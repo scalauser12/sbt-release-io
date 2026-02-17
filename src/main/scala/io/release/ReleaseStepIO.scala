@@ -5,13 +5,19 @@ import io.release.vcs.Vcs as ReleaseVcs
 import sbt.*
 import sbt.Keys.*
 
-/** Keys for command-line parsed attributes stored in State. */
+/**
+ * Keys for command-line parsed attributes stored in State.
+ * Delegates to upstream sbt-release attribute keys to ensure interoperability
+ * between IO-native steps and upstream steps.
+ */
 object ReleaseKeys {
-  val useDefaults = AttributeKey[Boolean]("release-use-defaults")
-  val skipTests = AttributeKey[Boolean]("release-skip-tests")
-  val cross = AttributeKey[Boolean]("release-cross")
-  val commandLineReleaseVersion = AttributeKey[Option[String]]("release-command-line-release-version")
-  val commandLineNextVersion = AttributeKey[Option[String]]("release-command-line-next-version")
+  import sbtrelease.ReleasePlugin.autoImport.{ReleaseKeys => UpstreamKeys}
+
+  val useDefaults: AttributeKey[Boolean] = UpstreamKeys.useDefaults
+  val skipTests: AttributeKey[Boolean] = UpstreamKeys.skipTests
+  val cross: AttributeKey[Boolean] = UpstreamKeys.cross
+  val commandLineReleaseVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineReleaseVersion
+  val commandLineNextVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineNextVersion
 }
 
 /** Context threaded through each release step. */
