@@ -127,7 +127,7 @@ object ReleaseStepIO {
             case Nil =>
               // No more commands enqueued, restore saved remaining
               newState.copy(remainingCommands = savedRemaining)
-            case head :: tail if head.commandLine == FailureCommand.toString =>
+            case head :: tail if head == FailureCommand =>
               // Failure detected, prepend FailureCommand to saved remaining
               newState.copy(remainingCommands = head +: savedRemaining)
             case head :: tail =>
@@ -168,9 +168,7 @@ object ReleaseStepIO {
         IO.pure(ctx)
       } else {
         // Check if sbt injected FailureCommand (task failure without exception)
-        val hasFailure = ctx.state.remainingCommands.headOption.exists { cmd =>
-          cmd.commandLine == FailureCommand.toString
-        }
+        val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
         if (hasFailure) {
           IO(ctx.state.log.error("[release-io] Task failure detected via FailureCommand")) *>
             IO.pure(ctx.fail)
@@ -188,9 +186,7 @@ object ReleaseStepIO {
       * marks the context as failed, and strips the sentinel command.
       */
     def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO {
-      val hasFailure = ctx.state.remainingCommands.headOption.exists { cmd =>
-        cmd.commandLine == FailureCommand.toString
-      }
+      val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
       if (hasFailure) {
         val cleaned = ctx.state.copy(remainingCommands = ctx.state.remainingCommands.drop(1))
         ctx.copy(state = cleaned, failed = true)
@@ -202,7 +198,7 @@ object ReleaseStepIO {
     /** Strips the FailureCommand sentinel at the end, matching upstream's removeFailureCommand. */
     def removeFailureCommand(ctx: ReleaseContext): IO[ReleaseContext] = IO {
       ctx.state.remainingCommands.toList match {
-        case head :: tail if head.commandLine == FailureCommand.toString =>
+        case head :: tail if head == FailureCommand =>
           ctx.copy(state = ctx.state.copy(remainingCommands = tail))
         case _ => ctx
       }

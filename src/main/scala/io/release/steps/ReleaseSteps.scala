@@ -129,7 +129,13 @@ object ReleaseSteps {
             (versionFile.getName, commitMsg, sign, signOff)
           }.flatMap { case (fileName, commitMsg, sign, signOff) =>
             vcs.add(fileName) *>
-              vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
+              IO(vcs.underlying.status.!!.trim).flatMap { status =>
+                if (status.nonEmpty) {
+                  vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
+                } else {
+                  IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
+                }
+              }
           }
         }
       },
@@ -206,7 +212,13 @@ object ReleaseSteps {
             (versionFile.getName, commitMsg, sign, signOff)
           }.flatMap { case (fileName, commitMsg, sign, signOff) =>
             vcs.add(fileName) *>
-              vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
+              IO(vcs.underlying.status.!!.trim).flatMap { status =>
+                if (status.nonEmpty) {
+                  vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
+                } else {
+                  IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
+                }
+              }
           }
         }
       }
