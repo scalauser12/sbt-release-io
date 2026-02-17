@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.vcs.Vcs as ReleaseVcs
 import sbt.*
 import sbt.Keys.*
+import sbt.Def.ScopedKey
 import sbtrelease.Compat
 
 /**
@@ -237,30 +238,74 @@ object ReleaseStepIO {
     }
   }
 
-  /** Run an action across all crossScalaVersions. */
+  /** Run an action across all crossScalaVersions using proper project reload.
+    * Based on sbt-release's implementation which properly switches Scala versions
+    * by reloading the project structure, ensuring incremental compilation is invalidated.
+    */
   private def runCrossBuild(
       action: ReleaseContext => IO[ReleaseContext]
   )(ctx: ReleaseContext): IO[ReleaseContext] = IO.defer {
     val extracted = Project.extract(ctx.state)
     val crossVersions = extracted.get(crossScalaVersions)
+    val currentVersion = (extracted.currentRef / scalaVersion).get(extracted.structure.data)
 
     if (crossVersions.length <= 1) {
       action(ctx)
     } else {
-      crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+      val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
         ioCtx.flatMap { currentCtx =>
           IO(currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version")) *>
             IO {
-              // Extract fresh instance after state modifications
-              val freshExtracted = Project.extract(currentCtx.state)
-              val newState = freshExtracted.appendWithSession(
-                Seq(ThisBuild / scalaVersion := version),
-                currentCtx.state
-              )
+              val newState = switchScalaVersion(currentCtx.state, version)
               currentCtx.copy(state = newState)
             }.flatMap(action)
         }
       }
+
+      // Restore original Scala version after cross-build
+      finalIO.flatMap { finalCtx =>
+        currentVersion match {
+          case Some(ver) =>
+            IO {
+              val restoredState = switchScalaVersion(finalCtx.state, ver)
+              finalCtx.copy(state = restoredState)
+            }
+          case None => IO.pure(finalCtx)
+        }
+      }
     }
   }
+
+  /** Switch Scala version by fully reloading the project structure.
+    * This is a copy of sbt.Cross.switchVersion logic which ensures incremental
+    * compilation caches are properly invalidated.
+    */
+  private def switchScalaVersion(state: State, version: String): State = {
+    val extracted = Project.extract(state)
+    import extracted.{*, given}
+
+    state.log.info(s"Setting scala version to $version")
+
+    // Settings to add: set scalaVersion and clear scalaHome
+    val add = Seq(
+      GlobalScope / Keys.scalaVersion := version,
+      GlobalScope / Keys.scalaHome := None
+    )
+
+    // Filter out existing scalaVersion and scalaHome settings to avoid conflicts
+    val cleared = session.mergeSettings.filterNot(crossExclude)
+
+    // Reapply settings with full project reload
+    val newStructure = LoadCompat.reapply(add ++ cleared, structure)
+    Project.setProject(session, newStructure, state)
+  }
+
+  /** Check if a setting should be excluded during cross-build (scalaVersion, scalaHome). */
+  private def crossExclude(s: Setting[_]): Boolean =
+    s.key match {
+      case ScopedKey(Scope(_, Zero, Zero, _), key)
+          if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>
+        true
+      case _ => false
+    }
 }
