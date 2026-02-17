@@ -44,23 +44,6 @@ class Vcs(val underlying: SbtVcs) {
   def pushAll: IO[Unit] = push
 
   def currentHash: IO[String] = IO(underlying.currentHash)
-
-  // Additional methods preserved for backward compatibility
-  def hasUpstream: IO[Boolean] = IO {
-    underlying.checkRemote("").!(ProcessLogger(_ => ())) == 0
-  }
-
-  def trackingRemote: IO[String] = IO {
-    if (underlying.trackingRemote.nonEmpty) underlying.trackingRemote else "origin"
-  }
-
-  def isBehindRemote: IO[Boolean] = IO {
-    underlying.isBehindRemote
-  }
-
-  def status: IO[String] = IO {
-    underlying.status.!!
-  }
 }
 
 object Vcs {
