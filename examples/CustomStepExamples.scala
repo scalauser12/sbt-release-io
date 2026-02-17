@@ -60,7 +60,9 @@ object CustomStepExamples {
         IO {
           val file = new java.io.File("CHANGELOG.md")
           val entry = s"\n## $releaseVer\n\n- Release $releaseVer\n"
-          val existing = if (file.exists()) scala.io.Source.fromFile(file).mkString else "# Changelog\n"
+          val existing = if (file.exists())
+            scala.util.Using(scala.io.Source.fromFile(file))(_.mkString).get
+          else "# Changelog\n"
           java.nio.file.Files.write(file.toPath, (existing + entry).getBytes("UTF-8"))
           println(s"[release-io] Updated CHANGELOG.md for $releaseVer")
           ctx

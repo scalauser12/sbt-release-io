@@ -1,4 +1,4 @@
-import sbt.Keys._
+import sbt.Keys.*
 
 lazy val root = (project in file("."))
   .enablePlugins(SbtPlugin)
@@ -7,9 +7,9 @@ lazy val root = (project in file("."))
     organization := "io.github.sbt-release-io",
     version := "0.1.0-SNAPSHOT",
     sbtPlugin := true,
-    scalaVersion := "2.12.19",
+    addSbtPlugin("com.github.sbt" % "sbt-release" % "1.4.0"),
     libraryDependencies ++= Seq(
-      "org.typelevel" %% "cats-effect" % "3.5.4"
+      "org.typelevel" %% "cats-effect" % "3.6.3"
     ),
     scalacOptions ++= Seq(
       "-deprecation",

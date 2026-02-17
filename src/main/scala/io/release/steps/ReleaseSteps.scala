@@ -1,7 +1,7 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseStepIO}
+import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt._
@@ -16,31 +16,46 @@ object ReleaseSteps {
     Vcs.detect(baseDir).map(v => ctx.withVcs(v))
   }
 
-  val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO.io("check-clean-working-dir") { ctx =>
-    requireVcs(ctx) { vcs =>
-      vcs.isClean.flatMap {
-        case true  => IO.pure(ctx)
-        case false =>
-          IO.raiseError(new RuntimeException(
-            "Working directory is not clean. Please commit or stash your changes before releasing."
-          ))
+  val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
+    name = "check-clean-working-dir",
+    action = ctx => IO.pure(ctx),
+    check = ctx =>
+      requireVcs(ctx) { vcs =>
+        vcs.isClean.flatMap {
+          case true  => IO.pure(ctx)
+          case false =>
+            IO.raiseError(new RuntimeException(
+              "Working directory is not clean. Please commit or stash your changes before releasing."
+            ))
+        }
       }
-    }
-  }
+  )
 
-  val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO.io("check-snapshot-dependencies") { ctx =>
-    IO {
-      val extracted = extract(ctx.state)
-      val snapshotDeps = extracted.get(libraryDependencies).filter { dep =>
-        dep.revision.endsWith("-SNAPSHOT")
-      }
-      if (snapshotDeps.nonEmpty) {
-        val depList = snapshotDeps.map(d => s"  ${d.organization}:${d.name}:${d.revision}").mkString("\n")
-        throw new RuntimeException(s"Snapshot dependencies found:\n$depList")
-      }
-      ctx
-    }
-  }
+  val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO(
+    name = "check-snapshot-dependencies",
+    action = ctx => IO.pure(ctx),
+    check = ctx =>
+      IO {
+        val extracted = extract(ctx.state)
+        val allProjectRefs = extracted.structure.allProjectRefs
+
+        val snapshotDeps = allProjectRefs.flatMap { projectRef =>
+          val deps = extracted.get(projectRef / libraryDependencies)
+          deps.filter(_.revision.endsWith("-SNAPSHOT")).map { dep =>
+            (projectRef.project, dep)
+          }
+        }
+
+        if (snapshotDeps.nonEmpty) {
+          val depList = snapshotDeps.map { case (proj, dep) =>
+            s"  [$proj] ${dep.organization}:${dep.name}:${dep.revision}"
+          }.mkString("\n")
+          throw new RuntimeException(s"Snapshot dependencies found:\n$depList")
+        }
+        ctx
+      },
+    enableCrossBuild = true
+  )
 
   val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") { ctx =>
     IO {
@@ -52,25 +67,34 @@ object ReleaseSteps {
       val releaseVer = Version.releaseVersion(parsed).string
       val nextVer = Version.nextVersion(parsed).string
 
+      val releaseVersionArg = ctx.state.get(ReleaseKeys.commandLineReleaseVersion).flatten
+      val nextVersionArg = ctx.state.get(ReleaseKeys.commandLineNextVersion).flatten
+
+      val finalReleaseVer = releaseVersionArg.getOrElse(releaseVer)
+      val finalNextVer = nextVersionArg.getOrElse(nextVer)
+
       println(s"[release-io] Current version : $currentVer")
-      println(s"[release-io] Release version : $releaseVer")
-      println(s"[release-io] Next version    : $nextVer")
+      println(s"[release-io] Release version : $finalReleaseVer")
+      println(s"[release-io] Next version    : $finalNextVer")
 
-      ctx.withVersions(releaseVer, nextVer)
+      ctx.withVersions(finalReleaseVer, finalNextVer)
     }
   }
 
-  val runTests: ReleaseStepIO = ReleaseStepIO.io("run-tests") { ctx =>
-    if (ctx.skipTests) {
-      IO(println("[release-io] Skipping tests")).as(ctx)
-    } else {
-      IO {
-        val extracted = extract(ctx.state)
-        val (newState, _) = extracted.runTask(sbt.Test / sbt.Keys.test, ctx.state)
-        ctx.copy(state = newState)
-      }
-    }
-  }
+  val runTests: ReleaseStepIO = ReleaseStepIO(
+    name = "run-tests",
+    action = ctx =>
+      if (ctx.skipTests) {
+        IO(println("[release-io] Skipping tests")).as(ctx)
+      } else {
+        IO {
+          val extracted = extract(ctx.state)
+          val (newState, _) = extracted.runTask(sbt.Test / sbt.Keys.test, ctx.state)
+          ctx.copy(state = newState)
+        }
+      },
+    enableCrossBuild = true
+  )
 
   val setReleaseVersion: ReleaseStepIO = ReleaseStepIO.io("set-release-version") { ctx =>
     requireVersions(ctx) { case (releaseVer, _) =>
@@ -78,14 +102,22 @@ object ReleaseSteps {
     }
   }
 
-  val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO.io("commit-release-version") { ctx =>
-    requireVcs(ctx) { vcs =>
-      requireVersions(ctx) { case (releaseVer, _) =>
-        vcs.add("version.sbt") *>
-          vcs.commit(s"Setting version to $releaseVer").as(ctx)
+  val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
+    name = "commit-release-version",
+    action = ctx =>
+      requireVcs(ctx) { vcs =>
+        requireVersions(ctx) { case (releaseVer, _) =>
+          vcs.add("version.sbt") *>
+            vcs.commit(s"Setting version to $releaseVer").as(ctx)
+        }
+      },
+    check = ctx =>
+      requireVcs(ctx) { _ =>
+        requireVersions(ctx) { _ =>
+          IO.pure(ctx)
+        }
       }
-    }
-  }
+  )
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
@@ -98,17 +130,30 @@ object ReleaseSteps {
     }
   }
 
-  val publishArtifacts: ReleaseStepIO = ReleaseStepIO.io("publish-artifacts") { ctx =>
-    if (ctx.skipPublish) {
-      IO(println("[release-io] Skipping publish")).as(ctx)
-    } else {
-      IO {
-        val extracted = extract(ctx.state)
-        val (newState, _) = extracted.runTask(sbt.Keys.publish, ctx.state)
-        ctx.copy(state = newState)
-      }
-    }
-  }
+  val publishArtifacts: ReleaseStepIO = ReleaseStepIO(
+    name = "publish-artifacts",
+    action = ctx =>
+      if (ctx.skipPublish) {
+        IO(println("[release-io] Skipping publish")).as(ctx)
+      } else {
+        IO {
+          val extracted = extract(ctx.state)
+          val (newState, _) = extracted.runTask(sbt.Keys.publish, ctx.state)
+          ctx.copy(state = newState)
+        }
+      },
+    check = ctx =>
+      if (ctx.skipPublish) {
+        IO.pure(ctx)
+      } else {
+        IO {
+          val extracted = extract(ctx.state)
+          // Check will be performed during action phase when publishTo is resolved
+          ctx
+        }
+      },
+    enableCrossBuild = true
+  )
 
   val setNextVersion: ReleaseStepIO = ReleaseStepIO.io("set-next-version") { ctx =>
     requireVersions(ctx) { case (_, nextVer) =>

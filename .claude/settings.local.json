@@ -6,7 +6,10 @@
       "Bash(git commit:*)",
       "Bash(sbt compile:*)",
       "Bash(git -C /Users/boriskotsev/IdeaProjects/sbt-release-io add:*)",
-      "Bash(git -C /Users/boriskotsev/IdeaProjects/sbt-release-io commit --amend --no-edit)"
+      "Bash(git -C /Users/boriskotsev/IdeaProjects/sbt-release-io commit --amend --no-edit)",
+      "Bash(git -C /Users/boriskotsev/IdeaProjects/sbt-release-io status)",
+      "Bash(git -C /Users/boriskotsev/IdeaProjects/sbt-release-io diff --staged)",
+      "Bash(git -C /Users/boriskotsev/IdeaProjects/sbt-release-io log --oneline -5)"
     ]
   }
 }

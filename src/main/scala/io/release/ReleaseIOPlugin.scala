@@ -2,50 +2,107 @@ package io.release
 
 import cats.effect.unsafe.implicits.global
 import io.release.steps.ReleaseSteps
-import sbt._
-import sbt.Keys._
+import sbt.*
+import sbt.Keys.*
+import sbt.complete.DefaultParsers.*
+import sbt.complete.Parser
 
 object ReleaseIOPlugin extends AutoPlugin {
 
   override def trigger = allRequirements
 
+  /** Parse results for command-line arguments. */
+  private sealed trait ReleaseArg
+  private object ReleaseArg {
+    case object WithDefaults extends ReleaseArg
+    case object SkipTests extends ReleaseArg
+    case object CrossBuild extends ReleaseArg
+    case class ReleaseVersion(value: String) extends ReleaseArg
+    case class NextVersion(value: String) extends ReleaseArg
+  }
+
+  /** Parser for releaseIO command arguments. */
+  private lazy val releaseParser: Parser[Seq[ReleaseArg]] = {
+    import ReleaseArg._
+
+    val withDefaults: Parser[ReleaseArg] = literal("with-defaults").map(_ => WithDefaults)
+    val skipTests: Parser[ReleaseArg] = literal("skip-tests").map(_ => SkipTests)
+    val crossBuild: Parser[ReleaseArg] = literal("cross").map(_ => CrossBuild)
+    val releaseVersion: Parser[ReleaseArg] = (literal("release-version") ~> Space ~> NotSpace).map(ReleaseVersion)
+    val nextVersion: Parser[ReleaseArg] = (literal("next-version") ~> Space ~> NotSpace).map(NextVersion)
+
+    val arg = withDefaults | skipTests | crossBuild | releaseVersion | nextVersion
+    (Space ~> arg).*
+  }
+
   object autoImport {
-    val releaseIOSteps = settingKey[Seq[ReleaseStepIO]]("The sequence of IO release steps to execute")
-    val releaseIOSkipTests = settingKey[Boolean]("Whether to skip tests during release")
+    val releaseIOProcess = settingKey[Seq[ReleaseStepIO]]("The sequence of IO release steps to execute")
+    val releaseIOCrossBuild = settingKey[Boolean]("Whether to enable cross-building during release")
     val releaseIOSkipPublish = settingKey[Boolean]("Whether to skip publish during release")
-    val releaseIO = Command.command("releaseIO")(doReleaseIO)
+
+    // Re-export factory methods
+    val releaseIOStepTask = ReleaseStepIO.fromTask _
+    val releaseIOStepTaskAggregated = ReleaseStepIO.fromTaskAggregated _
+    val releaseIOStepCommand = ReleaseStepIO.fromCommand _
+    val releaseIOStepCommandAndRemaining = ReleaseStepIO.fromCommandAndRemaining _
+
+    // Re-export sbt-release compatibility conversions
+    implicit val sbtReleaseStepConversion: sbtrelease.ReleasePlugin.autoImport.ReleaseStep => ReleaseStepIO =
+      SbtReleaseCompat.releaseStepToReleaseStepIO
+
+    implicit val sbtReleaseStateTransformConversion: (State => State) => ReleaseStepIO =
+      SbtReleaseCompat.stateTransformToReleaseStepIO
   }
 
   import autoImport._
 
   override lazy val projectSettings: Seq[Setting[_]] = Seq(
-    releaseIOSteps := ReleaseSteps.defaults,
-    releaseIOSkipTests := false,
+    releaseIOProcess := ReleaseSteps.defaults,
+    releaseIOCrossBuild := false,
     releaseIOSkipPublish := false,
-    commands += releaseIO
+    commands += Command("releaseIO")(_ => releaseParser)(doReleaseIO)
   )
 
-  private def doReleaseIO(state: State): State = {
+  private def doReleaseIO(state: State, args: Seq[ReleaseArg]): State = {
+    import ReleaseArg._
+
     val extracted = Project.extract(state)
-    val steps = extracted.get(releaseIOSteps)
-    val skipTests = extracted.get(releaseIOSkipTests)
+    val steps = extracted.get(releaseIOProcess)
+    val crossBuildSetting = extracted.get(releaseIOCrossBuild)
     val skipPublish = extracted.get(releaseIOSkipPublish)
 
+    // Parse command-line arguments
+    val useDefaults = args.contains(WithDefaults)
+    val skipTests = args.contains(SkipTests)
+    val crossFromArgs = args.contains(CrossBuild)
+    val crossEnabled = crossBuildSetting || crossFromArgs
+
+    val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
+    val nextVersionArg = args.collectFirst { case NextVersion(v) => v }
+
+    // Store parsed arguments in State attributes
+    val decoratedState = state
+      .put(ReleaseKeys.useDefaults, useDefaults)
+      .put(ReleaseKeys.skipTests, skipTests)
+      .put(ReleaseKeys.cross, crossEnabled)
+      .put(ReleaseKeys.commandLineReleaseVersion, releaseVersionArg)
+      .put(ReleaseKeys.commandLineNextVersion, nextVersionArg)
+
     val initialCtx = ReleaseContext(
-      state = state,
+      state = decoratedState,
       skipTests = skipTests,
       skipPublish = skipPublish
     )
 
-    // Compose all steps into a single IO program and run once
-    val program = ReleaseStepIO.compose(steps)
+    state.log.info("[release-io] Starting release process...")
+    state.log.info(s"[release-io] ${steps.length} steps to execute")
+    if (crossEnabled) {
+      state.log.info("[release-io] Cross-build enabled")
+    }
 
-    println("[release-io] Starting release process...")
-    println(s"[release-io] ${steps.length} steps to execute")
+    val finalCtx = ReleaseStepIO.compose(steps, crossEnabled)(initialCtx).unsafeRunSync()
 
-    val finalCtx = program(initialCtx).unsafeRunSync()
-
-    println("[release-io] Release completed successfully!")
+    state.log.info("[release-io] Release completed successfully!")
     finalCtx.state
   }
 }

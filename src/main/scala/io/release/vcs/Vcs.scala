@@ -30,8 +30,10 @@ class Vcs(val baseDir: File) {
     run("remote").map(_.nonEmpty)
 
   def trackingRemote: IO[String] =
-    run("config", s"branch.${currentBranch}.remote")
-      .handleErrorWith(_ => IO.pure("origin"))
+    currentBranch.flatMap { branch =>
+      run("config", s"branch.$branch.remote")
+        .handleErrorWith(_ => IO.pure("origin"))
+    }
 
   def isBehindRemote: IO[Boolean] =
     run("fetch", "--dry-run").map(_.nonEmpty)
