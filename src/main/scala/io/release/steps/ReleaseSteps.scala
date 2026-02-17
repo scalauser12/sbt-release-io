@@ -121,8 +121,14 @@ object ReleaseSteps {
     action = ctx =>
       requireVcs(ctx) { vcs =>
         requireVersions(ctx) { case (releaseVer, _) =>
-          vcs.add("version.sbt") *>
-            vcs.commit(s"Setting version to $releaseVer").as(ctx)
+          IO {
+            val extracted = extract(ctx.state)
+            val versionFile = extracted.get(releaseVersionFile)
+            versionFile.getName
+          }.flatMap { fileName =>
+            vcs.add(fileName) *>
+              vcs.commit(s"Setting version to $releaseVer").as(ctx)
+          }
         }
       },
     check = ctx =>
@@ -182,8 +188,14 @@ object ReleaseSteps {
     ReleaseStepIO.io("commit-next-version") { ctx =>
       requireVcs(ctx) { vcs =>
         requireVersions(ctx) { case (_, nextVer) =>
-          vcs.add("version.sbt") *>
-            vcs.commit(s"Setting version to $nextVer").as(ctx)
+          IO {
+            val extracted = extract(ctx.state)
+            val versionFile = extracted.get(releaseVersionFile)
+            versionFile.getName
+          }.flatMap { fileName =>
+            vcs.add(fileName) *>
+              vcs.commit(s"Setting version to $nextVer").as(ctx)
+          }
         }
       }
     }
@@ -243,14 +255,25 @@ object ReleaseSteps {
       ver: String
   ): IO[ReleaseContext] = IO {
     val extracted = extract(ctx.state)
-    val baseDir = extracted.get(thisProject).base
-    val versionFile = new java.io.File(baseDir, "version.sbt")
-    val contents = s"""ThisBuild / version := "$ver"\n"""
+
+    // Use upstream sbt-release's settings for file location and scope
+    val versionFile = extracted.get(releaseVersionFile)
+    val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
+
+    val versionKey = if (useGlobalVersion) "ThisBuild / version" else "version"
+    val contents = s"""$versionKey := "$ver"\n"""
+
     java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-    ctx.state.log.info(s"[release-io] Wrote version $ver to version.sbt")
+    ctx.state.log.info(s"[release-io] Wrote version $ver to ${versionFile.getName}")
+
+    val versionSetting = if (useGlobalVersion) {
+      ThisBuild / version := ver
+    } else {
+      version := ver
+    }
 
     val newState = extracted.appendWithSession(
-      Seq(ThisBuild / version := ver),
+      Seq(versionSetting),
       ctx.state
     )
     ctx.copy(state = newState)
