@@ -11,8 +11,8 @@ $ exec git commit -m "Initial commit"
 # Verify version.sbt was updated to next version
 $ exec grep -q "0.2.0-SNAPSHOT" version.sbt
 
-# Verify git commits were created (should have 3: init, release, next)
-$ exec sh -c "test $(git log --oneline | wc -l | tr -d ' ') -eq 3"
+# Verify git commits were created (using custom task like upstream)
+> checkGitCommitCount
 
-# Verify tag was created
-$ exec sh -c "git tag | grep -q ."
+# Verify tag was created (using custom task like upstream)
+> checkGitTag

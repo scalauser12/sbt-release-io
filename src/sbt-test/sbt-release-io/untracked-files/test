@@ -14,8 +14,8 @@ $ exists untracked.txt
 # Release should succeed despite untracked file (because releaseIgnoreUntrackedFiles := true)
 > releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 
-# Verify release completed - check a tag was created
-$ exec sh -c "git tag | grep -q ."
+# Verify release completed - check a tag was created (using custom task like upstream)
+> checkGitTag
 
 # Verify final version
 $ exec grep -q "0.2.0-SNAPSHOT" version.sbt
