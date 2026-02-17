@@ -25,11 +25,11 @@ object ReleaseIOPlugin extends AutoPlugin {
   private lazy val releaseParser: Parser[Seq[ReleaseArg]] = {
     import ReleaseArg._
 
-    val withDefaults: Parser[ReleaseArg] = literal("with-defaults").map(_ => WithDefaults)
-    val skipTests: Parser[ReleaseArg] = literal("skip-tests").map(_ => SkipTests)
-    val crossBuild: Parser[ReleaseArg] = literal("cross").map(_ => CrossBuild)
-    val releaseVersion: Parser[ReleaseArg] = (literal("release-version") ~> Space ~> NotSpace).map(ReleaseVersion)
-    val nextVersion: Parser[ReleaseArg] = (literal("next-version") ~> Space ~> NotSpace).map(NextVersion)
+    val withDefaults: Parser[ReleaseArg] = token("with-defaults").map(_ => WithDefaults)
+    val skipTests: Parser[ReleaseArg] = token("skip-tests").map(_ => SkipTests)
+    val crossBuild: Parser[ReleaseArg] = token("cross").map(_ => CrossBuild)
+    val releaseVersion: Parser[ReleaseArg] = (token("release-version") ~> Space ~> token(NotSpace, "<release version>")).map(ReleaseVersion)
+    val nextVersion: Parser[ReleaseArg] = (token("next-version") ~> Space ~> token(NotSpace, "<next version>")).map(NextVersion)
 
     val arg = withDefaults | skipTests | crossBuild | releaseVersion | nextVersion
     (Space ~> arg).*

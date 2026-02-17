@@ -19,6 +19,7 @@ object ReleaseKeys {
   val cross: AttributeKey[Boolean] = UpstreamKeys.cross
   val commandLineReleaseVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineReleaseVersion
   val commandLineNextVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineNextVersion
+  val versions: AttributeKey[(String, String)] = UpstreamKeys.versions
 }
 
 /** Context threaded through each release step. */
@@ -104,18 +105,39 @@ object ReleaseStepIO {
       }
     )
 
-  /** Create a step that runs an sbt command and preserves remaining commands. */
+  /** Create a step that runs an sbt command and drains all follow-up commands.
+    * Matches upstream sbt-release's releaseStepCommandAndRemaining behavior,
+    * which is critical for commands like +publish that enqueue sub-commands.
+    */
   def fromCommandAndRemaining(command: String): ReleaseStepIO =
     ReleaseStepIO(
       name = s"command+remaining: $command",
       action = ctx => IO {
-        val remainingCommands = ctx.state.remainingCommands
-        val stateWithoutRemaining = ctx.state.copy(remainingCommands = Nil)
-        val newState = Command.process(command, stateWithoutRemaining, (msg: String) => {
-          throw new RuntimeException(s"Failed to parse command '$command': $msg")
-        })
-        val stateWithRemaining = newState.copy(remainingCommands = remainingCommands)
-        ctx.copy(state = stateWithRemaining)
+        val FailureCommand = Compat.FailureCommand
+        val savedRemaining = ctx.state.remainingCommands
+
+        @scala.annotation.tailrec
+        def drainCommands(state: State, commandToRun: String): State = {
+          val stateWithoutRemaining = state.copy(remainingCommands = Nil)
+          val newState = Command.process(commandToRun, stateWithoutRemaining, (msg: String) => {
+            throw new RuntimeException(s"Failed to parse command '$commandToRun': $msg")
+          })
+
+          newState.remainingCommands.toList match {
+            case Nil =>
+              // No more commands enqueued, restore saved remaining
+              newState.copy(remainingCommands = savedRemaining)
+            case head :: tail if head.commandLine == FailureCommand.toString =>
+              // Failure detected, prepend FailureCommand to saved remaining
+              newState.copy(remainingCommands = head +: savedRemaining)
+            case head :: tail =>
+              // More commands enqueued, drain them recursively
+              drainCommands(newState.copy(remainingCommands = tail), head.commandLine)
+          }
+        }
+
+        val finalState = drainCommands(ctx.state, command)
+        ctx.copy(state = finalState)
       }
     )
 
@@ -146,7 +168,9 @@ object ReleaseStepIO {
         IO.pure(ctx)
       } else {
         // Check if sbt injected FailureCommand (task failure without exception)
-        val hasFailure = ctx.state.remainingCommands.headOption.exists(_ == FailureCommand)
+        val hasFailure = ctx.state.remainingCommands.headOption.exists { cmd =>
+          cmd.commandLine == FailureCommand.toString
+        }
         if (hasFailure) {
           IO(ctx.state.log.error("[release-io] Task failure detected via FailureCommand")) *>
             IO.pure(ctx.fail)
@@ -161,12 +185,15 @@ object ReleaseStepIO {
 
     /** Between-step hook matching sbt-release 1.4's execution model.
       * Inspects remainingCommands for FailureCommand (sbt's task failure signal),
-      * and restores onFailure handler for the next step.
+      * marks the context as failed, and strips the sentinel command.
       */
     def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO {
-      val hasFailure = ctx.state.remainingCommands.headOption.exists(_ == FailureCommand)
+      val hasFailure = ctx.state.remainingCommands.headOption.exists { cmd =>
+        cmd.commandLine == FailureCommand.toString
+      }
       if (hasFailure) {
-        ctx.copy(state = ctx.state.fail)
+        val cleaned = ctx.state.copy(remainingCommands = ctx.state.remainingCommands.drop(1))
+        ctx.copy(state = cleaned, failed = true)
       } else {
         ctx.copy(state = ctx.state.copy(onFailure = Some(FailureCommand)))
       }
@@ -175,7 +202,7 @@ object ReleaseStepIO {
     /** Strips the FailureCommand sentinel at the end, matching upstream's removeFailureCommand. */
     def removeFailureCommand(ctx: ReleaseContext): IO[ReleaseContext] = IO {
       ctx.state.remainingCommands.toList match {
-        case head :: tail if head == FailureCommand =>
+        case head :: tail if head.commandLine == FailureCommand.toString =>
           ctx.copy(state = ctx.state.copy(remainingCommands = tail))
         case _ => ctx
       }
@@ -228,7 +255,9 @@ object ReleaseStepIO {
         ioCtx.flatMap { currentCtx =>
           IO(currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version")) *>
             IO {
-              val newState = extracted.appendWithSession(
+              // Extract fresh instance after state modifications
+              val freshExtracted = Project.extract(currentCtx.state)
+              val newState = freshExtracted.appendWithSession(
                 Seq(ThisBuild / scalaVersion := version),
                 currentCtx.state
               )

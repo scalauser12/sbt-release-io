@@ -21,14 +21,20 @@ object ReleaseSteps {
     name = "check-clean-working-dir",
     action = ctx =>
       requireVcs(ctx) { vcs =>
-        vcs.isClean.flatMap {
-          case true => IO.pure(ctx)
-          case false =>
+        IO {
+          val extracted = extract(ctx.state)
+          val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
+          (vcs.underlying.hasModifiedFiles, !ignoreUntracked && vcs.underlying.hasUntrackedFiles)
+        }.flatMap { case (hasModified, checkUntracked) =>
+          if (hasModified || checkUntracked) {
             IO.raiseError(
               new RuntimeException(
                 "Working directory is not clean. Please commit or stash your changes before releasing."
               )
             )
+          } else {
+            IO.pure(ctx)
+          }
         }
       }
   )
@@ -39,21 +45,12 @@ object ReleaseSteps {
     check = ctx =>
       IO {
         val extracted = extract(ctx.state)
-        val allProjectRefs = extracted.structure.allProjectRefs
-
-        val snapshotDeps = allProjectRefs.flatMap { projectRef =>
-          val deps = scala.util
-            .Try(extracted.get(projectRef / libraryDependencies))
-            .getOrElse(Nil)
-          deps.filter(_.revision.endsWith("-SNAPSHOT")).map { dep =>
-            (projectRef.project, dep)
-          }
-        }
+        val (_, snapshotDeps) = extracted.runTask(releaseSnapshotDependencies, ctx.state)
 
         if (snapshotDeps.nonEmpty) {
           val depList = snapshotDeps
-            .map { case (proj, dep) =>
-              s"  [$proj] ${dep.organization}:${dep.name}:${dep.revision}"
+            .map { dep =>
+              s"  ${dep.organization}:${dep.name}:${dep.revision}"
             }
             .mkString("\n")
           throw new RuntimeException(s"Snapshot dependencies found:\n$depList")
@@ -89,7 +86,9 @@ object ReleaseSteps {
         ctx.state.log.info(s"[release-io] Release version : $finalReleaseVer")
         ctx.state.log.info(s"[release-io] Next version    : $finalNextVer")
 
-        ctx.withVersions(finalReleaseVer, finalNextVer)
+        // Store versions in both ReleaseContext and State attributes for upstream interop
+        val updatedState = ctx.state.put(ReleaseKeys.versions, (finalReleaseVer, finalNextVer))
+        ctx.copy(state = updatedState).withVersions(finalReleaseVer, finalNextVer)
       }
   }
 
@@ -124,10 +123,13 @@ object ReleaseSteps {
           IO {
             val extracted = extract(ctx.state)
             val versionFile = extracted.get(releaseVersionFile)
-            versionFile.getName
-          }.flatMap { fileName =>
+            val commitMsg = extracted.runTask(releaseCommitMessage, ctx.state)._2
+            val sign = extracted.get(releaseVcsSign)
+            val signOff = extracted.get(releaseVcsSignOff)
+            (versionFile.getName, commitMsg, sign, signOff)
+          }.flatMap { case (fileName, commitMsg, sign, signOff) =>
             vcs.add(fileName) *>
-              vcs.commit(s"Setting version to $releaseVer").as(ctx)
+              vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
           }
         }
       },
@@ -142,12 +144,19 @@ object ReleaseSteps {
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       requireVersions(ctx) { case (releaseVer, _) =>
-        val tagName = s"v$releaseVer"
-        vcs
-          .tag(tagName, Some(s"Release $releaseVer"))
-          .as(
-            ctx.withAttr("release-tag", tagName)
-          )
+        IO {
+          val extracted = extract(ctx.state)
+          val tagName = extracted.runTask(releaseTagName, ctx.state)._2
+          val tagComment = extracted.runTask(releaseTagComment, ctx.state)._2
+          val sign = extracted.get(releaseVcsSign)
+          (tagName, tagComment, sign)
+        }.flatMap { case (tagName, tagComment, sign) =>
+          vcs
+            .tag(tagName, Some(tagComment), sign = sign)
+            .as(
+              ctx.withAttr("release-tag", tagName)
+            )
+        }
       }
     }
   }
@@ -160,7 +169,7 @@ object ReleaseSteps {
       } else {
         IO {
           val extracted = extract(ctx.state)
-          val (newState, _) = extracted.runTask(sbt.Keys.publish, ctx.state)
+          val newState = extracted.runAggregated(releasePublishArtifactsAction in Global, ctx.state)
           ctx.copy(state = newState)
         }
       },
@@ -191,10 +200,13 @@ object ReleaseSteps {
           IO {
             val extracted = extract(ctx.state)
             val versionFile = extracted.get(releaseVersionFile)
-            versionFile.getName
-          }.flatMap { fileName =>
+            val commitMsg = extracted.runTask(releaseNextCommitMessage, ctx.state)._2
+            val sign = extracted.get(releaseVcsSign)
+            val signOff = extracted.get(releaseVcsSignOff)
+            (versionFile.getName, commitMsg, sign, signOff)
+          }.flatMap { case (fileName, commitMsg, sign, signOff) =>
             vcs.add(fileName) *>
-              vcs.commit(s"Setting version to $nextVer").as(ctx)
+              vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
           }
         }
       }

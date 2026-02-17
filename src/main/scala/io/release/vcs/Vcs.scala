@@ -21,15 +21,15 @@ class Vcs(val underlying: SbtVcs) {
     ()
   }
 
-  def commit(message: String): IO[Unit] = IO {
-    underlying.commit(message, sign = false, signOff = false).!!
+  def commit(message: String, sign: Boolean = false, signOff: Boolean = false): IO[Unit] = IO {
+    underlying.commit(message, sign = sign, signOff = signOff).!!
     ()
   }
 
-  def tag(name: String, message: Option[String] = None): IO[Unit] = IO {
+  def tag(name: String, message: Option[String] = None, sign: Boolean = false): IO[Unit] = IO {
     message match {
-      case Some(msg) => underlying.tag(name, msg, sign = false).!!
-      case None      => underlying.tag(name, comment = "", sign = false).!!
+      case Some(msg) => underlying.tag(name, msg, sign = sign).!!
+      case None      => underlying.tag(name, comment = "", sign = sign).!!
     }
     ()
   }
