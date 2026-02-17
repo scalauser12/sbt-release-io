@@ -1,9 +1,10 @@
 package io.release.vcs
 
 import cats.effect.IO
+import sbtrelease.Vcs as SbtVcs
+
 import java.io.File
-import scala.sys.process._
-import sbtrelease.{Vcs => SbtVcs}
+import scala.sys.process.*
 
 /**
  * Wrapper around sbt-release's Vcs abstraction, exposing operations as cats-effect IO.

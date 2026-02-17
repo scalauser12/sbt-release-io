@@ -1,14 +1,13 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import io.release.vcs.Vcs
-import io.release.version.Version
+import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
-import sbtrelease.ReleasePlugin.autoImport._
-import sbtrelease.ReleaseStateTransformations._
+import sbtrelease.ReleasePlugin.autoImport.*
+import sbtrelease.ReleaseStateTransformations.*
 
 /** Built-in release steps composed as IO actions. */
 object ReleaseSteps {
@@ -207,10 +206,9 @@ object ReleaseSteps {
     }
   }
 
-  /**
-   * Default ordered sequence of all release steps using IO-native implementations.
-   * These steps provide richer error handling and use the ReleaseContext-based VCS/version plumbing.
-   */
+  /** Default ordered sequence of all release steps using IO-native implementations.
+    * These steps provide richer error handling and use the ReleaseContext-based VCS/version plumbing.
+    */
   val defaults: Seq[ReleaseStepIO] = Seq(
     initializeVcs,
     checkCleanWorkingDir,
@@ -226,11 +224,10 @@ object ReleaseSteps {
     pushChanges
   )
 
-  /**
-   * Alternative release process that delegates to upstream sbt-release's built-in steps.
-   * Uses automatic conversion from ReleaseStep to ReleaseStepIO via SbtReleaseCompat.
-   * Choose this if you want maximum compatibility with sbt-release's battle-tested implementations.
-   */
+  /** Alternative release process that delegates to upstream sbt-release's built-in steps.
+    * Uses automatic conversion from ReleaseStep to ReleaseStepIO via SbtReleaseCompat.
+    * Choose this if you want maximum compatibility with sbt-release's battle-tested implementations.
+    */
   val defaultsFromUpstream: Seq[ReleaseStepIO] = {
     import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
     Seq(
@@ -290,7 +287,9 @@ object ReleaseSteps {
     val contents = s"""$versionKey := "$ver"\n"""
 
     java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-    ctx.state.log.info(s"[release-io] Wrote version $ver to ${versionFile.getName}")
+    ctx.state.log.info(
+      s"[release-io] Wrote version $ver to ${versionFile.getName}"
+    )
 
     val versionSetting = if (useGlobalVersion) {
       ThisBuild / version := ver
