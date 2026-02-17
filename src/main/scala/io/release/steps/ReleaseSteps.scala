@@ -4,8 +4,8 @@ import cats.effect.IO
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import io.release.vcs.Vcs
 import io.release.version.Version
-import sbt._
-import sbt.Keys._
+import sbt.*
+import sbt.Keys.*
 import sbt.Project.extract
 
 /** Built-in release steps composed as IO actions. */
@@ -18,15 +18,16 @@ object ReleaseSteps {
 
   val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
     name = "check-clean-working-dir",
-    action = ctx => IO.pure(ctx),
-    check = ctx =>
+    action = ctx =>
       requireVcs(ctx) { vcs =>
         vcs.isClean.flatMap {
-          case true  => IO.pure(ctx)
+          case true => IO.pure(ctx)
           case false =>
-            IO.raiseError(new RuntimeException(
-              "Working directory is not clean. Please commit or stash your changes before releasing."
-            ))
+            IO.raiseError(
+              new RuntimeException(
+                "Working directory is not clean. Please commit or stash your changes before releasing."
+              )
+            )
         }
       }
   )
@@ -40,16 +41,20 @@ object ReleaseSteps {
         val allProjectRefs = extracted.structure.allProjectRefs
 
         val snapshotDeps = allProjectRefs.flatMap { projectRef =>
-          val deps = extracted.get(projectRef / libraryDependencies)
+          val deps = scala.util
+            .Try(extracted.get(projectRef / libraryDependencies))
+            .getOrElse(Nil)
           deps.filter(_.revision.endsWith("-SNAPSHOT")).map { dep =>
             (projectRef.project, dep)
           }
         }
 
         if (snapshotDeps.nonEmpty) {
-          val depList = snapshotDeps.map { case (proj, dep) =>
-            s"  [$proj] ${dep.organization}:${dep.name}:${dep.revision}"
-          }.mkString("\n")
+          val depList = snapshotDeps
+            .map { case (proj, dep) =>
+              s"  [$proj] ${dep.organization}:${dep.name}:${dep.revision}"
+            }
+            .mkString("\n")
           throw new RuntimeException(s"Snapshot dependencies found:\n$depList")
         }
         ctx
@@ -57,50 +62,59 @@ object ReleaseSteps {
     enableCrossBuild = true
   )
 
-  val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") { ctx =>
-    IO {
-      val extracted = extract(ctx.state)
-      val currentVer = extracted.get(version)
-      val parsed = Version.parse(currentVer).getOrElse(
-        throw new RuntimeException(s"Cannot parse current version: $currentVer")
-      )
-      val releaseVer = Version.releaseVersion(parsed).string
-      val nextVer = Version.nextVersion(parsed).string
+  val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") {
+    ctx =>
+      IO {
+        val extracted = extract(ctx.state)
+        val currentVer = extracted.get(version)
+        val parsed = Version
+          .parse(currentVer)
+          .getOrElse(
+            throw new RuntimeException(
+              s"Cannot parse current version: $currentVer"
+            )
+          )
+        val releaseVer = Version.releaseVersion(parsed)
+        val nextVer = Version.nextVersion(parsed)
 
-      val releaseVersionArg = ctx.state.get(ReleaseKeys.commandLineReleaseVersion).flatten
-      val nextVersionArg = ctx.state.get(ReleaseKeys.commandLineNextVersion).flatten
+        val releaseVersionArg =
+          ctx.state.get(ReleaseKeys.commandLineReleaseVersion).flatten
+        val nextVersionArg =
+          ctx.state.get(ReleaseKeys.commandLineNextVersion).flatten
 
-      val finalReleaseVer = releaseVersionArg.getOrElse(releaseVer)
-      val finalNextVer = nextVersionArg.getOrElse(nextVer)
+        val finalReleaseVer = releaseVersionArg.getOrElse(releaseVer)
+        val finalNextVer = nextVersionArg.getOrElse(nextVer)
 
-      println(s"[release-io] Current version : $currentVer")
-      println(s"[release-io] Release version : $finalReleaseVer")
-      println(s"[release-io] Next version    : $finalNextVer")
+        ctx.state.log.info(s"[release-io] Current version : $currentVer")
+        ctx.state.log.info(s"[release-io] Release version : $finalReleaseVer")
+        ctx.state.log.info(s"[release-io] Next version    : $finalNextVer")
 
-      ctx.withVersions(finalReleaseVer, finalNextVer)
-    }
+        ctx.withVersions(finalReleaseVer, finalNextVer)
+      }
   }
 
   val runTests: ReleaseStepIO = ReleaseStepIO(
     name = "run-tests",
     action = ctx =>
       if (ctx.skipTests) {
-        IO(println("[release-io] Skipping tests")).as(ctx)
+        IO(ctx.state.log.info("[release-io] Skipping tests")).as(ctx)
       } else {
         IO {
           val extracted = extract(ctx.state)
-          val (newState, _) = extracted.runTask(sbt.Test / sbt.Keys.test, ctx.state)
+          val (newState, _) =
+            extracted.runTask(sbt.Test / sbt.Keys.test, ctx.state)
           ctx.copy(state = newState)
         }
       },
     enableCrossBuild = true
   )
 
-  val setReleaseVersion: ReleaseStepIO = ReleaseStepIO.io("set-release-version") { ctx =>
-    requireVersions(ctx) { case (releaseVer, _) =>
-      writeVersion(ctx, releaseVer)
+  val setReleaseVersion: ReleaseStepIO =
+    ReleaseStepIO.io("set-release-version") { ctx =>
+      requireVersions(ctx) { case (releaseVer, _) =>
+        writeVersion(ctx, releaseVer)
+      }
     }
-  }
 
   val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
     name = "commit-release-version",
@@ -123,9 +137,11 @@ object ReleaseSteps {
     requireVcs(ctx) { vcs =>
       requireVersions(ctx) { case (releaseVer, _) =>
         val tagName = s"v$releaseVer"
-        vcs.tag(tagName, Some(s"Release $releaseVer")).as(
-          ctx.withAttr("release-tag", tagName)
-        )
+        vcs
+          .tag(tagName, Some(s"Release $releaseVer"))
+          .as(
+            ctx.withAttr("release-tag", tagName)
+          )
       }
     }
   }
@@ -134,7 +150,7 @@ object ReleaseSteps {
     name = "publish-artifacts",
     action = ctx =>
       if (ctx.skipPublish) {
-        IO(println("[release-io] Skipping publish")).as(ctx)
+        IO(ctx.state.log.info("[release-io] Skipping publish")).as(ctx)
       } else {
         IO {
           val extracted = extract(ctx.state)
@@ -155,20 +171,22 @@ object ReleaseSteps {
     enableCrossBuild = true
   )
 
-  val setNextVersion: ReleaseStepIO = ReleaseStepIO.io("set-next-version") { ctx =>
-    requireVersions(ctx) { case (_, nextVer) =>
-      writeVersion(ctx, nextVer)
-    }
+  val setNextVersion: ReleaseStepIO = ReleaseStepIO.io("set-next-version") {
+    ctx =>
+      requireVersions(ctx) { case (_, nextVer) =>
+        writeVersion(ctx, nextVer)
+      }
   }
 
-  val commitNextVersion: ReleaseStepIO = ReleaseStepIO.io("commit-next-version") { ctx =>
-    requireVcs(ctx) { vcs =>
-      requireVersions(ctx) { case (_, nextVer) =>
-        vcs.add("version.sbt") *>
-          vcs.commit(s"Setting version to $nextVer").as(ctx)
+  val commitNextVersion: ReleaseStepIO =
+    ReleaseStepIO.io("commit-next-version") { ctx =>
+      requireVcs(ctx) { vcs =>
+        requireVersions(ctx) { case (_, nextVer) =>
+          vcs.add("version.sbt") *>
+            vcs.commit(s"Setting version to $nextVer").as(ctx)
+        }
       }
     }
-  }
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO.io("push-changes") { ctx =>
     requireVcs(ctx) { vcs =>
@@ -194,12 +212,17 @@ object ReleaseSteps {
 
   // --- helpers ---
 
-  private def requireVcs(ctx: ReleaseContext)(f: Vcs => IO[ReleaseContext]): IO[ReleaseContext] =
+  private def requireVcs(
+      ctx: ReleaseContext
+  )(f: Vcs => IO[ReleaseContext]): IO[ReleaseContext] =
     ctx.vcs match {
       case Some(v) => f(v)
-      case None    => IO.raiseError(new RuntimeException(
-        "VCS not initialized. Ensure initializeVcs runs before this step."
-      ))
+      case None =>
+        IO.raiseError(
+          new RuntimeException(
+            "VCS not initialized. Ensure initializeVcs runs before this step."
+          )
+        )
     }
 
   private def requireVersions(ctx: ReleaseContext)(
@@ -207,18 +230,24 @@ object ReleaseSteps {
   ): IO[ReleaseContext] =
     ctx.versions match {
       case Some(v) => f(v)
-      case None    => IO.raiseError(new RuntimeException(
-        "Versions not set. Ensure inquireVersions runs before this step."
-      ))
+      case None =>
+        IO.raiseError(
+          new RuntimeException(
+            "Versions not set. Ensure inquireVersions runs before this step."
+          )
+        )
     }
 
-  private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = IO {
+  private def writeVersion(
+      ctx: ReleaseContext,
+      ver: String
+  ): IO[ReleaseContext] = IO {
     val extracted = extract(ctx.state)
     val baseDir = extracted.get(thisProject).base
     val versionFile = new java.io.File(baseDir, "version.sbt")
     val contents = s"""ThisBuild / version := "$ver"\n"""
     java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-    println(s"[release-io] Wrote version $ver to version.sbt")
+    ctx.state.log.info(s"[release-io] Wrote version $ver to version.sbt")
 
     val newState = extracted.appendWithSession(
       Seq(ThisBuild / version := ver),

@@ -1,40 +1,23 @@
 package io.release.version
 
-/** Simple semantic version representation with parsing and bumping. */
-case class Version(major: Int, minor: Int, patch: Int, qualifier: Option[String] = None) {
+import sbtrelease.{Version => SbtVersion}
 
-  def isSnapshot: Boolean = qualifier.contains("SNAPSHOT")
-
-  def withoutQualifier: Version = copy(qualifier = None)
-
-  def asSnapshot: Version = copy(qualifier = Some("SNAPSHOT"))
-
-  def bumpMajor: Version = Version(major + 1, 0, 0)
-
-  def bumpMinor: Version = Version(major, minor + 1, 0)
-
-  def bumpPatch: Version = Version(major, minor, patch + 1)
-
-  def string: String = {
-    val base = s"$major.$minor.$patch"
-    qualifier.fold(base)(q => s"$base-$q")
-  }
-
-  override def toString: String = string
-}
-
+/**
+ * Facade for sbt-release's Version class.
+ * Delegates all version parsing and transformation logic to the upstream library.
+ */
 object Version {
-  private val Pattern = """(\d+)\.(\d+)\.(\d+)(?:-(.+))?""".r
 
-  def parse(s: String): Option[Version] = s.trim match {
-    case Pattern(maj, min, pat, qual) =>
-      Some(Version(maj.toInt, min.toInt, pat.toInt, Option(qual)))
-    case _ => None
-  }
+  /** Parse a version string using sbt-release's parser. */
+  def parse(s: String): Option[SbtVersion] = SbtVersion(s)
 
-  /** Derive the release version from a snapshot version. */
-  def releaseVersion(v: Version): Version = v.withoutQualifier
+  /** Derive the release version by removing qualifiers (e.g., "1.2.3-SNAPSHOT" → "1.2.3"). */
+  def releaseVersion(v: SbtVersion): String = v.withoutQualifier.unapply
 
-  /** Derive the next development version by bumping patch and adding -SNAPSHOT. */
-  def nextVersion(v: Version): Version = v.withoutQualifier.bumpPatch.asSnapshot
+  /**
+   * Derive the next development version by bumping patch and adding -SNAPSHOT.
+   * Uses sbt-release's default bump strategy (Bugfix/Patch).
+   */
+  def nextVersion(v: SbtVersion): String =
+    v.bump(SbtVersion.Bump.Bugfix).asSnapshot.unapply
 }
