@@ -2,78 +2,76 @@ package io.release.vcs
 
 import cats.effect.IO
 import java.io.File
-import scala.sys.process.{Process, ProcessLogger}
+import scala.sys.process._
+import sbtrelease.{Vcs => SbtVcs}
 
-/** Git operations wrapped in IO. */
-class Vcs(val baseDir: File) {
+/**
+ * Wrapper around sbt-release's Vcs abstraction, exposing operations as cats-effect IO.
+ * Delegates all VCS operations to upstream, gaining support for Git, Mercurial, and Subversion.
+ */
+class Vcs(val underlying: SbtVcs) {
 
-  private def run(args: String*): IO[String] = IO {
-    val cmd = "git" +: args
-    val output = new StringBuilder
-    val errors = new StringBuilder
-    val logger = ProcessLogger(
-      line => output.append(line).append('\n'),
-      line => errors.append(line).append('\n')
-    )
-    val exitCode = Process(cmd, baseDir).!(logger)
-    if (exitCode != 0)
-      throw new RuntimeException(
-        s"git ${args.mkString(" ")} failed (exit code $exitCode): ${errors.toString.trim}"
-      )
-    output.toString.trim
+  def currentBranch: IO[String] = IO(underlying.currentBranch)
+
+  def isClean: IO[Boolean] = IO(!underlying.hasModifiedFiles && !underlying.hasUntrackedFiles)
+
+  def add(file: String): IO[Unit] = IO {
+    underlying.add(file).!!
+    ()
   }
 
-  def currentBranch: IO[String] =
-    run("rev-parse", "--abbrev-ref", "HEAD")
+  def commit(message: String): IO[Unit] = IO {
+    underlying.commit(message, sign = false, signOff = false).!!
+    ()
+  }
 
-  def hasUpstream: IO[Boolean] =
-    run("remote").map(_.nonEmpty)
-
-  def trackingRemote: IO[String] =
-    currentBranch.flatMap { branch =>
-      run("config", s"branch.$branch.remote")
-        .handleErrorWith(_ => IO.pure("origin"))
-    }
-
-  def isBehindRemote: IO[Boolean] =
-    run("fetch", "--dry-run").map(_.nonEmpty)
-
-  def status: IO[String] =
-    run("status", "--porcelain")
-
-  def isClean: IO[Boolean] =
-    status.map(_.isEmpty)
-
-  def add(file: String): IO[Unit] =
-    run("add", file).void
-
-  def commit(message: String): IO[Unit] =
-    run("commit", "-m", message).void
-
-  def tag(name: String, message: Option[String] = None): IO[Unit] =
+  def tag(name: String, message: Option[String] = None): IO[Unit] = IO {
     message match {
-      case Some(msg) => run("tag", "-a", name, "-m", msg).void
-      case None      => run("tag", name).void
+      case Some(msg) => underlying.tag(name, msg, sign = false).!!
+      case None      => underlying.tag(name, comment = "", sign = false).!!
     }
+    ()
+  }
 
-  def pushTags: IO[Unit] =
-    run("push", "--tags").void
+  def push: IO[Unit] = IO {
+    underlying.pushChanges.!!
+    ()
+  }
 
-  def push: IO[Unit] =
-    run("push").void
+  def pushTags: IO[Unit] = push // sbt-release's pushChanges includes tags
 
-  def pushAll: IO[Unit] =
-    push *> pushTags
+  def pushAll: IO[Unit] = push
 
-  def currentHash: IO[String] =
-    run("rev-parse", "HEAD")
+  def currentHash: IO[String] = IO(underlying.currentHash)
+
+  // Additional methods preserved for backward compatibility
+  def hasUpstream: IO[Boolean] = IO {
+    underlying.checkRemote("").!(ProcessLogger(_ => ())) == 0
+  }
+
+  def trackingRemote: IO[String] = IO {
+    if (underlying.trackingRemote.nonEmpty) underlying.trackingRemote else "origin"
+  }
+
+  def isBehindRemote: IO[Boolean] = IO {
+    underlying.isBehindRemote
+  }
+
+  def status: IO[String] = IO {
+    underlying.status.!!
+  }
 }
 
 object Vcs {
+  /**
+   * Detect VCS type (Git, Mercurial, or Subversion) in the given directory.
+   * Delegates to sbt-release's detection logic.
+   */
   def detect(baseDir: File): IO[Vcs] = IO {
-    val gitDir = new File(baseDir, ".git")
-    if (!gitDir.exists())
-      throw new RuntimeException(s"Not a git repository: ${baseDir.getAbsolutePath}")
-    new Vcs(baseDir)
+    SbtVcs.detect(baseDir)
+      .map(new Vcs(_))
+      .getOrElse(
+        throw new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}")
+      )
   }
 }
