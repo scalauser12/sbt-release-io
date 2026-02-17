@@ -144,9 +144,18 @@ object ReleaseStepIO {
       }
     }
 
+    /** Between-step hook, matching sbt-release 1.4's execution model.
+      * Provides an extension point for inserting logic between steps
+      * (e.g., rollback, logging, user prompts).
+      */
+    def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO.pure(ctx)
+
     def buildActionPhase(steps: Seq[ReleaseContext => IO[ReleaseContext]])(startCtx: ReleaseContext): IO[ReleaseContext] = {
-      steps.foldLeft(IO.pure(startCtx)) { (ioCtx, step) =>
-        ioCtx.flatMap(filterFailure(step))
+      val interleavedSteps = steps.flatMap { step =>
+        Seq(filterFailure(step) _, failureCheck _)
+      }
+      interleavedSteps.foldLeft(IO.pure(startCtx)) { (ioCtx, f) =>
+        ioCtx.flatMap(f)
       }
     }
 
