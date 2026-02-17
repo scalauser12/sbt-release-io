@@ -3,6 +3,8 @@ import scala.sys.process._
 name := "skip-tests-test"
 scalaVersion := "2.12.18"
 
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test
+
 // Skip push and publish steps in tests
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
   step.name == "push-changes" || step.name == "publish-artifacts"

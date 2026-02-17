@@ -1,5 +1,5 @@
+package com.example
+
 class FailingTest extends org.scalatest.funsuite.AnyFunSuite {
-  test("this test fails") {
-    fail("This test always fails")
-  }
+  sys.error("This test always fails during initialization")
 }
