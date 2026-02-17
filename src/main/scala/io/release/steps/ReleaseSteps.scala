@@ -8,6 +8,7 @@ import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport._
+import sbtrelease.ReleaseStateTransformations._
 
 /** Built-in release steps composed as IO actions. */
 object ReleaseSteps {
@@ -206,7 +207,10 @@ object ReleaseSteps {
     }
   }
 
-  /** Default ordered sequence of all release steps. */
+  /**
+   * Default ordered sequence of all release steps using IO-native implementations.
+   * These steps provide richer error handling and use the ReleaseContext-based VCS/version plumbing.
+   */
   val defaults: Seq[ReleaseStepIO] = Seq(
     initializeVcs,
     checkCleanWorkingDir,
@@ -221,6 +225,28 @@ object ReleaseSteps {
     commitNextVersion,
     pushChanges
   )
+
+  /**
+   * Alternative release process that delegates to upstream sbt-release's built-in steps.
+   * Uses automatic conversion from ReleaseStep to ReleaseStepIO via SbtReleaseCompat.
+   * Choose this if you want maximum compatibility with sbt-release's battle-tested implementations.
+   */
+  val defaultsFromUpstream: Seq[ReleaseStepIO] = {
+    import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
+    Seq(
+      checkSnapshotDependencies,
+      inquireVersions,
+      runClean,
+      runTest,
+      setReleaseVersion,
+      commitReleaseVersion,
+      tagRelease,
+      publishArtifacts,
+      setNextVersion,
+      commitNextVersion,
+      pushChanges
+    )
+  }
 
   // --- helpers ---
 
