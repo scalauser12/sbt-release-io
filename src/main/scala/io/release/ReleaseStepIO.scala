@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.vcs.Vcs as ReleaseVcs
 import sbt.*
 import sbt.Keys.*
+import sbtrelease.Compat
 
 /**
  * Keys for command-line parsed attributes stored in State.
@@ -123,12 +124,19 @@ object ReleaseStepIO {
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] = {
 
-    // Phase 1: Run all checks sequentially, threading the context
-    val checkPhase: IO[ReleaseContext] = steps.foldLeft(IO.pure(initialCtx)) { (acc, step) =>
-      acc.flatMap { ctx =>
-        step.check(ctx)
-      }
+    // Phase 1: Run all checks against the same initial state (matching upstream).
+    // Upstream: initialChecks.foreach(_(startState))
+    // Checks are validation-only; their state mutations are discarded.
+    val checkPhase: IO[Unit] = steps.foldLeft(IO.unit) { (acc, step) =>
+      acc *> step.check(initialCtx).void
     }
+
+    val FailureCommand = Compat.FailureCommand
+
+    // Set onFailure so sbt injects FailureCommand when a task fails without throwing
+    val startCtx = initialCtx.copy(
+      state = initialCtx.state.copy(onFailure = Some(FailureCommand))
+    )
 
     // Phase 2: Run actions with failure handling and cross-build support
     def filterFailure(f: ReleaseContext => IO[ReleaseContext])(
@@ -137,21 +145,45 @@ object ReleaseStepIO {
       if (ctx.failed) {
         IO.pure(ctx)
       } else {
-        f(ctx).handleErrorWith { err =>
-          IO(ctx.state.log.error(s"[release-io] Error: ${err.getMessage}")) *>
+        // Check if sbt injected FailureCommand (task failure without exception)
+        val hasFailure = ctx.state.remainingCommands.headOption.exists(_ == FailureCommand)
+        if (hasFailure) {
+          IO(ctx.state.log.error("[release-io] Task failure detected via FailureCommand")) *>
             IO.pure(ctx.fail)
+        } else {
+          f(ctx).handleErrorWith { err =>
+            IO(ctx.state.log.error(s"[release-io] Error: ${err.getMessage}")) *>
+              IO.pure(ctx.fail)
+          }
         }
       }
     }
 
-    /** Between-step hook, matching sbt-release 1.4's execution model.
-      * Provides an extension point for inserting logic between steps
-      * (e.g., rollback, logging, user prompts).
+    /** Between-step hook matching sbt-release 1.4's execution model.
+      * Inspects remainingCommands for FailureCommand (sbt's task failure signal),
+      * and restores onFailure handler for the next step.
       */
-    def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO.pure(ctx)
+    def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO {
+      val hasFailure = ctx.state.remainingCommands.headOption.exists(_ == FailureCommand)
+      if (hasFailure) {
+        ctx.copy(state = ctx.state.fail)
+      } else {
+        ctx.copy(state = ctx.state.copy(onFailure = Some(FailureCommand)))
+      }
+    }
+
+    /** Strips the FailureCommand sentinel at the end, matching upstream's removeFailureCommand. */
+    def removeFailureCommand(ctx: ReleaseContext): IO[ReleaseContext] = IO {
+      ctx.state.remainingCommands.toList match {
+        case head :: tail if head == FailureCommand =>
+          ctx.copy(state = ctx.state.copy(remainingCommands = tail))
+        case _ => ctx
+      }
+    }
 
     def buildActionPhase(steps: Seq[ReleaseContext => IO[ReleaseContext]])(startCtx: ReleaseContext): IO[ReleaseContext] = {
-      val interleavedSteps = steps.flatMap { step =>
+      val allSteps = steps :+ ((ctx: ReleaseContext) => removeFailureCommand(ctx))
+      val interleavedSteps = allSteps.flatMap { step =>
         Seq(filterFailure(step) _, failureCheck _)
       }
       interleavedSteps.foldLeft(IO.pure(startCtx)) { (ioCtx, f) =>
@@ -171,8 +203,8 @@ object ReleaseStepIO {
     }
 
     // Execute both phases
-    checkPhase.flatMap { checkedCtx =>
-      buildActionPhase(wrappedActions)(checkedCtx)
+    checkPhase.flatMap { _ =>
+      buildActionPhase(wrappedActions)(startCtx)
     }.flatMap { finalCtx =>
       if (finalCtx.failed) {
         IO.raiseError(new RuntimeException("Release process failed"))
