@@ -138,12 +138,6 @@ object ReleaseSteps {
               }
           }
         }
-      },
-    check = ctx =>
-      requireVcs(ctx) { _ =>
-        requireVersions(ctx) { _ =>
-          IO.pure(ctx)
-        }
       }
   )
 
