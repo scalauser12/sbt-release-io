@@ -7,6 +7,7 @@ import io.release.version.Version
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
+import sbtrelease.ReleasePlugin.autoImport._
 
 /** Built-in release steps composed as IO actions. */
 object ReleaseSteps {
@@ -67,23 +68,22 @@ object ReleaseSteps {
       IO {
         val extracted = extract(ctx.state)
         val currentVer = extracted.get(version)
-        val parsed = Version
-          .parse(currentVer)
-          .getOrElse(
-            throw new RuntimeException(
-              s"Cannot parse current version: $currentVer"
-            )
-          )
-        val releaseVer = Version.releaseVersion(parsed)
-        val nextVer = Version.nextVersion(parsed)
 
+        // Use upstream sbt-release's version functions which respect releaseVersionBump setting
+        val releaseFunc = extracted.runTask(releaseVersion, ctx.state)._2
+        val nextFunc = extracted.runTask(releaseNextVersion, ctx.state)._2
+
+        val suggestedReleaseVer = releaseFunc(currentVer)
+        val suggestedNextVer = nextFunc(suggestedReleaseVer)
+
+        // Allow command-line overrides
         val releaseVersionArg =
           ctx.state.get(ReleaseKeys.commandLineReleaseVersion).flatten
         val nextVersionArg =
           ctx.state.get(ReleaseKeys.commandLineNextVersion).flatten
 
-        val finalReleaseVer = releaseVersionArg.getOrElse(releaseVer)
-        val finalNextVer = nextVersionArg.getOrElse(nextVer)
+        val finalReleaseVer = releaseVersionArg.getOrElse(suggestedReleaseVer)
+        val finalNextVer = nextVersionArg.getOrElse(suggestedNextVer)
 
         ctx.state.log.info(s"[release-io] Current version : $currentVer")
         ctx.state.log.info(s"[release-io] Release version : $finalReleaseVer")
