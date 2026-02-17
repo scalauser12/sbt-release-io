@@ -7,6 +7,14 @@ lazy val root = (project in file("."))
     organization := "io.github.sbt-release-io",
     version := "0.1.0-SNAPSHOT",
     sbtPlugin := true,
+
+    // Scripted test configuration
+    scriptedLaunchOpts := {
+      scriptedLaunchOpts.value ++
+      Seq("-Xmx1024M", "-Dplugin.version=" + version.value)
+    },
+    scriptedBufferLog := false,
+
     addSbtPlugin("com.github.sbt" % "sbt-release" % "1.4.0"),
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-effect" % "3.6.3"
