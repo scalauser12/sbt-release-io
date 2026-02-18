@@ -44,11 +44,16 @@ object ReleaseIOPlugin extends AutoPlugin {
     val releaseIOCrossBuild = settingKey[Boolean]("Whether to enable cross-building during release")
     val releaseIOSkipPublish = settingKey[Boolean]("Whether to skip publish during release")
 
-    // Re-export factory methods
-    val releaseIOStepTask = ReleaseStepIO.fromTask _
-    val releaseIOStepTaskAggregated = ReleaseStepIO.fromTaskAggregated _
-    val releaseIOStepCommand = ReleaseStepIO.fromCommand _
-    val releaseIOStepCommandAndRemaining = ReleaseStepIO.fromCommandAndRemaining _
+    // Re-export factory methods as def wrappers to preserve generic type parameters
+    // and default argument values (eta-expanded vals lose both).
+    def releaseIOStepTask[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
+      ReleaseStepIO.fromTask(key, enableCrossBuild)
+    def releaseIOStepTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
+      ReleaseStepIO.fromTaskAggregated(key, enableCrossBuild)
+    def releaseIOStepCommand(command: String): ReleaseStepIO =
+      ReleaseStepIO.fromCommand(command)
+    def releaseIOStepCommandAndRemaining(command: String): ReleaseStepIO =
+      ReleaseStepIO.fromCommandAndRemaining(command)
 
     // Re-export sbt-release compatibility conversions
     implicit val sbtReleaseStepConversion
