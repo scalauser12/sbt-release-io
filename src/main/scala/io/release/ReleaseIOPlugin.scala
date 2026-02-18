@@ -43,6 +43,8 @@ object ReleaseIOPlugin extends AutoPlugin {
   }
 
   object autoImport {
+    import scala.language.implicitConversions
+
     val releaseIOProcess =
       settingKey[Seq[ReleaseStepIO]]("The sequence of IO release steps to execute")
     val releaseIOCrossBuild = settingKey[Boolean]("Whether to enable cross-building during release")

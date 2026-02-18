@@ -210,7 +210,7 @@ object ReleaseSteps {
       } else {
         IO {
           val extracted = extract(ctx.state)
-          val newState = extracted.runAggregated(releasePublishArtifactsAction in Global, ctx.state)
+          val newState = extracted.runAggregated(Global / releasePublishArtifactsAction, ctx.state)
           ctx.copy(state = newState)
         }
       },

@@ -108,7 +108,7 @@ object ReleaseStepIO {
       action = ctx =>
         IO {
           val extracted = Project.extract(ctx.state)
-          val newState = extracted.runAggregated(key in extracted.currentRef, ctx.state)
+          val newState = extracted.runAggregated(extracted.currentRef / key, ctx.state)
           ctx.copy(state = newState)
         },
       enableCrossBuild = enableCrossBuild
@@ -158,7 +158,7 @@ object ReleaseStepIO {
               case Nil =>
                 // No more commands enqueued, restore saved remaining
                 newState.copy(remainingCommands = savedRemaining)
-              case head :: tail if head == FailureCommand =>
+              case head :: _ if head == FailureCommand =>
                 // Failure detected, prepend FailureCommand to saved remaining
                 newState.copy(remainingCommands = head +: savedRemaining)
               case head :: tail =>
