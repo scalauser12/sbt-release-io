@@ -1,6 +1,9 @@
 target/
 project/target/
 project/project/
+.bloop/
+.metals/
+.vscode/
 .idea/
 .bsp/
 *.class
