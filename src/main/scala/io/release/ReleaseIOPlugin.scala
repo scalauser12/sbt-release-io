@@ -54,6 +54,8 @@ object ReleaseIOPlugin extends AutoPlugin {
       ReleaseStepIO.fromTask(key, enableCrossBuild)
     def releaseIOStepTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
       ReleaseStepIO.fromTaskAggregated(key, enableCrossBuild)
+    def releaseIOStepInputTask[T](key: InputKey[T], args: String = "", enableCrossBuild: Boolean = false): ReleaseStepIO =
+      ReleaseStepIO.fromInputTask(key, args, enableCrossBuild)
     def releaseIOStepCommand(command: String): ReleaseStepIO =
       ReleaseStepIO.fromCommand(command)
     def releaseIOStepCommandAndRemaining(command: String): ReleaseStepIO =

@@ -83,14 +83,32 @@ object ReleaseStepIO {
       enableCrossBuild = enableCrossBuild
     )
 
-  /** Create a step that runs a TaskKey aggregated across all subprojects. */
+  /** Create a step that runs an InputKey with optional string args. Empty string uses parser
+    * defaults. Mirrors sbt-release's `releaseStepInputTask`.
+    */
+  def fromInputTask[T](key: InputKey[T], args: String = "", enableCrossBuild: Boolean = false): ReleaseStepIO =
+    ReleaseStepIO(
+      name = key.key.label,
+      action = ctx =>
+        IO {
+          val extracted = Project.extract(ctx.state)
+          val (newState, _) = extracted.runInputTask(key, args, ctx.state)
+          ctx.copy(state = newState)
+        },
+      enableCrossBuild = enableCrossBuild
+    )
+
+  /** Create a step that runs a TaskKey aggregated across all subprojects. Scopes the key to the
+    * current project ref so that aggregation follows the project's `aggregate` setting. Mirrors
+    * sbt-release's `releaseStepTaskAggregated`.
+    */
   def fromTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
     ReleaseStepIO(
       name = s"${key.key.label} (aggregated)",
       action = ctx =>
         IO {
           val extracted = Project.extract(ctx.state)
-          val newState = extracted.runAggregated(key in Global, ctx.state)
+          val newState = extracted.runAggregated(key in extracted.currentRef, ctx.state)
           ctx.copy(state = newState)
         },
       enableCrossBuild = enableCrossBuild
