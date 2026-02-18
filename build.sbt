@@ -17,7 +17,8 @@ lazy val root = (project in file("."))
 
     addSbtPlugin("com.github.sbt" % "sbt-release" % "1.4.0"),
     libraryDependencies ++= Seq(
-      "org.typelevel" %% "cats-effect" % "3.6.3"
+      "org.typelevel" %% "cats-effect" % "3.6.3",
+      "org.specs2" %% "specs2-core" % "4.20.4" % Test
     ),
     scalacOptions ++= Seq(
       "-deprecation",
