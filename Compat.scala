@@ -7,7 +7,7 @@ import sbt.Keys._
 import sbt.internal.Aggregation.KeyValue
 import sbt.internal.{Act, Aggregation, ExtendableKeyIndex}
 import sbt.std.Transform.DummyTaskMap
-import scala.language.reflectiveCalls
+import scala.language.{implicitConversions, reflectiveCalls}
 
 object Compat {
 
