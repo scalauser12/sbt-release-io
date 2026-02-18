@@ -28,15 +28,19 @@ object ReleaseIOPlugin extends AutoPlugin {
     val withDefaults: Parser[ReleaseArg] = token("with-defaults").map(_ => WithDefaults)
     val skipTests: Parser[ReleaseArg] = token("skip-tests").map(_ => SkipTests)
     val crossBuild: Parser[ReleaseArg] = token("cross").map(_ => CrossBuild)
-    val releaseVersion: Parser[ReleaseArg] = (token("release-version") ~> Space ~> token(NotSpace, "<release version>")).map(ReleaseVersion)
-    val nextVersion: Parser[ReleaseArg] = (token("next-version") ~> Space ~> token(NotSpace, "<next version>")).map(NextVersion)
+    val releaseVersion: Parser[ReleaseArg] =
+      (token("release-version") ~> Space ~> token(NotSpace, "<release version>"))
+        .map(ReleaseVersion)
+    val nextVersion: Parser[ReleaseArg] =
+      (token("next-version") ~> Space ~> token(NotSpace, "<next version>")).map(NextVersion)
 
     val arg = withDefaults | skipTests | crossBuild | releaseVersion | nextVersion
     (Space ~> arg).*
   }
 
   object autoImport {
-    val releaseIOProcess = settingKey[Seq[ReleaseStepIO]]("The sequence of IO release steps to execute")
+    val releaseIOProcess =
+      settingKey[Seq[ReleaseStepIO]]("The sequence of IO release steps to execute")
     val releaseIOCrossBuild = settingKey[Boolean]("Whether to enable cross-building during release")
     val releaseIOSkipPublish = settingKey[Boolean]("Whether to skip publish during release")
 
@@ -47,7 +51,8 @@ object ReleaseIOPlugin extends AutoPlugin {
     val releaseIOStepCommandAndRemaining = ReleaseStepIO.fromCommandAndRemaining _
 
     // Re-export sbt-release compatibility conversions
-    implicit val sbtReleaseStepConversion: sbtrelease.ReleasePlugin.autoImport.ReleaseStep => ReleaseStepIO =
+    implicit val sbtReleaseStepConversion
+        : sbtrelease.ReleasePlugin.autoImport.ReleaseStep => ReleaseStepIO =
       SbtReleaseCompat.releaseStepToReleaseStepIO
 
     implicit val sbtReleaseStateTransformConversion: (State => State) => ReleaseStepIO =

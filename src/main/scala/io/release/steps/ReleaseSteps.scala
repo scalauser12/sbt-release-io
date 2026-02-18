@@ -21,19 +21,18 @@ object ReleaseSteps {
     name = "check-clean-working-dir",
     action = ctx =>
       requireVcs(ctx) { vcs =>
-        IO {
-          val extracted = extract(ctx.state)
-          val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
-          (vcs.underlying.hasModifiedFiles, !ignoreUntracked && vcs.underlying.hasUntrackedFiles)
-        }.flatMap { case (hasModified, checkUntracked) =>
-          if (hasModified || checkUntracked) {
-            IO.raiseError(
-              new RuntimeException(
-                "Working directory is not clean. Please commit or stash your changes before releasing."
+        val ignoreUntracked = extract(ctx.state).get(releaseIgnoreUntrackedFiles)
+        vcs.hasModifiedFiles.flatMap { hasModified =>
+          vcs.hasUntrackedFiles.flatMap { hasUntracked =>
+            if (hasModified || (!ignoreUntracked && hasUntracked)) {
+              IO.raiseError(
+                new RuntimeException(
+                  "Working directory is not clean. Please commit or stash your changes before releasing."
+                )
               )
-            )
-          } else {
-            IO.pure(ctx)
+            } else {
+              IO.pure(ctx)
+            }
           }
         }
       }
@@ -45,7 +44,12 @@ object ReleaseSteps {
     check = ctx =>
       IO {
         val extracted = extract(ctx.state)
-        val (_, snapshotDeps) = extracted.runTask(releaseSnapshotDependencies, ctx.state)
+        val thisRef = extracted.get(thisProjectRef)
+        val (_, result) = sbtrelease.Compat.runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
+        val snapshotDeps = result match {
+          case sbt.Value(value) => value.flatMap(_.value)
+          case sbt.Inc(cause)   => throw new RuntimeException("Error checking for snapshot dependencies: " + cause)
+        }
 
         if (snapshotDeps.nonEmpty) {
           val depList = snapshotDeps
@@ -129,8 +133,8 @@ object ReleaseSteps {
             (versionFile.getName, commitMsg, sign, signOff)
           }.flatMap { case (fileName, commitMsg, sign, signOff) =>
             vcs.add(fileName) *>
-              IO(vcs.underlying.status.!!.trim).flatMap { status =>
-                if (status.nonEmpty) {
+              vcs.hasChanges.flatMap { hasChanges =>
+                if (hasChanges) {
                   vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
                 } else {
                   IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
@@ -206,8 +210,8 @@ object ReleaseSteps {
             (versionFile.getName, commitMsg, sign, signOff)
           }.flatMap { case (fileName, commitMsg, sign, signOff) =>
             vcs.add(fileName) *>
-              IO(vcs.underlying.status.!!.trim).flatMap { status =>
-                if (status.nonEmpty) {
+              vcs.hasChanges.flatMap { hasChanges =>
+                if (hasChanges) {
                   vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
                 } else {
                   IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)

@@ -10,9 +10,16 @@ import scala.sys.process.*
  * Wrapper around sbt-release's Vcs abstraction, exposing operations as cats-effect IO.
  * Delegates all VCS operations to upstream, gaining support for Git, Mercurial, and Subversion.
  */
-class Vcs(val underlying: SbtVcs) {
+class Vcs(private val underlying: SbtVcs) {
 
   def currentBranch: IO[String] = IO(underlying.currentBranch)
+
+  def hasModifiedFiles: IO[Boolean] = IO(underlying.hasModifiedFiles)
+
+  def hasUntrackedFiles: IO[Boolean] = IO(underlying.hasUntrackedFiles)
+
+  /** True if `git add` (or equivalent) staged any changes — used for empty-commit detection. */
+  def hasChanges: IO[Boolean] = IO(underlying.status.!!.trim.nonEmpty)
 
   def isClean: IO[Boolean] = IO(!underlying.hasModifiedFiles && !underlying.hasUntrackedFiles)
 

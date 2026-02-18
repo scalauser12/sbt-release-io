@@ -7,18 +7,17 @@ import sbt.Keys.*
 import sbt.Def.ScopedKey
 import sbtrelease.Compat
 
-/**
- * Keys for command-line parsed attributes stored in State.
- * Delegates to upstream sbt-release attribute keys to ensure interoperability
- * between IO-native steps and upstream steps.
- */
+/** Keys for command-line parsed attributes stored in State. Delegates to upstream sbt-release
+  * attribute keys to ensure interoperability between IO-native steps and upstream steps.
+  */
 object ReleaseKeys {
   import sbtrelease.ReleasePlugin.autoImport.{ReleaseKeys => UpstreamKeys}
 
   val useDefaults: AttributeKey[Boolean] = UpstreamKeys.useDefaults
   val skipTests: AttributeKey[Boolean] = UpstreamKeys.skipTests
   val cross: AttributeKey[Boolean] = UpstreamKeys.cross
-  val commandLineReleaseVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineReleaseVersion
+  val commandLineReleaseVersion: AttributeKey[Option[String]] =
+    UpstreamKeys.commandLineReleaseVersion
   val commandLineNextVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineNextVersion
   val versions: AttributeKey[(String, String)] = UpstreamKeys.versions
 }
@@ -74,11 +73,12 @@ object ReleaseStepIO {
   def fromTask[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
     ReleaseStepIO(
       name = key.key.label,
-      action = ctx => IO {
-        val extracted = Project.extract(ctx.state)
-        val (newState, _) = extracted.runTask(key, ctx.state)
-        ctx.copy(state = newState)
-      },
+      action = ctx =>
+        IO {
+          val extracted = Project.extract(ctx.state)
+          val (newState, _) = extracted.runTask(key, ctx.state)
+          ctx.copy(state = newState)
+        },
       enableCrossBuild = enableCrossBuild
     )
 
@@ -86,11 +86,12 @@ object ReleaseStepIO {
   def fromTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
     ReleaseStepIO(
       name = s"${key.key.label} (aggregated)",
-      action = ctx => IO {
-        val extracted = Project.extract(ctx.state)
-        val newState = extracted.runAggregated(key in Global, ctx.state)
-        ctx.copy(state = newState)
-      },
+      action = ctx =>
+        IO {
+          val extracted = Project.extract(ctx.state)
+          val newState = extracted.runAggregated(key in Global, ctx.state)
+          ctx.copy(state = newState)
+        },
       enableCrossBuild = enableCrossBuild
     )
 
@@ -98,48 +99,58 @@ object ReleaseStepIO {
   def fromCommand(command: String): ReleaseStepIO =
     ReleaseStepIO(
       name = s"command: $command",
-      action = ctx => IO {
-        val newState = Command.process(command, ctx.state, (msg: String) => {
-          throw new RuntimeException(s"Failed to parse command '$command': $msg")
-        })
-        ctx.copy(state = newState)
-      }
+      action = ctx =>
+        IO {
+          val newState = Command.process(
+            command,
+            ctx.state,
+            (msg: String) => {
+              throw new RuntimeException(s"Failed to parse command '$command': $msg")
+            }
+          )
+          ctx.copy(state = newState)
+        }
     )
 
-  /** Create a step that runs an sbt command and drains all follow-up commands.
-    * Matches upstream sbt-release's releaseStepCommandAndRemaining behavior,
-    * which is critical for commands like +publish that enqueue sub-commands.
+  /** Create a step that runs an sbt command and drains all follow-up commands. Matches upstream
+    * sbt-release's releaseStepCommandAndRemaining behavior, which is critical for commands like
+    * +publish that enqueue sub-commands.
     */
   def fromCommandAndRemaining(command: String): ReleaseStepIO =
     ReleaseStepIO(
       name = s"command+remaining: $command",
-      action = ctx => IO {
-        val FailureCommand = Compat.FailureCommand
-        val savedRemaining = ctx.state.remainingCommands
+      action = ctx =>
+        IO {
+          val FailureCommand = Compat.FailureCommand
+          val savedRemaining = ctx.state.remainingCommands
 
-        @scala.annotation.tailrec
-        def drainCommands(state: State, commandToRun: String): State = {
-          val stateWithoutRemaining = state.copy(remainingCommands = Nil)
-          val newState = Command.process(commandToRun, stateWithoutRemaining, (msg: String) => {
-            throw new RuntimeException(s"Failed to parse command '$commandToRun': $msg")
-          })
+          @scala.annotation.tailrec
+          def drainCommands(state: State, commandToRun: String): State = {
+            val stateWithoutRemaining = state.copy(remainingCommands = Nil)
+            val newState = Command.process(
+              commandToRun,
+              stateWithoutRemaining,
+              (msg: String) => {
+                throw new RuntimeException(s"Failed to parse command '$commandToRun': $msg")
+              }
+            )
 
-          newState.remainingCommands.toList match {
-            case Nil =>
-              // No more commands enqueued, restore saved remaining
-              newState.copy(remainingCommands = savedRemaining)
-            case head :: tail if head == FailureCommand =>
-              // Failure detected, prepend FailureCommand to saved remaining
-              newState.copy(remainingCommands = head +: savedRemaining)
-            case head :: tail =>
-              // More commands enqueued, drain them recursively
-              drainCommands(newState.copy(remainingCommands = tail), head.commandLine)
+            newState.remainingCommands.toList match {
+              case Nil =>
+                // No more commands enqueued, restore saved remaining
+                newState.copy(remainingCommands = savedRemaining)
+              case head :: tail if head == FailureCommand =>
+                // Failure detected, prepend FailureCommand to saved remaining
+                newState.copy(remainingCommands = head +: savedRemaining)
+              case head :: tail =>
+                // More commands enqueued, drain them recursively
+                drainCommands(newState.copy(remainingCommands = tail), head.commandLine)
+            }
           }
-        }
 
-        val finalState = drainCommands(ctx.state, command)
-        ctx.copy(state = finalState)
-      }
+          val finalState = drainCommands(ctx.state, command)
+          ctx.copy(state = finalState)
+        }
     )
 
   /** Compose a sequence of steps into a two-phase IO program. */
@@ -182,9 +193,9 @@ object ReleaseStepIO {
       }
     }
 
-    /** Between-step hook matching sbt-release 1.4's execution model.
-      * Inspects remainingCommands for FailureCommand (sbt's task failure signal),
-      * marks the context as failed, and strips the sentinel command.
+    /** Between-step hook matching sbt-release 1.4's execution model. Inspects remainingCommands for
+      * FailureCommand (sbt's task failure signal), marks the context as failed, and strips the
+      * sentinel command.
       */
     def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO {
       val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
@@ -205,7 +216,9 @@ object ReleaseStepIO {
       }
     }
 
-    def buildActionPhase(steps: Seq[ReleaseContext => IO[ReleaseContext]])(startCtx: ReleaseContext): IO[ReleaseContext] = {
+    def buildActionPhase(
+        steps: Seq[ReleaseContext => IO[ReleaseContext]]
+    )(startCtx: ReleaseContext): IO[ReleaseContext] = {
       val allSteps = steps :+ ((ctx: ReleaseContext) => removeFailureCommand(ctx))
       val interleavedSteps = allSteps.flatMap { step =>
         Seq(filterFailure(step) _, failureCheck _)
@@ -219,28 +232,30 @@ object ReleaseStepIO {
       val baseAction = (ctx: ReleaseContext) =>
         IO(ctx.state.log.info(s"[release-io] Executing step: ${step.name}")) *> step.action(ctx)
 
-      if (step.enableCrossBuild && crossBuild) {
-        ctx => runCrossBuild(baseAction)(ctx)
+      if (step.enableCrossBuild && crossBuild) { ctx =>
+        runCrossBuild(baseAction)(ctx)
       } else {
         baseAction
       }
     }
 
     // Execute both phases
-    checkPhase.flatMap { _ =>
-      buildActionPhase(wrappedActions)(startCtx)
-    }.flatMap { finalCtx =>
-      if (finalCtx.failed) {
-        IO.raiseError(new RuntimeException("Release process failed"))
-      } else {
-        IO.pure(finalCtx)
+    checkPhase
+      .flatMap { _ =>
+        buildActionPhase(wrappedActions)(startCtx)
       }
-    }
+      .flatMap { finalCtx =>
+        if (finalCtx.failed) {
+          IO.raiseError(new RuntimeException("Release process failed"))
+        } else {
+          IO.pure(finalCtx)
+        }
+      }
   }
 
-  /** Run an action across all crossScalaVersions using proper project reload.
-    * Based on sbt-release's implementation which properly switches Scala versions
-    * by reloading the project structure, ensuring incremental compilation is invalidated.
+  /** Run an action across all crossScalaVersions using proper project reload. Based on
+    * sbt-release's implementation which properly switches Scala versions by reloading the project
+    * structure, ensuring incremental compilation is invalidated.
     */
   private def runCrossBuild(
       action: ReleaseContext => IO[ReleaseContext]
@@ -276,9 +291,9 @@ object ReleaseStepIO {
     }
   }
 
-  /** Switch Scala version by fully reloading the project structure.
-    * This is a copy of sbt.Cross.switchVersion logic which ensures incremental
-    * compilation caches are properly invalidated.
+  /** Switch Scala version by fully reloading the project structure. This is a copy of
+    * sbt.Cross.switchVersion logic which ensures incremental compilation caches are properly
+    * invalidated.
     */
   private def switchScalaVersion(state: State, version: String): State = {
     val extracted = Project.extract(state)
