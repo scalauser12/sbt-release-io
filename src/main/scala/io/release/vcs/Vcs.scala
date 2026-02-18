@@ -44,10 +44,7 @@ class Vcs(private val underlying: SbtVcs) {
   def existsTag(name: String): IO[Boolean] = IO(underlying.existsTag(name))
 
   def tag(name: String, message: Option[String] = None, sign: Boolean = false): IO[Unit] = IO {
-    message match {
-      case Some(msg) => underlying.tag(name, msg, sign = sign).!!
-      case None      => underlying.tag(name, comment = "", sign = sign).!!
-    }
+    underlying.tag(name, message.getOrElse(""), sign = sign).!!
     ()
   }
 
@@ -64,12 +61,14 @@ class Vcs(private val underlying: SbtVcs) {
 }
 
 object Vcs {
+
   /**
    * Detect VCS type (Git, Mercurial, or Subversion) in the given directory.
    * Delegates to sbt-release's detection logic.
    */
   def detect(baseDir: File): IO[Vcs] = IO {
-    SbtVcs.detect(baseDir)
+    SbtVcs
+      .detect(baseDir)
       .map(new Vcs(_))
       .getOrElse(
         throw new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}")

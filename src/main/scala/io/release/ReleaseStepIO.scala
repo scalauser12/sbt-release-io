@@ -86,7 +86,11 @@ object ReleaseStepIO {
   /** Create a step that runs an InputKey with optional string args. Empty string uses parser
     * defaults. Mirrors sbt-release's `releaseStepInputTask`.
     */
-  def fromInputTask[T](key: InputKey[T], args: String = "", enableCrossBuild: Boolean = false): ReleaseStepIO =
+  def fromInputTask[T](
+      key: InputKey[T],
+      args: String = "",
+      enableCrossBuild: Boolean = false
+  ): ReleaseStepIO =
     ReleaseStepIO(
       name = key.key.label,
       action = ctx =>

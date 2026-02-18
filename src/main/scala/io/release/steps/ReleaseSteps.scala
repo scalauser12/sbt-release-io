@@ -45,10 +45,12 @@ object ReleaseSteps {
       IO {
         val extracted = extract(ctx.state)
         val thisRef = extracted.get(thisProjectRef)
-        val (_, result) = sbtrelease.Compat.runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
+        val (_, result) =
+          sbtrelease.Compat.runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
         val snapshotDeps = result match {
           case sbt.Value(value) => value.flatMap(_.value)
-          case sbt.Inc(cause)   => throw new RuntimeException("Error checking for snapshot dependencies: " + cause)
+          case sbt.Inc(cause)   =>
+            throw new RuntimeException("Error checking for snapshot dependencies: " + cause)
         }
 
         if (snapshotDeps.nonEmpty) {
@@ -64,36 +66,35 @@ object ReleaseSteps {
     enableCrossBuild = true
   )
 
-  val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") {
-    ctx =>
-      IO {
-        val extracted = extract(ctx.state)
-        val currentVer = extracted.get(version)
+  val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") { ctx =>
+    IO {
+      val extracted = extract(ctx.state)
+      val currentVer = extracted.get(version)
 
-        // Use upstream sbt-release's version functions which respect releaseVersionBump setting
-        val releaseFunc = extracted.runTask(releaseVersion, ctx.state)._2
-        val nextFunc = extracted.runTask(releaseNextVersion, ctx.state)._2
+      // Use upstream sbt-release's version functions which respect releaseVersionBump setting
+      val releaseFunc = extracted.runTask(releaseVersion, ctx.state)._2
+      val nextFunc = extracted.runTask(releaseNextVersion, ctx.state)._2
 
-        val suggestedReleaseVer = releaseFunc(currentVer)
-        val suggestedNextVer = nextFunc(suggestedReleaseVer)
+      val suggestedReleaseVer = releaseFunc(currentVer)
+      val suggestedNextVer = nextFunc(suggestedReleaseVer)
 
-        // Allow command-line overrides
-        val releaseVersionArg =
-          ctx.state.get(ReleaseKeys.commandLineReleaseVersion).flatten
-        val nextVersionArg =
-          ctx.state.get(ReleaseKeys.commandLineNextVersion).flatten
+      // Allow command-line overrides
+      val releaseVersionArg =
+        ctx.state.get(ReleaseKeys.commandLineReleaseVersion).flatten
+      val nextVersionArg =
+        ctx.state.get(ReleaseKeys.commandLineNextVersion).flatten
 
-        val finalReleaseVer = releaseVersionArg.getOrElse(suggestedReleaseVer)
-        val finalNextVer = nextVersionArg.getOrElse(suggestedNextVer)
+      val finalReleaseVer = releaseVersionArg.getOrElse(suggestedReleaseVer)
+      val finalNextVer = nextVersionArg.getOrElse(suggestedNextVer)
 
-        ctx.state.log.info(s"[release-io] Current version : $currentVer")
-        ctx.state.log.info(s"[release-io] Release version : $finalReleaseVer")
-        ctx.state.log.info(s"[release-io] Next version    : $finalNextVer")
+      ctx.state.log.info(s"[release-io] Current version : $currentVer")
+      ctx.state.log.info(s"[release-io] Release version : $finalReleaseVer")
+      ctx.state.log.info(s"[release-io] Next version    : $finalNextVer")
 
-        // Store versions in both ReleaseContext and State attributes for upstream interop
-        val updatedState = ctx.state.put(ReleaseKeys.versions, (finalReleaseVer, finalNextVer))
-        ctx.copy(state = updatedState).withVersions(finalReleaseVer, finalNextVer)
-      }
+      // Store versions in both ReleaseContext and State attributes for upstream interop
+      val updatedState = ctx.state.put(ReleaseKeys.versions, (finalReleaseVer, finalNextVer))
+      ctx.copy(state = updatedState).withVersions(finalReleaseVer, finalNextVer)
+    }
   }
 
   val runTests: ReleaseStepIO = ReleaseStepIO(
@@ -119,31 +120,8 @@ object ReleaseSteps {
       }
     }
 
-  val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
-    name = "commit-release-version",
-    action = ctx =>
-      requireVcs(ctx) { vcs =>
-        requireVersions(ctx) { case (releaseVer, _) =>
-          IO {
-            val extracted = extract(ctx.state)
-            val versionFile = extracted.get(releaseVersionFile)
-            val commitMsg = extracted.runTask(releaseCommitMessage, ctx.state)._2
-            val sign = extracted.get(releaseVcsSign)
-            val signOff = extracted.get(releaseVcsSignOff)
-            (versionFile.getName, commitMsg, sign, signOff)
-          }.flatMap { case (fileName, commitMsg, sign, signOff) =>
-            vcs.add(fileName) *>
-              vcs.hasChanges.flatMap { hasChanges =>
-                if (hasChanges) {
-                  vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
-                } else {
-                  IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
-                }
-              }
-          }
-        }
-      }
-  )
+  val commitReleaseVersion: ReleaseStepIO =
+    ReleaseStepIO.io("commit-release-version")(commitVersionFile(releaseCommitMessage))
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
@@ -177,11 +155,13 @@ object ReleaseSteps {
         vcs.tag(tagName, Some(tagComment), sign = sign).as(ctx.withAttr("release-tag", tagName))
       case true =>
         val effectiveAnswer: IO[String] = defaultAnswer match {
-          case Some(ans) => IO.pure(ans)
+          case Some(ans)           => IO.pure(ans)
           case None if useDefaults => IO.pure("a")
-          case None =>
+          case None                =>
             IO.blocking {
-              print(s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] ")
+              print(
+                s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
+              )
               Option(scala.io.StdIn.readLine()).getOrElse("")
             }
         }
@@ -191,11 +171,16 @@ object ReleaseSteps {
               new RuntimeException(s"Tag [$tagName] already exists. Aborting release!")
             )
           case "k" | "K" =>
-            IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Keeping existing tag."))
+            IO(
+              ctx.state.log
+                .warn(s"[release-io] Tag [$tagName] already exists. Keeping existing tag.")
+            )
               .as(ctx.withAttr("release-tag", tagName))
           case "o" | "O" =>
             IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")) *>
-              vcs.tag(tagName, Some(tagComment), sign = sign).as(ctx.withAttr("release-tag", tagName))
+              vcs
+                .tag(tagName, Some(tagComment), sign = sign)
+                .as(ctx.withAttr("release-tag", tagName))
           case newTagName =>
             ctx.state.log.info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
             resolveTag(vcs, newTagName, tagComment, sign, None, ctx, useDefaults = false)
@@ -214,50 +199,18 @@ object ReleaseSteps {
           ctx.copy(state = newState)
         }
       },
-    check = ctx =>
-      if (ctx.skipPublish) {
-        IO.pure(ctx)
-      } else {
-        IO {
-          val extracted = extract(ctx.state)
-          // Check will be performed during action phase when publishTo is resolved
-          ctx
-        }
-      },
+    check = ctx => IO.pure(ctx), // publishTo check is performed in the action phase
     enableCrossBuild = true
   )
 
-  val setNextVersion: ReleaseStepIO = ReleaseStepIO.io("set-next-version") {
-    ctx =>
-      requireVersions(ctx) { case (_, nextVer) =>
-        writeVersion(ctx, nextVer)
-      }
+  val setNextVersion: ReleaseStepIO = ReleaseStepIO.io("set-next-version") { ctx =>
+    requireVersions(ctx) { case (_, nextVer) =>
+      writeVersion(ctx, nextVer)
+    }
   }
 
   val commitNextVersion: ReleaseStepIO =
-    ReleaseStepIO.io("commit-next-version") { ctx =>
-      requireVcs(ctx) { vcs =>
-        requireVersions(ctx) { case (_, nextVer) =>
-          IO {
-            val extracted = extract(ctx.state)
-            val versionFile = extracted.get(releaseVersionFile)
-            val commitMsg = extracted.runTask(releaseNextCommitMessage, ctx.state)._2
-            val sign = extracted.get(releaseVcsSign)
-            val signOff = extracted.get(releaseVcsSignOff)
-            (versionFile.getName, commitMsg, sign, signOff)
-          }.flatMap { case (fileName, commitMsg, sign, signOff) =>
-            vcs.add(fileName) *>
-              vcs.hasChanges.flatMap { hasChanges =>
-                if (hasChanges) {
-                  vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
-                } else {
-                  IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
-                }
-              }
-          }
-        }
-      }
-    }
+    ReleaseStepIO.io("commit-next-version")(commitVersionFile(releaseNextCommitMessage))
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO.io("push-changes") { ctx =>
     requireVcs(ctx) { vcs =>
@@ -311,7 +264,7 @@ object ReleaseSteps {
   )(f: Vcs => IO[ReleaseContext]): IO[ReleaseContext] =
     ctx.vcs match {
       case Some(v) => f(v)
-      case None =>
+      case None    =>
         IO.raiseError(
           new RuntimeException(
             "VCS not initialized. Ensure initializeVcs runs before this step."
@@ -324,12 +277,36 @@ object ReleaseSteps {
   ): IO[ReleaseContext] =
     ctx.versions match {
       case Some(v) => f(v)
-      case None =>
+      case None    =>
         IO.raiseError(
           new RuntimeException(
             "Versions not set. Ensure inquireVersions runs before this step."
           )
         )
+    }
+
+  private def commitVersionFile(
+      commitMsgKey: TaskKey[String]
+  )(ctx: ReleaseContext): IO[ReleaseContext] =
+    requireVcs(ctx) { vcs =>
+      requireVersions(ctx) { _ =>
+        IO {
+          val extracted = extract(ctx.state)
+          val versionFile = extracted.get(releaseVersionFile)
+          val commitMsg   = extracted.runTask(commitMsgKey, ctx.state)._2
+          val sign        = extracted.get(releaseVcsSign)
+          val signOff     = extracted.get(releaseVcsSignOff)
+          (versionFile.getName, commitMsg, sign, signOff)
+        }.flatMap { case (fileName, commitMsg, sign, signOff) =>
+          vcs.add(fileName) *>
+            vcs.hasChanges.flatMap { hasChanges =>
+              if (hasChanges)
+                vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
+              else
+                IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
+            }
+        }
+      }
     }
 
   private def writeVersion(

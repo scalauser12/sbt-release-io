@@ -54,9 +54,16 @@ object ReleaseIOPlugin extends AutoPlugin {
     // and default argument values (eta-expanded vals lose both).
     def releaseIOStepTask[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
       ReleaseStepIO.fromTask(key, enableCrossBuild)
-    def releaseIOStepTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
+    def releaseIOStepTaskAggregated[T](
+        key: TaskKey[T],
+        enableCrossBuild: Boolean = false
+    ): ReleaseStepIO =
       ReleaseStepIO.fromTaskAggregated(key, enableCrossBuild)
-    def releaseIOStepInputTask[T](key: InputKey[T], args: String = "", enableCrossBuild: Boolean = false): ReleaseStepIO =
+    def releaseIOStepInputTask[T](
+        key: InputKey[T],
+        args: String = "",
+        enableCrossBuild: Boolean = false
+    ): ReleaseStepIO =
       ReleaseStepIO.fromInputTask(key, args, enableCrossBuild)
     def releaseIOStepCommand(command: String): ReleaseStepIO =
       ReleaseStepIO.fromCommand(command)
