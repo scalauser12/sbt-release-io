@@ -1,53 +1,67 @@
-import scala.sys.process._
-import _root_.io.release.ReleaseStepIO
-import _root_.sbtrelease.ReleaseStateTransformations.runClean
-
+name := "foo"
+organization := "com.example"
+version := "1.2.3"
 scalaVersion := "2.12.18"
 
-// Task that creates aggregated-marker in the project base dir — shared by root and sub
-val createAggregatedMarker = taskKey[Unit]("Creates aggregated-marker via fromTaskAggregated")
-
-def aggregatedMarkerSetting = createAggregatedMarker := IO.touch(baseDirectory.value / "aggregated-marker")
-
-// Root-only tasks
-val createTaskMarker = taskKey[Unit]("Creates a file via fromTask")
-val createCommandMarker = taskKey[Unit]("Creates a file via sbt task run from a command")
-val createInputTaskMarker = inputKey[Unit]("Creates a file via fromInputTask")
+lazy val myTask = taskKey[Unit]("My task")
+lazy val myAggregatedTask = taskKey[Unit]("My aggregated task")
+lazy val myInputTask = inputKey[Unit]("My input task")
 
 lazy val root = (project in file("."))
   .aggregate(sub)
-  .settings(
-    name := "tasks-as-steps-test",
-    releaseIgnoreUntrackedFiles := true,
-    aggregatedMarkerSetting,
-    createTaskMarker := IO.touch(file("task-marker")),
-    createCommandMarker := IO.touch(file("command-marker")),
-    createInputTaskMarker := {
-      import sbt.complete.DefaultParsers._
-      val fileName = spaceDelimited("<filename>").parsed.headOption.getOrElse("inputtask-marker")
-      IO.touch(file(fileName))
-    },
-    // Test all factory methods and both implicit conversions in a single release process:
-    //   fromTask              — via releaseIOStepTask
-    //   fromTaskAggregated    — via releaseIOStepTaskAggregated (root + sub artifacts)
-    //   fromInputTask         — via releaseIOStepInputTask (default + explicit args)
-    //   fromCommand           — via releaseIOStepCommand
-    //   fromCommandAndRemaining — via releaseIOStepCommandAndRemaining
-    //   ReleaseStep implicit  — runClean converted via sbtReleaseStepConversion
-    releaseIOProcess := Seq(
-      releaseIOStepTask(createTaskMarker),
-      releaseIOStepTaskAggregated(createAggregatedMarker),
-      releaseIOStepInputTask(createInputTaskMarker),
-      releaseIOStepInputTask(createInputTaskMarker, " custom-input-marker"),
-      releaseIOStepCommand("createCommandMarker"),
-      releaseIOStepCommandAndRemaining("show version"),
-      runClean
-    )
-  )
-
+  .settings(myAggregatedTaskSetting)
 lazy val sub = (project in file("sub"))
   .settings(
-    name := "tasks-as-steps-sub",
     scalaVersion := "2.12.18",
-    aggregatedMarkerSetting
+    myAggregatedTaskSetting
   )
+
+def myAggregatedTaskSetting = myAggregatedTask := {
+  IO.write(target.value / "myaggregatedtask", "ran")
+}
+
+myTask := {
+  IO.write(target.value / "mytask", "ran")
+}
+myInputTask := {
+  val marker = Def.spaceDelimited().parsed.headOption.getOrElse("myinputtask")
+  IO.write(target.value / marker, "ran")
+}
+
+lazy val myCommand = Command.command("mycommand") { state =>
+  IO.write(Project.extract(state).get(target) / "mycommand", "ran")
+  state
+}
+lazy val myInputCommand = Command.make("myinputcommand") { state =>
+  Def.spaceDelimited().map { args => () =>
+    val marker = args.headOption.getOrElse("myinputcommand")
+    IO.write(Project.extract(state).get(target) / marker, "ran")
+    state
+  }
+}
+lazy val myCommand2 = Command.command("mycommand2") { state =>
+  IO.write(Project.extract(state).get(target) / "mycommand2", "ran")
+  state
+}
+lazy val myInputCommand2 = Command.make("myinputcommand2") { state =>
+  Def.spaceDelimited().map { args => () =>
+    val marker = args.headOption.getOrElse("myinputcommand2")
+    IO.write(Project.extract(state).get(target) / marker, "ran")
+    state
+  }
+}
+
+commands ++= Seq(myCommand, myInputCommand, myCommand2, myInputCommand2)
+
+releaseIOProcess := Seq(
+  releaseIOStepTask(myTask),
+  releaseIOStepTaskAggregated(myAggregatedTask),
+  releaseIOStepInputTask(myInputTask),
+  releaseIOStepInputTask(myInputTask, " custominputtask"),
+  releaseIOStepCommand("mycommand"),
+  releaseIOStepCommand("myinputcommand"),
+  releaseIOStepCommand("myinputcommand custominputcommand"),
+  releaseIOStepCommand("mycommand2"),
+  releaseIOStepCommand("myinputcommand2"),
+  releaseIOStepCommand("myinputcommand2 custominputcommand2")
+)

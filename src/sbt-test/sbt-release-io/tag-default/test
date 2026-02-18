@@ -1,0 +1,41 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Pre-create the tag that will conflict with the release version 0.1.0
+$ exec git tag -a v0.1.0 -m "pre-existing tag"
+
+# Scenario 1: default behavior = abort (no default-tag-exists-answer arg)
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Scenario 2: explicit abort (a)
+-> releaseIO with-defaults default-tag-exists-answer a release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Scenario 3: overwrite (o) — git tag -f is used, existing tag is replaced
+> releaseIO with-defaults default-tag-exists-answer o release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt
+> checkTagExists v0.1.0
+
+# Reset for next scenario
+$ exec git tag -d v0.1.0
+$ exec git reset --hard HEAD~2
+> reload
+
+# Scenario 4: keep existing tag (k) — tag is left as-is, release still succeeds
+$ exec git tag -a v0.1.0 -m "pre-existing tag"
+> releaseIO with-defaults default-tag-exists-answer k release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt
+> checkTagExists v0.1.0
+
+# Reset for next scenario
+$ exec git tag -d v0.1.0
+$ exec git reset --hard HEAD~2
+> reload
+
+# Scenario 5: custom tag name — release uses v0.1.0-custom instead
+$ exec git tag -a v0.1.0 -m "pre-existing tag"
+> releaseIO with-defaults default-tag-exists-answer v0.1.0-custom release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+> checkTagExists v0.1.0-custom

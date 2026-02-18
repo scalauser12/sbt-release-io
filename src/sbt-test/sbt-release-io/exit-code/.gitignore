@@ -1,4 +1,5 @@
 target/
+global/
 project/target/
 project/project/
 *.log

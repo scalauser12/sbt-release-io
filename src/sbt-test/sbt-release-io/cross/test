@@ -1,0 +1,24 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Run release WITHOUT cross flag - should only build for default Scala version (2.13)
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+> checkTargetDir 2.13 exists
+> checkTargetDir 2.12 not-exists
+
+# Clean and verify both are gone
+> clean
+> checkTargetDir 2.13 not-exists
+> checkTargetDir 2.12 not-exists
+
+# Run release WITH cross flag - should build for all crossScalaVersions
+> releaseIO with-defaults cross release-version 0.2.0 next-version 0.3.0-SNAPSHOT
+> checkTargetDir 2.13 exists
+> checkTargetDir 2.12 exists
+
+# Verify tag was created
+> checkGitTag

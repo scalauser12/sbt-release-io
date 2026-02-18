@@ -1,6 +1,6 @@
 import scala.sys.process._
 
-name := "tag-exists-test"
+name := "tag-default-test"
 scalaVersion := "2.12.18"
 
 releaseIgnoreUntrackedFiles := true

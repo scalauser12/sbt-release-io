@@ -1,26 +1,9 @@
 # Initialize git repository
-$ exec git init
+$ exec git init .
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"
-$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
-$ exec git commit -m "Initial commit"
+$ exec git add .
+$ exec git commit -m init
+> reload
 
-# Test that a simple command succeeds
-> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommand("show version"))
-> releaseIO with-defaults
-
-# Test that a failing task propagates the error
-> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommand("failingTask"))
--> releaseIO with-defaults
-
-# Test that multiple steps work, and error in later step is propagated
-> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommand("show version"), _root_.io.release.ReleaseStepIO.fromCommand("failingTask"))
--> releaseIO with-defaults
-
-# Test fromCommandAndRemaining: success case
-> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommandAndRemaining("show version"))
-> releaseIO with-defaults
-
-# Test fromCommandAndRemaining: failure case
-> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommandAndRemaining("failingTask"))
--> releaseIO with-defaults
+> checkExitCodes

@@ -1,0 +1,32 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# releaseIO can run without with-defaults (uses computed versions by default)
+> releaseIO
+> checkContentsOfVersionSbt 1.0.0-RC2-SNAPSHOT
+
+# Reset to release commit and verify release version was written
+$ exec git reset --hard HEAD~1
+> reload
+> checkContentsOfVersionSbt 1.0.0-RC1
+
+# Reset to initial snapshot and remove tag created by the first release
+$ exec git reset --hard HEAD~1
+$ exec git tag -d v1.0.0-RC1
+> reload
+> checkContentsOfVersionSbt 1.0.0-RC1-SNAPSHOT
+
+# with-defaults also works and honors releaseVersionBump
+> set releaseVersionBump := sbtrelease.Version.Bump.NextStable
+> releaseIO with-defaults
+> checkContentsOfVersionSbt 1.0.1-SNAPSHOT
+
+# Verify release version commit for NextStable
+$ exec git reset --hard HEAD~1
+> reload
+> checkContentsOfVersionSbt 1.0.0
+
