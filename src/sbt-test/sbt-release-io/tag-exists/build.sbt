@@ -10,8 +10,10 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
   step.name == "push-changes" || step.name == "publish-artifacts"
 }
 
-val checkTagExists = taskKey[Unit]("Assert that the release tag exists")
+val checkTagExists = inputKey[Unit]("Assert that a git tag exists")
 checkTagExists := {
+  import sbt.complete.DefaultParsers._
+  val tagName = spaceDelimited("<tag>").parsed.head
   val tags = "git tag".!!.trim.split("\n").toSeq
-  assert(tags.contains("v0.1.0"), s"Expected tag 'v0.1.0' but found: ${tags.mkString(", ")}")
+  assert(tags.contains(tagName), s"Expected tag '$tagName' but found: ${tags.mkString(", ")}")
 }

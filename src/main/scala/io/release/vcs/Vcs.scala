@@ -18,8 +18,16 @@ class Vcs(private val underlying: SbtVcs) {
 
   def hasUntrackedFiles: IO[Boolean] = IO(underlying.hasUntrackedFiles)
 
-  /** True if `git add` (or equivalent) staged any changes — used for empty-commit detection. */
-  def hasChanges: IO[Boolean] = IO(underlying.status.!!.trim.nonEmpty)
+  /** True if there are tracked-file changes to commit (staged or modified), excluding untracked
+    * files. Used after `vcs.add(file)` to decide whether `git commit` should be called — an
+    * untracked file in the status output would otherwise cause a spurious commit attempt that
+    * fails with "nothing to commit".
+    */
+  def hasChanges: IO[Boolean] = IO {
+    underlying.status.!!.trim.linesIterator
+      .filterNot(_.startsWith("?")) // exclude untracked (?? in git, ? in hg)
+      .nonEmpty
+  }
 
   def isClean: IO[Boolean] = IO(!underlying.hasModifiedFiles && !underlying.hasUntrackedFiles)
 
@@ -32,6 +40,8 @@ class Vcs(private val underlying: SbtVcs) {
     underlying.commit(message, sign = sign, signOff = signOff).!!
     ()
   }
+
+  def existsTag(name: String): IO[Boolean] = IO(underlying.existsTag(name))
 
   def tag(name: String, message: Option[String] = None, sign: Boolean = false): IO[Unit] = IO {
     message match {

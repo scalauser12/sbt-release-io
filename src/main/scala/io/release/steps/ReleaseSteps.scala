@@ -153,17 +153,54 @@ object ReleaseSteps {
           val tagName = extracted.runTask(releaseTagName, ctx.state)._2
           val tagComment = extracted.runTask(releaseTagComment, ctx.state)._2
           val sign = extracted.get(releaseVcsSign)
-          (tagName, tagComment, sign)
-        }.flatMap { case (tagName, tagComment, sign) =>
-          vcs
-            .tag(tagName, Some(tagComment), sign = sign)
-            .as(
-              ctx.withAttr("release-tag", tagName)
-            )
+          val defaultAnswer = ctx.state.get(ReleaseKeys.tagDefault).flatten
+          val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
+          (tagName, tagComment, sign, defaultAnswer, useDefaults)
+        }.flatMap { case (tagName, tagComment, sign, defaultAnswer, useDefaults) =>
+          resolveTag(vcs, tagName, tagComment, sign, defaultAnswer, ctx, useDefaults)
         }
       }
     }
   }
+
+  private def resolveTag(
+      vcs: Vcs,
+      tagName: String,
+      tagComment: String,
+      sign: Boolean,
+      defaultAnswer: Option[String],
+      ctx: ReleaseContext,
+      useDefaults: Boolean
+  ): IO[ReleaseContext] =
+    vcs.existsTag(tagName).flatMap {
+      case false =>
+        vcs.tag(tagName, Some(tagComment), sign = sign).as(ctx.withAttr("release-tag", tagName))
+      case true =>
+        val effectiveAnswer: IO[String] = defaultAnswer match {
+          case Some(ans) => IO.pure(ans)
+          case None if useDefaults => IO.pure("a")
+          case None =>
+            IO.blocking {
+              print(s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] ")
+              Option(scala.io.StdIn.readLine()).getOrElse("")
+            }
+        }
+        effectiveAnswer.flatMap {
+          case "a" | "A" | "" =>
+            IO.raiseError(
+              new RuntimeException(s"Tag [$tagName] already exists. Aborting release!")
+            )
+          case "k" | "K" =>
+            IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Keeping existing tag."))
+              .as(ctx.withAttr("release-tag", tagName))
+          case "o" | "O" =>
+            IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")) *>
+              vcs.tag(tagName, Some(tagComment), sign = sign).as(ctx.withAttr("release-tag", tagName))
+          case newTagName =>
+            ctx.state.log.info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
+            resolveTag(vcs, newTagName, tagComment, sign, None, ctx, useDefaults = false)
+        }
+    }
 
   val publishArtifacts: ReleaseStepIO = ReleaseStepIO(
     name = "publish-artifacts",

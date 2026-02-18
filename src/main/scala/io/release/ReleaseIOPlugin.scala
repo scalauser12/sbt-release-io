@@ -19,6 +19,7 @@ object ReleaseIOPlugin extends AutoPlugin {
     case object CrossBuild extends ReleaseArg
     case class ReleaseVersion(value: String) extends ReleaseArg
     case class NextVersion(value: String) extends ReleaseArg
+    case class TagDefault(value: String) extends ReleaseArg
   }
 
   /** Parser for releaseIO command arguments. */
@@ -33,8 +34,11 @@ object ReleaseIOPlugin extends AutoPlugin {
         .map(ReleaseVersion)
     val nextVersion: Parser[ReleaseArg] =
       (token("next-version") ~> Space ~> token(NotSpace, "<next version>")).map(NextVersion)
+    val tagDefault: Parser[ReleaseArg] =
+      (token("default-tag-exists-answer") ~> Space ~> token(NotSpace, "o|k|a|<tag-name>"))
+        .map(TagDefault)
 
-    val arg = withDefaults | skipTests | crossBuild | releaseVersion | nextVersion
+    val arg = withDefaults | skipTests | crossBuild | releaseVersion | nextVersion | tagDefault
     (Space ~> arg).*
   }
 
@@ -89,6 +93,7 @@ object ReleaseIOPlugin extends AutoPlugin {
 
     val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
     val nextVersionArg = args.collectFirst { case NextVersion(v) => v }
+    val tagDefaultArg = args.collectFirst { case TagDefault(v) => v }
 
     // Store parsed arguments in State attributes
     val decoratedState = state
@@ -97,6 +102,7 @@ object ReleaseIOPlugin extends AutoPlugin {
       .put(ReleaseKeys.cross, crossEnabled)
       .put(ReleaseKeys.commandLineReleaseVersion, releaseVersionArg)
       .put(ReleaseKeys.commandLineNextVersion, nextVersionArg)
+      .put(ReleaseKeys.tagDefault, tagDefaultArg)
 
     val initialCtx = ReleaseContext(
       state = decoratedState,

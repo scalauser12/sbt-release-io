@@ -20,6 +20,7 @@ object ReleaseKeys {
     UpstreamKeys.commandLineReleaseVersion
   val commandLineNextVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineNextVersion
   val versions: AttributeKey[(String, String)] = UpstreamKeys.versions
+  val tagDefault: AttributeKey[Option[String]] = UpstreamKeys.tagDefault
 }
 
 /** Context threaded through each release step. */

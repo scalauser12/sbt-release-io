@@ -16,3 +16,11 @@ $ exec git commit -m "Initial commit"
 # Test that multiple steps work, and error in later step is propagated
 > set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommand("show version"), _root_.io.release.ReleaseStepIO.fromCommand("failingTask"))
 -> releaseIO with-defaults
+
+# Test fromCommandAndRemaining: success case
+> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommandAndRemaining("show version"))
+> releaseIO with-defaults
+
+# Test fromCommandAndRemaining: failure case
+> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommandAndRemaining("failingTask"))
+-> releaseIO with-defaults
