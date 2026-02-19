@@ -15,9 +15,9 @@ object SbtReleaseCompat {
   /** Convert a sbt-release ReleaseStep to ReleaseStepIO. */
   implicit def releaseStepToReleaseStepIO(step: ReleaseStep): ReleaseStepIO =
     ReleaseStepIO(
-      name             = deriveName(step),
-      action           = lift(step.action),
-      check            = lift(step.check),
+      name = deriveName(step),
+      action = lift(step.action),
+      check = lift(step.check),
       enableCrossBuild = step.enableCrossBuild
     )
 
@@ -27,7 +27,7 @@ object SbtReleaseCompat {
 
   private def deriveName(step: ReleaseStep): String = {
     val className = step.action.getClass.getName
-    val stripped = className.stripSuffix("$")
+    val stripped  = className.stripSuffix("$")
     val shortName = stripped.split('.').lastOption.getOrElse("")
     if (shortName.isEmpty) "<sbt-release step>" else shortName
   }
