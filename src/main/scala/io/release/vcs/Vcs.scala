@@ -30,34 +30,29 @@ class Vcs(private val underlying: SbtVcs) {
   }
 
   def isClean: IO[Boolean] =
-    IO.blocking(!underlying.hasModifiedFiles && !underlying.hasUntrackedFiles)
+    for {
+      modified  <- hasModifiedFiles
+      untracked <- hasUntrackedFiles
+    } yield !modified && !untracked
 
-  def add(file: String): IO[Unit] = IO.blocking {
-    underlying.add(file).!!
-    ()
-  }
+  def add(file: String): IO[Unit] = IO.blocking(underlying.add(file).!!).void
 
   def commit(message: String, sign: Boolean = false, signOff: Boolean = false): IO[Unit] =
-    IO.blocking {
-      underlying.commit(message, sign = sign, signOff = signOff).!!
-      ()
-    }
+    IO.blocking(underlying.commit(message, sign = sign, signOff = signOff).!!).void
 
   def existsTag(name: String): IO[Boolean] = IO.blocking(underlying.existsTag(name))
 
   def tag(name: String, message: Option[String] = None, sign: Boolean = false): IO[Unit] =
-    IO.blocking {
-      underlying.tag(name, message.getOrElse(""), sign = sign).!!
-      ()
-    }
+    IO.blocking(underlying.tag(name, message.getOrElse(""), sign = sign).!!).void
 
-  def push: IO[Unit] = IO.blocking {
-    underlying.pushChanges.!!
-    ()
-  }
+  def push: IO[Unit] = IO.blocking(underlying.pushChanges.!!).void
 
-  def pushTags: IO[Unit] = push // sbt-release's pushChanges includes tags
+  /** Pushes all changes including tags. Delegates to [[push]], as sbt-release's
+    * `pushChanges` already includes tags.
+    */
+  def pushTags: IO[Unit] = push
 
+  /** Pushes all changes (commits and tags). Delegates to [[push]]. */
   def pushAll: IO[Unit] = push
 
   def currentHash: IO[String] = IO.blocking(underlying.currentHash)
@@ -69,12 +64,10 @@ object Vcs {
    * Detect VCS type (Git, Mercurial, or Subversion) in the given directory.
    * Delegates to sbt-release's detection logic.
    */
-  def detect(baseDir: File): IO[Vcs] = IO.blocking {
-    SbtVcs
-      .detect(baseDir)
-      .map(new Vcs(_))
-      .getOrElse(
-        throw new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}")
-      )
-  }
+  def detect(baseDir: File): IO[Vcs] =
+    IO.blocking(SbtVcs.detect(baseDir)).flatMap {
+      case Some(v) => IO.pure(new Vcs(v))
+      case None    =>
+        IO.raiseError(new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
+    }
 }
