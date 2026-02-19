@@ -22,19 +22,18 @@ object ReleaseSteps {
     action = ctx =>
       requireVcs(ctx) { vcs =>
         val ignoreUntracked = extract(ctx.state).get(releaseIgnoreUntrackedFiles)
-        vcs.hasModifiedFiles.flatMap { hasModified =>
-          vcs.hasUntrackedFiles.flatMap { hasUntracked =>
-            if (hasModified || (!ignoreUntracked && hasUntracked)) {
-              IO.raiseError(
-                new RuntimeException(
-                  "Working directory is not clean. Please commit or stash your changes before releasing."
-                )
-              )
-            } else {
-              IO.pure(ctx)
-            }
-          }
-        }
+        for {
+          hasModified  <- vcs.hasModifiedFiles
+          hasUntracked <- vcs.hasUntrackedFiles
+          result       <- if (hasModified || (!ignoreUntracked && hasUntracked))
+                            IO.raiseError(
+                              new RuntimeException(
+                                "Working directory is not clean. Please commit or stash your changes before releasing."
+                              )
+                            )
+                          else
+                            IO.pure(ctx)
+        } yield result
       }
   )
 
@@ -125,18 +124,20 @@ object ReleaseSteps {
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
-      requireVersions(ctx) { case (releaseVer, _) =>
-        IO {
-          val extracted = extract(ctx.state)
-          val tagName = extracted.runTask(releaseTagName, ctx.state)._2
-          val tagComment = extracted.runTask(releaseTagComment, ctx.state)._2
-          val sign = extracted.get(releaseVcsSign)
-          val defaultAnswer = ctx.state.get(ReleaseKeys.tagDefault).flatten
-          val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
-          (tagName, tagComment, sign, defaultAnswer, useDefaults)
-        }.flatMap { case (tagName, tagComment, sign, defaultAnswer, useDefaults) =>
-          resolveTag(vcs, tagName, tagComment, sign, defaultAnswer, ctx, useDefaults)
-        }
+      requireVersions(ctx) { _ =>
+        for {
+          t <- IO {
+            val extracted     = extract(ctx.state)
+            val tagName       = extracted.runTask(releaseTagName, ctx.state)._2
+            val tagComment    = extracted.runTask(releaseTagComment, ctx.state)._2
+            val sign          = extracted.get(releaseVcsSign)
+            val defaultAnswer = ctx.state.get(ReleaseKeys.tagDefault).flatten
+            val useDefaults   = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
+            (tagName, tagComment, sign, defaultAnswer, useDefaults)
+          }
+          (tagName, tagComment, sign, defaultAnswer, useDefaults) = t
+          result <- resolveTag(vcs, tagName, tagComment, sign, defaultAnswer, ctx, useDefaults)
+        } yield result
       }
     }
   }
@@ -290,22 +291,23 @@ object ReleaseSteps {
   )(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVcs(ctx) { vcs =>
       requireVersions(ctx) { _ =>
-        IO {
-          val extracted = extract(ctx.state)
-          val versionFile = extracted.get(releaseVersionFile)
-          val commitMsg   = extracted.runTask(commitMsgKey, ctx.state)._2
-          val sign        = extracted.get(releaseVcsSign)
-          val signOff     = extracted.get(releaseVcsSignOff)
-          (versionFile.getName, commitMsg, sign, signOff)
-        }.flatMap { case (fileName, commitMsg, sign, signOff) =>
-          vcs.add(fileName) *>
-            vcs.hasChanges.flatMap { hasChanges =>
-              if (hasChanges)
-                vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
-              else
-                IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
-            }
-        }
+        for {
+          t <- IO {
+            val extracted   = extract(ctx.state)
+            val versionFile = extracted.get(releaseVersionFile)
+            val commitMsg   = extracted.runTask(commitMsgKey, ctx.state)._2
+            val sign        = extracted.get(releaseVcsSign)
+            val signOff     = extracted.get(releaseVcsSignOff)
+            (versionFile.getName, commitMsg, sign, signOff)
+          }
+          (fileName, commitMsg, sign, signOff) = t
+          _          <- vcs.add(fileName)
+          hasChanges <- vcs.hasChanges
+          result     <- if (hasChanges)
+                          vcs.commit(commitMsg, sign = sign, signOff = signOff).as(ctx)
+                        else
+                          IO(ctx.state.log.info("[release-io] No changes to commit (version file unchanged)")).as(ctx)
+        } yield result
       }
     }
 

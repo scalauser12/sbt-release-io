@@ -13,14 +13,14 @@ import sbtrelease.Compat
 object ReleaseKeys {
   import sbtrelease.ReleasePlugin.autoImport.{ReleaseKeys => UpstreamKeys}
 
-  val useDefaults: AttributeKey[Boolean] = UpstreamKeys.useDefaults
-  val skipTests: AttributeKey[Boolean] = UpstreamKeys.skipTests
-  val cross: AttributeKey[Boolean] = UpstreamKeys.cross
+  val useDefaults: AttributeKey[Boolean]                      = UpstreamKeys.useDefaults
+  val skipTests: AttributeKey[Boolean]                        = UpstreamKeys.skipTests
+  val cross: AttributeKey[Boolean]                            = UpstreamKeys.cross
   val commandLineReleaseVersion: AttributeKey[Option[String]] =
     UpstreamKeys.commandLineReleaseVersion
-  val commandLineNextVersion: AttributeKey[Option[String]] = UpstreamKeys.commandLineNextVersion
-  val versions: AttributeKey[(String, String)] = UpstreamKeys.versions
-  val tagDefault: AttributeKey[Option[String]] = UpstreamKeys.tagDefault
+  val commandLineNextVersion: AttributeKey[Option[String]]    = UpstreamKeys.commandLineNextVersion
+  val versions: AttributeKey[(String, String)]                = UpstreamKeys.versions
+  val tagDefault: AttributeKey[Option[String]]                = UpstreamKeys.tagDefault
 }
 
 /** Context threaded through each release step. */
@@ -76,7 +76,7 @@ object ReleaseStepIO {
       name = key.key.label,
       action = ctx =>
         IO {
-          val extracted = Project.extract(ctx.state)
+          val extracted     = Project.extract(ctx.state)
           val (newState, _) = extracted.runTask(key, ctx.state)
           ctx.copy(state = newState)
         },
@@ -95,7 +95,7 @@ object ReleaseStepIO {
       name = key.key.label,
       action = ctx =>
         IO {
-          val extracted = Project.extract(ctx.state)
+          val extracted     = Project.extract(ctx.state)
           val (newState, _) = extracted.runInputTask(key, args, ctx.state)
           ctx.copy(state = newState)
         },
@@ -112,7 +112,7 @@ object ReleaseStepIO {
       action = ctx =>
         IO {
           val extracted = Project.extract(ctx.state)
-          val newState = extracted.runAggregated(extracted.currentRef / key, ctx.state)
+          val newState  = extracted.runAggregated(extracted.currentRef / key, ctx.state)
           ctx.copy(state = newState)
         },
       enableCrossBuild = enableCrossBuild
@@ -150,7 +150,7 @@ object ReleaseStepIO {
           @scala.annotation.tailrec
           def drainCommands(state: State, commandToRun: String): State = {
             val stateWithoutRemaining = state.copy(remainingCommands = Nil)
-            val newState = Command.process(
+            val newState              = Command.process(
               commandToRun,
               stateWithoutRemaining,
               (msg: String) => {
@@ -159,13 +159,13 @@ object ReleaseStepIO {
             )
 
             newState.remainingCommands.toList match {
-              case Nil =>
+              case Nil                                 =>
                 // No more commands enqueued, restore saved remaining
                 newState.copy(remainingCommands = savedRemaining)
               case head :: _ if head == FailureCommand =>
                 // Failure detected, prepend FailureCommand to saved remaining
                 newState.copy(remainingCommands = head +: savedRemaining)
-              case head :: tail =>
+              case head :: tail                        =>
                 // More commands enqueued, drain them recursively
                 drainCommands(newState.copy(remainingCommands = tail), head.commandLine)
             }
@@ -225,9 +225,7 @@ object ReleaseStepIO {
       if (hasFailure) {
         val cleaned = ctx.state.copy(remainingCommands = ctx.state.remainingCommands.drop(1))
         ctx.copy(state = cleaned, failed = true)
-      } else {
-        ctx.copy(state = ctx.state.copy(onFailure = Some(FailureCommand)))
-      }
+      } else ctx.copy(state = ctx.state.copy(onFailure = Some(FailureCommand)))
     }
 
     /** Strips the FailureCommand sentinel at the end, matching upstream's removeFailureCommand. */
@@ -235,14 +233,14 @@ object ReleaseStepIO {
       ctx.state.remainingCommands.toList match {
         case head :: tail if head == FailureCommand =>
           ctx.copy(state = ctx.state.copy(remainingCommands = tail))
-        case _ => ctx
+        case _                                      => ctx
       }
     }
 
     def buildActionPhase(
         steps: Seq[ReleaseContext => IO[ReleaseContext]]
     )(startCtx: ReleaseContext): IO[ReleaseContext] = {
-      val allSteps = steps :+ ((ctx: ReleaseContext) => removeFailureCommand(ctx))
+      val allSteps         = steps :+ ((ctx: ReleaseContext) => removeFailureCommand(ctx))
       val interleavedSteps = allSteps.flatMap { step =>
         Seq(filterFailure(step) _, failureCheck _)
       }
@@ -255,25 +253,20 @@ object ReleaseStepIO {
       val baseAction = (ctx: ReleaseContext) =>
         IO(ctx.state.log.info(s"[release-io] Executing step: ${step.name}")) *> step.action(ctx)
 
-      if (step.enableCrossBuild && crossBuild) { ctx =>
-        runCrossBuild(baseAction)(ctx)
-      } else {
-        baseAction
-      }
+      if (step.enableCrossBuild && crossBuild) ctx => runCrossBuild(baseAction)(ctx)
+      else baseAction
     }
 
     // Execute both phases
-    checkPhase
-      .flatMap { _ =>
-        buildActionPhase(wrappedActions)(startCtx)
-      }
-      .flatMap { finalCtx =>
-        if (finalCtx.failed) {
+    for {
+      _        <- checkPhase
+      finalCtx <- buildActionPhase(wrappedActions)(startCtx)
+      result   <-
+        if (finalCtx.failed)
           IO.raiseError(new RuntimeException("Release process failed"))
-        } else {
+        else
           IO.pure(finalCtx)
-        }
-      }
+    } yield result
   }
 
   /** Run an action across all crossScalaVersions using proper project reload. Based on
@@ -283,34 +276,37 @@ object ReleaseStepIO {
   private def runCrossBuild(
       action: ReleaseContext => IO[ReleaseContext]
   )(ctx: ReleaseContext): IO[ReleaseContext] = IO.defer {
-    val extracted = Project.extract(ctx.state)
-    val crossVersions = extracted.get(crossScalaVersions)
+    val extracted      = Project.extract(ctx.state)
+    val crossVersions  = extracted.get(crossScalaVersions)
     val currentVersion = (extracted.currentRef / scalaVersion).get(extracted.structure.data)
 
     if (crossVersions.length <= 1) {
       action(ctx)
     } else {
       val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-        ioCtx.flatMap { currentCtx =>
-          IO(currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version")) *>
-            IO {
-              val newState = switchScalaVersion(currentCtx.state, version)
-              currentCtx.copy(state = newState)
-            }.flatMap(action)
-        }
+        for {
+          currentCtx <- ioCtx
+          _          <- IO(currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version"))
+          newCtx     <- IO {
+                          val newState = switchScalaVersion(currentCtx.state, version)
+                          currentCtx.copy(state = newState)
+                        }
+          result     <- action(newCtx)
+        } yield result
       }
 
       // Restore original Scala version after cross-build
-      finalIO.flatMap { finalCtx =>
-        currentVersion match {
-          case Some(ver) =>
-            IO {
-              val restoredState = switchScalaVersion(finalCtx.state, ver)
-              finalCtx.copy(state = restoredState)
-            }
-          case None => IO.pure(finalCtx)
-        }
-      }
+      for {
+        finalCtx <- finalIO
+        result   <- currentVersion match {
+                      case Some(ver) =>
+                        IO {
+                          val restoredState = switchScalaVersion(finalCtx.state, ver)
+                          finalCtx.copy(state = restoredState)
+                        }
+                      case None      => IO.pure(finalCtx)
+                    }
+      } yield result
     }
   }
 
@@ -327,7 +323,7 @@ object ReleaseStepIO {
     // Settings to add: set scalaVersion and clear scalaHome
     val add = Seq(
       GlobalScope / Keys.scalaVersion := version,
-      GlobalScope / Keys.scalaHome := None
+      GlobalScope / Keys.scalaHome    := None
     )
 
     // Filter out existing scalaVersion and scalaHome settings to avoid conflicts
