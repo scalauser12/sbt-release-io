@@ -1,13 +1,13 @@
 package io.release
 
-import sbt._
+import sbt.*
 import sbt.Def.ScopedKey
 import sbt.internal.{BuildStructure, BuildStreams, BuildUtil}
 
 /** Compatibility layer for sbt.Load which was made private in sbt 1.0.
   * Only `reapply` is reimplemented here because sbtrelease.Load.reapply uses the older
   * Def.make API and omits the `compiledMap` field from BuildStructure, which is required
-  * by newer sbt versions. All other helpers delegate directly to sbtrelease.Load.
+  * by newer sbt versions. All other `sbtrelease.Load` helpers are used directly elsewhere.
   * See: https://github.com/sbt/sbt/issues/3296#issuecomment-315218050
   */
 object LoadCompat {

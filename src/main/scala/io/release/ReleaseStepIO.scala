@@ -318,7 +318,7 @@ object ReleaseStepIO {
     val extracted = Project.extract(state)
     import extracted.{*, given}
 
-    state.log.info(s"Setting scala version to $version")
+    state.log.info(s"[release-io] Setting scala version to $version")
 
     // Settings to add: set scalaVersion and clear scalaHome
     val add = Seq(
