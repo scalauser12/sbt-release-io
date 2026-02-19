@@ -15,12 +15,10 @@ object CustomStepExamples {
   // --- Custom step: print a banner ---
 
   val printBanner: ReleaseStepIO = ReleaseStepIO.io("print-banner") { ctx =>
-    IO.blocking {
-      println("=" * 60)
-      println("  RELEASE IN PROGRESS")
-      println("=" * 60)
-      ctx
-    }
+    IO.println("=" * 60) *>
+      IO.println("  RELEASE IN PROGRESS") *>
+      IO.println("=" * 60) *>
+      IO.pure(ctx)
   }
 
   // --- Custom step: validate branch name ---
@@ -33,11 +31,13 @@ object CustomStepExamples {
           result <- if (branch == "main" || branch == "master")
                       IO.pure(ctx)
                     else
-                      IO.raiseError(new RuntimeException(
-                        s"Releases must be done from main/master, but current branch is '$branch'"
-                      ))
+                      IO.raiseError(
+                        new RuntimeException(
+                          s"Releases must be done from main/master, but current branch is '$branch'"
+                        )
+                      )
         } yield result
-      case None =>
+      case None      =>
         IO.raiseError(new RuntimeException("VCS not initialized"))
     }
   }
@@ -46,7 +46,7 @@ object CustomStepExamples {
 
   def runShellCommand(name: String, command: String): ReleaseStepIO =
     ReleaseStepIO.io(s"shell-$name") { ctx =>
-      IO {
+      IO.blocking {
         import scala.sys.process._
         val exitCode = command.!
         if (exitCode != 0)
@@ -61,17 +61,18 @@ object CustomStepExamples {
     ctx.versions match {
       case Some((releaseVer, _)) =>
         IO.blocking {
-          val baseDir = extract(ctx.state).get(thisProject).base
-          val file = new java.io.File(baseDir, "CHANGELOG.md")
-          val entry = s"\n## $releaseVer\n\n- Release $releaseVer\n"
-          val existing = if (file.exists())
-            scala.util.Using(scala.io.Source.fromFile(file))(_.mkString).get
-          else "# Changelog\n"
+          val baseDir  = extract(ctx.state).get(thisProject).base
+          val file     = new java.io.File(baseDir, "CHANGELOG.md")
+          val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
+          val existing =
+            if (file.exists())
+              scala.util.Using(scala.io.Source.fromFile(file))(_.mkString).get
+            else "# Changelog\n"
           java.nio.file.Files.write(file.toPath, (existing + entry).getBytes("UTF-8"))
-          println(s"[release-io] Updated CHANGELOG.md for $releaseVer")
-          ctx
-        }
-      case None =>
+        } *>
+          IO.println(s"[release-io] Updated CHANGELOG.md for $releaseVer") *>
+          IO.pure(ctx)
+      case None                  =>
         IO.raiseError(new RuntimeException("Versions not set"))
     }
   }
@@ -123,7 +124,7 @@ object CustomStepExamples {
   ): ReleaseStepIO =
     ReleaseStepIO.io(s"conditional-$name") { ctx =>
       if (condition(ctx)) step.action(ctx)
-      else IO.blocking(println(s"[release-io] Skipping $name (condition not met)")).as(ctx)
+      else IO.println(s"[release-io] Skipping $name (condition not met)").as(ctx)
     }
 
   // --- Example: Mixing upstream sbt-release steps with custom IO steps ---
@@ -144,20 +145,20 @@ object CustomStepExamples {
     import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
 
     Seq(
-      printBanner,                      // Custom IO step
-      checkSnapshotDependencies,        // Upstream sbt-release step (auto-converted)
-      ReleaseSteps.initializeVcs,       // IO-native step
-      validateBranch,                   // Custom validation step
-      inquireVersions,                  // Upstream step with configurable version bumping
-      ReleaseSteps.runTests,            // IO-native test runner
-      setReleaseVersion,                // Upstream version setter
-      generateChangelog,                // Custom changelog generator
-      commitReleaseVersion,             // Upstream commit step
-      tagRelease,                       // Upstream tag step
-      publishArtifacts,                 // Upstream publish step
-      setNextVersion,                   // Upstream next version
-      commitNextVersion,                // Upstream commit
-      markReleaseDone                   // Custom completion marker
+      printBanner,                // Custom IO step
+      checkSnapshotDependencies,  // Upstream sbt-release step (auto-converted)
+      ReleaseSteps.initializeVcs, // IO-native step
+      validateBranch,             // Custom validation step
+      inquireVersions,            // Upstream step with configurable version bumping
+      ReleaseSteps.runTests,      // IO-native test runner
+      setReleaseVersion,          // Upstream version setter
+      generateChangelog,          // Custom changelog generator
+      commitReleaseVersion,       // Upstream commit step
+      tagRelease,                 // Upstream tag step
+      publishArtifacts,           // Upstream publish step
+      setNextVersion,             // Upstream next version
+      commitNextVersion,          // Upstream commit
+      markReleaseDone             // Custom completion marker
       // Note: pushChanges intentionally omitted
     )
   }
