@@ -10,7 +10,7 @@ import scala.language.implicitConversions
 object SbtReleaseCompat {
 
   private def lift(f: State => State): ReleaseContext => IO[ReleaseContext] =
-    ctx => IO(ctx.copy(state = f(ctx.state)))
+    ctx => IO.blocking(ctx.copy(state = f(ctx.state)))
 
   /** Convert a sbt-release ReleaseStep to ReleaseStepIO. */
   implicit def releaseStepToReleaseStepIO(step: ReleaseStep): ReleaseStepIO =
