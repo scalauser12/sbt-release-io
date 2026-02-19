@@ -160,7 +160,9 @@ object ReleaseSteps {
           case Some(ans)           => IO.pure(ans)
           case None if useDefaults => IO.pure("a")
           case None                =>
-            IO.print(s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] ") *>
+            IO.print(
+              s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
+            ) *>
               IO.readLine.map(l => Option(l).getOrElse(""))
         }
         effectiveAnswer.flatMap {

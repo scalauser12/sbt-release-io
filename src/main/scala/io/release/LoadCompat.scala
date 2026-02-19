@@ -16,16 +16,16 @@ object LoadCompat {
   def reapply(newSettings: Seq[Setting[_]], structure: BuildStructure)(implicit
       display: Show[ScopedKey[_]]
   ): BuildStructure = {
-    val transformed = sbtrelease.Load.finalTransforms(newSettings)
+    val transformed            = sbtrelease.Load.finalTransforms(newSettings)
     val (compiledMap, newData) =
       Def.makeWithCompiledMap(transformed)(using structure.delegates, structure.scopeLocal, display)
-    val newIndex = sbtrelease.Load.structureIndex(
+    val newIndex               = sbtrelease.Load.structureIndex(
       newData,
       transformed,
       index => BuildUtil(structure.root, structure.units, index, newData),
       structure.units
     )
-    val newStreams = BuildStreams.mkStreams(structure.units, structure.root, newData)
+    val newStreams             = BuildStreams.mkStreams(structure.units, structure.root, newData)
     new BuildStructure(
       units = structure.units,
       root = structure.root,

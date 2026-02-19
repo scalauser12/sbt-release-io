@@ -29,24 +29,27 @@ class Vcs(private val underlying: SbtVcs) {
       .nonEmpty
   }
 
-  def isClean: IO[Boolean] = IO.blocking(!underlying.hasModifiedFiles && !underlying.hasUntrackedFiles)
+  def isClean: IO[Boolean] =
+    IO.blocking(!underlying.hasModifiedFiles && !underlying.hasUntrackedFiles)
 
   def add(file: String): IO[Unit] = IO.blocking {
     underlying.add(file).!!
     ()
   }
 
-  def commit(message: String, sign: Boolean = false, signOff: Boolean = false): IO[Unit] = IO.blocking {
-    underlying.commit(message, sign = sign, signOff = signOff).!!
-    ()
-  }
+  def commit(message: String, sign: Boolean = false, signOff: Boolean = false): IO[Unit] =
+    IO.blocking {
+      underlying.commit(message, sign = sign, signOff = signOff).!!
+      ()
+    }
 
   def existsTag(name: String): IO[Boolean] = IO.blocking(underlying.existsTag(name))
 
-  def tag(name: String, message: Option[String] = None, sign: Boolean = false): IO[Unit] = IO.blocking {
-    underlying.tag(name, message.getOrElse(""), sign = sign).!!
-    ()
-  }
+  def tag(name: String, message: Option[String] = None, sign: Boolean = false): IO[Unit] =
+    IO.blocking {
+      underlying.tag(name, message.getOrElse(""), sign = sign).!!
+      ()
+    }
 
   def push: IO[Unit] = IO.blocking {
     underlying.pushChanges.!!
