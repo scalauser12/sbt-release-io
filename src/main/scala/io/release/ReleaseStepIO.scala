@@ -75,7 +75,7 @@ object ReleaseStepIO {
     ReleaseStepIO(
       name = key.key.label,
       action = ctx =>
-        IO {
+        IO.blocking {
           val extracted     = Project.extract(ctx.state)
           val (newState, _) = extracted.runTask(key, ctx.state)
           ctx.copy(state = newState)
@@ -94,7 +94,7 @@ object ReleaseStepIO {
     ReleaseStepIO(
       name = key.key.label,
       action = ctx =>
-        IO {
+        IO.blocking {
           val extracted     = Project.extract(ctx.state)
           val (newState, _) = extracted.runInputTask(key, args, ctx.state)
           ctx.copy(state = newState)
@@ -110,7 +110,7 @@ object ReleaseStepIO {
     ReleaseStepIO(
       name = s"${key.key.label} (aggregated)",
       action = ctx =>
-        IO {
+        IO.blocking {
           val extracted = Project.extract(ctx.state)
           val newState  = extracted.runAggregated(extracted.currentRef / key, ctx.state)
           ctx.copy(state = newState)
@@ -123,7 +123,7 @@ object ReleaseStepIO {
     ReleaseStepIO(
       name = s"command: $command",
       action = ctx =>
-        IO {
+        IO.blocking {
           val newState = Command.process(
             command,
             ctx.state,
@@ -143,7 +143,7 @@ object ReleaseStepIO {
     ReleaseStepIO(
       name = s"command+remaining: $command",
       action = ctx =>
-        IO {
+        IO.blocking {
           val FailureCommand = Compat.FailureCommand
           val savedRemaining = ctx.state.remainingCommands
 
@@ -287,7 +287,7 @@ object ReleaseStepIO {
         for {
           currentCtx <- ioCtx
           _          <- IO(currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version"))
-          newCtx     <- IO {
+          newCtx     <- IO.blocking {
                           val newState = switchScalaVersion(currentCtx.state, version)
                           currentCtx.copy(state = newState)
                         }
@@ -300,7 +300,7 @@ object ReleaseStepIO {
         finalCtx <- finalIO
         result   <- currentVersion match {
                       case Some(ver) =>
-                        IO {
+                        IO.blocking {
                           val restoredState = switchScalaVersion(finalCtx.state, ver)
                           finalCtx.copy(state = restoredState)
                         }

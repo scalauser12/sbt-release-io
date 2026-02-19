@@ -42,7 +42,7 @@ object ReleaseSteps {
     name = "check-snapshot-dependencies",
     action = ctx => IO.pure(ctx),
     check = ctx =>
-      IO {
+      IO.blocking {
         val extracted    = extract(ctx.state)
         val thisRef      = extracted.get(thisProjectRef)
         val (_, result)  =
@@ -67,7 +67,7 @@ object ReleaseSteps {
   )
 
   val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") { ctx =>
-    IO {
+    IO.blocking {
       val extracted  = extract(ctx.state)
       val currentVer = extracted.get(version)
 
@@ -103,7 +103,7 @@ object ReleaseSteps {
       if (ctx.skipTests) {
         IO(ctx.state.log.info("[release-io] Skipping tests")).as(ctx)
       } else {
-        IO {
+        IO.blocking {
           val extracted     = extract(ctx.state)
           val (newState, _) =
             extracted.runTask(sbt.Test / sbt.Keys.test, ctx.state)
@@ -127,7 +127,7 @@ object ReleaseSteps {
     requireVcs(ctx) { vcs =>
       requireVersions(ctx) { _ =>
         for {
-          t                                                      <- IO {
+          t                                                      <- IO.blocking {
                                                                       val extracted     = extract(ctx.state)
                                                                       val tagName       = extracted.runTask(releaseTagName, ctx.state)._2
                                                                       val tagComment    = extracted.runTask(releaseTagComment, ctx.state)._2
@@ -195,7 +195,7 @@ object ReleaseSteps {
       if (ctx.skipPublish) {
         IO(ctx.state.log.info("[release-io] Skipping publish")).as(ctx)
       } else {
-        IO {
+        IO.blocking {
           val extracted = extract(ctx.state)
           val newState  = extracted.runAggregated(Global / releasePublishArtifactsAction, ctx.state)
           ctx.copy(state = newState)
@@ -293,7 +293,7 @@ object ReleaseSteps {
     requireVcs(ctx) { vcs =>
       requireVersions(ctx) { _ =>
         for {
-          t                                   <- IO {
+          t                                   <- IO.blocking {
                                                    val extracted   = extract(ctx.state)
                                                    val versionFile = extracted.get(releaseVersionFile)
                                                    val commitMsg   = extracted.runTask(commitMsgKey, ctx.state)._2
@@ -317,7 +317,7 @@ object ReleaseSteps {
   private def writeVersion(
       ctx: ReleaseContext,
       ver: String
-  ): IO[ReleaseContext] = IO {
+  ): IO[ReleaseContext] = IO.blocking {
     val extracted = extract(ctx.state)
 
     // Use upstream sbt-release's settings for file location and scope
