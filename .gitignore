@@ -6,6 +6,7 @@ project/project/
 .vscode/
 .idea/
 .bsp/
+.claude/
 *.class
 *.log
 .DS_Store
