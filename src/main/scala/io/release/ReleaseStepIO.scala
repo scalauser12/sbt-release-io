@@ -147,31 +147,41 @@ object ReleaseStepIO {
           val FailureCommand = Compat.FailureCommand
           val savedRemaining = ctx.state.remainingCommands
 
+          // Drain the pending queue of Exec commands. Each command is run with an empty
+          // remainingCommands so that whatever it enqueues is captured and appended to
+          // the rest of the pending queue — avoiding the tail-loss bug of threading
+          // pending items through state.remainingCommands (which gets stripped each call).
           @scala.annotation.tailrec
-          def drainCommands(state: State, commandToRun: String): State = {
-            val stateWithoutRemaining = state.copy(remainingCommands = Nil)
-            val newState              = Command.process(
-              commandToRun,
-              stateWithoutRemaining,
-              (msg: String) => {
-                throw new RuntimeException(s"Failed to parse command '$commandToRun': $msg")
-              }
-            )
-
-            newState.remainingCommands.toList match {
+          def drainCommands(state: State, pending: List[Exec]): State =
+            pending match {
               case Nil                                 =>
-                // No more commands enqueued, restore saved remaining
-                newState.copy(remainingCommands = savedRemaining)
+                // Pending queue exhausted; restore saved remaining
+                state.copy(remainingCommands = savedRemaining)
               case head :: _ if head == FailureCommand =>
-                // Failure detected, prepend FailureCommand to saved remaining
-                newState.copy(remainingCommands = head +: savedRemaining)
-              case head :: tail                        =>
-                // More commands enqueued, drain them recursively
-                drainCommands(newState.copy(remainingCommands = tail), head.commandLine)
+                // Failure detected; propagate FailureCommand to saved remaining
+                state.copy(remainingCommands = head +: savedRemaining)
+              case head :: rest                        =>
+                val cleanState = state.copy(remainingCommands = Nil)
+                val newState   = Command.process(
+                  head.commandLine,
+                  cleanState,
+                  (msg: String) =>
+                    throw new RuntimeException(
+                      s"Failed to parse command '${head.commandLine}': $msg"
+                    )
+                )
+                // Newly enqueued commands go before the remaining pending items
+                drainCommands(newState, newState.remainingCommands.toList ++ rest)
             }
-          }
 
-          val finalState = drainCommands(ctx.state, command)
+          // Run the initial command, then drain whatever it enqueued
+          val cleanInit  = ctx.state.copy(remainingCommands = Nil)
+          val afterFirst = Command.process(
+            command,
+            cleanInit,
+            (msg: String) => throw new RuntimeException(s"Failed to parse command '$command': $msg")
+          )
+          val finalState = drainCommands(afterFirst, afterFirst.remainingCommands.toList)
           ctx.copy(state = finalState)
         }
     )
@@ -198,23 +208,13 @@ object ReleaseStepIO {
     // Phase 2: Run actions with failure handling and cross-build support
     def filterFailure(f: ReleaseContext => IO[ReleaseContext])(
         ctx: ReleaseContext
-    ): IO[ReleaseContext] = {
-      if (ctx.failed) {
-        IO.pure(ctx)
-      } else {
-        // Check if sbt injected FailureCommand (task failure without exception)
-        val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
-        if (hasFailure) {
-          IO(ctx.state.log.error("[release-io] Task failure detected via FailureCommand")) *>
+    ): IO[ReleaseContext] =
+      if (ctx.failed) IO.pure(ctx)
+      else
+        f(ctx).handleErrorWith { err =>
+          IO(ctx.state.log.error(s"[release-io] Error: ${err.getMessage}")) *>
             IO.pure(ctx.fail)
-        } else {
-          f(ctx).handleErrorWith { err =>
-            IO(ctx.state.log.error(s"[release-io] Error: ${err.getMessage}")) *>
-              IO.pure(ctx.fail)
-          }
         }
-      }
-    }
 
     /** Between-step hook matching sbt-release 1.4's execution model. Inspects remainingCommands for
       * FailureCommand (sbt's task failure signal), marks the context as failed, and strips the
