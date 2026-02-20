@@ -9,7 +9,8 @@ import sbt.complete.Parser
 
 object ReleaseIOPlugin extends AutoPlugin {
 
-  override def trigger = allRequirements
+  override def requires = sbtrelease.ReleasePlugin
+  override def trigger  = allRequirements
 
   /** Parse results for command-line arguments. */
   private sealed trait ReleaseArg
@@ -127,7 +128,7 @@ object ReleaseIOPlugin extends AutoPlugin {
 
     val finalCtx = ReleaseStepIO.compose(steps, crossEnabled)(initialCtx).unsafeRunSync()
 
-    state.log.info("[release-io] Release completed successfully!")
+    finalCtx.state.log.info("[release-io] Release completed successfully!")
     finalCtx.state
   }
 }
