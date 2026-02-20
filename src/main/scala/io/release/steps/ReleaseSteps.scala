@@ -157,43 +157,36 @@ object ReleaseSteps {
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
-      requireVersions(ctx) { _ =>
-        IO.blocking {
-          val extracted        = extract(ctx.state)
-          val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
-          val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
-          val sign             = extracted.get(releaseVcsSign)
-          val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
-          val useDefaults      = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
-          (tagName, tagComment, sign, defaultAnswer, useDefaults, s2)
-        }.flatMap { case (tagName, tagComment, sign, defaultAnswer, useDefaults, taskState) =>
-          resolveTag(
-            vcs,
-            tagName,
-            tagComment,
-            sign,
-            defaultAnswer,
-            ctx.copy(state = taskState),
-            useDefaults
-          )
-        }
+      IO.blocking {
+        val extracted        = extract(ctx.state)
+        val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
+        val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
+        val sign             = extracted.get(releaseVcsSign)
+        val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
+        val useDefaults      = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
+        TagParams(tagName, tagComment, sign, defaultAnswer, useDefaults) -> ctx.copy(state = s2)
+      }.flatMap { case (params, updatedCtx) =>
+        resolveTag(vcs, params, updatedCtx)
       }
     }
   }
 
   private def resolveTag(
       vcs: Vcs,
-      tagName: String,
-      tagComment: String,
-      sign: Boolean,
-      defaultAnswer: Option[String],
-      ctx: ReleaseContext,
-      useDefaults: Boolean
-  ): IO[ReleaseContext] =
+      params: TagParams,
+      ctx: ReleaseContext
+  ): IO[ReleaseContext] = {
+    val TagParams(tagName, tagComment, sign, defaultAnswer, useDefaults) = params
     IO.blocking(vcs.existsTag(tagName)).flatMap {
       case false =>
-        IO.blocking { runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'") }
-          .as(ctx.withAttr("release-tag", tagName))
+        IO.blocking {
+          runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'")
+          val newState = extract(ctx.state).appendWithSession(
+            Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
+            ctx.state
+          )
+          ctx.copy(state = newState)
+        }
       case true  =>
         val effectiveAnswer: IO[String] = defaultAnswer match {
           case Some(ans)           => IO.pure(ans)
@@ -215,23 +208,33 @@ object ReleaseSteps {
               new RuntimeException(s"Tag [$tagName] already exists. Aborting release!")
             )
           case "k" | "K"      =>
+            // Keep existing tag: no manifest attribute (matches upstream sbt-release behavior)
             IO(
               ctx.state.log
                 .warn(s"[release-io] Tag [$tagName] already exists. Keeping existing tag.")
-            )
-              .as(ctx.withAttr("release-tag", tagName))
+            ).as(ctx)
           case "o" | "O"      =>
             IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")) *>
               IO.blocking {
                 runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'")
-              }.as(ctx.withAttr("release-tag", tagName))
+                val newState = extract(ctx.state).appendWithSession(
+                  Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
+                  ctx.state
+                )
+                ctx.copy(state = newState)
+              }
           case newTagName     =>
             IO(
               ctx.state.log.info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
             ) *>
-              resolveTag(vcs, newTagName, tagComment, sign, None, ctx, useDefaults = false)
+              resolveTag(
+                vcs,
+                params.copy(tagName = newTagName, defaultAnswer = None, useDefaults = false),
+                ctx
+              )
         }
     }
+  }
 
   val publishArtifacts: ReleaseStepIO = ReleaseStepIO(
     name = "publish-artifacts",
@@ -261,11 +264,31 @@ object ReleaseSteps {
       commitVersionNative(ctx, releaseNextCommitMessage).map(_._1)
     }
 
-  val pushChanges: ReleaseStepIO = ReleaseStepIO.io("push-changes") { ctx =>
-    requireVcs(ctx) { vcs =>
-      IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
-    }
-  }
+  val pushChanges: ReleaseStepIO = ReleaseStepIO(
+    name = "push-changes",
+    check = ctx => {
+      val base = extract(ctx.state).get(thisProject).base
+      IO.blocking(Vcs.detect(base)).flatMap {
+        case None      => IO.pure(ctx)
+        case Some(vcs) =>
+          IO.blocking {
+            if (!vcs.hasUpstream)
+              throw new RuntimeException(
+                s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
+                  "Set up a remote tracking branch or remove pushChanges from the release process."
+              )
+            if (vcs.isBehindRemote)
+              throw new RuntimeException(
+                "[release-io] The upstream branch has unmerged commits. Merge them before releasing."
+              )
+          }.as(ctx)
+      }
+    },
+    action = ctx =>
+      requireVcs(ctx) { vcs =>
+        IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
+      }
+  )
 
   /** Default ordered sequence of all release steps using IO-native implementations.
     * These steps provide richer error handling and use the ReleaseContext-based VCS/version plumbing.
@@ -308,6 +331,14 @@ object ReleaseSteps {
   }
 
   // --- helpers ---
+
+  private final case class TagParams(
+      tagName: String,
+      tagComment: String,
+      sign: Boolean,
+      defaultAnswer: Option[String],
+      useDefaults: Boolean
+  )
 
   /** Runs a process and throws a descriptive exception on non-zero exit instead of the opaque
     * "Nonzero exit value: N" from `ProcessBuilder.!!`.
@@ -396,7 +427,7 @@ object ReleaseSteps {
     val versionKey       = if (useGlobalVersion) "ThisBuild / version" else "version"
     val contents         = s"""$versionKey := "$ver"\n"""
     IO.blocking(java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))) *>
-      IO {
+      IO.blocking {
         ctx.state.log.info(s"[release-io] Wrote version $ver to ${versionFile.getName}")
         val versionSetting = if (useGlobalVersion) ThisBuild / version := ver else version := ver
         val newState       = extracted.appendWithSession(Seq(versionSetting), ctx.state)
