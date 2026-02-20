@@ -18,7 +18,7 @@ object ReleaseSteps {
     val baseDir = extract(ctx.state).get(thisProject).base
     IO.blocking(Vcs.detect(baseDir)).flatMap {
       case Some(sbtVcs) =>
-        IO.blocking {
+        IO {
           // Set releaseVcs in state so delegated sbt-release steps can access it at runtime
           val newState = extract(ctx.state).appendWithSession(
             Seq(releaseVcs := Some(sbtVcs)),
@@ -136,7 +136,7 @@ object ReleaseSteps {
     action = ctx =>
       requireVersions(ctx) { case (releaseVer, _) =>
         commitVersionNative(ctx, releaseCommitMessage).flatMap { case (resultCtx, currentHash) =>
-          IO.blocking {
+          IO {
             val extracted        = extract(resultCtx.state)
             val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
             val versionSetting   =
@@ -209,7 +209,7 @@ object ReleaseSteps {
             IO.print(
               s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
             ) *>
-              IO.readLine.map(l => Option(l).getOrElse(""))
+              IO.readLine
         }
         effectiveAnswer.flatMap {
           case "a" | "A" | "" =>
