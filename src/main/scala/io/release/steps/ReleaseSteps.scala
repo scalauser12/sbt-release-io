@@ -1,15 +1,15 @@
 package io.release.steps
 
 import cats.effect.IO
+import scala.sys.process.*
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbt.Package.ManifestAttributes
 import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.ReleaseStateTransformations.*
+import sbtrelease.ReleaseStateTransformations.{runClean, runTest}
 import sbtrelease.Vcs
-import scala.sys.process.*
 
 /** Built-in release steps composed as IO actions. */
 object ReleaseSteps {
@@ -113,25 +113,26 @@ object ReleaseSteps {
 
   val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
     name = "commit-release-version",
-    check = ctx =>
-      IO.blocking(sbtrelease.Vcs.detect(extract(ctx.state).get(thisProject).base)).flatMap {
+    check = ctx => {
+      val base = extract(ctx.state).get(thisProject).base
+      IO.blocking(sbtrelease.Vcs.detect(base)).flatMap {
         case None      =>
           IO.raiseError(
-            new RuntimeException(
-              s"No VCS detected at ${extract(ctx.state).get(thisProject).base.getAbsolutePath}"
-            )
+            new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}")
           )
         case Some(vcs) =>
+          // Always filter untracked ('?') lines: they are never staged and cannot
+          // block a commit, so they should not prevent the release check from passing.
           IO.blocking {
-            val ignoreUntracked = extract(ctx.state).get(releaseIgnoreUntrackedFiles)
             vcs.status.!!.trim.linesIterator
-              .filterNot(line => ignoreUntracked && line.startsWith("?"))
+              .filterNot(_.startsWith("?"))
               .mkString("\n")
           }.flatMap {
             case "" => IO.pure(ctx)
             case s  => IO.raiseError(new RuntimeException(s"Working directory is dirty:\n$s"))
           }
-      },
+      }
+    },
     action = ctx =>
       requireVersions(ctx) { case (releaseVer, _) =>
         commitVersionNative(ctx, releaseCommitMessage).flatMap { case (resultCtx, currentHash) =>
@@ -193,12 +194,17 @@ object ReleaseSteps {
   ): IO[ReleaseContext] =
     IO.blocking(vcs.existsTag(tagName)).flatMap {
       case false =>
-        IO.blocking(vcs.tag(tagName, tagComment, sign = sign).!!)
+        IO.blocking { runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'") }
           .as(ctx.withAttr("release-tag", tagName))
       case true  =>
         val effectiveAnswer: IO[String] = defaultAnswer match {
           case Some(ans)           => IO.pure(ans)
-          case None if useDefaults => IO.pure("a")
+          case None if useDefaults =>
+            IO(
+              ctx.state.log.warn(
+                s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
+              )
+            ).as("a")
           case None                =>
             IO.print(
               s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
@@ -218,8 +224,9 @@ object ReleaseSteps {
               .as(ctx.withAttr("release-tag", tagName))
           case "o" | "O"      =>
             IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")) *>
-              IO.blocking(vcs.tag(tagName, tagComment, sign = sign).!!)
-                .as(ctx.withAttr("release-tag", tagName))
+              IO.blocking {
+                runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'")
+              }.as(ctx.withAttr("release-tag", tagName))
           case newTagName     =>
             IO(
               ctx.state.log.info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
@@ -258,7 +265,7 @@ object ReleaseSteps {
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO.io("push-changes") { ctx =>
     requireVcs(ctx) { vcs =>
-      IO.blocking(vcs.pushChanges.!!).as(ctx)
+      IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
     }
   }
 
@@ -303,6 +310,15 @@ object ReleaseSteps {
   }
 
   // --- helpers ---
+
+  /** Runs a process and throws a descriptive exception on non-zero exit instead of the opaque
+    * "Nonzero exit value: N" from `ProcessBuilder.!!`.
+    */
+  private def runProcess(process: ProcessBuilder, context: => String): Unit = {
+    val code = process.!
+    if (code != 0)
+      throw new RuntimeException(s"$context failed with exit code $code")
+  }
 
   private def requireVcs(
       ctx: ReleaseContext
@@ -351,11 +367,12 @@ object ReleaseSteps {
           val relativePath = sbt.IO
             .relativize(base, versionFile)
             .getOrElse(
-              s"Version file [$versionFile] is outside of this VCS repository " +
-                s"with base directory [$base]!"
+              throw new RuntimeException(
+                s"[release-io] Version file [$versionFile] is outside of VCS root [$base]"
+              )
             )
 
-          vcs.add(relativePath).!!
+          runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
 
           // Always filter '?' lines: untracked files are never staged and would
           // cause a spurious 'nothing to commit' failure if included in the check.
@@ -365,7 +382,7 @@ object ReleaseSteps {
 
           if (status.nonEmpty) {
             val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
-            vcs.commit(msg, sign, signOff).!!
+            runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
             (ctx.copy(state = commitState), vcs.currentHash)
           } else {
             // nothing to commit — version file content unchanged (empty-commit scenario)
