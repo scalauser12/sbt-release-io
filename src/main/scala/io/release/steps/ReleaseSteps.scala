@@ -16,7 +16,7 @@ object ReleaseSteps {
 
   val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
     val baseDir = extract(ctx.state).get(thisProject).base
-    IO.blocking(sbtrelease.Vcs.detect(baseDir)).flatMap {
+    IO.blocking(Vcs.detect(baseDir)).flatMap {
       case Some(sbtVcs) =>
         IO.blocking {
           // Set releaseVcs in state so delegated sbt-release steps can access it at runtime
@@ -41,8 +41,8 @@ object ReleaseSteps {
         val (_, result) =
           sbtrelease.Compat.runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
         result match {
-          case sbt.Value(value) => Right(value.flatMap(_.value))
-          case sbt.Inc(cause)   => Left(cause)
+          case Value(value) => Right(value.flatMap(_.value))
+          case Inc(cause)   => Left(cause)
         }
       }.flatMap {
         case Left(cause)                  =>
@@ -97,7 +97,7 @@ object ReleaseSteps {
         IO.blocking {
           val extracted = extract(ctx.state)
           val ref       = extracted.get(thisProjectRef)
-          val newState  = extracted.runAggregated(ref / sbt.Test / sbt.Keys.test, ctx.state)
+          val newState  = extracted.runAggregated(ref / Test / test, ctx.state)
           ctx.copy(state = newState)
         }
       },
@@ -115,7 +115,7 @@ object ReleaseSteps {
     name = "commit-release-version",
     check = ctx => {
       val base = extract(ctx.state).get(thisProject).base
-      IO.blocking(sbtrelease.Vcs.detect(base)).flatMap {
+      IO.blocking(Vcs.detect(base)).flatMap {
         case None      =>
           IO.raiseError(
             new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}")
