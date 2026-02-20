@@ -27,7 +27,7 @@ object CustomStepExamples {
     ctx.vcs match {
       case Some(vcs) =>
         for {
-          branch <- vcs.currentBranch
+          branch <- IO.blocking(vcs.currentBranch)
           result <- if (branch == "main" || branch == "master")
                       IO.pure(ctx)
                     else

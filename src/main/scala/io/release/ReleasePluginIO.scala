@@ -98,6 +98,30 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
   protected def releaseIOCommand: Setting[?] =
     commands += Command("releaseIO")(_ => releaseParser)(doReleaseIO)
 
+  /** Build the initial release context from the current state.
+    *
+    * Besides command-line flags, this hydrates versions/VCS from state/settings so partial
+    * command flows (e.g. extra release commands) can continue from prior steps.
+    */
+  protected def initialContext(
+      state: State,
+      skipTests: Boolean,
+      skipPublish: Boolean
+  ): ReleaseContext = {
+    val maybeVersions = state.get(ReleaseKeys.versions)
+    val maybeVcs      = scala.util.Try {
+      Project.extract(state).get(sbtrelease.ReleasePlugin.autoImport.releaseVcs)
+    }.toOption.flatten
+
+    ReleaseContext(
+      state = state,
+      versions = maybeVersions,
+      vcs = maybeVcs,
+      skipTests = skipTests,
+      skipPublish = skipPublish
+    )
+  }
+
   private def doReleaseIO(state: State, args: Seq[ReleaseArg]): State = {
     import ReleaseArg.*
 
@@ -173,7 +197,46 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
   override protected def skipPublishEnabled(state: State): Boolean =
     Project.extract(state).get(releaseIOSkipPublish)
 
+  private def runExtraReleaseSteps(state: State, steps: Seq[ReleaseStepIO]): State = {
+    val extracted     = Project.extract(state)
+    val crossEnabled  = extracted.get(releaseIOCrossBuild) || state.get(ReleaseKeys.cross).getOrElse(
+      false
+    )
+    val skipTests     = state.get(ReleaseKeys.skipTests).getOrElse(false)
+    val skipPublish   = extracted.get(releaseIOSkipPublish)
+    val ctx           = initialContext(state, skipTests = skipTests, skipPublish = skipPublish)
+    val finalCtx      = ReleaseStepIO.compose(steps, crossEnabled)(ctx).unsafeRunSync()
+    finalCtx.state
+  }
+
+  private def actionOnly(step: ReleaseStepIO): ReleaseStepIO =
+    step.copy(check = ctx => IO.pure(ctx))
+
+  private def checkOnly(step: ReleaseStepIO): ReleaseStepIO =
+    step.copy(action = ctx => IO.pure(ctx))
+
+  private def releaseStepCommand(name: String, step: ReleaseStepIO): Command =
+    Command.command(name) { state =>
+      runExtraReleaseSteps(state, Seq(step))
+    }
+
+  private lazy val releaseExtraCommands: Seq[Command] = Seq(
+    releaseStepCommand("release-vcs-checks", checkOnly(ReleaseSteps.checkCleanWorkingDir)),
+    releaseStepCommand(
+      "release-check-snapshot-dependencies",
+      checkOnly(ReleaseSteps.checkSnapshotDependencies)
+    ),
+    releaseStepCommand("release-inquire-versions", actionOnly(ReleaseSteps.inquireVersions)),
+    releaseStepCommand("release-set-release-version", actionOnly(ReleaseSteps.setReleaseVersion)),
+    releaseStepCommand("release-set-next-version", actionOnly(ReleaseSteps.setNextVersion)),
+    releaseStepCommand("release-commit-release-version", actionOnly(ReleaseSteps.commitReleaseVersion)),
+    releaseStepCommand("release-commit-next-version", actionOnly(ReleaseSteps.commitNextVersion)),
+    releaseStepCommand("release-tag-release", actionOnly(ReleaseSteps.tagRelease)),
+    releaseStepCommand("release-push-changes", actionOnly(ReleaseSteps.pushChanges))
+  )
+
   override lazy val projectSettings: Seq[Setting[?]] = baseReleaseSettings ++ Seq(
+    commands             ++= releaseExtraCommands,
     releaseIOProcess     := ReleaseSteps.defaults,
     releaseIOCrossBuild  := false,
     releaseIOSkipPublish := false

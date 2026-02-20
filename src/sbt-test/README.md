@@ -36,6 +36,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies exit codes from `releaseIO` (0 for success, 1 for failure)
 - Tests both `fromCommand` and `fromCommandAndRemaining` step factories
 
+### extra-commands
+- Verifies upstream-style helper commands are registered
+- Covers `release-vcs-checks`, version inquire/set/commit, and tagging commands
+- Ensures command chaining works via state attributes between commands
+
 ### fail-test
 - Verifies that failing tests abort the release before later steps execute
 - Checks that a marker file is not created when tests fail

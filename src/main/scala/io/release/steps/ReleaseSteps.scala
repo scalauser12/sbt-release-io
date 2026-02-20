@@ -31,6 +31,12 @@ object ReleaseSteps {
     }
   }
 
+  val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
+    name = "check-clean-working-dir",
+    action = ctx => IO.pure(ctx),
+    check = checkCleanWorkingDirImpl
+  )
+
   val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO(
     name = "check-snapshot-dependencies",
     action = ctx => IO.pure(ctx),
@@ -113,29 +119,7 @@ object ReleaseSteps {
 
   val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
     name = "commit-release-version",
-    check = ctx => {
-      val extracted       = extract(ctx.state)
-      val base            = extracted.get(thisProject).base
-      val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
-      IO.blocking(Vcs.detect(base)).flatMap {
-        case None      =>
-          IO.raiseError(
-            new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}")
-          )
-        case Some(vcs) =>
-          IO.blocking {
-            val lines    = vcs.status.!!.trim.linesIterator
-            // Filter untracked ('?') lines only when releaseIgnoreUntrackedFiles is true.
-            // When false (default), untracked files are treated as dirty and block the release.
-            val filtered =
-              if (ignoreUntracked) lines.filterNot(_.startsWith("?")) else lines
-            filtered.mkString("\n")
-          }.flatMap {
-            case "" => IO.pure(ctx)
-            case s  => IO.raiseError(new RuntimeException(s"Working directory is dirty:\n$s"))
-          }
-      }
-    },
+    check = checkCleanWorkingDirForCommit,
     action = ctx =>
       requireVersions(ctx) { case (releaseVer, _) =>
         commitVersionNative(ctx, releaseCommitMessage).flatMap { case (resultCtx, currentHash) =>
@@ -311,7 +295,15 @@ object ReleaseSteps {
     },
     action = ctx =>
       requireVcs(ctx) { vcs =>
-        IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
+        IO.blocking {
+          if (vcs.hasUpstream) {
+            runProcess(vcs.pushChanges, "vcs push")
+          } else {
+            ctx.state.log.info(
+              s"[release-io] Changes were NOT pushed, because no upstream branch is configured for branch '${vcs.currentBranch}'."
+            )
+          }
+        }.as(ctx)
       }
   )
 
@@ -320,6 +312,7 @@ object ReleaseSteps {
     */
   val defaults: Seq[ReleaseStepIO] = Seq(
     initializeVcs,
+    checkCleanWorkingDir,
     checkSnapshotDependencies,
     inquireVersions,
     runTests,
@@ -341,6 +334,7 @@ object ReleaseSteps {
     import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
     Seq(
       initializeVcs,
+      checkCleanWorkingDir,
       checkSnapshotDependencies,
       inquireVersions,
       runClean,
@@ -415,6 +409,59 @@ object ReleaseSteps {
           )
         )
     }
+
+  private def checkCleanWorkingDirImpl(ctx: ReleaseContext): IO[ReleaseContext] =
+    checkCleanWorkingDirInternal(ctx, logStartHash = true)
+
+  private def checkCleanWorkingDirForCommit(ctx: ReleaseContext): IO[ReleaseContext] =
+    checkCleanWorkingDirInternal(ctx, logStartHash = false)
+
+  private def checkCleanWorkingDirInternal(
+      ctx: ReleaseContext,
+      logStartHash: Boolean
+  ): IO[ReleaseContext] = {
+    val extracted       = extract(ctx.state)
+    val base            = extracted.get(thisProject).base
+    val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
+
+    IO.blocking(Vcs.detect(base)).flatMap {
+      case None      =>
+        IO.raiseError(
+          new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}")
+        )
+      case Some(vcs) =>
+        IO.blocking {
+          val modified  = vcs.modifiedFiles
+          val untracked = vcs.untrackedFiles
+
+          if (modified.nonEmpty) {
+            throw new RuntimeException(
+              s"""Aborting release: unstaged modified files
+                 |
+                 |Modified files:
+                 |
+                 |${modified.mkString(" - ", "\n", "")}
+                 |""".stripMargin
+            )
+          }
+
+          if (untracked.nonEmpty && !ignoreUntracked) {
+            throw new RuntimeException(
+              s"""Aborting release: untracked files. Remove them or specify 'releaseIgnoreUntrackedFiles := true' in settings
+                 |
+                 |Untracked files:
+                 |
+                 |${untracked.mkString(" - ", "\n", "")}
+                 |""".stripMargin
+            )
+          }
+
+          if (logStartHash)
+            ctx.state.log.info(s"[release-io] Starting release process off commit: ${vcs.currentHash}")
+          ctx.withVcs(vcs)
+        }
+    }
+  }
 
   private def commitVersionNative(
       ctx: ReleaseContext,

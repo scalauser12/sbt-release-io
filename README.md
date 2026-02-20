@@ -9,6 +9,7 @@ An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with 
 - **Flexible step composition**: Create custom release steps using cats-effect IO
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run release steps across multiple Scala versions
+- **Upstream-style helper commands**: Run individual release phases with `release-*` commands
 - **Configurable**: Respects all upstream sbt-release settings (commit messages, signing, version bumping, etc.)
 
 ## Installation
@@ -46,6 +47,22 @@ sbt "releaseIO release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 
 # Combine options
 sbt "releaseIO with-defaults skip-tests release-version 1.0.0"
+```
+
+### Extra Commands
+
+The plugin also provides upstream-style helper commands for running individual phases:
+
+```bash
+sbt release-vcs-checks
+sbt release-check-snapshot-dependencies
+sbt release-inquire-versions
+sbt release-set-release-version
+sbt release-set-next-version
+sbt release-commit-release-version
+sbt release-commit-next-version
+sbt release-tag-release
+sbt release-push-changes
 ```
 
 ### Configuration
@@ -102,7 +119,7 @@ val printBanner = ReleaseStepIO.io("print-banner") { ctx =>
 val validateBranch = ReleaseStepIO.io("validate-branch") { ctx =>
   ctx.vcs match {
     case Some(vcs) =>
-      vcs.currentBranch.flatMap { branch =>
+      IO.blocking(vcs.currentBranch).flatMap { branch =>
         if (branch == "main") IO.pure(ctx)
         else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
       }
