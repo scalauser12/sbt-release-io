@@ -1,13 +1,14 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.vcs.Vcs
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.ReleaseStateTransformations.*
+import sbtrelease.Vcs
+import scala.sys.process.*
 
 /** Built-in release steps composed as IO actions. */
 object ReleaseSteps {
@@ -22,18 +23,11 @@ object ReleaseSteps {
             Seq(releaseVcs := Some(sbtVcs)),
             ctx.state
           )
-          ctx.copy(state = newState).withVcs(new Vcs(sbtVcs))
+          ctx.copy(state = newState).withVcs(sbtVcs)
         }
-      case None =>
+      case None         =>
         IO.raiseError(new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
     }
-  }
-
-  val checkCleanWorkingDir: ReleaseStepIO = {
-    import _root_.io.release.SbtReleaseCompat.stateTransformToReleaseStepIO
-    stateTransformToReleaseStepIO(
-      sbtrelease.ReleaseStateTransformations.commitReleaseVersion.check
-    ).copy(name = "check-clean-working-dir")
   }
 
   val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO(
@@ -118,10 +112,11 @@ object ReleaseSteps {
 
   val commitReleaseVersion: ReleaseStepIO = {
     import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
-    // Override check: initialVcsChecks reads releaseVcs which is set at load time (before git init
-    // in scripted tests). The action runs after initializeVcs has set releaseVcs in the session.
+    // check: initialVcsChecks reads releaseVcs from state, which is None at check-phase time
+    // (before initializeVcs runs). We inline the clean-working-dir check here, detecting VCS
+    // directly, so it runs unconditionally in the pre-flight phase regardless of the step list.
     //
-    // Note: commitReleaseVersionAction ends with reapply(Seq(packageOptions += ...), state).
+    // action: commitReleaseVersionAction ends with reapply(Seq(packageOptions += ...), state).
     // That reapply rebuilds the session and inadvertently drops our version := releaseVer
     // setting, causing tagRelease to tag the wrong commit hash. Re-apply the release version
     // after delegation to restore it.
@@ -130,7 +125,25 @@ object ReleaseSteps {
     )
     delegated.copy(
       name = "commit-release-version",
-      check = ctx => IO.pure(ctx),
+      check = ctx =>
+        IO.blocking(sbtrelease.Vcs.detect(extract(ctx.state).get(thisProject).base)).flatMap {
+          case None      =>
+            IO.raiseError(
+              new RuntimeException(
+                s"No VCS detected at ${extract(ctx.state).get(thisProject).base.getAbsolutePath}"
+              )
+            )
+          case Some(vcs) =>
+            IO.blocking {
+              val ignoreUntracked = extract(ctx.state).get(releaseIgnoreUntrackedFiles)
+              vcs.status.!!.trim.linesIterator
+                .filterNot(line => ignoreUntracked && line.startsWith("?"))
+                .mkString("\n")
+            }.flatMap {
+              case "" => IO.pure(ctx)
+              case s  => IO.raiseError(new RuntimeException(s"Working directory is dirty:\n$s"))
+            }
+        },
       action = ctx =>
         requireVersions(ctx) { case (releaseVer, _) =>
           delegated.action(ctx).flatMap { resultCtx =>
@@ -139,7 +152,7 @@ object ReleaseSteps {
               val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
               val versionSetting   =
                 if (useGlobalVersion) ThisBuild / version := releaseVer
-                else version := releaseVer
+                else version                              := releaseVer
               val newState         = extracted.appendWithSession(Seq(versionSetting), resultCtx.state)
               resultCtx.copy(state = newState)
             }
@@ -152,17 +165,25 @@ object ReleaseSteps {
     requireVcs(ctx) { vcs =>
       requireVersions(ctx) { _ =>
         for {
-          t                                                            <- IO.blocking {
-                                                                          val extracted        = extract(ctx.state)
-                                                                          val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
-                                                                          val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
-                                                                          val sign             = extracted.get(releaseVcsSign)
-                                                                          val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
-                                                                          val useDefaults      = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
-                                                                          (tagName, tagComment, sign, defaultAnswer, useDefaults, s2)
-                                                                        }
+          t                                                                 <- IO.blocking {
+                                                                                 val extracted        = extract(ctx.state)
+                                                                                 val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
+                                                                                 val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
+                                                                                 val sign             = extracted.get(releaseVcsSign)
+                                                                                 val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
+                                                                                 val useDefaults      = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
+                                                                                 (tagName, tagComment, sign, defaultAnswer, useDefaults, s2)
+                                                                               }
           (tagName, tagComment, sign, defaultAnswer, useDefaults, taskState) = t
-          result                                                             <- resolveTag(vcs, tagName, tagComment, sign, defaultAnswer, ctx.copy(state = taskState), useDefaults)
+          result                                                            <- resolveTag(
+                                                                                 vcs,
+                                                                                 tagName,
+                                                                                 tagComment,
+                                                                                 sign,
+                                                                                 defaultAnswer,
+                                                                                 ctx.copy(state = taskState),
+                                                                                 useDefaults
+                                                                               )
         } yield result
       }
     }
@@ -177,9 +198,10 @@ object ReleaseSteps {
       ctx: ReleaseContext,
       useDefaults: Boolean
   ): IO[ReleaseContext] =
-    vcs.existsTag(tagName).flatMap {
+    IO.blocking(vcs.existsTag(tagName)).flatMap {
       case false =>
-        vcs.tag(tagName, Some(tagComment), sign = sign).as(ctx.withAttr("release-tag", tagName))
+        IO.blocking(vcs.tag(tagName, tagComment, sign = sign).!!)
+          .as(ctx.withAttr("release-tag", tagName))
       case true  =>
         val effectiveAnswer: IO[String] = defaultAnswer match {
           case Some(ans)           => IO.pure(ans)
@@ -203,11 +225,12 @@ object ReleaseSteps {
               .as(ctx.withAttr("release-tag", tagName))
           case "o" | "O"      =>
             IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")) *>
-              vcs
-                .tag(tagName, Some(tagComment), sign = sign)
+              IO.blocking(vcs.tag(tagName, tagComment, sign = sign).!!)
                 .as(ctx.withAttr("release-tag", tagName))
           case newTagName     =>
-            IO(ctx.state.log.info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")) *>
+            IO(
+              ctx.state.log.info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
+            ) *>
               resolveTag(vcs, newTagName, tagComment, sign, None, ctx, useDefaults = false)
         }
     }
@@ -220,7 +243,8 @@ object ReleaseSteps {
       } else {
         IO.blocking {
           val extracted = extract(ctx.state)
-          val newState  = extracted.runAggregated(extracted.currentRef / releasePublishArtifactsAction, ctx.state)
+          val newState  =
+            extracted.runAggregated(extracted.currentRef / releasePublishArtifactsAction, ctx.state)
           ctx.copy(state = newState)
         }
       },
@@ -243,7 +267,7 @@ object ReleaseSteps {
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO.io("push-changes") { ctx =>
     requireVcs(ctx) { vcs =>
-      vcs.pushAll.as(ctx)
+      IO.blocking(vcs.pushChanges.!!).as(ctx)
     }
   }
 
@@ -252,7 +276,6 @@ object ReleaseSteps {
     */
   val defaults: Seq[ReleaseStepIO] = Seq(
     initializeVcs,
-    checkCleanWorkingDir,
     checkSnapshotDependencies,
     inquireVersions,
     runTests,

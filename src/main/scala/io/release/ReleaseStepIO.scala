@@ -1,8 +1,8 @@
 package io.release
 
 import cats.effect.IO
-import io.release.vcs.Vcs as ReleaseVcs
 import sbt.*
+import sbtrelease.Vcs
 import sbt.Keys.*
 import sbt.Def.ScopedKey
 import sbtrelease.Compat
@@ -27,7 +27,7 @@ object ReleaseKeys {
 case class ReleaseContext(
     state: State,
     versions: Option[(String, String)] = None, // (releaseVersion, nextVersion)
-    vcs: Option[ReleaseVcs] = None,
+    vcs: Option[Vcs] = None,
     skipTests: Boolean = false,
     skipPublish: Boolean = false,
     attributes: Map[String, String] = Map.empty,
@@ -36,7 +36,7 @@ case class ReleaseContext(
   def withVersions(release: String, next: String): ReleaseContext =
     copy(versions = Some((release, next)))
 
-  def withVcs(v: ReleaseVcs): ReleaseContext =
+  def withVcs(v: Vcs): ReleaseContext =
     copy(vcs = Some(v))
 
   def attr(key: String): Option[String] = attributes.get(key)
