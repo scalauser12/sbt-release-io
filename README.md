@@ -53,7 +53,7 @@ sbt "releaseIO with-defaults skip-tests release-version 1.0.0"
 In `build.sbt`:
 
 ```scala
-import io.release.ReleaseIOPlugin.autoImport._
+import io.release.ReleasePluginIO.autoImport._
 import io.release.steps.ReleaseSteps
 
 // Use default release steps (recommended)
