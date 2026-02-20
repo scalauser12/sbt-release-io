@@ -5,6 +5,7 @@ import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
+import sbt.Package.ManifestAttributes
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.ReleaseStateTransformations.*
 import sbtrelease.Vcs
@@ -110,56 +111,48 @@ object ReleaseSteps {
       }
     }
 
-  val commitReleaseVersion: ReleaseStepIO = {
-    import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
-    // check: initialVcsChecks reads releaseVcs from state, which is None at check-phase time
-    // (before initializeVcs runs). We inline the clean-working-dir check here, detecting VCS
-    // directly, so it runs unconditionally in the pre-flight phase regardless of the step list.
-    //
-    // action: commitReleaseVersionAction ends with reapply(Seq(packageOptions += ...), state).
-    // That reapply rebuilds the session and inadvertently drops our version := releaseVer
-    // setting, causing tagRelease to tag the wrong commit hash. Re-apply the release version
-    // after delegation to restore it.
-    val delegated = releaseStepToReleaseStepIO(
-      sbtrelease.ReleaseStateTransformations.commitReleaseVersion
-    )
-    delegated.copy(
-      name = "commit-release-version",
-      check = ctx =>
-        IO.blocking(sbtrelease.Vcs.detect(extract(ctx.state).get(thisProject).base)).flatMap {
-          case None      =>
-            IO.raiseError(
-              new RuntimeException(
-                s"No VCS detected at ${extract(ctx.state).get(thisProject).base.getAbsolutePath}"
-              )
+  val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
+    name = "commit-release-version",
+    check = ctx =>
+      IO.blocking(sbtrelease.Vcs.detect(extract(ctx.state).get(thisProject).base)).flatMap {
+        case None      =>
+          IO.raiseError(
+            new RuntimeException(
+              s"No VCS detected at ${extract(ctx.state).get(thisProject).base.getAbsolutePath}"
             )
-          case Some(vcs) =>
-            IO.blocking {
-              val ignoreUntracked = extract(ctx.state).get(releaseIgnoreUntrackedFiles)
-              vcs.status.!!.trim.linesIterator
-                .filterNot(line => ignoreUntracked && line.startsWith("?"))
-                .mkString("\n")
-            }.flatMap {
-              case "" => IO.pure(ctx)
-              case s  => IO.raiseError(new RuntimeException(s"Working directory is dirty:\n$s"))
-            }
-        },
-      action = ctx =>
-        requireVersions(ctx) { case (releaseVer, _) =>
-          delegated.action(ctx).flatMap { resultCtx =>
-            IO.blocking {
-              val extracted        = extract(resultCtx.state)
-              val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
-              val versionSetting   =
-                if (useGlobalVersion) ThisBuild / version := releaseVer
-                else version                              := releaseVer
-              val newState         = extracted.appendWithSession(Seq(versionSetting), resultCtx.state)
-              resultCtx.copy(state = newState)
-            }
+          )
+        case Some(vcs) =>
+          IO.blocking {
+            val ignoreUntracked = extract(ctx.state).get(releaseIgnoreUntrackedFiles)
+            vcs.status.!!.trim.linesIterator
+              .filterNot(line => ignoreUntracked && line.startsWith("?"))
+              .mkString("\n")
+          }.flatMap {
+            case "" => IO.pure(ctx)
+            case s  => IO.raiseError(new RuntimeException(s"Working directory is dirty:\n$s"))
+          }
+      },
+    action = ctx =>
+      requireVersions(ctx) { case (releaseVer, _) =>
+        commitVersionNative(ctx, releaseCommitMessage).flatMap { case (resultCtx, currentHash) =>
+          IO.blocking {
+            val extracted        = extract(resultCtx.state)
+            val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
+            val versionSetting   =
+              if (useGlobalVersion) ThisBuild / version := releaseVer
+              else version                              := releaseVer
+            val newState = extracted.appendWithSession(
+              Seq(
+                packageOptions += ManifestAttributes("Vcs-Release-Hash" -> currentHash),
+                versionSetting
+              ),
+              resultCtx.state
+            )
+            resultCtx.copy(state = newState)
           }
         }
-    )
-  }
+      }
+  )
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
@@ -258,12 +251,10 @@ object ReleaseSteps {
     }
   }
 
-  val commitNextVersion: ReleaseStepIO = {
-    import _root_.io.release.SbtReleaseCompat.stateTransformToReleaseStepIO
-    stateTransformToReleaseStepIO(
-      sbtrelease.ReleaseStateTransformations.commitNextVersion
-    ).copy(name = "commit-next-version")
-  }
+  val commitNextVersion: ReleaseStepIO =
+    ReleaseStepIO.io("commit-next-version") { ctx =>
+      commitVersionNative(ctx, releaseNextCommitMessage).map(_._1)
+    }
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO.io("push-changes") { ctx =>
     requireVcs(ctx) { vcs =>
@@ -337,6 +328,50 @@ object ReleaseSteps {
             "Versions not set. Ensure inquireVersions runs before this step."
           )
         )
+    }
+
+  private def commitVersionNative(
+      ctx: ReleaseContext,
+      commitMessageKey: TaskKey[String]
+  ): IO[(ReleaseContext, String)] =
+    ctx.vcs match {
+      case None      =>
+        IO.raiseError(
+          new RuntimeException(
+            "VCS not initialized. Ensure initializeVcs runs before this step."
+          )
+        )
+      case Some(vcs) =>
+        IO.blocking {
+          val extracted    = extract(ctx.state)
+          val versionFile  = extracted.get(releaseVersionFile).getCanonicalFile
+          val base         = vcs.baseDir.getCanonicalFile
+          val sign         = extracted.get(releaseVcsSign)
+          val signOff      = extracted.get(releaseVcsSignOff)
+          val relativePath = sbt.IO
+            .relativize(base, versionFile)
+            .getOrElse(
+              s"Version file [$versionFile] is outside of this VCS repository " +
+                s"with base directory [$base]!"
+            )
+
+          vcs.add(relativePath).!!
+
+          // Always filter '?' lines: untracked files are never staged and would
+          // cause a spurious 'nothing to commit' failure if included in the check.
+          val status = vcs.status.!!.trim.linesIterator
+            .filterNot(_.startsWith("?"))
+            .mkString("\n")
+
+          if (status.nonEmpty) {
+            val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
+            vcs.commit(msg, sign, signOff).!!
+            (ctx.copy(state = commitState), vcs.currentHash)
+          } else {
+            // nothing to commit — version file content unchanged (empty-commit scenario)
+            (ctx, vcs.currentHash)
+          }
+        }
     }
 
   private def writeVersion(
