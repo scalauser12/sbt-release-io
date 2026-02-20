@@ -11,6 +11,9 @@ import sbt.complete.Parser
 /** Base trait for resource-parameterized release plugins. Each release step is a function
   * `T => ReleaseStepIO` where `T` is a resource acquired once for the entire release process.
   *
+  * Plain `ReleaseStepIO` values are implicitly lifted to `T => ReleaseStepIO`, so `lift()` is
+  * not required. The `releaseIO` command is registered automatically via [[baseReleaseSettings]].
+  *
   * Users extend this trait to create custom plugins with resource lifecycle management:
   * {{{
   * object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
@@ -18,16 +21,15 @@ import sbt.complete.Parser
   *   override def resource = Resource.make(IO(new HttpClient()))(c => IO(c.close()))
   *
   *   override protected def releaseProcess(state: State) = Seq(
-  *     lift(ReleaseSteps.initializeVcs),
-  *     lift(ReleaseSteps.inquireVersions),
+  *     ReleaseSteps.initializeVcs,
+  *     ReleaseSteps.inquireVersions,
   *     client => ReleaseStepIO.io("publish") { ctx => IO(client.publish()).as(ctx) }
   *   )
-  *
-  *   override lazy val projectSettings = Seq(releaseIOCommand)
   * }
   * }}}
   */
 trait ReleasePluginIOLike[T] extends AutoPlugin {
+  import scala.language.implicitConversions
 
   override def requires: Plugins = plugins.JvmPlugin && sbtrelease.ReleasePlugin
 
@@ -35,6 +37,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
   def resource: Resource[IO, T]
 
   /** The release steps. Each step is a function from the resource `T` to a `ReleaseStepIO`.
+    * Plain `ReleaseStepIO` values are implicitly lifted via [[liftStep]].
     * Called at `releaseIO` command execution time with the current sbt State.
     */
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO]
@@ -45,8 +48,20 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
   /** Whether to skip publish. */
   protected def skipPublishEnabled(state: State): Boolean = false
 
-  /** Lift a plain `ReleaseStepIO` to a resource-parameterized step that ignores `T`. */
+  /** Implicitly lift a plain `ReleaseStepIO` to a resource-ignoring step.
+    * This allows mixing plain steps and resource-parameterized steps in `releaseProcess`.
+    */
+  protected implicit def liftStep(step: ReleaseStepIO): T => ReleaseStepIO = _ => step
+
+  /** Explicitly lift a plain `ReleaseStepIO` to a resource-parameterized step that ignores `T`. */
   protected def lift(step: ReleaseStepIO): T => ReleaseStepIO = _ => step
+
+  /** Base settings that include command registration. Custom plugins that override
+    * `projectSettings` should include `baseReleaseSettings` in their sequence.
+    */
+  protected def baseReleaseSettings: Seq[Setting[?]] = Seq(releaseIOCommand)
+
+  override lazy val projectSettings: Seq[Setting[?]] = baseReleaseSettings
 
   /** Parse results for command-line arguments. */
   protected sealed trait ReleaseArg
@@ -146,47 +161,50 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
   object autoImport {
     import scala.language.implicitConversions
 
+    // Delegate setting keys to the shared ReleaseIO object so they are accessible
+    // both via autoImport (for build.sbt users) and via `import ReleaseIO.*`
+    // (for custom plugin authors).
+
     /** The ordered sequence of release steps to execute. Defaults to [[steps.ReleaseSteps.defaults]].
       * Each step is a [[ReleaseStepIO]] with an action, optional check, and cross-build flag.
       */
-    val releaseIOProcess =
-      settingKey[Seq[ReleaseStepIO]]("The sequence of IO release steps to execute")
+    val releaseIOProcess: SettingKey[Seq[ReleaseStepIO]] = ReleaseIO.releaseIOProcess
 
     /** When `true`, steps with `enableCrossBuild = true` are executed once per `crossScalaVersions`.
       * Can also be enabled via the `cross` command-line argument to `releaseIO`.
       */
-    val releaseIOCrossBuild = settingKey[Boolean]("Whether to enable cross-building during release")
+    val releaseIOCrossBuild: SettingKey[Boolean] = ReleaseIO.releaseIOCrossBuild
 
     /** When `true`, the `publishArtifacts` step is skipped entirely. */
-    val releaseIOSkipPublish = settingKey[Boolean]("Whether to skip publish during release")
+    val releaseIOSkipPublish: SettingKey[Boolean] = ReleaseIO.releaseIOSkipPublish
 
     // Re-export factory methods as def wrappers to preserve generic type parameters
     // and default argument values (eta-expanded vals lose both).
     def releaseIOStepTask[A](key: TaskKey[A], enableCrossBuild: Boolean = false): ReleaseStepIO =
-      ReleaseStepIO.fromTask(key, enableCrossBuild)
+      ReleaseIO.stepTask(key, enableCrossBuild)
     def releaseIOStepTaskAggregated[A](
         key: TaskKey[A],
         enableCrossBuild: Boolean = false
     ): ReleaseStepIO                                                                            =
-      ReleaseStepIO.fromTaskAggregated(key, enableCrossBuild)
+      ReleaseIO.stepTaskAggregated(key, enableCrossBuild)
     def releaseIOStepInputTask[A](
         key: InputKey[A],
         args: String = "",
         enableCrossBuild: Boolean = false
     ): ReleaseStepIO                                                                            =
-      ReleaseStepIO.fromInputTask(key, args, enableCrossBuild)
+      ReleaseIO.stepInputTask(key, args, enableCrossBuild)
     def releaseIOStepCommand(command: String): ReleaseStepIO                                    =
-      ReleaseStepIO.fromCommand(command)
+      ReleaseIO.stepCommand(command)
     def releaseIOStepCommandAndRemaining(command: String): ReleaseStepIO                        =
-      ReleaseStepIO.fromCommandAndRemaining(command)
+      ReleaseIO.stepCommandAndRemaining(command)
 
     // Re-export sbt-release compatibility conversions
     implicit val sbtReleaseStepConversion
         : sbtrelease.ReleasePlugin.autoImport.ReleaseStep => ReleaseStepIO =
-      SbtReleaseCompat.releaseStepToReleaseStepIO
+      ReleaseIO.sbtReleaseStepConversion
 
     implicit val sbtReleaseStateTransformConversion: (State => State) => ReleaseStepIO =
-      SbtReleaseCompat.stateTransformToReleaseStepIO
+      ReleaseIO.sbtReleaseStateTransformConversion
   }
 
   import autoImport.*
@@ -202,10 +220,9 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
   override protected def skipPublishEnabled(state: State): Boolean =
     Project.extract(state).get(releaseIOSkipPublish)
 
-  override lazy val projectSettings: Seq[Setting[?]] = Seq(
+  override lazy val projectSettings: Seq[Setting[?]] = baseReleaseSettings ++ Seq(
     releaseIOProcess     := ReleaseSteps.defaults,
     releaseIOCrossBuild  := false,
-    releaseIOSkipPublish := false,
-    releaseIOCommand
+    releaseIOSkipPublish := false
   )
 }
