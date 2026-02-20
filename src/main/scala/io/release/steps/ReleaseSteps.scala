@@ -141,7 +141,7 @@ object ReleaseSteps {
             val versionSetting   =
               if (useGlobalVersion) ThisBuild / version := releaseVer
               else version                              := releaseVer
-            val newState = extracted.appendWithSession(
+            val newState         = extracted.appendWithSession(
               Seq(
                 packageOptions += ManifestAttributes("Vcs-Release-Hash" -> currentHash),
                 versionSetting
