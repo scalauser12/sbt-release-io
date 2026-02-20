@@ -158,27 +158,25 @@ object ReleaseSteps {
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       requireVersions(ctx) { _ =>
-        for {
-          t                                                                 <- IO.blocking {
-                                                                                 val extracted        = extract(ctx.state)
-                                                                                 val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
-                                                                                 val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
-                                                                                 val sign             = extracted.get(releaseVcsSign)
-                                                                                 val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
-                                                                                 val useDefaults      = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
-                                                                                 (tagName, tagComment, sign, defaultAnswer, useDefaults, s2)
-                                                                               }
-          (tagName, tagComment, sign, defaultAnswer, useDefaults, taskState) = t
-          result                                                            <- resolveTag(
-                                                                                 vcs,
-                                                                                 tagName,
-                                                                                 tagComment,
-                                                                                 sign,
-                                                                                 defaultAnswer,
-                                                                                 ctx.copy(state = taskState),
-                                                                                 useDefaults
-                                                                               )
-        } yield result
+        IO.blocking {
+          val extracted        = extract(ctx.state)
+          val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
+          val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
+          val sign             = extracted.get(releaseVcsSign)
+          val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
+          val useDefaults      = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
+          (tagName, tagComment, sign, defaultAnswer, useDefaults, s2)
+        }.flatMap { case (tagName, tagComment, sign, defaultAnswer, useDefaults, taskState) =>
+          resolveTag(
+            vcs,
+            tagName,
+            tagComment,
+            sign,
+            defaultAnswer,
+            ctx.copy(state = taskState),
+            useDefaults
+          )
+        }
       }
     }
   }
@@ -391,34 +389,18 @@ object ReleaseSteps {
         }
     }
 
-  private def writeVersion(
-      ctx: ReleaseContext,
-      ver: String
-  ): IO[ReleaseContext] = IO.blocking {
-    val extracted = extract(ctx.state)
-
-    // Use upstream sbt-release's settings for file location and scope
+  private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = {
+    val extracted        = extract(ctx.state)
     val versionFile      = extracted.get(releaseVersionFile)
     val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
-
-    val versionKey = if (useGlobalVersion) "ThisBuild / version" else "version"
-    val contents   = s"""$versionKey := "$ver"\n"""
-
-    java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-    ctx.state.log.info(
-      s"[release-io] Wrote version $ver to ${versionFile.getName}"
-    )
-
-    val versionSetting = if (useGlobalVersion) {
-      ThisBuild / version := ver
-    } else {
-      version := ver
-    }
-
-    val newState = extracted.appendWithSession(
-      Seq(versionSetting),
-      ctx.state
-    )
-    ctx.copy(state = newState)
+    val versionKey       = if (useGlobalVersion) "ThisBuild / version" else "version"
+    val contents         = s"""$versionKey := "$ver"\n"""
+    IO.blocking(java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))) *>
+      IO {
+        ctx.state.log.info(s"[release-io] Wrote version $ver to ${versionFile.getName}")
+        val versionSetting = if (useGlobalVersion) ThisBuild / version := ver else version := ver
+        val newState       = extracted.appendWithSession(Seq(versionSetting), ctx.state)
+        ctx.copy(state = newState)
+      }
   }
 }
