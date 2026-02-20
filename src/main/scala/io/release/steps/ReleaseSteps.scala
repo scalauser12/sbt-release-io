@@ -114,19 +114,22 @@ object ReleaseSteps {
   val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
     name = "commit-release-version",
     check = ctx => {
-      val base = extract(ctx.state).get(thisProject).base
+      val extracted       = extract(ctx.state)
+      val base            = extracted.get(thisProject).base
+      val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
       IO.blocking(Vcs.detect(base)).flatMap {
         case None      =>
           IO.raiseError(
             new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}")
           )
         case Some(vcs) =>
-          // Always filter untracked ('?') lines: they are never staged and cannot
-          // block a commit, so they should not prevent the release check from passing.
           IO.blocking {
-            vcs.status.!!.trim.linesIterator
-              .filterNot(_.startsWith("?"))
-              .mkString("\n")
+            val lines    = vcs.status.!!.trim.linesIterator
+            // Filter untracked ('?') lines only when releaseIgnoreUntrackedFiles is true.
+            // When false (default), untracked files are treated as dirty and block the release.
+            val filtered =
+              if (ignoreUntracked) lines.filterNot(_.startsWith("?")) else lines
+            filtered.mkString("\n")
           }.flatMap {
             case "" => IO.pure(ctx)
             case s  => IO.raiseError(new RuntimeException(s"Working directory is dirty:\n$s"))
@@ -249,7 +252,29 @@ object ReleaseSteps {
           ctx.copy(state = newState)
         }
       },
-    check = ctx => IO.pure(ctx),
+    check = ctx =>
+      if (ctx.skipPublish) IO.pure(ctx)
+      else
+        IO.blocking {
+          val extracted = extract(ctx.state)
+          val ref       = extracted.get(thisProjectRef)
+          val allRefs   = ref +: extracted.currentProject.aggregate
+          val missing   = allRefs
+            .filterNot { r =>
+              checkPublishSkip(extracted, r, ctx.state)
+            }
+            .filter { r =>
+              checkPublishToMissing(extracted, r, ctx.state)
+            }
+          if (missing.nonEmpty) {
+            val names = missing.map(_.project)
+            throw new RuntimeException(
+              s"publishTo not configured for: ${names.mkString(", ")}. " +
+                "Set publishTo or add `publish / skip := true`."
+            )
+          }
+          ctx
+        },
     enableCrossBuild = true
   )
 
@@ -331,6 +356,22 @@ object ReleaseSteps {
   }
 
   // --- helpers ---
+
+  @annotation.nowarn("msg=deprecated")
+  private def checkPublishSkip(
+      extracted: Extracted,
+      ref: ProjectRef,
+      state: State
+  ): Boolean =
+    scala.util.Try(extracted.runTask(Keys.skip in (ref, publish), state)._2).getOrElse(false)
+
+  @annotation.nowarn("msg=deprecated")
+  private def checkPublishToMissing(
+      extracted: Extracted,
+      ref: ProjectRef,
+      state: State
+  ): Boolean =
+    scala.util.Try(extracted.runTask(publishTo in ref, state)._2).getOrElse(None).isEmpty
 
   private final case class TagParams(
       tagName: String,

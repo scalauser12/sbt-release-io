@@ -158,54 +158,7 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
 
   override def resource: Resource[IO, Unit] = Resource.unit
 
-  object autoImport {
-    import scala.language.implicitConversions
-
-    // Delegate setting keys to the shared ReleaseIO object so they are accessible
-    // both via autoImport (for build.sbt users) and via `import ReleaseIO.*`
-    // (for custom plugin authors).
-
-    /** The ordered sequence of release steps to execute. Defaults to [[steps.ReleaseSteps.defaults]].
-      * Each step is a [[ReleaseStepIO]] with an action, optional check, and cross-build flag.
-      */
-    val releaseIOProcess: SettingKey[Seq[ReleaseStepIO]] = ReleaseIO.releaseIOProcess
-
-    /** When `true`, steps with `enableCrossBuild = true` are executed once per `crossScalaVersions`.
-      * Can also be enabled via the `cross` command-line argument to `releaseIO`.
-      */
-    val releaseIOCrossBuild: SettingKey[Boolean] = ReleaseIO.releaseIOCrossBuild
-
-    /** When `true`, the `publishArtifacts` step is skipped entirely. */
-    val releaseIOSkipPublish: SettingKey[Boolean] = ReleaseIO.releaseIOSkipPublish
-
-    // Re-export factory methods as def wrappers to preserve generic type parameters
-    // and default argument values (eta-expanded vals lose both).
-    def releaseIOStepTask[A](key: TaskKey[A], enableCrossBuild: Boolean = false): ReleaseStepIO =
-      ReleaseIO.stepTask(key, enableCrossBuild)
-    def releaseIOStepTaskAggregated[A](
-        key: TaskKey[A],
-        enableCrossBuild: Boolean = false
-    ): ReleaseStepIO                                                                            =
-      ReleaseIO.stepTaskAggregated(key, enableCrossBuild)
-    def releaseIOStepInputTask[A](
-        key: InputKey[A],
-        args: String = "",
-        enableCrossBuild: Boolean = false
-    ): ReleaseStepIO                                                                            =
-      ReleaseIO.stepInputTask(key, args, enableCrossBuild)
-    def releaseIOStepCommand(command: String): ReleaseStepIO                                    =
-      ReleaseIO.stepCommand(command)
-    def releaseIOStepCommandAndRemaining(command: String): ReleaseStepIO                        =
-      ReleaseIO.stepCommandAndRemaining(command)
-
-    // Re-export sbt-release compatibility conversions
-    implicit val sbtReleaseStepConversion
-        : sbtrelease.ReleasePlugin.autoImport.ReleaseStep => ReleaseStepIO =
-      ReleaseIO.sbtReleaseStepConversion
-
-    implicit val sbtReleaseStateTransformConversion: (State => State) => ReleaseStepIO =
-      ReleaseIO.sbtReleaseStateTransformConversion
-  }
+  object autoImport extends ReleaseIO
 
   import autoImport.*
 

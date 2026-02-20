@@ -13,27 +13,76 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 
 ## Available Tests
 
+### check-phase
+- Verifies that check-phase failures prevent action execution
+
+### command-line-version-numbers
+- Specifies release and next versions via `release-version` / `next-version` args
+- Verifies both versions are written to `version.sbt` at the correct points
+
+### cross
+- Tests cross-building with multiple Scala versions via the `cross` flag
+- Verifies both 2.13 and 2.12 builds occur only when cross is enabled
+
+### custom-tag
+- Tests custom tag naming via the `releaseTagName` setting
+- Uses `runtimeVersion` to create dynamic tag names
+
+### empty-commit
+- Version file already at release version
+- Verifies no-op commit is handled gracefully
+
+### exit-code
+- Verifies exit codes from `releaseIO` (0 for success, 1 for failure)
+- Tests both `fromCommand` and `fromCommandAndRemaining` step factories
+
+### fail-test
+- Verifies that failing tests abort the release before later steps execute
+- Checks that a marker file is not created when tests fail
+
+### publish-to-check
+- Verifies that a missing `publishTo` setting fails at check phase
+- Catches misconfiguration before any commits or tags happen
+
+### run-tests-aggregate-fail
+- Verifies that failing tests in aggregated sub-projects abort the release
+- Multi-project setup with one passing and one failing test
+
 ### simple
-Tests the basic release workflow:
-- Initialize git repository
-- Run release with default settings
-- Verify version changes, commits, and tags
+- Tests the basic release workflow end-to-end
+- Verifies version changes, git commits, and tags are created
+
+### skip-tests
+- Verifies that the `skip-tests` flag allows release despite failing tests
+- Tests both the negative case (failure) and positive case (success with flag)
 
 ### snapshot-deps
-Tests snapshot dependency detection:
 - Project with a SNAPSHOT dependency
 - Verifies release fails with appropriate error
 
-### untracked-files
-Tests `releaseIgnoreUntrackedFiles` setting:
-- Creates untracked files in working directory
-- Verifies release succeeds when setting is enabled
+### tag-default
+- Tests tag name conflict handling with multiple scenarios
+- Covers abort, overwrite, keep, and custom tag name resolution
 
-### empty-commit
-Tests handling of empty commits:
-- Version file already at release version
-- Verifies no-op commit is handled gracefully
-- Verifies "No changes to commit" message is logged
+### tasks-as-steps
+- Tests `stepTask`, `stepTaskAggregated`, `stepInputTask`, and `stepCommand` factories
+- Verifies tasks, input tasks, and commands all execute correctly as release steps
+
+### untracked-files
+- Tests `releaseIgnoreUntrackedFiles := true`
+- Creates untracked files and verifies release succeeds when the setting is enabled
+
+### untracked-files-fail
+- Tests default `releaseIgnoreUntrackedFiles` behavior (false)
+- Verifies untracked files block the release
+
+### version-bump
+- Tests different version bump strategies: Next, NextStable, Bugfix, Minor
+- Verifies qualifier stripping and snapshot suffix behavior for each
+
+### with-defaults
+- Tests release with and without the `with-defaults` flag
+- Verifies `releaseVersionBump` setting is honored across multiple scenarios
 
 ## Running Tests
 

@@ -1,18 +1,23 @@
 import _root_.io.release.steps.ReleaseSteps
 import sbt.IO
 
-name := "command-line-version-numbers"
+name         := "command-line-version-numbers"
 scalaVersion := "2.12.18"
 
 publishTo := Some(Resolver.file("file", new File(".")))
 
+releaseIgnoreUntrackedFiles := true
+
 releaseIOProcess := Seq(
+  ReleaseSteps.initializeVcs,
   ReleaseSteps.checkSnapshotDependencies,
   ReleaseSteps.inquireVersions,
   ReleaseSteps.runTests,
   ReleaseSteps.setReleaseVersion,
+  ReleaseSteps.commitReleaseVersion,
   ReleaseSteps.publishArtifacts,
-  ReleaseSteps.setNextVersion
+  ReleaseSteps.setNextVersion,
+  ReleaseSteps.commitNextVersion
 )
 
 val checkContentsOfVersionSbt =
@@ -26,4 +31,3 @@ checkContentsOfVersionSbt := {
     s"Expected version.sbt to contain '$expected' but got:\n$contents"
   )
 }
-

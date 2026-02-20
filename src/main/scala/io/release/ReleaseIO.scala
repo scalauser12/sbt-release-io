@@ -1,19 +1,20 @@
 package io.release
 
-import io.release.steps.ReleaseSteps
 import sbt.*
 
 import scala.language.implicitConversions
 
 /** Shared setting keys, factory methods, and implicit conversions for release-io plugins.
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
-  * import from here.
+  * mix in or import from here.
   *
   * {{{
   * import io.release.ReleaseIO.*
+  * // or
+  * object autoImport extends ReleaseIO
   * }}}
   */
-object ReleaseIO {
+trait ReleaseIO {
 
   // ── Setting keys ──────────────────────────────────────────────────────────
 
@@ -66,3 +67,5 @@ object ReleaseIO {
   implicit val sbtReleaseStateTransformConversion: (State => State) => ReleaseStepIO =
     SbtReleaseCompat.stateTransformToReleaseStepIO
 }
+
+object ReleaseIO extends ReleaseIO
