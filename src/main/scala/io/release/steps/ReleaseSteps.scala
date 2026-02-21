@@ -37,7 +37,7 @@ object ReleaseSteps {
   val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
     name = "check-clean-working-dir",
     action = ctx => IO.pure(ctx),
-    check = checkCleanWorkingDirImpl
+    check = checkCleanWorkingDirInternal(_, logStartHash = true)
   )
 
   val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO(
@@ -179,7 +179,7 @@ object ReleaseSteps {
 
   val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
     name = "commit-release-version",
-    check = checkCleanWorkingDirForCommit,
+    check = checkCleanWorkingDirInternal(_, logStartHash = false),
     action = ctx =>
       requireVersions(ctx) { case (releaseVer, _) =>
         commitVersionNative(ctx, releaseCommitMessage).flatMap { case (resultCtx, currentHash) =>
@@ -457,21 +457,19 @@ object ReleaseSteps {
 
   // --- helpers ---
 
-  @annotation.nowarn("msg=deprecated")
   private def checkPublishSkip(
       extracted: Extracted,
       ref: ProjectRef,
       state: State
   ): Boolean =
-    scala.util.Try(extracted.runTask(Keys.skip in (ref, publish), state)._2).getOrElse(false)
+    scala.util.Try(extracted.runTask(ref / publish / Keys.skip, state)._2).getOrElse(false)
 
-  @annotation.nowarn("msg=deprecated")
   private def checkPublishToMissing(
       extracted: Extracted,
       ref: ProjectRef,
       state: State
   ): Boolean =
-    scala.util.Try(extracted.runTask(publishTo in ref, state)._2).getOrElse(None).isEmpty
+    scala.util.Try(extracted.runTask(ref / publishTo, state)._2).getOrElse(None).isEmpty
 
   private final case class TagParams(
       tagName: String,
@@ -496,7 +494,6 @@ object ReleaseSteps {
         Option(raw).map(_.trim.toLowerCase).getOrElse("") match {
           case ""          => defaultYes
           case "y" | "yes" => true
-          case "n" | "no"  => false
           case _           => false
         }
       }
@@ -538,37 +535,16 @@ object ReleaseSteps {
         }
       }
 
-  private def requireVcs(
+  private def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
+    opt.fold(IO.raiseError[B](new RuntimeException(error)))(f)
+
+  private def requireVcs(ctx: ReleaseContext)(f: Vcs => IO[ReleaseContext]): IO[ReleaseContext] =
+    required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.")(f)
+
+  private def requireVersions(
       ctx: ReleaseContext
-  )(f: Vcs => IO[ReleaseContext]): IO[ReleaseContext] =
-    ctx.vcs match {
-      case Some(v) => f(v)
-      case None    =>
-        IO.raiseError(
-          new RuntimeException(
-            "VCS not initialized. Ensure initializeVcs runs before this step."
-          )
-        )
-    }
-
-  private def requireVersions(ctx: ReleaseContext)(
-      f: ((String, String)) => IO[ReleaseContext]
-  ): IO[ReleaseContext] =
-    ctx.versions match {
-      case Some(v) => f(v)
-      case None    =>
-        IO.raiseError(
-          new RuntimeException(
-            "Versions not set. Ensure inquireVersions runs before this step."
-          )
-        )
-    }
-
-  private def checkCleanWorkingDirImpl(ctx: ReleaseContext): IO[ReleaseContext] =
-    checkCleanWorkingDirInternal(ctx, logStartHash = true)
-
-  private def checkCleanWorkingDirForCommit(ctx: ReleaseContext): IO[ReleaseContext] =
-    checkCleanWorkingDirInternal(ctx, logStartHash = false)
+  )(f: ((String, String)) => IO[ReleaseContext]): IO[ReleaseContext] =
+    required(ctx.versions, "Versions not set. Ensure inquireVersions runs before this step.")(f)
 
   private def checkCleanWorkingDirInternal(
       ctx: ReleaseContext,
@@ -623,66 +599,57 @@ object ReleaseSteps {
       ctx: ReleaseContext,
       commitMessageKey: TaskKey[String]
   ): IO[(ReleaseContext, String)] =
-    ctx.vcs match {
-      case None      =>
-        IO.raiseError(
-          new RuntimeException(
-            "VCS not initialized. Ensure initializeVcs runs before this step."
-          )
-        )
-      case Some(vcs) =>
-        IO.blocking {
-          val extracted    = extract(ctx.state)
-          val versionFile  = extracted.get(releaseVersionFile).getCanonicalFile
-          val base         = vcs.baseDir.getCanonicalFile
-          val sign         = extracted.get(releaseVcsSign)
-          val signOff      = extracted.get(releaseVcsSignOff)
-          val relativePath = sbt.IO
-            .relativize(base, versionFile)
-            .getOrElse(
-              throw new RuntimeException(
-                s"[release-io] Version file [$versionFile] is outside of VCS root [$base]"
-              )
+    required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
+      IO.blocking {
+        val extracted    = extract(ctx.state)
+        val versionFile  = extracted.get(releaseVersionFile).getCanonicalFile
+        val base         = vcs.baseDir.getCanonicalFile
+        val sign         = extracted.get(releaseVcsSign)
+        val signOff      = extracted.get(releaseVcsSignOff)
+        val relativePath = sbt.IO
+          .relativize(base, versionFile)
+          .getOrElse(
+            throw new RuntimeException(
+              s"[release-io] Version file [$versionFile] is outside of VCS root [$base]"
             )
+          )
 
-          runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+        runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
 
-          // Always filter '?' lines: untracked files are never staged and would
-          // cause a spurious 'nothing to commit' failure if included in the check.
-          val statusOutput = {
-            val sb   = new StringBuilder
-            val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
-            if (code != 0)
-              throw new RuntimeException(s"vcs status failed with exit code $code")
-            sb.toString.trim
-          }
-          val status       = statusOutput.linesIterator
-            .filterNot(_.startsWith("?"))
-            .mkString("\n")
-
-          if (status.nonEmpty) {
-            val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
-            runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
-            (ctx.copy(state = commitState), vcs.currentHash)
-          } else {
-            // nothing to commit — version file content unchanged (empty-commit scenario)
-            (ctx, vcs.currentHash)
-          }
+        // Always filter '?' lines: untracked files are never staged and would
+        // cause a spurious 'nothing to commit' failure if included in the check.
+        val statusOutput = {
+          val sb   = new StringBuilder
+          val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
+          if (code != 0)
+            throw new RuntimeException(s"vcs status failed with exit code $code")
+          sb.toString.trim
         }
+        val status       = statusOutput.linesIterator
+          .filterNot(_.startsWith("?"))
+          .mkString("\n")
+
+        if (status.nonEmpty) {
+          val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
+          runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
+          (ctx.copy(state = commitState), vcs.currentHash)
+        } else {
+          // nothing to commit — version file content unchanged (empty-commit scenario)
+          (ctx, vcs.currentHash)
+        }
+      }
     }
 
-  private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = {
+  private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = IO.blocking {
     val extracted        = extract(ctx.state)
     val versionFile      = extracted.get(releaseVersionFile)
     val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
     val versionKey       = if (useGlobalVersion) "ThisBuild / version" else "version"
     val contents         = s"""$versionKey := "$ver"\n"""
-    IO.blocking(java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))) *>
-      IO.blocking {
-        ctx.state.log.info(s"[release-io] Wrote version $ver to ${versionFile.getName}")
-        val versionSetting = if (useGlobalVersion) ThisBuild / version := ver else version := ver
-        val newState       = extracted.appendWithSession(Seq(versionSetting), ctx.state)
-        ctx.copy(state = newState)
-      }
+    java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
+    ctx.state.log.info(s"[release-io] Wrote version $ver to ${versionFile.getName}")
+    val versionSetting   = if (useGlobalVersion) ThisBuild / version := ver else version := ver
+    val newState         = extracted.appendWithSession(Seq(versionSetting), ctx.state)
+    ctx.copy(state = newState)
   }
 }
