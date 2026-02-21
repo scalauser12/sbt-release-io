@@ -32,6 +32,10 @@ trait ReleaseIO {
   val releaseIOSkipPublish: SettingKey[Boolean] =
     settingKey[Boolean]("Whether to skip publish during release")
 
+  /** When `true`, release steps may prompt for confirmation/input (versions, push, etc.). */
+  val releaseIOInteractive: SettingKey[Boolean] =
+    settingKey[Boolean]("Whether to enable interactive prompts during release")
+
   // ── Factory methods ───────────────────────────────────────────────────────
 
   /** Create a release step that runs a task. */

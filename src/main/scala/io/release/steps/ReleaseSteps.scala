@@ -54,44 +54,88 @@ object ReleaseSteps {
         case Left(cause)                  =>
           IO.raiseError(new RuntimeException("Error checking for snapshot dependencies: " + cause))
         case Right(deps) if deps.nonEmpty =>
-          val depList = deps
-            .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
-            .mkString("\n")
-          IO.raiseError(new RuntimeException(s"Snapshot dependencies found:\n$depList"))
+          val depList = deps.map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}").mkString(
+            "\n"
+          )
+          val msg     = s"Snapshot dependencies found:\n$depList"
+
+          if (!ctx.interactive) {
+            IO.raiseError(new RuntimeException(msg))
+          } else {
+            IO(ctx.state.log.warn(msg)) *>
+              confirmContinue(
+                ctx,
+                prompt = "Do you want to continue (y/n)? [n] ",
+                defaultYes = false,
+                abortMessage = "Aborting release due to snapshot dependencies."
+              ).as(ctx)
+          }
         case Right(_)                     => IO.pure(ctx)
       },
     enableCrossBuild = true
   )
 
   val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") { ctx =>
-    IO.blocking {
-      val extracted  = extract(ctx.state)
-      val currentVer = extracted.get(version)
+    final case class InquireData(
+        state: State,
+        currentVersion: String,
+        suggestedRelease: String,
+        nextVersionFn: String => String,
+        releaseVersionArg: Option[String],
+        nextVersionArg: Option[String],
+        useDefaults: Boolean
+    )
 
-      // Use upstream sbt-release's version functions which respect releaseVersionBump setting
-      val (s1, releaseFunc) = extracted.runTask(releaseVersion, ctx.state)
-      val (s2, nextFunc)    = extracted.runTask(releaseNextVersion, s1)
+    for {
+      data <- IO.blocking {
+                val extracted  = extract(ctx.state)
+                val currentVer = extracted.get(version)
 
-      val suggestedReleaseVer = releaseFunc(currentVer)
-      val suggestedNextVer    = nextFunc(suggestedReleaseVer)
+                // Use upstream sbt-release's version functions which respect releaseVersionBump.
+                val (s1, releaseFn) = extracted.runTask(releaseVersion, ctx.state)
+                val (s2, nextFn)    = extracted.runTask(releaseNextVersion, s1)
 
-      // Allow command-line overrides
-      val releaseVersionArg =
-        s2.get(ReleaseKeys.commandLineReleaseVersion).flatten
-      val nextVersionArg    =
-        s2.get(ReleaseKeys.commandLineNextVersion).flatten
+                InquireData(
+                  state = s2,
+                  currentVersion = currentVer,
+                  suggestedRelease = releaseFn(currentVer),
+                  nextVersionFn = nextFn,
+                  releaseVersionArg = s2.get(ReleaseKeys.commandLineReleaseVersion).flatten,
+                  nextVersionArg = s2.get(ReleaseKeys.commandLineNextVersion).flatten,
+                  useDefaults = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
+                )
+              }
+      releaseVer <-
+        data.releaseVersionArg match {
+          case Some(v)                                          => IO.pure(v)
+          case None if !ctx.interactive || data.useDefaults     => IO.pure(data.suggestedRelease)
+          case None                                              =>
+            IO(data.state.log.info("Press enter to use the default value")) *>
+              readVersion(
+                prompt = s"Release version [${data.suggestedRelease}] : ",
+                defaultVersion = data.suggestedRelease
+              )
+        }
+      suggestedNext = data.nextVersionFn(releaseVer)
+      nextVer <-
+        data.nextVersionArg match {
+          case Some(v)                                          => IO.pure(v)
+          case None if !ctx.interactive || data.useDefaults     => IO.pure(suggestedNext)
+          case None                                              =>
+            readVersion(
+              prompt = s"Next version [${suggestedNext}] : ",
+              defaultVersion = suggestedNext
+            )
+        }
+      updated  <- IO {
+                    data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
+                    data.state.log.info(s"[release-io] Release version : $releaseVer")
+                    data.state.log.info(s"[release-io] Next version    : $nextVer")
 
-      val finalReleaseVer = releaseVersionArg.getOrElse(suggestedReleaseVer)
-      val finalNextVer    = nextVersionArg.getOrElse(suggestedNextVer)
-
-      s2.log.info(s"[release-io] Current version : $currentVer")
-      s2.log.info(s"[release-io] Release version : $finalReleaseVer")
-      s2.log.info(s"[release-io] Next version    : $finalNextVer")
-
-      // Store versions in both ReleaseContext and State attributes for upstream interop
-      val updatedState = s2.put(ReleaseKeys.versions, (finalReleaseVer, finalNextVer))
-      ctx.copy(state = updatedState).withVersions(finalReleaseVer, finalNextVer)
-    }
+                    val updatedState = data.state.put(ReleaseKeys.versions, (releaseVer, nextVer))
+                    ctx.copy(state = updatedState).withVersions(releaseVer, nextVer)
+                  }
+    } yield updated
   }
 
   val runTests: ReleaseStepIO = ReleaseStepIO(
@@ -183,6 +227,12 @@ object ReleaseSteps {
                 s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
               )
             ).as("a")
+          case None if !ctx.interactive =>
+            IO.raiseError(
+              new RuntimeException(
+                s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
+              )
+            )
           case None                =>
             IO.print(
               s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
@@ -280,30 +330,71 @@ object ReleaseSteps {
       IO.blocking(Vcs.detect(base)).flatMap {
         case None      => IO.pure(ctx)
         case Some(vcs) =>
-          IO.blocking {
-            if (!vcs.hasUpstream)
-              throw new RuntimeException(
-                s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
-                  "Set up a remote tracking branch or remove pushChanges from the release process."
-              )
-            if (vcs.isBehindRemote)
-              throw new RuntimeException(
-                "[release-io] The upstream branch has unmerged commits. Merge them before releasing."
-              )
-          }.as(ctx)
+          for {
+            _              <- IO.blocking {
+                                if (!vcs.hasUpstream)
+                                  throw new RuntimeException(
+                                    s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
+                                      "Set up a remote tracking branch or remove pushChanges from the release process."
+                                  )
+                              }
+            remoteExitCode <- IO.blocking {
+                                ctx.state.log.info(
+                                  s"[release-io] Checking remote [${vcs.trackingRemote}] ..."
+                                )
+                                vcs.checkRemote(vcs.trackingRemote).!
+                              }
+            _              <-
+              if (remoteExitCode == 0) IO.unit
+              else
+                confirmContinue(
+                  ctx,
+                  prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                  defaultYes = false,
+                  abortMessage = "Aborting the release due to remote check failure."
+                )
+            behindRemote   <- IO.blocking(vcs.isBehindRemote)
+            _              <-
+              if (!behindRemote) IO.unit
+              else
+                confirmContinue(
+                  ctx,
+                  prompt =
+                    "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
+                  defaultYes = false,
+                  abortMessage = "Merge the upstream commits and run release again."
+                )
+          } yield ctx.withVcs(vcs)
       }
     },
     action = ctx =>
       requireVcs(ctx) { vcs =>
-        IO.blocking {
-          if (vcs.hasUpstream) {
-            runProcess(vcs.pushChanges, "vcs push")
-          } else {
+        if (!vcs.hasUpstream) {
+          IO(
             ctx.state.log.info(
               s"[release-io] Changes were NOT pushed, because no upstream branch is configured for branch '${vcs.currentBranch}'."
             )
+          ).as(ctx)
+        } else if (!ctx.interactive) {
+          IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
+        } else {
+          val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
+          val decisionIO  =
+            if (useDefaults) IO.pure(true)
+            else
+              askYesNo(
+                prompt = "Push changes to the remote repository (y/n)? [y] ",
+                defaultYes = true
+              )
+
+          decisionIO.flatMap {
+            case true  => IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
+            case false =>
+              IO(
+                ctx.state.log.warn("[release-io] Remember to push the changes yourself!")
+              ).as(ctx)
           }
-        }.as(ctx)
+        }
       }
   )
 
@@ -383,6 +474,54 @@ object ReleaseSteps {
     if (code != 0)
       throw new RuntimeException(s"$context failed with exit code $code")
   }
+
+  private def askYesNo(prompt: String, defaultYes: Boolean): IO[Boolean] =
+    IO.print(prompt) *>
+      IO.readLine.map { raw =>
+        Option(raw).map(_.trim.toLowerCase).getOrElse("") match {
+          case ""                => defaultYes
+          case "y" | "yes"       => true
+          case "n" | "no"        => false
+          case _                 => false
+        }
+      }
+
+  private def confirmContinue(
+      ctx: ReleaseContext,
+      prompt: String,
+      defaultYes: Boolean,
+      abortMessage: String
+  ): IO[Unit] = {
+    val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
+    if (!ctx.interactive)
+      IO.raiseError(new RuntimeException(abortMessage))
+    else {
+      val decisionIO =
+        if (useDefaults) IO.pure(defaultYes)
+        else askYesNo(prompt, defaultYes = defaultYes)
+
+      decisionIO.flatMap { continue =>
+        if (continue) IO.unit
+        else IO.raiseError(new RuntimeException(abortMessage))
+      }
+    }
+  }
+
+  private def readVersion(prompt: String, defaultVersion: String): IO[String] =
+    IO.print(prompt) *>
+      IO.readLine.flatMap { raw =>
+        val input = Option(raw).map(_.trim).getOrElse("")
+        if (input.isEmpty) IO.pure(defaultVersion)
+        else {
+          sbtrelease.Version(input).map(_.unapply) match {
+            case Some(v) => IO.pure(v)
+            case None    =>
+              IO.raiseError(
+                new RuntimeException(s"Invalid version format: '$input'")
+              )
+          }
+        }
+      }
 
   private def requireVcs(
       ctx: ReleaseContext

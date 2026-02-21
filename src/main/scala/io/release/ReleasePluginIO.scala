@@ -48,6 +48,9 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
   /** Whether to skip publish. */
   protected def skipPublishEnabled(state: State): Boolean = false
 
+  /** Whether interactive prompts are enabled. */
+  protected def interactiveEnabled(state: State): Boolean = false
+
   /** Implicitly lift a plain `ReleaseStepIO` to a resource-ignoring step.
     * This allows mixing plain steps and resource-parameterized steps in `releaseProcess`.
     */
@@ -106,7 +109,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
   protected def initialContext(
       state: State,
       skipTests: Boolean,
-      skipPublish: Boolean
+      skipPublish: Boolean,
+      interactive: Boolean
   ): ReleaseContext = {
     val maybeVersions = state.get(ReleaseKeys.versions)
     val maybeVcs      = scala.util.Try {
@@ -118,7 +122,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
       versions = maybeVersions,
       vcs = maybeVcs,
       skipTests = skipTests,
-      skipPublish = skipPublish
+      skipPublish = skipPublish,
+      interactive = interactive
     )
   }
 
@@ -133,6 +138,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     val crossFromArgs = args.contains(CrossBuild)
     val crossEnabled  = crossBuildEnabled(state) || crossFromArgs
     val skipPublish   = skipPublishEnabled(state)
+    val interactive   = interactiveEnabled(state)
 
     val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
     val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
@@ -150,7 +156,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     val initialCtx = ReleaseContext(
       state = decoratedState,
       skipTests = skipTests,
-      skipPublish = skipPublish
+      skipPublish = skipPublish,
+      interactive = interactive
     )
 
     decoratedState.log.info("[release-io] Starting release process...")
@@ -197,6 +204,9 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
   override protected def skipPublishEnabled(state: State): Boolean =
     Project.extract(state).get(releaseIOSkipPublish)
 
+  override protected def interactiveEnabled(state: State): Boolean =
+    Project.extract(state).get(releaseIOInteractive)
+
   private def runExtraReleaseSteps(state: State, steps: Seq[ReleaseStepIO]): State = {
     val extracted     = Project.extract(state)
     val crossEnabled  = extracted.get(releaseIOCrossBuild) || state.get(ReleaseKeys.cross).getOrElse(
@@ -204,7 +214,13 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
     )
     val skipTests     = state.get(ReleaseKeys.skipTests).getOrElse(false)
     val skipPublish   = extracted.get(releaseIOSkipPublish)
-    val ctx           = initialContext(state, skipTests = skipTests, skipPublish = skipPublish)
+    val interactive   = extracted.get(releaseIOInteractive)
+    val ctx           = initialContext(
+      state,
+      skipTests = skipTests,
+      skipPublish = skipPublish,
+      interactive = interactive
+    )
     val finalCtx      = ReleaseStepIO.compose(steps, crossEnabled)(ctx).unsafeRunSync()
     finalCtx.state
   }
@@ -239,6 +255,7 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
     commands             ++= releaseExtraCommands,
     releaseIOProcess     := ReleaseSteps.defaults,
     releaseIOCrossBuild  := false,
-    releaseIOSkipPublish := false
+    releaseIOSkipPublish := false,
+    releaseIOInteractive := false
   )
 }

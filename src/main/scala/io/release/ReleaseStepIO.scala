@@ -30,6 +30,7 @@ case class ReleaseContext(
     vcs: Option[Vcs] = None,
     skipTests: Boolean = false,
     skipPublish: Boolean = false,
+    interactive: Boolean = false,
     attributes: Map[String, String] = Map.empty,
     failed: Boolean = false
 ) {

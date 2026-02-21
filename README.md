@@ -10,6 +10,7 @@ An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with 
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run release steps across multiple Scala versions
 - **Upstream-style helper commands**: Run individual release phases with `release-*` commands
+- **Optional interactive mode**: Enable upstream-like prompts for versions, confirmation, and push
 - **Configurable**: Respects all upstream sbt-release settings (commit messages, signing, version bumping, etc.)
 
 ## Installation
@@ -97,6 +98,9 @@ releaseIOCrossBuild := true
 
 // Skip publish during release
 releaseIOSkipPublish := true
+
+// Enable interactive prompts (disabled by default)
+releaseIOInteractive := true
 ```
 
 ### Custom Release Steps

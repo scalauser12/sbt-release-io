@@ -45,6 +45,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies that failing tests abort the release before later steps execute
 - Checks that a marker file is not created when tests fail
 
+### interactive-with-defaults
+- Enables `releaseIOInteractive := true`
+- Verifies `with-defaults` runs in interactive mode without blocking prompts
+
 ### publish-to-check
 - Verifies that a missing `publishTo` setting fails at check phase
 - Catches misconfiguration before any commits or tags happen

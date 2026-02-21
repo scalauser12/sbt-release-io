@@ -8,6 +8,9 @@ $ exec git commit -m "Initial commit"
 # Pre-create the tag that will conflict with the release version 0.1.0
 $ exec git tag -a v0.1.0 -m "pre-existing tag"
 
+# Scenario 0: non-interactive mode (default) should abort instead of prompting
+-> releaseIO release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
 # Scenario 1: default behavior = abort (no default-tag-exists-answer arg)
 -> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 
