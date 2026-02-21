@@ -53,6 +53,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies that a missing `publishTo` setting fails at check phase
 - Catches misconfiguration before any commits or tags happen
 
+### run-clean
+- Verifies the default release flow executes `runClean` before tests
+- Asserts files created under `target/` are removed during release
+
 ### run-tests-aggregate-fail
 - Verifies that failing tests in aggregated sub-projects abort the release
 - Multi-project setup with one passing and one failing test

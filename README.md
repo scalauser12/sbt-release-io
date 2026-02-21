@@ -83,6 +83,7 @@ releaseIOProcess := Seq(
   ReleaseSteps.checkCleanWorkingDir,
   ReleaseSteps.checkSnapshotDependencies,
   ReleaseSteps.inquireVersions,
+  ReleaseSteps.runClean,
   ReleaseSteps.runTests,
   ReleaseSteps.setReleaseVersion,
   ReleaseSteps.commitReleaseVersion,
@@ -172,14 +173,15 @@ The default release process includes:
 2. **checkCleanWorkingDir** - Verify no uncommitted changes
 3. **checkSnapshotDependencies** - Verify no snapshot dependencies
 4. **inquireVersions** - Determine release and next versions
-5. **runTests** - Run tests (unless `skip-tests`)
-6. **setReleaseVersion** - Update version.sbt to release version
-7. **commitReleaseVersion** - Commit version change
-8. **tagRelease** - Create Git tag
-9. **publishArtifacts** - Publish to repository
-10. **setNextVersion** - Update version.sbt to next snapshot
-11. **commitNextVersion** - Commit version change
-12. **pushChanges** - Push commits and tags to remote
+5. **runClean** - Clean project build outputs
+6. **runTests** - Run tests (unless `skip-tests`)
+7. **setReleaseVersion** - Update version.sbt to release version
+8. **commitReleaseVersion** - Commit version change
+9. **tagRelease** - Create Git tag
+10. **publishArtifacts** - Publish to repository
+11. **setNextVersion** - Update version.sbt to next snapshot
+12. **commitNextVersion** - Commit version change
+13. **pushChanges** - Push commits and tags to remote
 
 ## Testing
 

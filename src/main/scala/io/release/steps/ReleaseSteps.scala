@@ -8,7 +8,7 @@ import sbt.Keys.*
 import sbt.Project.extract
 import sbt.Package.ManifestAttributes
 import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.ReleaseStateTransformations.{runClean, runTest}
+import sbtrelease.ReleaseStateTransformations.{runClean => upstreamRunClean, runTest => upstreamRunTest}
 import sbtrelease.Vcs
 
 /** Built-in release steps composed as IO actions. */
@@ -152,6 +152,17 @@ object ReleaseSteps {
         }
       },
     enableCrossBuild = true
+  )
+
+  val runClean: ReleaseStepIO = ReleaseStepIO(
+    name = "run-clean",
+    action = ctx =>
+      IO.blocking {
+        val extracted = extract(ctx.state)
+        val ref       = extracted.get(thisProjectRef)
+        val newState  = extracted.runAggregated(ref / (Global / clean), ctx.state)
+        ctx.copy(state = newState)
+      }
   )
 
   val setReleaseVersion: ReleaseStepIO =
@@ -406,6 +417,7 @@ object ReleaseSteps {
     checkCleanWorkingDir,
     checkSnapshotDependencies,
     inquireVersions,
+    runClean,
     runTests,
     setReleaseVersion,
     commitReleaseVersion,
@@ -428,8 +440,8 @@ object ReleaseSteps {
       checkCleanWorkingDir,
       checkSnapshotDependencies,
       inquireVersions,
-      runClean,
-      runTest,
+      upstreamRunClean,
+      upstreamRunTest,
       setReleaseVersion,
       commitReleaseVersion,
       tagRelease,
