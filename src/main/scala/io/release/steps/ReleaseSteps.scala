@@ -8,7 +8,10 @@ import sbt.Keys.*
 import sbt.Project.extract
 import sbt.Package.ManifestAttributes
 import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.ReleaseStateTransformations.{runClean => upstreamRunClean, runTest => upstreamRunTest}
+import sbtrelease.ReleaseStateTransformations.{
+  runClean => upstreamRunClean,
+  runTest => upstreamRunTest
+}
 import sbtrelease.Vcs
 
 /** Built-in release steps composed as IO actions. */
@@ -54,9 +57,11 @@ object ReleaseSteps {
         case Left(cause)                  =>
           IO.raiseError(new RuntimeException("Error checking for snapshot dependencies: " + cause))
         case Right(deps) if deps.nonEmpty =>
-          val depList = deps.map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}").mkString(
-            "\n"
-          )
+          val depList = deps
+            .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
+            .mkString(
+              "\n"
+            )
           val msg     = s"Snapshot dependencies found:\n$depList"
 
           if (!ctx.interactive) {
@@ -87,29 +92,29 @@ object ReleaseSteps {
     )
 
     for {
-      data <- IO.blocking {
-                val extracted  = extract(ctx.state)
-                val currentVer = extracted.get(version)
+      data         <- IO.blocking {
+                        val extracted  = extract(ctx.state)
+                        val currentVer = extracted.get(version)
 
-                // Use upstream sbt-release's version functions which respect releaseVersionBump.
-                val (s1, releaseFn) = extracted.runTask(releaseVersion, ctx.state)
-                val (s2, nextFn)    = extracted.runTask(releaseNextVersion, s1)
+                        // Use upstream sbt-release's version functions which respect releaseVersionBump.
+                        val (s1, releaseFn) = extracted.runTask(releaseVersion, ctx.state)
+                        val (s2, nextFn)    = extracted.runTask(releaseNextVersion, s1)
 
-                InquireData(
-                  state = s2,
-                  currentVersion = currentVer,
-                  suggestedRelease = releaseFn(currentVer),
-                  nextVersionFn = nextFn,
-                  releaseVersionArg = s2.get(ReleaseKeys.commandLineReleaseVersion).flatten,
-                  nextVersionArg = s2.get(ReleaseKeys.commandLineNextVersion).flatten,
-                  useDefaults = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
-                )
-              }
-      releaseVer <-
+                        InquireData(
+                          state = s2,
+                          currentVersion = currentVer,
+                          suggestedRelease = releaseFn(currentVer),
+                          nextVersionFn = nextFn,
+                          releaseVersionArg = s2.get(ReleaseKeys.commandLineReleaseVersion).flatten,
+                          nextVersionArg = s2.get(ReleaseKeys.commandLineNextVersion).flatten,
+                          useDefaults = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
+                        )
+                      }
+      releaseVer   <-
         data.releaseVersionArg match {
-          case Some(v)                                          => IO.pure(v)
-          case None if !ctx.interactive || data.useDefaults     => IO.pure(data.suggestedRelease)
-          case None                                              =>
+          case Some(v)                                      => IO.pure(v)
+          case None if !ctx.interactive || data.useDefaults => IO.pure(data.suggestedRelease)
+          case None                                         =>
             IO(data.state.log.info("Press enter to use the default value")) *>
               readVersion(
                 prompt = s"Release version [${data.suggestedRelease}] : ",
@@ -117,24 +122,24 @@ object ReleaseSteps {
               )
         }
       suggestedNext = data.nextVersionFn(releaseVer)
-      nextVer <-
+      nextVer      <-
         data.nextVersionArg match {
-          case Some(v)                                          => IO.pure(v)
-          case None if !ctx.interactive || data.useDefaults     => IO.pure(suggestedNext)
-          case None                                              =>
+          case Some(v)                                      => IO.pure(v)
+          case None if !ctx.interactive || data.useDefaults => IO.pure(suggestedNext)
+          case None                                         =>
             readVersion(
               prompt = s"Next version [${suggestedNext}] : ",
               defaultVersion = suggestedNext
             )
         }
-      updated  <- IO {
-                    data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
-                    data.state.log.info(s"[release-io] Release version : $releaseVer")
-                    data.state.log.info(s"[release-io] Next version    : $nextVer")
+      updated      <- IO {
+                        data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
+                        data.state.log.info(s"[release-io] Release version : $releaseVer")
+                        data.state.log.info(s"[release-io] Next version    : $nextVer")
 
-                    val updatedState = data.state.put(ReleaseKeys.versions, (releaseVer, nextVer))
-                    ctx.copy(state = updatedState).withVersions(releaseVer, nextVer)
-                  }
+                        val updatedState = data.state.put(ReleaseKeys.versions, (releaseVer, nextVer))
+                        ctx.copy(state = updatedState).withVersions(releaseVer, nextVer)
+                      }
     } yield updated
   }
 
@@ -231,8 +236,8 @@ object ReleaseSteps {
         }
       case true  =>
         val effectiveAnswer: IO[String] = defaultAnswer match {
-          case Some(ans)           => IO.pure(ans)
-          case None if useDefaults =>
+          case Some(ans)                => IO.pure(ans)
+          case None if useDefaults      =>
             IO(
               ctx.state.log.warn(
                 s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
@@ -244,7 +249,7 @@ object ReleaseSteps {
                 s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
               )
             )
-          case None                =>
+          case None                     =>
             IO.print(
               s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
             ) *>
@@ -302,8 +307,7 @@ object ReleaseSteps {
       else
         IO.blocking {
           val extracted = extract(ctx.state)
-          val ref       = extracted.get(thisProjectRef)
-          val allRefs   = ref +: extracted.currentProject.aggregate
+          val allRefs   = extracted.currentRef +: extracted.currentProject.aggregate
           val missing   = allRefs
             .filterNot { r =>
               checkPublishSkip(extracted, r, ctx.state)
@@ -336,48 +340,47 @@ object ReleaseSteps {
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO(
     name = "push-changes",
-    check = ctx => {
-      val base = extract(ctx.state).get(thisProject).base
-      IO.blocking(Vcs.detect(base)).flatMap {
-        case None      => IO.pure(ctx)
-        case Some(vcs) =>
-          for {
-            _              <- IO.blocking {
-                                if (!vcs.hasUpstream)
-                                  throw new RuntimeException(
-                                    s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
-                                      "Set up a remote tracking branch or remove pushChanges from the release process."
-                                  )
-                              }
-            remoteExitCode <- IO.blocking {
-                                ctx.state.log.info(
-                                  s"[release-io] Checking remote [${vcs.trackingRemote}] ..."
-                                )
-                                vcs.checkRemote(vcs.trackingRemote).!
-                              }
-            _              <-
-              if (remoteExitCode == 0) IO.unit
-              else
-                confirmContinue(
-                  ctx,
-                  prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                  defaultYes = false,
-                  abortMessage = "Aborting the release due to remote check failure."
+    check = ctx =>
+      requireVcs(ctx) { vcs =>
+        for {
+          hasUp          <- IO.blocking(vcs.hasUpstream)
+          _              <-
+            if (hasUp) IO.unit
+            else
+              IO.raiseError(
+                new RuntimeException(
+                  s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
+                    "Set up a remote tracking branch or remove pushChanges from the release process."
                 )
-            behindRemote   <- IO.blocking(vcs.isBehindRemote)
-            _              <-
-              if (!behindRemote) IO.unit
-              else
-                confirmContinue(
-                  ctx,
-                  prompt =
-                    "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
-                  defaultYes = false,
-                  abortMessage = "Merge the upstream commits and run release again."
-                )
-          } yield ctx.withVcs(vcs)
-      }
-    },
+              )
+          remoteExitCode <- IO.blocking {
+                              ctx.state.log.info(
+                                s"[release-io] Checking remote [${vcs.trackingRemote}] ..."
+                              )
+                              vcs.checkRemote(vcs.trackingRemote).!
+                            }
+          _              <-
+            if (remoteExitCode == 0) IO.unit
+            else
+              confirmContinue(
+                ctx,
+                prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                defaultYes = false,
+                abortMessage = "Aborting the release due to remote check failure."
+              )
+          behindRemote   <- IO.blocking(vcs.isBehindRemote)
+          _              <-
+            if (!behindRemote) IO.unit
+            else
+              confirmContinue(
+                ctx,
+                prompt =
+                  "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
+                defaultYes = false,
+                abortMessage = "Merge the upstream commits and run release again."
+              )
+        } yield ctx
+      },
     action = ctx =>
       requireVcs(ctx) { vcs =>
         if (!vcs.hasUpstream) {
@@ -491,10 +494,10 @@ object ReleaseSteps {
     IO.print(prompt) *>
       IO.readLine.map { raw =>
         Option(raw).map(_.trim.toLowerCase).getOrElse("") match {
-          case ""                => defaultYes
-          case "y" | "yes"       => true
-          case "n" | "no"        => false
-          case _                 => false
+          case ""          => defaultYes
+          case "y" | "yes" => true
+          case "n" | "no"  => false
+          case _           => false
         }
       }
 
@@ -608,7 +611,9 @@ object ReleaseSteps {
           }
 
           if (logStartHash)
-            ctx.state.log.info(s"[release-io] Starting release process off commit: ${vcs.currentHash}")
+            ctx.state.log.info(
+              s"[release-io] Starting release process off commit: ${vcs.currentHash}"
+            )
           ctx.withVcs(vcs)
         }
     }
@@ -644,7 +649,14 @@ object ReleaseSteps {
 
           // Always filter '?' lines: untracked files are never staged and would
           // cause a spurious 'nothing to commit' failure if included in the check.
-          val status = vcs.status.!!.trim.linesIterator
+          val statusOutput = {
+            val sb   = new StringBuilder
+            val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
+            if (code != 0)
+              throw new RuntimeException(s"vcs status failed with exit code $code")
+            sb.toString.trim
+          }
+          val status       = statusOutput.linesIterator
             .filterNot(_.startsWith("?"))
             .mkString("\n")
 
