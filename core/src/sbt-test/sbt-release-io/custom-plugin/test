@@ -1,0 +1,23 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt project/CustomPlugin.scala
+$ exec git commit -m "Initial commit"
+
+# Verify markers don't exist yet
+$ absent resource-acquired
+$ absent step-used-resource
+$ absent resource-released
+
+# Run release
+> releaseCustom with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Resource was acquired (marker created before steps)
+$ exists resource-acquired
+
+# Step ran with live resource
+$ exists step-used-resource
+
+# Resource was released after completion
+$ exists resource-released

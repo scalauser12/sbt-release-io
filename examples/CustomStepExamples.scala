@@ -3,6 +3,8 @@ package io.release.examples
 import cats.effect.IO
 import io.release.{ReleaseContext, ReleaseStepIO}
 import io.release.steps.ReleaseSteps
+import sbt.Project.extract
+import sbt.Keys.thisProject
 
 /**
  * Examples showing how to create custom release steps and compose them
@@ -13,12 +15,10 @@ object CustomStepExamples {
   // --- Custom step: print a banner ---
 
   val printBanner: ReleaseStepIO = ReleaseStepIO.io("print-banner") { ctx =>
-    IO {
-      println("=" * 60)
-      println("  RELEASE IN PROGRESS")
-      println("=" * 60)
-      ctx
-    }
+    IO.println("=" * 60) *>
+      IO.println("  RELEASE IN PROGRESS") *>
+      IO.println("=" * 60) *>
+      IO.pure(ctx)
   }
 
   // --- Custom step: validate branch name ---
@@ -26,15 +26,18 @@ object CustomStepExamples {
   val validateBranch: ReleaseStepIO = ReleaseStepIO.io("validate-branch") { ctx =>
     ctx.vcs match {
       case Some(vcs) =>
-        vcs.currentBranch.flatMap { branch =>
-          if (branch == "main" || branch == "master")
-            IO.pure(ctx)
-          else
-            IO.raiseError(new RuntimeException(
-              s"Releases must be done from main/master, but current branch is '$branch'"
-            ))
-        }
-      case None =>
+        for {
+          branch <- IO.blocking(vcs.currentBranch)
+          result <- if (branch == "main" || branch == "master")
+                      IO.pure(ctx)
+                    else
+                      IO.raiseError(
+                        new RuntimeException(
+                          s"Releases must be done from main/master, but current branch is '$branch'"
+                        )
+                      )
+        } yield result
+      case None      =>
         IO.raiseError(new RuntimeException("VCS not initialized"))
     }
   }
@@ -42,8 +45,8 @@ object CustomStepExamples {
   // --- Custom step: run a shell command ---
 
   def runShellCommand(name: String, command: String): ReleaseStepIO =
-    ReleaseStepIO(s"shell-$name") { ctx =>
-      IO {
+    ReleaseStepIO.io(s"shell-$name") { ctx =>
+      IO.blocking {
         import scala.sys.process._
         val exitCode = command.!
         if (exitCode != 0)
@@ -57,15 +60,19 @@ object CustomStepExamples {
   val generateChangelog: ReleaseStepIO = ReleaseStepIO.io("generate-changelog") { ctx =>
     ctx.versions match {
       case Some((releaseVer, _)) =>
-        IO {
-          val file = new java.io.File("CHANGELOG.md")
-          val entry = s"\n## $releaseVer\n\n- Release $releaseVer\n"
-          val existing = if (file.exists()) scala.io.Source.fromFile(file).mkString else "# Changelog\n"
+        IO.blocking {
+          val baseDir  = extract(ctx.state).get(thisProject).base
+          val file     = new java.io.File(baseDir, "CHANGELOG.md")
+          val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
+          val existing =
+            if (file.exists())
+              scala.util.Using(scala.io.Source.fromFile(file))(_.mkString).get
+            else "# Changelog\n"
           java.nio.file.Files.write(file.toPath, (existing + entry).getBytes("UTF-8"))
-          println(s"[release-io] Updated CHANGELOG.md for $releaseVer")
-          ctx
-        }
-      case None =>
+        } *>
+          IO.println(s"[release-io] Updated CHANGELOG.md for $releaseVer") *>
+          IO.pure(ctx)
+      case None                  =>
         IO.raiseError(new RuntimeException("Versions not set"))
     }
   }
@@ -86,7 +93,7 @@ object CustomStepExamples {
    * {{{
    * import io.release.examples.CustomStepExamples
    *
-   * releaseIOSteps := CustomStepExamples.customProcess
+   * releaseIOProcess := CustomStepExamples.customProcess
    * }}}
    */
   val customProcess: Seq[ReleaseStepIO] = Seq(
@@ -115,8 +122,44 @@ object CustomStepExamples {
       condition: ReleaseContext => Boolean,
       step: ReleaseStepIO
   ): ReleaseStepIO =
-    ReleaseStepIO(s"conditional-$name") { ctx =>
+    ReleaseStepIO.io(s"conditional-$name") { ctx =>
       if (condition(ctx)) step.action(ctx)
-      else IO(println(s"[release-io] Skipping $name (condition not met)")).as(ctx)
+      else IO.println(s"[release-io] Skipping $name (condition not met)").as(ctx)
     }
+
+  // --- Example: Mixing upstream sbt-release steps with custom IO steps ---
+
+  /**
+   * Example showing how to combine upstream sbt-release transformations
+   * with custom IO-based steps for maximum flexibility.
+   *
+   * Usage in build.sbt:
+   * {{{
+   * import io.release.examples.CustomStepExamples
+   *
+   * releaseIOProcess := CustomStepExamples.mixedProcess
+   * }}}
+   */
+  val mixedProcess: Seq[ReleaseStepIO] = {
+    import sbtrelease.ReleaseStateTransformations._
+    import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
+
+    Seq(
+      printBanner,                // Custom IO step
+      checkSnapshotDependencies,  // Upstream sbt-release step (auto-converted)
+      ReleaseSteps.initializeVcs, // IO-native step
+      validateBranch,             // Custom validation step
+      inquireVersions,            // Upstream step with configurable version bumping
+      ReleaseSteps.runTests,      // IO-native test runner
+      setReleaseVersion,          // Upstream version setter
+      generateChangelog,          // Custom changelog generator
+      commitReleaseVersion,       // Upstream commit step
+      tagRelease,                 // Upstream tag step
+      publishArtifacts,           // Upstream publish step
+      setNextVersion,             // Upstream next version
+      commitNextVersion,          // Upstream commit
+      markReleaseDone             // Custom completion marker
+      // Note: pushChanges intentionally omitted
+    )
+  }
 }

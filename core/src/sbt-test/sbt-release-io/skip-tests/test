@@ -1,0 +1,15 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src/test/scala/FailingTest.scala
+$ exec git commit -m "Initial commit"
+
+# Try release WITHOUT skip-tests - should fail because test fails
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Now release WITH skip-tests - should succeed
+> releaseIO with-defaults skip-tests release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify tag was created
+> checkGitTag

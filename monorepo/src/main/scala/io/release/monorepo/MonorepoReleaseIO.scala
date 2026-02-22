@@ -1,0 +1,205 @@
+package io.release.monorepo
+
+import cats.effect.IO
+import io.release.monorepo.steps.MonorepoReleaseSteps
+import io.release.steps.VersionSteps
+import sbt.*
+import sbt.Keys.*
+
+/** Setting keys for the monorepo release plugin.
+  *
+  * Keys are singletons defined in the companion object so multiple plugins
+  * can safely mix in this trait without creating duplicate key instances.
+  */
+trait MonorepoReleaseIO {
+  import MonorepoReleaseIO.*
+
+  // ── Core settings ─────────────────────────────────────────────────────
+
+  /** Which subprojects participate in monorepo releases. Default: all aggregated projects. */
+  val releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] = _releaseIOMonorepoProjects
+
+  /** The ordered sequence of monorepo release steps. */
+  val releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] = _releaseIOMonorepoProcess
+
+  // ── Version settings ──────────────────────────────────────────────────
+
+  /** Per-project version file resolver. Default: `<projectBase>/version.sbt`. */
+  val releaseIOMonorepoVersionFile: SettingKey[ProjectRef => File] = _releaseIOMonorepoVersionFile
+
+  /** Per-project version reader. Default: same regex as core `defaultReadVersion`. */
+  val releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] = _releaseIOMonorepoReadVersion
+
+  /** Per-project version writer. Default: produces `version := "x.y.z"\n`. */
+  val releaseIOMonorepoWriteVersion: SettingKey[(File, String) => IO[String]] =
+    _releaseIOMonorepoWriteVersion
+
+  /** Use global (root) version.sbt instead of per-project version files. Default: false. */
+  val releaseIOMonorepoUseGlobalVersion: SettingKey[Boolean] = _releaseIOMonorepoUseGlobalVersion
+
+  // ── Tagging settings ──────────────────────────────────────────────────
+
+  /** Tagging strategy: PerProject or Unified. Default: PerProject. */
+  val releaseIOMonorepoTagStrategy: SettingKey[MonorepoTagStrategy] = _releaseIOMonorepoTagStrategy
+
+  /** Tag name formatter for per-project tags. (projectName, version) => tagName. */
+  val releaseIOMonorepoTagName: SettingKey[(String, String) => String] = _releaseIOMonorepoTagName
+
+  /** Tag name formatter for unified tags. version => tagName. */
+  val releaseIOMonorepoUnifiedTagName: SettingKey[String => String] =
+    _releaseIOMonorepoUnifiedTagName
+
+  // ── Change detection settings ─────────────────────────────────────────
+
+  /** Whether to use git-based change detection. Default: true. */
+  val releaseIOMonorepoDetectChanges: SettingKey[Boolean] = _releaseIOMonorepoDetectChanges
+
+  /** Custom change detection function. When set, replaces the built-in git diff logic. */
+  val releaseIOMonorepoChangeDetector
+      : SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]] =
+    _releaseIOMonorepoChangeDetector
+
+  // ── Behavioral settings ───────────────────────────────────────────────
+
+  /** Cross-build enabled. Default: false. */
+  val releaseIOMonorepoCrossBuild: SettingKey[Boolean] = _releaseIOMonorepoCrossBuild
+
+  /** Skip tests. Default: false. */
+  val releaseIOMonorepoSkipTests: SettingKey[Boolean] = _releaseIOMonorepoSkipTests
+
+  /** Skip publish. Default: false. */
+  val releaseIOMonorepoSkipPublish: SettingKey[Boolean] = _releaseIOMonorepoSkipPublish
+
+  /** Interactive mode. Default: false. */
+  val releaseIOMonorepoInteractive: SettingKey[Boolean] = _releaseIOMonorepoInteractive
+
+  // ── Default settings ──────────────────────────────────────────────────
+
+  lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
+    releaseIOMonorepoProcess          := MonorepoReleaseSteps.defaults,
+    releaseIOMonorepoCrossBuild       := false,
+    releaseIOMonorepoSkipTests        := false,
+    releaseIOMonorepoSkipPublish      := false,
+    releaseIOMonorepoInteractive      := false,
+    releaseIOMonorepoDetectChanges    := true,
+    releaseIOMonorepoChangeDetector   := None,
+    releaseIOMonorepoUseGlobalVersion := false,
+    releaseIOMonorepoTagStrategy      := MonorepoTagStrategy.PerProject,
+    releaseIOMonorepoTagName          := ((name: String, ver: String) => s"$name-v$ver"),
+    releaseIOMonorepoUnifiedTagName   := ((ver: String) => s"v$ver"),
+    releaseIOMonorepoReadVersion      := VersionSteps.defaultReadVersion,
+    releaseIOMonorepoWriteVersion     := ((_, ver) => IO.pure(s"""version := "$ver"\n""")),
+    // Default version file resolver: looks up baseDirectory from the loaded build structure.
+    // Uses loadedBuild (a SettingKey) instead of buildStructure (a TaskKey),
+    // since settings cannot depend on tasks.
+    releaseIOMonorepoVersionFile      := {
+      val projectBases: Map[String, File] = loadedBuild.value.allProjectRefs.map {
+        case (ref, proj) => ref.project -> proj.base
+      }.toMap
+      ref => {
+        val base = projectBases.getOrElse(
+          ref.project,
+          throw new RuntimeException(s"Cannot resolve baseDirectory for ${ref.project}")
+        )
+        base / "version.sbt"
+      }
+    },
+    releaseIOMonorepoProjects         := thisProject.value.aggregate
+  )
+}
+
+object MonorepoReleaseIO extends MonorepoReleaseIO {
+
+  // Canonical key definitions — created exactly once, shared across all mix-ins.
+  private[monorepo] lazy val _releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] =
+    SettingKey[Seq[ProjectRef]](
+      "releaseIOMonorepoProjects",
+      "Which subprojects participate in monorepo releases"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] =
+    SettingKey[Seq[MonorepoStepIO]](
+      "releaseIOMonorepoProcess",
+      "The ordered sequence of monorepo release steps"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoVersionFile: SettingKey[ProjectRef => File] =
+    SettingKey[ProjectRef => File](
+      "releaseIOMonorepoVersionFile",
+      "Per-project version file resolver"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] =
+    SettingKey[File => IO[String]](
+      "releaseIOMonorepoReadVersion",
+      "Function to read version from a version file"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoWriteVersion
+      : SettingKey[(File, String) => IO[String]] =
+    SettingKey[(File, String) => IO[String]](
+      "releaseIOMonorepoWriteVersion",
+      "Function that produces version file contents"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoUseGlobalVersion: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoUseGlobalVersion",
+      "Use root version.sbt instead of per-project version files"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoTagStrategy: SettingKey[MonorepoTagStrategy] =
+    SettingKey[MonorepoTagStrategy](
+      "releaseIOMonorepoTagStrategy",
+      "Tagging strategy: PerProject or Unified"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoTagName: SettingKey[(String, String) => String] =
+    SettingKey[(String, String) => String](
+      "releaseIOMonorepoTagName",
+      "Tag name formatter for per-project tags: (name, version) => tag"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoUnifiedTagName: SettingKey[String => String] =
+    SettingKey[String => String](
+      "releaseIOMonorepoUnifiedTagName",
+      "Tag name formatter for unified tags: version => tag"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoDetectChanges: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoDetectChanges",
+      "Whether to use git-based change detection"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoChangeDetector
+      : SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]] =
+    SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]](
+      "releaseIOMonorepoChangeDetector",
+      "Custom change detection function"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoCrossBuild: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoCrossBuild",
+      "Whether to enable cross-building during monorepo release"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoSkipTests: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoSkipTests",
+      "Whether to skip tests during monorepo release"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoSkipPublish: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoSkipPublish",
+      "Whether to skip publish during monorepo release"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoInteractive: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoInteractive",
+      "Whether to enable interactive prompts during monorepo release"
+    )
+}
