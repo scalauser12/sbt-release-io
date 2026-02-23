@@ -120,9 +120,18 @@ object MonorepoReleaseSteps {
 
               case None =>
                 // Default: git diff-based detection
-                val tagNameFn = extracted.get(releaseIOMonorepoTagName)
+                val tagStrategy      = extracted.get(releaseIOMonorepoTagStrategy)
+                val tagNameFn        = extracted.get(releaseIOMonorepoTagName)
+                val unifiedTagNameFn = extracted.get(releaseIOMonorepoUnifiedTagName)
                 ChangeDetection
-                  .detectChangedProjects(vcs, ctx.projects, tagNameFn, ctx.state)
+                  .detectChangedProjects(
+                    vcs,
+                    ctx.projects,
+                    tagStrategy,
+                    tagNameFn,
+                    unifiedTagNameFn,
+                    ctx.state
+                  )
                   .flatMap { changedProjects =>
                     if (changedProjects.isEmpty) {
                       IO.raiseError(
