@@ -1,0 +1,19 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with unified tag strategy
+> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
+
+# Verify exactly one unified tag was created (not per-project tags)
+> checkUnifiedTag
+
+# Verify the tag annotation mentions both projects
+> checkTagAnnotation
+
+# Verify version files updated to next versions
+> checkCoreVersion
+> checkApiVersion

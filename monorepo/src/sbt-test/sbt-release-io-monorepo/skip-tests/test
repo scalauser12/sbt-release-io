@@ -1,0 +1,15 @@
+# Test: skip-tests CLI flag skips test execution
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Run monorepo release with skip-tests flag
+> releaseIOMonorepo core api with-defaults skip-tests release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify tests did NOT run (no marker files)
+> checkTestsSkipped
+
+# Verify release still completed (tags exist)
+> checkGitTags

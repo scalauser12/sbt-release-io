@@ -1,0 +1,15 @@
+# Test: publish / skip := true bypasses publishTo check (release succeeds)
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with publish-artifacts step present. Without publish/skip, the check
+# would fail because publishTo is not set. With publish/skip=true, the check
+# is bypassed and the release succeeds.
+> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Verify the release completed successfully
+> checkGitTags
+> checkCoreVersion

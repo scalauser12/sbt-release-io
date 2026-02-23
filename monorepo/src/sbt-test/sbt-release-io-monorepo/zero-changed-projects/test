@@ -1,0 +1,14 @@
+# Test: zero changed projects detected — release aborts with "Nothing to release"
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Create tags for all projects (simulating a prior release)
+$ exec git tag core-v0.1.0
+$ exec git tag api-v0.1.0
+
+# Make NO changes after tagging. Run release without explicit project selection.
+# Change detection should find zero changed projects and abort.
+-> releaseIOMonorepo with-defaults

@@ -1,0 +1,9 @@
+# Test: next-version consistency validation fails in global-version mode
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release versions match (1.0.0) but next versions differ (1.1.0-SNAPSHOT vs 2.0.0-SNAPSHOT)
+-> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=2.0.0-SNAPSHOT

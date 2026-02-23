@@ -1,0 +1,19 @@
+# Test: release-version-only override — next version computed automatically
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Provide only release-version for core (no next-version)
+# Next version should be computed as bugfix bump: 5.0.0 -> 5.0.1-SNAPSHOT
+> releaseIOMonorepo core api with-defaults release-version core=5.0.0
+
+# Verify core got computed next version (bugfix bump of 5.0.0)
+> checkCoreVersion
+
+# Verify api got computed versions (no overrides at all)
+> checkApiVersion
+
+# Verify tags
+> checkTags

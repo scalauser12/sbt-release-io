@@ -1,0 +1,24 @@
+# Test: detectChanges=false releases all projects regardless of which have changes
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate a previous release by manually creating tags
+$ exec git tag core-v0.1.0
+$ exec git tag api-v0.1.0
+
+# Modify ONLY core directory (add a file and commit)
+$ exec touch core/CHANGES.md
+$ exec git add core/CHANGES.md
+$ exec git commit -m "Add changes file to core"
+
+# Release with NO explicit project selection and NO all-changed flag.
+# detectChanges=false means all projects are released regardless.
+> releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT release-version api=0.2.0 next-version api=0.3.0-SNAPSHOT
+
+# Verify BOTH projects were released (both got new tags)
+> checkTags
+> checkCoreVersion
+> checkApiVersion

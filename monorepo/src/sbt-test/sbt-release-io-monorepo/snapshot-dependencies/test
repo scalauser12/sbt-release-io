@@ -1,0 +1,12 @@
+# Test: SNAPSHOT dependencies are detected in check phase and abort the release
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release should fail in check phase because core has a SNAPSHOT dependency
+-> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Verify no actions ran
+> checkNoCommits

@@ -1,0 +1,12 @@
+# Test: missing publishTo configuration causes check phase to abort release
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release should fail in check phase because publishTo is not configured
+-> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Verify no actions ran — only the initial commit should exist
+> checkNoCommits

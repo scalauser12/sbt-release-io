@@ -1,0 +1,15 @@
+# Test: custom change detection function selects only specific projects
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with NO explicit project selection — relies on custom change detector.
+# Custom detector returns true only for "core", so only core should be released.
+> releaseIOMonorepo with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+# Verify only core-v1.0.0 tag was created (no api tag)
+> checkTags
+> checkCoreVersion
+> checkApiVersion
