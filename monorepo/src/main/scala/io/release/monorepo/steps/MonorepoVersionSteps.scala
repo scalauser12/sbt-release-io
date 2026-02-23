@@ -94,6 +94,18 @@ private[monorepo] object MonorepoVersionSteps {
     } yield result
   }
 
+  /** Validate that all projects agree on release and next versions when global version mode is
+    * active. Runs as a Global step so that a mismatch aborts the entire release immediately,
+    * rather than marking one project failed via per-project error isolation.
+    */
+  val validateVersionConsistency: MonorepoStepIO.Global = MonorepoStepIO.Global(
+    name = "validate-version-consistency",
+    action = ctx =>
+      validateGlobalVersionConsistency(ctx, _._1, "set-release-version") *>
+        validateGlobalVersionConsistency(ctx, _._2, "set-next-version") *>
+        IO.pure(ctx)
+  )
+
   /** Write release versions to per-project version files. */
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "set-release-version",
@@ -171,6 +183,32 @@ private[monorepo] object MonorepoVersionSteps {
   )
 
   // --- private helpers ---
+
+  /** When global version mode is active, verify all projects agree on the version to write.
+    * This prevents the same file from being overwritten with different values.
+    */
+  private def validateGlobalVersionConsistency(
+      ctx: MonorepoContext,
+      extractVersion: ((String, String)) => String,
+      stepName: String
+  ): IO[Unit] = {
+    val extracted = extract(ctx.state)
+    if (!extracted.get(releaseIOMonorepoUseGlobalVersion)) IO.unit
+    else {
+      val versions =
+        ctx.currentProjects.flatMap(p => p.versions.map(v => p.name -> extractVersion(v)))
+      val distinct = versions.map(_._2).distinct
+      if (distinct.length > 1) {
+        val detail = versions.map { case (n, v) => s"  $n -> $v" }.mkString("\n")
+        IO.raiseError(
+          new RuntimeException(
+            s"[release-io-monorepo] $stepName: global version mode requires all projects to " +
+              s"share the same version but found:\n$detail"
+          )
+        )
+      } else IO.unit
+    }
+  }
 
   /** Pre-validate that all version files are within the VCS root, returning their relative paths. */
   private def resolveRelativePaths(

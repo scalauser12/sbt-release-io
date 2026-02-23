@@ -97,14 +97,29 @@ private[monorepo] object MonorepoPublishSteps {
       else
         IO.blocking {
           val extracted = extract(ctx.state)
-          val skipPub   =
-            scala.util
-              .Try(extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2)
-              .getOrElse(false)
-          !skipPub && scala.util
-            .Try(extracted.runTask(project.ref / publishTo, ctx.state)._2)
-            .getOrElse(None)
-            .isEmpty
+          scala.util.Try(
+            extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2
+          ) match {
+            case scala.util.Success(true)  => false // skip=true => no publishTo error
+            case scala.util.Failure(ex)    =>
+              ctx.state.log.warn(
+                s"[release-io-monorepo] Could not evaluate publish/skip for ${project.name}: " +
+                  s"${ex.getMessage}. Skipping publishTo check."
+              )
+              false // conservatively skip check
+            case scala.util.Success(false) =>
+              scala.util.Try(
+                extracted.runTask(project.ref / publishTo, ctx.state)._2
+              ) match {
+                case scala.util.Success(Some(_)) => false // publishTo configured
+                case scala.util.Success(None)    => true  // publishTo missing
+                case scala.util.Failure(ex)      =>
+                  throw new RuntimeException(
+                    s"Failed to evaluate publishTo for ${project.name}: ${ex.getMessage}",
+                    ex
+                  )
+              }
+          }
         }.flatMap {
           case true  =>
             IO.raiseError(

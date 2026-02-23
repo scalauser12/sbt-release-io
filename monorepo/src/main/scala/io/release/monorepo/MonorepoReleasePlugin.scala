@@ -172,18 +172,30 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
         name = projName,
         baseDir = projBase,
         versionFile = versionFileFn(ref),
-        versions = for {
-          rel  <- releaseVersionOverrides.get(projName)
-          next <- nextVersionOverrides.get(projName).orElse(Some(""))
-        } yield (rel, next)
+        versions = {
+          val rel  = releaseVersionOverrides.getOrElse(projName, "")
+          val next = nextVersionOverrides.getOrElse(projName, "")
+          if (rel.nonEmpty || next.nonEmpty) Some((rel, next)) else None
+        }
       )
+    }
+
+    // Validate override project names
+    val validNames       = allProjects.map(_.name).toSet
+    val invalidOverrides =
+      (releaseVersionOverrides.keySet ++ nextVersionOverrides.keySet) -- validNames
+    if (invalidOverrides.nonEmpty) {
+      state.log.error(
+        s"[release-io-monorepo] Unknown projects in version overrides: " +
+          s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}"
+      )
+      return state.fail
     }
 
     // Filter to selected projects (if explicit selection provided)
     val selectedProjects =
       if (selectedNames.nonEmpty) {
-        val validNames = allProjects.map(_.name).toSet
-        val invalid    = selectedNames.filterNot(validNames.contains)
+        val invalid = selectedNames.filterNot(validNames.contains)
         if (invalid.nonEmpty) {
           state.log.error(
             s"[release-io-monorepo] Unknown projects: ${invalid.mkString(", ")}. " +

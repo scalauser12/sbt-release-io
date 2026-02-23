@@ -53,7 +53,7 @@ object MonorepoStepIO {
         case pp: PerProject =>
           val wrappedCheck: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
             if (pp.enableCrossBuild && crossBuild)
-              (ctx, proj) => runCrossBuild(state => pp.check(ctx.withState(state), proj))(ctx)
+              (ctx, proj) => runCrossBuild(innerCtx => pp.check(innerCtx, proj))(ctx)
             else pp.check
           initialCtx.currentProjects.foldLeft(IO.unit) { (innerAcc, proj) =>
             innerAcc *> wrappedCheck(initialCtx, proj).void
@@ -104,7 +104,7 @@ object MonorepoStepIO {
       case pp: PerProject =>
         val wrappedAction: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
           if (pp.enableCrossBuild && crossBuild)
-            (ctx, proj) => runCrossBuild(state => pp.action(ctx.withState(state), proj))(ctx)
+            (ctx, proj) => runCrossBuild(innerCtx => pp.action(innerCtx, proj))(ctx)
           else pp.action
 
         if (ctx.failed) IO.pure(ctx)
@@ -147,14 +147,14 @@ object MonorepoStepIO {
     * Based on the core plugin's cross-build implementation.
     */
   private def runCrossBuild(
-      action: State => IO[MonorepoContext]
+      action: MonorepoContext => IO[MonorepoContext]
   )(ctx: MonorepoContext): IO[MonorepoContext] = IO.defer {
     val extracted      = Project.extract(ctx.state)
     val crossVersions  = extracted.get(crossScalaVersions)
     val currentVersion = (extracted.currentRef / scalaVersion).get(extracted.structure.data)
 
     if (crossVersions.length <= 1) {
-      action(ctx.state)
+      action(ctx)
     } else {
       val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
         for {
@@ -165,7 +165,7 @@ object MonorepoStepIO {
                           )
                         )
           newState   <- IO.blocking(switchScalaVersion(currentCtx.state, version))
-          result     <- action(newState)
+          result     <- action(currentCtx.withState(newState))
         } yield result
       }
 

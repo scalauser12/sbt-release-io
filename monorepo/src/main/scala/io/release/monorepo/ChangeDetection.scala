@@ -53,29 +53,30 @@ object ChangeDetection {
         val baseRelative =
           sbt.IO.relativize(vcs.baseDir, project.baseDir).getOrElse(project.baseDir.getName)
 
-        val changedFiles =
-          scala.util
-            .Try(
-              Process(
-                Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
-                vcs.baseDir
-              ).lineStream_!.toList
+        scala.util
+          .Try(
+            Process(
+              Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
+              vcs.baseDir
+            ).lineStream_!.toList
+          ) match {
+          case scala.util.Failure(_)            =>
+            state.log.warn(
+              s"[release-io-monorepo] git diff failed for ${project.name}, conservatively treating as changed"
             )
-            .getOrElse {
-              state.log.warn(
-                s"[release-io-monorepo] git diff failed for ${project.name}, conservatively treating as changed"
+            true
+          case scala.util.Success(changedFiles) =>
+            if (changedFiles.nonEmpty) {
+              state.log.info(
+                s"[release-io-monorepo] ${project.name} has ${changedFiles.length} changed file(s) since $tag"
               )
-              return true
+              true
+            } else {
+              state.log.info(
+                s"[release-io-monorepo] ${project.name} unchanged since $tag"
+              )
+              false
             }
-
-        if (changedFiles.nonEmpty) {
-          state.log.info(
-            s"[release-io-monorepo] ${project.name} has ${changedFiles.length} changed file(s) since $tag"
-          )
-          true
-        } else {
-          state.log.info(s"[release-io-monorepo] ${project.name} unchanged since $tag")
-          false
         }
     }
   }

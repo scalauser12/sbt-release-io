@@ -138,7 +138,7 @@ private[monorepo] object MonorepoVcsSteps {
                 IO.blocking {
                   runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'")
                   ctx.state.log.info(s"[release-io-monorepo] Tagged release as $tagName")
-                  ctx.projects.foldLeft(ctx) { (c, p) =>
+                  ctx.currentProjects.foldLeft(ctx) { (c, p) =>
                     c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
                   }
                 }
@@ -149,37 +149,44 @@ private[monorepo] object MonorepoVcsSteps {
 
   val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "push-changes",
-    check = ctx =>
-      required(ctx.vcs, "VCS not initialized") { vcs =>
-        for {
-          hasUp      <- IO.blocking(vcs.hasUpstream)
-          _          <-
-            if (hasUp) IO.unit
-            else
-              IO.raiseError(
-                new RuntimeException(
-                  s"No tracking branch configured for '${vcs.currentBranch}'. " +
-                    "Set up a remote tracking branch or remove pushChanges from the release process."
+    check = ctx => {
+      val extracted = extract(ctx.state)
+      val base      = extracted.get(thisProject).base
+
+      IO.blocking(Vcs.detect(base)).flatMap {
+        case None      =>
+          IO.raiseError(new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}"))
+        case Some(vcs) =>
+          for {
+            hasUp      <- IO.blocking(vcs.hasUpstream)
+            _          <-
+              if (hasUp) IO.unit
+              else
+                IO.raiseError(
+                  new RuntimeException(
+                    s"No tracking branch configured for '${vcs.currentBranch}'. " +
+                      "Set up a remote tracking branch or remove pushChanges from the release process."
+                  )
                 )
-              )
-          remoteCode <- IO.blocking(vcs.checkRemote(vcs.trackingRemote).!)
-          _          <-
-            if (remoteCode == 0) IO.unit
-            else
-              IO.raiseError(
-                new RuntimeException("Remote check failed. Aborting release.")
-              )
-          behind     <- IO.blocking(vcs.isBehindRemote)
-          _          <-
-            if (!behind) IO.unit
-            else
-              IO.raiseError(
-                new RuntimeException(
-                  "Upstream has unmerged commits. Merge first or remove pushChanges from process."
+            remoteCode <- IO.blocking(vcs.checkRemote(vcs.trackingRemote).!)
+            _          <-
+              if (remoteCode == 0) IO.unit
+              else
+                IO.raiseError(
+                  new RuntimeException("Remote check failed. Aborting release.")
                 )
-              )
-        } yield ctx
-      },
+            behind     <- IO.blocking(vcs.isBehindRemote)
+            _          <-
+              if (!behind) IO.unit
+              else
+                IO.raiseError(
+                  new RuntimeException(
+                    "Upstream has unmerged commits. Merge first or remove pushChanges from process."
+                  )
+                )
+          } yield ctx
+      }
+    },
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         IO.blocking(vcs.hasUpstream).flatMap {

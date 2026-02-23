@@ -16,11 +16,14 @@ object MonorepoReleaseSteps {
   val pushChanges: MonorepoStepIO.Global          = MonorepoVcsSteps.pushChanges
 
   // ── Version steps ─────────────────────────────────────────────────────
-  val inquireVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.inquireVersions
-  val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoVersionSteps.setReleaseVersions
-  val setNextVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.setNextVersions
-  val commitReleaseVersions: MonorepoStepIO.Global  = MonorepoVersionSteps.commitReleaseVersions
-  val commitNextVersions: MonorepoStepIO.Global     = MonorepoVersionSteps.commitNextVersions
+  val inquireVersions: MonorepoStepIO.PerProject        = MonorepoVersionSteps.inquireVersions
+  val validateVersionConsistency: MonorepoStepIO.Global =
+    MonorepoVersionSteps.validateVersionConsistency
+  val setReleaseVersions: MonorepoStepIO.PerProject     = MonorepoVersionSteps.setReleaseVersions
+  val setNextVersions: MonorepoStepIO.PerProject        = MonorepoVersionSteps.setNextVersions
+  val commitReleaseVersions: MonorepoStepIO.Global      =
+    MonorepoVersionSteps.commitReleaseVersions
+  val commitNextVersions: MonorepoStepIO.Global         = MonorepoVersionSteps.commitNextVersions
 
   // ── Publish & test steps ──────────────────────────────────────────────
   val checkSnapshotDependencies: MonorepoStepIO.PerProject =
@@ -79,14 +82,24 @@ object MonorepoReleaseSteps {
           } else {
             customDetector match {
               case Some(detector) =>
-                // Custom change detector
+                // Custom change detector with per-project error isolation
                 ctx.projects
                   .foldLeft(IO.pure(Seq.empty[ProjectReleaseInfo])) { (acc, project) =>
                     acc.flatMap { changed =>
-                      detector(project.ref, project.baseDir, ctx.state).map {
-                        case true  => changed :+ project
-                        case false => changed
-                      }
+                      detector(project.ref, project.baseDir, ctx.state)
+                        .map {
+                          case true  => changed :+ project
+                          case false => changed
+                        }
+                        .handleErrorWith { err =>
+                          IO(
+                            ctx.state.log.warn(
+                              s"[release-io-monorepo] Change detection failed for ${project.name}: " +
+                                s"${Option(err.getMessage).getOrElse(err.toString)}. " +
+                                "Conservatively treating as changed."
+                            )
+                          ).as(changed :+ project)
+                        }
                     }
                   }
                   .flatMap { changedProjects =>
@@ -157,6 +170,7 @@ object MonorepoReleaseSteps {
     detectOrSelectProjects,
     checkSnapshotDependencies,
     inquireVersions,
+    validateVersionConsistency,
     runClean,
     runTests,
     setReleaseVersions,
