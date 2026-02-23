@@ -19,7 +19,7 @@ $ exec git commit -m "Add changes file to root"
 # Sub should NOT be detected as changed.
 > releaseIOMonorepo with-defaults release-version root=0.2.0 next-version root=0.3.0-SNAPSHOT
 
-# Verify only root-proj-v0.2.0 was added (no sub-v0.2.0)
+# Verify only root-v0.2.0 was added (no sub-v0.2.0)
 > checkTags
 
 # Verify root got next version
