@@ -231,7 +231,7 @@ object ReleaseStepIO {
       * FailureCommand (sbt's task failure signal), marks the context as failed, and strips the
       * sentinel command.
       */
-    def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO {
+    def failureCheck(ctx: ReleaseContext): IO[ReleaseContext] = IO.pure {
       val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
       if (hasFailure) {
         val cleaned = ctx.state.copy(remainingCommands = ctx.state.remainingCommands.drop(1))
@@ -240,7 +240,7 @@ object ReleaseStepIO {
     }
 
     /** Strips the FailureCommand sentinel at the end, matching upstream's removeFailureCommand. */
-    def removeFailureCommand(ctx: ReleaseContext): IO[ReleaseContext] = IO {
+    def removeFailureCommand(ctx: ReleaseContext): IO[ReleaseContext] = IO.pure {
       ctx.state.remainingCommands.toList match {
         case head :: tail if head == FailureCommand =>
           ctx.copy(state = ctx.state.copy(remainingCommands = tail))

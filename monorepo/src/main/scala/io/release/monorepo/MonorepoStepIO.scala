@@ -55,6 +55,7 @@ object MonorepoStepIO {
             if (pp.enableCrossBuild && crossBuild)
               (ctx, proj) => runCrossBuild(innerCtx => pp.check(innerCtx, proj))(ctx)
             else pp.check
+          // Intentionally passes initialCtx (not threaded) — check state mutations are discarded
           initialCtx.currentProjects.foldLeft(IO.unit) { (innerAcc, proj) =>
             innerAcc *> wrappedCheck(initialCtx, proj).void
           }
@@ -72,7 +73,7 @@ object MonorepoStepIO {
       * FailureCommand (sbt's task failure signal), marks the context as failed, and strips the
       * sentinel command.
       */
-    def failureCheck(ctx: MonorepoContext): IO[MonorepoContext] = IO {
+    def failureCheck(ctx: MonorepoContext): IO[MonorepoContext] = IO.pure {
       val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
       if (hasFailure) {
         val cleaned = ctx.state.copy(remainingCommands = ctx.state.remainingCommands.drop(1))
@@ -99,6 +100,7 @@ object MonorepoStepIO {
     ): IO[MonorepoContext] = step match {
       case g: Global =>
         IO(ctx.state.log.info(s"[release-io-monorepo] ${g.name}")) *>
+          // Deliberately converts exceptions to ctx.fail (fail-and-continue-to-cleanup)
           g.action(ctx).handleErrorWith(handleStepError(ctx, g.name))
 
       case pp: PerProject =>
@@ -107,23 +109,21 @@ object MonorepoStepIO {
             (ctx, proj) => runCrossBuild(innerCtx => pp.action(innerCtx, proj))(ctx)
           else pp.action
 
-        if (ctx.failed) IO.pure(ctx)
-        else
-          MonorepoStepHelpers
-            .runPerProject(
-              ctx,
-              (c, proj) =>
-                IO(c.state.log.info(s"[release-io-monorepo] ${pp.name} [${proj.name}]")) *>
-                  wrappedAction(c, proj)
-            )
-            .map { resultCtx =>
-              // Propagate per-project failures to global context
-              if (resultCtx.projects.exists(_.failed)) resultCtx.fail
-              else resultCtx
-            }
+        MonorepoStepHelpers
+          .runPerProject(
+            ctx,
+            (c, proj) =>
+              IO(c.state.log.info(s"[release-io-monorepo] ${pp.name} [${proj.name}]")) *>
+                wrappedAction(c, proj)
+          )
+          .map { resultCtx =>
+            // Propagate per-project failures to global context
+            if (resultCtx.projects.exists(_.failed)) resultCtx.fail
+            else resultCtx
+          }
     }
 
-    def removeFailureCommand(ctx: MonorepoContext): IO[MonorepoContext] = IO {
+    def removeFailureCommand(ctx: MonorepoContext): IO[MonorepoContext] = IO.pure {
       ctx.state.remainingCommands.toList match {
         case head :: tail if head == FailureCommand =>
           ctx.copy(state = ctx.state.copy(remainingCommands = tail))
