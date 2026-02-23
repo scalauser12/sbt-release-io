@@ -51,37 +51,37 @@ private[release] object VcsSteps {
           new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}")
         )
       case Some(vcs) =>
-        IO.blocking {
-          val modified  = vcs.modifiedFiles
-          val untracked = vcs.untrackedFiles
-
-          if (modified.nonEmpty) {
-            throw new RuntimeException(
-              s"""Aborting release: unstaged modified files
-                 |
-                 |Modified files:
-                 |
-                 |${modified.map(" - " + _).mkString("\n")}
-                 |""".stripMargin
+        IO.blocking((vcs.modifiedFiles, vcs.untrackedFiles, vcs.currentHash)).flatMap {
+          case (modified, _, _) if modified.nonEmpty                       =>
+            IO.raiseError(
+              new RuntimeException(
+                s"""Aborting release: unstaged modified files
+                   |
+                   |Modified files:
+                   |
+                   |${modified.map(" - " + _).mkString("\n")}
+                   |""".stripMargin
+              )
             )
-          }
-
-          if (untracked.nonEmpty && !ignoreUntracked) {
-            throw new RuntimeException(
-              s"""Aborting release: untracked files. Remove them or specify 'releaseIgnoreUntrackedFiles := true' in settings
-                 |
-                 |Untracked files:
-                 |
-                 |${untracked.map(" - " + _).mkString("\n")}
-                 |""".stripMargin
+          case (_, untracked, _) if untracked.nonEmpty && !ignoreUntracked =>
+            IO.raiseError(
+              new RuntimeException(
+                s"""Aborting release: untracked files. Remove them or specify 'releaseIgnoreUntrackedFiles := true' in settings
+                   |
+                   |Untracked files:
+                   |
+                   |${untracked.map(" - " + _).mkString("\n")}
+                   |""".stripMargin
+              )
             )
-          }
-
-          if (logStartHash)
-            ctx.state.log.info(
-              s"[release-io] Starting release process off commit: ${vcs.currentHash}"
-            )
-          ctx.withVcs(vcs)
+          case (_, _, currentHash)                                         =>
+            IO {
+              if (logStartHash)
+                ctx.state.log.info(
+                  s"[release-io] Starting release process off commit: $currentHash"
+                )
+              ctx.withVcs(vcs)
+            }
         }
     }
   }

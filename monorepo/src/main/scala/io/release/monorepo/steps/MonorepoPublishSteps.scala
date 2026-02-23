@@ -16,7 +16,6 @@ private[monorepo] object MonorepoPublishSteps {
     action = (ctx, _) => IO.pure(ctx),
     check = (ctx, project) =>
       IO.blocking {
-        val extracted   = extract(ctx.state)
         val (_, result) =
           sbtrelease.Compat.runTaskAggregated(project.ref / releaseSnapshotDependencies, ctx.state)
         result match {
@@ -24,7 +23,7 @@ private[monorepo] object MonorepoPublishSteps {
           case Inc(cause)   => Left(cause)
         }
       }.flatMap {
-        case Left(cause) =>
+        case Left(cause)                  =>
           IO.raiseError(
             new RuntimeException(
               s"Error checking snapshot dependencies for ${project.name}: $cause"
@@ -39,7 +38,7 @@ private[monorepo] object MonorepoPublishSteps {
               s"Snapshot dependencies found in ${project.name}:\n$depList"
             )
           )
-        case Right(_) => IO.pure(ctx)
+        case Right(_)                     => IO.pure(ctx)
       },
     enableCrossBuild = true
   )
@@ -60,9 +59,11 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-tests",
     action = (ctx, project) =>
       if (ctx.skipTests) {
-        IO(ctx.state.log.info(
-          s"[release-io-monorepo] Skipping tests for ${project.name}"
-        )).as(ctx)
+        IO(
+          ctx.state.log.info(
+            s"[release-io-monorepo] Skipping tests for ${project.name}"
+          )
+        ).as(ctx)
       } else {
         IO.blocking {
           val extracted = extract(ctx.state)
@@ -78,16 +79,17 @@ private[monorepo] object MonorepoPublishSteps {
     name = "publish-artifacts",
     action = (ctx, project) =>
       if (ctx.skipPublish) {
-        IO(ctx.state.log.info(
-          s"[release-io-monorepo] Skipping publish for ${project.name}"
-        )).as(ctx)
+        IO(
+          ctx.state.log.info(
+            s"[release-io-monorepo] Skipping publish for ${project.name}"
+          )
+        ).as(ctx)
       } else {
         IO.blocking {
           val extracted = extract(ctx.state)
           val newState  =
             extracted.runAggregated(project.ref / releasePublishArtifactsAction, ctx.state)
           ctx.withState(newState)
-            .updateProject(project.ref)(_.copy(released = true))
         }
       },
     check = (ctx, project) =>
@@ -99,20 +101,19 @@ private[monorepo] object MonorepoPublishSteps {
             scala.util
               .Try(extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2)
               .getOrElse(false)
-          if (!skipPub) {
-            val missing =
-              scala.util
-                .Try(extracted.runTask(project.ref / publishTo, ctx.state)._2)
-                .getOrElse(None)
-                .isEmpty
-            if (missing) {
-              throw new RuntimeException(
+          !skipPub && scala.util
+            .Try(extracted.runTask(project.ref / publishTo, ctx.state)._2)
+            .getOrElse(None)
+            .isEmpty
+        }.flatMap {
+          case true  =>
+            IO.raiseError(
+              new RuntimeException(
                 s"publishTo not configured for ${project.name}. " +
                   "Set publishTo or add `publish / skip := true`."
               )
-            }
-          }
-          ctx
+            )
+          case false => IO.pure(ctx)
         },
     enableCrossBuild = true
   )

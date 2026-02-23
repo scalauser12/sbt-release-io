@@ -69,21 +69,19 @@ private[release] object PublishSteps {
         IO.blocking {
           val extracted = extract(ctx.state)
           val allRefs   = extracted.currentRef +: extracted.currentProject.aggregate
-          val missing   = allRefs
-            .filterNot { r =>
-              checkPublishSkip(extracted, r, ctx.state)
-            }
-            .filter { r =>
-              checkPublishToMissing(extracted, r, ctx.state)
-            }
+          allRefs
+            .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
+            .filter(r => checkPublishToMissing(extracted, r, ctx.state))
+        }.flatMap { missing =>
           if (missing.nonEmpty) {
             val names = missing.map(_.project)
-            throw new RuntimeException(
-              s"publishTo not configured for: ${names.mkString(", ")}. " +
-                "Set publishTo or add `publish / skip := true`."
+            IO.raiseError(
+              new RuntimeException(
+                s"publishTo not configured for: ${names.mkString(", ")}. " +
+                  "Set publishTo or add `publish / skip := true`."
+              )
             )
-          }
-          ctx
+          } else IO.pure(ctx)
         },
     enableCrossBuild = true
   )

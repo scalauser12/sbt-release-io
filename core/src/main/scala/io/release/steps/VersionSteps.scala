@@ -173,40 +173,44 @@ private[release] object VersionSteps {
       commitMessageKey: TaskKey[String]
   ): IO[(ReleaseContext, String)] =
     required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-      IO.blocking {
-        val extracted    = extract(ctx.state)
-        val versionFile  = extracted.get(releaseVersionFile).getCanonicalFile
-        val base         = vcs.baseDir.getCanonicalFile
-        val sign         = extracted.get(releaseVcsSign)
-        val signOff      = extracted.get(releaseVcsSignOff)
-        val relativePath = sbt.IO
-          .relativize(base, versionFile)
-          .getOrElse(
-            throw new RuntimeException(
+      val extracted   = extract(ctx.state)
+      val versionFile = extracted.get(releaseVersionFile).getCanonicalFile
+      val base        = vcs.baseDir.getCanonicalFile
+
+      sbt.IO.relativize(base, versionFile) match {
+        case None               =>
+          IO.raiseError(
+            new RuntimeException(
               s"[release-io] Version file [$versionFile] is outside of VCS root [$base]"
             )
           )
+        case Some(relativePath) =>
+          IO.blocking {
+            val sign    = extracted.get(releaseVcsSign)
+            val signOff = extracted.get(releaseVcsSignOff)
 
-        runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+            runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
 
-        val statusOutput = {
-          val sb   = new StringBuilder
-          val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
-          if (code != 0)
-            throw new RuntimeException(s"vcs status failed with exit code $code")
-          sb.toString.trim
-        }
-        val status       = statusOutput.linesIterator
-          .filterNot(_.startsWith("?"))
-          .mkString("\n")
+            // vcs status exit code check — synchronous process helper, throw is intentional
+            val statusOutput = {
+              val sb   = new StringBuilder
+              val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
+              if (code != 0)
+                throw new RuntimeException(s"vcs status failed with exit code $code")
+              sb.toString.trim
+            }
+            val status       = statusOutput.linesIterator
+              .filterNot(_.startsWith("?"))
+              .mkString("\n")
 
-        if (status.nonEmpty) {
-          val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
-          runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
-          (ctx.copy(state = commitState), vcs.currentHash)
-        } else {
-          (ctx, vcs.currentHash)
-        }
+            if (status.nonEmpty) {
+              val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
+              runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
+              (ctx.copy(state = commitState), vcs.currentHash)
+            } else {
+              (ctx, vcs.currentHash)
+            }
+          }
       }
     }
 

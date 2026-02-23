@@ -12,7 +12,6 @@ case class ProjectReleaseInfo(
     versionFile: File,
     versions: Option[(String, String)] = None, // (releaseVersion, nextVersion)
     tagName: Option[String] = None,
-    released: Boolean = false,
     failed: Boolean = false
 )
 

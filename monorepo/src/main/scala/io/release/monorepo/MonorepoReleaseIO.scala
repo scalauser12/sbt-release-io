@@ -88,7 +88,13 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoTagName          := ((name: String, ver: String) => s"$name-v$ver"),
     releaseIOMonorepoUnifiedTagName   := ((ver: String) => s"v$ver"),
     releaseIOMonorepoReadVersion      := VersionSteps.defaultReadVersion,
-    releaseIOMonorepoWriteVersion     := ((_, ver) => IO.pure(s"""version := "$ver"\n""")),
+    releaseIOMonorepoWriteVersion     := {
+      val useGlobal = releaseIOMonorepoUseGlobalVersion.value
+      (_, ver) => {
+        val key = if (useGlobal) "ThisBuild / version" else "version"
+        IO.pure(s"""$key := "$ver"\n""")
+      }
+    },
     // Default version file resolver: looks up baseDirectory from the loaded build structure.
     // Uses loadedBuild (a SettingKey) instead of buildStructure (a TaskKey),
     // since settings cannot depend on tasks.
@@ -96,12 +102,13 @@ trait MonorepoReleaseIO {
       val projectBases: Map[String, File] = loadedBuild.value.allProjectRefs.map {
         case (ref, proj) => ref.project -> proj.base
       }.toMap
+      val versionFileName                 = sbtrelease.ReleasePlugin.autoImport.releaseVersionFile.value.getName
       ref => {
         val base = projectBases.getOrElse(
           ref.project,
           throw new RuntimeException(s"Cannot resolve baseDirectory for ${ref.project}")
         )
-        base / "version.sbt"
+        base / versionFileName
       }
     },
     releaseIOMonorepoProjects         := thisProject.value.aggregate

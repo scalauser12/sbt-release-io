@@ -4,6 +4,7 @@ import cats.effect.{IO, Resource}
 import cats.effect.unsafe.implicits.global
 import io.release.ReleasePluginIO
 import io.release.monorepo.MonorepoReleaseIO.*
+import scala.util.control.NonFatal
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
@@ -87,10 +88,10 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
   // This avoids ambiguity between the catch-all project name parser and
   // multi-token parsers like "release-version <project>=<version>" which
   // conflict under sbt's `|` combinator with `.*` repetition.
-  protected lazy val monorepoParser: Parser[Seq[MonorepoArg]] =
+  protected lazy val monorepoParser: Parser[Either[String, Seq[MonorepoArg]]] =
     (Space ~> token(NotSpace)).* map interpretTokens
 
-  protected def interpretTokens(tokens: Seq[String]): Seq[MonorepoArg] = {
+  protected def interpretTokens(tokens: Seq[String]): Either[String, Seq[MonorepoArg]] = {
     import MonorepoArg.*
 
     val result = Seq.newBuilder[MonorepoArg]
@@ -104,34 +105,40 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
         case "all-changed"     => result += AllChanged
         case "release-version" =>
           if (!iter.hasNext)
-            throw new RuntimeException("release-version requires <project>=<version> argument")
+            return Left("release-version requires <project>=<version> argument")
           val s     = iter.next()
           val parts = s.split("=", 2)
           if (parts.length != 2)
-            throw new RuntimeException(
-              s"Invalid release-version format: '$s'. Expected project=version"
-            )
+            return Left(s"Invalid release-version format: '$s'. Expected project=version")
           result += ReleaseVersion(parts(0), parts(1))
         case "next-version"    =>
           if (!iter.hasNext)
-            throw new RuntimeException("next-version requires <project>=<version> argument")
+            return Left("next-version requires <project>=<version> argument")
           val s     = iter.next()
           val parts = s.split("=", 2)
           if (parts.length != 2)
-            throw new RuntimeException(
-              s"Invalid next-version format: '$s'. Expected project=version"
-            )
+            return Left(s"Invalid next-version format: '$s'. Expected project=version")
           result += NextVersion(parts(0), parts(1))
         case name              => result += SelectProject(name)
       }
     }
-    result.result()
+    Right(result.result())
   }
 
   // ── Release execution ───────────────────────────────────────────────
 
-  protected def doMonorepoRelease(state: State, args: Seq[MonorepoArg]): State = {
+  protected def doMonorepoRelease(
+      state: State,
+      argsOrError: Either[String, Seq[MonorepoArg]]
+  ): State = {
     import MonorepoArg.*
+
+    val args = argsOrError match {
+      case Left(msg) =>
+        state.log.error(s"[release-io-monorepo] $msg")
+        return state.fail
+      case Right(a)  => a
+    }
 
     val extracted = extract(state)
 
@@ -201,7 +208,8 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       interactive = interactive && !useDefaults,
       tagStrategy = tagStrategy,
       attributes =
-        if (selectedNames.nonEmpty || !allChanged) Map("projects-selected" -> "true")
+        if (selectedNames.nonEmpty) Map("projects-selected" -> "true")
+        else if (allChanged) Map("all-changed" -> "true")
         else Map.empty
     )
 
@@ -216,7 +224,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     // steps complete (or immediately on failure). Each step function receives the resource T.
     val program = resource.use { t =>
       val steps = stepFns.map(_(t))
-      MonorepoStepIO.compose(steps)(initialCtx)
+      MonorepoStepIO.compose(steps, crossBuild)(initialCtx)
     }
 
     try {
@@ -225,7 +233,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       finalCtx.state.log.info("[release-io-monorepo] Monorepo release completed successfully!")
       finalCtx.state
     } catch {
-      case e: RuntimeException =>
+      case NonFatal(e) =>
         state.log.error(s"[release-io-monorepo] Release failed: ${e.getMessage}")
         state.fail
     }

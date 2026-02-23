@@ -12,7 +12,7 @@ object DependencyGraph {
   def topologicalSort(
       projects: Seq[ProjectRef],
       state: State
-  ): IO[Seq[ProjectRef]] = IO.blocking {
+  ): IO[Seq[ProjectRef]] = IO.defer {
     val extracted  = Project.extract(state)
     val structure  = extracted.structure
     val projectSet = projects.toSet
@@ -60,11 +60,13 @@ object DependencyGraph {
 
     if (result.length != projects.length) {
       val remaining = projects.filterNot(result.contains)
-      throw new RuntimeException(
-        s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"
+      IO.raiseError(
+        new RuntimeException(
+          s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"
+        )
       )
+    } else {
+      IO.pure(result.toSeq)
     }
-
-    result.toSeq
   }
 }

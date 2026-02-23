@@ -56,7 +56,7 @@ class MonorepoStepIOSpec extends Specification {
       log.toList must_== List("core", "api")
     }
 
-    "skip failed projects in subsequent PerProject steps" in withContext { ctx =>
+    "abort release when a per-project step fails" in withContext { ctx =>
       val log      = ArrayBuffer.empty[String]
       val projects = Seq(dummyProject("core"), dummyProject("api"))
       val pCtx     = ctx.withProjects(projects)
@@ -73,10 +73,10 @@ class MonorepoStepIOSpec extends Specification {
         action = (c, proj) => IO(log += s"step2:${proj.name}").as(c)
       )
 
-      val result =
-        MonorepoStepIO.compose(Seq(failingStep, secondStep))(pCtx).unsafeRunSync()
-      log.toList must_== List("step1:api", "step2:api")
-      result.projects.find(_.name == "core").get.failed must_== true
+      MonorepoStepIO.compose(Seq(failingStep, secondStep))(pCtx).unsafeRunSync() must
+        throwA[RuntimeException]("Monorepo release process failed")
+      // step1 ran for api (core failed), step2 skipped entirely because ctx.failed is true
+      log.toList must_== List("step1:api")
     }
 
     "thread MonorepoContext through sequential steps" in withContext { ctx =>
@@ -156,45 +156,36 @@ class MonorepoStepIOSpec extends Specification {
       )
 
       f(MonorepoContext(state = state))
-    } finally deleteRecursively(dir)
-  }
-
-  private def deleteRecursively(file: File): Unit = {
-    if (file.isDirectory) {
-      val children = file.listFiles()
-      if (children != null) children.foreach(deleteRecursively)
-    }
-    file.delete()
-    ()
+    } finally TestHelpers.deleteRecursively(dir)
   }
 
   private def dummyAppConfiguration(baseDir: File): AppConfiguration = {
     val launcher: Launcher = new Launcher {
-      override def getScala(version: String): ScalaProvider                                 = null
-      override def getScala(version: String, reason: String): ScalaProvider                 = null
+      override def getScala(version: String): ScalaProvider                                   = null
+      override def getScala(version: String, reason: String): ScalaProvider                   = null
       override def getScala(version: String, reason: String, scalaOrg: String): ScalaProvider = null
-      override def app(id: ApplicationID, version: String): AppProvider                     = null
-      override def topLoader(): ClassLoader                                                 = getClass.getClassLoader
-      override def globalLock(): GlobalLock = new GlobalLock {
+      override def app(id: ApplicationID, version: String): AppProvider                       = null
+      override def topLoader(): ClassLoader                                                   = getClass.getClassLoader
+      override def globalLock(): GlobalLock                                                   = new GlobalLock {
         override def apply[T](lockFile: File, run: java.util.concurrent.Callable[T]): T = run.call()
       }
-      override def bootDirectory(): File                = baseDir
-      override def ivyRepositories(): Array[Repository] = Array.empty
-      override def appRepositories(): Array[Repository] = Array.empty
-      override def isOverrideRepositories(): Boolean     = false
-      override def ivyHome(): File                       = baseDir
-      override def checksums(): Array[String]            = Array.empty
+      override def bootDirectory(): File                                                      = baseDir
+      override def ivyRepositories(): Array[Repository]                                       = Array.empty
+      override def appRepositories(): Array[Repository]                                       = Array.empty
+      override def isOverrideRepositories(): Boolean                                          = false
+      override def ivyHome(): File                                                            = baseDir
+      override def checksums(): Array[String]                                                 = Array.empty
     }
 
     val appId: ApplicationID = new ApplicationID {
-      override def groupID(): String                    = "test"
-      override def name(): String                       = "test"
-      override def version(): String                    = "0.0.0"
-      override def mainClass(): String                  = "test.Main"
-      override def mainComponents(): Array[String]      = Array.empty
-      override def crossVersioned(): Boolean            = false
-      override def crossVersionedValue(): CrossValue    = CrossValue.Disabled
-      override def classpathExtra(): Array[File]        = Array.empty
+      override def groupID(): String                 = "test"
+      override def name(): String                    = "test"
+      override def version(): String                 = "0.0.0"
+      override def mainClass(): String               = "test.Main"
+      override def mainComponents(): Array[String]   = Array.empty
+      override def crossVersioned(): Boolean         = false
+      override def crossVersionedValue(): CrossValue = CrossValue.Disabled
+      override def classpathExtra(): Array[File]     = Array.empty
     }
 
     class DummyAppMain extends AppMain {
@@ -202,32 +193,32 @@ class MonorepoStepIOSpec extends Specification {
     }
 
     lazy val scalaProvider: ScalaProvider = new ScalaProvider {
-      override def launcher(): Launcher        = launcher
-      override def version(): String           = "2.12.21"
-      override def loader(): ClassLoader       = getClass.getClassLoader
-      override def jars(): Array[File]         = Array.empty
-      override def libraryJar(): File          = new File(baseDir, "scala-library.jar")
-      override def compilerJar(): File         = new File(baseDir, "scala-compiler.jar")
+      override def launcher(): Launcher                = launcher
+      override def version(): String                   = "2.12.21"
+      override def loader(): ClassLoader               = getClass.getClassLoader
+      override def jars(): Array[File]                 = Array.empty
+      override def libraryJar(): File                  = new File(baseDir, "scala-library.jar")
+      override def compilerJar(): File                 = new File(baseDir, "scala-compiler.jar")
       override def app(id: ApplicationID): AppProvider = appProvider
     }
 
     lazy val componentProvider: ComponentProvider = new ComponentProvider {
-      override def componentLocation(id: String): File              = new File(baseDir, s"component-$id")
-      override def component(id: String): Array[File]               = Array.empty
-      override def defineComponent(id: String, files: Array[File]): Unit = ()
+      override def componentLocation(id: String): File                     = new File(baseDir, s"component-$id")
+      override def component(id: String): Array[File]                      = Array.empty
+      override def defineComponent(id: String, files: Array[File]): Unit   = ()
       override def addToComponent(id: String, files: Array[File]): Boolean = true
-      override def lockFile(): File                                 = new File(baseDir, ".components.lock")
+      override def lockFile(): File                                        = new File(baseDir, ".components.lock")
     }
 
     lazy val appProvider: AppProvider = new AppProvider {
-      override def scalaProvider(): ScalaProvider              = scalaProvider
-      override def id(): ApplicationID                         = appId
-      override def loader(): ClassLoader                       = getClass.getClassLoader
-      override def mainClass(): Class[_ <: AppMain]            = classOf[DummyAppMain]
-      override def entryPoint(): Class[_]                      = classOf[DummyAppMain]
-      override def newMain(): AppMain                          = new DummyAppMain
-      override def mainClasspath(): Array[File]                = Array.empty
-      override def components(): ComponentProvider             = componentProvider
+      override def scalaProvider(): ScalaProvider   = scalaProvider
+      override def id(): ApplicationID              = appId
+      override def loader(): ClassLoader            = getClass.getClassLoader
+      override def mainClass(): Class[_ <: AppMain] = classOf[DummyAppMain]
+      override def entryPoint(): Class[_]           = classOf[DummyAppMain]
+      override def newMain(): AppMain               = new DummyAppMain
+      override def mainClasspath(): Array[File]     = Array.empty
+      override def components(): ComponentProvider  = componentProvider
     }
 
     new AppConfiguration {

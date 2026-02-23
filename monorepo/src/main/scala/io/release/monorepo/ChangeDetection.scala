@@ -35,9 +35,10 @@ object ChangeDetection {
     val lastTag    =
       scala.util
         .Try(
-          Process(Seq("git", "describe", "--tags", "--match", tagPattern, "--abbrev=0"), vcs.baseDir)
-            .lineStream_!
-            .headOption
+          Process(
+            Seq("git", "describe", "--tags", "--match", tagPattern, "--abbrev=0"),
+            vcs.baseDir
+          ).lineStream_!.headOption
         )
         .getOrElse(None)
 
@@ -60,7 +61,12 @@ object ChangeDetection {
                 vcs.baseDir
               ).lineStream_!.toList
             )
-            .getOrElse(Nil)
+            .getOrElse {
+              state.log.warn(
+                s"[release-io-monorepo] git diff failed for ${project.name}, conservatively treating as changed"
+              )
+              return true
+            }
 
         if (changedFiles.nonEmpty) {
           state.log.info(

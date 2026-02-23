@@ -4,7 +4,8 @@ import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.ReleaseKeys
-import io.release.steps.StepHelpers.*
+import io.release.steps.StepHelpers.runProcess
+import MonorepoStepHelpers.*
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
@@ -124,30 +125,22 @@ private[monorepo] object MonorepoVersionSteps {
     name = "commit-release-versions",
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        IO.blocking {
-          val extracted = extract(ctx.state)
-          val sign      = extracted.get(releaseVcsSign)
-          val signOff   = extracted.get(releaseVcsSignOff)
-          val base      = vcs.baseDir.getCanonicalFile
+        resolveRelativePaths(ctx, vcs).flatMap { paths =>
+          IO.blocking {
+            val extracted = extract(ctx.state)
+            val sign      = extracted.get(releaseVcsSign)
+            val signOff   = extracted.get(releaseVcsSignOff)
 
-          // Stage all version files
-          ctx.currentProjects.foreach { project =>
-            val versionFile  = resolveVersionFile(ctx, project)
-            val relativePath = sbt.IO
-              .relativize(base, versionFile.getCanonicalFile)
-              .getOrElse(
-                throw new RuntimeException(
-                  s"Version file [${versionFile.getCanonicalPath}] is outside VCS root [$base]"
-                )
-              )
-            runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+            paths.foreach { case (_, relativePath) =>
+              runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+            }
+
+            val summary = ctx.currentProjects
+              .flatMap(p => p.versions.map { case (rel, _) => s"${p.name} $rel" })
+              .mkString(", ")
+
+            commitIfChanged(vcs, s"Setting release versions: $summary", sign, signOff, ctx)
           }
-
-          val summary = ctx.currentProjects
-            .flatMap(p => p.versions.map { case (rel, _) => s"${p.name} $rel" })
-            .mkString(", ")
-
-          commitIfChanged(vcs, s"Setting release versions: $summary", sign, signOff, ctx)
         }
       }
   )
@@ -157,35 +150,50 @@ private[monorepo] object MonorepoVersionSteps {
     name = "commit-next-versions",
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        IO.blocking {
-          val extracted = extract(ctx.state)
-          val sign      = extracted.get(releaseVcsSign)
-          val signOff   = extracted.get(releaseVcsSignOff)
-          val base      = vcs.baseDir.getCanonicalFile
+        resolveRelativePaths(ctx, vcs).flatMap { paths =>
+          IO.blocking {
+            val extracted = extract(ctx.state)
+            val sign      = extracted.get(releaseVcsSign)
+            val signOff   = extracted.get(releaseVcsSignOff)
 
-          // Stage all version files
-          ctx.currentProjects.foreach { project =>
-            val versionFile  = resolveVersionFile(ctx, project)
-            val relativePath = sbt.IO
-              .relativize(base, versionFile.getCanonicalFile)
-              .getOrElse(
-                throw new RuntimeException(
-                  s"Version file [${versionFile.getCanonicalPath}] is outside VCS root [$base]"
-                )
-              )
-            runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+            paths.foreach { case (_, relativePath) =>
+              runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+            }
+
+            val summary = ctx.currentProjects
+              .flatMap(p => p.versions.map { case (_, next) => s"${p.name} $next" })
+              .mkString(", ")
+
+            commitIfChanged(vcs, s"Setting next versions: $summary", sign, signOff, ctx)
           }
-
-          val summary = ctx.currentProjects
-            .flatMap(p => p.versions.map { case (_, next) => s"${p.name} $next" })
-            .mkString(", ")
-
-          commitIfChanged(vcs, s"Setting next versions: $summary", sign, signOff, ctx)
         }
       }
   )
 
   // --- private helpers ---
+
+  /** Pre-validate that all version files are within the VCS root, returning their relative paths. */
+  private def resolveRelativePaths(
+      ctx: MonorepoContext,
+      vcs: sbtrelease.Vcs
+  ): IO[Seq[(ProjectReleaseInfo, String)]] = {
+    val base = vcs.baseDir.getCanonicalFile
+    ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
+      (acc, project) =>
+        acc.flatMap { paths =>
+          val versionFile = resolveVersionFile(ctx, project)
+          sbt.IO.relativize(base, versionFile.getCanonicalFile) match {
+            case Some(rel) => IO.pure(paths :+ (project, rel))
+            case None      =>
+              IO.raiseError(
+                new RuntimeException(
+                  s"Version file [${versionFile.getCanonicalPath}] is outside VCS root [$base]"
+                )
+              )
+          }
+        }
+    }
+  }
 
   private def resolveVersionFile(ctx: MonorepoContext, project: ProjectReleaseInfo): File = {
     val extracted = extract(ctx.state)
@@ -246,6 +254,4 @@ private[monorepo] object MonorepoVersionSteps {
     ctx
   }
 
-  private def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
-    opt.fold(IO.raiseError[B](new RuntimeException(error)))(f)
 }
