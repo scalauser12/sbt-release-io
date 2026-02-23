@@ -185,32 +185,32 @@ private[release] object VersionSteps {
             )
           )
         case Some(relativePath) =>
-          IO.blocking {
-            val sign    = extracted.get(releaseVcsSign)
-            val signOff = extracted.get(releaseVcsSignOff)
+          val sign    = extracted.get(releaseVcsSign)
+          val signOff = extracted.get(releaseVcsSignOff)
 
-            runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
-
-            // vcs status exit code check — synchronous process helper, throw is intentional
-            val statusOutput = {
-              val sb   = new StringBuilder
-              val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
-              if (code != 0)
-                throw new RuntimeException(s"vcs status failed with exit code $code")
-              sb.toString.trim
+          runProcess(vcs.add(relativePath), s"vcs add '$relativePath'") *>
+            IO.blocking {
+              val statusOutput = {
+                val sb   = new StringBuilder
+                val code =
+                  vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
+                if (code != 0)
+                  throw new RuntimeException(s"vcs status failed with exit code $code")
+                sb.toString.trim
+              }
+              statusOutput.linesIterator
+                .filterNot(_.startsWith("?"))
+                .mkString("\n")
+            }.flatMap { status =>
+              if (status.nonEmpty) {
+                val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
+                runProcess(vcs.commit(msg, sign, signOff), "vcs commit").flatMap { _ =>
+                  IO.blocking((ctx.copy(state = commitState), vcs.currentHash))
+                }
+              } else {
+                IO.pure((ctx, vcs.currentHash))
+              }
             }
-            val status       = statusOutput.linesIterator
-              .filterNot(_.startsWith("?"))
-              .mkString("\n")
-
-            if (status.nonEmpty) {
-              val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
-              runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
-              (ctx.copy(state = commitState), vcs.currentHash)
-            } else {
-              (ctx, vcs.currentHash)
-            }
-          }
       }
     }
 

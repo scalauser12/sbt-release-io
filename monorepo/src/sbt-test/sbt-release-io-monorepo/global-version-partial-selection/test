@@ -1,0 +1,9 @@
+# Test: partial project selection rejected in global-version mode
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Selecting only core in global-version mode should fail
+-> releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT

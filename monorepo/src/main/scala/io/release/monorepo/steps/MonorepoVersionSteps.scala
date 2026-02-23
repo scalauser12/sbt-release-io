@@ -138,15 +138,13 @@ private[monorepo] object MonorepoVersionSteps {
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         resolveRelativePaths(ctx, vcs).flatMap { paths =>
-          IO.blocking {
-            val extracted = extract(ctx.state)
-            val sign      = extracted.get(releaseVcsSign)
-            val signOff   = extracted.get(releaseVcsSignOff)
+          val extracted = extract(ctx.state)
+          val sign      = extracted.get(releaseVcsSign)
+          val signOff   = extracted.get(releaseVcsSignOff)
 
-            paths.foreach { case (_, relativePath) =>
-              runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
-            }
-
+          paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
+            acc *> runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+          } *> {
             val summary = ctx.currentProjects
               .flatMap(p => p.versions.map { case (rel, _) => s"${p.name} $rel" })
               .mkString(", ")
@@ -163,15 +161,13 @@ private[monorepo] object MonorepoVersionSteps {
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         resolveRelativePaths(ctx, vcs).flatMap { paths =>
-          IO.blocking {
-            val extracted = extract(ctx.state)
-            val sign      = extracted.get(releaseVcsSign)
-            val signOff   = extracted.get(releaseVcsSignOff)
+          val extracted = extract(ctx.state)
+          val sign      = extracted.get(releaseVcsSign)
+          val signOff   = extracted.get(releaseVcsSignOff)
 
-            paths.foreach { case (_, relativePath) =>
-              runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
-            }
-
+          paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
+            acc *> runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+          } *> {
             val summary = ctx.currentProjects
               .flatMap(p => p.versions.map { case (_, next) => s"${p.name} $next" })
               .mkString(", ")
@@ -276,20 +272,18 @@ private[monorepo] object MonorepoVersionSteps {
       sign: Boolean,
       signOff: Boolean,
       ctx: MonorepoContext
-  ): MonorepoContext = {
-    val statusOutput = {
+  ): IO[MonorepoContext] =
+    IO.blocking {
       val sb   = new StringBuilder
       val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
       if (code != 0) throw new RuntimeException(s"vcs status failed with exit code $code")
-      sb.toString.trim
+      sb.toString.trim.linesIterator.filterNot(_.startsWith("?")).mkString("\n")
+    }.flatMap { status =>
+      if (status.nonEmpty)
+        runProcess(vcs.commit(msg, sign, signOff), "vcs commit") *>
+          IO(ctx.state.log.info(s"[release-io-monorepo] Committed: $msg")).as(ctx)
+      else
+        IO.pure(ctx)
     }
-    val status       = statusOutput.linesIterator.filterNot(_.startsWith("?")).mkString("\n")
-
-    if (status.nonEmpty) {
-      runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
-      ctx.state.log.info(s"[release-io-monorepo] Committed: $msg")
-    }
-    ctx
-  }
 
 }

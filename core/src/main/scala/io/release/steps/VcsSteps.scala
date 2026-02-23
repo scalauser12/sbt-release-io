@@ -110,14 +110,14 @@ private[release] object VcsSteps {
     val TagParams(tagName, tagComment, sign, defaultAnswer, useDefaults) = params
     IO.blocking(vcs.existsTag(tagName)).flatMap {
       case false =>
-        IO.blocking {
-          runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'")
-          val newState = extract(ctx.state).appendWithSession(
-            Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
-            ctx.state
-          )
-          ctx.copy(state = newState)
-        }
+        runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'") *>
+          IO.blocking {
+            val newState = extract(ctx.state).appendWithSession(
+              Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
+              ctx.state
+            )
+            ctx.copy(state = newState)
+          }
       case true  =>
         val effectiveAnswer: IO[String] = defaultAnswer match {
           case Some(ans)                => IO.pure(ans)
@@ -151,8 +151,8 @@ private[release] object VcsSteps {
             ).as(ctx)
           case "o" | "O"      =>
             IO(ctx.state.log.warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")) *>
+              runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'") *>
               IO.blocking {
-                runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'")
                 val newState = extract(ctx.state).appendWithSession(
                   Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
                   ctx.state
@@ -227,7 +227,7 @@ private[release] object VcsSteps {
               ).as(ctx)
             }
           case true if !ctx.interactive =>
-            IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
+            runProcess(vcs.pushChanges, "vcs push").as(ctx)
           case true                     =>
             val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
             val decisionIO  =
@@ -239,7 +239,7 @@ private[release] object VcsSteps {
                 )
 
             decisionIO.flatMap {
-              case true  => IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
+              case true  => runProcess(vcs.pushChanges, "vcs push").as(ctx)
               case false =>
                 IO(
                   ctx.state.log.warn("[release-io] Remember to push the changes yourself!")

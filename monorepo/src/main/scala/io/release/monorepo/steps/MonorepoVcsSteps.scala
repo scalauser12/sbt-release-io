@@ -98,13 +98,13 @@ private[monorepo] object MonorepoVcsSteps {
                   )
                 )
               case false =>
-                IO.blocking {
-                  runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'")
-                  ctx.state.log.info(
-                    s"[release-io-monorepo] Tagged ${project.name} as $tagName"
-                  )
-                  ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName)))
-                }
+                runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'") *>
+                  IO {
+                    ctx.state.log.info(
+                      s"[release-io-monorepo] Tagged ${project.name} as $tagName"
+                    )
+                    ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName)))
+                  }
             }
         }
       }
@@ -114,36 +114,50 @@ private[monorepo] object MonorepoVcsSteps {
     name = "tag-release",
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        ctx.currentProjects.flatMap(_.versions).headOption match {
-          case None           =>
-            IO.raiseError(
-              new RuntimeException("No release versions set for any project")
+        // Validate all projects share the same release version for unified tagging
+        val releaseVersions =
+          ctx.currentProjects.flatMap(p => p.versions.map { case (rel, _) => p.name -> rel })
+        val distinct        = releaseVersions.map(_._2).distinct
+        if (distinct.length > 1) {
+          val detail = releaseVersions.map { case (n, v) => s"  $n -> $v" }.mkString("\n")
+          IO.raiseError(
+            new RuntimeException(
+              s"[release-io-monorepo] Unified tag requires all projects to share the same " +
+                s"release version, but found:\n$detail\n" +
+                s"Use per-project tag strategy or align versions."
             )
-          case Some((rel, _)) =>
-            val extracted = extract(ctx.state)
-            val tagNameFn = extracted.get(releaseIOMonorepoUnifiedTagName)
-            val sign      = extracted.get(releaseVcsSign)
-            val tagName   = tagNameFn(rel)
-            val summary   = ctx.currentProjects
-              .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
-              .mkString(", ")
-            val comment   = s"Release: $summary"
+          )
+        } else
+          ctx.currentProjects.flatMap(_.versions).headOption match {
+            case None           =>
+              IO.raiseError(
+                new RuntimeException("No release versions set for any project")
+              )
+            case Some((rel, _)) =>
+              val extracted = extract(ctx.state)
+              val tagNameFn = extracted.get(releaseIOMonorepoUnifiedTagName)
+              val sign      = extracted.get(releaseVcsSign)
+              val tagName   = tagNameFn(rel)
+              val summary   = ctx.currentProjects
+                .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
+                .mkString(", ")
+              val comment   = s"Release: $summary"
 
-            IO.blocking(vcs.existsTag(tagName)).flatMap {
-              case true  =>
-                IO.raiseError(
-                  new RuntimeException(s"Tag [$tagName] already exists. Aborting.")
-                )
-              case false =>
-                IO.blocking {
-                  runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'")
-                  ctx.state.log.info(s"[release-io-monorepo] Tagged release as $tagName")
-                  ctx.currentProjects.foldLeft(ctx) { (c, p) =>
-                    c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
-                  }
-                }
-            }
-        }
+              IO.blocking(vcs.existsTag(tagName)).flatMap {
+                case true  =>
+                  IO.raiseError(
+                    new RuntimeException(s"Tag [$tagName] already exists. Aborting.")
+                  )
+                case false =>
+                  runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'") *>
+                    IO {
+                      ctx.state.log.info(s"[release-io-monorepo] Tagged release as $tagName")
+                      ctx.currentProjects.foldLeft(ctx) { (c, p) =>
+                        c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
+                      }
+                    }
+              }
+          }
       }
   )
 
@@ -197,7 +211,7 @@ private[monorepo] object MonorepoVcsSteps {
               )
             ).as(ctx)
           case true  =>
-            IO.blocking { runProcess(vcs.pushChanges, "vcs push") }.as(ctx)
+            runProcess(vcs.pushChanges, "vcs push").as(ctx)
         }
       }
   )
