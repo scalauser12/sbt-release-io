@@ -90,23 +90,19 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
   protected lazy val monorepoParser: Parser[Seq[MonorepoArg]] = {
     import MonorepoArg.*
 
-    val withDefaults: Parser[MonorepoArg] = token("with-defaults").map(_ => WithDefaults)
-    val skipTests: Parser[MonorepoArg]    = token("skip-tests").map(_ => SkipTests)
-    val crossBuild: Parser[MonorepoArg]   = token("cross").map(_ => CrossBuild)
-    val allChanged: Parser[MonorepoArg]   = token("all-changed").map(_ => AllChanged)
-    val releaseVer: Parser[MonorepoArg]   =
-      (token("release-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
-        .map { s =>
-          val parts = s.split("=", 2)
-          ReleaseVersion(parts(0), parts.lift(1).getOrElse(""))
-        }
-    val nextVer: Parser[MonorepoArg]      =
-      (token("next-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
-        .map { s =>
-          val parts = s.split("=", 2)
-          NextVersion(parts(0), parts.lift(1).getOrElse(""))
-        }
-    val projectName: Parser[MonorepoArg]  =
+    val withDefaults: Parser[MonorepoArg]                                                          = token("with-defaults").map(_ => WithDefaults)
+    val skipTests: Parser[MonorepoArg]                                                             = token("skip-tests").map(_ => SkipTests)
+    val crossBuild: Parser[MonorepoArg]                                                            = token("cross").map(_ => CrossBuild)
+    val allChanged: Parser[MonorepoArg]                                                            = token("all-changed").map(_ => AllChanged)
+    def versionParser(keyword: String, ctor: (String, String) => MonorepoArg): Parser[MonorepoArg] =
+      (token(keyword) ~> Space ~> token(NotSpace, "<project>=<version>")).map { s =>
+        val parts = s.split("=", 2)
+        ctor(parts(0), parts.lift(1).getOrElse(""))
+      }
+
+    val releaseVer                       = versionParser("release-version", ReleaseVersion.apply)
+    val nextVer                          = versionParser("next-version", NextVersion.apply)
+    val projectName: Parser[MonorepoArg] =
       token(NotSpace, "<project>").map(SelectProject(_))
 
     // projectName must be last — it's the catch-all

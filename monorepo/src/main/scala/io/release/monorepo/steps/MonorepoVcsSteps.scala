@@ -11,8 +11,6 @@ import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.Vcs
 
-import scala.sys.process.*
-
 /** VCS-related monorepo release steps. */
 private[monorepo] object MonorepoVcsSteps {
 
@@ -61,12 +59,7 @@ private[monorepo] object MonorepoVcsSteps {
                 )
               )
             case (_, _, currentHash)                                         =>
-              IO {
-                ctx.state.log.info(
-                  s"[release-io-monorepo] Starting release off commit: $currentHash"
-                )
-                ctx
-              }
+              logInfo(ctx, s"Starting release off commit: $currentHash")
           }
       }
     }
@@ -114,20 +107,12 @@ private[monorepo] object MonorepoVcsSteps {
     name = "tag-release",
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        // Validate all projects share the same release version for unified tagging
-        val releaseVersions =
-          ctx.currentProjects.flatMap(p => p.versions.map { case (rel, _) => p.name -> rel })
-        val distinct        = releaseVersions.map(_._2).distinct
-        if (distinct.length > 1) {
-          val detail = releaseVersions.map { case (n, v) => s"  $n -> $v" }.mkString("\n")
-          IO.raiseError(
-            new RuntimeException(
-              s"[release-io-monorepo] Unified tag requires all projects to share the same " +
-                s"release version, but found:\n$detail\n" +
-                s"Use per-project tag strategy or align versions."
-            )
-          )
-        } else
+        validateVersionConsistency(
+          ctx.currentProjects,
+          _._1,
+          "Unified tag requires all projects to share the same release version. " +
+            "Use per-project tag strategy or align versions"
+        ) *> {
           ctx.currentProjects.flatMap(_.versions).headOption match {
             case None           =>
               IO.raiseError(
@@ -138,9 +123,7 @@ private[monorepo] object MonorepoVcsSteps {
               val tagNameFn = extracted.get(releaseIOMonorepoUnifiedTagName)
               val sign      = extracted.get(releaseVcsSign)
               val tagName   = tagNameFn(rel)
-              val summary   = ctx.currentProjects
-                .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
-                .mkString(", ")
+              val summary   = versionSummary(ctx, _._1)
               val comment   = s"Release: $summary"
 
               IO.blocking(vcs.existsTag(tagName)).flatMap {
@@ -158,6 +141,7 @@ private[monorepo] object MonorepoVcsSteps {
                     }
               }
           }
+        }
       }
   )
 
@@ -173,45 +157,31 @@ private[monorepo] object MonorepoVcsSteps {
         case Some(vcs) =>
           for {
             hasUp      <- IO.blocking(vcs.hasUpstream)
-            _          <-
-              if (hasUp) IO.unit
-              else
-                IO.raiseError(
-                  new RuntimeException(
-                    s"No tracking branch configured for '${vcs.currentBranch}'. " +
-                      "Set up a remote tracking branch or remove pushChanges from the release process."
-                  )
-                )
+            _          <- IO.raiseUnless(hasUp)(
+                            new RuntimeException(
+                              s"No tracking branch configured for '${vcs.currentBranch}'. " +
+                                "Set up a remote tracking branch or remove pushChanges from the release process."
+                            )
+                          )
             remoteCode <- IO.blocking(vcs.checkRemote(vcs.trackingRemote).!)
-            _          <-
-              if (remoteCode == 0) IO.unit
-              else
-                IO.raiseError(
-                  new RuntimeException("Remote check failed. Aborting release.")
-                )
+            _          <- IO.raiseUnless(remoteCode == 0)(
+                            new RuntimeException("Remote check failed. Aborting release.")
+                          )
             behind     <- IO.blocking(vcs.isBehindRemote)
             _          <-
-              if (!behind) IO.unit
-              else
-                IO.raiseError(
-                  new RuntimeException(
-                    "Upstream has unmerged commits. Merge first or remove pushChanges from process."
-                  )
+              IO.raiseWhen(behind)(
+                new RuntimeException(
+                  "Upstream has unmerged commits. Merge first or remove pushChanges from process."
                 )
+              )
           } yield ctx
       }
     },
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         IO.blocking(vcs.hasUpstream).flatMap {
-          case false =>
-            IO(
-              ctx.state.log.warn(
-                s"[release-io-monorepo] No upstream branch, changes were NOT pushed."
-              )
-            ).as(ctx)
-          case true  =>
-            runProcess(vcs.pushChanges, "vcs push").as(ctx)
+          case false => logWarn(ctx, "No upstream branch, changes were NOT pushed.")
+          case true  => runProcess(vcs.pushChanges, "vcs push").as(ctx)
         }
       }
   )

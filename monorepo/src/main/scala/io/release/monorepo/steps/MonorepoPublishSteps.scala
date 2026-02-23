@@ -2,10 +2,13 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.monorepo.*
+import MonorepoStepHelpers.*
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
+
+import scala.util.{Failure, Success, Try}
 
 /** Publish, test, clean, and dependency-check monorepo release steps. */
 private[monorepo] object MonorepoPublishSteps {
@@ -58,19 +61,14 @@ private[monorepo] object MonorepoPublishSteps {
   val runTests: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "run-tests",
     action = (ctx, project) =>
-      if (ctx.skipTests) {
-        IO(
-          ctx.state.log.info(
-            s"[release-io-monorepo] Skipping tests for ${project.name}"
-          )
-        ).as(ctx)
-      } else {
+      if (ctx.skipTests)
+        logInfo(ctx, s"Skipping tests for ${project.name}")
+      else
         IO.blocking {
           val extracted = extract(ctx.state)
           val newState  = extracted.runAggregated(project.ref / Test / test, ctx.state)
           ctx.withState(newState)
-        }
-      },
+        },
     enableCrossBuild = true
   )
 
@@ -78,60 +76,48 @@ private[monorepo] object MonorepoPublishSteps {
   val publishArtifacts: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "publish-artifacts",
     action = (ctx, project) =>
-      if (ctx.skipPublish) {
-        IO(
-          ctx.state.log.info(
-            s"[release-io-monorepo] Skipping publish for ${project.name}"
-          )
-        ).as(ctx)
-      } else {
+      if (ctx.skipPublish)
+        logInfo(ctx, s"Skipping publish for ${project.name}")
+      else
         IO.blocking {
           val extracted = extract(ctx.state)
           val newState  =
             extracted.runAggregated(project.ref / releasePublishArtifactsAction, ctx.state)
           ctx.withState(newState)
-        }
-      },
+        },
     check = (ctx, project) =>
       if (ctx.skipPublish) IO.pure(ctx)
       else
         IO.blocking {
-          val extracted = extract(ctx.state)
-          scala.util.Try(
-            extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2
-          ) match {
-            case scala.util.Success(true)  => Right(false) // skip=true => no publishTo error
-            case scala.util.Failure(ex)    =>
+          val extracted  = extract(ctx.state)
+          val skipResult =
+            Try(extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2)
+          skipResult match {
+            case Success(true)  => false
+            case Failure(ex)    =>
               ctx.state.log.warn(
                 s"[release-io-monorepo] Could not evaluate publish/skip for ${project.name}: " +
                   s"${ex.getMessage}. Skipping publishTo check."
               )
-              Right(false) // conservatively skip check
-            case scala.util.Success(false) =>
-              scala.util.Try(
-                extracted.runTask(project.ref / publishTo, ctx.state)._2
-              ) match {
-                case scala.util.Success(Some(_)) => Right(false) // publishTo configured
-                case scala.util.Success(None)    => Right(true)  // publishTo missing
-                case scala.util.Failure(ex)      =>
-                  Left(
-                    new RuntimeException(
-                      s"Failed to evaluate publishTo for ${project.name}: ${ex.getMessage}",
-                      ex
-                    )
+              false
+            case Success(false) =>
+              Try(extracted.runTask(project.ref / publishTo, ctx.state)._2) match {
+                case Success(Some(_)) => false
+                case Success(None)    => true
+                case Failure(ex)      =>
+                  throw new RuntimeException(
+                    s"Failed to evaluate publishTo for ${project.name}: ${ex.getMessage}",
+                    ex
                   )
               }
           }
-        }.flatMap {
-          case Left(ex)     => IO.raiseError(ex)
-          case Right(true)  =>
-            IO.raiseError(
-              new RuntimeException(
-                s"publishTo not configured for ${project.name}. " +
-                  "Set publishTo or add `publish / skip := true`."
-              )
+        }.flatMap { missing =>
+          IO.raiseWhen(missing)(
+            new RuntimeException(
+              s"publishTo not configured for ${project.name}. " +
+                "Set publishTo or add `publish / skip := true`."
             )
-          case Right(false) => IO.pure(ctx)
+          ).as(ctx)
         },
     enableCrossBuild = true
   )
