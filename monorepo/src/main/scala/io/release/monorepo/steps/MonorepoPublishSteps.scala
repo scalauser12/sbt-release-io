@@ -2,10 +2,13 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.monorepo.*
+import MonorepoStepHelpers.*
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
+
+import scala.util.{Failure, Success, Try}
 
 /** Publish, test, clean, and dependency-check monorepo release steps. */
 private[monorepo] object MonorepoPublishSteps {
@@ -16,7 +19,6 @@ private[monorepo] object MonorepoPublishSteps {
     action = (ctx, _) => IO.pure(ctx),
     check = (ctx, project) =>
       IO.blocking {
-        val extracted   = extract(ctx.state)
         val (_, result) =
           sbtrelease.Compat.runTaskAggregated(project.ref / releaseSnapshotDependencies, ctx.state)
         result match {
@@ -24,7 +26,7 @@ private[monorepo] object MonorepoPublishSteps {
           case Inc(cause)   => Left(cause)
         }
       }.flatMap {
-        case Left(cause) =>
+        case Left(cause)                  =>
           IO.raiseError(
             new RuntimeException(
               s"Error checking snapshot dependencies for ${project.name}: $cause"
@@ -39,7 +41,7 @@ private[monorepo] object MonorepoPublishSteps {
               s"Snapshot dependencies found in ${project.name}:\n$depList"
             )
           )
-        case Right(_) => IO.pure(ctx)
+        case Right(_)                     => IO.pure(ctx)
       },
     enableCrossBuild = true
   )
@@ -59,17 +61,14 @@ private[monorepo] object MonorepoPublishSteps {
   val runTests: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "run-tests",
     action = (ctx, project) =>
-      if (ctx.skipTests) {
-        IO(ctx.state.log.info(
-          s"[release-io-monorepo] Skipping tests for ${project.name}"
-        )).as(ctx)
-      } else {
+      if (ctx.skipTests)
+        logInfo(ctx, s"Skipping tests for ${project.name}")
+      else
         IO.blocking {
           val extracted = extract(ctx.state)
           val newState  = extracted.runAggregated(project.ref / Test / test, ctx.state)
           ctx.withState(newState)
-        }
-      },
+        },
     enableCrossBuild = true
   )
 
@@ -77,42 +76,48 @@ private[monorepo] object MonorepoPublishSteps {
   val publishArtifacts: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "publish-artifacts",
     action = (ctx, project) =>
-      if (ctx.skipPublish) {
-        IO(ctx.state.log.info(
-          s"[release-io-monorepo] Skipping publish for ${project.name}"
-        )).as(ctx)
-      } else {
+      if (ctx.skipPublish)
+        logInfo(ctx, s"Skipping publish for ${project.name}")
+      else
         IO.blocking {
           val extracted = extract(ctx.state)
           val newState  =
             extracted.runAggregated(project.ref / releasePublishArtifactsAction, ctx.state)
           ctx.withState(newState)
-            .updateProject(project.ref)(_.copy(released = true))
-        }
-      },
+        },
     check = (ctx, project) =>
       if (ctx.skipPublish) IO.pure(ctx)
       else
         IO.blocking {
-          val extracted = extract(ctx.state)
-          val skipPub   =
-            scala.util
-              .Try(extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2)
-              .getOrElse(false)
-          if (!skipPub) {
-            val missing =
-              scala.util
-                .Try(extracted.runTask(project.ref / publishTo, ctx.state)._2)
-                .getOrElse(None)
-                .isEmpty
-            if (missing) {
-              throw new RuntimeException(
-                s"publishTo not configured for ${project.name}. " +
-                  "Set publishTo or add `publish / skip := true`."
+          val extracted  = extract(ctx.state)
+          val skipResult =
+            Try(extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2)
+          skipResult match {
+            case Success(true)  => false
+            case Failure(ex)    =>
+              ctx.state.log.warn(
+                s"[release-io-monorepo] Could not evaluate publish/skip for ${project.name}: " +
+                  s"${ex.getMessage}. Skipping publishTo check."
               )
-            }
+              false
+            case Success(false) =>
+              Try(extracted.runTask(project.ref / publishTo, ctx.state)._2) match {
+                case Success(Some(_)) => false
+                case Success(None)    => true
+                case Failure(ex)      =>
+                  throw new RuntimeException(
+                    s"Failed to evaluate publishTo for ${project.name}: ${ex.getMessage}",
+                    ex
+                  )
+              }
           }
-          ctx
+        }.flatMap { missing =>
+          IO.raiseWhen(missing)(
+            new RuntimeException(
+              s"publishTo not configured for ${project.name}. " +
+                "Set publishTo or add `publish / skip := true`."
+            )
+          ).as(ctx)
         },
     enableCrossBuild = true
   )

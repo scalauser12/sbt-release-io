@@ -1,0 +1,15 @@
+# Test: first release with no prior tags — change detection marks all projects as changed
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Do NOT create any tags. Do NOT select specific projects.
+# Change detection should find no prior tags and mark both as changed.
+> releaseIOMonorepo with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify both projects were released
+> checkTags
+> checkCoreVersion
+> checkApiVersion

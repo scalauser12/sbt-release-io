@@ -19,8 +19,8 @@ private[release] object StepHelpers {
   )(f: ((String, String)) => IO[ReleaseContext]): IO[ReleaseContext] =
     required(ctx.versions, "Versions not set. Ensure inquireVersions runs before this step.")(f)
 
-  /** Runs a process and throws a descriptive exception on non-zero exit. */
-  def runProcess(process: ProcessBuilder, context: => String): Unit = {
+  /** Runs a process inside IO.blocking and raises on non-zero exit. */
+  def runProcess(process: ProcessBuilder, context: => String): IO[Unit] = IO.blocking {
     val code = process.!
     if (code != 0)
       throw new RuntimeException(s"$context failed with exit code $code")

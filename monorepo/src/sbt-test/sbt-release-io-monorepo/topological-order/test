@@ -1,0 +1,15 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# List projects in REVERSE order to prove topological sort reorders them
+> releaseIOMonorepo api middle core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version middle=0.1.0 next-version middle=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify execution order was core -> middle -> api (topological)
+> checkOrder
+
+# Verify tags were created for all 3 projects
+> checkGitTags

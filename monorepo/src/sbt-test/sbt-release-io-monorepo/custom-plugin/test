@@ -1,0 +1,27 @@
+# Test: custom MonorepoReleasePluginLike with resource lifecycle
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Verify markers don't exist yet
+$ absent resource-acquired
+$ absent step-used-resource
+$ absent resource-released
+
+# Run custom command (not releaseIOMonorepo — uses CustomReleasePlugin's "customRelease")
+> customRelease core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+# Resource was acquired (marker created before steps)
+$ exists resource-acquired
+
+# Step ran with live resource
+$ exists step-used-resource
+
+# Resource was released after completion
+$ exists resource-released
+
+# Verify the release completed
+> checkTag
+> checkCoreVersion

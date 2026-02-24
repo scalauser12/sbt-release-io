@@ -12,7 +12,7 @@ object DependencyGraph {
   def topologicalSort(
       projects: Seq[ProjectRef],
       state: State
-  ): IO[Seq[ProjectRef]] = IO.blocking {
+  ): IO[Seq[ProjectRef]] = IO.defer {
     val extracted  = Project.extract(state)
     val structure  = extracted.structure
     val projectSet = projects.toSet
@@ -29,42 +29,47 @@ object DependencyGraph {
     }.toMap
 
     // Build reverse adjacency map: project -> set of projects that depend on it
-    val dependedOnBy: Map[ProjectRef, Set[ProjectRef]] = {
-      val m = scala.collection.mutable.Map[ProjectRef, Set[ProjectRef]]()
-      for {
-        (proj, deps) <- dependsOn
-        dep          <- deps
-      } m(dep) = m.getOrElse(dep, Set.empty) + proj
-      m.toMap.withDefaultValue(Set.empty)
-    }
+    val dependedOnBy: Map[ProjectRef, Set[ProjectRef]] =
+      dependsOn.toSeq
+        .flatMap { case (proj, deps) => deps.map(_ -> proj) }
+        .groupBy(_._1)
+        .map { case (k, v) => k -> v.map(_._2).toSet }
+        .withDefaultValue(Set.empty)
 
-    // Kahn's algorithm
-    val inDegree = scala.collection.mutable.Map[ProjectRef, Int]()
-    projects.foreach(p => inDegree(p) = dependsOn.getOrElse(p, Set.empty).size)
+    // Kahn's algorithm — pure tail-recursive implementation
+    val inDegree: Map[ProjectRef, Int] =
+      projects.map(p => p -> dependsOn.getOrElse(p, Set.empty).size).toMap
 
-    val queue  = scala.collection.mutable.Queue[ProjectRef]()
-    val result = scala.collection.mutable.ListBuffer[ProjectRef]()
-
-    // Start with projects that have no dependencies within the set
-    projects.filter(p => inDegree(p) == 0).foreach(queue.enqueue(_))
-
-    while (queue.nonEmpty) {
-      val current = queue.dequeue()
-      result += current
-      dependedOnBy(current).foreach { dependent =>
-        val newDeg = inDegree(dependent) - 1
-        inDegree(dependent) = newDeg
-        if (newDeg == 0) queue.enqueue(dependent)
+    @annotation.tailrec
+    def loop(
+        queue: List[ProjectRef],
+        degrees: Map[ProjectRef, Int],
+        acc: List[ProjectRef]
+    ): List[ProjectRef] =
+      queue match {
+        case Nil             => acc.reverse
+        case current :: rest =>
+          val (newQueue, newDegrees) = dependedOnBy(current).foldLeft((rest, degrees)) {
+            case ((q, d), dependent) =>
+              val nd = d(dependent) - 1
+              if (nd == 0) (dependent :: q, d.updated(dependent, nd))
+              else (q, d.updated(dependent, nd))
+          }
+          loop(newQueue, newDegrees, current :: acc)
       }
-    }
+
+    val seeds  = projects.filter(p => inDegree(p) == 0).toList
+    val result = loop(seeds, inDegree, Nil)
 
     if (result.length != projects.length) {
       val remaining = projects.filterNot(result.contains)
-      throw new RuntimeException(
-        s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"
+      IO.raiseError(
+        new RuntimeException(
+          s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"
+        )
       )
+    } else {
+      IO.pure(result)
     }
-
-    result.toSeq
   }
 }

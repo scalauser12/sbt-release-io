@@ -4,13 +4,11 @@ import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.ReleaseKeys
-import io.release.steps.StepHelpers.*
+import MonorepoStepHelpers.*
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
-
-import scala.sys.process.*
 
 /** Version-related monorepo release steps: inquire, set, commit. */
 private[monorepo] object MonorepoVersionSteps {
@@ -21,21 +19,18 @@ private[monorepo] object MonorepoVersionSteps {
     */
   val inquireVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "inquire-versions",
-    action = (ctx, project) => {
-      // If both versions were pre-set via command-line overrides, use them directly
+    action = (ctx, project) =>
       project.versions match {
         case Some((rel, next)) if rel.nonEmpty && next.nonEmpty =>
           IO {
-            val currentVer = "pre-set"
             ctx.state.log.info(
-              s"[release-io-monorepo] ${project.name}: $currentVer -> $rel (next: $next)"
+              s"[release-io-monorepo] ${project.name}: pre-set -> $rel (next: $next)"
             )
             ctx.updateProject(project.ref)(_.copy(versions = Some((rel, next))))
           }
         case _                                                  =>
           inquireVersionsInteractive(ctx, project)
       }
-    }
   )
 
   private def inquireVersionsInteractive(
@@ -55,33 +50,21 @@ private[monorepo] object MonorepoVersionSteps {
                                                                 (s2, releaseFn(currentVer), nextFn, useDefaults)
                                                               }
       (updatedState, suggestedRelease, nextFn, useDefaults) = data
-      // Use command-line override for release version if available
-      releaseVer                                           <- project.versions.map(_._1).filter(_.nonEmpty) match {
-                                                                case Some(v) => IO.pure(v)
-                                                                case None    =>
-                                                                  if (!ctx.interactive || useDefaults) IO.pure(suggestedRelease)
-                                                                  else
-                                                                    IO.print(
-                                                                      s"Release version for ${project.name} [$suggestedRelease] : "
-                                                                    ) *> IO.readLine.map { raw =>
-                                                                      val input = Option(raw).map(_.trim).getOrElse("")
-                                                                      if (input.isEmpty) suggestedRelease else input
-                                                                    }
-                                                              }
+      releaseVer                                           <- promptOrDefault(
+                                                                project.versions.map(_._1),
+                                                                suggestedRelease,
+                                                                s"Release version for ${project.name}",
+                                                                ctx.interactive,
+                                                                useDefaults
+                                                              )
       suggestedNext                                         = nextFn(releaseVer)
-      // Use command-line override for next version if available
-      nextVer                                              <- project.versions.flatMap(v => Option(v._2).filter(_.nonEmpty)) match {
-                                                                case Some(v) => IO.pure(v)
-                                                                case None    =>
-                                                                  if (!ctx.interactive || useDefaults) IO.pure(suggestedNext)
-                                                                  else
-                                                                    IO.print(
-                                                                      s"Next version for ${project.name} [$suggestedNext] : "
-                                                                    ) *> IO.readLine.map { raw =>
-                                                                      val input = Option(raw).map(_.trim).getOrElse("")
-                                                                      if (input.isEmpty) suggestedNext else input
-                                                                    }
-                                                              }
+      nextVer                                              <- promptOrDefault(
+                                                                project.versions.flatMap(v => Option(v._2)),
+                                                                suggestedNext,
+                                                                s"Next version for ${project.name}",
+                                                                ctx.interactive,
+                                                                useDefaults
+                                                              )
       result                                               <- IO {
                                                                 ctx.state.log.info(
                                                                   s"[release-io-monorepo] ${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
@@ -93,6 +76,30 @@ private[monorepo] object MonorepoVersionSteps {
     } yield result
   }
 
+  /** Validate that all projects agree on release and next versions when global version mode is
+    * active. Runs as a Global step so that a mismatch aborts the entire release immediately,
+    * rather than marking one project failed via per-project error isolation.
+    */
+  val validateVersionConsistency: MonorepoStepIO.Global = MonorepoStepIO.Global(
+    name = "validate-version-consistency",
+    action = ctx => {
+      val extracted = extract(ctx.state)
+      if (!extracted.get(releaseIOMonorepoUseGlobalVersion)) IO.pure(ctx)
+      else
+        MonorepoStepHelpers.validateVersionConsistency(
+          ctx.currentProjects,
+          _._1,
+          "set-release-version: global version mode requires all projects to share the same version"
+        ) *>
+          MonorepoStepHelpers.validateVersionConsistency(
+            ctx.currentProjects,
+            _._2,
+            "set-next-version: global version mode requires all projects to share the same version"
+          ) *>
+          IO.pure(ctx)
+    }
+  )
+
   /** Write release versions to per-project version files. */
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "set-release-version",
@@ -100,9 +107,7 @@ private[monorepo] object MonorepoVersionSteps {
       project.versions match {
         case Some((releaseVer, _)) => writeProjectVersion(ctx, project, releaseVer)
         case None                  =>
-          IO.raiseError(
-            new RuntimeException(s"Versions not set for ${project.name}")
-          )
+          IO.raiseError(new RuntimeException(s"Versions not set for ${project.name}"))
       }
   )
 
@@ -113,90 +118,23 @@ private[monorepo] object MonorepoVersionSteps {
       project.versions match {
         case Some((_, nextVer)) => writeProjectVersion(ctx, project, nextVer)
         case None               =>
-          IO.raiseError(
-            new RuntimeException(s"Versions not set for ${project.name}")
-          )
+          IO.raiseError(new RuntimeException(s"Versions not set for ${project.name}"))
       }
   )
 
   /** Single commit for all release version files. */
   val commitReleaseVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-release-versions",
-    action = ctx =>
-      required(ctx.vcs, "VCS not initialized") { vcs =>
-        IO.blocking {
-          val extracted = extract(ctx.state)
-          val sign      = extracted.get(releaseVcsSign)
-          val signOff   = extracted.get(releaseVcsSignOff)
-          val base      = vcs.baseDir.getCanonicalFile
-
-          // Stage all version files
-          ctx.currentProjects.foreach { project =>
-            val versionFile  = resolveVersionFile(ctx, project)
-            val relativePath = sbt.IO
-              .relativize(base, versionFile.getCanonicalFile)
-              .getOrElse(
-                throw new RuntimeException(
-                  s"Version file [${versionFile.getCanonicalPath}] is outside VCS root [$base]"
-                )
-              )
-            runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
-          }
-
-          val summary = ctx.currentProjects
-            .flatMap(p => p.versions.map { case (rel, _) => s"${p.name} $rel" })
-            .mkString(", ")
-
-          commitIfChanged(vcs, s"Setting release versions: $summary", sign, signOff, ctx)
-        }
-      }
+    action = ctx => commitVersions(ctx, "Setting release versions", _._1)
   )
 
   /** Single commit for all next version files. */
   val commitNextVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-next-versions",
-    action = ctx =>
-      required(ctx.vcs, "VCS not initialized") { vcs =>
-        IO.blocking {
-          val extracted = extract(ctx.state)
-          val sign      = extracted.get(releaseVcsSign)
-          val signOff   = extracted.get(releaseVcsSignOff)
-          val base      = vcs.baseDir.getCanonicalFile
-
-          // Stage all version files
-          ctx.currentProjects.foreach { project =>
-            val versionFile  = resolveVersionFile(ctx, project)
-            val relativePath = sbt.IO
-              .relativize(base, versionFile.getCanonicalFile)
-              .getOrElse(
-                throw new RuntimeException(
-                  s"Version file [${versionFile.getCanonicalPath}] is outside VCS root [$base]"
-                )
-              )
-            runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
-          }
-
-          val summary = ctx.currentProjects
-            .flatMap(p => p.versions.map { case (_, next) => s"${p.name} $next" })
-            .mkString(", ")
-
-          commitIfChanged(vcs, s"Setting next versions: $summary", sign, signOff, ctx)
-        }
-      }
+    action = ctx => commitVersions(ctx, "Setting next versions", _._2)
   )
 
   // --- private helpers ---
-
-  private def resolveVersionFile(ctx: MonorepoContext, project: ProjectReleaseInfo): File = {
-    val extracted = extract(ctx.state)
-    val useGlobal = extracted.get(releaseIOMonorepoUseGlobalVersion)
-    if (useGlobal) {
-      extracted.get(sbtrelease.ReleasePlugin.autoImport.releaseVersionFile)
-    } else {
-      val versionFileFn = extracted.get(releaseIOMonorepoVersionFile)
-      versionFileFn(project.ref)
-    }
-  }
 
   private def writeProjectVersion(
       ctx: MonorepoContext,
@@ -214,7 +152,6 @@ private[monorepo] object MonorepoVersionSteps {
                     ctx.state.log.info(
                       s"[release-io-monorepo] Wrote version $ver to ${versionFile.getPath} for ${project.name}"
                     )
-                    // Update the sbt state with the new version scoped to this project
                     val newState = extracted.appendWithSession(
                       Seq(project.ref / version := ver),
                       ctx.state
@@ -223,29 +160,4 @@ private[monorepo] object MonorepoVersionSteps {
                   }
     } yield result
   }
-
-  private def commitIfChanged(
-      vcs: sbtrelease.Vcs,
-      msg: String,
-      sign: Boolean,
-      signOff: Boolean,
-      ctx: MonorepoContext
-  ): MonorepoContext = {
-    val statusOutput = {
-      val sb   = new StringBuilder
-      val code = vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
-      if (code != 0) throw new RuntimeException(s"vcs status failed with exit code $code")
-      sb.toString.trim
-    }
-    val status       = statusOutput.linesIterator.filterNot(_.startsWith("?")).mkString("\n")
-
-    if (status.nonEmpty) {
-      runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
-      ctx.state.log.info(s"[release-io-monorepo] Committed: $msg")
-    }
-    ctx
-  }
-
-  private def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
-    opt.fold(IO.raiseError[B](new RuntimeException(error)))(f)
 }

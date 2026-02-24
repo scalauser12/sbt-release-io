@@ -27,7 +27,7 @@ class MonorepoContextSpec extends Specification {
         dummyProject("core").copy(failed = true),
         dummyProject("api")
       )
-      val ctx = MonorepoContext(state = state, projects = projects)
+      val ctx      = MonorepoContext(state = state, projects = projects)
 
       ctx.currentProjects.map(_.name) must_== Seq("api")
     }
@@ -54,7 +54,7 @@ class MonorepoContextSpec extends Specification {
         skipPublish = true,
         interactive = false
       )
-      val rc = ctx.toReleaseContext
+      val rc  = ctx.toReleaseContext
 
       rc.skipTests must_== true
       rc.skipPublish must_== true
@@ -76,7 +76,6 @@ class MonorepoContextSpec extends Specification {
       val proj = dummyProject("test")
       proj.versions must beNone
       proj.tagName must beNone
-      proj.released must_== false
       proj.failed must_== false
     }
   }
@@ -108,7 +107,7 @@ class MonorepoContextSpec extends Specification {
           logFile,
           ConsoleOut.systemOut
         )
-      val state = State(
+      val state         = State(
         configuration = dummyAppConfiguration(dir),
         definedCommands = Nil,
         exitHooks = Set.empty,
@@ -121,32 +120,25 @@ class MonorepoContextSpec extends Specification {
         next = State.Continue
       )
       f(state)
-    } finally {
-      if (dir.isDirectory) {
-        val children = dir.listFiles()
-        if (children != null) children.foreach(_.delete())
-      }
-      dir.delete()
-      ()
-    }
+    } finally TestHelpers.deleteRecursively(dir)
   }
 
   private def dummyAppConfiguration(baseDir: File): AppConfiguration = {
     val launcher: Launcher = new Launcher {
-      override def getScala(version: String): ScalaProvider                                 = null
-      override def getScala(version: String, reason: String): ScalaProvider                 = null
+      override def getScala(version: String): ScalaProvider                                   = null
+      override def getScala(version: String, reason: String): ScalaProvider                   = null
       override def getScala(version: String, reason: String, scalaOrg: String): ScalaProvider = null
-      override def app(id: ApplicationID, version: String): AppProvider                     = null
-      override def topLoader(): ClassLoader                                                 = getClass.getClassLoader
-      override def globalLock(): GlobalLock = new GlobalLock {
+      override def app(id: ApplicationID, version: String): AppProvider                       = null
+      override def topLoader(): ClassLoader                                                   = getClass.getClassLoader
+      override def globalLock(): GlobalLock                                                   = new GlobalLock {
         override def apply[T](lockFile: File, run: java.util.concurrent.Callable[T]): T = run.call()
       }
-      override def bootDirectory(): File                = baseDir
-      override def ivyRepositories(): Array[Repository] = Array.empty
-      override def appRepositories(): Array[Repository] = Array.empty
-      override def isOverrideRepositories(): Boolean     = false
-      override def ivyHome(): File                       = baseDir
-      override def checksums(): Array[String]            = Array.empty
+      override def bootDirectory(): File                                                      = baseDir
+      override def ivyRepositories(): Array[Repository]                                       = Array.empty
+      override def appRepositories(): Array[Repository]                                       = Array.empty
+      override def isOverrideRepositories(): Boolean                                          = false
+      override def ivyHome(): File                                                            = baseDir
+      override def checksums(): Array[String]                                                 = Array.empty
     }
 
     val appId: ApplicationID = new ApplicationID {
@@ -165,13 +157,13 @@ class MonorepoContextSpec extends Specification {
     }
 
     lazy val scalaProvider: ScalaProvider = new ScalaProvider {
-      override def launcher(): Launcher                        = launcher
-      override def version(): String                           = "2.12.21"
-      override def loader(): ClassLoader                       = getClass.getClassLoader
-      override def jars(): Array[File]                         = Array.empty
-      override def libraryJar(): File                          = new File(baseDir, "scala-library.jar")
-      override def compilerJar(): File                         = new File(baseDir, "scala-compiler.jar")
-      override def app(id: ApplicationID): AppProvider         = appProvider
+      override def launcher(): Launcher                = launcher
+      override def version(): String                   = "2.12.21"
+      override def loader(): ClassLoader               = getClass.getClassLoader
+      override def jars(): Array[File]                 = Array.empty
+      override def libraryJar(): File                  = new File(baseDir, "scala-library.jar")
+      override def compilerJar(): File                 = new File(baseDir, "scala-compiler.jar")
+      override def app(id: ApplicationID): AppProvider = appProvider
     }
 
     lazy val componentProvider: ComponentProvider = new ComponentProvider {

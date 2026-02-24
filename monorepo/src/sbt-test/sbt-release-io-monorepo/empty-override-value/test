@@ -1,0 +1,12 @@
+# Test: empty override values are rejected as parse errors
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Empty release-version value should fail
+-> releaseIOMonorepo core with-defaults release-version core=
+
+# Empty next-version value should also fail
+-> releaseIOMonorepo core with-defaults next-version core=

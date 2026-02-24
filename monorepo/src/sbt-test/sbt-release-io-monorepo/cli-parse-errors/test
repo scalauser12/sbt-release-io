@@ -1,0 +1,18 @@
+# Test: CLI parser format validation catches malformed arguments
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# release-version with no argument should fail
+-> releaseIOMonorepo core with-defaults release-version
+
+# release-version with invalid format (no '=') should fail
+-> releaseIOMonorepo core with-defaults release-version badformat
+
+# next-version with no argument should fail
+-> releaseIOMonorepo core with-defaults next-version
+
+# next-version with invalid format (no '=') should fail
+-> releaseIOMonorepo core with-defaults next-version alsobad

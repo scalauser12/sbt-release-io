@@ -4,42 +4,64 @@ import cats.effect.IO
 import sbt.*
 import sbtrelease.Vcs
 
+import scala.util.{Failure, Success, Try}
+
 /** Git diff-based change detection for monorepo subprojects. */
 object ChangeDetection {
 
   /** Detect which projects have changed since their last release tag.
     * Uses file-level `git diff` between the last matching tag and HEAD.
+    *
+    * Tag pattern computation is strategy-aware:
+    *   - PerProject: one pattern per project (e.g. `core-v*`)
+    *   - Unified: a single shared pattern (e.g. `v*`)
+    *
+    * Each project's version file is automatically excluded from diff results,
+    * since version bumps from the previous release are not meaningful changes.
+    * Additional files to exclude can be passed via `additionalExcludeFiles`.
     */
   def detectChangedProjects(
       vcs: Vcs,
       projects: Seq[ProjectReleaseInfo],
+      tagStrategy: MonorepoTagStrategy,
       tagNameFn: (String, String) => String,
-      state: State
+      unifiedTagNameFn: String => String,
+      state: State,
+      additionalExcludeFiles: Seq[File] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     IO.blocking {
+      val globalExcludes: Set[String] = additionalExcludeFiles.flatMap { f =>
+        sbt.IO.relativize(vcs.baseDir, f)
+      }.toSet
+
       projects.filter { project =>
-        hasChangedSinceLastTag(vcs, project, tagNameFn, state)
+        val tagPattern         = tagStrategy match {
+          case MonorepoTagStrategy.PerProject => tagNameFn(project.name, "*")
+          case MonorepoTagStrategy.Unified    => unifiedTagNameFn("*")
+        }
+        val versionFileExclude =
+          sbt.IO.relativize(vcs.baseDir, project.versionFile).toSet
+        val excludes           = globalExcludes ++ versionFileExclude
+        hasChangedSinceLastTag(vcs, project, tagPattern, state, excludes)
       }
     }
 
   private def hasChangedSinceLastTag(
       vcs: Vcs,
       project: ProjectReleaseInfo,
-      tagNameFn: (String, String) => String,
-      state: State
+      tagPattern: String,
+      state: State,
+      excludePaths: Set[String]
   ): Boolean = {
     import scala.sys.process.*
 
-    // Find the latest tag matching this project's pattern (e.g., "core-v*")
-    val tagPattern = tagNameFn(project.name, "*")
-    val lastTag    =
-      scala.util
-        .Try(
-          Process(Seq("git", "describe", "--tags", "--match", tagPattern, "--abbrev=0"), vcs.baseDir)
-            .lineStream_!
-            .headOption
-        )
-        .getOrElse(None)
+    val lastTag =
+      Try(
+        Process(
+          Seq("git", "describe", "--tags", "--match", tagPattern, "--abbrev=0"),
+          vcs.baseDir
+        ).lineStream_!.headOption
+      ).getOrElse(None)
 
     lastTag match {
       case None =>
@@ -50,26 +72,41 @@ object ChangeDetection {
 
       case Some(tag) =>
         val baseRelative =
-          sbt.IO.relativize(vcs.baseDir, project.baseDir).getOrElse(project.baseDir.getName)
+          sbt.IO.relativize(vcs.baseDir, project.baseDir).filter(_.nonEmpty).getOrElse(".")
 
-        val changedFiles =
-          scala.util
-            .Try(
-              Process(
-                Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
-                vcs.baseDir
-              ).lineStream_!.toList
+        Try(
+          Process(
+            Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
+            vcs.baseDir
+          ).lineStream_!.toList
+        ) match {
+          case Failure(_)            =>
+            state.log.warn(
+              s"[release-io-monorepo] git diff failed for ${project.name}, conservatively treating as changed"
             )
-            .getOrElse(Nil)
-
-        if (changedFiles.nonEmpty) {
-          state.log.info(
-            s"[release-io-monorepo] ${project.name} has ${changedFiles.length} changed file(s) since $tag"
-          )
-          true
-        } else {
-          state.log.info(s"[release-io-monorepo] ${project.name} unchanged since $tag")
-          false
+            true
+          case Success(changedFiles) =>
+            val significantFiles = changedFiles.filterNot(excludePaths.contains)
+            val excludedCount    = changedFiles.length - significantFiles.length
+            if (significantFiles.nonEmpty) {
+              val note =
+                if (excludedCount > 0) s" ($excludedCount version/excluded file(s) filtered)"
+                else ""
+              state.log.info(
+                s"[release-io-monorepo] ${project.name} has ${significantFiles.length} changed file(s) since $tag$note"
+              )
+              true
+            } else {
+              if (changedFiles.nonEmpty)
+                state.log.info(
+                  s"[release-io-monorepo] ${project.name} has only version/excluded file changes since $tag, treating as unchanged"
+                )
+              else
+                state.log.info(
+                  s"[release-io-monorepo] ${project.name} unchanged since $tag"
+                )
+              false
+            }
         }
     }
   }

@@ -13,8 +13,8 @@ import sbt.internal.{BuildStructure, BuildStreams, BuildUtil}
 object LoadCompat {
 
   /** Reevaluates settings after modifying them. Does not recompile or reload any build components. */
-  def reapply(newSettings: Seq[Setting[_]], structure: BuildStructure)(implicit
-      display: Show[ScopedKey[_]]
+  def reapply(newSettings: Seq[Setting[?]], structure: BuildStructure)(implicit
+      display: Show[ScopedKey[?]]
   ): BuildStructure = {
     val transformed            = sbtrelease.Load.finalTransforms(newSettings)
     val (compiledMap, newData) =

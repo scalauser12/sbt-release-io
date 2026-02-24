@@ -3,6 +3,7 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
+import MonorepoStepHelpers.*
 import sbt.*
 import sbt.Project.extract
 
@@ -11,18 +12,22 @@ object MonorepoReleaseSteps {
 
   // ── VCS steps ───────────────────────────────────────────────────────────
   val initializeVcs: MonorepoStepIO.Global        = MonorepoVcsSteps.initializeVcs
-  val checkCleanWorkingDir: MonorepoStepIO.Global  = MonorepoVcsSteps.checkCleanWorkingDir
-  val pushChanges: MonorepoStepIO.Global           = MonorepoVcsSteps.pushChanges
+  val checkCleanWorkingDir: MonorepoStepIO.Global = MonorepoVcsSteps.checkCleanWorkingDir
+  val pushChanges: MonorepoStepIO.Global          = MonorepoVcsSteps.pushChanges
 
   // ── Version steps ─────────────────────────────────────────────────────
-  val inquireVersions: MonorepoStepIO.PerProject       = MonorepoVersionSteps.inquireVersions
-  val setReleaseVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.setReleaseVersions
-  val setNextVersions: MonorepoStepIO.PerProject       = MonorepoVersionSteps.setNextVersions
-  val commitReleaseVersions: MonorepoStepIO.Global     = MonorepoVersionSteps.commitReleaseVersions
-  val commitNextVersions: MonorepoStepIO.Global        = MonorepoVersionSteps.commitNextVersions
+  val inquireVersions: MonorepoStepIO.PerProject        = MonorepoVersionSteps.inquireVersions
+  val validateVersionConsistency: MonorepoStepIO.Global =
+    MonorepoVersionSteps.validateVersionConsistency
+  val setReleaseVersions: MonorepoStepIO.PerProject     = MonorepoVersionSteps.setReleaseVersions
+  val setNextVersions: MonorepoStepIO.PerProject        = MonorepoVersionSteps.setNextVersions
+  val commitReleaseVersions: MonorepoStepIO.Global      =
+    MonorepoVersionSteps.commitReleaseVersions
+  val commitNextVersions: MonorepoStepIO.Global         = MonorepoVersionSteps.commitNextVersions
 
   // ── Publish & test steps ──────────────────────────────────────────────
-  val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoPublishSteps.checkSnapshotDependencies
+  val checkSnapshotDependencies: MonorepoStepIO.PerProject =
+    MonorepoPublishSteps.checkSnapshotDependencies
   val publishArtifacts: MonorepoStepIO.PerProject          = MonorepoPublishSteps.publishArtifacts
   val runTests: MonorepoStepIO.PerProject                  = MonorepoPublishSteps.runTests
   val runClean: MonorepoStepIO.PerProject                  = MonorepoPublishSteps.runClean
@@ -48,87 +53,100 @@ object MonorepoReleaseSteps {
   val detectOrSelectProjects: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "detect-or-select-projects",
     action = ctx => {
-      // If projects have already been filtered (by command parser), keep them.
-      // Otherwise, detect changed projects using git diff.
-      if (ctx.attr("projects-selected").contains("true")) {
-        IO(ctx.state.log.info(
-          s"[release-io-monorepo] Releasing explicitly selected projects: ${ctx.projects.map(_.name).mkString(", ")}"
-        )).as(ctx)
-      } else {
+      if (ctx.attr("projects-selected").contains("true"))
+        logInfo(
+          ctx,
+          s"Releasing explicitly selected projects: ${ctx.projects.map(_.name).mkString(", ")}"
+        )
+      else if (ctx.attr("all-changed").contains("true"))
+        logInfo(
+          ctx,
+          s"Releasing all projects (all-changed): ${ctx.projects.map(_.name).mkString(", ")}"
+        )
+      else
         required(ctx.vcs, "VCS not initialized") { vcs =>
-          val extracted = extract(ctx.state)
-          val detectChanges = extracted.get(releaseIOMonorepoDetectChanges)
+          val extracted      = extract(ctx.state)
+          val detectChanges  = extracted.get(releaseIOMonorepoDetectChanges)
           val customDetector = extracted.get(releaseIOMonorepoChangeDetector)
 
-          if (!detectChanges) {
-            IO(ctx.state.log.info(
-              s"[release-io-monorepo] Change detection disabled, releasing all projects"
-            )).as(ctx)
-          } else {
+          if (!detectChanges)
+            logInfo(ctx, "Change detection disabled, releasing all projects")
+          else
             customDetector match {
               case Some(detector) =>
-                // Custom change detector
-                ctx.projects
-                  .foldLeft(IO.pure(Seq.empty[ProjectReleaseInfo])) { (acc, project) =>
-                    acc.flatMap { changed =>
-                      detector(project.ref, project.baseDir, ctx.state).map {
-                        case true  => changed :+ project
-                        case false => changed
-                      }
-                    }
-                  }
-                  .flatMap { changedProjects =>
-                    if (changedProjects.isEmpty) {
-                      IO.raiseError(new RuntimeException(
-                        "[release-io-monorepo] No projects have changed. Nothing to release."
-                      ))
-                    } else {
-                      IO(ctx.state.log.info(
-                        s"[release-io-monorepo] Changed projects: ${changedProjects.map(_.name).mkString(", ")}"
-                      )).as(ctx.withProjects(changedProjects))
-                    }
-                  }
+                detectWithCustomDetector(ctx, detector).flatMap(applyChangedProjects(ctx, _))
 
               case None =>
-                // Default: git diff-based detection
-                val tagNameFn = extracted.get(releaseIOMonorepoTagName)
+                val tagStrategy           = extracted.get(releaseIOMonorepoTagStrategy)
+                val tagNameFn             = extracted.get(releaseIOMonorepoTagName)
+                val unifiedTagNameFn      = extracted.get(releaseIOMonorepoUnifiedTagName)
+                val userExcludes          = extracted.get(releaseIOMonorepoDetectChangesExcludes)
+                val globalVersionExcludes =
+                  if (extracted.get(releaseIOMonorepoUseGlobalVersion))
+                    Seq(
+                      extracted.get(
+                        sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
+                      )
+                    )
+                  else Seq.empty
                 ChangeDetection
-                  .detectChangedProjects(vcs, ctx.projects, tagNameFn, ctx.state)
-                  .flatMap { changedProjects =>
-                    if (changedProjects.isEmpty) {
-                      IO.raiseError(new RuntimeException(
-                        "[release-io-monorepo] No projects have changed. Nothing to release."
-                      ))
-                    } else {
-                      IO(ctx.state.log.info(
-                        s"[release-io-monorepo] Changed projects: ${changedProjects.map(_.name).mkString(", ")}"
-                      )).as(ctx.withProjects(changedProjects))
-                    }
-                  }
+                  .detectChangedProjects(
+                    vcs,
+                    ctx.projects,
+                    tagStrategy,
+                    tagNameFn,
+                    unifiedTagNameFn,
+                    ctx.state,
+                    userExcludes ++ globalVersionExcludes
+                  )
+                  .flatMap(applyChangedProjects(ctx, _))
             }
-          }
         }
-      }
     }
   )
+
+  private def detectWithCustomDetector(
+      ctx: MonorepoContext,
+      detector: (ProjectRef, File, State) => IO[Boolean]
+  ): IO[Seq[ProjectReleaseInfo]] =
+    ctx.projects.foldLeft(IO.pure(Seq.empty[ProjectReleaseInfo])) { (acc, project) =>
+      acc.flatMap { changed =>
+        detector(project.ref, project.baseDir, ctx.state)
+          .map { if (_) changed :+ project else changed }
+          .handleErrorWith { err =>
+            IO(
+              ctx.state.log.warn(
+                s"[release-io-monorepo] Change detection failed for ${project.name}: " +
+                  s"${Option(err.getMessage).getOrElse(err.toString)}. " +
+                  "Conservatively treating as changed."
+              )
+            ).as(changed :+ project)
+          }
+      }
+    }
+
+  private def applyChangedProjects(
+      ctx: MonorepoContext,
+      changedProjects: Seq[ProjectReleaseInfo]
+  ): IO[MonorepoContext] =
+    if (changedProjects.isEmpty)
+      IO.raiseError(
+        new RuntimeException("[release-io-monorepo] No projects have changed. Nothing to release.")
+      )
+    else
+      logInfo(ctx, s"Changed projects: ${changedProjects.map(_.name).mkString(", ")}")
+        .map(_.withProjects(changedProjects))
 
   /** Tag releases — dispatches to per-project or unified based on tag strategy setting. */
   val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-releases",
     action = ctx => {
-      val extracted   = extract(ctx.state)
-      val tagStrategy = extracted.get(releaseIOMonorepoTagStrategy)
+      val extracted    = extract(ctx.state)
+      val tagStrategy  = extracted.get(releaseIOMonorepoTagStrategy)
       val concreteStep = MonorepoVcsSteps.tagReleases(tagStrategy)
-      // Dispatch to the concrete step's action
       concreteStep match {
-        case g: MonorepoStepIO.Global     => g.action(ctx)
-        case pp: MonorepoStepIO.PerProject =>
-          ctx.currentProjects.foldLeft(IO.pure(ctx)) { (ioCtx, proj) =>
-            ioCtx.flatMap { currentCtx =>
-              val latestProj = currentCtx.projects.find(_.ref == proj.ref).getOrElse(proj)
-              pp.action(currentCtx, latestProj)
-            }
-          }
+        case g: MonorepoStepIO.Global      => g.action(ctx)
+        case pp: MonorepoStepIO.PerProject => runPerProject(ctx, pp.action)
       }
     }
   )
@@ -143,6 +161,7 @@ object MonorepoReleaseSteps {
     detectOrSelectProjects,
     checkSnapshotDependencies,
     inquireVersions,
+    validateVersionConsistency,
     runClean,
     runTests,
     setReleaseVersions,
@@ -154,6 +173,4 @@ object MonorepoReleaseSteps {
     pushChanges
   )
 
-  private def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
-    opt.fold(IO.raiseError[B](new RuntimeException(error)))(f)
 }

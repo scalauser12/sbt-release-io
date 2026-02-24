@@ -59,6 +59,13 @@ trait MonorepoReleaseIO {
       : SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]] =
     _releaseIOMonorepoChangeDetector
 
+  /** Additional files to exclude from change detection (absolute paths).
+    * Per-project version files are always excluded automatically.
+    * Use this to exclude files like generated changelogs that change every release.
+    */
+  val releaseIOMonorepoDetectChangesExcludes: SettingKey[Seq[File]] =
+    _releaseIOMonorepoDetectChangesExcludes
+
   // ── Behavioral settings ───────────────────────────────────────────────
 
   /** Cross-build enabled. Default: false. */
@@ -76,35 +83,43 @@ trait MonorepoReleaseIO {
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
-    releaseIOMonorepoProcess          := MonorepoReleaseSteps.defaults,
-    releaseIOMonorepoCrossBuild       := false,
-    releaseIOMonorepoSkipTests        := false,
-    releaseIOMonorepoSkipPublish      := false,
-    releaseIOMonorepoInteractive      := false,
-    releaseIOMonorepoDetectChanges    := true,
-    releaseIOMonorepoChangeDetector   := None,
-    releaseIOMonorepoUseGlobalVersion := false,
-    releaseIOMonorepoTagStrategy      := MonorepoTagStrategy.PerProject,
-    releaseIOMonorepoTagName          := ((name: String, ver: String) => s"$name-v$ver"),
-    releaseIOMonorepoUnifiedTagName   := ((ver: String) => s"v$ver"),
-    releaseIOMonorepoReadVersion      := VersionSteps.defaultReadVersion,
-    releaseIOMonorepoWriteVersion     := ((_, ver) => IO.pure(s"""version := "$ver"\n""")),
+    releaseIOMonorepoProcess               := MonorepoReleaseSteps.defaults,
+    releaseIOMonorepoCrossBuild            := false,
+    releaseIOMonorepoSkipTests             := false,
+    releaseIOMonorepoSkipPublish           := false,
+    releaseIOMonorepoInteractive           := false,
+    releaseIOMonorepoDetectChanges         := true,
+    releaseIOMonorepoChangeDetector        := None,
+    releaseIOMonorepoDetectChangesExcludes := Seq.empty,
+    releaseIOMonorepoUseGlobalVersion      := false,
+    releaseIOMonorepoTagStrategy           := MonorepoTagStrategy.PerProject,
+    releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name-v$ver"),
+    releaseIOMonorepoUnifiedTagName        := ((ver: String) => s"v$ver"),
+    releaseIOMonorepoReadVersion           := VersionSteps.defaultReadVersion,
+    releaseIOMonorepoWriteVersion          := {
+      val useGlobal = releaseIOMonorepoUseGlobalVersion.value
+      (_, ver) => {
+        val key = if (useGlobal) "ThisBuild / version" else "version"
+        IO.pure(s"""$key := "$ver"\n""")
+      }
+    },
     // Default version file resolver: looks up baseDirectory from the loaded build structure.
     // Uses loadedBuild (a SettingKey) instead of buildStructure (a TaskKey),
     // since settings cannot depend on tasks.
-    releaseIOMonorepoVersionFile      := {
+    releaseIOMonorepoVersionFile           := {
       val projectBases: Map[String, File] = loadedBuild.value.allProjectRefs.map {
         case (ref, proj) => ref.project -> proj.base
       }.toMap
+      val versionFileName                 = sbtrelease.ReleasePlugin.autoImport.releaseVersionFile.value.getName
       ref => {
         val base = projectBases.getOrElse(
           ref.project,
           throw new RuntimeException(s"Cannot resolve baseDirectory for ${ref.project}")
         )
-        base / "version.sbt"
+        base / versionFileName
       }
     },
-    releaseIOMonorepoProjects         := thisProject.value.aggregate
+    releaseIOMonorepoProjects              := thisProject.value.aggregate
   )
 }
 
@@ -177,6 +192,12 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]](
       "releaseIOMonorepoChangeDetector",
       "Custom change detection function"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoDetectChangesExcludes: SettingKey[Seq[File]] =
+    SettingKey[Seq[File]](
+      "releaseIOMonorepoDetectChangesExcludes",
+      "Additional files to exclude from change detection"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoCrossBuild: SettingKey[Boolean] =
