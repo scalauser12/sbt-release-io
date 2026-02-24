@@ -152,7 +152,10 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       allProjectRefs.map { ref =>
         val projBase =
           (ref / baseDirectory).get(extracted.structure.data).getOrElse {
-            extracted.get(baseDirectory)
+            throw new RuntimeException(
+              s"Cannot resolve baseDirectory for project '${ref.project}'. " +
+                "Ensure the project is correctly defined in the build."
+            )
           }
         val projName = ref.project
         ProjectReleaseInfo(

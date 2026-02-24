@@ -107,14 +107,18 @@ trait MonorepoReleaseIO {
     // Uses loadedBuild (a SettingKey) instead of buildStructure (a TaskKey),
     // since settings cannot depend on tasks.
     releaseIOMonorepoVersionFile           := {
-      val projectBases: Map[String, File] = loadedBuild.value.allProjectRefs.map {
-        case (ref, proj) => ref.project -> proj.base
+      val projectBases: Map[ProjectRef, File] = loadedBuild.value.allProjectRefs.map {
+        case (ref, proj) => ref -> proj.base
       }.toMap
-      val versionFileName                 = sbtrelease.ReleasePlugin.autoImport.releaseVersionFile.value.getName
+      val versionFileName                     =
+        sbtrelease.ReleasePlugin.autoImport.releaseVersionFile.value.getName
       ref => {
         val base = projectBases.getOrElse(
-          ref.project,
-          throw new RuntimeException(s"Cannot resolve baseDirectory for ${ref.project}")
+          ref,
+          throw new RuntimeException(
+            s"Cannot resolve baseDirectory for project '${ref.project}' in build ${ref.build}. " +
+              "Ensure the project is listed in releaseIOMonorepoProjects."
+          )
         )
         base / versionFileName
       }

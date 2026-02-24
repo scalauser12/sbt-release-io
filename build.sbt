@@ -16,7 +16,7 @@ lazy val commonSettings = Seq(
   scriptedBufferLog  := false
 )
 
-lazy val core = (project in file("core"))
+lazy val core = (project in file("modules/core"))
   .enablePlugins(SbtPlugin)
   .settings(
     commonSettings,
@@ -24,7 +24,7 @@ lazy val core = (project in file("core"))
     addSbtPlugin("com.github.sbt" % "sbt-release" % "1.4.0")
   )
 
-lazy val monorepo = (project in file("monorepo"))
+lazy val monorepo = (project in file("modules/monorepo"))
   .enablePlugins(SbtPlugin)
   .dependsOn(core)
   .settings(

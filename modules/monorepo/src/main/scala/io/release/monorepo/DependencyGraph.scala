@@ -13,12 +13,13 @@ object DependencyGraph {
       projects: Seq[ProjectRef],
       state: State
   ): IO[Seq[ProjectRef]] = IO.defer {
-    val extracted  = Project.extract(state)
-    val structure  = extracted.structure
-    val projectSet = projects.toSet
+    val extracted      = Project.extract(state)
+    val structure      = extracted.structure
+    val uniqueProjects = projects.distinct
+    val projectSet     = uniqueProjects.toSet
 
     // Build adjacency map: project -> set of projects it depends on (within our set)
-    val dependsOn: Map[ProjectRef, Set[ProjectRef]] = projects.map { ref =>
+    val dependsOn: Map[ProjectRef, Set[ProjectRef]] = uniqueProjects.map { ref =>
       val deps = Project
         .getProject(ref, structure)
         .toSeq
@@ -38,7 +39,7 @@ object DependencyGraph {
 
     // Kahn's algorithm — pure tail-recursive implementation
     val inDegree: Map[ProjectRef, Int] =
-      projects.map(p => p -> dependsOn.getOrElse(p, Set.empty).size).toMap
+      uniqueProjects.map(p => p -> dependsOn.getOrElse(p, Set.empty).size).toMap
 
     @annotation.tailrec
     def loop(
@@ -58,11 +59,11 @@ object DependencyGraph {
           loop(newQueue, newDegrees, current :: acc)
       }
 
-    val seeds  = projects.filter(p => inDegree(p) == 0).toList
+    val seeds  = uniqueProjects.filter(p => inDegree(p) == 0).toList
     val result = loop(seeds, inDegree, Nil)
 
-    if (result.length != projects.length) {
-      val remaining = projects.filterNot(result.contains)
+    if (result.length != uniqueProjects.length) {
+      val remaining = uniqueProjects.filterNot(result.contains)
       IO.raiseError(
         new RuntimeException(
           s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"

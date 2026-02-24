@@ -327,7 +327,7 @@ object ReleaseStepIO {
     */
   private def switchScalaVersion(state: State, version: String): State = {
     val extracted = Project.extract(state)
-    import extracted.{*, given}
+    import extracted.*
 
     state.log.info(s"[release-io] Setting scala version to $version")
 

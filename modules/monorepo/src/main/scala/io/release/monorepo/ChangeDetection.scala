@@ -9,6 +9,10 @@ import scala.util.{Failure, Success, Try}
 /** Git diff-based change detection for monorepo subprojects. */
 object ChangeDetection {
 
+  /** Normalize path separators to forward slashes to match git output on all platforms. */
+  private def gitRelativize(base: File, file: File): Option[String] =
+    sbt.IO.relativize(base, file).map(_.replace('\\', '/'))
+
   /** Detect which projects have changed since their last release tag.
     * Uses file-level `git diff` between the last matching tag and HEAD.
     *
@@ -31,7 +35,7 @@ object ChangeDetection {
   ): IO[Seq[ProjectReleaseInfo]] =
     IO.blocking {
       val globalExcludes: Set[String] = additionalExcludeFiles.flatMap { f =>
-        sbt.IO.relativize(vcs.baseDir, f)
+        gitRelativize(vcs.baseDir, f)
       }.toSet
 
       projects.filter { project =>
@@ -40,7 +44,7 @@ object ChangeDetection {
           case MonorepoTagStrategy.Unified    => unifiedTagNameFn("*")
         }
         val versionFileExclude =
-          sbt.IO.relativize(vcs.baseDir, project.versionFile).toSet
+          gitRelativize(vcs.baseDir, project.versionFile).toSet
         val excludes           = globalExcludes ++ versionFileExclude
         hasChangedSinceLastTag(vcs, project, tagPattern, state, excludes)
       }
@@ -72,7 +76,7 @@ object ChangeDetection {
 
       case Some(tag) =>
         val baseRelative =
-          sbt.IO.relativize(vcs.baseDir, project.baseDir).filter(_.nonEmpty).getOrElse(".")
+          gitRelativize(vcs.baseDir, project.baseDir).filter(_.nonEmpty).getOrElse(".")
 
         Try(
           Process(
