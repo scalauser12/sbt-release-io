@@ -77,9 +77,18 @@ object MonorepoReleaseSteps {
                 detectWithCustomDetector(ctx, detector).flatMap(applyChangedProjects(ctx, _))
 
               case None =>
-                val tagStrategy      = extracted.get(releaseIOMonorepoTagStrategy)
-                val tagNameFn        = extracted.get(releaseIOMonorepoTagName)
-                val unifiedTagNameFn = extracted.get(releaseIOMonorepoUnifiedTagName)
+                val tagStrategy           = extracted.get(releaseIOMonorepoTagStrategy)
+                val tagNameFn             = extracted.get(releaseIOMonorepoTagName)
+                val unifiedTagNameFn      = extracted.get(releaseIOMonorepoUnifiedTagName)
+                val userExcludes          = extracted.get(releaseIOMonorepoDetectChangesExcludes)
+                val globalVersionExcludes =
+                  if (extracted.get(releaseIOMonorepoUseGlobalVersion))
+                    Seq(
+                      extracted.get(
+                        sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
+                      )
+                    )
+                  else Seq.empty
                 ChangeDetection
                   .detectChangedProjects(
                     vcs,
@@ -87,7 +96,8 @@ object MonorepoReleaseSteps {
                     tagStrategy,
                     tagNameFn,
                     unifiedTagNameFn,
-                    ctx.state
+                    ctx.state,
+                    userExcludes ++ globalVersionExcludes
                   )
                   .flatMap(applyChangedProjects(ctx, _))
             }
