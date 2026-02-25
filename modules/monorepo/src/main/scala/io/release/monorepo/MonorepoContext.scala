@@ -4,7 +4,20 @@ import io.release.{ReleaseContext, ReleaseKeys}
 import sbt.*
 import sbtrelease.Vcs
 
-/** Identifies which subprojects participate in a monorepo release. */
+/** Metadata for a single subproject participating in a monorepo release.
+  *
+  * Created by [[MonorepoReleasePluginLike]] during argument validation, then threaded
+  * through [[MonorepoStepIO.PerProject]] steps. Per-project failure is tracked here
+  * independently of the global [[MonorepoContext.failed]] flag.
+  *
+  * @param ref         sbt project reference
+  * @param name        project name (matches `ref.project`)
+  * @param baseDir     project root directory
+  * @param versionFile path to the project's `version.sbt`
+  * @param versions    `(releaseVersion, nextVersion)` pair, set by version inquiry steps
+  * @param tagName     VCS tag for this project's release, set by the tagging step
+  * @param failed      set to true when this project's step action fails
+  */
 case class ProjectReleaseInfo(
     ref: ProjectRef,
     name: String,
@@ -26,7 +39,22 @@ object MonorepoTagStrategy {
   case object Unified extends MonorepoTagStrategy
 }
 
-/** Context threaded through each monorepo release step. */
+/** Immutable context threaded through each monorepo release step during both phases.
+  *
+  * Created by [[MonorepoReleasePluginLike.doMonorepoRelease]], then passed through
+  * the composer. Global steps receive the context directly; per-project
+  * steps receive both the context and the current [[ProjectReleaseInfo]].
+  *
+  * @param state       the current `sbt.State`, updated between steps
+  * @param vcs         VCS adapter (git), set by `initializeVcs`
+  * @param projects    subprojects in topological order
+  * @param skipTests   when true, test steps are skipped
+  * @param skipPublish when true, publish steps are skipped
+  * @param interactive when true, steps may prompt for user input
+  * @param tagStrategy per-project or unified tagging
+  * @param attributes  arbitrary key-value store for inter-step communication
+  * @param failed      set to true by the composer on step failure; subsequent steps are skipped
+  */
 case class MonorepoContext(
     state: State,
     vcs: Option[Vcs] = None,

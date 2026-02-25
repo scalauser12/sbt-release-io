@@ -20,11 +20,13 @@ private[release] object StepHelpers {
     required(ctx.versions, "Versions not set. Ensure inquireVersions runs before this step.")(f)
 
   /** Runs a process inside IO.blocking and raises on non-zero exit. */
-  def runProcess(process: ProcessBuilder, context: => String): IO[Unit] = IO.blocking {
-    val code = process.!
-    if (code != 0)
-      throw new RuntimeException(s"$context failed with exit code $code")
-  }
+  def runProcess(process: ProcessBuilder, context: => String): IO[Unit] =
+    IO.blocking(process.!).flatMap { code =>
+      if (code != 0)
+        IO.raiseError(new RuntimeException(s"$context failed with exit code $code"))
+      else
+        IO.unit
+    }
 
   def askYesNo(prompt: String, defaultYes: Boolean): IO[Boolean] =
     IO.print(prompt) *>

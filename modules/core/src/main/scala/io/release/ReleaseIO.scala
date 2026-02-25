@@ -3,9 +3,7 @@ package io.release
 import cats.effect.IO
 import sbt.*
 
-import scala.language.implicitConversions
-
-/** Shared setting keys, factory methods, and implicit conversions for release-io plugins.
+/** Shared setting keys and factory methods for release-io plugins.
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
   * mix in or import from here.
   *
@@ -23,7 +21,10 @@ trait ReleaseIO {
 
   // ── Setting keys (delegated to singleton in companion object) ───────────
 
-  /** The ordered sequence of release steps to execute. Defaults to [[steps.ReleaseSteps.defaults]]. */
+  /** The ordered sequence of release steps to execute. Defaults to [[steps.ReleaseSteps.defaults]].
+    * Resource-aware steps should be added by overriding `releaseProcess` in a
+    * [[ReleasePluginIOLike]] subclass, where the resource type `T` is known at compile time.
+    */
   val releaseIOProcess: SettingKey[Seq[ReleaseStepIO]] = ReleaseIO._releaseIOProcess
 
   /** When `true`, steps with `enableCrossBuild = true` are executed once per `crossScalaVersions`.
@@ -75,14 +76,29 @@ trait ReleaseIO {
   def stepCommandAndRemaining(command: String): ReleaseStepIO =
     ReleaseStepIO.fromCommandAndRemaining(command)
 
-  // ── sbt-release compatibility conversions ─────────────────────────────────
+  // ── Resource-aware factory methods ─────────────────────────────────
 
-  implicit val sbtReleaseStepConversion
-      : sbtrelease.ReleasePlugin.autoImport.ReleaseStep => ReleaseStepIO =
-    SbtReleaseCompat.releaseStepToReleaseStepIO
+  /** Create a resource-aware release step from a named IO action.
+    *
+    * {{{
+    * val notifySlack: HttpClient => ReleaseStepIO = resourceStep("notify-slack") { client => ctx =>
+    *   IO { client.post("/slack", s"Released ${ctx.versions}"); ctx }
+    * }
+    * }}}
+    */
+  def resourceStep[T](name: String, enableCrossBuild: Boolean = false)(
+      f: T => ReleaseContext => IO[ReleaseContext]
+  ): T => ReleaseStepIO =
+    (t: T) => ReleaseStepIO(name, f(t), enableCrossBuild = enableCrossBuild)
 
-  implicit val sbtReleaseStateTransformConversion: (State => State) => ReleaseStepIO =
-    SbtReleaseCompat.stateTransformToReleaseStepIO
+  /** Create a resource-aware release step with a check phase. */
+  def resourceStepWithCheck[T](name: String, enableCrossBuild: Boolean = false)(
+      action: T => ReleaseContext => IO[ReleaseContext]
+  )(
+      check: T => ReleaseContext => IO[ReleaseContext]
+  ): T => ReleaseStepIO =
+    (t: T) => ReleaseStepIO(name, action(t), check(t), enableCrossBuild)
+
 }
 
 object ReleaseIO extends ReleaseIO {

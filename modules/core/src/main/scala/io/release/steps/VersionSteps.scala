@@ -19,18 +19,15 @@ private[release] object VersionSteps {
 
   /** Default version file reader. Parses `[ThisBuild /] version := "x.y.z"`. */
   val defaultReadVersion: File => IO[String] = { file =>
-    IO.blocking(sbt.IO.read(file)).flatMap { contents =>
-      versionPattern.findFirstMatchIn(contents) match {
-        case Some(m) => IO.pure(m.group(1))
-        case None    =>
-          IO.raiseError(
-            new RuntimeException(
-              s"Could not parse version from ${file.getName}. " +
-                s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents"""
-            )
-          )
-      }
-    }
+    for {
+      contents <- IO.blocking(sbt.IO.read(file))
+      result   <- IO.fromOption(versionPattern.findFirstMatchIn(contents).map(_.group(1)))(
+                    new RuntimeException(
+                      s"Could not parse version from ${file.getName}. " +
+                        s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents"""
+                    )
+                  )
+    } yield result
   }
 
   /** Default version file writer. Produces `[ThisBuild /] version := "x.y.z"`. */
@@ -125,23 +122,27 @@ private[release] object VersionSteps {
     check = VcsSteps.checkCleanWorkingDirInternal(_, logStartHash = false),
     action = ctx =>
       requireVersions(ctx) { case (releaseVer, _) =>
-        commitVersionNative(ctx, releaseCommitMessage).flatMap { case (resultCtx, currentHash) =>
-          IO.blocking {
-            val extracted        = extract(resultCtx.state)
-            val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
-            val versionSetting   =
-              if (useGlobalVersion) ThisBuild / version := releaseVer
-              else version                              := releaseVer
-            val newState         = extracted.appendWithSession(
-              Seq(
-                packageOptions += ManifestAttributes("Vcs-Release-Hash" -> currentHash),
-                versionSetting
-              ),
-              resultCtx.state
-            )
-            resultCtx.copy(state = newState)
-          }
-        }
+        for {
+          commitResult            <- commitVersionNative(ctx, releaseCommitMessage)
+          (resultCtx, currentHash) = commitResult
+          finalCtx                <- IO.blocking {
+                                       val extracted        = extract(resultCtx.state)
+                                       val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
+                                       val versionSetting   =
+                                         if (useGlobalVersion) ThisBuild / version := releaseVer
+                                         else version                              := releaseVer
+                                       val newState         = extracted.appendWithSession(
+                                         Seq(
+                                           packageOptions += ManifestAttributes(
+                                             "Vcs-Release-Hash" -> currentHash
+                                           ),
+                                           versionSetting
+                                         ),
+                                         resultCtx.state
+                                       )
+                                       resultCtx.copy(state = newState)
+                                     }
+        } yield finalCtx
       }
   )
 
@@ -153,20 +154,18 @@ private[release] object VersionSteps {
   // --- private helpers ---
 
   private def readVersionPrompt(prompt: String, defaultVersion: String): IO[String] =
-    IO.print(prompt) *>
-      IO.readLine.flatMap { raw =>
+    for {
+      _      <- IO.print(prompt)
+      raw    <- IO.readLine
+      result <- {
         val input = Option(raw).map(_.trim).getOrElse("")
         if (input.isEmpty) IO.pure(defaultVersion)
-        else {
-          sbtrelease.Version(input).map(_.unapply) match {
-            case Some(v) => IO.pure(v)
-            case None    =>
-              IO.raiseError(
-                new RuntimeException(s"Invalid version format: '$input'")
-              )
-          }
-        }
+        else
+          IO.fromOption(sbtrelease.Version(input).map(_.unapply))(
+            new RuntimeException(s"Invalid version format: '$input'")
+          )
       }
+    } yield result
 
   private def commitVersionNative(
       ctx: ReleaseContext,
@@ -177,40 +176,45 @@ private[release] object VersionSteps {
       val versionFile = extracted.get(releaseVersionFile).getCanonicalFile
       val base        = vcs.baseDir.getCanonicalFile
 
-      sbt.IO.relativize(base, versionFile) match {
-        case None               =>
-          IO.raiseError(
-            new RuntimeException(
-              s"[release-io] Version file [$versionFile] is outside of VCS root [$base]"
-            )
-          )
-        case Some(relativePath) =>
-          val sign    = extracted.get(releaseVcsSign)
-          val signOff = extracted.get(releaseVcsSignOff)
+      IO.fromOption(sbt.IO.relativize(base, versionFile))(
+        new RuntimeException(
+          s"[release-io] Version file [$versionFile] is outside of VCS root [$base]"
+        )
+      ).flatMap { relativePath =>
+        val sign    = extracted.get(releaseVcsSign)
+        val signOff = extracted.get(releaseVcsSignOff)
 
-          runProcess(vcs.add(relativePath), s"vcs add '$relativePath'") *>
-            IO.blocking {
-              val statusOutput = {
-                val sb   = new StringBuilder
-                val code =
-                  vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
-                if (code != 0)
-                  throw new RuntimeException(s"vcs status failed with exit code $code")
-                sb.toString.trim
-              }
-              statusOutput.linesIterator
-                .filterNot(_.startsWith("?"))
-                .mkString("\n")
-            }.flatMap { status =>
-              if (status.nonEmpty) {
-                val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
-                runProcess(vcs.commit(msg, sign, signOff), "vcs commit").flatMap { _ =>
-                  IO.blocking((ctx.copy(state = commitState), vcs.currentHash))
-                }
-              } else {
-                IO.pure((ctx, vcs.currentHash))
-              }
-            }
+        for {
+          _      <- runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+          status <- IO.blocking {
+                      val sb   = new StringBuilder
+                      val code =
+                        vcs.status.!(
+                          ProcessLogger(line => sb.append(line).append('\n'), _ => ())
+                        )
+                      (code, sb.toString.trim)
+                    }.flatMap { case (code, output) =>
+                      if (code != 0)
+                        IO.raiseError(
+                          new RuntimeException(s"vcs status failed with exit code $code")
+                        )
+                      else
+                        IO.pure(
+                          output.linesIterator
+                            .filterNot(_.startsWith("?"))
+                            .mkString("\n")
+                        )
+                    }
+          result <- if (status.nonEmpty) {
+                      val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
+                      for {
+                        _ <- runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
+                        r <- IO.blocking((ctx.copy(state = commitState), vcs.currentHash))
+                      } yield r
+                    } else {
+                      IO.pure((ctx, vcs.currentHash))
+                    }
+        } yield result
       }
     }
 

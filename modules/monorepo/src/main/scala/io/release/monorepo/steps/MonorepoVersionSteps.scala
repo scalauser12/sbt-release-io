@@ -36,12 +36,15 @@ private[monorepo] object MonorepoVersionSteps {
   private def inquireVersionsInteractive(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): IO[MonorepoContext] = {
-    val extracted   = extract(ctx.state)
-    val readFn      = extracted.get(releaseIOMonorepoReadVersion)
-    val versionFile = resolveVersionFile(ctx, project)
-
+  ): IO[MonorepoContext] =
     for {
+      versionFile                                          <- resolveVersionFile(ctx, project)
+      setup                                                <- IO.blocking {
+                                                                val extracted = extract(ctx.state)
+                                                                val readFn    = extracted.get(releaseIOMonorepoReadVersion)
+                                                                (extracted, readFn)
+                                                              }
+      (extracted, readFn)                                   = setup
       currentVer                                           <- readFn(versionFile)
       data                                                 <- IO.blocking {
                                                                 val (s1, releaseFn) = extracted.runTask(releaseVersion, ctx.state)
@@ -59,7 +62,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                               )
       suggestedNext                                         = nextFn(releaseVer)
       nextVer                                              <- promptOrDefault(
-                                                                project.versions.flatMap(v => Option(v._2)),
+                                                                project.versions.map(_._2),
                                                                 suggestedNext,
                                                                 s"Next version for ${project.name}",
                                                                 ctx.interactive,
@@ -74,7 +77,6 @@ private[monorepo] object MonorepoVersionSteps {
                                                                   .updateProject(project.ref)(_.copy(versions = Some((releaseVer, nextVer))))
                                                               }
     } yield result
-  }
 
   /** Validate that all projects agree on release and next versions when global version mode is
     * active. Runs as a Global step so that a mismatch aborts the entire release immediately,
@@ -82,22 +84,22 @@ private[monorepo] object MonorepoVersionSteps {
     */
   val validateVersionConsistency: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "validate-version-consistency",
-    action = ctx => {
-      val extracted = extract(ctx.state)
-      if (!extracted.get(releaseIOMonorepoUseGlobalVersion)) IO.pure(ctx)
-      else
-        MonorepoStepHelpers.validateVersionConsistency(
-          ctx.currentProjects,
-          _._1,
-          "set-release-version: global version mode requires all projects to share the same version"
-        ) *>
+    action = ctx =>
+      IO.blocking(extract(ctx.state).get(releaseIOMonorepoUseGlobalVersion)).flatMap {
+        case false => IO.pure(ctx)
+        case true  =>
           MonorepoStepHelpers.validateVersionConsistency(
             ctx.currentProjects,
-            _._2,
-            "set-next-version: global version mode requires all projects to share the same version"
+            _._1,
+            "set-release-version: global version mode requires all projects to share the same version"
           ) *>
-          IO.pure(ctx)
-    }
+            MonorepoStepHelpers.validateVersionConsistency(
+              ctx.currentProjects,
+              _._2,
+              "set-next-version: global version mode requires all projects to share the same version"
+            ) *>
+            IO.pure(ctx)
+      }
   )
 
   /** Write release versions to per-project version files. */
@@ -140,24 +142,26 @@ private[monorepo] object MonorepoVersionSteps {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
       ver: String
-  ): IO[MonorepoContext] = {
-    val extracted   = extract(ctx.state)
-    val writeFn     = extracted.get(releaseIOMonorepoWriteVersion)
-    val versionFile = resolveVersionFile(ctx, project)
-
+  ): IO[MonorepoContext] =
     for {
-      contents <- writeFn(versionFile, ver)
-      result   <- IO.blocking {
-                    java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-                    ctx.state.log.info(
-                      s"[release-io-monorepo] Wrote version $ver to ${versionFile.getPath} for ${project.name}"
-                    )
-                    val newState = extracted.appendWithSession(
-                      Seq(project.ref / version := ver),
-                      ctx.state
-                    )
-                    ctx.withState(newState)
-                  }
+      versionFile         <- resolveVersionFile(ctx, project)
+      setup               <- IO.blocking {
+                               val extracted = extract(ctx.state)
+                               val writeFn   = extracted.get(releaseIOMonorepoWriteVersion)
+                               (extracted, writeFn)
+                             }
+      (extracted, writeFn) = setup
+      contents            <- writeFn(versionFile, ver)
+      result              <- IO.blocking {
+                               java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
+                               ctx.state.log.info(
+                                 s"[release-io-monorepo] Wrote version $ver to ${versionFile.getPath} for ${project.name}"
+                               )
+                               val newState = extracted.appendWithSession(
+                                 Seq(project.ref / version := ver),
+                                 ctx.state
+                               )
+                               ctx.withState(newState)
+                             }
     } yield result
-  }
 }

@@ -5,6 +5,7 @@ import cats.effect.unsafe.implicits.global
 import org.specs2.mutable.Specification
 import sbt.{State, ProjectRef}
 import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
+import sbtrelease.Compat
 import xsbti.*
 
 import java.io.File
@@ -120,6 +121,50 @@ class MonorepoStepIOSpec extends Specification {
 
       MonorepoStepIO.compose(Seq(step))(pCtx).unsafeRunSync()
       log.toList must_== List("check:core", "check:api", "action:core", "action:api")
+    }
+
+    "detect FailureCommand during global check phase" in withContext { ctx =>
+      val log = ArrayBuffer.empty[String]
+
+      val step = MonorepoStepIO.Global(
+        name = "failing-check",
+        check = c =>
+          IO.pure(
+            c.copy(state =
+              c.state.copy(remainingCommands = Compat.FailureCommand +: c.state.remainingCommands)
+            )
+          ),
+        action = c => IO(log += "action").as(c)
+      )
+
+      MonorepoStepIO.compose(Seq(step))(ctx).unsafeRunSync() must
+        throwA[RuntimeException]("Check phase failed")
+      log.toList must_== List()
+    }
+
+    "detect FailureCommand during per-project check phase" in withContext { ctx =>
+      val log      = ArrayBuffer.empty[String]
+      val projects = Seq(dummyProject("core"), dummyProject("api"))
+      val pCtx     = ctx.withProjects(projects)
+
+      val step = MonorepoStepIO.PerProject(
+        name = "failing-per-project-check",
+        check = (c, proj) =>
+          if (proj.name == "core")
+            IO.pure(
+              c.copy(state =
+                c.state.copy(remainingCommands = Compat.FailureCommand +: c.state.remainingCommands)
+              )
+            )
+          else IO(log += s"check:${proj.name}").as(c),
+        action = (c, proj) => IO(log += s"action:${proj.name}").as(c)
+      )
+
+      MonorepoStepIO.compose(Seq(step))(pCtx).unsafeRunSync() must
+        throwA[RuntimeException]("Check phase failed")
+      // api's check still runs within the same step; failure detected after step completes
+      // but no actions should run
+      log.toList must_== List("check:api")
     }
   }
 

@@ -6,7 +6,7 @@ import io.release.steps.VersionSteps
 import sbt.*
 import sbt.Keys.*
 
-/** Setting keys for the monorepo release plugin.
+/** Setting keys and factory methods for the monorepo release plugin.
   *
   * Keys are singletons defined in the companion object so multiple plugins
   * can safely mix in this trait without creating duplicate key instances.
@@ -19,8 +19,12 @@ trait MonorepoReleaseIO {
   /** Which subprojects participate in monorepo releases. Default: all aggregated projects. */
   val releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] = _releaseIOMonorepoProjects
 
-  /** The ordered sequence of monorepo release steps. */
-  val releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] = _releaseIOMonorepoProcess
+  /** The ordered sequence of monorepo release steps.
+    * Resource-aware steps should be added by overriding `monorepoReleaseProcess` in a
+    * [[MonorepoReleasePluginLike]] subclass, where the resource type `T` is known at compile time.
+    */
+  val releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] =
+    _releaseIOMonorepoProcess
 
   // ── Version settings ──────────────────────────────────────────────────
 
@@ -30,7 +34,10 @@ trait MonorepoReleaseIO {
   /** Per-project version reader. Default: same regex as core `defaultReadVersion`. */
   val releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] = _releaseIOMonorepoReadVersion
 
-  /** Per-project version writer. Default: produces `version := "x.y.z"\n`. */
+  /** Per-project version writer. Default: produces `version := "x.y.z"\n`.
+    * The default implementation ignores the `File` parameter; custom implementations
+    * may read the existing file to perform partial updates.
+    */
   val releaseIOMonorepoWriteVersion: SettingKey[(File, String) => IO[String]] =
     _releaseIOMonorepoWriteVersion
 
@@ -79,6 +86,60 @@ trait MonorepoReleaseIO {
 
   /** Interactive mode. Default: false. */
   val releaseIOMonorepoInteractive: SettingKey[Boolean] = _releaseIOMonorepoInteractive
+
+  // ── Factory methods ──────────────────────────────────────────────────
+
+  /** Create a global monorepo release step from a context-transforming IO action. */
+  def globalStep(name: String)(
+      action: MonorepoContext => IO[MonorepoContext]
+  ): MonorepoStepIO.Global =
+    MonorepoStepIO.Global(name, action)
+
+  /** Create a per-project monorepo release step from a project-level IO action. */
+  def perProjectStep(name: String, enableCrossBuild: Boolean = false)(
+      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+  ): MonorepoStepIO.PerProject =
+    MonorepoStepIO.PerProject(name, action, enableCrossBuild = enableCrossBuild)
+
+  // ── Resource-aware factory methods ─────────────────────────────────
+
+  /** Create a resource-aware global monorepo step.
+    * Global steps have no `enableCrossBuild` parameter — they always run once,
+    * not per Scala version. Use [[resourcePerProjectStep]] for cross-build support.
+    *
+    * {{{
+    * val notifySlack: HttpClient => MonorepoStepIO =
+    *   resourceGlobalStep("notify-slack") { client => ctx =>
+    *     IO { client.post("/slack", "Released!"); ctx }
+    *   }
+    * }}}
+    */
+  def resourceGlobalStep[T](name: String)(
+      f: T => MonorepoContext => IO[MonorepoContext]
+  ): T => MonorepoStepIO =
+    (t: T) => MonorepoStepIO.Global(name, f(t))
+
+  /** Create a resource-aware per-project monorepo step. */
+  def resourcePerProjectStep[T](name: String, enableCrossBuild: Boolean = false)(
+      f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+  ): T => MonorepoStepIO =
+    (t: T) => MonorepoStepIO.PerProject(name, f(t), enableCrossBuild = enableCrossBuild)
+
+  /** Create a resource-aware global monorepo step with a check phase. */
+  def resourceGlobalStepWithCheck[T](name: String)(
+      action: T => MonorepoContext => IO[MonorepoContext]
+  )(
+      check: T => MonorepoContext => IO[MonorepoContext]
+  ): T => MonorepoStepIO =
+    (t: T) => MonorepoStepIO.Global(name, action(t), check(t))
+
+  /** Create a resource-aware per-project monorepo step with a check phase. */
+  def resourcePerProjectStepWithCheck[T](name: String, enableCrossBuild: Boolean = false)(
+      action: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+  )(
+      check: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+  ): T => MonorepoStepIO =
+    (t: T) => MonorepoStepIO.PerProject(name, action(t), check(t), enableCrossBuild)
 
   // ── Default settings ──────────────────────────────────────────────────
 

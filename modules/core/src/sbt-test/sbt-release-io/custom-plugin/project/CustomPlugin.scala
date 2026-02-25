@@ -18,19 +18,17 @@ object CustomPlugin extends ReleasePluginIOLike[java.io.File] {
     )
   }
 
-  private def useResource(acquired: java.io.File): ReleaseStepIO =
-    ReleaseStepIO(
-      name = "use-resource",
-      action = (ctx: ReleaseContext) =>
-        IO {
-          assert(acquired.exists(), s"Resource should exist: ${acquired.getAbsolutePath}")
-          sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "step-used-resource"))
-          ctx
-        }
+  // Override releaseProcess to append a resource-aware step using defaultsWith
+  override protected def releaseProcess(state: State): Seq[java.io.File => ReleaseStepIO] =
+    defaultsWith(state)((acquired: java.io.File) =>
+      ReleaseStepIO(
+        name = "use-resource",
+        action = (ctx: ReleaseContext) =>
+          IO {
+            assert(acquired.exists(), s"Resource should exist: ${acquired.getAbsolutePath}")
+            sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "step-used-resource"))
+            ctx
+          }
+      )
     )
-
-  // Use additionalSteps instead of overriding releaseProcess
-  override protected def additionalSteps: Seq[java.io.File => ReleaseStepIO] =
-    Seq((f: java.io.File) => useResource(f))
-
 }

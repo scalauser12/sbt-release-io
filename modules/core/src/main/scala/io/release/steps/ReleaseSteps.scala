@@ -3,11 +3,6 @@ package io.release.steps
 import cats.effect.IO
 import java.io.File
 import io.release.ReleaseStepIO
-import io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
-import sbtrelease.ReleaseStateTransformations.{
-  runClean as upstreamRunClean,
-  runTest as upstreamRunTest
-}
 
 /** Facade re-exporting all built-in release steps and default sequences.
   *
@@ -57,25 +52,6 @@ object ReleaseSteps {
     inquireVersions,
     runClean,
     runTests,
-    setReleaseVersion,
-    commitReleaseVersion,
-    tagRelease,
-    publishArtifacts,
-    setNextVersion,
-    commitNextVersion,
-    pushChanges
-  )
-
-  /** Alternative sequence using upstream sbt-release's `runClean` and `runTest`.
-    * All other steps (including commit steps) remain IO-native.
-    */
-  val defaultsFromUpstream: Seq[ReleaseStepIO] = Seq(
-    initializeVcs,
-    checkCleanWorkingDir,
-    checkSnapshotDependencies,
-    inquireVersions,
-    upstreamRunClean,
-    upstreamRunTest,
     setReleaseVersion,
     commitReleaseVersion,
     tagRelease,

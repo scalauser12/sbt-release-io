@@ -3,4 +3,4 @@ project/target/
 project/project/
 *.class
 *.log
-test
+global/

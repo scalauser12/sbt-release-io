@@ -4,3 +4,4 @@ project/project/
 *.log
 .bsp/
 marker-file
+global/

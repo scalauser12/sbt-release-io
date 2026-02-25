@@ -127,39 +127,4 @@ object CustomStepExamples {
       else IO.println(s"[release-io] Skipping $name (condition not met)").as(ctx)
     }
 
-  // --- Example: Mixing upstream sbt-release steps with custom IO steps ---
-
-  /**
-   * Example showing how to combine upstream sbt-release transformations
-   * with custom IO-based steps for maximum flexibility.
-   *
-   * Usage in build.sbt:
-   * {{{
-   * import io.release.examples.CustomStepExamples
-   *
-   * releaseIOProcess := CustomStepExamples.mixedProcess
-   * }}}
-   */
-  val mixedProcess: Seq[ReleaseStepIO] = {
-    import sbtrelease.ReleaseStateTransformations._
-    import _root_.io.release.SbtReleaseCompat.releaseStepToReleaseStepIO
-
-    Seq(
-      printBanner,                // Custom IO step
-      checkSnapshotDependencies,  // Upstream sbt-release step (auto-converted)
-      ReleaseSteps.initializeVcs, // IO-native step
-      validateBranch,             // Custom validation step
-      inquireVersions,            // Upstream step with configurable version bumping
-      ReleaseSteps.runTests,      // IO-native test runner
-      setReleaseVersion,          // Upstream version setter
-      generateChangelog,          // Custom changelog generator
-      commitReleaseVersion,       // Upstream commit step
-      tagRelease,                 // Upstream tag step
-      publishArtifacts,           // Upstream publish step
-      setNextVersion,             // Upstream next version
-      commitNextVersion,          // Upstream commit
-      markReleaseDone             // Custom completion marker
-      // Note: pushChanges intentionally omitted
-    )
-  }
 }

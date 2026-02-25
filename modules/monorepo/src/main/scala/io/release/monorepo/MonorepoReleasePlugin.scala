@@ -1,5 +1,6 @@
 package io.release.monorepo
 
+import scala.language.implicitConversions
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -17,7 +18,6 @@ import sbt.complete.Parser
   * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the
   * entire release process.
   *
-  * Plain `MonorepoStepIO` values are implicitly lifted to `T => MonorepoStepIO` via [[liftStep]].
   * A release command (named by [[commandName]]) and default settings are registered automatically.
   *
   * To coexist with the default [[MonorepoReleasePlugin]], use `noTrigger` and override
@@ -27,7 +27,6 @@ import sbt.complete.Parser
   *   override def trigger     = noTrigger
   *   override def commandName = "releaseMonorepoCustom"
   *   override def resource    = Resource.make(IO(new HttpClient()))(c => IO(c.close()))
-  *   override def additionalSteps = Seq(client => notifySlack(client))
   *
   *   object autoImport extends MonorepoReleaseIO
   * }
@@ -36,30 +35,82 @@ import sbt.complete.Parser
   * }}}
   */
 trait MonorepoReleasePluginLike[T] extends AutoPlugin {
-  import scala.language.implicitConversions
 
   override def requires: Plugins = ReleasePluginIO
 
   /** The resource acquired once for the entire monorepo release process and passed to each step. */
   def resource: Resource[IO, T]
 
-  /** The monorepo release steps. Each step is a function from the resource `T` to a
-    * `MonorepoStepIO`. Plain `MonorepoStepIO` values are implicitly lifted via [[liftStep]].
-    * Defaults to reading from the `releaseIOMonorepoProcess` setting, plus [[additionalSteps]].
+  /** The monorepo release steps. Reads plain steps from the `releaseIOMonorepoProcess` setting
+    * and lifts each into a resource-ignoring function. Override to append resource-aware steps.
     */
   protected def monorepoReleaseProcess(state: State): Seq[T => MonorepoStepIO] =
-    Project.extract(state).get(releaseIOMonorepoProcess).map(liftStep) ++ additionalSteps
+    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess))
 
-  /** Resource-parameterized steps appended to the monorepo release process.
-    * Override to add steps that use the resource `T` without overriding `monorepoReleaseProcess`.
-    * For insertion at specific positions, override `monorepoReleaseProcess` directly.
-    */
-  protected def additionalSteps: Seq[T => MonorepoStepIO] = Seq.empty
+  // ── Ergonomic helpers for resource-aware step composition ──────────
 
-  /** Implicitly lift a plain `MonorepoStepIO` to a resource-ignoring step.
-    * This allows mixing plain steps and resource-parameterized steps in `monorepoReleaseProcess`.
+  /** Implicitly lifts a plain monorepo step into a resource-ignoring step function.
+    * Always in scope inside the plugin trait, so plain steps and resource-aware steps
+    * can be freely mixed in the same `Seq[T => MonorepoStepIO]`.
     */
-  protected implicit def liftStep(step: MonorepoStepIO): T => MonorepoStepIO = _ => step
+  protected implicit def liftStep(step: MonorepoStepIO): T => MonorepoStepIO =
+    (_: T) => step
+
+  /** Lift a sequence of plain monorepo steps into resource-ignoring step functions. */
+  protected def liftSteps(steps: Seq[MonorepoStepIO]): Seq[T => MonorepoStepIO] =
+    steps.map(liftStep)
+
+  /** Read default steps from settings and append resource-aware steps at the end.
+    *
+    * {{{
+    * override protected def monorepoReleaseProcess(state: State) =
+    *   defaultsWith(state)(
+    *     (client: HttpClient) => MonorepoStepIO.Global("notify", ctx => IO { ... })
+    *   )
+    * }}}
+    */
+  protected def defaultsWith(state: State)(
+      extraSteps: (T => MonorepoStepIO)*
+  ): Seq[T => MonorepoStepIO] =
+    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) ++ extraSteps
+
+  /** Read default steps and insert resource-aware steps after a named step.
+    *
+    * @param afterStep the `name` of the step after which to insert
+    * Throws `RuntimeException` if no step with the given name is found.
+    */
+  protected def defaultsWithAfter(state: State, afterStep: String)(
+      extraSteps: (T => MonorepoStepIO)*
+  ): Seq[T => MonorepoStepIO] = {
+    val defaults        = Project.extract(state).get(releaseIOMonorepoProcess)
+    val idx             = defaults.indexWhere(_.name == afterStep)
+    if (idx < 0)
+      throw new RuntimeException(
+        s"Step '$afterStep' not found in defaults. " +
+          s"Available: ${defaults.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = defaults.splitAt(idx + 1)
+    liftSteps(before) ++ extraSteps ++ liftSteps(after)
+  }
+
+  /** Read default steps and insert resource-aware steps before a named step.
+    *
+    * @param beforeStep the `name` of the step before which to insert
+    * Throws `RuntimeException` if no step with the given name is found.
+    */
+  protected def defaultsWithBefore(state: State, beforeStep: String)(
+      extraSteps: (T => MonorepoStepIO)*
+  ): Seq[T => MonorepoStepIO] = {
+    val defaults        = Project.extract(state).get(releaseIOMonorepoProcess)
+    val idx             = defaults.indexWhere(_.name == beforeStep)
+    if (idx < 0)
+      throw new RuntimeException(
+        s"Step '$beforeStep' not found in defaults. " +
+          s"Available: ${defaults.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = defaults.splitAt(idx)
+    liftSteps(before) ++ extraSteps ++ liftSteps(after)
+  }
 
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
@@ -90,10 +141,11 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
   protected lazy val monorepoParser: Parser[Seq[MonorepoArg]] = {
     import MonorepoArg.*
 
-    val withDefaults: Parser[MonorepoArg]                                                          = token("with-defaults").map(_ => WithDefaults)
-    val skipTests: Parser[MonorepoArg]                                                             = token("skip-tests").map(_ => SkipTests)
-    val crossBuild: Parser[MonorepoArg]                                                            = token("cross").map(_ => CrossBuild)
-    val allChanged: Parser[MonorepoArg]                                                            = token("all-changed").map(_ => AllChanged)
+    val withDefaults: Parser[MonorepoArg] = token("with-defaults").map(_ => WithDefaults)
+    val skipTests: Parser[MonorepoArg]    = token("skip-tests").map(_ => SkipTests)
+    val crossBuild: Parser[MonorepoArg]   = token("cross").map(_ => CrossBuild)
+    val allChanged: Parser[MonorepoArg]   = token("all-changed").map(_ => AllChanged)
+
     def versionParser(keyword: String, ctor: (String, String) => MonorepoArg): Parser[MonorepoArg] =
       (token(keyword) ~> Space ~> token(NotSpace, "<project>=<version>")).map { s =>
         val parts = s.split("=", 2)
@@ -310,7 +362,9 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
           finalCtx.state
         } catch {
           case NonFatal(e) =>
-            state.log.error(s"[release-io-monorepo] Release failed: ${e.getMessage}")
+            state.log.error(
+              s"[release-io-monorepo] Release failed: ${Option(e.getMessage).getOrElse(e.toString)}"
+            )
             state.fail
         }
     }

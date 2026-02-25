@@ -57,53 +57,72 @@ object MonorepoReleaseSteps {
         logInfo(
           ctx,
           s"Releasing explicitly selected projects: ${ctx.projects.map(_.name).mkString(", ")}"
-        )
+        ).flatMap(guardNonEmpty)
       else if (ctx.attr("all-changed").contains("true"))
         logInfo(
           ctx,
           s"Releasing all projects (all-changed): ${ctx.projects.map(_.name).mkString(", ")}"
-        )
+        ).flatMap(guardNonEmpty)
       else
         required(ctx.vcs, "VCS not initialized") { vcs =>
-          val extracted      = extract(ctx.state)
-          val detectChanges  = extracted.get(releaseIOMonorepoDetectChanges)
-          val customDetector = extracted.get(releaseIOMonorepoChangeDetector)
-
-          if (!detectChanges)
-            logInfo(ctx, "Change detection disabled, releasing all projects")
-          else
-            customDetector match {
-              case Some(detector) =>
-                detectWithCustomDetector(ctx, detector).flatMap(applyChangedProjects(ctx, _))
-
-              case None =>
-                val tagStrategy           = extracted.get(releaseIOMonorepoTagStrategy)
-                val tagNameFn             = extracted.get(releaseIOMonorepoTagName)
-                val unifiedTagNameFn      = extracted.get(releaseIOMonorepoUnifiedTagName)
-                val userExcludes          = extracted.get(releaseIOMonorepoDetectChangesExcludes)
-                val globalVersionExcludes =
-                  if (extracted.get(releaseIOMonorepoUseGlobalVersion))
-                    Seq(
-                      extracted.get(
-                        sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
-                      )
-                    )
-                  else Seq.empty
-                ChangeDetection
-                  .detectChangedProjects(
-                    vcs,
-                    ctx.projects,
-                    tagStrategy,
-                    tagNameFn,
-                    unifiedTagNameFn,
-                    ctx.state,
-                    userExcludes ++ globalVersionExcludes
-                  )
-                  .flatMap(applyChangedProjects(ctx, _))
-            }
+          detectChangedProjects(ctx, vcs)
         }
     }
   )
+
+  private def guardNonEmpty(ctx: MonorepoContext): IO[MonorepoContext] =
+    if (ctx.projects.isEmpty)
+      IO.raiseError(new RuntimeException("No projects configured. Nothing to release."))
+    else IO.pure(ctx)
+
+  private def detectChangedProjects(
+      ctx: MonorepoContext,
+      vcs: sbtrelease.Vcs
+  ): IO[MonorepoContext] = {
+    val extracted        = extract(ctx.state)
+    val detectChanges    = extracted.get(releaseIOMonorepoDetectChanges)
+    val customDetector   = extracted.get(releaseIOMonorepoChangeDetector)
+    val useGlobalVersion = extracted.get(releaseIOMonorepoUseGlobalVersion)
+
+    def applyDetectedProjects(changed: Seq[ProjectReleaseInfo]): IO[MonorepoContext] =
+      enforceGlobalVersionAllOrNothing(ctx, changed, useGlobalVersion)
+        .flatMap(applyChangedProjects(ctx, _))
+
+    if (!detectChanges)
+      logInfo(ctx, "Change detection disabled, releasing all projects")
+        .flatMap(guardNonEmpty)
+    else
+      customDetector match {
+        case Some(detector) =>
+          detectWithCustomDetector(ctx, detector).flatMap(applyDetectedProjects)
+        case None           =>
+          runBuiltinDetection(ctx, vcs, extracted).flatMap(applyDetectedProjects)
+      }
+  }
+
+  private def runBuiltinDetection(
+      ctx: MonorepoContext,
+      vcs: sbtrelease.Vcs,
+      extracted: Extracted
+  ): IO[Seq[ProjectReleaseInfo]] = {
+    val tagStrategy           = extracted.get(releaseIOMonorepoTagStrategy)
+    val tagNameFn             = extracted.get(releaseIOMonorepoTagName)
+    val unifiedTagNameFn      = extracted.get(releaseIOMonorepoUnifiedTagName)
+    val userExcludes          = extracted.get(releaseIOMonorepoDetectChangesExcludes)
+    val globalVersionExcludes =
+      if (extracted.get(releaseIOMonorepoUseGlobalVersion))
+        Seq(extracted.get(sbtrelease.ReleasePlugin.autoImport.releaseVersionFile))
+      else Seq.empty
+    ChangeDetection.detectChangedProjects(
+      vcs,
+      ctx.projects,
+      tagStrategy,
+      tagNameFn,
+      unifiedTagNameFn,
+      ctx.state,
+      userExcludes ++ globalVersionExcludes
+    )
+  }
 
   private def detectWithCustomDetector(
       ctx: MonorepoContext,
@@ -125,13 +144,37 @@ object MonorepoReleaseSteps {
       }
     }
 
+  private def enforceGlobalVersionAllOrNothing(
+      ctx: MonorepoContext,
+      changedProjects: Seq[ProjectReleaseInfo],
+      useGlobalVersion: Boolean
+  ): IO[Seq[ProjectReleaseInfo]] = {
+    val changedRefs = changedProjects.map(_.ref).toSet
+    val allRefs     = ctx.projects.map(_.ref).toSet
+    if (!useGlobalVersion || changedProjects.isEmpty || changedRefs == allRefs)
+      IO.pure(changedProjects)
+    else {
+      val changedNames  = changedProjects.map(_.name).mkString(", ")
+      val excludedNames =
+        ctx.projects.filterNot(p => changedRefs.contains(p.ref)).map(_.name).mkString(", ")
+      IO.raiseError(
+        new RuntimeException(
+          "Global version mode is active, but change detection selected only a subset of projects. " +
+            s"Changed: $changedNames. Excluded: $excludedNames. " +
+            "Release all projects (for example, use `all-changed`), disable change detection, " +
+            "or disable releaseIOMonorepoUseGlobalVersion."
+        )
+      )
+    }
+  }
+
   private def applyChangedProjects(
       ctx: MonorepoContext,
       changedProjects: Seq[ProjectReleaseInfo]
   ): IO[MonorepoContext] =
     if (changedProjects.isEmpty)
       IO.raiseError(
-        new RuntimeException("[release-io-monorepo] No projects have changed. Nothing to release.")
+        new RuntimeException("No projects have changed. Nothing to release.")
       )
     else
       logInfo(ctx, s"Changed projects: ${changedProjects.map(_.name).mkString(", ")}")
@@ -146,7 +189,13 @@ object MonorepoReleaseSteps {
       val concreteStep = MonorepoVcsSteps.tagReleases(tagStrategy)
       concreteStep match {
         case g: MonorepoStepIO.Global      => g.action(ctx)
-        case pp: MonorepoStepIO.PerProject => runPerProject(ctx, pp.action)
+        case pp: MonorepoStepIO.PerProject =>
+          runPerProject(
+            ctx,
+            (currentCtx, project) =>
+              logInfo(currentCtx, s"${pp.name} [${project.name}]") *>
+                pp.action(currentCtx, project)
+          ).map(propagateFailures)
       }
     }
   )

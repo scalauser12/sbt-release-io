@@ -16,3 +16,6 @@ $ exec git tag core-v1.0.0
 
 # Api tag should have been created (per-project error isolation let api proceed)
 > checkApiTagCreated
+
+# Post-tag steps (set-next-version) should have been skipped due to global failure propagation
+> checkNextVersionNotApplied

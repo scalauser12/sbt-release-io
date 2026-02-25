@@ -1,5 +1,6 @@
 import _root_.cats.effect.{IO, Resource}
 import _root_.io.release.monorepo.*
+import _root_.io.release.monorepo.MonorepoReleaseIO.*
 import sbt._
 
 object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
@@ -16,17 +17,19 @@ object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
     )
   }
 
-  private def useResource(acquired: java.io.File): MonorepoStepIO =
-    MonorepoStepIO.Global(
-      name = "use-resource",
-      action = ctx =>
-        IO {
-          assert(acquired.exists(), s"Resource should exist: ${acquired.getAbsolutePath}")
-          sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "step-used-resource"))
-          ctx
-        }
+  // Override monorepoReleaseProcess to append a resource-aware step using defaultsWith
+  override protected def monorepoReleaseProcess(
+      state: State
+  ): Seq[java.io.File => MonorepoStepIO] =
+    defaultsWith(state)((acquired: java.io.File) =>
+      MonorepoStepIO.Global(
+        name = "use-resource",
+        action = ctx =>
+          IO {
+            assert(acquired.exists(), s"Resource should exist: ${acquired.getAbsolutePath}")
+            sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "step-used-resource"))
+            ctx
+          }
+      )
     )
-
-  override protected def additionalSteps: Seq[java.io.File => MonorepoStepIO] =
-    Seq((f: java.io.File) => useResource(f))
 }

@@ -1,0 +1,21 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate a previous release by manually creating tags
+$ exec git tag core-v0.1.0
+$ exec git tag api-v0.1.0
+
+# Modify ONLY core directory (add a file and commit)
+$ exec touch core/CHANGES.md
+$ exec git add core/CHANGES.md
+$ exec git commit -m "Add changes file to core"
+
+# Global version mode + change-detected subset should fail (all-or-nothing enforcement)
+-> releaseIOMonorepo with-defaults
+
+# Verify no release side-effects were applied after failure
+> checkFailureArtifacts

@@ -73,10 +73,6 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies that failing tests in aggregated sub-projects abort the release
 - Multi-project setup with one passing and one failing test
 
-### sbt-release-compat
-- Mixes upstream sbt-release `ReleaseStep` values with IO-native steps
-- Tests the `SbtReleaseCompat` implicit conversions (`ReleaseStep => ReleaseStepIO`)
-
 ### simple
 - Tests the basic release workflow end-to-end
 - Verifies version changes, git commits, and tags are created

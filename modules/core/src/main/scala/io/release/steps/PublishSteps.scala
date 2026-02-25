@@ -16,37 +16,45 @@ private[release] object PublishSteps {
     name = "check-snapshot-dependencies",
     action = ctx => IO.pure(ctx),
     check = ctx =>
-      IO.blocking {
-        val extracted   = extract(ctx.state)
-        val thisRef     = extracted.get(thisProjectRef)
-        val (_, result) =
-          sbtrelease.Compat.runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
-        result match {
-          case Value(value) => Right(value.flatMap(_.value))
-          case Inc(cause)   => Left(cause)
-        }
-      }.flatMap {
-        case Left(cause)                  =>
-          IO.raiseError(new RuntimeException("Error checking for snapshot dependencies: " + cause))
-        case Right(deps) if deps.nonEmpty =>
-          val depList = deps
-            .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
-            .mkString("\n")
-          val msg     = s"Snapshot dependencies found:\n$depList"
+      for {
+        checkResult <- IO.blocking {
+                         val extracted   = extract(ctx.state)
+                         val thisRef     = extracted.get(thisProjectRef)
+                         val (_, result) =
+                           sbtrelease.Compat
+                             .runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
+                         result match {
+                           case Value(value) => Right(value.flatMap(_.value))
+                           case Inc(cause)   => Left(cause)
+                         }
+                       }
+        result      <- checkResult match {
+                         case Left(cause)                  =>
+                           IO.raiseError[ReleaseContext](
+                             new RuntimeException(
+                               "Error checking for snapshot dependencies: " + cause
+                             )
+                           )
+                         case Right(deps) if deps.nonEmpty =>
+                           val depList = deps
+                             .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
+                             .mkString("\n")
+                           val msg     = s"Snapshot dependencies found:\n$depList"
 
-          if (!ctx.interactive) {
-            IO.raiseError(new RuntimeException(msg))
-          } else {
-            IO(ctx.state.log.warn(msg)) *>
-              confirmContinue(
-                ctx,
-                prompt = "Do you want to continue (y/n)? [n] ",
-                defaultYes = false,
-                abortMessage = "Aborting release due to snapshot dependencies."
-              ).as(ctx)
-          }
-        case Right(_)                     => IO.pure(ctx)
-      },
+                           if (!ctx.interactive) {
+                             IO.raiseError[ReleaseContext](new RuntimeException(msg))
+                           } else {
+                             IO(ctx.state.log.warn(msg)) *>
+                               confirmContinue(
+                                 ctx,
+                                 prompt = "Do you want to continue (y/n)? [n] ",
+                                 defaultYes = false,
+                                 abortMessage = "Aborting release due to snapshot dependencies."
+                               ).as(ctx)
+                           }
+                         case Right(_)                     => IO.pure(ctx)
+                       }
+      } yield result,
     enableCrossBuild = true
   )
 
@@ -66,23 +74,24 @@ private[release] object PublishSteps {
     check = ctx =>
       if (ctx.skipPublish) IO.pure(ctx)
       else
-        IO.blocking {
-          val extracted = extract(ctx.state)
-          val allRefs   = extracted.currentRef +: extracted.currentProject.aggregate
-          allRefs
-            .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
-            .filter(r => checkPublishToMissing(extracted, r, ctx.state))
-        }.flatMap { missing =>
-          if (missing.nonEmpty) {
-            val names = missing.map(_.project)
-            IO.raiseError(
-              new RuntimeException(
-                s"publishTo not configured for: ${names.mkString(", ")}. " +
-                  "Set publishTo or add `publish / skip := true`."
-              )
-            )
-          } else IO.pure(ctx)
-        },
+        for {
+          missing <- IO.blocking {
+                       val extracted = extract(ctx.state)
+                       val allRefs   = extracted.currentRef +: extracted.currentProject.aggregate
+                       allRefs
+                         .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
+                         .filter(r => checkPublishToMissing(extracted, r, ctx.state))
+                     }
+          result  <- if (missing.nonEmpty) {
+                       val names = missing.map(_.project)
+                       IO.raiseError[ReleaseContext](
+                         new RuntimeException(
+                           s"publishTo not configured for: ${names.mkString(", ")}. " +
+                             "Set publishTo or add `publish / skip := true`."
+                         )
+                       )
+                     } else IO.pure(ctx)
+        } yield result,
     enableCrossBuild = true
   )
 

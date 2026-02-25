@@ -1,5 +1,7 @@
 package io.release
 
+import scala.language.implicitConversions
+
 import cats.effect.{IO, Resource}
 import cats.effect.unsafe.implicits.global
 import io.release.steps.ReleaseSteps
@@ -11,7 +13,6 @@ import sbt.complete.Parser
 /** Base trait for resource-parameterized release plugins. Each release step is a function
   * `T => ReleaseStepIO` where `T` is a resource acquired once for the entire release process.
   *
-  * Plain `ReleaseStepIO` values are implicitly lifted to `T => ReleaseStepIO` via [[liftStep]].
   * A release command (named by [[commandName]]) and default settings are registered automatically.
   *
   * To coexist with the default [[ReleasePluginIO]], use `noTrigger` and override [[commandName]]:
@@ -20,32 +21,88 @@ import sbt.complete.Parser
   *   override def trigger       = noTrigger
   *   override def commandName   = "releaseCustom"
   *   override def resource      = Resource.make(IO(new HttpClient()))(c => IO(c.close()))
-  *   override def additionalSteps = Seq(client => notifyStep(client))
   * }
   * // In build.sbt: enablePlugins(MyReleasePlugin)
   * // Run with:     sbt releaseCustom
   * }}}
   */
 trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
-  import scala.language.implicitConversions
 
   override def requires: Plugins = plugins.JvmPlugin && sbtrelease.ReleasePlugin
 
   /** The resource acquired once for the entire release process and passed to each step. */
   def resource: Resource[IO, T]
 
-  /** The release steps. Each step is a function from the resource `T` to a `ReleaseStepIO`.
-    * Plain `ReleaseStepIO` values are implicitly lifted via [[liftStep]].
-    * Defaults to reading from the `releaseIOProcess` setting, plus [[additionalSteps]].
+  /** The release steps. Reads plain steps from the `releaseIOProcess` setting and lifts
+    * each into a resource-ignoring function. Override to append resource-aware steps.
     */
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
-    Project.extract(state).get(releaseIOProcess).map(liftStep) ++ additionalSteps
+    liftSteps(Project.extract(state).get(releaseIOProcess))
 
-  /** Resource-parameterized steps appended to the release process.
-    * Override to add steps that use the resource `T` without overriding `releaseProcess`.
-    * For insertion at specific positions, override `releaseProcess` directly.
+  // ── Ergonomic helpers for resource-aware step composition ──────────
+
+  /** Implicitly lifts a plain release step into a resource-ignoring step function.
+    * Always in scope inside the plugin trait, so plain steps and resource-aware steps
+    * can be freely mixed in the same `Seq[T => ReleaseStepIO]`.
     */
-  protected def additionalSteps: Seq[T => ReleaseStepIO] = Seq.empty
+  protected implicit def liftStep(step: ReleaseStepIO): T => ReleaseStepIO =
+    (_: T) => step
+
+  /** Lift a sequence of plain release steps into resource-ignoring step functions. */
+  protected def liftSteps(steps: Seq[ReleaseStepIO]): Seq[T => ReleaseStepIO] =
+    steps.map(liftStep)
+
+  /** Read default steps from settings and append resource-aware steps at the end.
+    *
+    * {{{
+    * override protected def releaseProcess(state: State) =
+    *   defaultsWith(state)(
+    *     (client: HttpClient) => notifySlack(client)
+    *   )
+    * }}}
+    */
+  protected def defaultsWith(state: State)(
+      extraSteps: (T => ReleaseStepIO)*
+  ): Seq[T => ReleaseStepIO] =
+    liftSteps(Project.extract(state).get(releaseIOProcess)) ++ extraSteps
+
+  /** Read default steps and insert resource-aware steps after a named step.
+    *
+    * @param afterStep the `name` of the step after which to insert
+    * @throws java.lang.RuntimeException if no step with the given name is found
+    */
+  protected def defaultsWithAfter(state: State, afterStep: String)(
+      extraSteps: (T => ReleaseStepIO)*
+  ): Seq[T => ReleaseStepIO] = {
+    val defaults        = Project.extract(state).get(releaseIOProcess)
+    val idx             = defaults.indexWhere(_.name == afterStep)
+    if (idx < 0)
+      throw new RuntimeException(
+        s"Step '$afterStep' not found in defaults. " +
+          s"Available: ${defaults.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = defaults.splitAt(idx + 1)
+    liftSteps(before) ++ extraSteps ++ liftSteps(after)
+  }
+
+  /** Read default steps and insert resource-aware steps before a named step.
+    *
+    * @param beforeStep the `name` of the step before which to insert
+    * @throws java.lang.RuntimeException if no step with the given name is found
+    */
+  protected def defaultsWithBefore(state: State, beforeStep: String)(
+      extraSteps: (T => ReleaseStepIO)*
+  ): Seq[T => ReleaseStepIO] = {
+    val defaults        = Project.extract(state).get(releaseIOProcess)
+    val idx             = defaults.indexWhere(_.name == beforeStep)
+    if (idx < 0)
+      throw new RuntimeException(
+        s"Step '$beforeStep' not found in defaults. " +
+          s"Available: ${defaults.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = defaults.splitAt(idx)
+    liftSteps(before) ++ extraSteps ++ liftSteps(after)
+  }
 
   /** Whether cross-building is enabled (before command-line args are applied).
     * Defaults to reading from the `releaseIOCrossBuild` setting.
@@ -62,11 +119,6 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     */
   protected def interactiveEnabled(state: State): Boolean =
     Project.extract(state).get(releaseIOInteractive)
-
-  /** Implicitly lift a plain `ReleaseStepIO` to a resource-ignoring step.
-    * This allows mixing plain steps and resource-parameterized steps in `releaseProcess`.
-    */
-  protected implicit def liftStep(step: ReleaseStepIO): T => ReleaseStepIO = _ => step
 
   /** Base settings that include command registration. Custom plugins that override
     * `projectSettings` should include `baseReleaseSettings` in their sequence.

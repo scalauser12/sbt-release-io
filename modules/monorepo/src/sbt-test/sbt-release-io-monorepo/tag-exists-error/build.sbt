@@ -13,8 +13,10 @@ lazy val api = (project in file("api"))
     scalaVersion := "2.12.18"
   )
 
-val checkCoreTagStillExists = taskKey[Unit]("Verify the pre-existing core tag still exists")
-val checkApiTagCreated      = taskKey[Unit]("Verify api tag was created despite core failure")
+val checkCoreTagStillExists    = taskKey[Unit]("Verify the pre-existing core tag still exists")
+val checkApiTagCreated         = taskKey[Unit]("Verify api tag was created despite core failure")
+val checkNextVersionNotApplied =
+  taskKey[Unit]("Verify set-next-version was skipped after tag failure")
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
@@ -39,6 +41,20 @@ lazy val root = (project in file("."))
       assert(
         tags.contains("api-v1.0.0"),
         s"Expected api-v1.0.0 tag (per-project isolation) but tags are: ${tags.mkString(", ")}"
+      )
+    },
+    checkNextVersionNotApplied  := {
+      // Tag failure should propagate globally and skip set-next-version.
+      // Version files should contain the release version (1.0.0), not the next SNAPSHOT.
+      val coreVer = IO.read(file("core/version.sbt"))
+      val apiVer  = IO.read(file("api/version.sbt"))
+      assert(
+        !coreVer.contains("1.1.0-SNAPSHOT"),
+        s"core version.sbt should not contain next SNAPSHOT after tag failure: $coreVer"
+      )
+      assert(
+        !apiVer.contains("1.1.0-SNAPSHOT"),
+        s"api version.sbt should not contain next SNAPSHOT after tag failure: $apiVer"
       )
     }
   )

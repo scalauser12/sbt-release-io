@@ -4,3 +4,4 @@ project/project/
 *.log
 .bsp/
 action-ran
+global/

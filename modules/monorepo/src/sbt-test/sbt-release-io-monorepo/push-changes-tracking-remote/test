@@ -1,0 +1,23 @@
+# Test: push-changes must push branch and tags to tracking remote, not remote.pushDefault
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Configure two remotes: origin is tracking, backup is pushDefault.
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git init --bare remotes/backup.git
+$ exec git remote add origin remotes/origin.git
+$ exec git remote add backup remotes/backup.git
+
+# Set upstream to origin, then force plain `git push` default to backup.
+$ exec git push -u origin HEAD
+$ exec git config remote.pushDefault backup
+
+# Run release; push-changes should still target origin for both branch and tags.
+> releaseIOMonorepo with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Verify branch and tags landed on origin only.
+> checkPushTargets
