@@ -22,6 +22,15 @@ import sbt.Keys.*
  */
 object CustomMonorepoStepExamples {
 
+  /** How to read this file (recommended path):
+    *  1. Start with `minimalProcess` for an immediate working setup.
+    *  2. Move to `firstCustomProcess` for the smallest meaningful customization.
+    *  3. Use `MyMonorepoRelease` for advanced resource-aware customization.
+    *
+    * Note: plugin objects like `MyMonorepoRelease` must live in `project/MyMonorepoRelease.scala`
+    * to be discovered by sbt. The objects below are examples to copy there.
+    */
+
   /** Minimal working setup.
     *
     * Usage in build.sbt (root project):
@@ -30,13 +39,35 @@ object CustomMonorepoStepExamples {
     *   .aggregate(core, api)
     *   .enablePlugins(MonorepoReleasePlugin)
     *
+    * import io.release.monorepo.MonorepoReleasePlugin.autoImport._
     * import io.release.monorepo.examples.CustomMonorepoStepExamples
     * releaseIOMonorepoProcess := CustomMonorepoStepExamples.minimalProcess
     * }}}
     *
     * Run with: `sbt "releaseIOMonorepo with-defaults"`
+    *
+    * Recommended command modes:
+    *   - changed projects: `sbt "releaseIOMonorepo with-defaults"`
+    *   - explicit projects: `sbt "releaseIOMonorepo core api with-defaults"`
+    *   - all projects: `sbt "releaseIOMonorepo all-changed with-defaults"`
+    *
+    * Avoid mixing explicit project names with `all-changed` in one command.
     */
   val minimalProcess: Seq[MonorepoStepIO] = MonorepoReleaseSteps.defaults
+
+  /** First customization: prepend one custom step and keep the default flow.
+    *
+    * Usage in build.sbt (root project):
+    * {{{
+    * import io.release.monorepo.MonorepoReleasePlugin.autoImport._
+    * import io.release.monorepo.examples.CustomMonorepoStepExamples
+    * releaseIOMonorepoProcess := CustomMonorepoStepExamples.firstCustomProcess
+    * }}}
+    *
+    * Run with: `sbt "releaseIOMonorepo with-defaults"`
+    */
+  lazy val firstCustomProcess: Seq[MonorepoStepIO] =
+    Seq(printSummary) ++ MonorepoReleaseSteps.defaults
 
   // --- Global step: print a release summary ---
 
@@ -84,6 +115,7 @@ object CustomMonorepoStepExamples {
     }
 
   // --- Per-project step: generate a changelog per project ---
+  // Intentionally simple demo logic: append-only and not fully idempotent.
 
   val generateChangelog: MonorepoStepIO =
     perProjectStep("generate-changelog") { (ctx, project) =>
@@ -138,10 +170,13 @@ object CustomMonorepoStepExamples {
    *
    * Usage in build.sbt:
    * {{{
+   * import io.release.monorepo.MonorepoReleasePlugin.autoImport._
    * import io.release.monorepo.examples.CustomMonorepoStepExamples
    *
    * releaseIOMonorepoProcess := CustomMonorepoStepExamples.customProcess
    * }}}
+   *
+   * Run with: `sbt "releaseIOMonorepo with-defaults"`
    */
   val customProcess: Seq[MonorepoStepIO] = Seq(
     MonorepoReleaseSteps.initializeVcs,

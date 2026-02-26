@@ -14,10 +14,20 @@ import sbt.Project.extract
  */
 object CustomStepExamples {
 
+  /** How to read this file (recommended path):
+    *  1. Start with `minimalProcess` for an immediate working setup.
+    *  2. Move to `firstCustomProcess` for the smallest meaningful customization.
+    *  3. Use `MyReleasePlugin` for advanced resource-aware customization.
+    *
+    * Note: plugin objects like `MyReleasePlugin` must live in `project/MyReleasePlugin.scala`
+    * to be discovered by sbt. The object below is an example to copy there.
+    */
+
   /** Minimal working setup.
     *
     * Usage in build.sbt:
     * {{{
+    * import io.release.ReleasePluginIO.autoImport._
     * import io.release.examples.CustomStepExamples
     * releaseIOProcess := CustomStepExamples.minimalProcess
     * }}}
@@ -25,6 +35,19 @@ object CustomStepExamples {
     * Run with: `sbt "releaseIO with-defaults"`
     */
   val minimalProcess: Seq[ReleaseStepIO] = ReleaseSteps.defaults
+
+  /** First customization: prepend one custom step and keep the default flow.
+    *
+    * Usage in build.sbt:
+    * {{{
+    * import io.release.ReleasePluginIO.autoImport._
+    * import io.release.examples.CustomStepExamples
+    * releaseIOProcess := CustomStepExamples.firstCustomProcess
+    * }}}
+    *
+    * Run with: `sbt "releaseIO with-defaults"`
+    */
+  lazy val firstCustomProcess: Seq[ReleaseStepIO] = Seq(printBanner) ++ ReleaseSteps.defaults
 
   // --- Custom step: print a banner ---
 
@@ -57,6 +80,7 @@ object CustomStepExamples {
   }
 
   // --- Custom step: run a shell command ---
+  // Demo helper only: avoid passing untrusted shell strings in production.
 
   def runShellCommand(name: String, command: String): ReleaseStepIO =
     ReleaseStepIO.io(s"shell-$name") { ctx =>
@@ -70,6 +94,7 @@ object CustomStepExamples {
     }
 
   // --- Custom step: write a changelog placeholder ---
+  // Intentionally simple demo logic: append-only and not fully idempotent.
 
   val generateChangelog: ReleaseStepIO = ReleaseStepIO.io("generate-changelog") { ctx =>
     ctx.versions match {
@@ -105,10 +130,13 @@ object CustomStepExamples {
    *
    * Usage in build.sbt:
    * {{{
+   * import io.release.ReleasePluginIO.autoImport._
    * import io.release.examples.CustomStepExamples
    *
    * releaseIOProcess := CustomStepExamples.customProcess
    * }}}
+   *
+   * Run with: `sbt "releaseIO with-defaults"`
    */
   val customProcess: Seq[ReleaseStepIO] = Seq(
     printBanner,
