@@ -268,14 +268,15 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
  *
  * Run with:
  * {{{
- * sbt "releaseIOMonorepo with-defaults"
+ * sbt "releaseDynamic with-defaults"
  * }}}
  */
 object DynamicMonorepoPlugin extends MonorepoReleasePluginLike[Unit] {
 
   private val ScalaVersion = "2.13.16"
 
-  override def trigger = noTrigger
+  override def trigger               = noTrigger
+  override protected def commandName = "releaseDynamic"
 
   override def requires: Plugins = _root_.io.release.ReleasePluginIO
 
