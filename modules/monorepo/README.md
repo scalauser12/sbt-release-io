@@ -245,8 +245,6 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
   override def resource: Resource[IO, HttpClient] =
     Resource.make(IO(new HttpClient()))(c => IO(c.close()))
 
-  object autoImport extends MonorepoReleaseIO
-
   override protected def monorepoReleaseProcess(state: State) =
     defaultsWith(state)(
       resourceGlobalStep("notify-slack") { client => ctx =>
@@ -275,6 +273,68 @@ override protected def monorepoReleaseProcess(state: State) =
     }
   )
 ```
+
+> **Note:** Each helper inserts at a single position. To insert custom steps at multiple
+> non-adjacent positions, use the fully custom approach below.
+
+### Fully custom release process
+
+Override `monorepoReleaseProcess` directly to build the step sequence from scratch instead of
+appending to the defaults. Plain steps (from `MonorepoReleaseSteps`) and resource-aware steps
+can be mixed freely — an implicit conversion lifts plain steps into resource-ignoring functions.
+
+```scala
+// project/MyReleasePlugin.scala
+import sbt._
+import sbt.Keys._
+import _root_.io.release.monorepo._
+import _root_.io.release.monorepo.steps.MonorepoReleaseSteps
+import _root_.cats.effect.{IO, Resource}
+
+object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
+  override def trigger                    = noTrigger
+  override protected def commandName      = "myRelease"
+  override def resource: Resource[IO, HttpClient] =
+    Resource.make(IO(new HttpClient()))(c => IO(c.close()))
+
+  override protected def monorepoReleaseProcess(state: State): Seq[HttpClient => MonorepoStepIO] =
+    Seq(
+      // Plain steps — lifted automatically via the implicit conversion
+      MonorepoReleaseSteps.initializeVcs,
+      MonorepoReleaseSteps.checkCleanWorkingDir,
+      // 1st custom step — validate branch before anything else runs
+      resourceGlobalStep("validate-branch") { client => ctx =>
+        IO.blocking { client.get("/allowed-branches") }.flatMap { branches =>
+          if (branches.contains("main")) IO.pure(ctx)
+          else IO.raiseError(new RuntimeException("Release blocked"))
+        }
+      },
+      MonorepoReleaseSteps.resolveReleaseOrder,
+      MonorepoReleaseSteps.detectOrSelectProjects,
+      MonorepoReleaseSteps.inquireVersions,
+      MonorepoReleaseSteps.runTests,
+      MonorepoReleaseSteps.setReleaseVersions,
+      MonorepoReleaseSteps.commitReleaseVersions,
+      MonorepoReleaseSteps.tagReleases,
+      // 2nd custom step — notify after tagging
+      resourceGlobalStep("notify-slack") { client => ctx =>
+        IO.blocking { client.post("/webhook", s"Tagged!"); ctx }
+      },
+      MonorepoReleaseSteps.publishArtifacts,
+      // 3rd custom step — verify each project's published artifact
+      resourcePerProjectStep("verify-publish") { client => (ctx, project) =>
+        IO.blocking { client.get(s"/artifacts/${project.name}"); ctx }
+      },
+      MonorepoReleaseSteps.setNextVersions,
+      MonorepoReleaseSteps.commitNextVersions,
+      MonorepoReleaseSteps.pushChanges
+    )
+}
+```
+
+This bypasses the `releaseIOMonorepoProcess` setting entirely — the step list is hard-coded
+in the plugin. Use `defaultsWith`, `defaultsWithAfter`, or `defaultsWithBefore` (shown above)
+if you want to keep the setting-based defaults and only add extra steps.
 
 ### Resource-aware steps with checks
 
@@ -409,14 +469,45 @@ Each project uses its own `crossScalaVersions`. A project with `Seq("2.13.12", "
 
 ### Per-project failure isolation
 
-When a **PerProject** step's action fails for a project:
+In a monorepo release, multiple sub-projects run through each **PerProject** step in sequence.
+If one project's action throws an exception, the plugin **isolates** the failure to that project
+so the remaining projects in the same step can still complete.
 
-1. The error is logged.
-2. The project is marked as `failed`.
-3. The step continues with remaining projects.
-4. After the step completes, if any project failed, the global context is marked failed and all subsequent steps (both Global and PerProject) are skipped.
+#### What happens when a per-project action fails
 
-**Global** step failures immediately mark the context as failed and skip all subsequent steps.
+1. The exception is caught and the error message is logged.
+2. The project is marked as **failed** internally.
+3. The step **continues** executing for the remaining (non-failed) projects.
+4. Once the step finishes, the plugin checks whether any project is marked failed.
+   If so, the global release context is marked failed and **all subsequent steps**
+   (both Global and PerProject) are skipped entirely.
+5. At the end of the release, a `RuntimeException("Monorepo release process failed")`
+   is raised so the overall sbt command exits with an error.
+
+#### Example
+
+Given three projects — `core`, `api`, and `web` — with the release steps
+`run-tests` → `set-release-version` → `publish-artifacts`:
+
+| Step | core | api | web |
+|------|------|-----|-----|
+| `run-tests` | passes | **fails** | passes |
+| `set-release-version` | skipped | skipped | skipped |
+| `publish-artifacts` | skipped | skipped | skipped |
+
+- During `run-tests`, `api` throws an exception. The error is logged and `api` is marked
+  failed, but `web` still runs and passes.
+- After `run-tests` completes, the global context is marked failed because `api` failed.
+- `set-release-version` and all later steps are skipped for **every** project.
+
+> **Note:** There is no dependency-aware cascade. If `web` depends on `api`, `web` is not
+> automatically marked failed just because `api` failed — it simply continues in the current
+> step. In a later step (if the release hadn't been halted), `web` would likely fail on its
+> own due to a missing artifact from `api`.
+
+#### Global step failures
+
+A **Global** step failure immediately marks the context as failed and skips all subsequent steps.
 
 ### Topological ordering
 

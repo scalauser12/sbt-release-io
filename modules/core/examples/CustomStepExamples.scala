@@ -1,10 +1,12 @@
 package io.release.examples
 
-import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseStepIO}
+import cats.effect.{IO, Resource}
+import io.release.{ReleaseContext, ReleasePluginIOLike, ReleaseStepIO}
+import io.release.ReleaseIO.*
 import io.release.steps.ReleaseSteps
-import sbt.Project.extract
+import sbt.*
 import sbt.Keys.thisProject
+import sbt.Project.extract
 
 /**
  * Examples showing how to create custom release steps and compose them
@@ -104,6 +106,7 @@ object CustomStepExamples {
     ReleaseSteps.checkSnapshotDependencies,
     ReleaseSteps.inquireVersions,
     generateChangelog,
+    ReleaseSteps.runClean,
     ReleaseSteps.runTests,
     ReleaseSteps.setReleaseVersion,
     ReleaseSteps.commitReleaseVersion,
@@ -127,4 +130,96 @@ object CustomStepExamples {
       else IO.println(s"[release-io] Skipping $name (condition not met)").as(ctx)
     }
 
+}
+
+// --- Resource-aware custom plugin example ---
+
+/** Placeholder for an HTTP client used in the resource-aware plugin example below. */
+trait HttpClient {
+  def get(path: String): String
+  def post(path: String, body: String): Unit
+  def close(): Unit
+}
+
+/**
+ * Example: a custom release plugin that acquires an HTTP client once
+ * and uses it in resource-aware steps at non-adjacent positions.
+ *
+ * Must be defined in a `.scala` file under `project/` so sbt discovers the AutoPlugin.
+ * Use `_root_.io.release` imports because `import sbt.*` shadows the `io` package.
+ *
+ * Enable in build.sbt:
+ * {{{
+ * enablePlugins(MyReleasePlugin)
+ * }}}
+ *
+ * Run with:
+ * {{{
+ * sbt "releaseWithClient with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+ * }}}
+ */
+object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
+
+  override def trigger               = noTrigger
+  override protected def commandName = "releaseWithClient"
+
+  override def resource: Resource[IO, HttpClient] =
+    Resource.make(
+      IO {
+        new HttpClient {
+          def get(path: String): String              = s"GET $path"
+          def post(path: String, body: String): Unit = ()
+          def close(): Unit                          = ()
+        }
+      }
+    )(c => IO(c.close()))
+
+  override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
+    Seq(
+      // Plain steps — lifted automatically via the implicit conversion
+      ReleaseSteps.initializeVcs,
+      ReleaseSteps.checkCleanWorkingDir,
+      // 1st resource step — validate branch via API
+      resourceStep[HttpClient]("validate-branch") { client => ctx =>
+        IO.blocking {
+          val allowed = client.get("/allowed-branches").split(",").toSet
+          ctx.vcs match {
+            case Some(vcs) =>
+              val branch = vcs.currentBranch
+              if (!allowed.contains(branch))
+                throw new RuntimeException(s"Branch '$branch' is not allowed for release")
+            case None      =>
+              throw new RuntimeException("VCS not initialized")
+          }
+          ctx
+        }
+      },
+      ReleaseSteps.checkSnapshotDependencies,
+      ReleaseSteps.inquireVersions,
+      ReleaseSteps.runClean,
+      ReleaseSteps.runTests,
+      ReleaseSteps.setReleaseVersion,
+      ReleaseSteps.commitReleaseVersion,
+      ReleaseSteps.tagRelease,
+      // 2nd resource step — notify Slack after tagging
+      resourceStep[HttpClient]("notify-slack") { client => ctx =>
+        IO.blocking {
+          val version = ctx.versions.map(_._1).getOrElse("unknown")
+          client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+          ctx
+        }
+      },
+      ReleaseSteps.publishArtifacts,
+      // 3rd resource step — verify the published artifact
+      resourceStep[HttpClient]("verify-publish") { client => ctx =>
+        IO.blocking {
+          val version = ctx.versions.map(_._1).getOrElse("unknown")
+          client.get(s"/artifacts/$version")
+          ctx
+        }
+      },
+      ReleaseSteps.setNextVersion,
+      ReleaseSteps.commitNextVersion,
+      ReleaseSteps.pushChanges
+    )
 }

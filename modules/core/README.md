@@ -102,6 +102,19 @@ releaseIOSkipPublish := true
 
 // Enable interactive prompts (disabled by default)
 releaseIOInteractive := true
+
+// Custom version file reader (default parses `[ThisBuild /] version := "x.y.z"`)
+releaseIOReadVersion := { file =>
+  IO.blocking(sbt.IO.read(file)).flatMap { contents =>
+    // your custom parsing logic
+    IO.pure(contents.trim)
+  }
+}
+
+// Custom version file writer (default produces `version := "x.y.z"\n`)
+releaseIOWriteVersion := { (file, version) =>
+  IO.pure(s"""version := "$version"\n""")
+}
 ```
 
 ### Custom Release Steps
@@ -226,6 +239,68 @@ override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseSt
 ```
 
 These helpers read from the `releaseIOProcess` setting (including any `build.sbt` filtering), so your override builds on all configured steps.
+
+> **Note:** Each helper inserts at a single position. To insert custom steps at multiple
+> non-adjacent positions, use the fully custom approach below.
+
+#### Fully custom release process
+
+Override `releaseProcess` directly to build the step sequence from scratch instead of
+appending to the defaults. Plain steps (from `ReleaseSteps`) and resource-aware steps
+can be mixed freely — an implicit conversion lifts plain steps into resource-ignoring functions.
+
+```scala
+// project/MyReleasePlugin.scala
+import sbt._
+import sbt.Keys._
+import _root_.io.release._
+import _root_.io.release.steps.ReleaseSteps
+import _root_.cats.effect.{IO, Resource}
+
+object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
+  override def trigger                    = noTrigger
+  override protected def commandName      = "myRelease"
+  override def resource: Resource[IO, HttpClient] =
+    Resource.make(IO(new HttpClient()))(c => IO(c.close()))
+
+  override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
+    Seq(
+      // Plain steps — lifted automatically via the implicit conversion
+      ReleaseSteps.initializeVcs,
+      ReleaseSteps.checkCleanWorkingDir,
+      // 1st custom step — validate branch before anything else runs
+      (client: HttpClient) => ReleaseStepIO.io("validate-branch") { ctx =>
+        IO.blocking { client.get("/allowed-branches") }.flatMap { branches =>
+          if (branches.contains("main")) IO.pure(ctx)
+          else IO.raiseError(new RuntimeException("Release blocked"))
+        }
+      },
+      ReleaseSteps.checkSnapshotDependencies,
+      ReleaseSteps.inquireVersions,
+      ReleaseSteps.runClean,
+      ReleaseSteps.runTests,
+      ReleaseSteps.setReleaseVersion,
+      ReleaseSteps.commitReleaseVersion,
+      ReleaseSteps.tagRelease,
+      // 2nd custom step — notify after tagging
+      (client: HttpClient) => ReleaseStepIO.io("notify-slack") { ctx =>
+        IO.blocking { client.post("/webhook", s"Tagged!"); ctx }
+      },
+      ReleaseSteps.publishArtifacts,
+      // 3rd custom step — verify the published artifact
+      (client: HttpClient) => ReleaseStepIO.io("verify-publish") { ctx =>
+        IO.blocking { client.get(s"/artifacts/${ctx.versions.map(_._1).getOrElse("")}"); ctx }
+      },
+      ReleaseSteps.setNextVersion,
+      ReleaseSteps.commitNextVersion,
+      ReleaseSteps.pushChanges
+    )
+}
+```
+
+This bypasses the `releaseIOProcess` setting entirely — the step list is hard-coded
+in the plugin. Use `defaultsWith`, `defaultsWithAfter`, or `defaultsWithBefore` (shown above)
+if you want to keep the setting-based defaults and only add extra steps.
 
 #### Key design points
 
