@@ -2,7 +2,7 @@ package io.release
 
 import sbt.AttributeKey
 
-/** Attribute keys for command-line arguments stored in [[sbt.State]] during a release.
+/** Attribute keys for command-line arguments stored in `sbt.State` during a release.
   *
   * Delegates to the upstream sbt-release `ReleaseKeys` so that IO-native steps and
   * any upstream sbt-release steps sharing the same State can read the same values.

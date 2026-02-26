@@ -82,7 +82,7 @@ trait ReleaseIO {
     *
     * {{{
     * val notifySlack: HttpClient => ReleaseStepIO = resourceStep("notify-slack") { client => ctx =>
-    *   IO { client.post("/slack", s"Released ${ctx.versions}"); ctx }
+    *   IO { client.post("/slack", s"Released $${ctx.versions}"); ctx }
     * }
     * }}}
     */

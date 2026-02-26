@@ -69,7 +69,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   /** Read default steps and insert resource-aware steps after a named step.
     *
     * @param afterStep the `name` of the step after which to insert
-    * @throws java.lang.RuntimeException if no step with the given name is found
+    * Throws `RuntimeException` if no step with the given name is found.
     */
   protected def defaultsWithAfter(state: State, afterStep: String)(
       extraSteps: (T => ReleaseStepIO)*
@@ -88,7 +88,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   /** Read default steps and insert resource-aware steps before a named step.
     *
     * @param beforeStep the `name` of the step before which to insert
-    * @throws java.lang.RuntimeException if no step with the given name is found
+    * Throws `RuntimeException` if no step with the given name is found.
     */
   protected def defaultsWithBefore(state: State, beforeStep: String)(
       extraSteps: (T => ReleaseStepIO)*

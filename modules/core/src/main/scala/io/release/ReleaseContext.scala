@@ -9,7 +9,7 @@ import sbtrelease.Vcs
   * then passed through [[ReleaseStepIO.compose]] which threads it sequentially through
   * every step. Steps return a new `ReleaseContext` with updated state, versions, or flags.
   *
-  * @param state       the current sbt [[sbt.State]], updated between steps
+  * @param state       the current `sbt.State`, updated between steps
   * @param versions    `(releaseVersion, nextVersion)` pair, set by `inquireVersions`
   * @param vcs         VCS adapter (git), set by `initializeVcs`
   * @param skipTests   when true, test steps are skipped
