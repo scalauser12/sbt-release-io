@@ -216,14 +216,22 @@ trait HttpClient {
  * Example: a custom monorepo release plugin that acquires an HTTP client
  * once and uses it in resource-aware steps at non-adjacent positions.
  *
- * Must be defined in a `.scala` file under `project/` so sbt discovers the AutoPlugin.
- * Use `_root_.io.release` imports because `import sbt.*` shadows the `io` package.
+ * Copy this object to `project/MyMonorepoRelease.scala` in your build so sbt can discover it.
+ * In that file, prefer `_root_` imports (for example `_root_.io.release...`) because
+ * `import sbt.*` can shadow the `io` package.
+ * If you keep a package declaration in that file, import the plugin symbol in `build.sbt`
+ * before calling `enablePlugins(...)`.
  *
  * Enable on the root project in build.sbt:
  * {{{
+ * // if MyMonorepoRelease is in the default package in project/MyMonorepoRelease.scala:
  * lazy val root = (project in file("."))
  *   .aggregate(core, api, web)
  *   .enablePlugins(MyMonorepoRelease)
+ *
+ * // if MyMonorepoRelease has a package:
+ * // import your.package.MyMonorepoRelease
+ * // lazy val root = (project in file(".")).enablePlugins(MyMonorepoRelease)
  * }}}
  *
  * Run with:
@@ -308,8 +316,9 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
  * Example: a monorepo release plugin that dynamically discovers subprojects
  * by scanning the `modules/` directory for subdirectories containing a `version.sbt` file.
  *
- * Must be defined in a `.scala` file under `project/` so sbt discovers the AutoPlugin.
- * Use `_root_.io.release` imports because `import sbt.*` shadows the `io` package.
+ * Copy this object to `project/DynamicMonorepoPlugin.scala` in your build so sbt can discover it.
+ * In that file, prefer `_root_` imports (for example `_root_.io.release...`) because
+ * `import sbt.*` can shadow the `io` package.
  *
  * Usage in build.sbt:
  * {{{
@@ -325,6 +334,7 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
  */
 object DynamicMonorepoPlugin extends MonorepoReleasePluginLike[Unit] {
 
+  // Example value: align this with your build's Scala version.
   private val ScalaVersion = "2.13.16"
 
   override def trigger               = noTrigger

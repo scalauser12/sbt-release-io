@@ -185,12 +185,20 @@ trait HttpClient {
  * Example: a custom release plugin that acquires an HTTP client once
  * and uses it in resource-aware steps at non-adjacent positions.
  *
- * Must be defined in a `.scala` file under `project/` so sbt discovers the AutoPlugin.
- * Use `_root_.io.release` imports because `import sbt.*` shadows the `io` package.
+ * Copy this object to `project/MyReleasePlugin.scala` in your build so sbt can discover it.
+ * In that file, prefer `_root_` imports (for example `_root_.io.release...`) because
+ * `import sbt.*` can shadow the `io` package.
+ * If you keep a package declaration in that file, import the plugin symbol in `build.sbt`
+ * before calling `enablePlugins(...)`.
  *
  * Enable in build.sbt:
  * {{{
+ * // if MyReleasePlugin is in the default package in project/MyReleasePlugin.scala:
  * enablePlugins(MyReleasePlugin)
+ *
+ * // if MyReleasePlugin has a package:
+ * // import your.package.MyReleasePlugin
+ * // enablePlugins(MyReleasePlugin)
  * }}}
  *
  * Run with:
