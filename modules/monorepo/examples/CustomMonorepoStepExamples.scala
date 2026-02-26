@@ -167,9 +167,11 @@ trait HttpClient {
  * Must be defined in a `.scala` file under `project/` so sbt discovers the AutoPlugin.
  * Use `_root_.io.release` imports because `import sbt.*` shadows the `io` package.
  *
- * Enable in build.sbt:
+ * Enable on the root project in build.sbt:
  * {{{
- * enablePlugins(MyMonorepoRelease)
+ * lazy val root = (project in file("."))
+ *   .aggregate(core, api, web)
+ *   .enablePlugins(MyMonorepoRelease)
  * }}}
  *
  * Run with:
@@ -246,4 +248,57 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       MonorepoReleaseSteps.commitNextVersions,
       MonorepoReleaseSteps.pushChanges
     )
+}
+
+// --- Dynamic project discovery example ---
+
+/**
+ * Example: a monorepo release plugin that dynamically discovers subprojects
+ * by scanning the `modules/` directory for subdirectories containing a `version.sbt` file.
+ *
+ * Must be defined in a `.scala` file under `project/` so sbt discovers the AutoPlugin.
+ * Use `_root_.io.release` imports because `import sbt.*` shadows the `io` package.
+ *
+ * Usage in build.sbt:
+ * {{{
+ * lazy val root = (project in file("."))
+ *   .enablePlugins(DynamicMonorepoPlugin)
+ *   .aggregate(DynamicMonorepoPlugin.extraProjects.map(p => LocalProject(p.id)): _*)
+ * }}}
+ *
+ * Run with:
+ * {{{
+ * sbt "releaseIOMonorepo with-defaults"
+ * }}}
+ */
+object DynamicMonorepoPlugin extends MonorepoReleasePluginLike[Unit] {
+
+  private val ScalaVersion = "2.13.16"
+
+  override def trigger = noTrigger
+
+  override def requires: Plugins = _root_.io.release.ReleasePluginIO
+
+  override def resource: Resource[IO, Unit] = Resource.unit
+
+  def extraProjects: Seq[Project] = {
+    val modulesDir = file("modules")
+    val dirs       =
+      if (modulesDir.exists && modulesDir.isDirectory)
+        Option(modulesDir.listFiles)
+          .getOrElse(Array.empty[File])
+          .filter(_.isDirectory)
+          .filter(dir => (dir / "version.sbt").exists)
+          .sorted
+          .toSeq
+      else Seq.empty
+
+    dirs.map { dir =>
+      Project(dir.getName, dir)
+        .settings(
+          name         := dir.getName,
+          scalaVersion := ScalaVersion
+        )
+    }
+  }
 }
