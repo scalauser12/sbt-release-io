@@ -380,7 +380,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
   *   .enablePlugins(MonorepoReleasePlugin)
   * }}}
   *
-  * Then run: `sbt releaseIOMonorepo core api with-defaults`
+  * Then run: `sbt releaseIOMonorepo core with-defaults`
   */
 object MonorepoReleasePlugin extends MonorepoReleasePluginLike[Unit] {
 
