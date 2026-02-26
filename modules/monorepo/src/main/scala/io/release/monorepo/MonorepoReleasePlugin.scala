@@ -27,11 +27,9 @@ import sbt.complete.Parser
   *   override def trigger     = noTrigger
   *   override def commandName = "releaseMonorepoCustom"
   *   override def resource    = Resource.make(IO(new HttpClient()))(c => IO(c.close()))
-  *
-  *   object autoImport extends MonorepoReleaseIO
   * }
   * // In build.sbt: enablePlugins(MyMonorepoRelease)
-  * // Run with:     sbt releaseMonorepoCustom core api with-defaults
+  * // Run with:     sbt releaseMonorepoCustom with-defaults
   * }}}
   */
 trait MonorepoReleasePluginLike[T] extends AutoPlugin {
@@ -279,6 +277,12 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
                s"not supported. Release all projects or disable releaseIOMonorepoUseGlobalVersion."
            )
 
+      _ <- validate(
+             flags.allChanged && selectedNames.nonEmpty,
+             "Cannot combine 'all-changed' with explicit project selection. " +
+               s"Either use 'all-changed' alone or specify projects explicitly."
+           )
+
       invalid = selectedNames.filterNot(validNames.contains)
       _      <- validate(
                   selectedNames.nonEmpty && invalid.nonEmpty,
@@ -289,6 +293,18 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       selectedProjects =
         if (selectedNames.nonEmpty) allProjects.filter(p => selectedNames.contains(p.name))
         else allProjects
+
+      unusedOverrides =
+        if (selectedNames.nonEmpty)
+          (releaseVersionOverrides.keySet ++ nextVersionOverrides.keySet) --
+            selectedProjects.map(_.name).toSet
+        else Set.empty[String]
+      _              <- validate(
+                          unusedOverrides.nonEmpty,
+                          s"Version overrides target non-selected projects: " +
+                            s"${unusedOverrides.mkString(", ")}. " +
+                            s"Selected: ${selectedProjects.map(_.name).mkString(", ")}"
+                        )
 
       _ <- validate(
              selectedProjects.isEmpty,
