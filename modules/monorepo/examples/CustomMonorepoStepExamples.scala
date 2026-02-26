@@ -4,12 +4,13 @@ import cats.effect.{IO, Resource}
 import io.release.monorepo.{
   MonorepoContext,
   MonorepoReleasePluginLike,
-  MonorepoReleaseSteps,
   MonorepoStepIO,
   ProjectReleaseInfo
 }
+import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.monorepo.MonorepoReleaseIO.*
 import sbt.*
+import sbt.Keys.*
 
 /**
  * Examples showing how to create custom monorepo release steps and compose them
@@ -20,6 +21,22 @@ import sbt.*
  *   - '''PerProject''' — runs once per selected project in topological order
  */
 object CustomMonorepoStepExamples {
+
+  /** Minimal working setup.
+    *
+    * Usage in build.sbt (root project):
+    * {{{
+    * lazy val root = (project in file("."))
+    *   .aggregate(core, api)
+    *   .enablePlugins(MonorepoReleasePlugin)
+    *
+    * import io.release.monorepo.examples.CustomMonorepoStepExamples
+    * releaseIOMonorepoProcess := CustomMonorepoStepExamples.minimalProcess
+    * }}}
+    *
+    * Run with: `sbt "releaseIOMonorepo with-defaults"`
+    */
+  val minimalProcess: Seq[MonorepoStepIO] = MonorepoReleaseSteps.defaults
 
   // --- Global step: print a release summary ---
 
@@ -282,7 +299,7 @@ object DynamicMonorepoPlugin extends MonorepoReleasePluginLike[Unit] {
 
   override def resource: Resource[IO, Unit] = Resource.unit
 
-  def extraProjects: Seq[Project] = {
+  override def extraProjects: Seq[Project] = {
     val modulesDir = file("modules")
     val dirs       =
       if (modulesDir.exists && modulesDir.isDirectory)

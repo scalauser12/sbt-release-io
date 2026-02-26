@@ -14,6 +14,18 @@ import sbt.Project.extract
  */
 object CustomStepExamples {
 
+  /** Minimal working setup.
+    *
+    * Usage in build.sbt:
+    * {{{
+    * import io.release.examples.CustomStepExamples
+    * releaseIOProcess := CustomStepExamples.minimalProcess
+    * }}}
+    *
+    * Run with: `sbt "releaseIO with-defaults"`
+    */
+  val minimalProcess: Seq[ReleaseStepIO] = ReleaseSteps.defaults
+
   // --- Custom step: print a banner ---
 
   val printBanner: ReleaseStepIO = ReleaseStepIO.io("print-banner") { ctx =>
