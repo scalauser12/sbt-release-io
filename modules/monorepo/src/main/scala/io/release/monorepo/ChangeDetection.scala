@@ -16,9 +16,11 @@ object ChangeDetection {
     final case class LookupFailed(details: String) extends TagLookupResult
   }
 
-  /** Normalize path separators to forward slashes to match git output on all platforms. */
+  /** Normalize path separators to forward slashes to match git output on all platforms.
+    * Uses canonical paths to handle symlinks (e.g. macOS /var → /private/var).
+    */
   private def gitRelativize(base: File, file: File): Option[String] =
-    sbt.IO.relativize(base, file).map(_.replace('\\', '/'))
+    sbt.IO.relativize(base.getCanonicalFile, file.getCanonicalFile).map(_.replace('\\', '/'))
 
   private def errorMessage(err: Throwable): String =
     Option(err.getMessage).filter(_.trim.nonEmpty).getOrElse(err.toString)

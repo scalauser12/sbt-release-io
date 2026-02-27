@@ -52,6 +52,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### detect-changes-disabled
 - `detectChanges=false` setting releases all projects regardless of changes
 
+### detect-changes-excludes
+- `releaseIOMonorepoDetectChangesExcludes` filters additional files from change detection
+- Excluded-only changes yield "nothing to release"; real changes alongside excluded files still detected
+
 ### diamond-dependency
 - Diamond dependency graph (base -> left/right, left/right -> top)
 - Verifies topological sort puts base first and top last

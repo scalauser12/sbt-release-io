@@ -1,0 +1,31 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate a previous release
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
+
+# Add ONLY an excluded file (CHANGELOG.md) to core and commit
+$ touch core/CHANGELOG.md
+$ exec git add core/CHANGELOG.md
+$ exec git commit -m "Update changelog"
+
+# Release should FAIL — the only change is an excluded file, so no projects detected
+-> releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT
+
+# Now add a real source change alongside the excluded file
+$ touch core/CHANGES.md
+$ exec git add core/CHANGES.md
+$ exec git commit -m "Add changes file to core"
+
+# Release should SUCCEED — real change detected (CHANGELOG.md filtered, Feature.scala remains)
+> releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT
+
+# Verify only core was released
+> checkTags
+> checkCoreVersion
+> checkApiVersion

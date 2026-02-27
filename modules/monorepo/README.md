@@ -398,13 +398,14 @@ On detector error, the project is conservatively treated as changed.
 ### Excluding files from detection
 
 ```scala
-// Exclude generated changelog from change detection
+// In the root project settings — exclude a subproject's generated changelog
 releaseIOMonorepoDetectChangesExcludes := Seq(
-  baseDirectory.value / "CHANGELOG.md"
+  (core / baseDirectory).value / "CHANGELOG.md"
 )
 ```
 
-Per-project version files are always excluded automatically.
+This setting is read from the **root project** scope, so use `(subproject / baseDirectory).value`
+to reference subproject directories. Per-project version files are always excluded automatically.
 
 ## Tagging Strategies
 
