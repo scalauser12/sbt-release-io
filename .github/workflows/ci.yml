@@ -19,6 +19,7 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: sbt
+      - uses: sbt/setup-sbt@v1
       - name: Run tests
         run: sbt test
 
@@ -35,6 +36,7 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: sbt
+      - uses: sbt/setup-sbt@v1
       - name: Publish to Maven Central
         run: sbt ci-release
         env:
