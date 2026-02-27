@@ -28,6 +28,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Tests custom tag naming via the `releaseTagName` setting
 - Uses `runtimeVersion` to create dynamic tag names
 
+### custom-plugin
+- Tests `ReleasePluginIOLike` resource lifecycle (acquire → use → release)
+- Verifies marker files prove the resource was acquired, used by a step, and released
+
 ### empty-commit
 - Version file already at release version
 - Verifies no-op commit is handled gracefully
@@ -84,6 +88,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ### snapshot-deps
 - Project with a SNAPSHOT dependency
 - Verifies release fails with appropriate error
+
+### snapshot-deps-cross
+- Cross-build project where only one Scala version has a SNAPSHOT dependency
+- Verifies `cross` release fails when any version has snapshot dependencies
 
 ### tag-default
 - Tests tag name conflict handling with multiple scenarios
