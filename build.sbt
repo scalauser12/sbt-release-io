@@ -1,4 +1,3 @@
-ThisBuild / version                := "0.1.0-SNAPSHOT"
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
 
 lazy val commonSettings = Seq(
