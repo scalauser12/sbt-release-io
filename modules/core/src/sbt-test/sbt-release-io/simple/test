@@ -1,0 +1,18 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Run release with defaults
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify version.sbt was updated to next version
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt
+
+# Verify git commits were created (using custom task like upstream)
+> checkGitCommitCount 3
+
+# Verify tag was created (using custom task like upstream)
+> checkGitTag
