@@ -18,18 +18,18 @@ A monorepo release plugin for sbt, extending [sbt-release-io](../core/README.md)
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.1.0-SNAPSHOT")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.1.0")
 ```
 
 Enable on your root project in `build.sbt`:
 
 ```scala
 lazy val core = (project in file("core"))
-  .settings(version := "0.1.0-SNAPSHOT")
+  .settings(version := "0.1.0")
 
 lazy val api = (project in file("api"))
   .dependsOn(core)
-  .settings(version := "0.1.0-SNAPSHOT")
+  .settings(version := "0.1.0")
 
 lazy val root = (project in file("."))
   .aggregate(core, api)

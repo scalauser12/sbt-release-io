@@ -18,7 +18,7 @@ An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with 
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.1.0-SNAPSHOT")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.1.0")
 ```
 
 ## Usage
