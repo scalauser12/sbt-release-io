@@ -1,14 +1,14 @@
 package io.release
 
-import scala.language.implicitConversions
-
-import cats.effect.{IO, Resource}
 import cats.effect.unsafe.implicits.global
+import cats.effect.{IO, Resource}
 import io.release.steps.ReleaseSteps
 import sbt.*
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
+
+import scala.language.implicitConversions
 
 /** Base trait for resource-parameterized release plugins. Each release step is a function
   * `T => ReleaseStepIO` where `T` is a resource acquired once for the entire release process.

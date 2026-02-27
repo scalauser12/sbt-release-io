@@ -14,8 +14,8 @@ class MonorepoStepDefSpec extends Specification {
         IO.pure(ctx.withAttr("key", "value"))
       }
 
-      step.name must_== "test-global"
-      step must beAnInstanceOf[MonorepoStepIO.Global]
+      (step.name must_== "test-global") and
+        (step must beAnInstanceOf[MonorepoStepIO.Global])
     }
 
     "perProjectStep creates a PerProject step" in {
@@ -23,8 +23,8 @@ class MonorepoStepDefSpec extends Specification {
         IO.pure(ctx.withAttr("project", project.name))
       }
 
-      step.name must_== "test-per-project"
-      step must beAnInstanceOf[MonorepoStepIO.PerProject]
+      (step.name must_== "test-per-project") and
+        (step must beAnInstanceOf[MonorepoStepIO.PerProject])
     }
   }
 }

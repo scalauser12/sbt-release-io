@@ -1,9 +1,10 @@
 package io.release.steps
 
 import cats.effect.IO
-import scala.sys.process.*
 import io.release.{ReleaseContext, ReleaseKeys}
 import sbtrelease.Vcs
+
+import scala.sys.process.*
 
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {

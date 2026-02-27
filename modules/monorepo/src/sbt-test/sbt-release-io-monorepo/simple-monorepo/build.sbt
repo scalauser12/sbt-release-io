@@ -29,33 +29,40 @@ lazy val root = (project in file("."))
 
     // Custom verification tasks
     checkGitCommitCount := {
-      val count = "git log --oneline".!!.split("\n").length
-      // Expected: initial commit + set release versions + set next versions = 3
-      assert(count == 3, s"Expected 3 commits but found $count")
+      import sbt.complete.DefaultParsers._
+      val expected = spaceDelimited("<count>").parsed.head.toInt
+      val actual   = "git log --oneline".!!.trim.linesIterator.length
+      assert(actual == expected, s"Expected $expected commits but found $actual")
     },
 
     checkGitTags := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       // Expected: per-project tags (core-v0.1.0, api-v0.1.0)
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
-      assert(tags.sorted.toList == List("api-v0.1.0", "core-v0.1.0"),
-        s"Expected tags [api-v0.1.0, core-v0.1.0] but got [${tags.sorted.mkString(", ")}]")
+      assert(
+        tags.sorted.toList == List("api-v0.1.0", "core-v0.1.0"),
+        s"Expected tags [api-v0.1.0, core-v0.1.0] but got [${tags.sorted.mkString(", ")}]"
+      )
     },
 
     checkCoreVersion := {
       val contents = IO.read(file("core/version.sbt"))
-      assert(contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected core version 0.2.0-SNAPSHOT in core/version.sbt but got: $contents")
+      assert(
+        contents.contains("0.2.0-SNAPSHOT"),
+        s"Expected core version 0.2.0-SNAPSHOT in core/version.sbt but got: $contents"
+      )
     },
 
     checkApiVersion := {
       val contents = IO.read(file("api/version.sbt"))
-      assert(contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected api version 0.2.0-SNAPSHOT in api/version.sbt but got: $contents")
+      assert(
+        contents.contains("0.2.0-SNAPSHOT"),
+        s"Expected api version 0.2.0-SNAPSHOT in api/version.sbt but got: $contents"
+      )
     }
   )
 
-val checkGitCommitCount = taskKey[Unit]("Check git commit count")
+val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 val checkGitTags        = taskKey[Unit]("Check git tags")
 val checkCoreVersion    = taskKey[Unit]("Check core version.sbt")
 val checkApiVersion     = taskKey[Unit]("Check api version.sbt")

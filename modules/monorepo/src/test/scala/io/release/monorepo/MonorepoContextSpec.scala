@@ -1,8 +1,8 @@
 package io.release.monorepo
 
 import org.specs2.mutable.Specification
-import sbt.{State, ProjectRef}
 import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
+import sbt.{ProjectRef, State}
 import xsbti.*
 
 import java.io.File
@@ -18,8 +18,8 @@ class MonorepoContextSpec extends Specification {
       val updated  =
         ctx.updateProject(projects(0).ref)(_.copy(versions = Some(("1.0.0", "1.1.0-SNAPSHOT"))))
 
-      updated.projects(0).versions must beSome(("1.0.0", "1.1.0-SNAPSHOT"))
-      updated.projects(1).versions must beNone
+      (updated.projects(0).versions must beSome(("1.0.0", "1.1.0-SNAPSHOT"))) and
+        (updated.projects(1).versions must beNone)
     }
 
     "filter out failed projects in currentProjects" in withState { state =>
@@ -36,15 +36,15 @@ class MonorepoContextSpec extends Specification {
       val ctx     = MonorepoContext(state = state)
       val updated = ctx.withAttr("key1", "val1").withAttr("key2", "val2")
 
-      updated.attr("key1") must beSome("val1")
-      updated.attr("key2") must beSome("val2")
-      updated.attr("missing") must beNone
+      (updated.attr("key1") must beSome("val1")) and
+        (updated.attr("key2") must beSome("val2")) and
+        (updated.attr("missing") must beNone)
     }
 
     "mark as failed" in withState { state =>
       val ctx = MonorepoContext(state = state)
-      ctx.failed must_== false
-      ctx.fail.failed must_== true
+      (ctx.failed must_== false) and
+        (ctx.fail.failed must_== true)
     }
 
     "convert to ReleaseContext preserving shared state" in withState { state =>
@@ -56,10 +56,10 @@ class MonorepoContextSpec extends Specification {
       )
       val rc  = ctx.toReleaseContext
 
-      rc.skipTests must_== true
-      rc.skipPublish must_== true
-      rc.interactive must_== false
-      rc.versions must beNone
+      (rc.skipTests must_== true) and
+        (rc.skipPublish must_== true) and
+        (rc.interactive must_== false) and
+        (rc.versions must beNone)
     }
 
     "replace projects via withProjects" in withState { state =>
@@ -74,9 +74,9 @@ class MonorepoContextSpec extends Specification {
 
     "have sensible defaults" in {
       val proj = dummyProject("test")
-      proj.versions must beNone
-      proj.tagName must beNone
-      proj.failed must_== false
+      (proj.versions must beNone) and
+        (proj.tagName must beNone) and
+        (proj.failed must_== false)
     }
   }
 
@@ -123,12 +123,16 @@ class MonorepoContextSpec extends Specification {
     } finally TestHelpers.deleteRecursively(dir)
   }
 
+  private class DummyAppMain extends AppMain {
+    override def run(configuration: AppConfiguration): MainResult = new MainResult {}
+  }
+
   private def dummyAppConfiguration(baseDir: File): AppConfiguration = {
     val launcher: Launcher = new Launcher {
-      override def getScala(version: String): ScalaProvider                                   = null
-      override def getScala(version: String, reason: String): ScalaProvider                   = null
-      override def getScala(version: String, reason: String, scalaOrg: String): ScalaProvider = null
-      override def app(id: ApplicationID, version: String): AppProvider                       = null
+      override def getScala(version: String): ScalaProvider                                   = ???
+      override def getScala(version: String, reason: String): ScalaProvider                   = ???
+      override def getScala(version: String, reason: String, scalaOrg: String): ScalaProvider = ???
+      override def app(id: ApplicationID, version: String): AppProvider                       = ???
       override def topLoader(): ClassLoader                                                   = getClass.getClassLoader
       override def globalLock(): GlobalLock                                                   = new GlobalLock {
         override def apply[T](lockFile: File, run: java.util.concurrent.Callable[T]): T = run.call()
@@ -150,10 +154,6 @@ class MonorepoContextSpec extends Specification {
       override def crossVersioned(): Boolean         = false
       override def crossVersionedValue(): CrossValue = CrossValue.Disabled
       override def classpathExtra(): Array[File]     = Array.empty
-    }
-
-    class DummyAppMain extends AppMain {
-      override def run(configuration: AppConfiguration): MainResult = new MainResult {}
     }
 
     lazy val scalaProvider: ScalaProvider = new ScalaProvider {

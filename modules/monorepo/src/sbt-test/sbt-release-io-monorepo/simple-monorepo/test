@@ -13,7 +13,7 @@ $ exec git commit -m "Initial commit"
 > checkApiVersion
 
 # Verify git commits were created
-> checkGitCommitCount
+> checkGitCommitCount 3
 
 # Verify per-project tags were created
 > checkGitTags

@@ -24,8 +24,9 @@ object ChangeDetection {
     Option(err.getMessage).filter(_.trim.nonEmpty).getOrElse(err.toString)
 
   private def lookupLastTag(vcs: Vcs, tagPattern: String): TagLookupResult = {
-    import scala.sys.process.*
     import TagLookupResult.*
+
+    import scala.sys.process.*
 
     Try(
       Process(
@@ -115,8 +116,9 @@ object ChangeDetection {
       state: State,
       excludePaths: Set[String]
   ): Boolean = {
-    import scala.sys.process.*
     import TagLookupResult.*
+
+    import scala.sys.process.*
 
     lookupLastTag(vcs, tagPattern) match {
       case NoMatchingTag =>

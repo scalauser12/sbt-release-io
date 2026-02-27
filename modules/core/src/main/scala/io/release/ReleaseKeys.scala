@@ -9,7 +9,7 @@ import sbt.AttributeKey
   * Populated by [[ReleasePluginIOLike.doReleaseIO]] before the release process starts.
   */
 object ReleaseKeys {
-  import sbtrelease.ReleasePlugin.autoImport.{ReleaseKeys => UpstreamKeys}
+  import sbtrelease.ReleasePlugin.autoImport.ReleaseKeys as UpstreamKeys
 
   val useDefaults: AttributeKey[Boolean]                      = UpstreamKeys.useDefaults
   val skipTests: AttributeKey[Boolean]                        = UpstreamKeys.skipTests

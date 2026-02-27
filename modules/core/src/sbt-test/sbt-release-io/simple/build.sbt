@@ -13,10 +13,12 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
 releaseIgnoreUntrackedFiles := true
 
 // Custom verification tasks (following upstream sbt-release pattern)
-val checkGitCommitCount = taskKey[Unit]("Check that git has the expected number of commits")
+val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {
-  val count = "git log --oneline".!!.split("\n").length
-  assert(count == 3, s"Expected 3 commits but found $count")
+  import sbt.complete.DefaultParsers._
+  val expected = spaceDelimited("<count>").parsed.head.toInt
+  val actual   = "git log --oneline".!!.trim.linesIterator.length
+  assert(actual == expected, s"Expected $expected commits but found $actual")
 }
 
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")

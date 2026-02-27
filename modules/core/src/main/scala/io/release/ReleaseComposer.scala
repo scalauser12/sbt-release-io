@@ -2,8 +2,8 @@ package io.release
 
 import cats.effect.IO
 import sbt.*
-import sbt.Keys.*
 import sbt.Def.ScopedKey
+import sbt.Keys.*
 import sbtrelease.Compat
 
 import scala.util.control.NonFatal

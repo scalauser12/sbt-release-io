@@ -14,15 +14,11 @@ $ exec git tag -a v0.1.0 -m "pre-existing tag"
 -> releaseIO release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 $ exec git reset --hard HEAD~1
 
-# Scenario 1: default behavior = abort (no default-tag-exists-answer arg)
--> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
-$ exec git reset --hard HEAD~1
-
-# Scenario 2: explicit abort (a)
+# Scenario 1: explicit abort (a) — same as default behavior
 -> releaseIO with-defaults default-tag-exists-answer a release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 $ exec git reset --hard HEAD~1
 
-# Scenario 3: overwrite (o) — git tag -f is used, existing tag is replaced
+# Scenario 2: overwrite (o) — git tag -f is used, existing tag is replaced
 > releaseIO with-defaults default-tag-exists-answer o release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 $ exec grep -q "0.2.0-SNAPSHOT" version.sbt
 > checkTagExists v0.1.0
@@ -32,7 +28,7 @@ $ exec git tag -d v0.1.0
 $ exec git reset --hard HEAD~2
 > reload
 
-# Scenario 4: keep existing tag (k) — tag is left as-is, release still succeeds
+# Scenario 3: keep existing tag (k) — tag is left as-is, release still succeeds
 $ exec git tag -a v0.1.0 -m "pre-existing tag"
 > releaseIO with-defaults default-tag-exists-answer k release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 $ exec grep -q "0.2.0-SNAPSHOT" version.sbt
@@ -43,7 +39,7 @@ $ exec git tag -d v0.1.0
 $ exec git reset --hard HEAD~2
 > reload
 
-# Scenario 5: custom tag name — release uses v0.1.0-custom instead
+# Scenario 4: custom tag name — release uses v0.1.0-custom instead
 $ exec git tag -a v0.1.0 -m "pre-existing tag"
 > releaseIO with-defaults default-tag-exists-answer v0.1.0-custom release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 > checkTagExists v0.1.0-custom

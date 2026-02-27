@@ -3,7 +3,7 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
-import MonorepoStepHelpers.*
+import io.release.monorepo.steps.MonorepoStepHelpers.*
 import sbt.*
 import sbt.Project.extract
 

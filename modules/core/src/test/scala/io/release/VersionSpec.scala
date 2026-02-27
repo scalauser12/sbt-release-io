@@ -18,10 +18,8 @@ class VersionSpec extends Specification {
     def testBumpNextStable(input: String, expectedOutput: String): MatchResult[Any] =
       version(input).bumpNextStable.unapply must_== expectedOutput
 
-    def testBothBumpNextStrategies(input: String, expectedOutput: String): MatchResult[Any] = {
-      testBumpNext(input, expectedOutput)
-      testBumpNextStable(input, expectedOutput)
-    }
+    def testBothBumpNextStrategies(input: String, expectedOutput: String): MatchResult[Any] =
+      testBumpNext(input, expectedOutput) and testBumpNextStable(input, expectedOutput)
 
     "bump the major version if there's only a major version" in {
       testBothBumpNextStrategies("1", "2")
@@ -40,40 +38,40 @@ class VersionSpec extends Specification {
     }
 
     "drop the qualifier if it's a pre release and there is no version number at the end" in {
-      testBothBumpNextStrategies("1-rc", "1")
-      testBothBumpNextStrategies("1.0-rc", "1.0")
-      testBothBumpNextStrategies("1.0.0-rc", "1.0.0")
-      testBothBumpNextStrategies("1.0.0.0-rc", "1.0.0.0")
-      testBothBumpNextStrategies("1-beta", "1")
-      testBothBumpNextStrategies("1-alpha", "1")
+      testBothBumpNextStrategies("1-rc", "1") and
+        testBothBumpNextStrategies("1.0-rc", "1.0") and
+        testBothBumpNextStrategies("1.0.0-rc", "1.0.0") and
+        testBothBumpNextStrategies("1.0.0.0-rc", "1.0.0.0") and
+        testBothBumpNextStrategies("1-beta", "1") and
+        testBothBumpNextStrategies("1-alpha", "1")
     }
 
     "when the qualifier includes a pre release with a version number at the end" >> {
       "and Next is the bumping strategy" >> {
         "should bump the qualifier" in {
-          testBumpNext("1-rc1", "1-rc2")
-          testBumpNext("1.2-rc1", "1.2-rc2")
-          testBumpNext("1.2.3-rc1", "1.2.3-rc2")
-          testBumpNext("1-RC1", "1-RC2")
-          testBumpNext("1-M1", "1-M2")
-          testBumpNext("1-rc-1", "1-rc-2")
-          testBumpNext("1-rc.1", "1-rc.2")
-          testBumpNext("1-beta-1", "1-beta-2")
-          testBumpNext("1-beta.1", "1-beta.2")
+          testBumpNext("1-rc1", "1-rc2") and
+            testBumpNext("1.2-rc1", "1.2-rc2") and
+            testBumpNext("1.2.3-rc1", "1.2.3-rc2") and
+            testBumpNext("1-RC1", "1-RC2") and
+            testBumpNext("1-M1", "1-M2") and
+            testBumpNext("1-rc-1", "1-rc-2") and
+            testBumpNext("1-rc.1", "1-rc.2") and
+            testBumpNext("1-beta-1", "1-beta-2") and
+            testBumpNext("1-beta.1", "1-beta.2")
         }
       }
 
       "and NextStable is the bumping strategy" >> {
         "should remove the qualifier" in {
-          testBumpNextStable("1-rc1", "1")
-          testBumpNextStable("1.2-rc1", "1.2")
-          testBumpNextStable("1.2.3-rc1", "1.2.3")
-          testBumpNextStable("1-RC1", "1")
-          testBumpNextStable("1-M1", "1")
-          testBumpNextStable("1-rc-1", "1")
-          testBumpNextStable("1-rc.1", "1")
-          testBumpNextStable("1-beta-1", "1")
-          testBumpNextStable("1-beta.1", "1")
+          testBumpNextStable("1-rc1", "1") and
+            testBumpNextStable("1.2-rc1", "1.2") and
+            testBumpNextStable("1.2.3-rc1", "1.2.3") and
+            testBumpNextStable("1-RC1", "1") and
+            testBumpNextStable("1-M1", "1") and
+            testBumpNextStable("1-rc-1", "1") and
+            testBumpNextStable("1-rc.1", "1") and
+            testBumpNextStable("1-beta-1", "1") and
+            testBumpNextStable("1-beta.1", "1")
         }
       }
     }

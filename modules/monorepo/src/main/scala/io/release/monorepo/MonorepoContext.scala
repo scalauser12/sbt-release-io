@@ -1,6 +1,6 @@
 package io.release.monorepo
 
-import io.release.{ReleaseContext, ReleaseKeys}
+import io.release.ReleaseContext
 import sbt.*
 import sbtrelease.Vcs
 

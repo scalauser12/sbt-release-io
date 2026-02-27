@@ -3,14 +3,14 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
+import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.runProcess
-import MonorepoStepHelpers.*
-import scala.sys.process.Process
-import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.Vcs
+
+import scala.sys.process.Process
 
 /** VCS-related monorepo release steps. */
 private[monorepo] object MonorepoVcsSteps {

@@ -1,16 +1,16 @@
 package io.release.steps
 
 import cats.effect.IO
-import scala.sys.process.*
-import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import io.release.ReleaseIO.{releaseIOReadVersion, releaseIOWriteVersion}
+import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
+import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
-import sbt.Project.extract
 import sbt.Package.ManifestAttributes
+import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 
-import StepHelpers.*
+import scala.sys.process.*
 
 /** Version-related release steps: inquire, set, commit versions. */
 private[release] object VersionSteps {

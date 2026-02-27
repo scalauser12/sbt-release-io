@@ -1,8 +1,8 @@
 package io.release.monorepo.steps
 
-import cats.effect.IO
 import _root_.io.release.monorepo.{MonorepoContext, ProjectReleaseInfo}
 import _root_.io.release.steps.StepHelpers.runProcess
+import cats.effect.IO
 import sbt.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*

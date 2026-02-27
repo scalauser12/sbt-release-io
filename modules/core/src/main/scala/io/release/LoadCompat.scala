@@ -2,7 +2,7 @@ package io.release
 
 import sbt.*
 import sbt.Def.ScopedKey
-import sbt.internal.{BuildStructure, BuildStreams, BuildUtil}
+import sbt.internal.{BuildStreams, BuildStructure, BuildUtil}
 
 /** Compatibility layer for sbt.Load which was made private in sbt 1.0.
   * Only `reapply` is reimplemented here because sbtrelease.Load.reapply uses the older

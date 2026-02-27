@@ -1,16 +1,13 @@
 package io.release.steps
 
 import cats.effect.IO
-import scala.sys.process.*
+import io.release.steps.StepHelpers.*
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
-import sbt.*
 import sbt.Keys.*
-import sbt.Project.extract
 import sbt.Package.ManifestAttributes
+import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.Vcs
-
-import StepHelpers.*
 
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {

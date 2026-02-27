@@ -1,8 +1,9 @@
 lazy val commonSettings = Seq(
   organization       := "io.github.sbt-release-io",
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-effect" % "3.6.3",
-    "org.specs2"    %% "specs2-core" % "4.20.4" % Test
+    "org.typelevel" %% "cats-effect"                % "3.6.3",
+    "org.specs2"    %% "specs2-core"                % "4.20.4" % Test,
+    "org.typelevel" %% "cats-effect-testing-specs2" % "1.7.0"  % Test
   ),
   scalacOptions ++= Seq(
     "-deprecation",

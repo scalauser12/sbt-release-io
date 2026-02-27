@@ -3,11 +3,10 @@ package io.release.steps
 import cats.effect.IO
 import io.release.{ReleaseContext, ReleaseStepIO}
 import sbt.*
+import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
-
-import StepHelpers.*
 
 /** Publish, test, and dependency-related release steps. */
 private[release] object PublishSteps {

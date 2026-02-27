@@ -1,8 +1,9 @@
 package io.release.steps
 
 import cats.effect.IO
-import java.io.File
 import io.release.ReleaseStepIO
+
+import java.io.File
 
 /** Facade re-exporting all built-in release steps and default sequences.
   *
