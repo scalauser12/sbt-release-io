@@ -1,8 +1,26 @@
+ThisBuild / version := "0.1.0-SNAPSHOT"
+
 lazy val commonSettings = Seq(
-  organization       := "io.github.sbt-release-io",
+  organization       := "io.github.scalauser12",
+  homepage           := Some(url("https://github.com/scalauser12/sbt-release-io")),
+  licenses           := List("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")),
+  developers         := List(
+    Developer(
+      id = "scalauser12",
+      name = "Boris Kotsev",
+      email = "scalauser12@users.noreply.github.com",
+      url = url("https://github.com/scalauser12")
+    )
+  ),
+  scmInfo            := Some(
+    ScmInfo(
+      url("https://github.com/scalauser12/sbt-release-io"),
+      "scm:git@github.com:scalauser12/sbt-release-io.git"
+    )
+  ),
   libraryDependencies ++= Seq(
     "org.typelevel" %% "cats-effect"                % "3.6.3",
-    "org.specs2"    %% "specs2-core"                % "4.20.4" % Test,
+    "org.specs2"    %% "specs2-core"                % "4.23.0" % Test,
     "org.typelevel" %% "cats-effect-testing-specs2" % "1.7.0"  % Test
   ),
   scalacOptions ++= Seq(
@@ -36,6 +54,7 @@ lazy val monorepo = (project in file("modules/monorepo"))
 lazy val root = (project in file("."))
   .aggregate(core, monorepo)
   .settings(
-    name           := "sbt-release-io-root",
-    publish / skip := true
+    name                := "sbt-release-io-root",
+    publish / skip      := true,
+    sonatypeProfileName := "io.github.scalauser12"
   )

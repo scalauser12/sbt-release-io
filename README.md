@@ -1,5 +1,7 @@
 # sbt-release-io
 
+[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
+
 An sbt plugin suite that wraps [sbt-release](https://github.com/sbt/sbt-release) with cats-effect IO for composable, resource-safe release automation.
 
 ## Modules
@@ -16,7 +18,7 @@ An sbt plugin suite that wraps [sbt-release](https://github.com/sbt/sbt-release)
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.sbt-release-io" % "sbt-release-io" % "0.1.0-SNAPSHOT")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.1.0-SNAPSHOT")
 ```
 
 ```bash
@@ -28,7 +30,7 @@ sbt "releaseIO with-defaults"
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.sbt-release-io" % "sbt-release-io-monorepo" % "0.1.0-SNAPSHOT")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.1.0-SNAPSHOT")
 ```
 
 In `build.sbt`:
@@ -62,8 +64,10 @@ sbt monorepo/test        # monorepo unit tests only
 
 ## License
 
-This project follows the same license as sbt-release.
+This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Acknowledgments
 
 Built on top of [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization.
+
+Developed with the assistance of [Claude Code](https://claude.ai/claude-code) by Anthropic.

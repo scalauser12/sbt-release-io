@@ -18,7 +18,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io](../core/README.md)
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.sbt-release-io" % "sbt-release-io-monorepo" % "0.1.0-SNAPSHOT")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.1.0-SNAPSHOT")
 ```
 
 Enable on your root project in `build.sbt`:
