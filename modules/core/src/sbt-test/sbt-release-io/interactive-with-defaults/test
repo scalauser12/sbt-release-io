@@ -1,0 +1,12 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Interactive mode with with-defaults should complete without blocking on prompts
+> releaseIO with-defaults release-version 1.0.0-RC1 next-version 1.0.0-RC2-SNAPSHOT
+
+# Verify release completed
+> checkContentsOfVersionSbt 1.0.0-RC2-SNAPSHOT

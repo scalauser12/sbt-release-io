@@ -1,0 +1,16 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src/main/scala/Example.scala
+$ exec git commit -m "Initial commit"
+
+> 'releaseIO release-version 36.14.3 next-version 36.14.4-SNAPSHOT'
+$ exists target/scala-2.12/classes/Example$.class
+> checkContentsOfVersionSbt 36.14.4-SNAPSHOT
+
+# Verify release version commit: reset to the release commit (before next-version)
+# to confirm version.sbt was written with the release version
+$ exec git reset --hard HEAD~1
+> reload
+> checkContentsOfVersionSbt 36.14.3

@@ -3,6 +3,5 @@ project/target/
 project/project/
 *.class
 *.log
-test
 test-remote.git/
 global/
