@@ -34,8 +34,8 @@ lazy val root = (project in file("."))
       // Both core and api should be released even though only core has changes
       assert(tags.length == 4, s"Expected 4 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
-        tags.toList == List("api-v0.1.0", "api-v0.2.0", "core-v0.1.0", "core-v0.2.0"),
-        s"Expected [api-v0.1.0, api-v0.2.0, core-v0.1.0, core-v0.2.0] but got [${tags.mkString(", ")}]"
+        tags.toList == List("api/v0.1.0", "api/v0.2.0", "core/v0.1.0", "core/v0.2.0"),
+        s"Expected [api/v0.1.0, api/v0.2.0, core/v0.1.0, core/v0.2.0] but got [${tags.mkString(", ")}]"
       )
     },
     checkCoreVersion               := {

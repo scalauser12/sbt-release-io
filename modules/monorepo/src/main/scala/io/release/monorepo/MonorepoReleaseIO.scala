@@ -154,7 +154,7 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoDetectChangesExcludes := Seq.empty,
     releaseIOMonorepoUseGlobalVersion      := false,
     releaseIOMonorepoTagStrategy           := MonorepoTagStrategy.PerProject,
-    releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name-v$ver"),
+    releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name/v$ver"),
     releaseIOMonorepoUnifiedTagName        := ((ver: String) => s"v$ver"),
     releaseIOMonorepoReadVersion           := VersionSteps.defaultReadVersion,
     releaseIOMonorepoWriteVersion          := {

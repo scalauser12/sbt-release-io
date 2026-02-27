@@ -6,8 +6,8 @@ $ exec git add .
 $ exec git commit -m "Initial commit"
 
 # Create tags for all projects (simulating a prior release)
-$ exec git tag core-v0.1.0
-$ exec git tag api-v0.1.0
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
 
 # Make NO changes after tagging. Run release without explicit project selection.
 # Change detection should find zero changed projects and abort.

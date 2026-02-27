@@ -8,7 +8,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io](../core/README.md)
 - **Change detection**: Git-based detection of which projects changed since the last release tag, with pluggable custom detectors
 - **Per-project failure isolation**: A failing project is marked failed without aborting the current step's remaining projects; subsequent steps are skipped entirely
 - **Two-phase execution**: All checks run before any actions, so failures are caught before version files or tags are modified
-- **Tagging strategies**: Per-project tags (`core-v1.0.0`) or unified tags (`v1.0.0`)
+- **Tagging strategies**: Per-project tags (`core/v1.0.0`) or unified tags (`v1.0.0`)
 - **Global version mode**: Optional single `version.sbt` at the root, with consistency validation across all projects
 - **Cross-build support**: Steps like test and publish run once per `crossScalaVersions` entry
 - **Resource-safe custom plugins**: `MonorepoReleasePluginLike[T]` acquires a shared resource (HTTP client, temp dir, etc.) once for the entire release with guaranteed cleanup
@@ -134,7 +134,7 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `releaseIOMonorepoTagStrategy` | `MonorepoTagStrategy` | `PerProject` | `PerProject` or `Unified` |
-| `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name-v$ver"` | Per-project tag formatter |
+| `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Per-project tag formatter |
 | `releaseIOMonorepoUnifiedTagName` | `String => String` | `ver => s"v$ver"` | Unified tag formatter |
 
 ### Change detection settings
@@ -376,7 +376,7 @@ The plugin detects which projects have changed since their last release tag usin
 ### How it works
 
 1. For each project, find the most recent matching tag:
-   - **PerProject** strategy: pattern `<projectName>-v*` (e.g., `core-v*`)
+   - **PerProject** strategy: pattern `<projectName>/v*` (e.g., `core/v*`)
    - **Unified** strategy: pattern `v*`
 2. If no tag exists, the project is treated as changed (first release).
 3. Run `git diff --name-only <tag>..HEAD -- <projectDir>`.
@@ -413,8 +413,8 @@ Per-project version files are always excluded automatically.
 Each released project gets its own tag:
 
 ```
-core-v1.0.0
-api-v0.5.0
+core/v1.0.0
+api/v0.5.0
 ```
 
 Customize the format:

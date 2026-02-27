@@ -6,8 +6,8 @@ $ exec git add .
 $ exec git commit -m "Initial commit"
 
 # Simulate a previous release by manually creating tags
-$ exec git tag core-v0.1.0
-$ exec git tag api-v0.1.0
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
 
 # Modify ONLY core directory (add a file and commit)
 $ exec touch core/CHANGES.md
@@ -15,10 +15,10 @@ $ exec git add core/CHANGES.md
 $ exec git commit -m "Add changes file to core"
 
 # Release with NO explicit project selection — relies on change detection.
-# Only core should be detected as changed (api has no changes since api-v0.1.0).
+# Only core should be detected as changed (api has no changes since api/v0.1.0).
 > releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT
 
-# Verify only core-v0.2.0 was added (no api-v0.2.0)
+# Verify only core/v0.2.0 was added (no api/v0.2.0)
 > checkTags
 
 # Verify core got next version

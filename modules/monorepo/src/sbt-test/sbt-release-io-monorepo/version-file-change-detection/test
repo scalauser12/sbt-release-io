@@ -6,8 +6,8 @@ $ exec git add .
 $ exec git commit -m "Initial commit"
 
 # Simulate a previous release: tag at release version (0.1.0)
-$ exec git tag core-v0.1.0
-$ exec git tag api-v0.1.0
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
 
 # Simulate what commitNextVersions does after a release:
 # modify ONLY core/version.sbt from "0.1.0" to "0.2.0-SNAPSHOT"

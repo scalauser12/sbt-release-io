@@ -38,7 +38,7 @@ lazy val root = (project in file("."))
         tags.length == 1,
         s"Expected 1 tag (core only) but found ${tags.length}: ${tags.mkString(", ")}"
       )
-      assert(tags.head == "core-v1.0.0", s"Expected tag 'core-v1.0.0' but got '${tags.head}'")
+      assert(tags.head == "core/v1.0.0", s"Expected tag 'core/v1.0.0' but got '${tags.head}'")
     },
     checkCoreVersion                := {
       val contents = IO.read(file("core/version.sbt"))

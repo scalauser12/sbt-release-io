@@ -6,8 +6,8 @@ $ exec git add .
 $ exec git commit -m "Initial commit"
 
 # Simulate previous releases with per-project tags (uses sbt project ID, not name setting)
-$ exec git tag root-v0.1.0
-$ exec git tag sub-v0.1.0
+$ exec git tag root/v0.1.0
+$ exec git tag sub/v0.1.0
 
 # Modify ONLY the root directory (add a file and commit)
 $ exec touch CHANGES.md
@@ -19,7 +19,7 @@ $ exec git commit -m "Add changes file to root"
 # Sub should NOT be detected as changed.
 > releaseIOMonorepo with-defaults release-version root=0.2.0 next-version root=0.3.0-SNAPSHOT
 
-# Verify only root-v0.2.0 was added (no sub-v0.2.0)
+# Verify only root/v0.2.0 was added (no sub/v0.2.0)
 > checkTags
 
 # Verify root got next version

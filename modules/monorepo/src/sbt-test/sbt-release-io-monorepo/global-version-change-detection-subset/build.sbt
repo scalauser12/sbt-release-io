@@ -38,8 +38,8 @@ lazy val root = (project in file("."))
         s"Expected only the 2 pre-existing tags after failure, found ${tags.length}: ${tags.mkString(", ")}"
       )
       assert(
-        tags.toList == List("api-v0.1.0", "core-v0.1.0"),
-        s"Expected tags [api-v0.1.0, core-v0.1.0] but got [${tags.mkString(", ")}]"
+        tags.toList == List("api/v0.1.0", "core/v0.1.0"),
+        s"Expected tags [api/v0.1.0, core/v0.1.0] but got [${tags.mkString(", ")}]"
       )
       val contents = IO.read(file("core/version.sbt"))
       assert(
