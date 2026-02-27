@@ -29,15 +29,15 @@ lazy val root = (project in file("."))
 
     checkTags := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
-      // After release: original 2 tags + root-v0.2.0 (sub unchanged)
+      // After release: original 2 tags + root/v0.2.0 (sub unchanged)
       // Tag uses sbt project ID "root", not name setting "root-proj"
       assert(
         tags.length == 3,
         s"Expected 3 tags but found ${tags.length}: ${tags.mkString(", ")}"
       )
       assert(
-        tags.toList == List("root-v0.1.0", "root-v0.2.0", "sub-v0.1.0"),
-        s"Expected [root-v0.1.0, root-v0.2.0, sub-v0.1.0] but got [${tags.mkString(", ")}]"
+        tags.toList == List("root/v0.1.0", "root/v0.2.0", "sub/v0.1.0"),
+        s"Expected [root/v0.1.0, root/v0.2.0, sub/v0.1.0] but got [${tags.mkString(", ")}]"
       )
     },
 

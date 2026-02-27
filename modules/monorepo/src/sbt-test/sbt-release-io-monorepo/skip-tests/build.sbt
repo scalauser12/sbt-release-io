@@ -50,8 +50,8 @@ lazy val root = (project in file("."))
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
-        tags.toList == List("api-v0.1.0", "core-v0.1.0"),
-        s"Expected tags [api-v0.1.0, core-v0.1.0] but got [${tags.mkString(", ")}]"
+        tags.toList == List("api/v0.1.0", "core/v0.1.0"),
+        s"Expected tags [api/v0.1.0, core/v0.1.0] but got [${tags.mkString(", ")}]"
       )
     }
   )

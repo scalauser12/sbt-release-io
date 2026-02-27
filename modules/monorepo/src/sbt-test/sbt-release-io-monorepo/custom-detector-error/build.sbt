@@ -44,8 +44,8 @@ lazy val root = (project in file("."))
         s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}"
       )
       assert(
-        tags.toList == List("api-v1.0.0", "core-v1.0.0"),
-        s"Expected [api-v1.0.0, core-v1.0.0] but got [${tags.mkString(", ")}]"
+        tags.toList == List("api/v1.0.0", "core/v1.0.0"),
+        s"Expected [api/v1.0.0, core/v1.0.0] but got [${tags.mkString(", ")}]"
       )
     },
     checkCoreVersion                := {

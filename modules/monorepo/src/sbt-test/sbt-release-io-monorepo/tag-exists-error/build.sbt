@@ -31,16 +31,16 @@ lazy val root = (project in file("."))
     checkCoreTagStillExists     := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(
-        tags.contains("core-v1.0.0"),
-        s"Expected pre-existing tag core-v1.0.0 but tags are: ${tags.mkString(", ")}"
+        tags.contains("core/v1.0.0"),
+        s"Expected pre-existing tag core/v1.0.0 but tags are: ${tags.mkString(", ")}"
       )
     },
     checkApiTagCreated          := {
       // Per-project error isolation: core failed but api's tag should still have been created
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(
-        tags.contains("api-v1.0.0"),
-        s"Expected api-v1.0.0 tag (per-project isolation) but tags are: ${tags.mkString(", ")}"
+        tags.contains("api/v1.0.0"),
+        s"Expected api/v1.0.0 tag (per-project isolation) but tags are: ${tags.mkString(", ")}"
       )
     },
     checkNextVersionNotApplied  := {

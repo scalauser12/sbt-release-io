@@ -29,12 +29,12 @@ lazy val root = (project in file("."))
     },
     releaseIgnoreUntrackedFiles    := true,
     checkTags                      := {
-      // After release: original 2 manual tags + core-v0.2.0 + api-v0.2.0 = 4 tags
+      // After release: original 2 manual tags + core/v0.2.0 + api/v0.2.0 = 4 tags
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 4, s"Expected 4 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
-        tags.toList == List("api-v0.1.0", "api-v0.2.0", "core-v0.1.0", "core-v0.2.0"),
-        s"Expected [api-v0.1.0, api-v0.2.0, core-v0.1.0, core-v0.2.0] but got [${tags.mkString(", ")}]"
+        tags.toList == List("api/v0.1.0", "api/v0.2.0", "core/v0.1.0", "core/v0.2.0"),
+        s"Expected [api/v0.1.0, api/v0.2.0, core/v0.1.0, core/v0.2.0] but got [${tags.mkString(", ")}]"
       )
     },
     checkCoreVersion               := {

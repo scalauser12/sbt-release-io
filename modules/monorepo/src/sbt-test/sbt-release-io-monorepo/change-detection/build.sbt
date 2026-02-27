@@ -33,14 +33,14 @@ lazy val root = (project in file("."))
 
     checkTags := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
-      // After release: original 2 manual tags + only core-v0.2.0 (api unchanged)
+      // After release: original 2 manual tags + only core/v0.2.0 (api unchanged)
       assert(
         tags.length == 3,
         s"Expected 3 tags but found ${tags.length}: ${tags.mkString(", ")}"
       )
       assert(
-        tags.toList == List("api-v0.1.0", "core-v0.1.0", "core-v0.2.0"),
-        s"Expected [api-v0.1.0, core-v0.1.0, core-v0.2.0] but got [${tags.mkString(", ")}]"
+        tags.toList == List("api/v0.1.0", "core/v0.1.0", "core/v0.2.0"),
+        s"Expected [api/v0.1.0, core/v0.1.0, core/v0.2.0] but got [${tags.mkString(", ")}]"
       )
     },
 

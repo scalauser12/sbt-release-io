@@ -37,11 +37,11 @@ lazy val root = (project in file("."))
 
     checkGitTags := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
-      // Expected: per-project tags (core-v0.1.0, api-v0.1.0)
+      // Expected: per-project tags (core/v0.1.0, api/v0.1.0)
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
-        tags.sorted.toList == List("api-v0.1.0", "core-v0.1.0"),
-        s"Expected tags [api-v0.1.0, core-v0.1.0] but got [${tags.sorted.mkString(", ")}]"
+        tags.sorted.toList == List("api/v0.1.0", "core/v0.1.0"),
+        s"Expected tags [api/v0.1.0, core/v0.1.0] but got [${tags.sorted.mkString(", ")}]"
       )
     },
 

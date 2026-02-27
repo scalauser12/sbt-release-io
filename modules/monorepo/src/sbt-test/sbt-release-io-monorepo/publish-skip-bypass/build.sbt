@@ -25,7 +25,7 @@ lazy val root = (project in file("."))
     checkGitTags                := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(tags.length == 1, s"Expected 1 tag but found ${tags.length}: ${tags.mkString(", ")}")
-      assert(tags.head == "core-v0.1.0", s"Expected tag core-v0.1.0 but got ${tags.head}")
+      assert(tags.head == "core/v0.1.0", s"Expected tag core/v0.1.0 but got ${tags.head}")
     },
     checkCoreVersion            := {
       val contents = IO.read(file("core/version.sbt"))

@@ -48,8 +48,8 @@ lazy val root = (project in file("."))
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       // core was released as 0.1.0 (computed from 0.1.0-SNAPSHOT), next overridden to 9.9.9-SNAPSHOT
       assert(
-        tags.contains("core-v0.1.0"),
-        s"Expected tag core-v0.1.0 in: ${tags.mkString(", ")}"
+        tags.contains("core/v0.1.0"),
+        s"Expected tag core/v0.1.0 in: ${tags.mkString(", ")}"
       )
     }
   )

@@ -47,8 +47,8 @@ lazy val root = (project in file("."))
 
       val originTags = "git ls-remote --tags origin".!!.trim
       assert(
-        originTags.contains("refs/tags/core-v0.1.0"),
-        s"Expected origin to contain tag core-v0.1.0 but tags were: $originTags"
+        originTags.contains("refs/tags/core/v0.1.0"),
+        s"Expected origin to contain tag core/v0.1.0 but tags were: $originTags"
       )
 
       val backupTags = "git ls-remote --tags backup".!!.trim

@@ -30,7 +30,7 @@ lazy val root = (project in file("."))
 
     checkUnifiedTag := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
-      // Unified strategy: single tag v1.0.0 (NOT core-v1.0.0 / api-v1.0.0)
+      // Unified strategy: single tag v1.0.0 (NOT core/v1.0.0 / api/v1.0.0)
       assert(
         tags.length == 1,
         s"Expected exactly 1 unified tag but found ${tags.length}: ${tags.mkString(", ")}"

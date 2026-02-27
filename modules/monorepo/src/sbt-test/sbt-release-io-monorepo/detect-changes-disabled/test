@@ -6,8 +6,8 @@ $ exec git add .
 $ exec git commit -m "Initial commit"
 
 # Simulate a previous release by manually creating tags
-$ exec git tag core-v0.1.0
-$ exec git tag api-v0.1.0
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
 
 # Modify ONLY core directory (add a file and commit)
 $ exec touch core/CHANGES.md
