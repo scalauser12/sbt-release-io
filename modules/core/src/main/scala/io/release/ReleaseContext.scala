@@ -39,5 +39,8 @@ case class ReleaseContext(
   def withAttr(key: String, value: String): ReleaseContext =
     copy(attributes = attributes + (key -> value))
 
+  def releaseVersion: Option[String] = versions.map(_._1)
+  def nextVersion: Option[String]    = versions.map(_._2)
+
   def fail: ReleaseContext = copy(failed = true)
 }

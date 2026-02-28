@@ -252,7 +252,7 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       // 2nd resource step — notify Slack after tagging
       resourceStep[HttpClient]("notify-slack") { client => ctx =>
         IO.blocking {
-          val version = ctx.versions.map(_._1).getOrElse("unknown")
+          val version = ctx.releaseVersion.getOrElse("unknown")
           client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
           ctx
         }
@@ -261,7 +261,7 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       // 3rd resource step — verify the published artifact
       resourceStep[HttpClient]("verify-publish") { client => ctx =>
         IO.blocking {
-          val version = ctx.versions.map(_._1).getOrElse("unknown")
+          val version = ctx.releaseVersion.getOrElse("unknown")
           client.get(s"/artifacts/$version")
           ctx
         }

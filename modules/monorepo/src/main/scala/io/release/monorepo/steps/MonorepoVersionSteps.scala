@@ -54,7 +54,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                               }
       (updatedState, suggestedRelease, nextFn, useDefaults) = data
       releaseVer                                           <- promptOrDefault(
-                                                                project.versions.map(_._1),
+                                                                project.releaseVersion,
                                                                 suggestedRelease,
                                                                 s"Release version for ${project.name}",
                                                                 ctx.interactive,
@@ -62,7 +62,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                               )
       suggestedNext                                         = nextFn(releaseVer)
       nextVer                                              <- promptOrDefault(
-                                                                project.versions.map(_._2),
+                                                                project.nextVersion,
                                                                 suggestedNext,
                                                                 s"Next version for ${project.name}",
                                                                 ctx.interactive,

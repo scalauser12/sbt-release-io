@@ -25,7 +25,10 @@ case class ProjectReleaseInfo(
     versions: Option[(String, String)] = None, // (releaseVersion, nextVersion)
     tagName: Option[String] = None,
     failed: Boolean = false
-)
+) {
+  def releaseVersion: Option[String] = versions.map(_._1)
+  def nextVersion: Option[String]    = versions.map(_._2)
+}
 
 /** Tagging strategy for monorepo releases. */
 sealed trait MonorepoTagStrategy
