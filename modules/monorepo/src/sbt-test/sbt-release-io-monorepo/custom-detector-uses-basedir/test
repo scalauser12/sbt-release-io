@@ -1,0 +1,20 @@
+# Test: custom detector uses baseDir to check git diff HEAD~1, excluding version.sbt
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Touch only core — create a source file and commit
+$ exec mkdir -p core/src
+$ exec touch core/src/Change.scala
+$ exec git add core/src/Change.scala
+$ exec git commit -m "Change only core"
+
+# Release — detector diffs HEAD~1 per baseDir, only core has changes
+> releaseIOMonorepo with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+# Verify only core was released
+> checkTags
+> checkCoreVersion
+> checkApiVersion

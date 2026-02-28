@@ -41,6 +41,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Custom change detector throws for one project
 - Project conservatively treated as changed and released anyway
 
+### custom-detector-uses-basedir
+- Custom change detector uses the `baseDir` parameter to run `git diff HEAD~1`
+- Filters out `version.sbt` from diff results; only releases projects with real file changes
+
 ### custom-plugin
 - Tests `MonorepoReleasePluginLike` resource lifecycle (acquire -> use -> release)
 - Verifies marker files prove the resource was acquired, used by a step, and released
