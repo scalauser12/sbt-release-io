@@ -395,6 +395,10 @@ releaseIOMonorepoChangeDetector := Some { (ref: ProjectRef, baseDir: File, state
 
 On detector error, the project is conservatively treated as changed.
 
+> **Note:** A custom detector **replaces** the built-in detection entirely. Settings like
+> `releaseIOMonorepoDetectChangesExcludes` only apply to the built-in detector and are
+> ignored when a custom detector is set.
+
 ### Excluding files from detection
 
 ```scala
@@ -406,6 +410,7 @@ releaseIOMonorepoDetectChangesExcludes := Seq(
 
 This setting is read from the **root project** scope, so use `(subproject / baseDirectory).value`
 to reference subproject directories. Per-project version files are always excluded automatically.
+This setting only applies to the built-in detector and is ignored when `releaseIOMonorepoChangeDetector` is set.
 
 ## Tagging Strategies
 

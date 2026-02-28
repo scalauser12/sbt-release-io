@@ -1,5 +1,5 @@
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
-ThisBuild / versionScheme := Some("early-semver")
+ThisBuild / versionScheme          := Some("early-semver")
 
 lazy val commonSettings = Seq(
   organization       := "io.github.scalauser12",
