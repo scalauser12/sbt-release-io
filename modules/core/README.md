@@ -195,7 +195,7 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
     defaultsWith(state)(
       (client: HttpClient) => ReleaseStepIO.io("notify-api") { ctx =>
         IO.blocking {
-          client.post("/releases", s"""{"version": "${ctx.versions.map(_._1).getOrElse("")}"}""")
+          client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}""")
           ctx
         }
       }
@@ -289,7 +289,7 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       ReleaseSteps.publishArtifacts,
       // 3rd custom step — verify the published artifact
       (client: HttpClient) => ReleaseStepIO.io("verify-publish") { ctx =>
-        IO.blocking { client.get(s"/artifacts/${ctx.versions.map(_._1).getOrElse("")}"); ctx }
+        IO.blocking { client.get(s"/artifacts/${ctx.releaseVersion.getOrElse("")}"); ctx }
       },
       ReleaseSteps.setNextVersion,
       ReleaseSteps.commitNextVersion,
@@ -333,30 +333,48 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.0")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 
-Example: streaming a file archive through gzip compression and uploading it with http4s:
+Example: compressing an already-built release archive and uploading it to an internal artifact
+service after `publishArtifacts`:
 
 ```scala
 import cats.effect.IO
-import org.http4s.ember.client.EmberClientBuilder
-import org.http4s.{Request, Method, Uri}
+import fs2.compression.Compression
 import fs2.io.file.{Files, Path}
 import io.release.{ReleaseContext, ReleaseStepIO}
+import org.http4s.ember.client.EmberClientBuilder
+import org.http4s.{Method, Request, Uri}
 
 val uploadArchive: ReleaseStepIO = ReleaseStepIO.io("upload-archive") { ctx =>
-  val version = ctx.versions.map(_._1).getOrElse("unknown")
-  val archivePath = Path(s"target/release-$version.tar")
+  ctx.releaseVersion match {
+    case Some(version) =>
+      val archivePath = Path(s"target/myproject-$version.tar")
+      val uploadUri   =
+        Uri.unsafeFromString(
+          s"https://artifacts.example.com/releases/myproject-$version.tar.gz"
+        )
+      val body        = Files[IO].readAll(archivePath, 64 * 1024).through(Compression[IO].gzip())
+      val request     = Request[IO](Method.PUT, uploadUri).withBodyStream(body)
 
-  EmberClientBuilder.default[IO].build.use { client =>
-    Files[IO].readAll(archivePath)
-      .through(fs2.compression.Compression[IO].gzip())
-      .compile
-      .to(fs2.Chunk)
-      .flatMap { body =>
-        val uri = Uri.unsafeFromString(s"https://artifacts.example.com/releases/$version.tar.gz")
-        val req = Request[IO](Method.PUT, uri).withEntity(body)
-        client.expect[String](req)
-      }
-  }.as(ctx)
+      EmberClientBuilder.default[IO].build.use { client =>
+        client.expectOr[Unit](request) { response =>
+          IO.pure(new RuntimeException(s"Artifact upload failed: ${response.status}"))
+        }
+      }.as(ctx)
+
+    case None =>
+      IO.raiseError(new RuntimeException("releaseVersion is not set"))
+  }
+}
+```
+
+Place this step after `publishArtifacts` so it runs only after the standard repository publish succeeds:
+
+```scala
+import io.release.steps.ReleaseSteps
+
+releaseIOProcess := ReleaseSteps.defaults.flatMap {
+  case step if step.name == "publish-artifacts" => Seq(step, uploadArchive)
+  case step                                     => Seq(step)
 }
 ```
 
