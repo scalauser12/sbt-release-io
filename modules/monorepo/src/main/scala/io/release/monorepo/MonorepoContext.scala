@@ -1,6 +1,5 @@
 package io.release.monorepo
 
-import io.release.ReleaseContext
 import sbt.*
 import sbtrelease.Vcs
 
@@ -85,19 +84,4 @@ case class MonorepoContext(
     copy(attributes = attributes + (key -> value))
 
   def fail: MonorepoContext = copy(failed = true)
-
-  /** Convert to a single-project ReleaseContext for reusing core steps. */
-  def toReleaseContext: ReleaseContext =
-    ReleaseContext(
-      state = state,
-      versions = None,
-      vcs = vcs,
-      skipTests = skipTests,
-      skipPublish = skipPublish,
-      interactive = interactive
-    )
-
-  /** Absorb state changes from a ReleaseContext back into this MonorepoContext. */
-  def fromReleaseContext(ctx: ReleaseContext): MonorepoContext =
-    copy(state = ctx.state, vcs = ctx.vcs)
 }

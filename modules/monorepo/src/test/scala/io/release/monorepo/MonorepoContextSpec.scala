@@ -47,21 +47,6 @@ class MonorepoContextSpec extends Specification {
         (ctx.fail.failed must_== true)
     }
 
-    "convert to ReleaseContext preserving shared state" in withState { state =>
-      val ctx = MonorepoContext(
-        state = state,
-        skipTests = true,
-        skipPublish = true,
-        interactive = false
-      )
-      val rc  = ctx.toReleaseContext
-
-      (rc.skipTests must_== true) and
-        (rc.skipPublish must_== true) and
-        (rc.interactive must_== false) and
-        (rc.versions must beNone)
-    }
-
     "replace projects via withProjects" in withState { state =>
       val ctx     = MonorepoContext(state = state, projects = Seq(dummyProject("old")))
       val updated = ctx.withProjects(Seq(dummyProject("new1"), dummyProject("new2")))
