@@ -333,7 +333,7 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.0")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 
-Example: streaming a file upload with http4s and fs2:
+Example: streaming a file archive through gzip compression and uploading it with http4s:
 
 ```scala
 import cats.effect.IO
@@ -344,7 +344,7 @@ import io.release.{ReleaseContext, ReleaseStepIO}
 
 val uploadArchive: ReleaseStepIO = ReleaseStepIO.io("upload-archive") { ctx =>
   val version = ctx.versions.map(_._1).getOrElse("unknown")
-  val archivePath = Path(s"target/release-$version.tar.gz")
+  val archivePath = Path(s"target/release-$version.tar")
 
   EmberClientBuilder.default[IO].build.use { client =>
     Files[IO].readAll(archivePath)
@@ -352,7 +352,7 @@ val uploadArchive: ReleaseStepIO = ReleaseStepIO.io("upload-archive") { ctx =>
       .compile
       .to(fs2.Chunk)
       .flatMap { body =>
-        val uri = Uri.unsafeFromString(s"https://artifacts.example.com/releases/$version")
+        val uri = Uri.unsafeFromString(s"https://artifacts.example.com/releases/$version.tar.gz")
         val req = Request[IO](Method.PUT, uri).withEntity(body)
         client.expect[String](req)
       }
