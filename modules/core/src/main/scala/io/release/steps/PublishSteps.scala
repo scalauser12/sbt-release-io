@@ -1,11 +1,11 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseStepIO}
+import io.release.{ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
 import sbt.*
 import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
-import sbt.Project.extract
+import sbt.Project.extract // TODO: sbt 2 — verify Project.extract availability or add compat shim
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.util.control.NonFatal
@@ -24,9 +24,10 @@ private[release] object PublishSteps {
                          val (_, result) =
                            sbtrelease.Compat
                              .runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
-                         result match {
-                           case Value(value) => Right(value.flatMap(_.value))
-                           case Inc(cause)   => Left(cause)
+                         // TODO: sbt 2 — Scala 3 type inference may fail here; add explicit types
+                         result.toEither match {
+                           case Right(value) => Right(value.flatMap(_.value))
+                           case Left(cause)  => Left(cause)
                          }
                        }
         result      <- checkResult match {
@@ -105,7 +106,7 @@ private[release] object PublishSteps {
         IO.blocking {
           val extracted = extract(ctx.state)
           val ref       = extracted.get(thisProjectRef)
-          val newState  = extracted.runAggregated(ref / Test / test, ctx.state)
+          val newState  = extracted.runAggregated(ref / Test / ReleaseIOCompat.testKey, ctx.state)
           ctx.copy(state = newState)
         }
       },
@@ -118,7 +119,7 @@ private[release] object PublishSteps {
       IO.blocking {
         val extracted = extract(ctx.state)
         val ref       = extracted.get(thisProjectRef)
-        val newState  = extracted.runAggregated(ref / (Global / clean), ctx.state)
+        val newState  = extracted.runAggregated(ref / (Global / ReleaseIOCompat.cleanKey), ctx.state)
         ctx.copy(state = newState)
       }
   )

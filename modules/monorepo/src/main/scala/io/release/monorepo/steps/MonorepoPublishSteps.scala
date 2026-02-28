@@ -5,7 +5,7 @@ import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import sbt.*
 import sbt.Keys.*
-import sbt.Project.extract
+import sbt.Project.extract // TODO: sbt 2 — verify Project.extract availability or add compat shim
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.util.control.NonFatal
@@ -26,9 +26,10 @@ private[monorepo] object MonorepoPublishSteps {
                              project.ref / releaseSnapshotDependencies,
                              ctx.state
                            )
-                         result match {
-                           case Value(value) => Right(value.flatMap(_.value))
-                           case Inc(cause)   => Left(cause)
+                         // TODO: sbt 2 — Scala 3 type inference may fail here; add explicit types
+                         result.toEither match {
+                           case Right(value) => Right(value.flatMap(_.value))
+                           case Left(cause)  => Left(cause)
                          }
                        }
         result      <- IO.fromEither {
@@ -61,7 +62,11 @@ private[monorepo] object MonorepoPublishSteps {
     action = (ctx, project) =>
       IO.blocking {
         val extracted = extract(ctx.state)
-        val newState  = extracted.runAggregated(project.ref / (Global / clean), ctx.state)
+        val newState  =
+          extracted.runAggregated(
+            project.ref / (Global / _root_.io.release.ReleaseIOCompat.cleanKey),
+            ctx.state
+          )
         ctx.withState(newState)
       }
   )
@@ -75,7 +80,11 @@ private[monorepo] object MonorepoPublishSteps {
       else
         IO.blocking {
           val extracted = extract(ctx.state)
-          val newState  = extracted.runAggregated(project.ref / Test / test, ctx.state)
+          val newState  =
+            extracted.runAggregated(
+              project.ref / Test / _root_.io.release.ReleaseIOCompat.testKey,
+              ctx.state
+            )
           ctx.withState(newState)
         },
     enableCrossBuild = true

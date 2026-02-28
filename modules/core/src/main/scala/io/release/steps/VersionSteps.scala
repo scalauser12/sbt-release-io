@@ -7,7 +7,7 @@ import sbt.*
 import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
-import sbt.Project.extract
+import sbt.Project.extract // TODO: sbt 2 — verify Project.extract availability or add compat shim
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.sys.process.*
