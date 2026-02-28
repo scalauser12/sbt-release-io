@@ -352,7 +352,7 @@ val uploadArchive: ReleaseStepIO = ReleaseStepIO.io("upload-archive") { ctx =>
         Uri.unsafeFromString(
           s"https://artifacts.example.com/releases/myproject-$version.tar.gz"
         )
-      val body        = Files[IO].readAll(archivePath, 64 * 1024).through(Compression[IO].gzip())
+      val body        = Files[IO].readAll(archivePath).through(Compression[IO].gzip())
       val request     = Request[IO](Method.PUT, uploadUri).withBodyStream(body)
 
       EmberClientBuilder.default[IO].build.use { client =>
