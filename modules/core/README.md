@@ -310,6 +310,56 @@ if you want to keep the setting-based defaults and only add extra steps.
 | **Adding resource steps** | Override `releaseProcess` using `defaultsWith` (append), `defaultsWithAfter`/`defaultsWithBefore` (positional insert) |
 | **Setting keys** | All `releaseIO*` setting keys are singletons — they work regardless of which plugin exports them |
 
+### Using Typelevel Libraries in Release Steps
+
+Since release steps run in `IO`, you can use any library from the cats-effect ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
+
+**Constraint:** sbt plugins run on Scala 2.12, so you must use library versions published for 2.12.
+
+Some libraries that work well in release steps:
+
+| Library | Use case | Version constraint |
+|---------|----------|--------------------|
+| `http4s-ember-client` | HTTP requests (upload artifacts, notify services) | 0.23.x only (1.x dropped 2.12) |
+| `fs2-io` | Streaming file I/O, process execution | 3.x |
+| `circe` | JSON encoding/decoding for API calls | 0.14.x |
+| `doobie` | JDBC database access (record release metadata) | 1.x |
+| `sttp` | Lightweight HTTP client with cats-effect backend | 3.x |
+
+Add the dependency in `project/plugins.sbt` alongside the plugin:
+
+```scala
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.0")
+libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
+```
+
+Example: streaming a file upload with http4s and fs2:
+
+```scala
+import cats.effect.IO
+import org.http4s.ember.client.EmberClientBuilder
+import org.http4s.{Request, Method, Uri}
+import fs2.io.file.{Files, Path}
+import io.release.{ReleaseContext, ReleaseStepIO}
+
+val uploadArchive: ReleaseStepIO = ReleaseStepIO.io("upload-archive") { ctx =>
+  val version = ctx.versions.map(_._1).getOrElse("unknown")
+  val archivePath = Path(s"target/release-$version.tar.gz")
+
+  EmberClientBuilder.default[IO].build.use { client =>
+    Files[IO].readAll(archivePath)
+      .through(fs2.compression.Compression[IO].gzip())
+      .compile
+      .to(fs2.Chunk)
+      .flatMap { body =>
+        val uri = Uri.unsafeFromString(s"https://artifacts.example.com/releases/$version")
+        val req = Request[IO](Method.PUT, uri).withEntity(body)
+        client.expect[String](req)
+      }
+  }.as(ctx)
+}
+```
+
 ### Upstream sbt-release Settings
 
 All upstream sbt-release settings are supported:
