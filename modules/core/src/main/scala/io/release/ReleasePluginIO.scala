@@ -28,7 +28,7 @@ import scala.language.implicitConversions
   */
 trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
 
-  override def requires: Plugins = plugins.JvmPlugin && sbtrelease.ReleasePlugin
+  override def requires: Plugins = sbtrelease.ReleasePlugin
 
   /** The resource acquired once for the entire release process and passed to each step. */
   def resource: Resource[IO, T]
