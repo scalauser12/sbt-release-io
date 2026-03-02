@@ -26,25 +26,21 @@ lazy val root = (project in file("."))
 
     releaseIgnoreUntrackedFiles := true,
 
-    checkCoreVersion := {
-      val contents = IO.read(file("core/version.sbt"))
+    checkAll := {
+      val coreVer = IO.read(file("core/version.sbt"))
       // next-version override should be 9.9.9-SNAPSHOT
       assert(
-        contents.contains("9.9.9-SNAPSHOT"),
-        s"Expected core version 9.9.9-SNAPSHOT but got: $contents"
+        coreVer.contains("9.9.9-SNAPSHOT"),
+        s"Expected core version 9.9.9-SNAPSHOT but got: $coreVer"
       )
-    },
 
-    checkApiVersion := {
-      val contents = IO.read(file("api/version.sbt"))
+      val apiVer = IO.read(file("api/version.sbt"))
       // api has no overrides -- next version computed as 0.1.1-SNAPSHOT (bugfix bump of 0.1.0)
       assert(
-        contents.contains("0.1.1-SNAPSHOT"),
-        s"Expected api version 0.1.1-SNAPSHOT but got: $contents"
+        apiVer.contains("0.1.1-SNAPSHOT"),
+        s"Expected api version 0.1.1-SNAPSHOT but got: $apiVer"
       )
-    },
 
-    checkCoreTags := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       // core was released as 0.1.0 (computed from 0.1.0-SNAPSHOT), next overridden to 9.9.9-SNAPSHOT
       assert(
@@ -54,6 +50,4 @@ lazy val root = (project in file("."))
     }
   )
 
-val checkCoreVersion = taskKey[Unit]("Check core version.sbt")
-val checkApiVersion  = taskKey[Unit]("Check api version.sbt")
-val checkCoreTags    = taskKey[Unit]("Check core tags")
+val checkAll = taskKey[Unit]("Run all verification checks")

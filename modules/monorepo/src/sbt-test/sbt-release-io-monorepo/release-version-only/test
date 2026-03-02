@@ -9,11 +9,5 @@ $ exec git commit -m "Initial commit"
 # Next version should be computed as bugfix bump: 5.0.0 -> 5.0.1-SNAPSHOT
 > releaseIOMonorepo core api with-defaults release-version core=5.0.0
 
-# Verify core got computed next version (bugfix bump of 5.0.0)
-> checkCoreVersion
-
-# Verify api got computed versions (no overrides at all)
-> checkApiVersion
-
-# Verify tags
-> checkTags
+# Verify versions and tags
+> checkAll

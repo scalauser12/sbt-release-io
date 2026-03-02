@@ -1,5 +1,4 @@
 import scala.sys.process._
-import _root_.io.release.monorepo.{MonorepoStepIO, MonorepoContext, ProjectReleaseInfo}
 
 lazy val base = (project in file("base"))
   .settings(name := "base", scalaVersion := "2.12.18")
@@ -16,21 +15,7 @@ lazy val top = (project in file("top"))
   .dependsOn(left, right)
   .settings(name := "top", scalaVersion := "2.12.18")
 
-val recordOrder: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
-  name = "record-order",
-  action = (ctx: MonorepoContext, project: ProjectReleaseInfo) =>
-    _root_.cats.effect.IO {
-      val rootBase = sbt.Project.extract(ctx.state).get(baseDirectory)
-      val marker   = new java.io.File(rootBase, "order.txt")
-      val writer   = new java.io.FileWriter(marker, true)
-      writer.write(project.name + "\n")
-      writer.close()
-      ctx
-    }
-)
-
-val checkOrder   = taskKey[Unit]("Check project execution order in diamond dependency")
-val checkGitTags = taskKey[Unit]("Check git tags for diamond dependency")
+val checkAll = taskKey[Unit]("Run all verification checks")
 
 lazy val root = (project in file("."))
   .aggregate(base, left, right, top)
@@ -46,13 +31,14 @@ lazy val root = (project in file("."))
       val idx          = filtered.indexWhere(_.name == "resolve-release-order")
       if (idx >= 0) {
         val (before, after) = filtered.splitAt(idx + 1)
-        before ++ Seq(recordOrder) ++ after
+        before ++ Seq(RecordOrderStep.step) ++ after
       } else {
-        filtered :+ recordOrder
+        filtered :+ RecordOrderStep.step
       }
     },
     releaseIgnoreUntrackedFiles := true,
-    checkOrder                  := {
+    checkAll                    := {
+      // Check execution order
       val marker = baseDirectory.value / "order.txt"
       assert(marker.exists, s"order.txt marker file does not exist at ${marker.getAbsolutePath}")
       val lines  = IO.readLines(marker).filter(_.nonEmpty)
@@ -60,18 +46,15 @@ lazy val root = (project in file("."))
         lines.length == 4,
         s"Expected 4 entries but got ${lines.length}: ${lines.mkString(", ")}"
       )
-      // base must be first (both left and right depend on it)
       assert(lines.head == "base", s"Expected 'base' first but got '${lines.head}'")
-      // top must be last (depends on both left and right)
       assert(lines.last == "top", s"Expected 'top' last but got '${lines.last}'")
-      // middle two must be left and right in either order
       val middle = lines.slice(1, 3).sorted
       assert(
         middle == List("left", "right"),
         s"Expected middle entries [left, right] but got [${middle.mkString(", ")}]"
       )
-    },
-    checkGitTags                := {
+
+      // Check git tags
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 4, s"Expected 4 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(

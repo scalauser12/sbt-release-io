@@ -8,12 +8,5 @@ $ exec git commit -m "Initial commit"
 # Run monorepo release with explicit project selection and defaults
 > releaseIOMonorepo core api with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
 
-# Verify version files were updated to next versions
-> checkCoreVersion
-> checkApiVersion
-
-# Verify git commits were created
-> checkGitCommitCount 3
-
-# Verify per-project tags were created
-> checkGitTags
+# Verify versions, git commits, and tags
+> checkAll

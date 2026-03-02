@@ -8,19 +8,17 @@ $ exec git commit -m "Initial commit"
 # SCENARIO 1: Default (Next) bump strategy
 # Starting version: 1.0.0-RC1-SNAPSHOT
 # Expected release: 1.0.0-RC1, next: 1.0.0-RC2-SNAPSHOT
-> reload
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 1.0.0-RC2-SNAPSHOT
 
 # Reset to release version commit and verify it was set correctly
 $ exec git reset --hard HEAD~1
-> reload
-> checkVersionSbt 1.0.0-RC1
+$ exec grep -q '"1.0.0-RC1"' version.sbt
 
 # Reset to initial commit to test other strategies
 $ exec git reset --hard HEAD~1
+$ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 > reload
-> checkVersionSbt 1.0.0-RC1-SNAPSHOT
 
 # SCENARIO 2: NextStable bump strategy
 # Starting version: 1.0.0-RC1-SNAPSHOT
@@ -29,15 +27,14 @@ $ exec git reset --hard HEAD~1
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 1.0.1-SNAPSHOT
 
-# Reset to release version commit and verify (qualifier stripped → 1.0.0)
+# Reset to release version commit and verify (qualifier stripped -> 1.0.0)
 $ exec git reset --hard HEAD~1
-> reload
-> checkVersionSbt 1.0.0
+$ exec grep -q '"1.0.0"' version.sbt
 
 # Reset to initial commit
 $ exec git reset --hard HEAD~1
+$ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 > reload
-> checkVersionSbt 1.0.0-RC1-SNAPSHOT
 
 # SCENARIO 3: Bugfix bump strategy
 # Starting version: 1.0.0-RC1-SNAPSHOT
@@ -46,15 +43,14 @@ $ exec git reset --hard HEAD~1
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 1.0.1-SNAPSHOT
 
-# Reset to release version commit and verify (qualifier stripped → 1.0.0)
+# Reset to release version commit and verify (qualifier stripped -> 1.0.0)
 $ exec git reset --hard HEAD~1
-> reload
-> checkVersionSbt 1.0.0
+$ exec grep -q '"1.0.0"' version.sbt
 
 # Reset to initial commit
 $ exec git reset --hard HEAD~1
+$ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 > reload
-> checkVersionSbt 1.0.0-RC1-SNAPSHOT
 
 # SCENARIO 4: Minor bump strategy
 # Expected release: 1.0.0 (qualifier stripped by Minor), next: 1.1.0-SNAPSHOT
@@ -62,7 +58,6 @@ $ exec git reset --hard HEAD~1
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 1.1.0-SNAPSHOT
 
-# Reset to release version commit and verify (qualifier stripped → 1.0.0)
+# Reset to release version commit and verify (qualifier stripped -> 1.0.0)
 $ exec git reset --hard HEAD~1
-> reload
-> checkVersionSbt 1.0.0
+$ exec grep -q '"1.0.0"' version.sbt

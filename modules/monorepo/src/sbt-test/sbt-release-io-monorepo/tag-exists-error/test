@@ -11,11 +11,5 @@ $ exec git tag core/v1.0.0
 # Release should fail because core/v1.0.0 tag already exists
 -> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
 
-# The pre-existing core tag should still be there
-> checkCoreTagStillExists
-
-# Api tag should have been created (per-project error isolation let api proceed)
-> checkApiTagCreated
-
-# Post-tag steps (set-next-version) should have been skipped due to global failure propagation
-> checkNextVersionNotApplied
+# Verify: pre-existing core tag preserved, api tag created (isolation), next-version skipped
+> checkAll

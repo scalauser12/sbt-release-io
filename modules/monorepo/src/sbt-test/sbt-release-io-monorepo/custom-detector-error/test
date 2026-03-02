@@ -11,6 +11,4 @@ $ exec git commit -m "Initial commit"
 > releaseIOMonorepo with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
 
 # Verify BOTH projects were tagged (api conservatively treated as changed)
-> checkTags
-> checkCoreVersion
-> checkApiVersion
+> checkAll

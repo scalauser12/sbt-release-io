@@ -25,7 +25,5 @@ $ exec git commit -m "Add changes file to core"
 # Release should SUCCEED — real change detected (CHANGELOG.md filtered, Feature.scala remains)
 > releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT
 
-# Verify only core was released
-> checkTags
-> checkCoreVersion
-> checkApiVersion
+# Verify only core was released (tags and version files)
+> checkAll

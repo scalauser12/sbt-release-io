@@ -9,6 +9,4 @@ $ exec git commit -m "Initial commit"
 # Without skipPublish, check phase would fail since publishTo is not set.
 > releaseIOMonorepo core api with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
 
-> checkGitTags
-> checkCoreVersion
-> checkApiVersion
+> checkAll

@@ -27,7 +27,6 @@ lazy val root = (project in file("."))
     name := "cross-build-empty-cross-test",
 
     releaseIOMonorepoProcess := {
-      import _root_.io.release.monorepo.MonorepoStepIO
       import _root_.io.release.monorepo.steps.MonorepoReleaseSteps._
 
       Seq(
@@ -35,19 +34,7 @@ lazy val root = (project in file("."))
         resolveReleaseOrder,
         detectOrSelectProjects,
         inquireVersions,
-        MonorepoStepIO.PerProject(
-          name = "write-cross-markers",
-          action = (ctx, project) => {
-            val extracted = sbt.Project.extract(ctx.state)
-            val sv        = extracted.get(scalaVersion)
-            val marker    = project.baseDir / "marker" / s"built-$sv"
-            sbt.IO.touch(marker)
-            val counter   = project.baseDir / "marker" / "invocations.txt"
-            sbt.IO.append(counter, sv + "\n")
-            cats.effect.IO.pure(ctx)
-          },
-          enableCrossBuild = true
-        ),
+        CrossBuildMarkerStep.step,
         setReleaseVersions,
         commitReleaseVersions,
         tagReleases,

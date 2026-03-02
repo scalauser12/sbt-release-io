@@ -1,5 +1,4 @@
 import scala.sys.process._
-import _root_.io.release.monorepo.{MonorepoStepIO, MonorepoContext, ProjectReleaseInfo}
 
 lazy val core = (project in file("core"))
   .settings(
@@ -21,19 +20,7 @@ lazy val api = (project in file("api"))
     scalaVersion := "2.12.18"
   )
 
-// Custom step that records the order in which per-project actions execute
-val recordOrder: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
-  name = "record-order",
-  action = (ctx: MonorepoContext, project: ProjectReleaseInfo) =>
-    _root_.cats.effect.IO {
-      val rootBase = sbt.Project.extract(ctx.state).get(baseDirectory)
-      val marker   = new java.io.File(rootBase, "order.txt")
-      val writer   = new java.io.FileWriter(marker, true)
-      writer.write(project.name + "\n")
-      writer.close()
-      ctx
-    }
-)
+val checkAll = taskKey[Unit]("Run all verification checks")
 
 lazy val root = (project in file("."))
   .aggregate(core, middle, api)
@@ -54,15 +41,16 @@ lazy val root = (project in file("."))
       val idx          = filtered.indexWhere(_.name == "resolve-release-order")
       if (idx >= 0) {
         val (before, after) = filtered.splitAt(idx + 1)
-        before ++ Seq(recordOrder) ++ after
+        before ++ Seq(RecordOrderStep.step) ++ after
       } else {
-        filtered :+ recordOrder
+        filtered :+ RecordOrderStep.step
       }
     },
 
     releaseIgnoreUntrackedFiles := true,
 
-    checkOrder := {
+    checkAll := {
+      // Check execution order
       val marker = baseDirectory.value / "order.txt"
       assert(marker.exists, s"order.txt marker file does not exist at ${marker.getAbsolutePath}")
       val lines  = IO.readLines(marker).filter(_.nonEmpty)
@@ -71,9 +59,8 @@ lazy val root = (project in file("."))
         lines == List("core", "middle", "api"),
         s"Expected order [core, middle, api] but got [${lines.mkString(", ")}]"
       )
-    },
 
-    checkGitTags := {
+      // Check git tags
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 3, s"Expected 3 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
@@ -82,6 +69,3 @@ lazy val root = (project in file("."))
       )
     }
   )
-
-val checkOrder   = taskKey[Unit]("Check project execution order")
-val checkGitTags = taskKey[Unit]("Check git tags")

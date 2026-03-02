@@ -18,7 +18,5 @@ $ exec git commit -m "Add changes file to core"
 # detectChanges=false means all projects are released regardless.
 > releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT release-version api=0.2.0 next-version api=0.3.0-SNAPSHOT
 
-# Verify BOTH projects were released (both got new tags)
-> checkTags
-> checkCoreVersion
-> checkApiVersion
+# Verify both projects were released (tags and version files)
+> checkAll

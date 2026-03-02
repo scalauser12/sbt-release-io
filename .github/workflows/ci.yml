@@ -8,7 +8,20 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - name: Run unit tests
+        run: sbt test
+
+  core-scripted:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,11 +35,28 @@ jobs:
       - uses: sbt/setup-sbt@v1
       - name: Configure git
         run: git config --global init.defaultBranch main
-      - name: Run tests
-        run: sbt test && sbt core/scripted && sbt monorepo/scripted
+      - name: Run core scripted tests
+        run: sbt core/scripted
+
+  monorepo-scripted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - name: Configure git
+        run: git config --global init.defaultBranch main
+      - name: Run monorepo scripted tests
+        run: sbt monorepo/scripted
 
   publish:
-    needs: test
+    needs: [unit-tests, core-scripted, monorepo-scripted]
     if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

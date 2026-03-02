@@ -18,7 +18,5 @@ $ exec git commit -m "Add changes file to core"
 # even though only core has changes since its last tag.
 > releaseIOMonorepo all-changed with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT release-version api=0.2.0 next-version api=0.3.0-SNAPSHOT
 
-# Verify BOTH core/v0.2.0 and api/v0.2.0 tags were created
-> checkTags
-> checkCoreVersion
-> checkApiVersion
+# Verify tags and version files for both projects
+> checkAll

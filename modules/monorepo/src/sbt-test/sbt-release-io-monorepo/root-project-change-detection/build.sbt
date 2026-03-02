@@ -27,7 +27,7 @@ lazy val root = (project in file("."))
 
     releaseIgnoreUntrackedFiles := true,
 
-    checkTags := {
+    checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       // After release: original 2 tags + root/v0.2.0 (sub unchanged)
       // Tag uses sbt project ID "root", not name setting "root-proj"
@@ -39,26 +39,20 @@ lazy val root = (project in file("."))
         tags.toList == List("root/v0.1.0", "root/v0.2.0", "sub/v0.1.0"),
         s"Expected [root/v0.1.0, root/v0.2.0, sub/v0.1.0] but got [${tags.mkString(", ")}]"
       )
-    },
 
-    checkRootVersion := {
-      val contents = IO.read(file("version.sbt"))
+      val rootContents = IO.read(file("version.sbt"))
       assert(
-        contents.contains("0.3.0-SNAPSHOT"),
-        s"Expected root version 0.3.0-SNAPSHOT but got: $contents"
+        rootContents.contains("0.3.0-SNAPSHOT"),
+        s"Expected root version 0.3.0-SNAPSHOT but got: $rootContents"
       )
-    },
 
-    checkSubVersion := {
-      val contents = IO.read(file("sub/version.sbt"))
+      val subContents = IO.read(file("sub/version.sbt"))
       // sub was NOT released, so its version should be unchanged
       assert(
-        contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected sub version 0.2.0-SNAPSHOT (unchanged) but got: $contents"
+        subContents.contains("0.2.0-SNAPSHOT"),
+        s"Expected sub version 0.2.0-SNAPSHOT (unchanged) but got: $subContents"
       )
     }
   )
 
-val checkTags        = taskKey[Unit]("Check git tags")
-val checkRootVersion = taskKey[Unit]("Check root version.sbt")
-val checkSubVersion  = taskKey[Unit]("Check sub version.sbt")
+val checkAll = taskKey[Unit]("Run all verification checks")

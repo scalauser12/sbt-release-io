@@ -13,9 +13,7 @@ lazy val api = (project in file("api"))
     scalaVersion := "2.12.18"
   )
 
-val checkTags        = taskKey[Unit]("Check git tags")
-val checkCoreVersion = taskKey[Unit]("Check core version.sbt")
-val checkApiVersion  = taskKey[Unit]("Check api version.sbt")
+val checkAll = taskKey[Unit]("Run all verification checks")
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
@@ -29,27 +27,28 @@ lazy val root = (project in file("."))
       step.name == "run-clean" || step.name == "run-tests"
     },
     releaseIgnoreUntrackedFiles    := true,
-    checkTags                      := {
+    // Consolidated verification task
+    checkAll                       := {
+      // Check tags: both core and api should be released even though only core has changes
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
-      // Both core and api should be released even though only core has changes
       assert(tags.length == 4, s"Expected 4 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
         tags.toList == List("api/v0.1.0", "api/v0.2.0", "core/v0.1.0", "core/v0.2.0"),
         s"Expected [api/v0.1.0, api/v0.2.0, core/v0.1.0, core/v0.2.0] but got [${tags.mkString(", ")}]"
       )
-    },
-    checkCoreVersion               := {
-      val contents = IO.read(file("core/version.sbt"))
+
+      // Check core version
+      val coreContents = IO.read(file("core/version.sbt"))
       assert(
-        contents.contains("0.3.0-SNAPSHOT"),
-        s"Expected core version 0.3.0-SNAPSHOT but got: $contents"
+        coreContents.contains("0.3.0-SNAPSHOT"),
+        s"Expected core version 0.3.0-SNAPSHOT but got: $coreContents"
       )
-    },
-    checkApiVersion                := {
-      val contents = IO.read(file("api/version.sbt"))
+
+      // Check api version
+      val apiContents = IO.read(file("api/version.sbt"))
       assert(
-        contents.contains("0.3.0-SNAPSHOT"),
-        s"Expected api version 0.3.0-SNAPSHOT but got: $contents"
+        apiContents.contains("0.3.0-SNAPSHOT"),
+        s"Expected api version 0.3.0-SNAPSHOT but got: $apiContents"
       )
     }
   )

@@ -14,6 +14,5 @@ $ exec git commit -m "Initial commit"
 
 # Verify release version also used `version :=`
 $ exec git reset --hard HEAD~1
-> reload
-> checkVersionSbt 0.1.0
-> checkNoThisBuild
+$ exec grep -q '"0.1.0"' version.sbt
+$ exec grep -vq ThisBuild version.sbt

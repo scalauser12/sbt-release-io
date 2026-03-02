@@ -2,10 +2,10 @@ ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
 ThisBuild / versionScheme          := Some("early-semver")
 
 lazy val commonSettings = Seq(
-  organization       := "io.github.scalauser12",
-  homepage           := Some(url("https://github.com/scalauser12/sbt-release-io")),
-  licenses           := List("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")),
-  developers         := List(
+  organization              := "io.github.scalauser12",
+  homepage                  := Some(url("https://github.com/scalauser12/sbt-release-io")),
+  licenses                  := List("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")),
+  developers                := List(
     Developer(
       id = "scalauser12",
       name = "Boris Kotsev",
@@ -13,7 +13,7 @@ lazy val commonSettings = Seq(
       url = url("https://github.com/scalauser12")
     )
   ),
-  scmInfo            := Some(
+  scmInfo                   := Some(
     ScmInfo(
       url("https://github.com/scalauser12/sbt-release-io"),
       "scm:git@github.com:scalauser12/sbt-release-io.git"
@@ -29,11 +29,12 @@ lazy val commonSettings = Seq(
     "-feature",
     "-unchecked"
   ),
-  scriptedLaunchOpts := {
+  scriptedLaunchOpts        := {
     scriptedLaunchOpts.value ++
       Seq("-Xmx1024M", "-Dplugin.version=" + version.value)
   },
-  scriptedBufferLog  := false
+  scriptedBufferLog         := true,
+  scriptedParallelInstances := 4
 )
 
 lazy val core = (project in file("modules/core"))

@@ -13,9 +13,7 @@ lazy val api = (project in file("api"))
     scalaVersion := "2.12.18"
   )
 
-val checkTags        = taskKey[Unit]("Check git tags")
-val checkCoreVersion = taskKey[Unit]("Check core version.sbt")
-val checkApiVersion  = taskKey[Unit]("Check api version.sbt")
+val checkAll = taskKey[Unit]("Run all verification checks")
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
@@ -27,7 +25,7 @@ lazy val root = (project in file("."))
       step.name == "run-clean" || step.name == "run-tests"
     },
     releaseIgnoreUntrackedFiles := true,
-    checkTags                   := {
+    checkAll                    := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(
         tags.length == 2,
@@ -37,19 +35,17 @@ lazy val root = (project in file("."))
         tags.toList == List("api/v0.1.0", "core/v0.1.0"),
         s"Expected [api/v0.1.0, core/v0.1.0] but got [${tags.mkString(", ")}]"
       )
-    },
-    checkCoreVersion            := {
-      val contents = IO.read(file("core/version.sbt"))
+
+      val coreContents = IO.read(file("core/version.sbt"))
       assert(
-        contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected core version 0.2.0-SNAPSHOT but got: $contents"
+        coreContents.contains("0.2.0-SNAPSHOT"),
+        s"Expected core version 0.2.0-SNAPSHOT but got: $coreContents"
       )
-    },
-    checkApiVersion             := {
-      val contents = IO.read(file("api/version.sbt"))
+
+      val apiContents = IO.read(file("api/version.sbt"))
       assert(
-        contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected api version 0.2.0-SNAPSHOT but got: $contents"
+        apiContents.contains("0.2.0-SNAPSHOT"),
+        s"Expected api version 0.2.0-SNAPSHOT but got: $apiContents"
       )
     }
   )

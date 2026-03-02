@@ -11,5 +11,4 @@ $ exec git commit -m "Initial commit"
 # List projects in REVERSE dependency order to prove topological sort reorders them
 > releaseIOMonorepo top right left base with-defaults release-version base=0.1.0 next-version base=0.2.0-SNAPSHOT release-version left=0.1.0 next-version left=0.2.0-SNAPSHOT release-version right=0.1.0 next-version right=0.2.0-SNAPSHOT release-version top=0.1.0 next-version top=0.2.0-SNAPSHOT
 
-> checkOrder
-> checkGitTags
+> checkAll

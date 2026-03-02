@@ -4,6 +4,23 @@ $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"
 $ exec git add .
 $ exec git commit -m init
-> reload
 
-> checkExitCodes
+# Test 1: success with fromCommand("show version")
+> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommand("show version"))
+> releaseIO with-defaults
+
+# Test 2: failure with fromCommand("failingTask")
+> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommand("failingTask"))
+-> releaseIO with-defaults
+
+# Test 3: chained commands - second step fails
+> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommand("show version"), _root_.io.release.ReleaseStepIO.fromCommand("failingTask"))
+-> releaseIO with-defaults
+
+# Test 4: success with fromCommandAndRemaining("show version")
+> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommandAndRemaining("show version"))
+> releaseIO with-defaults
+
+# Test 5: failure with fromCommandAndRemaining("failingTask")
+> set releaseIOProcess := Seq(_root_.io.release.ReleaseStepIO.fromCommandAndRemaining("failingTask"))
+-> releaseIO with-defaults

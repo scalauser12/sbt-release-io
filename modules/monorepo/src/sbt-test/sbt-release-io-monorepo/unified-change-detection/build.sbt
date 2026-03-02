@@ -32,7 +32,7 @@ lazy val root = (project in file("."))
 
     releaseIgnoreUntrackedFiles := true,
 
-    checkTags := {
+    checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       // After release: original v0.1.0 + new v0.2.0 (both unified)
       assert(
@@ -43,26 +43,20 @@ lazy val root = (project in file("."))
         tags.toList == List("v0.1.0", "v0.2.0"),
         s"Expected [v0.1.0, v0.2.0] but got [${tags.mkString(", ")}]"
       )
-    },
 
-    checkCoreVersion := {
-      val contents = IO.read(file("core/version.sbt"))
+      val coreVer = IO.read(file("core/version.sbt"))
       assert(
-        contents.contains("0.2.1-SNAPSHOT"),
-        s"Expected core version 0.2.1-SNAPSHOT but got: $contents"
+        coreVer.contains("0.2.1-SNAPSHOT"),
+        s"Expected core version 0.2.1-SNAPSHOT but got: $coreVer"
       )
-    },
 
-    checkApiVersion := {
-      val contents = IO.read(file("api/version.sbt"))
+      val apiVer = IO.read(file("api/version.sbt"))
       // api was NOT released (no changes since v0.1.0), version should be unchanged
       assert(
-        contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected api version 0.2.0-SNAPSHOT (unchanged) but got: $contents"
+        apiVer.contains("0.2.0-SNAPSHOT"),
+        s"Expected api version 0.2.0-SNAPSHOT (unchanged) but got: $apiVer"
       )
     }
   )
 
-val checkTags        = taskKey[Unit]("Check git tags")
-val checkCoreVersion = taskKey[Unit]("Check core version.sbt")
-val checkApiVersion  = taskKey[Unit]("Check api version.sbt")
+val checkAll = taskKey[Unit]("Run all verification checks")

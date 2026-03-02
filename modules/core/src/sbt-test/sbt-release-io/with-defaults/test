@@ -11,14 +11,13 @@ $ exec git commit -m "Initial commit"
 
 # Reset to release commit and verify release version was written
 $ exec git reset --hard HEAD~1
-> reload
-> checkContentsOfVersionSbt 1.0.0-RC1
+$ exec grep -q '"1.0.0-RC1"' version.sbt
 
 # Reset to initial snapshot and remove tag created by the first release
 $ exec git reset --hard HEAD~1
 $ exec git tag -d v1.0.0-RC1
+$ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 > reload
-> checkContentsOfVersionSbt 1.0.0-RC1-SNAPSHOT
 
 # with-defaults also works and honors releaseVersionBump
 > set releaseVersionBump := sbtrelease.Version.Bump.NextStable
@@ -27,6 +26,4 @@ $ exec git tag -d v1.0.0-RC1
 
 # Verify release version commit for NextStable
 $ exec git reset --hard HEAD~1
-> reload
-> checkContentsOfVersionSbt 1.0.0
-
+$ exec grep -q '"1.0.0"' version.sbt

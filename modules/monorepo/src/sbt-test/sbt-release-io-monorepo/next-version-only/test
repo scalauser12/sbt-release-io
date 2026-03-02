@@ -8,11 +8,5 @@ $ exec git commit -m "Initial commit"
 # Release with only next-version override for core (no release-version override)
 > releaseIOMonorepo core api with-defaults next-version core=9.9.9-SNAPSHOT
 
-# Verify core got the override next version
-> checkCoreVersion
-
-# Verify api got computed next version
-> checkApiVersion
-
-# Verify core was tagged with computed release version
-> checkCoreTags
+# Verify core override next version, api computed next version, and core tag
+> checkAll

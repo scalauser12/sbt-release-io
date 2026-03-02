@@ -27,42 +27,35 @@ lazy val root = (project in file("."))
     // Ignore untracked files in tests
     releaseIgnoreUntrackedFiles := true,
 
-    // Custom verification tasks
-    checkGitCommitCount := {
-      import sbt.complete.DefaultParsers._
-      val expected = spaceDelimited("<count>").parsed.head.toInt
+    // Consolidated verification task
+    checkAll := {
+      // Check core version
+      val coreContents = IO.read(file("core/version.sbt"))
+      assert(
+        coreContents.contains("0.2.0-SNAPSHOT"),
+        s"Expected core version 0.2.0-SNAPSHOT in core/version.sbt but got: $coreContents"
+      )
+
+      // Check api version
+      val apiContents = IO.read(file("api/version.sbt"))
+      assert(
+        apiContents.contains("0.2.0-SNAPSHOT"),
+        s"Expected api version 0.2.0-SNAPSHOT in api/version.sbt but got: $apiContents"
+      )
+
+      // Check git commit count (expected: 3)
+      val expected = 3
       val actual   = "git log --oneline".!!.trim.linesIterator.length
       assert(actual == expected, s"Expected $expected commits but found $actual")
-    },
 
-    checkGitTags := {
+      // Check git tags
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
-      // Expected: per-project tags (core/v0.1.0, api/v0.1.0)
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
         tags.sorted.toList == List("api/v0.1.0", "core/v0.1.0"),
         s"Expected tags [api/v0.1.0, core/v0.1.0] but got [${tags.sorted.mkString(", ")}]"
       )
-    },
-
-    checkCoreVersion := {
-      val contents = IO.read(file("core/version.sbt"))
-      assert(
-        contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected core version 0.2.0-SNAPSHOT in core/version.sbt but got: $contents"
-      )
-    },
-
-    checkApiVersion := {
-      val contents = IO.read(file("api/version.sbt"))
-      assert(
-        contents.contains("0.2.0-SNAPSHOT"),
-        s"Expected api version 0.2.0-SNAPSHOT in api/version.sbt but got: $contents"
-      )
     }
   )
 
-val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
-val checkGitTags        = taskKey[Unit]("Check git tags")
-val checkCoreVersion    = taskKey[Unit]("Check core version.sbt")
-val checkApiVersion     = taskKey[Unit]("Check api version.sbt")
+val checkAll = taskKey[Unit]("Run all verification checks")
