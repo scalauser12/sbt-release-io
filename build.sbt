@@ -16,7 +16,7 @@ lazy val commonSettings = Seq(
   scmInfo                   := Some(
     ScmInfo(
       url("https://github.com/scalauser12/sbt-release-io"),
-      "scm:git@github.com:scalauser12/sbt-release-io.git"
+      "scm:git:git@github.com:scalauser12/sbt-release-io.git"
     )
   ),
   libraryDependencies ++= Seq(
