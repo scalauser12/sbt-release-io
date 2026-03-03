@@ -1,6 +1,8 @@
 # sbt-release-io
 
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo)
 
 An sbt plugin suite that wraps [sbt-release](https://github.com/sbt/sbt-release) with cats-effect IO for composable, resource-safe release automation.
 
@@ -18,7 +20,7 @@ An sbt plugin suite that wraps [sbt-release](https://github.com/sbt/sbt-release)
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.1")
 ```
 
 ```bash
@@ -30,7 +32,7 @@ sbt "releaseIO with-defaults"
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.2.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.2.1")
 ```
 
 In `build.sbt`:

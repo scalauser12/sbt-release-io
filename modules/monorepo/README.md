@@ -1,5 +1,7 @@
 # sbt-release-io-monorepo
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo)
+
 A monorepo release plugin for sbt, extending [sbt-release-io](../core/README.md) with per-project versioning, change detection, topological ordering, and failure isolation.
 
 ## Features
@@ -18,7 +20,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io](../core/README.md)
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.2.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.2.1")
 ```
 
 Enable on your root project in `build.sbt`:

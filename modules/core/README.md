@@ -1,5 +1,7 @@
 # sbt-release-io
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io)
+
 An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with cats-effect IO for better functional programming support and error handling.
 
 ## Features
@@ -18,7 +20,7 @@ An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with 
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.1")
 ```
 
 ## Usage
@@ -329,7 +331,7 @@ Some libraries that work well in release steps:
 Add the dependency in `project/plugins.sbt` alongside the plugin:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.1")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 
