@@ -1,0 +1,16 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src
+$ exec git commit -m "Initial commit"
+
+# Run release WITHOUT the cross CLI flag — cross-build should happen via setting
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify both Scala versions were built (proves releaseIOCrossBuild setting works)
+> checkTargetDir 2.13 exists
+> checkTargetDir 2.12 exists
+
+# Verify release completed
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt

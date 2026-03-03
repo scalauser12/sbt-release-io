@@ -1,0 +1,15 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt version.properties project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Run release — custom reader parses version.properties, custom writer produces properties format
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify version.properties uses the custom properties format with next version
+> checkVersionProps
+
+# Verify the release version commit (via git tag) had the correct custom format
+> checkReleaseVersionCommit
