@@ -24,9 +24,18 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Tests cross-building with multiple Scala versions via the `cross` flag
 - Verifies both 2.13 and 2.12 builds occur only when cross is enabled
 
+### cross-build-setting
+- Tests `releaseIOCrossBuild := true` setting (not the CLI flag)
+- Verifies both Scala versions are built when cross-build is enabled via setting
+
 ### custom-tag
 - Tests custom tag naming via the `releaseTagName` setting
 - Uses `runtimeVersion` to create dynamic tag names
+
+### custom-version-format
+- Tests `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOWriteVersion` settings
+- Uses a `.properties` file format instead of default `version.sbt`
+- Verifies custom format preserved in both working directory and git tag commits
 
 ### custom-plugin
 - Tests `ReleasePluginIOLike` resource lifecycle (acquire → use → release)
@@ -80,6 +89,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ### simple
 - Tests the basic release workflow end-to-end
 - Verifies version changes, git commits, and tags are created
+
+### skip-publish-setting
+- Tests `releaseIOSkipPublish := true` setting (not `publish / skip`)
+- Verifies release succeeds without `publishTo` configured when skip-publish is enabled via setting
 
 ### skip-tests
 - Verifies that the `skip-tests` flag allows release despite failing tests

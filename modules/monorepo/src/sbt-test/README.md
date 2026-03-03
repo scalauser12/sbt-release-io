@@ -33,6 +33,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Cross-building with different Scala versions per project
 - Core built for multiple versions, api for a single version
 
+### cross-build-setting
+- Tests `releaseIOMonorepoCrossBuild := true` setting (not the `cross` CLI flag)
+- Verifies cross-building activates via build setting with heterogeneous Scala versions
+
 ### custom-change-detector
 - Custom change detection function selects only specific projects
 - Returns true only for core, skipping api
@@ -52,6 +56,16 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### custom-tag-name
 - Custom per-project tag name formatter
 - Creates tags with format `release/<project>/<version>`
+
+### custom-unified-tag-name
+- Tests `releaseIOMonorepoUnifiedTagName` custom formatter with unified tag strategy
+- Produces `release-v1.0.0` instead of default `v1.0.0`
+- Verifies tag annotation mentions all released projects
+
+### custom-version-format
+- Tests `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoWriteVersion`
+- Uses `.properties` files instead of default `version.sbt` format
+- Verifies custom format preserved in working directory, git tags, and that `app.name=` lines are not clobbered
 
 ### detect-changes-disabled
 - `detectChanges=false` setting releases all projects regardless of changes
@@ -136,6 +150,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 
 ### skip-tests
 - `skip-tests` CLI flag skips test execution but release still completes
+
+### skip-tests-setting
+- Tests `releaseIOMonorepoSkipTests := true` setting (not the `skip-tests` CLI flag)
+- Marker-file approach proves tests were not executed despite `Test / test` being overridden to write markers
 
 ### snapshot-dependencies
 - SNAPSHOT dependencies detected in check phase

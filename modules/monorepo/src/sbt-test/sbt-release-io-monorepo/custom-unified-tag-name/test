@@ -1,0 +1,12 @@
+# Test: custom unified tag name formatter
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with unified tag strategy and custom tag name format
+> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
+
+# Verify custom unified tag format and next versions
+> checkAll
