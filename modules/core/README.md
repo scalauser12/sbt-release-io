@@ -1,6 +1,6 @@
 # sbt-release-io
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
 
 An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with cats-effect IO for better functional programming support and error handling.
 

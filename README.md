@@ -1,8 +1,8 @@
 # sbt-release-io
 
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo)
+[![sbt-release-io](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0?label=sbt-release-io)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
+[![sbt-release-io-monorepo](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0?label=sbt-release-io-monorepo)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
 
 An sbt plugin suite that wraps [sbt-release](https://github.com/sbt/sbt-release) with cats-effect IO for composable, resource-safe release automation.
 
