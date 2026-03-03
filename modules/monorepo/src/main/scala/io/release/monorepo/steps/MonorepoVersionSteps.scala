@@ -78,30 +78,6 @@ private[monorepo] object MonorepoVersionSteps {
                                                               }
     } yield result
 
-  /** Validate that all projects agree on release and next versions when global version mode is
-    * active. Runs as a Global step so that a mismatch aborts the entire release immediately,
-    * rather than marking one project failed via per-project error isolation.
-    */
-  val validateVersionConsistency: MonorepoStepIO.Global = MonorepoStepIO.Global(
-    name = "validate-version-consistency",
-    action = ctx =>
-      IO.blocking(extract(ctx.state).get(releaseIOMonorepoUseGlobalVersion)).flatMap {
-        case false => IO.pure(ctx)
-        case true  =>
-          MonorepoStepHelpers.validateVersionConsistency(
-            ctx.currentProjects,
-            _._1,
-            "set-release-version: global version mode requires all projects to share the same version"
-          ) *>
-            MonorepoStepHelpers.validateVersionConsistency(
-              ctx.currentProjects,
-              _._2,
-              "set-next-version: global version mode requires all projects to share the same version"
-            ) *>
-            IO.pure(ctx)
-      }
-  )
-
   /** Write release versions to per-project version files. */
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "set-release-version",

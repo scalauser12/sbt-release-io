@@ -101,9 +101,14 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Verifies global version file uses `ThisBuild / version` format
 - Not plain `version :=`
 
+### global-version-override
+- Tests global version override syntax (`release-version 2.0.0` without `project=`)
+- Applies the same version to all projects in global version mode
+- Verifies per-project tags and next version in `version.sbt`
+
 ### global-version-mismatch
-- Different release versions provided in global mode (e.g., core=1.0.0 vs api=2.0.0)
-- Release fails due to version consistency validation
+- Per-project version overrides provided in global mode (e.g., `release-version core=1.0.0`)
+- Release fails at argument validation — per-project overrides are not supported in global mode
 
 ### global-version-partial-selection
 - Partial project selection in global mode (only core specified)

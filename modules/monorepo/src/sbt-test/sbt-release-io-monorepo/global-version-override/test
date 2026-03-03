@@ -1,0 +1,12 @@
+# Test: global version override syntax (release-version <version> without project=)
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with global version overrides — applies 2.0.0 to all projects
+> releaseIOMonorepo core api with-defaults release-version 2.0.0 next-version 2.1.0-SNAPSHOT
+
+# Verify version file updated and per-project tags created
+> checkAll

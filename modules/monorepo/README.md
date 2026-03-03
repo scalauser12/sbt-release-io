@@ -64,6 +64,15 @@ release-version <project>=<version>
 next-version <project>=<version>
 ```
 
+In global version mode, use global overrides (without `project=`) to apply the same version to all projects:
+
+```
+release-version <version>
+next-version <version>
+```
+
+Per-project overrides are not allowed in global version mode. Global overrides are not allowed in non-global mode.
+
 ### Examples
 
 ```bash
@@ -73,8 +82,11 @@ sbt "releaseIOMonorepo with-defaults"
 # Release only core and api
 sbt "releaseIOMonorepo core api with-defaults"
 
-# Pin versions
+# Pin versions per project
 sbt "releaseIOMonorepo with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+
+# Pin versions globally (global version mode only)
+sbt "releaseIOMonorepo with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 
 # Release all projects regardless of changes
 sbt "releaseIOMonorepo all-changed with-defaults"
@@ -96,16 +108,15 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 | 4 | `detect-or-select-projects` | Global | Run change detection or use explicit CLI selection |
 | 5 | `check-snapshot-dependencies` | PerProject | Fail if any SNAPSHOT dependencies found (check phase only, cross-build) |
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
-| 7 | `validate-version-consistency` | Global | In global version mode: verify all projects agree |
-| 8 | `run-clean` | PerProject | Run `clean` task |
-| 9 | `run-tests` | PerProject | Run `test` task (cross-build enabled, skippable) |
-| 10 | `set-release-version` | PerProject | Write release version to `version.sbt` |
-| 11 | `commit-release-versions` | Global | Single commit staging all version files |
-| 12 | `tag-releases` | Global | Create per-project or unified tags |
-| 13 | `publish-artifacts` | PerProject | Publish artifacts (cross-build enabled, skippable) |
-| 14 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
-| 15 | `commit-next-versions` | Global | Single commit staging all version files |
-| 16 | `push-changes` | Global | Push branch + tags to tracking remote |
+| 7 | `run-clean` | PerProject | Run `clean` task |
+| 8 | `run-tests` | PerProject | Run `test` task (cross-build enabled, skippable) |
+| 9 | `set-release-version` | PerProject | Write release version to `version.sbt` |
+| 10 | `commit-release-versions` | Global | Single commit staging all version files |
+| 11 | `tag-releases` | Global | Create per-project or unified tags |
+| 12 | `publish-artifacts` | PerProject | Publish artifacts (cross-build enabled, skippable) |
+| 13 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
+| 14 | `commit-next-versions` | Global | Single commit staging all version files |
+| 15 | `push-changes` | Global | Push branch + tags to tracking remote |
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order.
 
@@ -452,7 +463,7 @@ When `releaseIOMonorepoUseGlobalVersion := true`:
 
 - All projects share the root `version.sbt` (the file defined by sbt-release's `releaseVersionFile`).
 - Version file content uses `ThisBuild / version := "x.y.z"` instead of `version := "x.y.z"`.
-- The `validate-version-consistency` step enforces all projects have the same release and next versions.
+- Per-project version overrides are rejected at parse time; use global overrides instead (`release-version 1.0.0`).
 - Partial project selection is blocked (CLI validation returns an error if a subset is named).
 - Change detection must select either all projects or none.
 

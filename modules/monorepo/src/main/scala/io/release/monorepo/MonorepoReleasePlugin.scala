@@ -131,6 +131,8 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     case class SelectProject(name: String)                      extends MonorepoArg
     case class ReleaseVersion(project: String, version: String) extends MonorepoArg
     case class NextVersion(project: String, version: String)    extends MonorepoArg
+    case class GlobalReleaseVersion(version: String)            extends MonorepoArg
+    case class GlobalNextVersion(version: String)               extends MonorepoArg
   }
 
   // ── Parser ──────────────────────────────────────────────────────────
@@ -144,14 +146,23 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     val crossBuild: Parser[MonorepoArg]   = token("cross").map(_ => CrossBuild)
     val allChanged: Parser[MonorepoArg]   = token("all-changed").map(_ => AllChanged)
 
-    def versionParser(keyword: String, ctor: (String, String) => MonorepoArg): Parser[MonorepoArg] =
-      (token(keyword) ~> Space ~> token(NotSpace, "<project>=<version>")).map { s =>
+    def versionParser(
+        keyword: String,
+        perProject: (String, String) => MonorepoArg,
+        global: String => MonorepoArg
+    ): Parser[MonorepoArg] =
+      (token(keyword) ~> Space ~> token(NotSpace, "<version> or <project>=<version>")).map { s =>
         val parts = s.split("=", 2)
-        ctor(parts(0), parts.lift(1).getOrElse(""))
+        if (parts.length == 2) perProject(parts(0), parts(1))
+        else global(s)
       }
 
-    val releaseVer                       = versionParser("release-version", ReleaseVersion.apply)
-    val nextVer                          = versionParser("next-version", NextVersion.apply)
+    val releaseVer                       = versionParser(
+      "release-version",
+      ReleaseVersion.apply,
+      GlobalReleaseVersion.apply
+    )
+    val nextVer                          = versionParser("next-version", NextVersion.apply, GlobalNextVersion.apply)
     val projectName: Parser[MonorepoArg] =
       token(NotSpace, "<project>").map(SelectProject(_))
 
@@ -194,7 +205,9 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
   private def resolveProjects(
       extracted: Extracted,
       releaseVersionOverrides: Map[String, String],
-      nextVersionOverrides: Map[String, String]
+      nextVersionOverrides: Map[String, String],
+      globalReleaseVersion: Option[String] = None,
+      globalNextVersion: Option[String] = None
   ): Either[Throwable, Seq[ProjectReleaseInfo]] =
     Try {
       val allProjectRefs = extracted.get(releaseIOMonorepoProjects)
@@ -214,8 +227,10 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
           baseDir = projBase,
           versionFile = versionFileFn(ref),
           versions = {
-            val rel  = releaseVersionOverrides.getOrElse(projName, "")
-            val next = nextVersionOverrides.getOrElse(projName, "")
+            val rel  =
+              globalReleaseVersion.getOrElse(releaseVersionOverrides.getOrElse(projName, ""))
+            val next =
+              globalNextVersion.getOrElse(nextVersionOverrides.getOrElse(projName, ""))
             if (rel.nonEmpty || next.nonEmpty) Some((rel, next)) else None
           }
         )
@@ -243,9 +258,14 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
 
     val extracted               = extract(state)
     val flags                   = parseFlags(args, extracted)
+    val useGlobalVersion        = extracted.get(releaseIOMonorepoUseGlobalVersion)
     val selectedNames           = args.collect { case SelectProject(name) => name }
     val releaseVersionOverrides = args.collect { case ReleaseVersion(p, v) => p -> v }.toMap
     val nextVersionOverrides    = args.collect { case NextVersion(p, v) => p -> v }.toMap
+    val globalReleaseVersions   = args.collect { case GlobalReleaseVersion(v) => v }
+    val globalNextVersions      = args.collect { case GlobalNextVersion(v) => v }
+    val globalReleaseVersion    = globalReleaseVersions.headOption
+    val globalNextVersion       = globalNextVersions.headOption
 
     for {
       _ <- validate(
@@ -256,9 +276,43 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
              nextVersionOverrides.exists { case (p, v) => p.isEmpty || v.isEmpty },
              "Invalid next-version format. Expected project=version"
            )
+      _ <- validate(
+             globalReleaseVersions.exists(_.isEmpty),
+             "Invalid release-version format. Expected a non-empty version string"
+           )
+      _ <- validate(
+             globalNextVersions.exists(_.isEmpty),
+             "Invalid next-version format. Expected a non-empty version string"
+           )
+      _ <- validate(
+             globalReleaseVersions.length > 1,
+             "Multiple global release-version overrides provided. Only one is allowed"
+           )
+      _ <- validate(
+             globalNextVersions.length > 1,
+             "Multiple global next-version overrides provided. Only one is allowed"
+           )
+      _ <- validate(
+             !useGlobalVersion &&
+               (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty),
+             "Global version overrides (release-version <version>) are only supported " +
+               "when releaseIOMonorepoUseGlobalVersion is enabled. " +
+               "Use per-project overrides (release-version <project>=<version>) instead."
+           )
+      _ <- validate(
+             (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty) &&
+               (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
+             "Cannot mix global version overrides with per-project version overrides"
+           )
 
-      allProjects <- resolveProjects(extracted, releaseVersionOverrides, nextVersionOverrides).left
-                       .map(e => fail(e.getMessage))
+      allProjects <-
+        resolveProjects(
+          extracted,
+          releaseVersionOverrides,
+          nextVersionOverrides,
+          globalReleaseVersion,
+          globalNextVersion
+        ).left.map(e => fail(e.getMessage))
 
       validNames       = allProjects.map(_.name).toSet
       invalidOverrides =
@@ -270,11 +324,18 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
                s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}"
            )
       _ <- validate(
-             extracted.get(releaseIOMonorepoUseGlobalVersion) && selectedNames.nonEmpty &&
+             useGlobalVersion && selectedNames.nonEmpty &&
                selectedNames.toSet != validNames,
              s"Global version mode is active — all projects share a single " +
                s"version file. Selecting a subset of projects (${selectedNames.mkString(", ")}) is " +
                s"not supported. Release all projects or disable releaseIOMonorepoUseGlobalVersion."
+           )
+      _ <- validate(
+             useGlobalVersion &&
+               (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
+             "Global version mode is active — all projects share a single version. " +
+               "Per-project version overrides (release-version project=version) are not supported. " +
+               "Use global overrides (release-version <version>) or remove per-project overrides."
            )
 
       _ <- validate(

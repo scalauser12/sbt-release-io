@@ -16,14 +16,12 @@ object MonorepoReleaseSteps {
   val pushChanges: MonorepoStepIO.Global          = MonorepoVcsSteps.pushChanges
 
   // ── Version steps ─────────────────────────────────────────────────────
-  val inquireVersions: MonorepoStepIO.PerProject        = MonorepoVersionSteps.inquireVersions
-  val validateVersionConsistency: MonorepoStepIO.Global =
-    MonorepoVersionSteps.validateVersionConsistency
-  val setReleaseVersions: MonorepoStepIO.PerProject     = MonorepoVersionSteps.setReleaseVersions
-  val setNextVersions: MonorepoStepIO.PerProject        = MonorepoVersionSteps.setNextVersions
-  val commitReleaseVersions: MonorepoStepIO.Global      =
+  val inquireVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.inquireVersions
+  val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoVersionSteps.setReleaseVersions
+  val setNextVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.setNextVersions
+  val commitReleaseVersions: MonorepoStepIO.Global  =
     MonorepoVersionSteps.commitReleaseVersions
-  val commitNextVersions: MonorepoStepIO.Global         = MonorepoVersionSteps.commitNextVersions
+  val commitNextVersions: MonorepoStepIO.Global     = MonorepoVersionSteps.commitNextVersions
 
   // ── Publish & test steps ──────────────────────────────────────────────
   val checkSnapshotDependencies: MonorepoStepIO.PerProject =
@@ -210,7 +208,6 @@ object MonorepoReleaseSteps {
     detectOrSelectProjects,
     checkSnapshotDependencies,
     inquireVersions,
-    validateVersionConsistency,
     runClean,
     runTests,
     setReleaseVersions,
