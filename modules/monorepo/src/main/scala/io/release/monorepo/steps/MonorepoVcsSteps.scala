@@ -155,7 +155,7 @@ private[monorepo] object MonorepoVcsSteps {
             val tagName   = extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer)
             val sign      = extracted.get(releaseVcsSign)
             createTag(vcs, tagName, s"Release ${project.name} $releaseVer", sign, project.name) *>
-              IO {
+              IO.blocking {
                 ctx.state.log.info(s"[release-io-monorepo] Tagged ${project.name} as $tagName")
                 ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName)))
               }
@@ -182,7 +182,7 @@ private[monorepo] object MonorepoVcsSteps {
               val sign      = extracted.get(releaseVcsSign)
               val summary   = versionSummary(ctx, _._1)
               createTag(vcs, tagName, s"Release: $summary", sign, "release") *>
-                IO {
+                IO.blocking {
                   ctx.state.log.info(s"[release-io-monorepo] Tagged release as $tagName")
                   ctx.currentProjects.foldLeft(ctx) { (c, p) =>
                     c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
@@ -239,7 +239,7 @@ private[monorepo] object MonorepoVcsSteps {
                   val tags = ctx.currentProjects.flatMap(_.tagName).distinct
                   for {
                     pushTarget <- resolveGitPushTarget(vcs)
-                    _          <- IO(
+                    _          <- IO.blocking(
                                     ctx.state.log.info(
                                       s"[release-io-monorepo] Pushing branch ${pushTarget.localBranch} " +
                                         s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
@@ -259,7 +259,7 @@ private[monorepo] object MonorepoVcsSteps {
                                   )
                     _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
                                     acc *>
-                                      IO(
+                                      IO.blocking(
                                         ctx.state.log
                                           .info(s"[release-io-monorepo] Pushing tag $tag")
                                       ) *>

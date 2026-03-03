@@ -93,7 +93,7 @@ private[release] object VersionSteps {
               defaultVersion = suggestedNext
             )
         }
-      updated      <- IO {
+      updated      <- IO.blocking {
                         data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
                         data.state.log.info(s"[release-io] Release version : $releaseVer")
                         data.state.log.info(s"[release-io] Next version    : $nextVer")

@@ -60,7 +60,7 @@ private[release] object ReleaseComposer {
       else
         f(ctx).handleErrorWith {
           case NonFatal(err) =>
-            IO(
+            IO.blocking(
               ctx.state.log
                 .error(s"[release-io] Error: ${Option(err.getMessage).getOrElse(err.toString)}")
             ) *>
@@ -104,7 +104,8 @@ private[release] object ReleaseComposer {
 
     val wrappedActions: Seq[ReleaseContext => IO[ReleaseContext]] = steps.map { step =>
       val baseAction = (ctx: ReleaseContext) =>
-        IO(ctx.state.log.info(s"[release-io] Executing step: ${step.name}")) *> step.action(ctx)
+        IO.blocking(ctx.state.log.info(s"[release-io] Executing step: ${step.name}")) *> step
+          .action(ctx)
 
       if (step.enableCrossBuild && crossBuild) ctx => runCrossBuild(baseAction)(ctx)
       else baseAction
@@ -140,7 +141,9 @@ private[release] object ReleaseComposer {
       val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
         for {
           currentCtx <- ioCtx
-          _          <- IO(currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version"))
+          _          <- IO.blocking(
+                          currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version")
+                        )
           newCtx     <- IO.blocking {
                           val newState = switchScalaVersion(currentCtx.state, version)
                           currentCtx.copy(state = newState)

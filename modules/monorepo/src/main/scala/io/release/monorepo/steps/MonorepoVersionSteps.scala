@@ -22,7 +22,7 @@ private[monorepo] object MonorepoVersionSteps {
     action = (ctx, project) =>
       project.versions match {
         case Some((rel, next)) if rel.nonEmpty && next.nonEmpty =>
-          IO {
+          IO.blocking {
             ctx.state.log.info(
               s"[release-io-monorepo] ${project.name}: pre-set -> $rel (next: $next)"
             )
@@ -68,7 +68,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                                 ctx.interactive,
                                                                 useDefaults
                                                               )
-      result                                               <- IO {
+      result                                               <- IO.blocking {
                                                                 ctx.state.log.info(
                                                                   s"[release-io-monorepo] ${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
                                                                 )

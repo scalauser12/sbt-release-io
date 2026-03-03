@@ -77,7 +77,7 @@ private[release] object VcsSteps {
             )
           )
         else
-          IO {
+          IO.blocking {
             if (logStartHash)
               ctx.state.log.info(
                 s"[release-io] Starting release process off commit: $currentHash"
@@ -129,7 +129,7 @@ private[release] object VcsSteps {
                   val effectiveAnswer: IO[String] = defaultAnswer match {
                     case Some(ans)                => IO.pure(ans)
                     case None if useDefaults      =>
-                      IO(
+                      IO.blocking(
                         ctx.state.log.warn(
                           s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
                         )
@@ -152,14 +152,14 @@ private[release] object VcsSteps {
                         new RuntimeException(s"Tag [$tagName] already exists. Aborting release!")
                       )
                     case "k" | "K"      =>
-                      IO(
+                      IO.blocking(
                         ctx.state.log
                           .warn(
                             s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
                           )
                       ).as(ctx)
                     case "o" | "O"      =>
-                      IO(
+                      IO.blocking(
                         ctx.state.log
                           .warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")
                       ) *>
@@ -177,7 +177,7 @@ private[release] object VcsSteps {
                           ctx.copy(state = newState)
                         }
                     case newTagName     =>
-                      IO(
+                      IO.blocking(
                         ctx.state.log
                           .info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
                       ) *>
@@ -243,7 +243,7 @@ private[release] object VcsSteps {
                       for {
                         branch <- IO.blocking(vcs.currentBranch)
                         r      <-
-                          IO(
+                          IO.blocking(
                             ctx.state.log.info(
                               s"[release-io] Changes were NOT pushed, because no upstream branch is configured for branch '$branch'."
                             )
@@ -264,7 +264,7 @@ private[release] object VcsSteps {
                       decisionIO.flatMap {
                         case true  => runProcess(vcs.pushChanges, "vcs push").as(ctx)
                         case false =>
-                          IO(
+                          IO.blocking(
                             ctx.state.log.warn(
                               "[release-io] Remember to push the changes yourself!"
                             )
