@@ -8,6 +8,7 @@ import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.sys.process.*
+import scala.util.control.NonFatal
 
 /** Shared helpers used across monorepo release step objects. */
 private[monorepo] object MonorepoStepHelpers {
@@ -32,14 +33,16 @@ private[monorepo] object MonorepoStepHelpers {
           val latestProj = currentCtx.projects.find(_.ref == proj.ref).getOrElse(proj)
           if (latestProj.failed) IO.pure(currentCtx)
           else
-            action(currentCtx, latestProj).handleErrorWith { err =>
-              IO.blocking(
-                currentCtx.state.log.error(
-                  s"[release-io-monorepo] ${latestProj.name}: ${Option(err.getMessage).getOrElse(err.toString)}"
+            action(currentCtx, latestProj).handleErrorWith {
+              case NonFatal(err) =>
+                IO.blocking(
+                  currentCtx.state.log.error(
+                    s"[release-io-monorepo] ${latestProj.name}: ${Option(err.getMessage).getOrElse(err.toString)}"
+                  )
+                ) *> IO.pure(
+                  currentCtx.updateProject(latestProj.ref)(_.copy(failed = true))
                 )
-              ) *> IO.pure(
-                currentCtx.updateProject(latestProj.ref)(_.copy(failed = true))
-              )
+              case fatal         => IO.raiseError(fatal)
             }
         }
       }
@@ -109,21 +112,23 @@ private[monorepo] object MonorepoStepHelpers {
   private[steps] def resolveRelativePaths(
       ctx: MonorepoContext,
       vcs: sbtrelease.Vcs
-  ): IO[Seq[(ProjectReleaseInfo, String)]] = {
-    val base = vcs.baseDir.getCanonicalFile
-    ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
-      (acc, project) =>
-        acc.flatMap { paths =>
-          resolveVersionFile(ctx, project).flatMap { versionFile =>
-            IO.fromOption(sbt.IO.relativize(base, versionFile.getCanonicalFile))(
-              new RuntimeException(
-                s"Version file [${versionFile.getCanonicalPath}] is outside VCS root [$base]"
-              )
-            ).map(rel => paths :+ (project, rel))
+  ): IO[Seq[(ProjectReleaseInfo, String)]] =
+    IO.blocking(vcs.baseDir.getCanonicalFile).flatMap { base =>
+      ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
+        (acc, project) =>
+          acc.flatMap { paths =>
+            resolveVersionFile(ctx, project).flatMap { versionFile =>
+              IO.blocking(versionFile.getCanonicalFile).flatMap { canonicalFile =>
+                IO.fromOption(sbt.IO.relativize(base, canonicalFile))(
+                  new RuntimeException(
+                    s"Version file [${canonicalFile.getPath}] is outside VCS root [$base]"
+                  )
+                ).map(rel => paths :+ (project, rel))
+              }
+            }
           }
-        }
+      }
     }
-  }
 
   private[steps] def resolveVersionFile(
       ctx: MonorepoContext,
@@ -183,15 +188,16 @@ private[monorepo] object MonorepoStepHelpers {
   ): IO[MonorepoContext] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       resolveRelativePaths(ctx, vcs).flatMap { paths =>
-        val extracted = extract(ctx.state)
-        val sign      = extracted.get(releaseVcsSign)
-        val signOff   = extracted.get(releaseVcsSignOff)
-
-        paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
-          acc *> runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
-        } *> {
-          val summary = versionSummary(ctx, selector)
-          commitIfChanged(vcs, s"$msgPrefix: $summary", sign, signOff, ctx)
+        IO.blocking {
+          val extracted = extract(ctx.state)
+          (extracted.get(releaseVcsSign), extracted.get(releaseVcsSignOff))
+        }.flatMap { case (sign, signOff) =>
+          paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
+            acc *> runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+          } *> {
+            val summary = versionSummary(ctx, selector)
+            commitIfChanged(vcs, s"$msgPrefix: $summary", sign, signOff, ctx)
+          }
         }
       }
     }
