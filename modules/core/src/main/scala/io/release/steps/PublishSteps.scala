@@ -8,6 +8,8 @@ import sbt.Keys.*
 import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 
+import scala.util.control.NonFatal
+
 /** Publish, test, and dependency-related release steps. */
 private[release] object PublishSteps {
 
@@ -126,12 +128,14 @@ private[release] object PublishSteps {
       ref: ProjectRef,
       state: State
   ): Boolean =
-    scala.util.Try(extracted.runTask(ref / publish / Keys.skip, state)._2).getOrElse(false)
+    try extracted.runTask(ref / publish / Keys.skip, state)._2
+    catch { case NonFatal(_) => false }
 
   private def checkPublishToMissing(
       extracted: Extracted,
       ref: ProjectRef,
       state: State
   ): Boolean =
-    scala.util.Try(extracted.runTask(ref / publishTo, state)._2).getOrElse(None).isEmpty
+    try extracted.runTask(ref / publishTo, state)._2.isEmpty
+    catch { case NonFatal(_) => true }
 }
