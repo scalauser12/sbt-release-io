@@ -31,23 +31,25 @@ private[monorepo] object MonorepoPublishSteps {
                            case Inc(cause)   => Left(cause)
                          }
                        }
-        result      <- checkResult match {
-                         case Left(cause)                  =>
-                           IO.raiseError[MonorepoContext](
+        result      <- IO.fromEither {
+                         checkResult.left
+                           .map(cause =>
                              new RuntimeException(
                                s"Error checking snapshot dependencies for ${project.name}: $cause"
                              )
                            )
-                         case Right(deps) if deps.nonEmpty =>
-                           val depList = deps
-                             .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
-                             .mkString("\n")
-                           IO.raiseError[MonorepoContext](
-                             new RuntimeException(
-                               s"Snapshot dependencies found in ${project.name}:\n$depList"
-                             )
-                           )
-                         case Right(_)                     => IO.pure(ctx)
+                           .flatMap { deps =>
+                             if (deps.nonEmpty) {
+                               val depList = deps
+                                 .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
+                                 .mkString("\n")
+                               Left(
+                                 new RuntimeException(
+                                   s"Snapshot dependencies found in ${project.name}:\n$depList"
+                                 )
+                               )
+                             } else Right(ctx)
+                           }
                        }
       } yield result,
     enableCrossBuild = true

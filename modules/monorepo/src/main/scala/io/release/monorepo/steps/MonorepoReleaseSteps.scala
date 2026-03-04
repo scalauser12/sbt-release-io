@@ -7,6 +7,8 @@ import io.release.monorepo.steps.MonorepoStepHelpers.*
 import sbt.*
 import sbt.Project.extract
 
+import scala.util.control.NonFatal
+
 /** Facade re-exporting all built-in monorepo release steps and default sequences. */
 object MonorepoReleaseSteps {
 
@@ -128,7 +130,7 @@ object MonorepoReleaseSteps {
       acc.flatMap { changed =>
         detector(project.ref, project.baseDir, ctx.state)
           .map { isChanged => if (isChanged) changed :+ project else changed }
-          .handleErrorWith { err =>
+          .recoverWith { case NonFatal(err) =>
             IO.blocking(
               ctx.state.log.warn(
                 s"[release-io-monorepo] Change detection failed for ${project.name}: " +

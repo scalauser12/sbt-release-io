@@ -141,7 +141,7 @@ private[monorepo] object MonorepoComposer {
       ctx: MonorepoContext
   ): IO[MonorepoContext] = step match {
     case global: MonorepoStepIO.Global =>
-      IO(ctx.state.log.info(s"$LogPrefix ${global.name}")) *>
+      IO.blocking(ctx.state.log.info(s"$LogPrefix ${global.name}")) *>
         global.action(ctx).handleErrorWith(handleStepError(ctx, global.name))
 
     case perProject: MonorepoStepIO.PerProject =>
@@ -160,7 +160,7 @@ private[monorepo] object MonorepoComposer {
       .runPerProject(
         ctx,
         (currentCtx, project) =>
-          IO(currentCtx.state.log.info(s"$LogPrefix $stepName [${project.name}]")) *>
+          IO.blocking(currentCtx.state.log.info(s"$LogPrefix $stepName [${project.name}]")) *>
             action(currentCtx, project)
       )
       .map(MonorepoStepHelpers.propagateFailures)
@@ -229,25 +229,18 @@ private[monorepo] object MonorepoComposer {
       }
 
     crossVersions.toList match {
-      case Nil            =>
+      case Nil      =>
         IO.raiseError(
           new RuntimeException(
             s"Project '${project.name}' has empty crossScalaVersions while cross-build is enabled. " +
               "Set at least one Scala version in crossScalaVersions or disable cross-build for this step/build."
           )
         )
-      case version :: Nil =>
-        for {
-          _        <- IO(ctx.state.log.info(s"$LogPrefix Cross-building with Scala $version"))
-          switched <- switchTo(version)(ctx)
-          result   <- action(switched)
-          restored <- restoreEntry(result)
-        } yield restored
-      case versions       =>
+      case versions =>
         val finalIO = versions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
           for {
             currentCtx <- ioCtx
-            _          <- IO(
+            _          <- IO.blocking(
                             currentCtx.state.log.info(
                               s"$LogPrefix Cross-building with Scala $version"
                             )
@@ -293,7 +286,7 @@ private[monorepo] object MonorepoComposer {
   ): IO[MonorepoContext] =
     err match {
       case NonFatal(_) =>
-        IO(
+        IO.blocking(
           ctx.state.log.error(
             s"$LogPrefix Error in $stepName: ${Option(err.getMessage).getOrElse(err.toString)}"
           )
