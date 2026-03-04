@@ -1,4 +1,4 @@
-# Test: CLI parser format validation catches malformed arguments
+# Test: CLI parser format validation catches malformed arguments and duplicate overrides
 $ exec git init
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"
@@ -16,3 +16,9 @@ $ exec git commit -m "Initial commit"
 
 # next-version with invalid format (no '=') should fail
 -> releaseIOMonorepo core with-defaults next-version alsobad
+
+# Duplicate per-project release-version overrides should fail
+-> releaseIOMonorepo core with-defaults release-version core=1.0.0 release-version core=2.0.0
+
+# Duplicate per-project next-version overrides should fail
+-> releaseIOMonorepo core with-defaults next-version core=1.0.0-SNAPSHOT next-version core=2.0.0-SNAPSHOT

@@ -190,14 +190,31 @@ private[monorepo] object MonorepoStepHelpers {
       resolveRelativePaths(ctx, vcs).flatMap { paths =>
         IO.blocking {
           val extracted = extract(ctx.state)
-          (extracted.get(releaseVcsSign), extracted.get(releaseVcsSignOff))
-        }.flatMap { case (sign, signOff) =>
-          paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
-            acc *> runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
-          } *> {
-            val summary = versionSummary(ctx, selector)
-            commitIfChanged(vcs, s"$msgPrefix: $summary", sign, signOff, ctx)
-          }
+          (
+            extracted.get(releaseVcsSign),
+            extracted.get(releaseVcsSignOff),
+            extracted.get(
+              _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion
+            )
+          )
+        }.flatMap { case (sign, signOff, useGlobalVersion) =>
+          // In global-version mode, all projects must agree before committing.
+          val consistencyCheck =
+            if (useGlobalVersion)
+              validateVersionConsistency(
+                ctx.currentProjects,
+                selector,
+                "Global version mode requires all projects to have the same version"
+              )
+            else IO.unit
+
+          consistencyCheck *>
+            paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
+              acc *> runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+            } *> {
+              val summary = versionSummary(ctx, selector)
+              commitIfChanged(vcs, s"$msgPrefix: $summary", sign, signOff, ctx)
+            }
         }
       }
     }

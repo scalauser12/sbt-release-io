@@ -22,8 +22,9 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Only detects and releases projects with changes since their last tag
 
 ### cli-parse-errors
-- Validates CLI argument format
+- Validates CLI argument format and rejects duplicate per-project overrides
 - Rejects malformed arguments: missing values, invalid format, empty values, typos in project names
+- Detects duplicate per-project `release-version` or `next-version` overrides for the same project
 
 ### cross-build-empty-cross
 - Cross-building fails when a project has empty `crossScalaVersions`

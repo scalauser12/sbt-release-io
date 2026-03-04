@@ -43,8 +43,8 @@ private[monorepo] object MonorepoVersionSteps {
       (extracted, readFn)                                   = setup
       currentVer                                           <- readFn(versionFile)
       data                                                 <- IO.blocking {
-                                                                val (s1, releaseFn) = extracted.runTask(releaseVersion, ctx.state)
-                                                                val (s2, nextFn)    = extracted.runTask(releaseNextVersion, s1)
+                                                                val (s1, releaseFn) = extracted.runTask(project.ref / releaseVersion, ctx.state)
+                                                                val (s2, nextFn)    = extracted.runTask(project.ref / releaseNextVersion, s1)
                                                                 val useDefaults     = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
                                                                 (s2, releaseFn(currentVer), nextFn, useDefaults)
                                                               }
