@@ -64,65 +64,65 @@ private[monorepo] object MonorepoVcsSteps {
 
   val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "initialize-vcs",
-    action = ctx => {
-      val baseDir = extract(ctx.state).get(thisProject).base
-      for {
-        maybeVcs <- IO.blocking(Vcs.detect(baseDir))
-        result   <- maybeVcs match {
-                      case Some(vcs) =>
-                        IO.blocking {
-                          val newState = extract(ctx.state).appendWithSession(
-                            Seq(releaseVcs := Some(vcs)),
-                            ctx.state
+    action = ctx =>
+      IO.blocking(extract(ctx.state).get(thisProject).base).flatMap { baseDir =>
+        for {
+          maybeVcs <- IO.blocking(Vcs.detect(baseDir))
+          result   <- maybeVcs match {
+                        case Some(vcs) =>
+                          IO.blocking {
+                            val newState = extract(ctx.state).appendWithSession(
+                              Seq(releaseVcs := Some(vcs)),
+                              ctx.state
+                            )
+                            ctx.withState(newState).withVcs(vcs)
+                          }
+                        case None      =>
+                          IO.raiseError[MonorepoContext](
+                            new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}")
                           )
-                          ctx.withState(newState).withVcs(vcs)
-                        }
-                      case None      =>
-                        IO.raiseError[MonorepoContext](
-                          new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}")
-                        )
-                    }
-      } yield result
-    }
+                      }
+        } yield result
+      }
   )
 
   val checkCleanWorkingDir: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "check-clean-working-dir",
     action = ctx => IO.pure(ctx),
-    check = ctx => {
-      val extracted       = extract(ctx.state)
-      val base            = extracted.get(thisProject).base
-      val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
-
-      for {
-        maybeVcs                          <- IO.blocking(Vcs.detect(base))
-        vcs                               <- IO.fromOption(maybeVcs)(
-                                               new RuntimeException(
-                                                 s"No VCS detected at ${base.getAbsolutePath}"
+    check = ctx =>
+      IO.blocking {
+        val extracted = extract(ctx.state)
+        (extracted.get(thisProject).base, extracted.get(releaseIgnoreUntrackedFiles))
+      }.flatMap { case (base, ignoreUntracked) =>
+        for {
+          maybeVcs                          <- IO.blocking(Vcs.detect(base))
+          vcs                               <- IO.fromOption(maybeVcs)(
+                                                 new RuntimeException(
+                                                   s"No VCS detected at ${base.getAbsolutePath}"
+                                                 )
                                                )
-                                             )
-        vcsInfo                           <- IO.blocking(
-                                               (vcs.modifiedFiles, vcs.untrackedFiles, vcs.currentHash)
-                                             )
-        (modified, untracked, currentHash) = vcsInfo
-        result                            <- {
-          if (modified.nonEmpty)
-            IO.raiseError[MonorepoContext](
-              new RuntimeException(
-                s"Aborting release: unstaged modified files\n${modified.map(" - " + _).mkString("\n")}"
+          vcsInfo                           <- IO.blocking(
+                                                 (vcs.modifiedFiles, vcs.untrackedFiles, vcs.currentHash)
+                                               )
+          (modified, untracked, currentHash) = vcsInfo
+          result                            <- {
+            if (modified.nonEmpty)
+              IO.raiseError[MonorepoContext](
+                new RuntimeException(
+                  s"Aborting release: unstaged modified files\n${modified.map(" - " + _).mkString("\n")}"
+                )
               )
-            )
-          else if (untracked.nonEmpty && !ignoreUntracked)
-            IO.raiseError[MonorepoContext](
-              new RuntimeException(
-                s"Aborting release: untracked files\n${untracked.map(" - " + _).mkString("\n")}"
+            else if (untracked.nonEmpty && !ignoreUntracked)
+              IO.raiseError[MonorepoContext](
+                new RuntimeException(
+                  s"Aborting release: untracked files\n${untracked.map(" - " + _).mkString("\n")}"
+                )
               )
-            )
-          else
-            logInfo(ctx, s"Starting release off commit: $currentHash")
-        }
-      } yield result
-    }
+            else
+              logInfo(ctx, s"Starting release off commit: $currentHash")
+          }
+        } yield result
+      }
   )
 
   /** Create per-project tags or a unified tag depending on strategy. */
@@ -151,14 +151,17 @@ private[monorepo] object MonorepoVcsSteps {
       required(ctx.vcs, "VCS not initialized") { vcs =>
         required(project.versions, s"Versions not set for ${project.name}") {
           case (releaseVer, _) =>
-            val extracted = extract(ctx.state)
-            val tagName   = extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer)
-            val sign      = extracted.get(releaseVcsSign)
-            createTag(vcs, tagName, s"Release ${project.name} $releaseVer", sign, project.name) *>
-              IO.blocking {
-                ctx.state.log.info(s"[release-io-monorepo] Tagged ${project.name} as $tagName")
-                ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName)))
-              }
+            IO.blocking {
+              val extracted = extract(ctx.state)
+              (
+                extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer),
+                extracted.get(releaseVcsSign)
+              )
+            }.flatMap { case (tagName, sign) =>
+              createTag(vcs, tagName, s"Release ${project.name} $releaseVer", sign, project.name) *>
+                logInfo(ctx, s"Tagged ${project.name} as $tagName")
+                  .as(ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName))))
+            }
         }
       }
   )
@@ -169,7 +172,7 @@ private[monorepo] object MonorepoVcsSteps {
       required(ctx.vcs, "VCS not initialized") { vcs =>
         validateVersionConsistency(
           ctx.currentProjects,
-          _._1,
+          { case (releaseVer, _) => releaseVer },
           "Unified tag requires all projects to share the same release version. " +
             "Use per-project tag strategy or align versions"
         ) *> {
@@ -177,17 +180,22 @@ private[monorepo] object MonorepoVcsSteps {
             case None           =>
               IO.raiseError(new RuntimeException("No release versions set for any project"))
             case Some((rel, _)) =>
-              val extracted = extract(ctx.state)
-              val tagName   = extracted.get(releaseIOMonorepoUnifiedTagName)(rel)
-              val sign      = extracted.get(releaseVcsSign)
-              val summary   = versionSummary(ctx, _._1)
-              createTag(vcs, tagName, s"Release: $summary", sign, "release") *>
-                IO.blocking {
-                  ctx.state.log.info(s"[release-io-monorepo] Tagged release as $tagName")
-                  ctx.currentProjects.foldLeft(ctx) { (c, p) =>
-                    c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
-                  }
-                }
+              IO.blocking {
+                val extracted = extract(ctx.state)
+                (
+                  extracted.get(releaseIOMonorepoUnifiedTagName)(rel),
+                  extracted.get(releaseVcsSign)
+                )
+              }.flatMap { case (tagName, sign) =>
+                val summary =
+                  versionSummary(ctx, { case (releaseVer, _) => releaseVer })
+                createTag(vcs, tagName, s"Release: $summary", sign, "release") *>
+                  logInfo(ctx, s"Tagged release as $tagName").as(
+                    ctx.currentProjects.foldLeft(ctx) { (c, p) =>
+                      c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
+                    }
+                  )
+              }
           }
         }
       }
@@ -195,37 +203,39 @@ private[monorepo] object MonorepoVcsSteps {
 
   val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "push-changes",
-    check = ctx => {
-      val extracted = extract(ctx.state)
-      val base      = extracted.get(thisProject).base
-
-      IO.blocking(Vcs.detect(base)).flatMap {
-        case None      =>
-          IO.raiseError(new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}"))
-        case Some(vcs) =>
-          for {
-            hasUpAndBranch <- IO.blocking((vcs.hasUpstream, vcs.currentBranch))
-            (hasUp, branch) = hasUpAndBranch
-            _              <- IO.raiseUnless(hasUp)(
-                                new RuntimeException(
-                                  s"No tracking branch configured for '$branch'. " +
-                                    "Set up a remote tracking branch or remove pushChanges from the release process."
+    check = ctx =>
+      IO.blocking {
+        val extracted = extract(ctx.state)
+        extracted.get(thisProject).base
+      }.flatMap { base =>
+        IO.blocking(Vcs.detect(base)).flatMap {
+          case None      =>
+            IO.raiseError(new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}"))
+          case Some(vcs) =>
+            for {
+              hasUpAndBranch <- IO.blocking((vcs.hasUpstream, vcs.currentBranch))
+              (hasUp, branch) = hasUpAndBranch
+              _              <- IO.raiseUnless(hasUp)(
+                                  new RuntimeException(
+                                    s"No tracking branch configured for '$branch'. " +
+                                      "Set up a remote tracking branch or remove pushChanges from the release process."
+                                  )
                                 )
-                              )
-            remoteCode     <- IO.blocking { val remote = vcs.trackingRemote; vcs.checkRemote(remote).! }
-            _              <- IO.raiseUnless(remoteCode == 0)(
-                                new RuntimeException("Remote check failed. Aborting release.")
-                              )
-            behind         <- IO.blocking(vcs.isBehindRemote)
-            _              <-
-              IO.raiseWhen(behind)(
-                new RuntimeException(
-                  "Upstream has unmerged commits. Merge first or remove pushChanges from process."
+              remote         <- IO.blocking(vcs.trackingRemote)
+              remoteCode     <- IO.blocking(vcs.checkRemote(remote).!)
+              _              <- IO.raiseUnless(remoteCode == 0)(
+                                  new RuntimeException("Remote check failed. Aborting release.")
+                                )
+              behind         <- IO.blocking(vcs.isBehindRemote)
+              _              <-
+                IO.raiseWhen(behind)(
+                  new RuntimeException(
+                    "Upstream has unmerged commits. Merge first or remove pushChanges from process."
+                  )
                 )
-              )
-          } yield ctx
-      }
-    },
+            } yield ctx
+        }
+      },
     action = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         for {
@@ -239,11 +249,10 @@ private[monorepo] object MonorepoVcsSteps {
                   val tags = ctx.currentProjects.flatMap(_.tagName).distinct
                   for {
                     pushTarget <- resolveGitPushTarget(vcs)
-                    _          <- IO.blocking(
-                                    ctx.state.log.info(
-                                      s"[release-io-monorepo] Pushing branch ${pushTarget.localBranch} " +
-                                        s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
-                                    )
+                    _          <- logInfo(
+                                    ctx,
+                                    s"Pushing branch ${pushTarget.localBranch} " +
+                                      s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
                                   )
                     _          <- runProcess(
                                     Process(
@@ -259,10 +268,7 @@ private[monorepo] object MonorepoVcsSteps {
                                   )
                     _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
                                     acc *>
-                                      IO.blocking(
-                                        ctx.state.log
-                                          .info(s"[release-io-monorepo] Pushing tag $tag")
-                                      ) *>
+                                      logInfo(ctx, s"Pushing tag $tag").void *>
                                       runProcess(
                                         Process(
                                           Seq("git", "push", pushTarget.remote, tag),
