@@ -20,7 +20,7 @@ An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with 
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.3.0")
 ```
 
 ## Usage
@@ -331,7 +331,7 @@ Some libraries that work well in release steps:
 Add the dependency in `project/plugins.sbt` alongside the plugin:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.2.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.3.0")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 
