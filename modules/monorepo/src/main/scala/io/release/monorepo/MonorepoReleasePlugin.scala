@@ -1,18 +1,19 @@
 package io.release.monorepo
 
+import scala.language.implicitConversions
+import scala.util.Try
+import scala.util.control.NonFatal
+
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import io.release.ReleasePluginIO
-import io.release.monorepo.MonorepoReleaseIO.*
 import sbt.*
 import sbt.Keys.*
 import sbt.Project.extract
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 
-import scala.language.implicitConversions
-import scala.util.Try
-import scala.util.control.NonFatal
+import _root_.io.release.ReleasePluginIO
+import _root_.io.release.monorepo.MonorepoReleaseIO.*
 
 /** Base trait for resource-parameterized monorepo release plugins. Each release step
   * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the
@@ -81,13 +82,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       extraSteps: (T => MonorepoStepIO)*
   ): Seq[T => MonorepoStepIO] = {
     val defaults        = Project.extract(state).get(releaseIOMonorepoProcess)
-    val idx             = defaults.indexWhere(_.name == afterStep)
-    if (idx < 0)
-      throw new RuntimeException(
-        s"Step '$afterStep' not found in defaults. " +
-          s"Available: ${defaults.map(_.name).mkString(", ")}"
-      )
-    val (before, after) = defaults.splitAt(idx + 1)
+    val (before, after) = defaults.splitAt(findStepIndex(defaults, afterStep) + 1)
     liftSteps(before) ++ extraSteps ++ liftSteps(after)
   }
 
@@ -100,14 +95,18 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       extraSteps: (T => MonorepoStepIO)*
   ): Seq[T => MonorepoStepIO] = {
     val defaults        = Project.extract(state).get(releaseIOMonorepoProcess)
-    val idx             = defaults.indexWhere(_.name == beforeStep)
+    val (before, after) = defaults.splitAt(findStepIndex(defaults, beforeStep))
+    liftSteps(before) ++ extraSteps ++ liftSteps(after)
+  }
+
+  private def findStepIndex(defaults: Seq[MonorepoStepIO], stepName: String): Int = {
+    val idx = defaults.indexWhere(_.name == stepName)
     if (idx < 0)
       throw new RuntimeException(
-        s"Step '$beforeStep' not found in defaults. " +
+        s"Step '$stepName' not found in defaults. " +
           s"Available: ${defaults.map(_.name).mkString(", ")}"
       )
-    val (before, after) = defaults.splitAt(idx)
-    liftSteps(before) ++ extraSteps ++ liftSteps(after)
+    idx
   }
 
   /** The name of the monorepo release command. Override to use a different name
@@ -212,6 +211,13 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     Try {
       val allProjectRefs = extracted.get(releaseIOMonorepoProjects)
       val versionFileFn  = extracted.get(releaseIOMonorepoVersionFile)
+
+      def resolveVersions(projName: String): Option[(String, String)] = {
+        val rel  = globalReleaseVersion.getOrElse(releaseVersionOverrides.getOrElse(projName, ""))
+        val next = globalNextVersion.getOrElse(nextVersionOverrides.getOrElse(projName, ""))
+        if (rel.nonEmpty || next.nonEmpty) Some((rel, next)) else None
+      }
+
       allProjectRefs.map { ref =>
         val projBase =
           (ref / baseDirectory).get(extracted.structure.data).getOrElse {
@@ -226,35 +232,29 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
           name = projName,
           baseDir = projBase,
           versionFile = versionFileFn(ref),
-          versions = {
-            val rel  =
-              globalReleaseVersion.getOrElse(releaseVersionOverrides.getOrElse(projName, ""))
-            val next =
-              globalNextVersion.getOrElse(nextVersionOverrides.getOrElse(projName, ""))
-            if (rel.nonEmpty || next.nonEmpty) Some((rel, next)) else None
-          }
+          versions = resolveVersions(projName)
         )
       }
     }.toEither
 
   // ── Argument validation ───────────────────────────────────────────
 
-  /** Validate parsed arguments and resolve projects. Returns the selected projects and flags,
-    * or a failed `State` on validation error.
+  /** Validate parsed arguments and resolve projects. Returns the selected projects, flags,
+    * and selected project names, or a failed `State` on validation error.
     */
   private def validateArgs(
       state: State,
       args: Seq[MonorepoArg]
-  ): Either[State, (Seq[ProjectReleaseInfo], ReleaseFlags)] = {
+  ): Either[State, (Seq[ProjectReleaseInfo], ReleaseFlags, Seq[String])] = {
     import MonorepoArg.*
 
-    def fail(msg: String): State = {
+    def failWith(msg: String): State = {
       state.log.error(s"[release-io-monorepo] $msg")
       state.fail
     }
 
     def validate(condition: Boolean, msg: => String): Either[State, Unit] =
-      if (condition) Left(fail(msg)) else Right(())
+      if (condition) Left(failWith(msg)) else Right(())
 
     val extracted               = extract(state)
     val flags                   = parseFlags(args, extracted)
@@ -268,6 +268,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     val globalNextVersion       = globalNextVersions.headOption
 
     for {
+      // ── Input format validation ──
       _ <- validate(
              releaseVersionOverrides.exists { case (p, v) => p.isEmpty || v.isEmpty },
              "Invalid release-version format. Expected project=version"
@@ -284,6 +285,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
              globalNextVersions.exists(_.isEmpty),
              "Invalid next-version format. Expected a non-empty version string"
            )
+      // ── Override multiplicity & conflict ──
       _ <- validate(
              globalReleaseVersions.length > 1,
              "Multiple global release-version overrides provided. Only one is allowed"
@@ -299,12 +301,14 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
                "when releaseIOMonorepoUseGlobalVersion is enabled. " +
                "Use per-project overrides (release-version <project>=<version>) instead."
            )
+      // Requires malformed-entry validations above to have short-circuited first.
       _ <- validate(
              (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty) &&
                (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
              "Cannot mix global version overrides with per-project version overrides"
            )
 
+      // ── Project resolution ──
       allProjects <-
         resolveProjects(
           extracted,
@@ -312,7 +316,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
           nextVersionOverrides,
           globalReleaseVersion,
           globalNextVersion
-        ).left.map(e => fail(e.getMessage))
+        ).left.map(e => failWith(Option(e.getMessage).getOrElse(e.toString)))
 
       validNames       = allProjects.map(_.name).toSet
       invalidOverrides =
@@ -323,6 +327,16 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
              s"Unknown projects in version overrides: " +
                s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}"
            )
+
+      // ── Project name validation ──
+      invalid = selectedNames.filterNot(validNames.contains)
+      _      <- validate(
+                  selectedNames.nonEmpty && invalid.nonEmpty,
+                  s"Unknown projects: ${invalid.mkString(", ")}. " +
+                    s"Available: ${validNames.mkString(", ")}"
+                )
+
+      // ── Global version mode constraints ──
       _ <- validate(
              useGlobalVersion && selectedNames.nonEmpty &&
                selectedNames.toSet != validNames,
@@ -338,23 +352,18 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
                "Use global overrides (release-version <version>) or remove per-project overrides."
            )
 
+      // ── Selection & override consistency ──
       _ <- validate(
              flags.allChanged && selectedNames.nonEmpty,
              "Cannot combine 'all-changed' with explicit project selection. " +
                s"Either use 'all-changed' alone or specify projects explicitly."
            )
 
-      invalid = selectedNames.filterNot(validNames.contains)
-      _      <- validate(
-                  selectedNames.nonEmpty && invalid.nonEmpty,
-                  s"Unknown projects: ${invalid.mkString(", ")}. " +
-                    s"Available: ${validNames.mkString(", ")}"
-                )
-
       selectedProjects =
         if (selectedNames.nonEmpty) allProjects.filter(p => selectedNames.contains(p.name))
         else allProjects
 
+      // Only relevant when explicit project selection is active (selectedNames.nonEmpty).
       unusedOverrides =
         if (selectedNames.nonEmpty)
           (releaseVersionOverrides.keySet ++ nextVersionOverrides.keySet) --
@@ -372,7 +381,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
              s"No projects selected for monorepo release. " +
                s"Available: ${validNames.mkString(", ")}"
            )
-    } yield (selectedProjects, flags)
+    } yield (selectedProjects, flags, selectedNames)
   }
 
   // ── Context building ──────────────────────────────────────────────
@@ -381,10 +390,8 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       state: State,
       projects: Seq[ProjectReleaseInfo],
       flags: ReleaseFlags,
-      args: Seq[MonorepoArg]
-  ): MonorepoContext = {
-    import MonorepoArg.*
-    val selectedNames = args.collect { case SelectProject(name) => name }
+      selectedNames: Seq[String]
+  ): MonorepoContext =
     MonorepoContext(
       state = state,
       projects = projects,
@@ -397,7 +404,6 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
         else if (flags.allChanged) Map("all-changed" -> "true")
         else Map.empty
     )
-  }
 
   private def logReleaseStart(
       state: State,
@@ -415,12 +421,13 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
 
   protected def doMonorepoRelease(state: State, args: Seq[MonorepoArg]): State =
     validateArgs(state, args) match {
-      case Left(failedState)                => failedState
-      case Right((selectedProjects, flags)) =>
+      case Left(failedState)                               => failedState
+      case Right((selectedProjects, flags, selectedNames)) =>
         try {
-          // monorepoReleaseProcess reads from sbt settings — can throw on misconfiguration.
+          // Guards both monorepoReleaseProcess (can throw on misconfiguration) and
+          // unsafeRunSync() (propagates IO failures as exceptions).
           val stepFns    = monorepoReleaseProcess(state)
-          val initialCtx = buildContext(state, selectedProjects, flags, args)
+          val initialCtx = buildContext(state, selectedProjects, flags, selectedNames)
 
           logReleaseStart(state, stepFns.length, selectedProjects.length, flags)
 
