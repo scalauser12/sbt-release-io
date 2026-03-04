@@ -117,22 +117,25 @@ private[monorepo] object MonorepoVersionSteps {
       ver: String
   ): IO[MonorepoContext] =
     for {
-      versionFile         <- resolveVersionFile(ctx, project)
-      setup               <- IO.blocking {
-                               val extracted = extract(ctx.state)
-                               val writeFn   = extracted.get(releaseIOMonorepoWriteVersion)
-                               (extracted, writeFn)
-                             }
-      (extracted, writeFn) = setup
-      contents            <- writeFn(versionFile, ver)
-      newState            <- IO.blocking {
-                               java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-                               extracted.appendWithSession(
-                                 Seq(project.ref / version := ver),
-                                 ctx.state
-                               )
-                             }
-      result              <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
-                               .as(ctx.withState(newState))
+      versionFile                    <- resolveVersionFile(ctx, project)
+      setup                          <- IO.blocking {
+                                          val extracted = extract(ctx.state)
+                                          val writeFn   = extracted.get(releaseIOMonorepoWriteVersion)
+                                          val useGlobal = extracted.get(
+                                            _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion
+                                          )
+                                          (extracted, writeFn, useGlobal)
+                                        }
+      (extracted, writeFn, useGlobal) = setup
+      contents                       <- writeFn(versionFile, ver)
+      newState                       <- IO.blocking {
+                                          java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
+                                          val setting =
+                                            if (useGlobal) ThisBuild / version := ver
+                                            else project.ref / version         := ver
+                                          extracted.appendWithSession(Seq(setting), ctx.state)
+                                        }
+      result                         <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
+                                          .as(ctx.withState(newState))
     } yield result
 }

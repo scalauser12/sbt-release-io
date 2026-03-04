@@ -97,23 +97,31 @@ private[monorepo] object MonorepoPublishSteps {
       else
         for {
           missing <- IO.blocking {
-                       val extracted   = extract(ctx.state)
-                       val skipPublish =
-                         try extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2
-                         catch { case NonFatal(_) => false }
-                       if (skipPublish) false
-                       else {
-                         val publishTarget =
-                           try extracted.runTask(project.ref / publishTo, ctx.state)._2
-                           catch { case NonFatal(_) => None }
-                         publishTarget.isEmpty
+                       val extracted  = extract(ctx.state)
+                       val aggregates = Project
+                         .getProject(project.ref, extracted.structure)
+                         .map(_.aggregate)
+                         .getOrElse(Seq.empty)
+                       val allRefs    = project.ref +: aggregates
+                       allRefs.filter { ref =>
+                         val skipPublish =
+                           try extracted.runTask(ref / publish / Keys.skip, ctx.state)._2
+                           catch { case NonFatal(_) => false }
+                         if (skipPublish) false
+                         else {
+                           val publishTarget =
+                             try extracted.runTask(ref / publishTo, ctx.state)._2
+                             catch { case NonFatal(_) => None }
+                           publishTarget.isEmpty
+                         }
                        }
                      }
           result  <-
-            if (missing)
+            if (missing.nonEmpty)
               IO.raiseError[MonorepoContext](
                 new RuntimeException(
-                  s"publishTo not configured for ${project.name}. Set publishTo or add `publish / skip := true`."
+                  s"publishTo not configured for: ${missing.map(_.project).mkString(", ")}. " +
+                    "Set publishTo or add `publish / skip := true`."
                 )
               )
             else IO.pure(ctx)
