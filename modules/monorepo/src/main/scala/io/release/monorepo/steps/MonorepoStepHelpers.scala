@@ -33,7 +33,7 @@ private[monorepo] object MonorepoStepHelpers {
           if (latestProj.failed) IO.pure(currentCtx)
           else
             action(currentCtx, latestProj).handleErrorWith { err =>
-              IO(
+              IO.blocking(
                 currentCtx.state.log.error(
                   s"[release-io-monorepo] ${latestProj.name}: ${Option(err.getMessage).getOrElse(err.toString)}"
                 )
@@ -47,10 +47,10 @@ private[monorepo] object MonorepoStepHelpers {
   // ── Logging ───────────────────────────────────────────────────────────
 
   def logInfo(ctx: MonorepoContext, msg: String): IO[MonorepoContext] =
-    IO(ctx.state.log.info(s"[release-io-monorepo] $msg")).as(ctx)
+    IO.blocking(ctx.state.log.info(s"[release-io-monorepo] $msg")).as(ctx)
 
   def logWarn(ctx: MonorepoContext, msg: String): IO[MonorepoContext] =
-    IO(ctx.state.log.warn(s"[release-io-monorepo] $msg")).as(ctx)
+    IO.blocking(ctx.state.log.warn(s"[release-io-monorepo] $msg")).as(ctx)
 
   // ── Version summaries ─────────────────────────────────────────────────
 

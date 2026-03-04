@@ -37,12 +37,10 @@ object MonorepoReleaseSteps {
     name = "resolve-release-order",
     action = ctx => {
       val projectRefs = ctx.projects.map(_.ref)
-      DependencyGraph.topologicalSort(projectRefs, ctx.state).map { sorted =>
+      DependencyGraph.topologicalSort(projectRefs, ctx.state).flatMap { sorted =>
         val sortedProjects = sorted.flatMap(ref => ctx.projects.find(_.ref == ref))
-        ctx.state.log.info(
-          s"[release-io-monorepo] Release order: ${sortedProjects.map(_.name).mkString(" -> ")}"
-        )
-        ctx.withProjects(sortedProjects)
+        val updated        = ctx.withProjects(sortedProjects)
+        logInfo(updated, s"Release order: ${sortedProjects.map(_.name).mkString(" -> ")}")
       }
     }
   )
@@ -129,9 +127,9 @@ object MonorepoReleaseSteps {
     ctx.projects.foldLeft(IO.pure(Seq.empty[ProjectReleaseInfo])) { (acc, project) =>
       acc.flatMap { changed =>
         detector(project.ref, project.baseDir, ctx.state)
-          .map { if (_) changed :+ project else changed }
+          .map { isChanged => if (isChanged) changed :+ project else changed }
           .handleErrorWith { err =>
-            IO(
+            IO.blocking(
               ctx.state.log.warn(
                 s"[release-io-monorepo] Change detection failed for ${project.name}: " +
                   s"${Option(err.getMessage).getOrElse(err.toString)}. " +
