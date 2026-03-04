@@ -22,12 +22,8 @@ private[monorepo] object MonorepoVersionSteps {
     action = (ctx, project) =>
       project.versions match {
         case Some((rel, next)) if rel.nonEmpty && next.nonEmpty =>
-          IO.blocking {
-            ctx.state.log.info(
-              s"[release-io-monorepo] ${project.name}: pre-set -> $rel (next: $next)"
-            )
-            ctx.updateProject(project.ref)(_.copy(versions = Some((rel, next))))
-          }
+          logInfo(ctx, s"${project.name}: pre-set -> $rel (next: $next)")
+            .as(ctx.updateProject(project.ref)(_.copy(versions = Some((rel, next)))))
         case _                                                  =>
           inquireVersionsInteractive(ctx, project)
       }
@@ -68,14 +64,14 @@ private[monorepo] object MonorepoVersionSteps {
                                                                 ctx.interactive,
                                                                 useDefaults
                                                               )
-      result                                               <- IO.blocking {
-                                                                ctx.state.log.info(
-                                                                  s"[release-io-monorepo] ${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
-                                                                )
+      result                                               <- logInfo(
+                                                                ctx,
+                                                                s"${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
+                                                              ).as(
                                                                 ctx
                                                                   .withState(updatedState)
                                                                   .updateProject(project.ref)(_.copy(versions = Some((releaseVer, nextVer))))
-                                                              }
+                                                              )
     } yield result
 
   /** Write release versions to per-project version files. */
@@ -103,13 +99,14 @@ private[monorepo] object MonorepoVersionSteps {
   /** Single commit for all release version files. */
   val commitReleaseVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-release-versions",
-    action = ctx => commitVersions(ctx, "Setting release versions", _._1)
+    action =
+      ctx => commitVersions(ctx, "Setting release versions", { case (releaseVer, _) => releaseVer })
   )
 
   /** Single commit for all next version files. */
   val commitNextVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-next-versions",
-    action = ctx => commitVersions(ctx, "Setting next versions", _._2)
+    action = ctx => commitVersions(ctx, "Setting next versions", { case (_, nextVer) => nextVer })
   )
 
   // --- private helpers ---
@@ -128,16 +125,14 @@ private[monorepo] object MonorepoVersionSteps {
                              }
       (extracted, writeFn) = setup
       contents            <- writeFn(versionFile, ver)
-      result              <- IO.blocking {
+      newState            <- IO.blocking {
                                java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-                               ctx.state.log.info(
-                                 s"[release-io-monorepo] Wrote version $ver to ${versionFile.getPath} for ${project.name}"
-                               )
-                               val newState = extracted.appendWithSession(
+                               extracted.appendWithSession(
                                  Seq(project.ref / version := ver),
                                  ctx.state
                                )
-                               ctx.withState(newState)
                              }
+      result              <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
+                               .as(ctx.withState(newState))
     } yield result
 }
