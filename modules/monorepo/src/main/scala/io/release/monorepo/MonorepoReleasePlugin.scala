@@ -12,6 +12,7 @@ import sbt.Project.extract
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 
+import _root_.io.release.ReleaseKeys
 import _root_.io.release.ReleasePluginIO
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
 
@@ -443,12 +444,18 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
       case Left(failedState)                               => failedState
       case Right((selectedProjects, flags, selectedNames)) =>
         try {
+          // Store parsed flags in State so steps (e.g. MonorepoVersionSteps) can read them.
+          val decoratedState = state
+            .put(ReleaseKeys.useDefaults, flags.useDefaults)
+            .put(ReleaseKeys.skipTests, flags.skipTests)
+            .put(ReleaseKeys.cross, flags.crossBuild)
+
           // Guards both monorepoReleaseProcess (can throw on misconfiguration) and
           // unsafeRunSync() (propagates IO failures as exceptions).
-          val stepFns    = monorepoReleaseProcess(state)
-          val initialCtx = buildContext(state, selectedProjects, flags, selectedNames)
+          val stepFns     = monorepoReleaseProcess(decoratedState)
+          val initialCtx  = buildContext(decoratedState, selectedProjects, flags, selectedNames)
 
-          logReleaseStart(state, stepFns.length, selectedProjects.length, flags)
+          logReleaseStart(decoratedState, stepFns.length, selectedProjects.length, flags)
 
           // The resource is acquired once and shared across all steps; it is released after all
           // steps complete (or immediately on failure). Each step function receives the resource T.
