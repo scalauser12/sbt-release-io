@@ -72,6 +72,8 @@ sbt release-push-changes
 
 In `build.sbt`:
 
+> The explicit `import io.release.ReleasePluginIO.autoImport._` is optional — sbt auto-imports these keys from plugins on the classpath.
+
 ```scala
 import io.release.ReleasePluginIO.autoImport._
 import io.release.steps.ReleaseSteps
@@ -308,6 +310,7 @@ if you want to keep the setting-based defaults and only add extra steps.
 | **Coexisting with default plugin** | Use `trigger = noTrigger` + `enablePlugins(...)` in `build.sbt`, and override `commandName` to avoid duplicate command registration |
 | **Adding resource steps** | Override `releaseProcess` using `defaultsWith` (append), `defaultsWithAfter`/`defaultsWithBefore` (positional insert) |
 | **Setting keys** | All `releaseIO*` setting keys are singletons — they work regardless of which plugin exports them |
+| **Do not add autoImport** | Do not define `object autoImport` in custom plugins — it causes ambiguous references with `ReleasePluginIO` (e.g. `reference to releaseIOProcess is ambiguous`) |
 
 ### Using Typelevel Libraries in Release Steps
 

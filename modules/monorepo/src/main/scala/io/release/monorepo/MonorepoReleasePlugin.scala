@@ -33,6 +33,12 @@ import _root_.io.release.monorepo.MonorepoReleaseIO.*
   * // In build.sbt: enablePlugins(MyMonorepoRelease)
   * // Run with:     sbt releaseMonorepoCustom with-defaults
   * }}}
+  *
+  * '''Do not add `object autoImport`''' to custom plugins. When both [[MonorepoReleasePlugin]]
+  * and a custom plugin define autoImport, the build gets ambiguous references
+  * (e.g. `reference to releaseIOMonorepoProcess is ambiguous`). [[MonorepoReleasePlugin]] is
+  * on the classpath (same JAR) and sbt imports its autoImport into build.sbt automatically,
+  * so you only need `enablePlugins(CustomReleasePlugin)`.
   */
 trait MonorepoReleasePluginLike[T]
     extends AutoPlugin

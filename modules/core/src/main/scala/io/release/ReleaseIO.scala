@@ -7,15 +7,10 @@ import sbt.*
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
   * mix in or import from here.
   *
-  * Setting keys are singletons defined in the companion object, so multiple plugins can
-  * safely `extends ReleaseIO` or define `object autoImport extends ReleaseIO` without
-  * creating duplicate key instances.
-  *
-  * {{{
-  * import io.release.ReleaseIO.*
-  * // or
-  * object autoImport extends ReleaseIO
-  * }}}
+  * Setting keys are singletons defined in the companion object. Custom plugins should
+  * ''not'' define `object autoImport extends ReleaseIO` when coexisting with
+  * [[ReleasePluginIO]] — that causes ambiguous references in build.sbt.
+  * [[ReleasePluginIO]] is auto-enabled and its keys are in scope automatically.
   */
 trait ReleaseIO {
 

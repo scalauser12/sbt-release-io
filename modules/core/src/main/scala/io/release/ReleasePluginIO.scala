@@ -25,6 +25,12 @@ import scala.language.implicitConversions
   * // In build.sbt: enablePlugins(MyReleasePlugin)
   * // Run with:     sbt releaseCustom
   * }}}
+  *
+  * '''Do not add `object autoImport`''' to custom plugins. When both [[ReleasePluginIO]]
+  * and a custom plugin define autoImport, the build gets ambiguous references
+  * (e.g. `reference to releaseIOProcess is ambiguous`). [[ReleasePluginIO]] is
+  * auto-enabled via `allRequirements`, so its keys are in scope when the custom
+  * plugin is enabled (it requires [[ReleasePluginIO]]).
   */
 trait ReleasePluginIOLike[T]
     extends AutoPlugin

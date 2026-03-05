@@ -160,6 +160,8 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 
 ### Example configuration
 
+> The explicit `import io.release.monorepo.MonorepoReleasePlugin.autoImport._` is optional — sbt auto-imports these keys from plugins on the classpath.
+
 ```scala
 import io.release.monorepo.MonorepoReleasePlugin.autoImport._
 
@@ -237,6 +239,10 @@ releaseIOMonorepoProcess := Seq(
 ## Custom Plugins
 
 If your release process needs a shared resource (HTTP client, database connection, temporary directory), create a custom plugin that extends `MonorepoReleasePluginLike[T]`. The resource is acquired once before all steps run and released after they complete (or on failure).
+
+When using a custom plugin, you only need `enablePlugins(MyReleasePlugin)` — you do not need to enable `MonorepoReleasePlugin`. Keys like `releaseIOMonorepoProcess` are available automatically because sbt imports `autoImport` from all plugins on the classpath, regardless of whether they are enabled. Plugin enablement controls which settings are applied, not which keys are in scope.
+
+> **Do not add `object autoImport`** to custom plugins. When both `MonorepoReleasePlugin` and a custom plugin define `autoImport`, the build gets ambiguous references (e.g. `reference to releaseIOMonorepoProcess is ambiguous`).
 
 Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sbt discovers `AutoPlugin` classes during meta-build compilation.
 
