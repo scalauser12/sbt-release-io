@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
+import io.release.steps.StepHelpers.required
 import sbt.*
 import sbt.Project.extract
 
@@ -200,7 +201,10 @@ object MonorepoReleaseSteps {
 
   // ── Default step sequence ─────────────────────────────────────────────
 
-  /** Default ordered sequence of all monorepo release steps. */
+  /** Default ordered step sequence for monorepo releases.
+    * The [[tagReleases]] step dispatches to per-project or unified tagging at runtime
+    * based on the `releaseIOMonorepoTagStrategy` setting.
+    */
   val defaults: Seq[MonorepoStepIO] = Seq(
     initializeVcs,
     checkCleanWorkingDir,

@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import sbt.*
-import sbt.Def.ScopedKey
 import sbt.Keys.*
 import sbtrelease.Compat
 
@@ -145,20 +144,20 @@ private[release] object ReleaseComposer {
                           currentCtx.state.log.info(s"[release-io] Cross-building with Scala $version")
                         )
           newCtx     <- IO.blocking {
-                          val newState = switchScalaVersion(currentCtx.state, version)
+                          val newState = CrossBuildSupport.switchScalaVersion(currentCtx.state, version)
                           currentCtx.copy(state = newState)
                         }
           result     <- action(newCtx)
         } yield result
       }
 
-      // Restore original Scala version after cross-build
       for {
         finalCtx <- finalIO
         result   <- currentVersion match {
                       case Some(ver) =>
                         IO.blocking {
-                          val restoredState = switchScalaVersion(finalCtx.state, ver)
+                          val restoredState =
+                            CrossBuildSupport.switchScalaVersion(finalCtx.state, ver)
                           finalCtx.copy(state = restoredState)
                         }
                       case None      => IO.pure(finalCtx)
@@ -166,37 +165,4 @@ private[release] object ReleaseComposer {
       } yield result
     }
   }
-
-  /** Switch Scala version by fully reloading the project structure. This is a copy of
-    * sbt.Cross.switchVersion logic which ensures incremental compilation caches are properly
-    * invalidated.
-    */
-  private def switchScalaVersion(state: State, version: String): State = {
-    val extracted = Project.extract(state)
-    import extracted.*
-
-    state.log.info(s"[release-io] Setting scala version to $version")
-
-    // Settings to add: set scalaVersion and clear scalaHome
-    val add = Seq(
-      GlobalScope / Keys.scalaVersion := version,
-      GlobalScope / Keys.scalaHome    := None
-    )
-
-    // Filter out existing scalaVersion and scalaHome settings to avoid conflicts
-    val cleared = session.mergeSettings.filterNot(crossExclude)
-
-    // Reapply settings with full project reload
-    val newStructure = LoadCompat.reapply(add ++ cleared, structure)
-    Project.setProject(session, newStructure, state)
-  }
-
-  /** Check if a setting should be excluded during cross-build (scalaVersion, scalaHome). */
-  private def crossExclude(s: Setting[?]): Boolean =
-    s.key match {
-      case ScopedKey(Scope(_, Zero, Zero, _), key)
-          if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>
-        true
-      case _ => false
-    }
 }

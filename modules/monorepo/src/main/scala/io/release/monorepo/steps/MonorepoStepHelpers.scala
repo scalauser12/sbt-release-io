@@ -1,7 +1,7 @@
 package io.release.monorepo.steps
 
 import _root_.io.release.monorepo.{MonorepoContext, ProjectReleaseInfo}
-import _root_.io.release.steps.StepHelpers.runProcess
+import _root_.io.release.steps.StepHelpers.{required, runProcess}
 import cats.effect.IO
 import sbt.*
 import sbt.Project.extract
@@ -12,9 +12,6 @@ import scala.util.control.NonFatal
 
 /** Shared helpers used across monorepo release step objects. */
 private[monorepo] object MonorepoStepHelpers {
-
-  def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
-    opt.fold(IO.raiseError[B](new RuntimeException(error)))(f)
 
   /** If any project is marked failed, propagate failure to the global context. */
   def propagateFailures(ctx: MonorepoContext): MonorepoContext =

@@ -2,6 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.steps.StepHelpers.*
+import _root_.io.release.VcsOps
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
@@ -13,18 +14,8 @@ import sbtrelease.Vcs
 private[release] object VcsSteps {
 
   val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
-    val baseDir = extract(ctx.state).get(thisProject).base
-    IO.blocking(Vcs.detect(baseDir)).flatMap {
-      case Some(sbtVcs) =>
-        IO.blocking {
-          val newState = extract(ctx.state).appendWithSession(
-            Seq(releaseVcs := Some(sbtVcs)),
-            ctx.state
-          )
-          ctx.copy(state = newState).withVcs(sbtVcs)
-        }
-      case None         =>
-        IO.raiseError(new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
+    VcsOps.detectAndInit(ctx.state).map { case (newState, vcs) =>
+      ctx.copy(state = newState).withVcs(vcs)
     }
   }
 
@@ -37,56 +28,16 @@ private[release] object VcsSteps {
   def checkCleanWorkingDirInternal(
       ctx: ReleaseContext,
       logStartHash: Boolean
-  ): IO[ReleaseContext] = {
-    val extracted       = extract(ctx.state)
-    val base            = extracted.get(thisProject).base
-    val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
-
-    for {
-      maybeVcs                          <- IO.blocking(Vcs.detect(base))
-      vcs                               <- IO.fromOption(maybeVcs)(
-                                             new RuntimeException(
-                                               s"No VCS detected at ${base.getAbsolutePath}"
-                                             )
-                                           )
-      vcsInfo                           <- IO.blocking(
-                                             (vcs.modifiedFiles, vcs.untrackedFiles, vcs.currentHash)
-                                           )
-      (modified, untracked, currentHash) = vcsInfo
-      result                            <- {
-        if (modified.nonEmpty)
-          IO.raiseError[ReleaseContext](
-            new RuntimeException(
-              s"""Aborting release: unstaged modified files
-                 |
-                 |Modified files:
-                 |
-                 |${modified.map(" - " + _).mkString("\n")}
-                 |""".stripMargin
-            )
+  ): IO[ReleaseContext] =
+    VcsOps.checkCleanWorkingDir(ctx.state).flatMap { result =>
+      IO.blocking {
+        if (logStartHash)
+          ctx.state.log.info(
+            s"[release-io] Starting release process off commit: ${result.currentHash}"
           )
-        else if (untracked.nonEmpty && !ignoreUntracked)
-          IO.raiseError[ReleaseContext](
-            new RuntimeException(
-              s"""Aborting release: untracked files. Remove them or specify 'releaseIgnoreUntrackedFiles := true' in settings
-                 |
-                 |Untracked files:
-                 |
-                 |${untracked.map(" - " + _).mkString("\n")}
-                 |""".stripMargin
-            )
-          )
-        else
-          IO.blocking {
-            if (logStartHash)
-              ctx.state.log.info(
-                s"[release-io] Starting release process off commit: $currentHash"
-              )
-            ctx.withVcs(vcs)
-          }
+        ctx.withVcs(result.vcs)
       }
-    } yield result
-  }
+    }
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
