@@ -26,9 +26,14 @@ import scala.language.implicitConversions
   * // Run with:     sbt releaseCustom
   * }}}
   */
-trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
+trait ReleasePluginIOLike[T]
+    extends AutoPlugin
+    with ReleaseIO
+    with PluginLikeSupport[ReleaseStepIO, T] {
 
   override def requires: Plugins = sbtrelease.ReleasePlugin
+
+  protected def stepName(step: ReleaseStepIO): String = step.name
 
   /** The resource acquired once for the entire release process and passed to each step. */
   def resource: Resource[IO, T]
@@ -38,19 +43,6 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     */
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess))
-
-  // ── Ergonomic helpers for resource-aware step composition ──────────
-
-  /** Implicitly lifts a plain release step into a resource-ignoring step function.
-    * Always in scope inside the plugin trait, so plain steps and resource-aware steps
-    * can be freely mixed in the same `Seq[T => ReleaseStepIO]`.
-    */
-  protected implicit def liftStep(step: ReleaseStepIO): T => ReleaseStepIO =
-    (_: T) => step
-
-  /** Lift a sequence of plain release steps into resource-ignoring step functions. */
-  protected def liftSteps(steps: Seq[ReleaseStepIO]): Seq[T => ReleaseStepIO] =
-    steps.map(liftStep)
 
   /** Read default steps from settings and append resource-aware steps at the end.
     *
@@ -66,43 +58,17 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   ): Seq[T => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess)) ++ extraSteps
 
-  /** Read default steps and insert resource-aware steps after a named step.
-    *
-    * @param afterStep the `name` of the step after which to insert
-    * Throws `RuntimeException` if no step with the given name is found.
-    */
+  /** Read default steps and insert resource-aware steps after a named step. */
   protected def defaultsWithAfter(state: State, afterStep: String)(
       extraSteps: (T => ReleaseStepIO)*
-  ): Seq[T => ReleaseStepIO] = {
-    val defaults        = Project.extract(state).get(releaseIOProcess)
-    val idx             = defaults.indexWhere(_.name == afterStep)
-    if (idx < 0)
-      throw new RuntimeException(
-        s"Step '$afterStep' not found in defaults. " +
-          s"Available: ${defaults.map(_.name).mkString(", ")}"
-      )
-    val (before, after) = defaults.splitAt(idx + 1)
-    liftSteps(before) ++ extraSteps ++ liftSteps(after)
-  }
+  ): Seq[T => ReleaseStepIO] =
+    insertAfter(Project.extract(state).get(releaseIOProcess), afterStep)(extraSteps)
 
-  /** Read default steps and insert resource-aware steps before a named step.
-    *
-    * @param beforeStep the `name` of the step before which to insert
-    * Throws `RuntimeException` if no step with the given name is found.
-    */
+  /** Read default steps and insert resource-aware steps before a named step. */
   protected def defaultsWithBefore(state: State, beforeStep: String)(
       extraSteps: (T => ReleaseStepIO)*
-  ): Seq[T => ReleaseStepIO] = {
-    val defaults        = Project.extract(state).get(releaseIOProcess)
-    val idx             = defaults.indexWhere(_.name == beforeStep)
-    if (idx < 0)
-      throw new RuntimeException(
-        s"Step '$beforeStep' not found in defaults. " +
-          s"Available: ${defaults.map(_.name).mkString(", ")}"
-      )
-    val (before, after) = defaults.splitAt(idx)
-    liftSteps(before) ++ extraSteps ++ liftSteps(after)
-  }
+  ): Seq[T => ReleaseStepIO] =
+    insertBefore(Project.extract(state).get(releaseIOProcess), beforeStep)(extraSteps)
 
   /** Whether cross-building is enabled (before command-line args are applied).
     * Defaults to reading from the `releaseIOCrossBuild` setting.
@@ -262,54 +228,57 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     */
   protected def doReleaseIO(state: State, args: Seq[ReleaseArg]): State = {
     import ReleaseArg.*
+    import scala.util.control.NonFatal
 
-    val stepFns = releaseProcess(state)
+    try {
+      val stepFns = releaseProcess(state)
 
-    // Parse command-line arguments
-    val useDefaults   = args.contains(WithDefaults)
-    val skipTests     = args.contains(SkipTests)
-    val crossFromArgs = args.contains(CrossBuild)
-    val crossEnabled  = crossBuildEnabled(state) || crossFromArgs
-    val skipPublish   = skipPublishEnabled(state)
-    val interactive   = interactiveEnabled(state)
+      val useDefaults   = args.contains(WithDefaults)
+      val skipTests     = args.contains(SkipTests)
+      val crossFromArgs = args.contains(CrossBuild)
+      val crossEnabled  = crossBuildEnabled(state) || crossFromArgs
+      val skipPublish   = skipPublishEnabled(state)
+      val interactive   = interactiveEnabled(state)
 
-    val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
-    val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
-    val tagDefaultArg     = args.collectFirst { case TagDefault(v) => v }
+      val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
+      val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
+      val tagDefaultArg     = args.collectFirst { case TagDefault(v) => v }
 
-    // Store parsed arguments in State attributes
-    val decoratedState = state
-      .put(ReleaseKeys.useDefaults, useDefaults)
-      .put(ReleaseKeys.skipTests, skipTests)
-      .put(ReleaseKeys.cross, crossEnabled)
-      .put(ReleaseKeys.commandLineReleaseVersion, releaseVersionArg)
-      .put(ReleaseKeys.commandLineNextVersion, nextVersionArg)
-      .put(ReleaseKeys.tagDefault, tagDefaultArg)
+      val decoratedState = state
+        .put(ReleaseKeys.useDefaults, useDefaults)
+        .put(ReleaseKeys.skipTests, skipTests)
+        .put(ReleaseKeys.cross, crossEnabled)
+        .put(ReleaseKeys.commandLineReleaseVersion, releaseVersionArg)
+        .put(ReleaseKeys.commandLineNextVersion, nextVersionArg)
+        .put(ReleaseKeys.tagDefault, tagDefaultArg)
 
-    val initialCtx = initialContext(
-      decoratedState,
-      skipTests = skipTests,
-      skipPublish = skipPublish,
-      interactive = interactive
-    )
+      val initialCtx = initialContext(
+        decoratedState,
+        skipTests = skipTests,
+        skipPublish = skipPublish,
+        interactive = interactive
+      )
 
-    decoratedState.log.info("[release-io] Starting release process...")
-    decoratedState.log.info(s"[release-io] ${stepFns.length} steps to execute")
-    if (crossEnabled) decoratedState.log.info("[release-io] Cross-build enabled")
+      decoratedState.log.info("[release-io] Starting release process...")
+      decoratedState.log.info(s"[release-io] ${stepFns.length} steps to execute")
+      if (crossEnabled) decoratedState.log.info("[release-io] Cross-build enabled")
 
-    // The resource is acquired once and shared across all steps; it is released after all
-    // steps complete (or immediately on failure). Each step function receives the resource T.
-    val program = resource.use { t =>
-      val steps = stepFns.map(_(t))
-      ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
+      val program = resource.use { t =>
+        val steps = stepFns.map(_(t))
+        ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
+      }
+
+      // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
+      val finalCtx = program.unsafeRunSync()
+      finalCtx.state.log.info("[release-io] Release completed successfully!")
+      finalCtx.state
+    } catch {
+      case NonFatal(e) =>
+        state.log.error(
+          s"[release-io] Release failed: ${Option(e.getMessage).getOrElse(e.toString)}"
+        )
+        state.fail
     }
-
-    // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
-    // Inner IO.blocking shifts still dispatch to the cats-effect blocking thread pool correctly.
-    val finalCtx = program.unsafeRunSync()
-
-    finalCtx.state.log.info("[release-io] Release completed successfully!")
-    finalCtx.state
   }
 }
 

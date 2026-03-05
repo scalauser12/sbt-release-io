@@ -14,9 +14,7 @@ import sbtrelease.Vcs
 private[release] object VcsSteps {
 
   val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
-    VcsOps.detectAndInit(ctx.state).map { case (newState, vcs) =>
-      ctx.copy(state = newState).withVcs(vcs)
-    }
+    VcsOps.detectAndInit(ctx)
   }
 
   val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(

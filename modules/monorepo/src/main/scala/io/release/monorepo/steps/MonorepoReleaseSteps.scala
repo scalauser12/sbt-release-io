@@ -179,16 +179,20 @@ object MonorepoReleaseSteps {
       logInfo(ctx, s"Changed projects: ${changedProjects.map(_.name).mkString(", ")}")
         .map(_.withProjects(changedProjects))
 
-  /** Tag releases — dispatches to per-project or unified based on tag strategy setting. */
+  /** Tag releases — dispatches to per-project or unified based on tag strategy setting.
+    * Reads `releaseIOMonorepoTagStrategy` at runtime and delegates to the appropriate
+    * tagging implementation directly, running per-project iteration inline for PerProject
+    * strategy.
+    */
   val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-releases",
     action = ctx => {
-      val extracted    = extract(ctx.state)
-      val tagStrategy  = extracted.get(releaseIOMonorepoTagStrategy)
-      val concreteStep = MonorepoVcsSteps.tagReleases(tagStrategy)
-      concreteStep match {
-        case g: MonorepoStepIO.Global      => g.action(ctx)
-        case pp: MonorepoStepIO.PerProject =>
+      val tagStrategy = extract(ctx.state).get(releaseIOMonorepoTagStrategy)
+      tagStrategy match {
+        case MonorepoTagStrategy.Unified    =>
+          MonorepoVcsSteps.tagReleasesUnified.action(ctx)
+        case MonorepoTagStrategy.PerProject =>
+          val pp = MonorepoVcsSteps.tagReleasesPerProject
           runPerProject(
             ctx,
             (currentCtx, project) =>

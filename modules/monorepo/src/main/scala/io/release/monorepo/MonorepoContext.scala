@@ -1,5 +1,6 @@
 package io.release.monorepo
 
+import _root_.io.release.ReleaseCtx
 import sbt.*
 import sbtrelease.Vcs
 
@@ -67,7 +68,7 @@ case class MonorepoContext(
     tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject,
     attributes: Map[String, String] = Map.empty,
     failed: Boolean = false
-) {
+) extends ReleaseCtx[MonorepoContext] {
 
   def currentProjects: Seq[ProjectReleaseInfo] =
     projects.filterNot(_.failed)

@@ -9,25 +9,27 @@ import sbtrelease.Vcs
 
 /** Shared VCS operations used by both core and monorepo release steps.
   *
-  * Methods return raw results (tuples, value objects) rather than context types so that
-  * each module can wrap results into its own context representation.
+  * Methods that can operate polymorphically (e.g. [[detectAndInit]]) accept a
+  * [[ReleaseCtx]] and return the updated context directly. Methods that need
+  * sbt settings extraction (e.g. [[checkCleanWorkingDir]]) return value objects
+  * so callers can map results into their own context type.
   */
 private[release] object VcsOps {
 
   /** Detect VCS at the project base, append `releaseVcs` to the sbt session,
-    * and return the updated state together with the detected VCS adapter.
+    * and return the context with updated state and VCS adapter.
     */
-  def detectAndInit(state: State): IO[(State, Vcs)] = IO.defer {
-    val extracted = extract(state)
+  def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO.defer {
+    val extracted = extract(ctx.state)
     val baseDir   = extracted.get(thisProject).base
     IO.blocking(Vcs.detect(baseDir)).flatMap {
       case Some(vcs) =>
         IO.blocking {
           val newState = extracted.appendWithSession(
             Seq(releaseVcs := Some(vcs)),
-            state
+            ctx.state
           )
-          (newState, vcs)
+          ctx.withState(newState).withVcs(vcs)
         }
       case None      =>
         IO.raiseError(new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}"))

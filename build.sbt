@@ -48,7 +48,7 @@ lazy val core = (project in file("modules/core"))
 
 lazy val monorepo = (project in file("modules/monorepo"))
   .enablePlugins(SbtPlugin)
-  .dependsOn(core)
+  .dependsOn(core, core % "test->test")
   .settings(
     commonSettings,
     name        := "sbt-release-io-monorepo",

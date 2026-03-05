@@ -84,7 +84,7 @@ class VcsOpsSpec extends Specification with CatsEffect {
 
   private val tempDirResource: Resource[IO, File] =
     Resource.make(IO(Files.createTempDirectory("vcs-ops-spec").toFile))(dir =>
-      IO(deleteRecursively(dir))
+      IO(TestSupport.deleteRecursively(dir))
     )
 
   private val gitRepoResource: Resource[IO, File] =
@@ -118,12 +118,4 @@ class VcsOpsSpec extends Specification with CatsEffect {
   private def runGit(repo: File, args: String*): String =
     Process(Seq("git") ++ args, repo).!!
 
-  private def deleteRecursively(file: File): Unit = {
-    if (file.isDirectory) {
-      val children = file.listFiles()
-      if (children != null) children.foreach(deleteRecursively)
-    }
-    file.delete()
-    ()
-  }
 }

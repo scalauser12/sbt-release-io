@@ -34,9 +34,13 @@ import _root_.io.release.monorepo.MonorepoReleaseIO.*
   * // Run with:     sbt releaseMonorepoCustom with-defaults
   * }}}
   */
-trait MonorepoReleasePluginLike[T] extends AutoPlugin {
+trait MonorepoReleasePluginLike[T]
+    extends AutoPlugin
+    with _root_.io.release.PluginLikeSupport[MonorepoStepIO, T] {
 
   override def requires: Plugins = ReleasePluginIO
+
+  protected def stepName(step: MonorepoStepIO): String = step.name
 
   /** The resource acquired once for the entire monorepo release process and passed to each step. */
   def resource: Resource[IO, T]
@@ -46,19 +50,6 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     */
   protected def monorepoReleaseProcess(state: State): Seq[T => MonorepoStepIO] =
     liftSteps(Project.extract(state).get(releaseIOMonorepoProcess))
-
-  // ── Ergonomic helpers for resource-aware step composition ──────────
-
-  /** Implicitly lifts a plain monorepo step into a resource-ignoring step function.
-    * Always in scope inside the plugin trait, so plain steps and resource-aware steps
-    * can be freely mixed in the same `Seq[T => MonorepoStepIO]`.
-    */
-  protected implicit def liftStep(step: MonorepoStepIO): T => MonorepoStepIO =
-    (_: T) => step
-
-  /** Lift a sequence of plain monorepo steps into resource-ignoring step functions. */
-  protected def liftSteps(steps: Seq[MonorepoStepIO]): Seq[T => MonorepoStepIO] =
-    steps.map(liftStep)
 
   /** Read default steps from settings and append resource-aware steps at the end.
     *
@@ -74,41 +65,17 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
   ): Seq[T => MonorepoStepIO] =
     liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) ++ extraSteps
 
-  /** Read default steps and insert resource-aware steps after a named step.
-    *
-    * @param afterStep the `name` of the step after which to insert
-    * Throws `RuntimeException` if no step with the given name is found.
-    */
+  /** Read default steps and insert resource-aware steps after a named step. */
   protected def defaultsWithAfter(state: State, afterStep: String)(
       extraSteps: (T => MonorepoStepIO)*
-  ): Seq[T => MonorepoStepIO] = {
-    val defaults        = Project.extract(state).get(releaseIOMonorepoProcess)
-    val (before, after) = defaults.splitAt(findStepIndex(defaults, afterStep) + 1)
-    liftSteps(before) ++ extraSteps ++ liftSteps(after)
-  }
+  ): Seq[T => MonorepoStepIO] =
+    insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), afterStep)(extraSteps)
 
-  /** Read default steps and insert resource-aware steps before a named step.
-    *
-    * @param beforeStep the `name` of the step before which to insert
-    * Throws `RuntimeException` if no step with the given name is found.
-    */
+  /** Read default steps and insert resource-aware steps before a named step. */
   protected def defaultsWithBefore(state: State, beforeStep: String)(
       extraSteps: (T => MonorepoStepIO)*
-  ): Seq[T => MonorepoStepIO] = {
-    val defaults        = Project.extract(state).get(releaseIOMonorepoProcess)
-    val (before, after) = defaults.splitAt(findStepIndex(defaults, beforeStep))
-    liftSteps(before) ++ extraSteps ++ liftSteps(after)
-  }
-
-  private def findStepIndex(defaults: Seq[MonorepoStepIO], stepName: String): Int = {
-    val idx = defaults.indexWhere(_.name == stepName)
-    if (idx < 0)
-      throw new RuntimeException(
-        s"Step '$stepName' not found in defaults. " +
-          s"Available: ${defaults.map(_.name).mkString(", ")}"
-      )
-    idx
-  }
+  ): Seq[T => MonorepoStepIO] =
+    insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), beforeStep)(extraSteps)
 
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
@@ -452,8 +419,8 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
 
           // Guards both monorepoReleaseProcess (can throw on misconfiguration) and
           // unsafeRunSync() (propagates IO failures as exceptions).
-          val stepFns     = monorepoReleaseProcess(decoratedState)
-          val initialCtx  = buildContext(decoratedState, selectedProjects, flags, selectedNames)
+          val stepFns    = monorepoReleaseProcess(decoratedState)
+          val initialCtx = buildContext(decoratedState, selectedProjects, flags, selectedNames)
 
           logReleaseStart(decoratedState, stepFns.length, selectedProjects.length, flags)
 

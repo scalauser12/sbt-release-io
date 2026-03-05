@@ -65,10 +65,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "initialize-vcs",
-    action = ctx =>
-      VcsOps.detectAndInit(ctx.state).map { case (newState, vcs) =>
-        ctx.withState(newState).withVcs(vcs)
-      }
+    action = ctx => VcsOps.detectAndInit(ctx)
   )
 
   val checkCleanWorkingDir: MonorepoStepIO.Global = MonorepoStepIO.Global(
@@ -79,12 +76,6 @@ private[monorepo] object MonorepoVcsSteps {
         logInfo(ctx, s"Starting release off commit: ${result.currentHash}")
       }
   )
-
-  /** Create per-project tags or a unified tag depending on strategy. */
-  private[steps] def tagReleases(tagStrategy: MonorepoTagStrategy): MonorepoStepIO = tagStrategy match {
-    case MonorepoTagStrategy.PerProject => tagReleasesPerProject
-    case MonorepoTagStrategy.Unified    => tagReleasesUnified
-  }
 
   private def createTag(
       vcs: Vcs,
@@ -100,26 +91,33 @@ private[monorepo] object MonorepoVcsSteps {
         runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'")
     }
 
-  private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
-    name = "tag-release",
-    action = (ctx, project) =>
-      required(ctx.vcs, "VCS not initialized") { vcs =>
-        required(project.versions, s"Versions not set for ${project.name}") {
-          case (releaseVer, _) =>
-            IO.blocking {
-              val extracted = extract(ctx.state)
-              (
-                extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer),
-                extracted.get(releaseVcsSign)
-              )
-            }.flatMap { case (tagName, sign) =>
-              createTag(vcs, tagName, s"Release ${project.name} $releaseVer", sign, project.name) *>
-                logInfo(ctx, s"Tagged ${project.name} as $tagName")
-                  .as(ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName))))
-            }
+  private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
+    MonorepoStepIO.PerProject(
+      name = "tag-release",
+      action = (ctx, project) =>
+        required(ctx.vcs, "VCS not initialized") { vcs =>
+          required(project.versions, s"Versions not set for ${project.name}") {
+            case (releaseVer, _) =>
+              IO.blocking {
+                val extracted = extract(ctx.state)
+                (
+                  extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer),
+                  extracted.get(releaseVcsSign)
+                )
+              }.flatMap { case (tagName, sign) =>
+                createTag(
+                  vcs,
+                  tagName,
+                  s"Release ${project.name} $releaseVer",
+                  sign,
+                  project.name
+                ) *>
+                  logInfo(ctx, s"Tagged ${project.name} as $tagName")
+                    .as(ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName))))
+              }
+          }
         }
-      }
-  )
+    )
 
   private[monorepo] val tagReleasesUnified: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-release",
@@ -163,12 +161,13 @@ private[monorepo] object MonorepoVcsSteps {
         for {
           hasUpAndBranch <- IO.blocking((vcs.hasUpstream, vcs.currentBranch))
           (hasUp, branch) = hasUpAndBranch
-          _              <- IO.raiseUnless(hasUp)(
-                              new RuntimeException(
-                                s"No tracking branch configured for '$branch'. " +
-                                  "Set up a remote tracking branch or remove pushChanges from the release process."
-                              )
-                            )
+          _              <-
+            IO.raiseUnless(hasUp)(
+              new RuntimeException(
+                s"No tracking branch configured for '$branch'. " +
+                  "Set up a remote tracking branch or remove pushChanges from the release process."
+              )
+            )
           remote         <- IO.blocking(vcs.trackingRemote)
           remoteCode     <- IO.blocking(vcs.checkRemote(remote).!)
           _              <- IO.raiseUnless(remoteCode == 0)(

@@ -27,7 +27,10 @@ case class ReleaseContext(
     interactive: Boolean = false,
     attributes: Map[String, String] = Map.empty,
     failed: Boolean = false
-) {
+) extends ReleaseCtx[ReleaseContext] {
+
+  def withState(s: State): ReleaseContext = copy(state = s)
+
   def withVersions(release: String, next: String): ReleaseContext =
     copy(versions = Some((release, next)))
 
