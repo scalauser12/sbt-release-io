@@ -107,15 +107,12 @@ releaseIOInteractive := true
 
 // Custom version file reader (default parses `[ThisBuild /] version := "x.y.z"`)
 releaseIOReadVersion := { file =>
-  IO.blocking(sbt.IO.read(file)).flatMap { contents =>
-    // your custom parsing logic
-    IO.pure(contents.trim)
-  }
+  IO.blocking(sbt.IO.read(file).trim)
 }
 
 // Custom version file writer (default produces `version := "x.y.z"\n`)
-releaseIOWriteVersion := { (file, version) =>
-  IO.pure(s"""version := "$version"\n""")
+releaseIOWriteVersion := { (_, version) =>
+  IO.pure(s"$version\n")
 }
 ```
 
