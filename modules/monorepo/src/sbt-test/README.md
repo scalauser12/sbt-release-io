@@ -115,6 +115,11 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Per-project version overrides provided in global mode (e.g., `release-version core=1.0.0`)
 - Release fails at argument validation — per-project overrides are not supported in global mode
 
+### global-version-task-mismatch
+- Custom `releaseVersion` tasks produce different values per project in global mode
+- Release fails at `validate-versions` step before `setReleaseVersions` mutates the shared `version.sbt`
+- Verifies the version file and git state remain untouched after failure
+
 ### global-version-partial-selection
 - Partial project selection in global mode (only core specified)
 - Fails because all projects must be included

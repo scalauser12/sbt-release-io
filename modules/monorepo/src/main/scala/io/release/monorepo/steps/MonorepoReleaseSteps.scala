@@ -22,6 +22,7 @@ object MonorepoReleaseSteps {
   val inquireVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.inquireVersions
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoVersionSteps.setReleaseVersions
   val setNextVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.setNextVersions
+  val validateVersions: MonorepoStepIO.Global       = MonorepoVersionSteps.validateVersions
   val commitReleaseVersions: MonorepoStepIO.Global  =
     MonorepoVersionSteps.commitReleaseVersions
   val commitNextVersions: MonorepoStepIO.Global     = MonorepoVersionSteps.commitNextVersions
@@ -216,6 +217,7 @@ object MonorepoReleaseSteps {
     detectOrSelectProjects,
     checkSnapshotDependencies,
     inquireVersions,
+    validateVersions,
     runClean,
     runTests,
     setReleaseVersions,

@@ -74,6 +74,28 @@ private[monorepo] object MonorepoVersionSteps {
                                                               )
     } yield result
 
+  /** Validate version consistency in global-version mode (before writing to shared file). */
+  val validateVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
+    name = "validate-versions",
+    action = ctx =>
+      IO.blocking(
+        extract(ctx.state)
+          .get(_root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion)
+      ).flatMap { useGlobal =>
+        if (useGlobal)
+          validateVersionConsistency(
+            ctx.currentProjects,
+            { case (rel, _) => rel },
+            "Global version mode requires all projects to have the same release version"
+          ) *> validateVersionConsistency(
+            ctx.currentProjects,
+            { case (_, next) => next },
+            "Global version mode requires all projects to have the same next version"
+          ) *> logInfo(ctx, "Version consistency validated for global version mode")
+        else IO.pure(ctx)
+      }
+  )
+
   /** Write release versions to per-project version files. */
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "set-release-version",

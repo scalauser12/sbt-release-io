@@ -1,0 +1,12 @@
+# Test: task-derived version mismatch is caught before file mutation in global-version mode
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# releaseVersion tasks produce 2.0.0 for core, 3.0.0 for api — should fail at validate-versions
+-> releaseIOMonorepo with-defaults
+
+# Verify version.sbt was NOT mutated (validate-versions caught mismatch before setReleaseVersions)
+> checkNoMutation

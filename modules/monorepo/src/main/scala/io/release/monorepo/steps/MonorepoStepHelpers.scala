@@ -77,9 +77,13 @@ private[monorepo] object MonorepoStepHelpers {
     case None    =>
       if (!interactive || useDefaults) IO.pure(suggested)
       else
-        IO.print(s"$label [$suggested] : ") *> IO.readLine.map { raw =>
+        IO.print(s"$label [$suggested] : ") *> IO.readLine.flatMap { raw =>
           val input = Option(raw).map(_.trim).getOrElse("")
-          if (input.isEmpty) suggested else input
+          if (input.isEmpty) IO.pure(suggested)
+          else
+            IO.fromOption(sbtrelease.Version(input).map(_.unapply))(
+              new IllegalArgumentException(s"Invalid version format: '$input'")
+            )
         }
   }
 
