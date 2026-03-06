@@ -156,6 +156,10 @@ private[monorepo] object MonorepoVcsSteps {
       }
   )
 
+  /** Push branch and tags to the remote. Tag pushing is implemented only for git.
+    * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
+    * users should verify their VCS behavior.
+    */
   val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "push-changes",
     check = ctx =>

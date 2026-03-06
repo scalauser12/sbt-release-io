@@ -157,6 +157,8 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name/v$ver"),
     releaseIOMonorepoUnifiedTagName        := ((ver: String) => s"v$ver"),
     releaseIOMonorepoReadVersion           := VersionSteps.defaultReadVersion,
+    // releaseIOMonorepoUseGlobalVersion is captured at build load time.
+    // Custom implementations may read from State at call time if dynamic behavior is needed.
     releaseIOMonorepoWriteVersion          := {
       val useGlobal = releaseIOMonorepoUseGlobalVersion.value
       (_, ver) => {

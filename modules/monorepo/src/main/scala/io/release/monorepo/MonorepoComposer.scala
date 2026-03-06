@@ -77,6 +77,10 @@ private[monorepo] object MonorepoComposer {
   /** Phase 1: run all checks against the initial context with `onFailure` armed.
     * Non-failure state mutations from checks are intentionally discarded.
     * Any check failure (exception or `FailureCommand`) aborts the release before actions execute.
+    *
+    * Checks run against the full project set before `detectOrSelectProjects` filters by change
+    * detection. Per-project checks (e.g. snapshot dependencies) therefore run for all projects;
+    * a failure in any project aborts the release before any actions run.
     */
   private def runCheckPhase(
       steps: Seq[MonorepoStepIO],

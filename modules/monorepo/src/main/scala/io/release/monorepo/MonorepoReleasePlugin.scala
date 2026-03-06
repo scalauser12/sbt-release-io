@@ -232,7 +232,8 @@ trait MonorepoReleasePluginLike[T]
       state.fail
     }
 
-    def validate(condition: Boolean, msg: => String): Either[State, Unit] =
+    /** Fails with msg when condition is true. Use for error conditions. */
+    def failWhen(condition: Boolean, msg: => String): Either[State, Unit] =
       if (condition) Left(failWith(msg)) else Right(())
 
     val extracted               = extract(state)
@@ -250,43 +251,43 @@ trait MonorepoReleasePluginLike[T]
 
     for {
       // ── Input format validation ──
-      _ <- validate(
+      _ <- failWhen(
              releaseVersionOverrides.exists { case (p, v) => p.isEmpty || v.isEmpty },
              "Invalid release-version format. Expected project=version"
            )
-      _ <- validate(
+      _ <- failWhen(
              nextVersionOverrides.exists { case (p, v) => p.isEmpty || v.isEmpty },
              "Invalid next-version format. Expected project=version"
            )
-      _ <- validate(
+      _ <- failWhen(
              globalReleaseVersions.exists(_.isEmpty),
              "Invalid release-version format. Expected a non-empty version string"
            )
-      _ <- validate(
+      _ <- failWhen(
              globalNextVersions.exists(_.isEmpty),
              "Invalid next-version format. Expected a non-empty version string"
            )
       // ── Per-project override duplicate detection ──
-      _ <- validate(
+      _ <- failWhen(
              releaseVersionPairs.groupBy(_._1).exists(_._2.length > 1),
              "Duplicate per-project release-version overrides: " +
                releaseVersionPairs.groupBy(_._1).filter(_._2.length > 1).keys.mkString(", ")
            )
-      _ <- validate(
+      _ <- failWhen(
              nextVersionPairs.groupBy(_._1).exists(_._2.length > 1),
              "Duplicate per-project next-version overrides: " +
                nextVersionPairs.groupBy(_._1).filter(_._2.length > 1).keys.mkString(", ")
            )
       // ── Override multiplicity & conflict ──
-      _ <- validate(
+      _ <- failWhen(
              globalReleaseVersions.length > 1,
              "Multiple global release-version overrides provided. Only one is allowed"
            )
-      _ <- validate(
+      _ <- failWhen(
              globalNextVersions.length > 1,
              "Multiple global next-version overrides provided. Only one is allowed"
            )
-      _ <- validate(
+      _ <- failWhen(
              !useGlobalVersion &&
                (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty),
              "Global version overrides (release-version <version>) are only supported " +
@@ -294,7 +295,7 @@ trait MonorepoReleasePluginLike[T]
                "Use per-project overrides (release-version <project>=<version>) instead."
            )
       // Requires malformed-entry validations above to have short-circuited first.
-      _ <- validate(
+      _ <- failWhen(
              (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty) &&
                (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
              "Cannot mix global version overrides with per-project version overrides"
@@ -315,7 +316,7 @@ trait MonorepoReleasePluginLike[T]
       invalidOverrides =
         (releaseVersionOverrides.keySet ++ nextVersionOverrides.keySet) -- validNames
 
-      _ <- validate(
+      _ <- failWhen(
              invalidOverrides.nonEmpty,
              s"Unknown projects in version overrides: " +
                s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}"
@@ -323,21 +324,21 @@ trait MonorepoReleasePluginLike[T]
 
       // ── Project name validation ──
       invalid = selectedNames.filterNot(validNames.contains)
-      _      <- validate(
+      _      <- failWhen(
                   selectedNames.nonEmpty && invalid.nonEmpty,
                   s"Unknown projects: ${invalid.mkString(", ")}. " +
                     s"Available: ${validNames.mkString(", ")}"
                 )
 
       // ── Global version mode constraints ──
-      _ <- validate(
+      _ <- failWhen(
              useGlobalVersion && selectedNames.nonEmpty &&
                selectedNames.toSet != validNames,
              s"Global version mode is active — all projects share a single " +
                s"version file. Selecting a subset of projects (${selectedNames.mkString(", ")}) is " +
                s"not supported. Release all projects or disable releaseIOMonorepoUseGlobalVersion."
            )
-      _ <- validate(
+      _ <- failWhen(
              useGlobalVersion &&
                (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
              "Global version mode is active — all projects share a single version. " +
@@ -346,7 +347,7 @@ trait MonorepoReleasePluginLike[T]
            )
 
       // ── Selection & override consistency ──
-      _ <- validate(
+      _ <- failWhen(
              flags.allChanged && selectedNames.nonEmpty,
              "Cannot combine 'all-changed' with explicit project selection. " +
                s"Either use 'all-changed' alone or specify projects explicitly."
@@ -362,14 +363,14 @@ trait MonorepoReleasePluginLike[T]
           (releaseVersionOverrides.keySet ++ nextVersionOverrides.keySet) --
             selectedProjects.map(_.name).toSet
         else Set.empty[String]
-      _              <- validate(
+      _              <- failWhen(
                           unusedOverrides.nonEmpty,
                           s"Version overrides target non-selected projects: " +
                             s"${unusedOverrides.mkString(", ")}. " +
                             s"Selected: ${selectedProjects.map(_.name).mkString(", ")}"
                         )
 
-      _ <- validate(
+      _ <- failWhen(
              selectedProjects.isEmpty,
              s"No projects selected for monorepo release. " +
                s"Available: ${validNames.mkString(", ")}"
