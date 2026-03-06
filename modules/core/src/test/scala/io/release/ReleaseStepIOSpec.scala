@@ -66,6 +66,18 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
       }
     }
 
+    "clear onFailure after successful compose so it does not leak to later commands" in {
+      contextResource.use { ctx =>
+        val step = ReleaseStepIO.io("noop") { c => IO.pure(c) }
+
+        ReleaseStepIO
+          .compose(Seq(step), crossBuild = false)(ctx)
+          .map { result =>
+            result.state.onFailure must beNone
+          }
+      }
+    }
+
     "detect FailureCommand sentinel and skip subsequent actions" in {
       contextResource.use { ctx =>
         Ref.of[IO, List[String]](Nil).flatMap { observed =>

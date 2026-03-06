@@ -30,13 +30,17 @@ private[release] object ComposerSupport {
     } else armOnFailure(ctx)
   }
 
-  /** Strip any remaining `FailureCommand` sentinel after all steps complete. */
+  /** Strip any remaining `FailureCommand` sentinel and clear `onFailure`
+    * after all steps complete, so the returned state does not leak the
+    * armed handler into subsequent commands in the same sbt session.
+    */
   def stripFailureCommand[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO {
-    ctx.state.remainingCommands.toList match {
+    val cleaned = ctx.state.remainingCommands.toList match {
       case head :: tail if head == FailureCommand =>
-        ctx.withState(ctx.state.copy(remainingCommands = tail))
-      case _                                      => ctx
+        ctx.state.copy(remainingCommands = tail)
+      case _                                      => ctx.state
     }
+    ctx.withState(cleaned.copy(onFailure = None))
   }
 
   /** Wrap a step function with error recovery: catch `NonFatal` exceptions,
