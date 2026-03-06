@@ -227,12 +227,16 @@ releaseIOMonorepoProcess := Seq(
   checkCleanWorkingDir,
   resolveReleaseOrder,
   detectOrSelectProjects,
+  checkSnapshotDependencies,
   inquireVersions,
+  // runClean and runTests omitted
   setReleaseVersions,
   commitReleaseVersions,
   tagReleases,
+  // publishArtifacts omitted — tag-only release
   setNextVersions,
-  commitNextVersions
+  commitNextVersions,
+  pushChanges
 )
 ```
 
@@ -457,6 +461,8 @@ v1.0.0
 ```
 
 Requires all projects to have the same release version. The tag annotation lists all project names and versions.
+
+> **Note:** The version consistency check applies only to the projects selected for release. When change detection is enabled, unchanged projects are excluded, so partial releases are possible — the unified tag will only reflect the changed subset. For true all-or-nothing unified releases, combine with Global Version mode or use the `all-changed` flag.
 
 ```scala
 releaseIOMonorepoTagStrategy    := MonorepoTagStrategy.Unified
