@@ -149,15 +149,21 @@ private[monorepo] object MonorepoVersionSteps {
                                           (extracted, writeFn, useGlobal)
                                         }
       (extracted, writeFn, useGlobal) = setup
-      contents                       <- writeFn(versionFile, ver)
-      newState                       <- IO.blocking {
-                                          java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
-                                          val setting =
-                                            if (useGlobal) ThisBuild / version := ver
-                                            else project.ref / version         := ver
-                                          extracted.appendWithSession(Seq(setting), ctx.state)
-                                        }
-      result                         <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
-                                          .as(ctx.withState(newState))
+      result                         <-
+        if (useGlobal && ctx.attr("global-version-written").contains(ver))
+          logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
+        else
+          for {
+            contents <- writeFn(versionFile, ver)
+            newState <- IO.blocking {
+                          java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
+                          val setting =
+                            if (useGlobal) ThisBuild / version := ver
+                            else project.ref / version         := ver
+                          extracted.appendWithSession(Seq(setting), ctx.state)
+                        }
+            r        <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
+                          .as(ctx.withState(newState))
+          } yield if (useGlobal) r.withAttr("global-version-written", ver) else r
     } yield result
 }

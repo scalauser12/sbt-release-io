@@ -98,6 +98,11 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - `releaseIOMonorepoUseGlobalVersion := true`
 - All projects share a single global `version.sbt` with `ThisBuild / version`
 
+### global-version-custom-write
+- Custom `releaseIOMonorepoReadVersion` and `releaseIOMonorepoWriteVersion` with `releaseIOMonorepoUseGlobalVersion := true`
+- Uses `.properties` file format with a shared root-level version file
+- Verifies properties format preserved (`app.name=` not clobbered) and correct versions in tags
+
 ### global-version-change-detection-subset
 - Change detection finds only a subset of projects changed in global mode
 - Fails because global mode enforces all-or-nothing
