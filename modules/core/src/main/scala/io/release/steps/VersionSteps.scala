@@ -17,11 +17,20 @@ private[release] object VersionSteps {
 
   private val versionPattern = """(?:ThisBuild\s*/\s*)?version\s*:=\s*"([^"]+)"""".r
 
-  /** Default version file reader. Parses `[ThisBuild /] version := "x.y.z"`. */
+  /** Default version file reader. Parses `[ThisBuild /] version := "x.y.z"`.
+    * Skips comment lines to avoid matching commented-out versions.
+    */
   val defaultReadVersion: File => IO[String] = { file =>
     for {
       contents <- IO.blocking(sbt.IO.read(file))
-      result   <- IO.fromOption(versionPattern.findFirstMatchIn(contents).map(_.group(1)))(
+      result   <- IO.fromOption {
+                    contents.linesIterator
+                      .map(_.trim)
+                      .filterNot(l => l.startsWith("//") || l.startsWith("/*") || l.startsWith("*"))
+                      .collectFirst(
+                        Function.unlift(versionPattern.findFirstMatchIn(_).map(_.group(1)))
+                      )
+                  }(
                     new IllegalStateException(
                       s"Could not parse version from ${file.getName}. " +
                         s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents"""

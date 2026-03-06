@@ -252,6 +252,19 @@ trait ReleasePluginIOLike[T]
       val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
       val tagDefaultArg     = args.collectFirst { case TagDefault(v) => v }
 
+      if (args.count(_.isInstanceOf[ReleaseVersion]) > 1)
+        state.log.warn(
+          s"[release-io] Multiple release-version args provided; using '${releaseVersionArg.get}'"
+        )
+      if (args.count(_.isInstanceOf[NextVersion]) > 1)
+        state.log.warn(
+          s"[release-io] Multiple next-version args provided; using '${nextVersionArg.get}'"
+        )
+      if (args.count(_.isInstanceOf[TagDefault]) > 1)
+        state.log.warn(
+          s"[release-io] Multiple default-tag-exists-answer args provided; using '${tagDefaultArg.get}'"
+        )
+
       val decoratedState = state
         .put(ReleaseKeys.useDefaults, useDefaults)
         .put(ReleaseKeys.skipTests, skipTests)

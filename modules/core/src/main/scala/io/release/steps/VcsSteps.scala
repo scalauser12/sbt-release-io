@@ -103,12 +103,19 @@ private[release] object VcsSteps {
                         )
                       )
                     case "k" | "K"      =>
-                      IO.blocking(
+                      IO.blocking {
                         ctx.state.log
                           .warn(
                             s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
                           )
-                      ).as(ctx)
+                        val newState = extract(ctx.state).appendWithSession(
+                          Seq(
+                            packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
+                          ),
+                          ctx.state
+                        )
+                        ctx.copy(state = newState)
+                      }
                     case "o" | "O"      =>
                       IO.blocking(
                         ctx.state.log
