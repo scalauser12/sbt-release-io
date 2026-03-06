@@ -92,7 +92,7 @@ object ReleaseStepIO {
             command,
             ctx.state,
             (msg: String) => {
-              throw new RuntimeException(s"Failed to parse command '$command': $msg")
+              throw new IllegalStateException(s"Failed to parse command '$command': $msg")
             }
           )
           ctx.copy(state = newState)
@@ -130,7 +130,7 @@ object ReleaseStepIO {
                   head.commandLine,
                   cleanState,
                   (msg: String) =>
-                    throw new RuntimeException(
+                    throw new IllegalStateException(
                       s"Failed to parse command '${head.commandLine}': $msg"
                     )
                 )
@@ -143,7 +143,8 @@ object ReleaseStepIO {
           val afterFirst = Command.process(
             command,
             cleanInit,
-            (msg: String) => throw new RuntimeException(s"Failed to parse command '$command': $msg")
+            (msg: String) =>
+              throw new IllegalStateException(s"Failed to parse command '$command': $msg")
           )
           val finalState = drainCommands(afterFirst, afterFirst.remainingCommands.toList)
           ctx.copy(state = finalState)

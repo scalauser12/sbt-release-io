@@ -1,5 +1,6 @@
 package io.release
 
+import cats.effect.IO
 import sbt.*
 import sbt.Def.ScopedKey
 import sbt.Keys.*
@@ -12,22 +13,25 @@ private[release] object CrossBuildSupport {
 
   /** Switch Scala version by fully reloading the project structure.
     * Based on `sbt.Cross.switchVersion` logic.
+    * Wraps the entire operation in `IO.blocking` since it calls sbt internals
+    * (`LoadCompat.reapply`, `Project.setProject`) that perform blocking I/O.
     */
-  def switchScalaVersion(state: State, version: String): State = {
-    val extracted = Project.extract(state)
-    import extracted.*
+  def switchScalaVersion(state: State, version: String): IO[State] =
+    IO.blocking {
+      val extracted = Project.extract(state)
+      import extracted.*
 
-    state.log.info(s"[release-io] Setting scala version to $version")
+      state.log.info(s"[release-io] Setting scala version to $version")
 
-    val add = Seq(
-      GlobalScope / Keys.scalaVersion := version,
-      GlobalScope / Keys.scalaHome    := None
-    )
+      val add = Seq(
+        GlobalScope / Keys.scalaVersion := version,
+        GlobalScope / Keys.scalaHome    := None
+      )
 
-    val cleared      = session.mergeSettings.filterNot(crossExclude)
-    val newStructure = LoadCompat.reapply(add ++ cleared, structure)
-    Project.setProject(session, newStructure, state)
-  }
+      val cleared      = session.mergeSettings.filterNot(crossExclude)
+      val newStructure = LoadCompat.reapply(add ++ cleared, structure)
+      Project.setProject(session, newStructure, state)
+    }
 
   /** Check if a setting should be excluded during cross-build (scalaVersion, scalaHome). */
   private[release] def crossExclude(s: Setting[?]): Boolean =

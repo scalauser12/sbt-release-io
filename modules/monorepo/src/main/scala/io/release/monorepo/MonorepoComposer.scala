@@ -66,7 +66,7 @@ private[monorepo] object MonorepoComposer {
       finalCtx <- ComposerSupport.runActionPhase(wrappedActions)(startCtx)
       result   <-
         if (finalCtx.failed)
-          IO.raiseError(new RuntimeException("Monorepo release process failed"))
+          IO.raiseError(new IllegalStateException("Monorepo release process failed"))
         else
           IO.pure(finalCtx)
     } yield result
@@ -104,7 +104,7 @@ private[monorepo] object MonorepoComposer {
   private def checkForFailure(ctx: MonorepoContext): IO[MonorepoContext] = {
     val failureCommand = Compat.FailureCommand
     if (ctx.state.remainingCommands.headOption.contains(failureCommand))
-      IO.raiseError(new RuntimeException("Check phase failed: sbt task failure detected"))
+      IO.raiseError(new IllegalStateException("Check phase failed: sbt task failure detected"))
     else
       IO.pure(ctx)
   }
@@ -162,9 +162,9 @@ private[monorepo] object MonorepoComposer {
     val entryVersion  = (extracted.currentRef / scalaVersion).get(extracted.structure.data)
 
     def switchTo(version: String)(currentCtx: MonorepoContext): IO[MonorepoContext] =
-      IO.blocking(
-        CrossBuildSupport.switchScalaVersion(currentCtx.state, version)
-      ).map(currentCtx.withState)
+      CrossBuildSupport
+        .switchScalaVersion(currentCtx.state, version)
+        .map(currentCtx.withState)
 
     def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
       entryVersion match {
@@ -175,7 +175,7 @@ private[monorepo] object MonorepoComposer {
     crossVersions.toList match {
       case Nil      =>
         IO.raiseError(
-          new RuntimeException(
+          new IllegalStateException(
             s"Project '${project.name}' has empty crossScalaVersions while cross-build is enabled. " +
               "Set at least one Scala version in crossScalaVersions or disable cross-build for this step/build."
           )
@@ -184,13 +184,18 @@ private[monorepo] object MonorepoComposer {
         val finalIO = versions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
           for {
             currentCtx <- ioCtx
-            _          <- IO.blocking(
-                            currentCtx.state.log.info(
-                              s"$LogPrefix Cross-building with Scala $version"
-                            )
-                          )
-            switched   <- switchTo(version)(currentCtx)
-            result     <- action(switched)
+            result     <-
+              if (currentCtx.failed) IO.pure(currentCtx)
+              else
+                for {
+                  _        <- IO.blocking(
+                                currentCtx.state.log.info(
+                                  s"$LogPrefix Cross-building with Scala $version"
+                                )
+                              )
+                  switched <- switchTo(version)(currentCtx)
+                  r        <- action(switched)
+                } yield r
           } yield result
         }
 

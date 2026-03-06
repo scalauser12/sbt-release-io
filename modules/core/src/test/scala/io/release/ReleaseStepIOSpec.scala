@@ -118,8 +118,8 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
 
   private val contextResource: Resource[IO, ReleaseContext] =
     Resource
-      .make(IO(Files.createTempDirectory("sbt-release-io-compose-spec").toFile))(dir =>
-        IO(TestSupport.deleteRecursively(dir))
+      .make(IO.blocking(Files.createTempDirectory("sbt-release-io-compose-spec").toFile))(dir =>
+        IO.blocking(TestSupport.deleteRecursively(dir))
       )
       .map(dir => ReleaseContext(state = TestSupport.dummyState(dir)))
 }

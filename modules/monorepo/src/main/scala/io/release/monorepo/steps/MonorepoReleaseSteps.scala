@@ -71,7 +71,7 @@ object MonorepoReleaseSteps {
 
   private def guardNonEmpty(ctx: MonorepoContext): IO[MonorepoContext] =
     if (ctx.projects.isEmpty)
-      IO.raiseError(new RuntimeException("No projects configured. Nothing to release."))
+      IO.raiseError(new IllegalStateException("No projects configured. Nothing to release."))
     else IO.pure(ctx)
 
   private def detectChangedProjects(
@@ -157,7 +157,7 @@ object MonorepoReleaseSteps {
       val excludedNames =
         ctx.projects.filterNot(p => changedRefs.contains(p.ref)).map(_.name).mkString(", ")
       IO.raiseError(
-        new RuntimeException(
+        new IllegalStateException(
           "Global version mode is active, but change detection selected only a subset of projects. " +
             s"Changed: $changedNames. Excluded: $excludedNames. " +
             "Release all projects (for example, use `all-changed`), disable change detection, " +
@@ -173,7 +173,7 @@ object MonorepoReleaseSteps {
   ): IO[MonorepoContext] =
     if (changedProjects.isEmpty)
       IO.raiseError(
-        new RuntimeException("No projects have changed. Nothing to release.")
+        new IllegalStateException("No projects have changed. Nothing to release.")
       )
     else
       logInfo(ctx, s"Changed projects: ${changedProjects.map(_.name).mkString(", ")}")

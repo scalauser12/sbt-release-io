@@ -60,7 +60,7 @@ private[monorepo] object MonorepoVcsSteps {
                         )
                     }
                   }
-      target   <- IO.fromEither(resolved.left.map(new RuntimeException(_)))
+      target   <- IO.fromEither(resolved.left.map(new IllegalStateException(_)))
     } yield target
 
   val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
@@ -86,7 +86,9 @@ private[monorepo] object MonorepoVcsSteps {
   ): IO[Unit] =
     IO.blocking(vcs.existsTag(tagName)).flatMap {
       case true  =>
-        IO.raiseError(new RuntimeException(s"Tag [$tagName] already exists for $label. Aborting."))
+        IO.raiseError(
+          new IllegalStateException(s"Tag [$tagName] already exists for $label. Aborting.")
+        )
       case false =>
         runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'")
     }
@@ -131,7 +133,7 @@ private[monorepo] object MonorepoVcsSteps {
         ) *> {
           ctx.currentProjects.flatMap(_.versions).headOption match {
             case None           =>
-              IO.raiseError(new RuntimeException("No release versions set for any project"))
+              IO.raiseError(new IllegalStateException("No release versions set for any project"))
             case Some((rel, _)) =>
               IO.blocking {
                 val extracted = extract(ctx.state)
@@ -163,7 +165,7 @@ private[monorepo] object MonorepoVcsSteps {
           (hasUp, branch) = hasUpAndBranch
           _              <-
             IO.raiseUnless(hasUp)(
-              new RuntimeException(
+              new IllegalStateException(
                 s"No tracking branch configured for '$branch'. " +
                   "Set up a remote tracking branch or remove pushChanges from the release process."
               )
@@ -171,12 +173,12 @@ private[monorepo] object MonorepoVcsSteps {
           remote         <- IO.blocking(vcs.trackingRemote)
           remoteCode     <- IO.blocking(vcs.checkRemote(remote).!)
           _              <- IO.raiseUnless(remoteCode == 0)(
-                              new RuntimeException("Remote check failed. Aborting release.")
+                              new IllegalStateException("Remote check failed. Aborting release.")
                             )
           behind         <- IO.blocking(vcs.isBehindRemote)
           _              <-
             IO.raiseWhen(behind)(
-              new RuntimeException(
+              new IllegalStateException(
                 "Upstream has unmerged commits. Merge first or remove pushChanges from process."
               )
             )

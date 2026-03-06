@@ -212,12 +212,14 @@ trait ReleasePluginIOLike[T]
       interactive: Boolean
   ): ReleaseContext = {
     val maybeVersions = state.get(ReleaseKeys.versions)
-    val maybeVcs      = scala.util
-      .Try {
+    val maybeVcs      =
+      try {
         Project.extract(state).get(sbtrelease.ReleasePlugin.autoImport.releaseVcs)
+      } catch {
+        case scala.util.control.NonFatal(e) =>
+          state.log.debug(s"[release-io] VCS detection skipped: ${e.getMessage}")
+          None
       }
-      .toOption
-      .flatten
 
     ReleaseContext(
       state = state,

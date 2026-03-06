@@ -200,7 +200,7 @@ trait MonorepoReleasePluginLike[T]
       allProjectRefs.map { ref =>
         val projBase =
           (ref / baseDirectory).get(extracted.structure.data).getOrElse {
-            throw new RuntimeException(
+            throw new IllegalStateException(
               s"Cannot resolve baseDirectory for project '${ref.project}'. " +
                 "Ensure the project is correctly defined in the build."
             )

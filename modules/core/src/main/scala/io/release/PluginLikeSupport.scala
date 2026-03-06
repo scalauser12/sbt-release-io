@@ -19,11 +19,13 @@ private[release] trait PluginLikeSupport[StepType, T] {
   protected def liftSteps(steps: Seq[StepType]): Seq[T => StepType] =
     steps.map(liftStep)
 
-  /** Find a step by name in a sequence, raising on missing. */
+  /** Find a step by name in a sequence, raising on missing.
+    * @throws IllegalArgumentException if no step with the given name exists
+    */
   protected def findStepIndex(defaults: Seq[StepType], name: String): Int = {
     val idx = defaults.indexWhere(s => stepName(s) == name)
     if (idx < 0)
-      throw new RuntimeException(
+      throw new IllegalArgumentException(
         s"Step '$name' not found in defaults. " +
           s"Available: ${defaults.map(stepName).mkString(", ")}"
       )

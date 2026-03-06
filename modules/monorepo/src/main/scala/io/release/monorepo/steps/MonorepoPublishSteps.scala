@@ -34,7 +34,7 @@ private[monorepo] object MonorepoPublishSteps {
         result      <- IO.fromEither {
                          checkResult.left
                            .map(cause =>
-                             new RuntimeException(
+                             new IllegalStateException(
                                s"Error checking snapshot dependencies for ${project.name}: $cause"
                              )
                            )
@@ -44,7 +44,7 @@ private[monorepo] object MonorepoPublishSteps {
                                  .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
                                  .mkString("\n")
                                Left(
-                                 new RuntimeException(
+                                 new IllegalStateException(
                                    s"Snapshot dependencies found in ${project.name}:\n$depList"
                                  )
                                )
@@ -121,7 +121,7 @@ private[monorepo] object MonorepoPublishSteps {
           result  <-
             if (missing.nonEmpty)
               IO.raiseError[MonorepoContext](
-                new RuntimeException(
+                new IllegalStateException(
                   s"publishTo not configured for: ${missing.map(_.project).mkString(", ")}. " +
                     "Set publishTo or add `publish / skip := true`."
                 )

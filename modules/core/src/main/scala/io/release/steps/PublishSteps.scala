@@ -32,7 +32,7 @@ private[release] object PublishSteps {
         result      <- checkResult match {
                          case Left(cause)                  =>
                            IO.raiseError[ReleaseContext](
-                             new RuntimeException(
+                             new IllegalStateException(
                                "Error checking for snapshot dependencies: " + cause
                              )
                            )
@@ -43,7 +43,7 @@ private[release] object PublishSteps {
                            val msg     = s"Snapshot dependencies found:\n$depList"
 
                            if (!ctx.interactive) {
-                             IO.raiseError[ReleaseContext](new RuntimeException(msg))
+                             IO.raiseError[ReleaseContext](new IllegalStateException(msg))
                            } else {
                              IO(ctx.state.log.warn(msg)) *>
                                confirmContinue(
@@ -86,7 +86,7 @@ private[release] object PublishSteps {
           result  <- if (missing.nonEmpty) {
                        val names = missing.map(_.project)
                        IO.raiseError[ReleaseContext](
-                         new RuntimeException(
+                         new IllegalStateException(
                            s"publishTo not configured for: ${names.mkString(", ")}. " +
                              "Set publishTo or add `publish / skip := true`."
                          )

@@ -32,7 +32,7 @@ private[release] object VcsOps {
           ctx.withState(newState).withVcs(vcs)
         }
       case None      =>
-        IO.raiseError(new RuntimeException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
+        IO.raiseError(new IllegalStateException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
     }
   }
 
@@ -40,7 +40,7 @@ private[release] object VcsOps {
     IO.blocking(Vcs.detect(base)).flatMap {
       case Some(vcs) => IO.pure(vcs)
       case None      =>
-        IO.raiseError(new RuntimeException(s"No VCS detected at ${base.getAbsolutePath}"))
+        IO.raiseError(new IllegalStateException(s"No VCS detected at ${base.getAbsolutePath}"))
     }
 
   /** Detect VCS at the project base directory. Does not modify sbt state. */
@@ -74,7 +74,7 @@ private[release] object VcsOps {
                                            )
       (modified, untracked, currentHash) = vcsInfo
       _                                 <- IO.raiseWhen(modified.nonEmpty)(
-                                             new RuntimeException(
+                                             new IllegalStateException(
                                                s"""Aborting release: unstaged modified files
                                                   |
                                                   |Modified files:
@@ -84,7 +84,7 @@ private[release] object VcsOps {
                                              )
                                            )
       _                                 <- IO.raiseWhen(untracked.nonEmpty && !ignoreUntracked)(
-                                             new RuntimeException(
+                                             new IllegalStateException(
                                                s"""Aborting release: untracked files. Remove them or specify 'releaseIgnoreUntrackedFiles := true' in settings
                                                   |
                                                   |Untracked files:

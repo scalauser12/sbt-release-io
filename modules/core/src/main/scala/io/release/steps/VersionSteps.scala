@@ -22,7 +22,7 @@ private[release] object VersionSteps {
     for {
       contents <- IO.blocking(sbt.IO.read(file))
       result   <- IO.fromOption(versionPattern.findFirstMatchIn(contents).map(_.group(1)))(
-                    new RuntimeException(
+                    new IllegalStateException(
                       s"Could not parse version from ${file.getName}. " +
                         s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents"""
                     )
@@ -162,7 +162,7 @@ private[release] object VersionSteps {
         if (input.isEmpty) IO.pure(defaultVersion)
         else
           IO.fromOption(sbtrelease.Version(input).map(_.unapply))(
-            new RuntimeException(s"Invalid version format: '$input'")
+            new IllegalArgumentException(s"Invalid version format: '$input'")
           )
       }
     } yield result
@@ -177,7 +177,7 @@ private[release] object VersionSteps {
       val base        = vcs.baseDir.getCanonicalFile
 
       IO.fromOption(sbt.IO.relativize(base, versionFile))(
-        new RuntimeException(
+        new IllegalStateException(
           s"[release-io] Version file [$versionFile] is outside of VCS root [$base]"
         )
       ).flatMap { relativePath =>
@@ -196,7 +196,7 @@ private[release] object VersionSteps {
                     }.flatMap { case (code, output) =>
                       if (code != 0)
                         IO.raiseError(
-                          new RuntimeException(s"vcs status failed with exit code $code")
+                          new IllegalStateException(s"vcs status failed with exit code $code")
                         )
                       else
                         IO.pure(

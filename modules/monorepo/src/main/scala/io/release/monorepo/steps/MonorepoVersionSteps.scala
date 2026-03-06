@@ -81,7 +81,7 @@ private[monorepo] object MonorepoVersionSteps {
       project.versions match {
         case Some((releaseVer, _)) => writeProjectVersion(ctx, project, releaseVer)
         case None                  =>
-          IO.raiseError(new RuntimeException(s"Versions not set for ${project.name}"))
+          IO.raiseError(new IllegalStateException(s"Versions not set for ${project.name}"))
       }
   )
 
@@ -92,7 +92,7 @@ private[monorepo] object MonorepoVersionSteps {
       project.versions match {
         case Some((_, nextVer)) => writeProjectVersion(ctx, project, nextVer)
         case None               =>
-          IO.raiseError(new RuntimeException(s"Versions not set for ${project.name}"))
+          IO.raiseError(new IllegalStateException(s"Versions not set for ${project.name}"))
       }
   )
 

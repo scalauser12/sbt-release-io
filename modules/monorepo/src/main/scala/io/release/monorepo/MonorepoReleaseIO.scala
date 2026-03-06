@@ -176,7 +176,7 @@ trait MonorepoReleaseIO {
       ref => {
         val base = projectBases.getOrElse(
           ref,
-          throw new RuntimeException(
+          throw new IllegalStateException(
             s"Cannot resolve baseDirectory for project '${ref.project}' in build ${ref.build}. " +
               "Ensure the project is listed in releaseIOMonorepoProjects."
           )

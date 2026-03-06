@@ -111,6 +111,10 @@ private[monorepo] object ChangeDetection {
       }
     }
 
+  /** Check whether a project has changed since its last matching tag.
+    * '''Performs blocking I/O''' (git subprocess calls) — must only be called
+    * from within `IO.blocking`.
+    */
   private def hasChangedSinceLastTag(
       vcs: Vcs,
       project: ProjectReleaseInfo,

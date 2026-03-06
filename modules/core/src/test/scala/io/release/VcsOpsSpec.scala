@@ -83,8 +83,8 @@ class VcsOpsSpec extends Specification with CatsEffect {
   // ── Helpers ──────────────────────────────────────────────────────────
 
   private val tempDirResource: Resource[IO, File] =
-    Resource.make(IO(Files.createTempDirectory("vcs-ops-spec").toFile))(dir =>
-      IO(TestSupport.deleteRecursively(dir))
+    Resource.make(IO.blocking(Files.createTempDirectory("vcs-ops-spec").toFile))(dir =>
+      IO.blocking(TestSupport.deleteRecursively(dir))
     )
 
   private val gitRepoResource: Resource[IO, File] =

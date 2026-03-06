@@ -85,7 +85,7 @@ private[release] object VcsSteps {
                       ).as("a")
                     case None if !ctx.interactive =>
                       IO.raiseError(
-                        new RuntimeException(
+                        new IllegalStateException(
                           s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
                         )
                       )
@@ -98,7 +98,9 @@ private[release] object VcsSteps {
                   effectiveAnswer.flatMap {
                     case "a" | "A" | "" =>
                       IO.raiseError(
-                        new RuntimeException(s"Tag [$tagName] already exists. Aborting release!")
+                        new IllegalStateException(
+                          s"Tag [$tagName] already exists. Aborting release!"
+                        )
                       )
                     case "k" | "K"      =>
                       IO.blocking(
@@ -151,7 +153,7 @@ private[release] object VcsSteps {
             if (hasUp) IO.unit
             else
               IO.raiseError(
-                new RuntimeException(
+                new IllegalStateException(
                   s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
                     "Set up a remote tracking branch or remove pushChanges from the release process."
                 )

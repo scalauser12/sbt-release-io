@@ -213,8 +213,8 @@ class MonorepoStepIOSpec extends Specification with CatsEffect {
 
   private val contextResource: Resource[IO, MonorepoContext] =
     Resource
-      .make(IO(Files.createTempDirectory("monorepo-step-spec").toFile))(dir =>
-        IO(TestSupport.deleteRecursively(dir))
+      .make(IO.blocking(Files.createTempDirectory("monorepo-step-spec").toFile))(dir =>
+        IO.blocking(TestSupport.deleteRecursively(dir))
       )
       .map(dir => MonorepoContext(state = TestSupport.dummyState(dir)))
 }

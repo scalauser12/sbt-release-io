@@ -10,7 +10,7 @@ import scala.sys.process.*
 private[release] object StepHelpers {
 
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
-    opt.fold(IO.raiseError[B](new RuntimeException(error)))(f)
+    opt.fold(IO.raiseError[B](new IllegalStateException(error)))(f)
 
   def requireVcs(ctx: ReleaseContext)(f: Vcs => IO[ReleaseContext]): IO[ReleaseContext] =
     required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.")(f)
@@ -24,7 +24,7 @@ private[release] object StepHelpers {
   def runProcess(process: ProcessBuilder, context: => String): IO[Unit] =
     IO.blocking(process.!).flatMap { code =>
       if (code != 0)
-        IO.raiseError(new RuntimeException(s"$context failed with exit code $code"))
+        IO.raiseError(new IllegalStateException(s"$context failed with exit code $code"))
       else
         IO.unit
     }

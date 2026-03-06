@@ -59,7 +59,7 @@ private[release] object ReleaseComposer {
       finalCtx <- ComposerSupport.runActionPhase(wrappedActions)(startCtx)
       result   <-
         if (finalCtx.failed)
-          IO.raiseError(new RuntimeException("Release process failed"))
+          IO.raiseError(new IllegalStateException("Release process failed"))
         else
           IO.pure(finalCtx)
     } yield result
@@ -82,11 +82,9 @@ private[release] object ReleaseComposer {
           _          <- IO.blocking(
                           currentCtx.state.log.info(s"$LogPrefix Cross-building with Scala $version")
                         )
-          newCtx     <- IO.blocking {
-                          val newState =
-                            CrossBuildSupport.switchScalaVersion(currentCtx.state, version)
-                          currentCtx.withState(newState)
-                        }
+          newCtx     <- CrossBuildSupport
+                          .switchScalaVersion(currentCtx.state, version)
+                          .map(currentCtx.withState)
           result     <- action(newCtx)
         } yield result
       }
@@ -95,11 +93,9 @@ private[release] object ReleaseComposer {
         finalCtx <- finalIO
         result   <- currentVersion match {
                       case Some(ver) =>
-                        IO.blocking {
-                          val restoredState =
-                            CrossBuildSupport.switchScalaVersion(finalCtx.state, ver)
-                          finalCtx.withState(restoredState)
-                        }
+                        CrossBuildSupport
+                          .switchScalaVersion(finalCtx.state, ver)
+                          .map(finalCtx.withState)
                       case None      => IO.pure(finalCtx)
                     }
       } yield result

@@ -96,8 +96,8 @@ private[monorepo] object MonorepoStepHelpers {
     if (distinct.length > 1) {
       val detail = versions.map { case (n, v) => s"  $n -> $v" }.mkString("\n")
       IO.raiseError(
-        new RuntimeException(
-          s"[release-io-monorepo] $context:\n$detail"
+        new IllegalStateException(
+          s"$context:\n$detail"
         )
       )
     } else IO.unit
@@ -117,7 +117,7 @@ private[monorepo] object MonorepoStepHelpers {
             resolveVersionFile(ctx, project).flatMap { versionFile =>
               IO.blocking(versionFile.getCanonicalFile).flatMap { canonicalFile =>
                 IO.fromOption(sbt.IO.relativize(base, canonicalFile))(
-                  new RuntimeException(
+                  new IllegalStateException(
                     s"Version file [${canonicalFile.getPath}] is outside VCS root [$base]"
                   )
                 ).map(rel => paths :+ (project, rel))
@@ -167,7 +167,8 @@ private[monorepo] object MonorepoStepHelpers {
                           )
                       }
       result       <- statusResult match {
-                        case Left(errMsg)  => IO.raiseError[MonorepoContext](new RuntimeException(errMsg))
+                        case Left(errMsg)  =>
+                          IO.raiseError[MonorepoContext](new IllegalStateException(errMsg))
                         case Right(status) =>
                           if (status.nonEmpty)
                             runProcess(vcs.commit(msg, sign, signOff), "vcs commit") *>

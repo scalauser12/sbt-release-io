@@ -18,8 +18,8 @@ class DependencyGraphSpec extends Specification with CatsEffect {
 
     "return empty sequence for empty project list" in {
       Resource
-        .make(IO(Files.createTempDirectory("dep-graph-spec").toFile))(dir =>
-          IO(TestSupport.deleteRecursively(dir))
+        .make(IO.blocking(Files.createTempDirectory("dep-graph-spec").toFile))(dir =>
+          IO.blocking(TestSupport.deleteRecursively(dir))
         )
         .use { dir =>
           val state = TestSupport.dummyState(dir)

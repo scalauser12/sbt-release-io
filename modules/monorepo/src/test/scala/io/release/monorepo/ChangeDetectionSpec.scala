@@ -151,13 +151,13 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
     )
 
   private val tempDirResource: Resource[IO, File] =
-    Resource.make(IO(Files.createTempDirectory("change-detection-spec").toFile))(dir =>
-      IO(TestSupport.deleteRecursively(dir))
+    Resource.make(IO.blocking(Files.createTempDirectory("change-detection-spec").toFile))(dir =>
+      IO.blocking(TestSupport.deleteRecursively(dir))
     )
 
   private val outsideDirResource: Resource[IO, File] =
-    Resource.make(IO(Files.createTempDirectory("change-detection-outside").toFile))(dir =>
-      IO(TestSupport.deleteRecursively(dir))
+    Resource.make(IO.blocking(Files.createTempDirectory("change-detection-outside").toFile))(dir =>
+      IO.blocking(TestSupport.deleteRecursively(dir))
     )
 
   private def initGitRepo(repo: File): Unit = {
