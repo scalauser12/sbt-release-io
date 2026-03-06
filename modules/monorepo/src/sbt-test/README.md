@@ -139,6 +139,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### missing-publishto
 - Missing `publishTo` configuration causes check phase abort
 
+### nested-parent-exclusion
+- Changes only in a nested child directory (e.g. `services/api/`) do NOT falsely mark the parent (`services`) as changed
+- Tests the generalized child-directory exclusion for non-root parent projects in a 3-level hierarchy
+
 ### next-version-mismatch
 - Next version mismatch between projects
 
@@ -165,6 +169,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Root project (baseDir == repo root) uses sbt project ID for tags
 - Change detection works for root project separate from subprojects
 
+### root-project-sibling-exclusion
+- Changes only in a child project directory do NOT falsely mark the root project as changed
+- Root project (diff scope `.`) excludes sibling project directories from its diff results
+
 ### simple-monorepo
 - Basic per-project release with two projects (core, api)
 - Verifies version files updated, git commits created, and per-project tags generated
@@ -186,6 +194,11 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### tag-exists-error
 - Pre-existing per-project tag causes per-project failure with isolation
 - Other projects succeed but next-version step skipped globally
+
+### transitive-aggregates
+- 3-level aggregate hierarchy: root -> services -> api
+- Default `releaseIOMonorepoProjects` transitively discovers nested aggregates
+- Verifies both `services` and `api` are released without manual override
 
 ### topological-order
 - Projects listed in reverse order (api, middle, core)

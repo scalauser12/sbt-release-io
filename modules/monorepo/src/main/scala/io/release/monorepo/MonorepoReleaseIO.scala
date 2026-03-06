@@ -186,7 +186,20 @@ trait MonorepoReleaseIO {
         base / versionFileName
       }
     },
-    releaseIOMonorepoProjects              := thisProject.value.aggregate
+    releaseIOMonorepoProjects              := {
+      val build      = loadedBuild.value
+      val root       = thisProjectRef.value
+      val projectMap = build.allProjectRefs.map { case (ref, proj) => ref -> proj.aggregate }.toMap
+
+      def transitive(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
+        if (visited.contains(ref)) Seq.empty
+        else {
+          val directAggs = projectMap.getOrElse(ref, Seq.empty)
+          directAggs.flatMap(agg => agg +: transitive(agg, visited + ref))
+        }
+
+      transitive(root, Set.empty).distinct
+    }
   )
 }
 

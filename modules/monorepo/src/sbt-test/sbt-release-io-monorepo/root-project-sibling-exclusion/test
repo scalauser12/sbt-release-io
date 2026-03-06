@@ -1,0 +1,23 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate previous releases with per-project tags
+$ exec git tag root/v0.1.0
+$ exec git tag sub/v0.1.0
+
+# Modify ONLY the sub directory (add a file and commit)
+$ exec touch sub/src/Foo.scala
+$ exec git add sub/src/Foo.scala
+$ exec git commit -m "Add source file to sub"
+
+# Release with NO explicit project selection — relies on change detection.
+# Sub should be detected as changed. Root should NOT be detected
+# (the change is under sub/, which must be excluded from root's diff scope).
+> releaseIOMonorepo with-defaults release-version sub=0.2.0 next-version sub=0.3.0-SNAPSHOT
+
+# Verify only sub was released and root is unchanged
+> checkAll

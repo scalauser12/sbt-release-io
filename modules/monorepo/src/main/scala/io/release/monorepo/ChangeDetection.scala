@@ -99,6 +99,12 @@ private[monorepo] object ChangeDetection {
         gitRelativize(vcs.baseDir, f)
       }.toSet
 
+      // Pre-compute relative paths for all projects so parent projects
+      // can exclude nested child project directories from their diff results.
+      val projectRelPaths: Seq[(String, String)] = projects.flatMap { p =>
+        gitRelativize(vcs.baseDir, p.baseDir).map(p.name -> _)
+      }
+
       projects.filter { project =>
         val tagPattern         = tagStrategy match {
           case MonorepoTagStrategy.PerProject => tagNameFn(project.name, "*")
@@ -107,7 +113,23 @@ private[monorepo] object ChangeDetection {
         val versionFileExclude =
           gitRelativize(vcs.baseDir, project.versionFile).toSet
         val excludes           = globalExcludes ++ versionFileExclude
-        hasChangedSinceLastTag(vcs, project, tagPattern, state, excludes)
+
+        // Exclude files under child project directories to avoid false
+        // positives when a parent's diff scope encompasses nested projects.
+        // For root projects (scope "."), any non-root sibling is a child.
+        // For non-root projects, only paths strictly nested under them qualify.
+        val childDirPrefixes = resolveDiffScope(vcs, project) match {
+          case Right(scope) =>
+            projectRelPaths.collect {
+              case (name, path)
+                  if name != project.name && path != "." && path.nonEmpty &&
+                    (scope == "." || path.startsWith(scope + "/")) =>
+                path
+            }.toSet
+          case _            => Set.empty[String]
+        }
+
+        hasChangedSinceLastTag(vcs, project, tagPattern, state, excludes, childDirPrefixes)
       }
     }
 
@@ -120,7 +142,8 @@ private[monorepo] object ChangeDetection {
       project: ProjectReleaseInfo,
       tagPattern: String,
       state: State,
-      excludePaths: Set[String]
+      excludePaths: Set[String],
+      childDirPrefixes: Set[String] = Set.empty
   ): Boolean = {
     import TagLookupResult.*
 
@@ -162,7 +185,11 @@ private[monorepo] object ChangeDetection {
                 )
                 true
               case Success(changedFiles) =>
-                val significantFiles = changedFiles.filterNot(excludePaths.contains)
+                val significantFiles = changedFiles
+                  .filterNot(excludePaths.contains)
+                  .filterNot(f =>
+                    childDirPrefixes.exists(prefix => f.startsWith(prefix + "/") || f == prefix)
+                  )
                 val excludedCount    = changedFiles.length - significantFiles.length
                 if (significantFiles.nonEmpty) {
                   val note =

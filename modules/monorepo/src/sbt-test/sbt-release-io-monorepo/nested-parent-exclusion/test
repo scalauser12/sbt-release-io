@@ -1,0 +1,23 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate previous releases
+$ exec git tag services/v0.1.0
+$ exec git tag api/v0.1.0
+
+# Modify ONLY the nested api directory
+$ exec touch services/api/Endpoint.scala
+$ exec git add services/api/Endpoint.scala
+$ exec git commit -m "Add endpoint to api"
+
+# Release with change detection — only api should be detected.
+# services must NOT be falsely marked as changed even though
+# services/api/ is nested under services/.
+> releaseIOMonorepo with-defaults release-version api=0.2.0 next-version api=0.3.0-SNAPSHOT
+
+# Verify only api was released and services is unchanged
+> checkAll
