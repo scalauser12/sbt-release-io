@@ -1,3 +1,9 @@
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
 > releaseIO with-defaults
 
 $ exists target/mytask

@@ -1,0 +1,1 @@
+// libA subproject — publishTo configured
