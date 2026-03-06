@@ -41,9 +41,21 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Tests `ReleasePluginIOLike` resource lifecycle (acquire → use → release)
 - Verifies marker files prove the resource was acquired, used by a step, and released
 
+### defaults-with-after
+- Tests `defaultsWithAfter` inserts a custom step at the correct position
+- Custom plugin inserts step after `check-clean-working-dir`
+
+### defaults-with-before
+- Tests `defaultsWithBefore` inserts a custom step at the correct position
+- Custom plugin inserts step before `tag-release`
+
 ### empty-commit
 - Version file already at release version
 - Verifies no-op commit is handled gracefully
+
+### empty-commit-noop
+- Verifies release flow when version file transitions SNAPSHOT → release → next SNAPSHOT
+- Documents commit step behavior when status is empty (no-op)
 
 ### exit-code
 - Verifies exit codes from `releaseIO` (0 for success, 1 for failure)
@@ -53,6 +65,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies upstream-style helper commands are registered
 - Covers `release-vcs-checks`, version inquire/set/commit, and tagging commands
 - Ensures command chaining works via state attributes between commands
+
+### extra-commands-individual
+- Runs each standalone release command in isolation
+- Verifies state flows correctly between commands (inquire → set → commit → tag → etc.)
 
 ### fail-test
 - Verifies that failing tests abort the release before later steps execute
@@ -86,6 +102,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies that failing tests in aggregated sub-projects abort the release
 - Multi-project setup with one passing and one failing test
 
+### resource-step-with-check
+- Tests `resourceStepWithCheck` in a custom plugin
+- Verifies both check and action phases run for resource-aware steps
+
 ### simple
 - Tests the basic release workflow end-to-end
 - Verifies version changes, git commits, and tags are created
@@ -97,6 +117,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ### skip-tests
 - Verifies that the `skip-tests` flag allows release despite failing tests
 - Tests both the negative case (failure) and positive case (success with flag)
+
+### step-command-and-remaining
+- Tests `stepCommandAndRemaining` factory in `releaseIOProcess`
+- Verifies command execution and drain logic
 
 ### snapshot-deps
 - Project with a SNAPSHOT dependency

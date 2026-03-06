@@ -7,7 +7,7 @@ import sbtrelease.Vcs
 import scala.util.{Failure, Success, Try}
 
 /** Git diff-based change detection for monorepo subprojects. */
-object ChangeDetection {
+private[monorepo] object ChangeDetection {
 
   private sealed trait TagLookupResult
   private object TagLookupResult {

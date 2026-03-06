@@ -54,6 +54,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Tests `MonorepoReleasePluginLike` resource lifecycle (acquire -> use -> release)
 - Verifies marker files prove the resource was acquired, used by a step, and released
 
+### custom-projects-setting
+- Overrides `releaseIOMonorepoProjects` to a subset of aggregated projects
+- Three projects (core, api, extra); only core and api released; extra unchanged
+
 ### custom-tag-name
 - Custom per-project tag name formatter
 - Creates tags with format `release/<project>/<version>`
@@ -114,6 +118,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### global-version-partial-selection
 - Partial project selection in global mode (only core specified)
 - Fails because all projects must be included
+
+### interactive-monorepo
+- `releaseIOMonorepoInteractive := true` with `with-defaults`
+- Verifies interactive mode completes without blocking prompts
 
 ### invalid-override
 - Typo in project name (e.g., `croe` instead of `core`) causes parse error

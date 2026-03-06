@@ -10,7 +10,7 @@ import sbt.internal.{BuildStreams, BuildStructure, BuildUtil}
   * by newer sbt versions. All other `sbtrelease.Load` helpers are used directly elsewhere.
   * See: https://github.com/sbt/sbt/issues/3296#issuecomment-315218050
   */
-object LoadCompat {
+private[release] object LoadCompat {
 
   /** Reevaluates settings after modifying them. Does not recompile or reload any build components. */
   def reapply(newSettings: Seq[Setting[?]], structure: BuildStructure)(implicit

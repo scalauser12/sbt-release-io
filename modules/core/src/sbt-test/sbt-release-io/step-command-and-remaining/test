@@ -1,0 +1,12 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src
+$ exec git commit -m "Initial commit"
+
+# Run release - process has only stepCommandAndRemaining("compile")
+> releaseIO with-defaults
+
+# Verify compile ran (classes exist)
+$ exists target/scala-2.12/classes/Example$.class

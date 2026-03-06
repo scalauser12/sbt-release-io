@@ -4,7 +4,7 @@ import cats.effect.IO
 import sbt.*
 
 /** Topological sort of sbt's inter-project dependency graph. */
-object DependencyGraph {
+private[monorepo] object DependencyGraph {
 
   /** Return projects in topological order (dependencies first).
     * Only considers dependencies within the given project set.

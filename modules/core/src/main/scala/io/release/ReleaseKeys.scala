@@ -8,7 +8,7 @@ import sbt.AttributeKey
   * any upstream sbt-release steps sharing the same State can read the same values.
   * Populated by [[ReleasePluginIOLike.doReleaseIO]] before the release process starts.
   */
-object ReleaseKeys {
+private[release] object ReleaseKeys {
   import sbtrelease.ReleasePlugin.autoImport.ReleaseKeys as UpstreamKeys
 
   val useDefaults: AttributeKey[Boolean]                      = UpstreamKeys.useDefaults

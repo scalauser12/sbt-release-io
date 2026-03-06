@@ -1,0 +1,17 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt project/ResourceStepWithCheckPlugin.scala
+$ exec git commit -m "Initial commit"
+
+# Run release - custom plugin uses resourceStepWithCheck
+> releaseResourceCheck with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify both check and action phases ran
+$ exists check-ran
+$ exists action-ran
+
+# Verify release completed
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt
+> checkGitTag
