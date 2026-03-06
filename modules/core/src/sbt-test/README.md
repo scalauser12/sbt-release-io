@@ -33,7 +33,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Uses `runtimeVersion` to create dynamic tag names
 
 ### custom-version-format
-- Tests `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOWriteVersion` settings
+- Tests `releaseVersionFile` (from sbt-release), `releaseIOReadVersion`, and `releaseIOWriteVersion` settings
 - Uses a `.properties` file format instead of default `version.sbt`
 - Verifies custom format preserved in both working directory and git tag commits
 

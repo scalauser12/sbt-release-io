@@ -73,7 +73,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Verifies custom format preserved in working directory, git tags, and that `app.name=` lines are not clobbered
 
 ### detect-changes-disabled
-- `detectChanges=false` setting releases all projects regardless of changes
+- `releaseIOMonorepoDetectChanges := false` releases all projects regardless of changes
 
 ### detect-changes-excludes
 - `releaseIOMonorepoDetectChangesExcludes` filters additional files from change detection
@@ -251,7 +251,7 @@ $ exec git add .
 $ exec git commit -m "Initial"
 
 # Run monorepo release
-> releaseIOMonorepo with-defaults release-version core=1.0.0,api=1.0.0
+> releaseIOMonorepo with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
 
 # Verify per-project tags
 $ exec git tag | grep -q "core/v1.0.0"

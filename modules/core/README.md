@@ -429,7 +429,7 @@ sbt scripted
 
 Run specific test:
 ```bash
-sbt "scripted sbt-release-io/simple"
+sbt "core/scripted sbt-release-io/simple"
 ```
 
 See `src/sbt-test/README.md` for test documentation.
