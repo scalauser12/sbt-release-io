@@ -105,14 +105,24 @@ private[monorepo] object ChangeDetection {
         gitRelativize(vcs.baseDir, p.baseDir).map(p.name -> _)
       }
 
+      // Pre-compute the tag lookup for unified mode to avoid redundant git calls.
+      val unifiedLookup: Option[(String, TagLookupResult)] = tagStrategy match {
+        case MonorepoTagStrategy.Unified =>
+          val pattern = unifiedTagNameFn("*")
+          Some((pattern, lookupLastTag(vcs, pattern)))
+        case _                           => None
+      }
+
       projects.filter { project =>
-        val tagPattern         = tagStrategy match {
-          case MonorepoTagStrategy.PerProject => tagNameFn(project.name, "*")
-          case MonorepoTagStrategy.Unified    => unifiedTagNameFn("*")
+        val (tagPattern, tagLookup) = unifiedLookup match {
+          case Some(precomputed) => precomputed
+          case None              =>
+            val p = tagNameFn(project.name, "*")
+            (p, lookupLastTag(vcs, p))
         }
-        val versionFileExclude =
+        val versionFileExclude      =
           gitRelativize(vcs.baseDir, project.versionFile).toSet
-        val excludes           = globalExcludes ++ versionFileExclude
+        val excludes                = globalExcludes ++ versionFileExclude
 
         // Exclude files under child project directories to avoid false
         // positives when a parent's diff scope encompasses nested projects.
@@ -129,7 +139,15 @@ private[monorepo] object ChangeDetection {
           case _            => Set.empty[String]
         }
 
-        hasChangedSinceLastTag(vcs, project, tagPattern, state, excludes, childDirPrefixes)
+        hasChangedSinceLastTag(
+          vcs,
+          project,
+          tagPattern,
+          tagLookup,
+          state,
+          excludes,
+          childDirPrefixes
+        )
       }
     }
 
@@ -141,6 +159,7 @@ private[monorepo] object ChangeDetection {
       vcs: Vcs,
       project: ProjectReleaseInfo,
       tagPattern: String,
+      tagLookup: TagLookupResult,
       state: State,
       excludePaths: Set[String],
       childDirPrefixes: Set[String] = Set.empty
@@ -149,7 +168,7 @@ private[monorepo] object ChangeDetection {
 
     import scala.sys.process.*
 
-    lookupLastTag(vcs, tagPattern) match {
+    tagLookup match {
       case NoMatchingTag =>
         state.log.info(
           s"[release-io-monorepo] No previous tag matching '$tagPattern' for ${project.name}, marking as changed"
