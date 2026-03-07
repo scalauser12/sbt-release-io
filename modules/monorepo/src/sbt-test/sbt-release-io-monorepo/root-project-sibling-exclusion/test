@@ -10,6 +10,7 @@ $ exec git tag root/v0.1.0
 $ exec git tag sub/v0.1.0
 
 # Modify ONLY the sub directory (add a file and commit)
+$ exec mkdir -p sub/src
 $ exec touch sub/src/Foo.scala
 $ exec git add sub/src/Foo.scala
 $ exec git commit -m "Add source file to sub"
