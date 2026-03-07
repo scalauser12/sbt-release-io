@@ -55,7 +55,7 @@ private[release] object ComposerSupport {
           IO.blocking(
             ctx.state.log
               .error(s"$logPrefix Error: ${Option(err.getMessage).getOrElse(err.toString)}")
-          ) *> IO.pure(ctx.fail)
+          ) *> IO.pure(ctx.failWith(err))
         case fatal         => IO.raiseError(fatal)
       }
 
