@@ -67,7 +67,8 @@ case class MonorepoContext(
     interactive: Boolean = false,
     tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject,
     attributes: Map[String, String] = Map.empty,
-    failed: Boolean = false
+    failed: Boolean = false,
+    failureCause: Option[Throwable] = None
 ) extends ReleaseCtx[MonorepoContext] {
 
   def currentProjects: Seq[ProjectReleaseInfo] =
@@ -87,5 +88,6 @@ case class MonorepoContext(
   def withAttr(key: String, value: String): MonorepoContext =
     copy(attributes = attributes + (key -> value))
 
-  def fail: MonorepoContext = copy(failed = true)
+  def fail: MonorepoContext                       = copy(failed = true)
+  def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))
 }

@@ -47,7 +47,7 @@ private[release] object StepHelpers {
   ): IO[Unit] = {
     val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
     if (!ctx.interactive)
-      IO.raiseError(new RuntimeException(abortMessage))
+      IO.raiseError(new IllegalStateException(abortMessage))
     else {
       val decisionIO =
         if (useDefaults) IO.pure(defaultYes)
@@ -55,7 +55,7 @@ private[release] object StepHelpers {
 
       decisionIO.flatMap { continue =>
         if (continue) IO.unit
-        else IO.raiseError(new RuntimeException(abortMessage))
+        else IO.raiseError(new IllegalStateException(abortMessage))
       }
     }
   }

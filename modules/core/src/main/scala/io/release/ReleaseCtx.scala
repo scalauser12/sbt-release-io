@@ -15,7 +15,9 @@ private[release] trait ReleaseCtx[Self] {
   def state: State
   def vcs: Option[Vcs]
   def failed: Boolean
+  def failureCause: Option[Throwable]
   def withState(s: State): Self
   def withVcs(v: Vcs): Self
   def fail: Self
+  def failWith(cause: Throwable): Self
 }

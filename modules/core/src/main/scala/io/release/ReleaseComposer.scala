@@ -59,7 +59,9 @@ private[release] object ReleaseComposer {
       finalCtx <- ComposerSupport.runActionPhase(wrappedActions)(startCtx)
       result   <-
         if (finalCtx.failed)
-          IO.raiseError(new IllegalStateException("Release process failed"))
+          IO.raiseError(
+            new IllegalStateException("Release process failed", finalCtx.failureCause.orNull)
+          )
         else
           IO.pure(finalCtx)
     } yield result

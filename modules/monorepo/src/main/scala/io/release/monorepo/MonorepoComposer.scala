@@ -66,7 +66,12 @@ private[monorepo] object MonorepoComposer {
       finalCtx <- ComposerSupport.runActionPhase(wrappedActions)(startCtx)
       result   <-
         if (finalCtx.failed)
-          IO.raiseError(new IllegalStateException("Monorepo release process failed"))
+          IO.raiseError(
+            new IllegalStateException(
+              "Monorepo release process failed",
+              finalCtx.failureCause.orNull
+            )
+          )
         else
           IO.pure(finalCtx)
     } yield result
@@ -218,7 +223,7 @@ private[monorepo] object MonorepoComposer {
           ctx.state.log.error(
             s"$LogPrefix Error in $stepName: ${Option(err.getMessage).getOrElse(err.toString)}"
           )
-        ) *> IO.pure(ctx.fail)
+        ) *> IO.pure(ctx.failWith(err))
       case fatal       => IO.raiseError(fatal)
     }
 }

@@ -26,7 +26,8 @@ case class ReleaseContext(
     skipPublish: Boolean = false,
     interactive: Boolean = false,
     attributes: Map[String, String] = Map.empty,
-    failed: Boolean = false
+    failed: Boolean = false,
+    failureCause: Option[Throwable] = None
 ) extends ReleaseCtx[ReleaseContext] {
 
   def withState(s: State): ReleaseContext = copy(state = s)
@@ -45,5 +46,6 @@ case class ReleaseContext(
   def releaseVersion: Option[String] = versions.map(_._1)
   def nextVersion: Option[String]    = versions.map(_._2)
 
-  def fail: ReleaseContext = copy(failed = true)
+  def fail: ReleaseContext                       = copy(failed = true)
+  def failWith(cause: Throwable): ReleaseContext = copy(failed = true, failureCause = Some(cause))
 }

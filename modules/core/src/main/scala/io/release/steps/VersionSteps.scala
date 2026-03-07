@@ -215,13 +215,18 @@ private[release] object VersionSteps {
                         )
                     }
           result <- if (status.nonEmpty) {
-                      val (commitState, msg) = extracted.runTask(commitMessageKey, ctx.state)
                       for {
-                        _ <- runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
-                        r <- IO.blocking((ctx.copy(state = commitState), vcs.currentHash))
+                        commitData        <- IO.blocking(
+                                               extracted.runTask(commitMessageKey, ctx.state)
+                                             )
+                        (commitState, msg) = commitData
+                        _                 <- runProcess(vcs.commit(msg, sign, signOff), "vcs commit")
+                        r                 <- IO.blocking(
+                                               (ctx.copy(state = commitState), vcs.currentHash)
+                                             )
                       } yield r
                     } else {
-                      IO.pure((ctx, vcs.currentHash))
+                      IO.blocking((ctx, vcs.currentHash))
                     }
         } yield result
       }
