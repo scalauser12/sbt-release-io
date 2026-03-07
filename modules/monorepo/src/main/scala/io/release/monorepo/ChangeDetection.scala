@@ -4,6 +4,7 @@ import cats.effect.IO
 import sbt.*
 import sbtrelease.Vcs
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /** Git diff-based change detection for monorepo subprojects. */
@@ -92,7 +93,8 @@ private[monorepo] object ChangeDetection {
       tagNameFn: (String, String) => String,
       unifiedTagNameFn: String => String,
       state: State,
-      additionalExcludeFiles: Seq[File] = Seq.empty
+      additionalExcludeFiles: Seq[File] = Seq.empty,
+      sharedPaths: Seq[String] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     IO.blocking {
       val globalExcludes: Set[String] = additionalExcludeFiles.flatMap { f =>
@@ -113,6 +115,10 @@ private[monorepo] object ChangeDetection {
         case _                           => None
       }
 
+      // Cache shared path results per tag to avoid redundant git diff calls
+      // when multiple projects share the same tag.
+      val sharedPathCache = mutable.Map.empty[String, Boolean]
+
       projects.filter { project =>
         val (tagPattern, tagLookup) = unifiedLookup match {
           case Some(precomputed) => precomputed
@@ -123,6 +129,16 @@ private[monorepo] object ChangeDetection {
         val versionFileExclude      =
           gitRelativize(vcs.baseDir, project.versionFile).toSet
         val excludes                = globalExcludes ++ versionFileExclude
+
+        // Check shared paths against this project's own tag.
+        val sharedChanged = tagLookup match {
+          case TagLookupResult.TagFound(tag) if sharedPaths.nonEmpty =>
+            sharedPathCache.getOrElseUpdate(
+              tag,
+              checkSharedPaths(vcs, tag, state, sharedPaths)
+            )
+          case _                                                     => false
+        }
 
         // Exclude files under child project directories to avoid false
         // positives when a parent's diff scope encompasses nested projects.
@@ -139,7 +155,7 @@ private[monorepo] object ChangeDetection {
           case _            => Set.empty[String]
         }
 
-        hasChangedSinceLastTag(
+        sharedChanged || hasChangedSinceLastTag(
           vcs,
           project,
           tagPattern,
@@ -150,6 +166,39 @@ private[monorepo] object ChangeDetection {
         )
       }
     }
+
+  /** Check whether any shared (root-level) paths have changed since the given tag.
+    * Results are cached per tag by the caller to avoid redundant git calls.
+    */
+  private def checkSharedPaths(
+      vcs: Vcs,
+      tag: String,
+      state: State,
+      sharedPaths: Seq[String]
+  ): Boolean = {
+    import scala.sys.process.*
+
+    Try(
+      Process(
+        Seq("git", "diff", "--name-only", s"$tag..HEAD", "--") ++ sharedPaths,
+        vcs.baseDir
+      ).!!.linesIterator.filter(_.nonEmpty).toList
+    ) match {
+      case Success(files) if files.nonEmpty =>
+        state.log.info(
+          s"[release-io-monorepo] Shared path change(s) detected since $tag: " +
+            s"${files.mkString(", ")}. Marking affected projects as changed"
+        )
+        true
+      case Success(_)                       => false
+      case Failure(err)                     =>
+        state.log.warn(
+          s"[release-io-monorepo] Failed to check shared paths: ${errorMessage(err)}. " +
+            "Conservatively treating as changed"
+        )
+        true
+    }
+  }
 
   /** Check whether a project has changed since its last matching tag.
     * '''Performs blocking I/O''' (git subprocess calls) — must only be called

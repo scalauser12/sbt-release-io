@@ -73,6 +73,15 @@ trait MonorepoReleaseIO {
   val releaseIOMonorepoDetectChangesExcludes: SettingKey[Seq[File]] =
     _releaseIOMonorepoDetectChangesExcludes
 
+  /** Root-level paths (relative to the repo root) checked for changes during detection.
+    * Each project's own tag is used as the baseline: if any shared path changed since that
+    * project's last release tag, the project is marked as changed.
+    * Default: `Seq("build.sbt", "project/")`.
+    * Set to `Seq.empty` to disable shared path detection.
+    */
+  val releaseIOMonorepoSharedPaths: SettingKey[Seq[String]] =
+    _releaseIOMonorepoSharedPaths
+
   // ── Behavioral settings ───────────────────────────────────────────────
 
   /** Cross-build enabled. Default: false. */
@@ -152,6 +161,7 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoDetectChanges         := true,
     releaseIOMonorepoChangeDetector        := None,
     releaseIOMonorepoDetectChangesExcludes := Seq.empty,
+    releaseIOMonorepoSharedPaths           := Seq("build.sbt", "project/"),
     releaseIOMonorepoUseGlobalVersion      := false,
     releaseIOMonorepoTagStrategy           := MonorepoTagStrategy.PerProject,
     releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name/v$ver"),
@@ -278,6 +288,12 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Seq[File]](
       "releaseIOMonorepoDetectChangesExcludes",
       "Additional files to exclude from change detection"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoSharedPaths: SettingKey[Seq[String]] =
+    SettingKey[Seq[String]](
+      "releaseIOMonorepoSharedPaths",
+      "Root-level paths checked for shared changes against each project's tag"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoCrossBuild: SettingKey[Boolean] =

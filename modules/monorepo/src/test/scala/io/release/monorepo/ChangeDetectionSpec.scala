@@ -95,6 +95,227 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
       }
     }
 
+    "mark all projects as changed when a shared path has changes" in {
+      tempDirResource.use { repo =>
+        IO.blocking {
+          sbt.IO.createDirectory(new File(repo, "core"))
+          sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
+
+          initGitRepo(repo)
+          runGit(repo, "add", ".")
+          runGit(repo, "commit", "-m", "Initial commit")
+          runGit(repo, "tag", "core-v0.1.0")
+
+          // Modify only the root build.sbt after tagging
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
+          runGit(repo, "add", "build.sbt")
+          runGit(repo, "commit", "-m", "Update root build.sbt")
+
+          val vcs = Vcs
+            .detect(repo)
+            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+        }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+          val project = ProjectReleaseInfo(
+            ref = ProjectRef(repo.toURI, "core"),
+            name = "core",
+            baseDir = new File(repo, "core"),
+            versionFile = new File(repo, "core/version.sbt")
+          )
+
+          detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).map {
+            changed =>
+              env.state.log.flush()
+              val logs = env.consoleBuffer.toString("UTF-8")
+              (changed.map(_.name) must_== Seq("core")) and
+                (logs must contain("Shared path change(s) detected")) and
+                (logs must contain("build.sbt"))
+          }
+        }
+      }
+    }
+
+    "not mark projects as changed when shared paths have no changes" in {
+      tempDirResource.use { repo =>
+        IO.blocking {
+          sbt.IO.createDirectory(new File(repo, "core"))
+          sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
+
+          initGitRepo(repo)
+          runGit(repo, "add", ".")
+          runGit(repo, "commit", "-m", "Initial commit")
+          runGit(repo, "tag", "core-v0.1.0")
+
+          val vcs = Vcs
+            .detect(repo)
+            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+        }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+          val project = ProjectReleaseInfo(
+            ref = ProjectRef(repo.toURI, "core"),
+            name = "core",
+            baseDir = new File(repo, "core"),
+            versionFile = new File(repo, "core/version.sbt")
+          )
+
+          detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).map {
+            changed =>
+              env.state.log.flush()
+              val logs = env.consoleBuffer.toString("UTF-8")
+              (changed must beEmpty) and
+                (logs must not(contain("Shared path change(s) detected")))
+          }
+        }
+      }
+    }
+
+    "detect shared path changes per-project with diverged tags" in {
+      tempDirResource.use { repo =>
+        IO.blocking {
+          sbt.IO.createDirectory(new File(repo, "core"))
+          sbt.IO.createDirectory(new File(repo, "api"))
+          sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(repo, "api/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
+
+          initGitRepo(repo)
+          runGit(repo, "add", ".")
+          runGit(repo, "commit", "-m", "Initial commit")
+
+          // Tag core first
+          runGit(repo, "tag", "core-v0.1.0")
+
+          // Modify build.sbt after core's tag
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
+          runGit(repo, "add", "build.sbt")
+          runGit(repo, "commit", "-m", "Update root build.sbt")
+
+          // Tag api after the build.sbt change
+          runGit(repo, "tag", "api-v0.1.0")
+
+          val vcs = Vcs
+            .detect(repo)
+            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+        }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+          val core = ProjectReleaseInfo(
+            ref = ProjectRef(repo.toURI, "core"),
+            name = "core",
+            baseDir = new File(repo, "core"),
+            versionFile = new File(repo, "core/version.sbt")
+          )
+          val api  = ProjectReleaseInfo(
+            ref = ProjectRef(repo.toURI, "api"),
+            name = "api",
+            baseDir = new File(repo, "api"),
+            versionFile = new File(repo, "api/version.sbt")
+          )
+
+          // core was tagged before build.sbt changed → core should be changed
+          // api was tagged after build.sbt changed → api should be unchanged
+          detectChanged(vcs, Seq(core, api), env.state, sharedPaths = Seq("build.sbt")).map {
+            changed =>
+              env.state.log.flush()
+              changed.map(_.name) must_== Seq("core")
+          }
+        }
+      }
+    }
+
+    "ignore shared path changes when sharedPaths is empty" in {
+      tempDirResource.use { repo =>
+        IO.blocking {
+          sbt.IO.createDirectory(new File(repo, "core"))
+          sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
+
+          initGitRepo(repo)
+          runGit(repo, "add", ".")
+          runGit(repo, "commit", "-m", "Initial commit")
+          runGit(repo, "tag", "core-v0.1.0")
+
+          // Modify root build.sbt
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
+          runGit(repo, "add", "build.sbt")
+          runGit(repo, "commit", "-m", "Update root build.sbt")
+
+          val vcs = Vcs
+            .detect(repo)
+            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+        }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+          val project = ProjectReleaseInfo(
+            ref = ProjectRef(repo.toURI, "core"),
+            name = "core",
+            baseDir = new File(repo, "core"),
+            versionFile = new File(repo, "core/version.sbt")
+          )
+
+          // sharedPaths is empty, so build.sbt change should be invisible
+          detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq.empty).map { changed =>
+            env.state.log.flush()
+            (changed must beEmpty)
+          }
+        }
+      }
+    }
+
+    "detect shared path changes in unified tag mode" in {
+      tempDirResource.use { repo =>
+        IO.blocking {
+          sbt.IO.createDirectory(new File(repo, "core"))
+          sbt.IO.createDirectory(new File(repo, "api"))
+          sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(repo, "api/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
+
+          initGitRepo(repo)
+          runGit(repo, "add", ".")
+          runGit(repo, "commit", "-m", "Initial commit")
+          runGit(repo, "tag", "v0.1.0")
+
+          // Modify build.sbt after the unified tag
+          sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
+          runGit(repo, "add", "build.sbt")
+          runGit(repo, "commit", "-m", "Update root build.sbt")
+
+          val vcs = Vcs
+            .detect(repo)
+            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+        }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+          val core = ProjectReleaseInfo(
+            ref = ProjectRef(repo.toURI, "core"),
+            name = "core",
+            baseDir = new File(repo, "core"),
+            versionFile = new File(repo, "core/version.sbt")
+          )
+          val api  = ProjectReleaseInfo(
+            ref = ProjectRef(repo.toURI, "api"),
+            name = "api",
+            baseDir = new File(repo, "api"),
+            versionFile = new File(repo, "api/version.sbt")
+          )
+
+          // Unified tag → both projects share the same tag → both should be changed
+          detectChanged(
+            vcs,
+            Seq(core, api),
+            env.state,
+            sharedPaths = Seq("build.sbt"),
+            tagStrategy = MonorepoTagStrategy.Unified
+          ).map { changed =>
+            env.state.log.flush()
+            val logs = env.consoleBuffer.toString("UTF-8")
+            (changed.map(_.name) must_== Seq("core", "api")) and
+              (logs must contain("Shared path change(s) detected"))
+          }
+        }
+      }
+    }
+
     "treat root project as unchanged when no files changed since tag" in {
       tempDirResource.use { repo =>
         IO.blocking {
@@ -139,15 +360,18 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
   private def detectChanged(
       vcs: Vcs,
       projects: Seq[ProjectReleaseInfo],
-      state: State
+      state: State,
+      sharedPaths: Seq[String] = Seq.empty,
+      tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
   ): IO[Seq[ProjectReleaseInfo]] =
     ChangeDetection.detectChangedProjects(
       vcs,
       projects,
-      MonorepoTagStrategy.PerProject,
+      tagStrategy,
       perProjectTagName,
       unifiedTagName,
-      state
+      state,
+      sharedPaths = sharedPaths
     )
 
   private val tempDirResource: Resource[IO, File] =

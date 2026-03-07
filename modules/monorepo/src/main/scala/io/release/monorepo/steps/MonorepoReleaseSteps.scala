@@ -113,6 +113,7 @@ object MonorepoReleaseSteps {
       if (extracted.get(releaseIOMonorepoUseGlobalVersion))
         Seq(extracted.get(sbtrelease.ReleasePlugin.autoImport.releaseVersionFile))
       else Seq.empty
+    val sharedPaths           = extracted.get(releaseIOMonorepoSharedPaths)
     ChangeDetection.detectChangedProjects(
       vcs,
       ctx.projects,
@@ -120,7 +121,8 @@ object MonorepoReleaseSteps {
       tagNameFn,
       unifiedTagNameFn,
       ctx.state,
-      userExcludes ++ globalVersionExcludes
+      userExcludes ++ globalVersionExcludes,
+      sharedPaths
     )
   }
 

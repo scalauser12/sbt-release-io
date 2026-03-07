@@ -157,6 +157,17 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 | `releaseIOMonorepoDetectChanges` | `Boolean` | `true` | Enable git-based change detection |
 | `releaseIOMonorepoChangeDetector` | `Option[(ProjectRef, File, State) => IO[Boolean]]` | `None` | Custom change detector |
 | `releaseIOMonorepoDetectChangesExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
+| `releaseIOMonorepoSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level paths checked for shared changes per project |
+
+Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's own last release tag. If any shared file changed since that tag, the project is marked as changed. This ensures modifications to shared build definitions, compiler plugins, or dependency versions are never silently missed. In per-project tag mode, projects with different tags are evaluated independently — a project tagged after a shared change won't be marked changed, while one tagged before it will. Set to `Seq.empty` to disable.
+
+```scala
+// Add extra shared paths (e.g. a shared source directory and formatting config)
+releaseIOMonorepoSharedPaths := Seq("build.sbt", "project/", "shared/", ".scalafmt.conf")
+
+// Or disable shared path detection entirely
+releaseIOMonorepoSharedPaths := Seq.empty
+```
 
 ### Example configuration
 
