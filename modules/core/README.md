@@ -314,7 +314,7 @@ if you want to keep the setting-based defaults and only add extra steps.
 
 ### Using Typelevel Libraries in Release Steps
 
-Since release steps run in `IO`, you can use any library from the cats-effect ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
+Since release steps run in `IO`, you can use any library from the Typelevel / FP ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
 
 **Constraint:** sbt plugins run on Scala 2.12, so you must use library versions published for 2.12.
 
