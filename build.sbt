@@ -1,5 +1,4 @@
-ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
-ThisBuild / versionScheme          := Some("early-semver")
+ThisBuild / versionScheme := Some("early-semver")
 
 lazy val commonSettings = Seq(
   organization              := "io.github.scalauser12",
@@ -58,7 +57,6 @@ lazy val monorepo = (project in file("modules/monorepo"))
 lazy val root = (project in file("."))
   .aggregate(core, monorepo)
   .settings(
-    name                := "sbt-release-io-root",
-    publish / skip      := true,
-    sonatypeProfileName := "io.github.scalauser12"
+    name           := "sbt-release-io-root",
+    publish / skip := true
   )
