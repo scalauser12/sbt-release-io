@@ -189,15 +189,24 @@ trait ReleasePluginIOLike[T]
     * Hydrates the context from existing state attributes set by prior steps.
     */
   protected def runExtraReleaseSteps(state: State, steps: Seq[ReleaseStepIO]): State = {
-    val crossEnabled =
-      crossBuildEnabled(state) || state.get(ReleaseKeys.cross).getOrElse(false)
-    val skipTests    = state.get(ReleaseKeys.skipTests).getOrElse(false)
-    val skipPublish  = skipPublishEnabled(state)
-    val interactive  = interactiveEnabled(state)
-    val ctx          = initialContext(state, skipTests, skipPublish, interactive)
-    // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
-    val finalCtx     = ReleaseStepIO.compose(steps, crossEnabled)(ctx).unsafeRunSync()
-    finalCtx.state
+    import scala.util.control.NonFatal
+    try {
+      val crossEnabled =
+        crossBuildEnabled(state) || state.get(ReleaseKeys.cross).getOrElse(false)
+      val skipTests    = state.get(ReleaseKeys.skipTests).getOrElse(false)
+      val skipPublish  = skipPublishEnabled(state)
+      val interactive  = interactiveEnabled(state)
+      val ctx          = initialContext(state, skipTests, skipPublish, interactive)
+      // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
+      val finalCtx     = ReleaseStepIO.compose(steps, crossEnabled)(ctx).unsafeRunSync()
+      finalCtx.state
+    } catch {
+      case NonFatal(e) =>
+        state.log.error(
+          s"[release-io] Step failed: ${Option(e.getMessage).getOrElse(e.toString)}"
+        )
+        state.fail
+    }
   }
 
   /** Build the initial release context from the current state.
