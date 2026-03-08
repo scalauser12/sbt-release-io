@@ -1,6 +1,6 @@
 import scala.sys.process._
 
-name := "version-bump-test"
+name         := "version-bump-test"
 scalaVersion := "2.12.18"
 
 releaseIgnoreUntrackedFiles := true

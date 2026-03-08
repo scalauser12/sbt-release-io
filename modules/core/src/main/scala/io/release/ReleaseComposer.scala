@@ -34,7 +34,8 @@ private[release] object ReleaseComposer {
 
     val checkPhase: IO[Unit] = steps.foldLeft(IO.unit) { (acc, step) =>
       val wrappedCheck =
-        if (step.enableCrossBuild && crossBuild) runCrossBuild(step.check) _
+        if (step.enableCrossBuild && crossBuild)
+          (ctx: ReleaseContext) => runCrossBuild(step.check)(ctx)
         else step.check
       acc *> wrappedCheck(initialCtx).void
     }

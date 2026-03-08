@@ -8,11 +8,20 @@ publishTo := Some(Resolver.file("file", new File(".")))
 
 releaseIgnoreUntrackedFiles := true
 
+val writeCompileMarker = taskKey[Unit]("Write a marker proving the release test step ran")
+writeCompileMarker := {
+  val markerDir = baseDirectory.value / "marker"
+  val marker    = markerDir / "compile-ran"
+  IO.createDirectory(markerDir)
+  IO.touch(marker)
+}
+
 releaseIOProcess := Seq(
   ReleaseSteps.initializeVcs,
   ReleaseSteps.checkSnapshotDependencies,
   ReleaseSteps.inquireVersions,
   ReleaseSteps.runTests,
+  stepTask(writeCompileMarker),
   ReleaseSteps.setReleaseVersion,
   ReleaseSteps.commitReleaseVersion,
   ReleaseSteps.publishArtifacts,

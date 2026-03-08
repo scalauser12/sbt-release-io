@@ -1,11 +1,10 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseStepIO}
+import io.release.{CleanCompat, ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
 import sbt.*
 import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
-import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.util.control.NonFatal
@@ -19,15 +18,12 @@ private[release] object PublishSteps {
     check = ctx =>
       for {
         checkResult <- IO.blocking {
-                         val extracted   = extract(ctx.state)
+                         val extracted   = Project.extract(ctx.state)
                          val thisRef     = extracted.get(thisProjectRef)
                          val (_, result) =
                            sbtrelease.Compat
                              .runTaskAggregated(thisRef / releaseSnapshotDependencies, ctx.state)
-                         result match {
-                           case Value(value) => Right(value.flatMap(_.value))
-                           case Inc(cause)   => Left(cause)
-                         }
+                         aggregatedTaskValues(result)
                        }
         result      <- checkResult match {
                          case Left(cause)                  =>
@@ -66,7 +62,7 @@ private[release] object PublishSteps {
         IO(ctx.state.log.info("[release-io] Skipping publish")).as(ctx)
       } else {
         IO.blocking {
-          val extracted = extract(ctx.state)
+          val extracted = Project.extract(ctx.state)
           val newState  =
             extracted.runAggregated(extracted.currentRef / releasePublishArtifactsAction, ctx.state)
           ctx.copy(state = newState)
@@ -77,7 +73,7 @@ private[release] object PublishSteps {
       else
         for {
           missing <- IO.blocking {
-                       val extracted = extract(ctx.state)
+                       val extracted = Project.extract(ctx.state)
                        val allRefs   = extracted.currentRef +: extracted.currentProject.aggregate
                        allRefs
                          .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
@@ -103,9 +99,9 @@ private[release] object PublishSteps {
         IO(ctx.state.log.info("[release-io] Skipping tests")).as(ctx)
       } else {
         IO.blocking {
-          val extracted = extract(ctx.state)
+          val extracted = Project.extract(ctx.state)
           val ref       = extracted.get(thisProjectRef)
-          val newState  = extracted.runAggregated(ref / Test / test, ctx.state)
+          val newState  = extracted.runAggregated(ref / Test / ReleaseIOCompat.testKey, ctx.state)
           ctx.copy(state = newState)
         }
       },
@@ -116,9 +112,9 @@ private[release] object PublishSteps {
     name = "run-clean",
     action = ctx =>
       IO.blocking {
-        val extracted = extract(ctx.state)
+        val extracted = Project.extract(ctx.state)
         val ref       = extracted.get(thisProjectRef)
-        val newState  = extracted.runAggregated(ref / (Global / clean), ctx.state)
+        val newState  = CleanCompat.runBuild(ctx.state, ref)
         ctx.copy(state = newState)
       }
   )

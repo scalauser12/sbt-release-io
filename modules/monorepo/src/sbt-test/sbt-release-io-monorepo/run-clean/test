@@ -1,0 +1,20 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Seed stale files for both projects under their active targets.
+> core/seedStaleFile
+> api/seedStaleFile
+> core/assertStaleFileExists
+> api/assertStaleFileExists
+
+# Release only core; api should not reach run-clean.
+> releaseIOMonorepo core with-defaults skip-tests release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# The selected project should be cleaned and released, while the non-selected project remains untouched.
+> core/assertStaleFileCleaned
+> api/assertStaleFileExists
+> checkReleaseSelection

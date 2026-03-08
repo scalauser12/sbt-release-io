@@ -6,46 +6,57 @@ lazy val myTask           = taskKey[Unit]("My task")
 lazy val myAggregatedTask = taskKey[Unit]("My aggregated task")
 lazy val myInputTask      = inputKey[Unit]("My input task")
 
+def writeMarker(baseDir: File, name: String): Unit = {
+  val markerDir = baseDir / "marker"
+  val marker    = markerDir / name
+  IO.createDirectory(markerDir)
+  IO.write(marker, "ran")
+}
+
 lazy val root = (project in file("."))
   .aggregate(sub)
-  .settings(myAggregatedTaskSetting)
+  .settings(
+    name := "foo-root",
+    myAggregatedTaskSetting
+  )
 lazy val sub  = (project in file("sub"))
   .settings(
+    name         := "foo-sub",
     scalaVersion := "2.12.18",
     myAggregatedTaskSetting
   )
 
 def myAggregatedTaskSetting = myAggregatedTask := {
-  IO.write(target.value / "myaggregatedtask", "ran")
+  writeMarker(baseDirectory.value, "myaggregatedtask")
 }
 
 myTask      := {
-  IO.write(target.value / "mytask", "ran")
+  writeMarker(baseDirectory.value, "mytask")
 }
 myInputTask := {
   val marker = Def.spaceDelimited().parsed.headOption.getOrElse("myinputtask")
-  IO.write(target.value / marker, "ran")
+  writeMarker(baseDirectory.value, marker)
 }
 
 lazy val myCommand       = Command.command("mycommand") { state =>
-  IO.write(Project.extract(state).get(target) / "mycommand", "ran")
+  writeMarker(Project.extract(state).get(baseDirectory), "mycommand")
   state
 }
 lazy val myInputCommand  = Command.make("myinputcommand") { state =>
   Def.spaceDelimited().map { args => () =>
     val marker = args.headOption.getOrElse("myinputcommand")
-    IO.write(Project.extract(state).get(target) / marker, "ran")
+    writeMarker(Project.extract(state).get(baseDirectory), marker)
     state
   }
 }
 lazy val myCommand2      = Command.command("mycommand2") { state =>
-  IO.write(Project.extract(state).get(target) / "mycommand2", "ran")
+  writeMarker(Project.extract(state).get(baseDirectory), "mycommand2")
   state
 }
 lazy val myInputCommand2 = Command.make("myinputcommand2") { state =>
   Def.spaceDelimited().map { args => () =>
     val marker = args.headOption.getOrElse("myinputcommand2")
-    IO.write(Project.extract(state).get(target) / marker, "ran")
+    writeMarker(Project.extract(state).get(baseDirectory), marker)
     state
   }
 }

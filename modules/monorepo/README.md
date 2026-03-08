@@ -109,7 +109,7 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 | 5 | `check-snapshot-dependencies` | PerProject | Fail if any SNAPSHOT dependencies found (check phase only, cross-build) |
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
 | 7 | `validate-versions` | Global | Fail if global-version mode is active but versions are inconsistent |
-| 8 | `run-clean` | PerProject | Run `clean` task |
+| 8 | `run-clean` | PerProject | Clean selected project outputs; sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide |
 | 9 | `run-tests` | PerProject | Run `test` task (cross-build enabled, skippable) |
 | 10 | `set-release-version` | PerProject | Write release version to `version.sbt` |
 | 11 | `commit-release-versions` | Global | Single commit staging all version files |
@@ -558,8 +558,8 @@ Projects are sorted by inter-project dependencies using Kahn's algorithm. Depend
 
 ## Compatibility
 
-- **sbt**: 1.x
-- **Scala**: 2.12
+- **sbt**: 1.12.3 and 2.0.0-RC9
+- **Scala**: 2.12.21 and 3.8.1
 - **sbt-release**: 1.4.0
 - **cats-effect**: 3.6.3
 - **Requires**: `sbt-release-io` (core plugin)

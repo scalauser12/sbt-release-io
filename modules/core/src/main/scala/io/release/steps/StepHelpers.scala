@@ -2,7 +2,9 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.{ReleaseContext, ReleaseKeys}
+import sbt.{EvaluateTask, Incomplete, Result}
 import sbtrelease.Vcs
+import sbt.internal.Aggregation.KeyValue
 
 import scala.sys.process.*
 
@@ -59,4 +61,13 @@ private[release] object StepHelpers {
       }
     }
   }
+
+  def aggregatedTaskValues[T](
+      result: Result[Seq[KeyValue[Seq[T]]]]
+  ): Either[Incomplete, Seq[T]] =
+    try {
+      Right(EvaluateTask.onResult(result)(_.flatMap(_.value)))
+    } catch {
+      case inc: Incomplete => Left(inc)
+    }
 }

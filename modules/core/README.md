@@ -85,10 +85,7 @@ releaseIOProcess := ReleaseSteps.defaults
 releaseIOProcess := Seq(
   ReleaseSteps.initializeVcs,
   ReleaseSteps.checkCleanWorkingDir,
-  ReleaseSteps.checkSnapshotDependencies,
   ReleaseSteps.inquireVersions,
-  ReleaseSteps.runClean,
-  ReleaseSteps.runTests,
   ReleaseSteps.setReleaseVersion,
   ReleaseSteps.commitReleaseVersion,
   ReleaseSteps.tagRelease,
@@ -314,7 +311,7 @@ if you want to keep the setting-based defaults and only add extra steps.
 
 ### Using Typelevel Libraries in Release Steps
 
-Since release steps run in `IO`, you can use any library from the cats-effect ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
+Since release steps run in `IO`, you can use any library from the Typelevel / FP ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
 
 **Constraint:** sbt plugins run on Scala 2.12, so you must use library versions published for 2.12.
 
@@ -408,7 +405,7 @@ The default release process includes:
 2. **checkCleanWorkingDir** - Verify no uncommitted changes
 3. **checkSnapshotDependencies** - Verify no snapshot dependencies
 4. **inquireVersions** - Determine release and next versions
-5. **runClean** - Clean project build outputs
+5. **runClean** - Clean project build outputs (`clean` on sbt 1, build-wide `cleanFull` on sbt 2)
 6. **runTests** - Run tests (unless `skip-tests`)
 7. **setReleaseVersion** - Update version.sbt to release version
 8. **commitReleaseVersion** - Commit version change
@@ -436,8 +433,8 @@ See `src/sbt-test/README.md` for test documentation.
 
 ## Compatibility
 
-- **sbt**: 1.x
-- **Scala**: 2.12
+- **sbt**: 1.12.3 and 2.0.0-RC9
+- **Scala**: 2.12.21 and 3.8.1
 - **sbt-release**: 1.4.0
 - **cats-effect**: 3.6.3
 

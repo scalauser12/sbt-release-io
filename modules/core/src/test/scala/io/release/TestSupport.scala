@@ -47,7 +47,7 @@ object TestSupport {
   }
 
   def dummyAppConfiguration(baseDir: File): AppConfiguration = {
-    val launcher: Launcher = new Launcher {
+    val launcher0: Launcher = new Launcher {
       override def getScala(version: String): ScalaProvider                                   = ???
       override def getScala(version: String, reason: String): ScalaProvider                   = ???
       override def getScala(version: String, reason: String, scalaOrg: String): ScalaProvider = ???
@@ -75,17 +75,17 @@ object TestSupport {
       override def classpathExtra(): Array[File]     = Array.empty
     }
 
-    lazy val scalaProvider: ScalaProvider = new ScalaProvider {
-      override def launcher(): Launcher                = launcher
+    lazy val scalaProvider0: ScalaProvider = new ScalaProvider {
+      override def launcher(): Launcher                = launcher0
       override def version(): String                   = "2.12.21"
       override def loader(): ClassLoader               = getClass.getClassLoader
       override def jars(): Array[File]                 = Array.empty
       override def libraryJar(): File                  = new File(baseDir, "scala-library.jar")
       override def compilerJar(): File                 = new File(baseDir, "scala-compiler.jar")
-      override def app(id: ApplicationID): AppProvider = appProvider
+      override def app(id: ApplicationID): AppProvider = appProvider0
     }
 
-    lazy val componentProvider: ComponentProvider = new ComponentProvider {
+    lazy val componentProvider0: ComponentProvider = new ComponentProvider {
       override def componentLocation(id: String): File                     = new File(baseDir, s"component-$id")
       override def component(id: String): Array[File]                      = Array.empty
       override def defineComponent(id: String, files: Array[File]): Unit   = ()
@@ -93,21 +93,21 @@ object TestSupport {
       override def lockFile(): File                                        = new File(baseDir, ".components.lock")
     }
 
-    lazy val appProvider: AppProvider = new AppProvider {
-      override def scalaProvider(): ScalaProvider   = scalaProvider
+    lazy val appProvider0: AppProvider = new AppProvider {
+      override def scalaProvider(): ScalaProvider   = scalaProvider0
       override def id(): ApplicationID              = appId
       override def loader(): ClassLoader            = getClass.getClassLoader
-      override def mainClass(): Class[_ <: AppMain] = classOf[DummyAppMain]
-      override def entryPoint(): Class[_]           = classOf[DummyAppMain]
+      override def mainClass(): Class[? <: AppMain] = classOf[DummyAppMain]
+      override def entryPoint(): Class[?]           = classOf[DummyAppMain]
       override def newMain(): AppMain               = new DummyAppMain
       override def mainClasspath(): Array[File]     = Array.empty
-      override def components(): ComponentProvider  = componentProvider
+      override def components(): ComponentProvider  = componentProvider0
     }
 
     new AppConfiguration {
       override def arguments(): Array[String] = Array.empty
       override def baseDirectory(): File      = baseDir
-      override def provider(): AppProvider    = appProvider
+      override def provider(): AppProvider    = appProvider0
     }
   }
 }

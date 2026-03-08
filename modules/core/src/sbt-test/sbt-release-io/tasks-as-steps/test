@@ -6,14 +6,14 @@ $ exec git commit -m "Initial commit"
 
 > releaseIO with-defaults
 
-$ exists target/mytask
-$ exists target/myaggregatedtask
-$ exists sub/target/myaggregatedtask
-$ exists target/myinputtask
-$ exists target/custominputtask
-$ exists target/mycommand
-$ exists target/myinputcommand
-$ exists target/custominputcommand
-$ exists target/mycommand2
-$ exists target/myinputcommand2
-$ exists target/custominputcommand2
+$ exists marker/mytask
+$ exists marker/myaggregatedtask
+$ exists sub/marker/myaggregatedtask
+$ exists marker/myinputtask
+$ exists marker/custominputtask
+$ exists marker/mycommand
+$ exists marker/myinputcommand
+$ exists marker/custominputcommand
+$ exists marker/mycommand2
+$ exists marker/myinputcommand2
+$ exists marker/custominputcommand2

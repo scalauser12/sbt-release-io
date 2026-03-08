@@ -151,12 +151,13 @@ trait ReleasePluginIOLike[T]
     val crossBuild: Parser[ReleaseArg]     = token("cross").map(_ => CrossBuild)
     val releaseVersion: Parser[ReleaseArg] =
       (token("release-version") ~> Space ~> token(NotSpace, "<release version>"))
-        .map(ReleaseVersion)
+        .map(ReleaseVersion.apply)
     val nextVersion: Parser[ReleaseArg]    =
-      (token("next-version") ~> Space ~> token(NotSpace, "<next version>")).map(NextVersion)
+      (token("next-version") ~> Space ~> token(NotSpace, "<next version>"))
+        .map(NextVersion.apply)
     val tagDefault: Parser[ReleaseArg]     =
       (token("default-tag-exists-answer") ~> Space ~> token(NotSpace, "o|k|a|<tag-name>"))
-        .map(TagDefault)
+        .map(TagDefault.apply)
 
     val arg = withDefaults | skipTests | crossBuild | releaseVersion | nextVersion | tagDefault
     (Space ~> arg).*

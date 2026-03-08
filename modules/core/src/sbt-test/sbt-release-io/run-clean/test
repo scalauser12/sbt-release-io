@@ -6,10 +6,9 @@ $ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
 $ exec git commit -m "Initial commit"
 
 # Create generated output that should be removed by the clean step.
-$ exec mkdir -p target
-$ exec bash -c 'echo stale > target/stale.txt'
-$ exists target/stale.txt
+> seedStaleFile
+> assertStaleFileExists
 
 # Default release flow should run clean before tests.
 > releaseIO with-defaults skip-tests release-version 0.1.0 next-version 0.2.0-SNAPSHOT
-$ absent target/stale.txt
+> assertStaleFileCleaned

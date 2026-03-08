@@ -344,7 +344,7 @@ object DynamicMonorepoPlugin extends MonorepoReleasePluginLike[Unit] {
 
   override def resource: Resource[IO, Unit] = Resource.unit
 
-  override def extraProjects: Seq[Project] = {
+  override lazy val extraProjects: Seq[Project] = {
     val modulesDir = file("modules")
     val dirs       =
       if (modulesDir.exists && modulesDir.isDirectory)

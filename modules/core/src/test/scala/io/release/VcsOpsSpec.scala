@@ -38,8 +38,8 @@ class VcsOpsSpec extends Specification with CatsEffect {
     "succeed on a clean repo and return the current hash" in {
       gitRepoWithCommitResource.use { case (repo, vcs) =>
         VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).map { result =>
-          (result.currentHash must not(beEmpty)) and
-            (result.vcs.commandName must_== "git")
+          (result.currentHash must not(beEmpty[String]))
+            .and(result.vcs.commandName must_== "git")
         }
       }
     }
@@ -74,7 +74,7 @@ class VcsOpsSpec extends Specification with CatsEffect {
       gitRepoWithCommitResource.use { case (repo, vcs) =>
         IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
           VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = true).map { result =>
-            result.currentHash must not(beEmpty)
+            result.currentHash must not(beEmpty[String])
           }
       }
     }

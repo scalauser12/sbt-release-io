@@ -3,7 +3,6 @@ package io.release
 import cats.effect.IO
 import sbt.*
 import sbt.Keys.*
-import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.Vcs
 
@@ -20,7 +19,7 @@ private[release] object VcsOps {
     * and return the context with updated state and VCS adapter.
     */
   def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO.defer {
-    val extracted = extract(ctx.state)
+    val extracted = Project.extract(ctx.state)
     val baseDir   = extracted.get(thisProject).base
     IO.blocking(Vcs.detect(baseDir)).flatMap {
       case Some(vcs) =>
@@ -45,7 +44,7 @@ private[release] object VcsOps {
 
   /** Detect VCS at the project base directory. Does not modify sbt state. */
   def detectVcs(state: State): IO[Vcs] = IO.defer {
-    val base = extract(state).get(thisProject).base
+    val base = Project.extract(state).get(thisProject).base
     detectVcsFromBase(base)
   }
 
@@ -56,7 +55,7 @@ private[release] object VcsOps {
     * Returns the detected VCS adapter and the current commit hash on success.
     */
   def checkCleanWorkingDir(state: State): IO[CleanCheckResult] = IO.defer {
-    val extracted       = extract(state)
+    val extracted       = Project.extract(state)
     val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
     val base            = extracted.get(thisProject).base
 

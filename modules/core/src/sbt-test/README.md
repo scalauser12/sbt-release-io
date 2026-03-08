@@ -40,6 +40,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ### custom-plugin
 - Tests `ReleasePluginIOLike` resource lifecycle (acquire → use → release)
 - Verifies marker files prove the resource was acquired, used by a step, and released
+- Verifies release side effects: default tag creation and next-version write
 
 ### defaults-with-after
 - Tests `defaultsWithAfter` inserts a custom step at the correct position
@@ -220,7 +221,7 @@ $ exec git tag | grep -q "v0.1.0"
 - Set `scriptedBufferLog := false` in build.sbt to see real-time output
 - Use `$ pause` in test scripts to inspect state
 - Test directories are in `target/sbt-test/sbt-release-io/<test-name>/`
-- Look for `target/` directories within test projects for build artifacts
+- Prefer explicit marker files under `baseDirectory.value / "marker"` over build output paths, since sbt 1 and sbt 2 lay out compiled artifacts differently
 
 ## Tips
 
@@ -228,4 +229,5 @@ $ exec git tag | grep -q "v0.1.0"
 - Each test starts with a clean slate
 - Git must be configured (`user.email`, `user.name`) in tests
 - Plugin is published locally before tests run
+- Use marker files for scripted assertions instead of `target/scala-*` or `target/out/...` paths
 - Tests can be slow (each is a full sbt session)

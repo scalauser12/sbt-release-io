@@ -52,15 +52,21 @@ sbt "releaseIOMonorepo with-defaults"
 ```bash
 sbt compile              # compile both modules
 sbt test                 # run unit tests (specs2)
+sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2 / Scala 3
+sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2 / Scala 3
 sbt scripted             # run all scripted integration tests
 sbt core/test            # core unit tests only
 sbt monorepo/test        # monorepo unit tests only
+sbt scalafmtAll          # format Scala sources
+sbt scalafmtSbt          # format .sbt and project/*.scala build files
+sbt scalafmtCheckAll     # verify Scala source formatting
+sbt scalafmtSbtCheck     # verify sbt/build file formatting
 ```
 
 ## Compatibility
 
-- **sbt**: 1.x
-- **Scala**: 2.12
+- **sbt**: 1.12.3 and 2.0.0-RC9
+- **Scala**: 2.12.21 and 3.8.1
 - **sbt-release**: 1.4.0
 - **cats-effect**: 3.6.3
 

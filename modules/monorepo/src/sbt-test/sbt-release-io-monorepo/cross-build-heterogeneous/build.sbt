@@ -1,23 +1,40 @@
 import scala.sys.process._
+import _root_.io.release.monorepo.MonorepoStepIO
 
 val Scala213 = "2.13.12"
 val Scala212 = "2.12.18"
+val markerScalaVersion = taskKey[String]("Current scalaVersion used by the marker step")
 
 lazy val core = (project in file("core"))
   .settings(
     name               := "core",
     scalaVersion       := Scala213,
-    crossScalaVersions := Seq(Scala213, Scala212)
+    crossScalaVersions := Seq(Scala213, Scala212),
+    markerScalaVersion := scalaVersion.value
   )
 
 lazy val api = (project in file("api"))
   .settings(
     name               := "api",
     scalaVersion       := Scala212,
-    crossScalaVersions := Seq(Scala212)
+    crossScalaVersions := Seq(Scala212),
+    markerScalaVersion := scalaVersion.value
   )
 
 val checkAll = taskKey[Unit]("Run all verification checks")
+val crossBuildMarkerStep = MonorepoStepIO.PerProject(
+  name = "write-cross-markers",
+  action = (ctx, project) =>
+    _root_.cats.effect.IO.blocking {
+      val extracted      = sbt.Project.extract(ctx.state)
+      val (newState, sv) = extracted.runTask(project.ref / markerScalaVersion, ctx.state)
+      val markerDir      = project.baseDir / "marker"
+      IO.touch(markerDir / s"built-$sv")
+      IO.append(markerDir / "invocations.txt", sv + "\n")
+      ctx.withState(newState)
+    },
+  enableCrossBuild = true
+)
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
@@ -33,7 +50,7 @@ lazy val root = (project in file("."))
         resolveReleaseOrder,
         detectOrSelectProjects,
         inquireVersions,
-        CrossBuildMarkerStep.step,
+        crossBuildMarkerStep,
         setReleaseVersions,
         commitReleaseVersions,
         tagReleases,

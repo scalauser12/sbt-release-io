@@ -4,6 +4,7 @@ import cats.effect.IO
 import sbt.*
 import sbt.Def.ScopedKey
 import sbt.Keys.*
+import sbt.util.Show
 
 /** Shared cross-build utilities used by both the core [[ReleaseComposer]] and the
   * monorepo `MonorepoComposer`. Switching Scala versions requires a full project-structure
@@ -18,8 +19,9 @@ private[release] object CrossBuildSupport {
     */
   def switchScalaVersion(state: State, version: String): IO[State] =
     IO.blocking {
-      val extracted = Project.extract(state)
+      val extracted                            = Project.extract(state)
       import extracted.*
+      implicit val showKey: Show[ScopedKey[?]] = extracted.showKey
 
       state.log.info(s"[release-io] Setting scala version to $version")
 

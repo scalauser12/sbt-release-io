@@ -8,7 +8,6 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import sbt.*
 import sbt.Keys.*
-import sbt.Project.extract
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 
@@ -236,7 +235,7 @@ trait MonorepoReleasePluginLike[T]
     def failWhen(condition: Boolean, msg: => String): Either[State, Unit] =
       if (condition) Left(failWith(msg)) else Right(())
 
-    val extracted               = extract(state)
+    val extracted               = Project.extract(state)
     val flags                   = parseFlags(args, extracted)
     val useGlobalVersion        = extracted.get(releaseIOMonorepoUseGlobalVersion)
     val selectedNames           = args.collect { case SelectProject(name) => name }

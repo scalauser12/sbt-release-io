@@ -4,9 +4,9 @@ import cats.effect.IO
 import io.release.steps.StepHelpers.*
 import _root_.io.release.VcsOps
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
+import sbt.*
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
-import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.Vcs
 
@@ -41,7 +41,7 @@ private[release] object VcsSteps {
     requireVcs(ctx) { vcs =>
       for {
         setup               <- IO.blocking {
-                                 val extracted        = extract(ctx.state)
+                                 val extracted        = Project.extract(ctx.state)
                                  val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
                                  val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
                                  val sign             = extracted.get(releaseVcsSign)
@@ -68,10 +68,12 @@ private[release] object VcsSteps {
       result <- if (!exists)
                   runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'") *>
                     IO.blocking {
-                      val newState = extract(ctx.state).appendWithSession(
-                        Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
-                        ctx.state
-                      )
+                      val newState = Project
+                        .extract(ctx.state)
+                        .appendWithSession(
+                          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
+                          ctx.state
+                        )
                       ctx.copy(state = newState)
                     }
                 else {
@@ -108,12 +110,14 @@ private[release] object VcsSteps {
                           .warn(
                             s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
                           )
-                        val newState = extract(ctx.state).appendWithSession(
-                          Seq(
-                            packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                          ),
-                          ctx.state
-                        )
+                        val newState = Project
+                          .extract(ctx.state)
+                          .appendWithSession(
+                            Seq(
+                              packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
+                            ),
+                            ctx.state
+                          )
                         ctx.copy(state = newState)
                       }
                     case "o" | "O"      =>
@@ -126,12 +130,14 @@ private[release] object VcsSteps {
                           s"vcs tag '$tagName'"
                         ) *>
                         IO.blocking {
-                          val newState = extract(ctx.state).appendWithSession(
-                            Seq(
-                              packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                            ),
-                            ctx.state
-                          )
+                          val newState = Project
+                            .extract(ctx.state)
+                            .appendWithSession(
+                              Seq(
+                                packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
+                              ),
+                              ctx.state
+                            )
                           ctx.copy(state = newState)
                         }
                     case newTagName     =>
