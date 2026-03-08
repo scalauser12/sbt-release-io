@@ -46,7 +46,8 @@ lazy val commonSettings = Seq(
   ),
   scriptedLaunchOpts            := {
     scriptedLaunchOpts.value ++
-      Seq("-Xmx1024M", "-Dplugin.version=" + version.value)
+      Seq("-Xmx1024M", "-Dplugin.version=" + version.value) ++
+      sys.props.get("sbt.version").map(v => s"-Dsbt.version=$v").toSeq
   },
   scriptedBufferLog             := true,
   scriptedParallelInstances     := 4
