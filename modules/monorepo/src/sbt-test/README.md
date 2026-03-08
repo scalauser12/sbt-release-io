@@ -165,6 +165,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Only release-version provided (no next-version)
 - Next version computed automatically as bugfix bump
 
+### run-clean
+- Releases only the explicitly selected project in a two-project build
+- Verifies `run-clean` removes generated output for the released project but leaves the non-selected project's target output intact
+
 ### root-project-change-detection
 - Root project (baseDir == repo root) uses sbt project ID for tags
 - Change detection works for root project separate from subprojects

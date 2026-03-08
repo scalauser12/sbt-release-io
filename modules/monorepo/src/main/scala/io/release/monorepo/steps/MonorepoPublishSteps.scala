@@ -56,12 +56,7 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-clean",
     action = (ctx, project) =>
       IO.blocking {
-        val extracted = Project.extract(ctx.state)
-        val newState  =
-          extracted.runAggregated(
-            project.ref / (Global / _root_.io.release.ReleaseIOCompat.cleanKey),
-            ctx.state
-          )
+        val newState = _root_.io.release.CleanCompat.runProject(ctx.state, project.ref)
         ctx.withState(newState)
       }
   )

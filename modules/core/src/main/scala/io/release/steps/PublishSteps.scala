@@ -1,7 +1,7 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
+import io.release.{CleanCompat, ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
 import sbt.*
 import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
@@ -114,7 +114,7 @@ private[release] object PublishSteps {
       IO.blocking {
         val extracted = Project.extract(ctx.state)
         val ref       = extracted.get(thisProjectRef)
-        val newState  = extracted.runAggregated(ref / (Global / ReleaseIOCompat.cleanKey), ctx.state)
+        val newState  = CleanCompat.runBuild(ctx.state, ref)
         ctx.copy(state = newState)
       }
   )

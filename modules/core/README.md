@@ -405,7 +405,7 @@ The default release process includes:
 2. **checkCleanWorkingDir** - Verify no uncommitted changes
 3. **checkSnapshotDependencies** - Verify no snapshot dependencies
 4. **inquireVersions** - Determine release and next versions
-5. **runClean** - Clean project build outputs
+5. **runClean** - Clean project build outputs (`clean` on sbt 1, build-wide `cleanFull` on sbt 2)
 6. **runTests** - Run tests (unless `skip-tests`)
 7. **setReleaseVersion** - Update version.sbt to release version
 8. **commitReleaseVersion** - Commit version change

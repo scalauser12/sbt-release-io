@@ -6,6 +6,5 @@ import sbt.*
   * This is public for cross-module reuse and is not a supported end-user extension point.
   */
 object ReleaseIOCompat {
-  def testKey: TaskKey[Unit]  = sbt.Keys.test
-  def cleanKey: TaskKey[Unit] = sbt.Keys.clean
+  def testKey: TaskKey[Unit] = sbt.Keys.test
 }

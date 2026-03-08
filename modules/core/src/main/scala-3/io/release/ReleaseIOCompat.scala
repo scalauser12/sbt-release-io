@@ -6,9 +6,7 @@ import sbt.*
   * This is public for cross-module reuse and is not a supported end-user extension point.
   *
   * In sbt 2, `test` becomes an InputKey, replaced by `testFull` as a `TaskKey[TestResult]`.
-  * `clean` remains a TaskKey[Unit] in both versions.
   */
 object ReleaseIOCompat {
   def testKey: TaskKey[sbt.protocol.testing.TestResult] = sbt.Keys.testFull
-  def cleanKey: TaskKey[Unit]                           = sbt.Keys.clean
 }

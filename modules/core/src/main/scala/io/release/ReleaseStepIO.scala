@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import sbt.*
-import sbtrelease.Compat
 
 /** A single release step with an optional check phase and cross-build support.
   *
@@ -108,46 +107,7 @@ object ReleaseStepIO {
       name = s"command+remaining: $command",
       action = ctx =>
         IO.blocking {
-          val FailureCommand = Compat.FailureCommand
-          val savedRemaining = ctx.state.remainingCommands
-
-          // Drain the pending queue of Exec commands. Each command is run with an empty
-          // remainingCommands so that whatever it enqueues is captured and appended to
-          // the rest of the pending queue — avoiding the tail-loss bug of threading
-          // pending items through state.remainingCommands (which gets stripped each call).
-          @scala.annotation.tailrec
-          def drainCommands(state: State, pending: List[Exec]): State =
-            pending match {
-              case Nil                                 =>
-                // Pending queue exhausted; restore saved remaining
-                state.copy(remainingCommands = savedRemaining)
-              case head :: _ if head == FailureCommand =>
-                // Failure detected; propagate FailureCommand to saved remaining
-                state.copy(remainingCommands = head +: savedRemaining)
-              case head :: rest                        =>
-                val cleanState = state.copy(remainingCommands = Nil)
-                val newState   = Command.process(
-                  head.commandLine,
-                  cleanState,
-                  (msg: String) =>
-                    throw new IllegalStateException(
-                      s"Failed to parse command '${head.commandLine}': $msg"
-                    )
-                )
-                // Newly enqueued commands go before the remaining pending items
-                drainCommands(newState, newState.remainingCommands.toList ++ rest)
-            }
-
-          // Run the initial command, then drain whatever it enqueued
-          val cleanInit  = ctx.state.copy(remainingCommands = Nil)
-          val afterFirst = Command.process(
-            command,
-            cleanInit,
-            (msg: String) =>
-              throw new IllegalStateException(s"Failed to parse command '$command': $msg")
-          )
-          val finalState = drainCommands(afterFirst, afterFirst.remainingCommands.toList)
-          ctx.copy(state = finalState)
+          ctx.copy(state = CommandStepSupport.runCommandAndRemaining(ctx.state, command))
         }
     )
 
