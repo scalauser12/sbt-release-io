@@ -14,6 +14,16 @@ releaseIgnoreUntrackedFiles := true
 
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")
 checkGitTag := {
-  val tags = "git tag".!!.trim
-  assert(tags.nonEmpty, "Expected at least one git tag but found none")
+  val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
+  assert(tags.length == 1, s"Expected 1 git tag but found ${tags.length}: ${tags.mkString(", ")}")
+  assert(tags.head == "v0.1.0", s"Expected git tag v0.1.0 but found ${tags.head}")
+}
+
+val checkNextVersion = taskKey[Unit]("Check that version.sbt was updated to the next snapshot version")
+checkNextVersion := {
+  val contents = IO.read(baseDirectory.value / "version.sbt")
+  assert(
+    contents.contains("""version := "0.2.0-SNAPSHOT""""),
+    s"""Expected version.sbt to contain 'version := "0.2.0-SNAPSHOT"' but got: $contents"""
+  )
 }

@@ -23,6 +23,7 @@ checkGitCommitCount := {
 
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")
 checkGitTag := {
-  val tags = "git tag".!!.trim
-  assert(tags.nonEmpty, "Expected at least one git tag but found none")
+  val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
+  assert(tags.length == 1, s"Expected 1 git tag but found ${tags.length}: ${tags.mkString(", ")}")
+  assert(tags.head == "v0.1.0", s"Expected git tag v0.1.0 but found ${tags.head}")
 }
