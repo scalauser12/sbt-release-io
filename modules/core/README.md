@@ -85,10 +85,7 @@ releaseIOProcess := ReleaseSteps.defaults
 releaseIOProcess := Seq(
   ReleaseSteps.initializeVcs,
   ReleaseSteps.checkCleanWorkingDir,
-  ReleaseSteps.checkSnapshotDependencies,
   ReleaseSteps.inquireVersions,
-  ReleaseSteps.runClean,
-  ReleaseSteps.runTests,
   ReleaseSteps.setReleaseVersion,
   ReleaseSteps.commitReleaseVersion,
   ReleaseSteps.tagRelease,
