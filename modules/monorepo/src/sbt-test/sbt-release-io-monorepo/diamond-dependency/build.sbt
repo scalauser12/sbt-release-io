@@ -1,4 +1,5 @@
 import scala.sys.process._
+import _root_.io.release.monorepo.MonorepoStepIO
 
 lazy val base = (project in file("base"))
   .settings(name := "base", scalaVersion := "2.12.18")
@@ -16,6 +17,16 @@ lazy val top = (project in file("top"))
   .settings(name := "top", scalaVersion := "2.12.18")
 
 val checkAll = taskKey[Unit]("Run all verification checks")
+val recordOrderStep = MonorepoStepIO.PerProject(
+  name = "record-order",
+  action = (ctx, project) =>
+    _root_.cats.effect.IO.blocking {
+      val writer = new java.io.FileWriter(file("order.txt"), true)
+      writer.write(project.name + "\n")
+      writer.close()
+      ctx
+    }
+)
 
 lazy val root = (project in file("."))
   .aggregate(base, left, right, top)
@@ -31,9 +42,9 @@ lazy val root = (project in file("."))
       val idx          = filtered.indexWhere(_.name == "resolve-release-order")
       if (idx >= 0) {
         val (before, after) = filtered.splitAt(idx + 1)
-        before ++ Seq(RecordOrderStep.step) ++ after
+        before ++ Seq(recordOrderStep) ++ after
       } else {
-        filtered :+ RecordOrderStep.step
+        filtered :+ recordOrderStep
       }
     },
     releaseIgnoreUntrackedFiles := true,

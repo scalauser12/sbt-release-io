@@ -40,6 +40,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ### custom-plugin
 - Tests `ReleasePluginIOLike` resource lifecycle (acquire → use → release)
 - Verifies marker files prove the resource was acquired, used by a step, and released
+- Verifies release side effects: default tag creation and next-version write
 
 ### defaults-with-after
 - Tests `defaultsWithAfter` inserts a custom step at the correct position

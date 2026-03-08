@@ -21,3 +21,7 @@ $ exists step-used-resource
 
 # Resource was released after completion
 $ exists resource-released
+
+# Verify the release completed
+> checkGitTag
+> checkNextVersion
