@@ -6,9 +6,11 @@ project/metals.sbt
 .vscode/
 .idea/
 .bsp/
+.agents/
 .claude/
 .cursor/
-.gemini/
+.codex/
+.mcp.json
 *.class
 *.log
 .DS_Store
