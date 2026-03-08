@@ -13,12 +13,15 @@ Scala 2.12 with `-Xsource:3`. sbt 1.12.3. cats-effect 3.6.3. specs2 for tests.
 - `sbt scripted` — run all scripted integration tests (~28 tests, takes ~3 min)
 - `sbt core/test` — run core unit tests only
 - `sbt monorepo/test` — run monorepo unit tests only
-- `sbt scalafmtAll` — format all source files
+- `sbt scalafmtAll` — format Scala source files
+- `sbt scalafmtSbt` — format `.sbt` and build definition files
+- `sbt scalafmtCheckAll` — verify Scala source formatting
+- `sbt scalafmtSbtCheck` — verify `.sbt` and build definition formatting
 
 ## Coding Conventions
 
 - Scala 2.12 with `-Xsource:3` — `import foo.{*, given}` and `[?]` wildcards are valid
-- Formatting: scalafmt 3.10.7, `runner.dialect = scala212source3`, maxColumn = 100, `align.preset = most`
+- Formatting: scalafmt 3.10.7 with `runner.dialect = scala212source3`, `project.layout = StandardConvention`, `lang:scala-3 = scala3`, and `.sbt = sbt1`
 - Use cats-effect `IO` for all effectful operations; wrap blocking calls in `IO.blocking`
 - Error handling: use `scala.util.control.NonFatal` in catch blocks, never bare `RuntimeException`
 - Use `handleErrorWith` for per-project error isolation in monorepo steps

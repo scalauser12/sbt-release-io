@@ -57,6 +57,10 @@ sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2 / Scala 3
 sbt scripted             # run all scripted integration tests
 sbt core/test            # core unit tests only
 sbt monorepo/test        # monorepo unit tests only
+sbt scalafmtAll          # format Scala sources
+sbt scalafmtSbt          # format .sbt and project/*.scala build files
+sbt scalafmtCheckAll     # verify Scala source formatting
+sbt scalafmtSbtCheck     # verify sbt/build file formatting
 ```
 
 ## Compatibility
