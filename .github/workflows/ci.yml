@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sbt-version: ["1.12.3", "${{ env.SBT2_VERSION }}"]
+        sbt-line: ["sbt1", "sbt2"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -39,8 +39,8 @@ jobs:
           java-version: 17
           cache: sbt
       - uses: sbt/setup-sbt@v1
-      - name: Run unit tests on sbt ${{ matrix.sbt-version }}
-        run: sbt -Dsbt.version=${{ matrix.sbt-version }} test
+      - name: Run unit tests on ${{ matrix.sbt-line == 'sbt2' && format('sbt {0}', env.SBT2_VERSION) || 'sbt 1.12.3' }}
+        run: sbt ${{ matrix.sbt-line == 'sbt2' && format('-Dsbt.version={0}', env.SBT2_VERSION) || '-Dsbt.version=1.12.3' }} test
 
   core-scripted:
     runs-on: ubuntu-latest
