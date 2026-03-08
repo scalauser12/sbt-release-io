@@ -1,6 +1,6 @@
 import scala.sys.process._
 
-name := "custom-tag-test"
+name         := "custom-tag-test"
 scalaVersion := "2.12.18"
 
 // Custom tag name with prefix (use runtimeVersion which is evaluated at tag time)
@@ -16,7 +16,10 @@ releaseIgnoreUntrackedFiles := true
 
 val checkCustomTag = taskKey[Unit]("Check that custom tag was created")
 checkCustomTag := {
-  val tags = "git tag".!!.trim.split("\n").toSeq
+  val tags        = "git tag".!!.trim.split("\n").toSeq
   val expectedTag = "release-0.1.0"
-  assert(tags.contains(expectedTag), s"Expected tag '$expectedTag' but found: ${tags.mkString(", ")}")
+  assert(
+    tags.contains(expectedTag),
+    s"Expected tag '$expectedTag' but found: ${tags.mkString(", ")}"
+  )
 }

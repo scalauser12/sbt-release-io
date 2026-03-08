@@ -2,7 +2,7 @@ import sbt.IO
 import _root_.io.release.ReleaseStepIO
 import _root_.io.release.steps.ReleaseSteps
 
-name := "fail-test-test"
+name         := "fail-test-test"
 scalaVersion := "2.12.18"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test

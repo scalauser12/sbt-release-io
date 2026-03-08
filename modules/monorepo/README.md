@@ -558,8 +558,8 @@ Projects are sorted by inter-project dependencies using Kahn's algorithm. Depend
 
 ## Compatibility
 
-- **sbt**: 1.x
-- **Scala**: 2.12
+- **sbt**: 1.12.3 and 2.0.0-RC9
+- **Scala**: 2.12.21 and 3.8.1
 - **sbt-release**: 1.4.0
 - **cats-effect**: 3.6.3
 - **Requires**: `sbt-release-io` (core plugin)

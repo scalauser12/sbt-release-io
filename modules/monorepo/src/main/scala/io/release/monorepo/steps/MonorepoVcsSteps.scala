@@ -6,8 +6,8 @@ import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.{required, runProcess}
+import sbt.*
 import sbt.Keys.*
-import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 import sbtrelease.Vcs
 
@@ -101,7 +101,7 @@ private[monorepo] object MonorepoVcsSteps {
           required(project.versions, s"Versions not set for ${project.name}") {
             case (releaseVer, _) =>
               IO.blocking {
-                val extracted = extract(ctx.state)
+                val extracted = Project.extract(ctx.state)
                 (
                   extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer),
                   extracted.get(releaseVcsSign)
@@ -136,7 +136,7 @@ private[monorepo] object MonorepoVcsSteps {
               IO.raiseError(new IllegalStateException("No release versions set for any project"))
             case Some((rel, _)) =>
               IO.blocking {
-                val extracted = extract(ctx.state)
+                val extracted = Project.extract(ctx.state)
                 (
                   extracted.get(releaseIOMonorepoUnifiedTagName)(rel),
                   extracted.get(releaseVcsSign)

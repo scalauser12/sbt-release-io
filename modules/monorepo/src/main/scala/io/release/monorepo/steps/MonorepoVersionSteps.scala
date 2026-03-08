@@ -7,7 +7,6 @@ import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import sbt.*
 import sbt.Keys.*
-import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 
 /** Version-related monorepo release steps: inquire, set, commit. */
@@ -36,7 +35,7 @@ private[monorepo] object MonorepoVersionSteps {
     for {
       versionFile                                          <- resolveVersionFile(ctx, project)
       setup                                                <- IO.blocking {
-                                                                val extracted = extract(ctx.state)
+                                                                val extracted = Project.extract(ctx.state)
                                                                 val readFn    = extracted.get(releaseIOMonorepoReadVersion)
                                                                 (extracted, readFn)
                                                               }
@@ -79,7 +78,8 @@ private[monorepo] object MonorepoVersionSteps {
     name = "validate-versions",
     action = ctx =>
       IO.blocking(
-        extract(ctx.state)
+        Project
+          .extract(ctx.state)
           .get(_root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion)
       ).flatMap { useGlobal =>
         if (useGlobal)
@@ -141,7 +141,7 @@ private[monorepo] object MonorepoVersionSteps {
     for {
       versionFile                    <- resolveVersionFile(ctx, project)
       setup                          <- IO.blocking {
-                                          val extracted = extract(ctx.state)
+                                          val extracted = Project.extract(ctx.state)
                                           val writeFn   = extracted.get(releaseIOMonorepoWriteVersion)
                                           val useGlobal = extracted.get(
                                             _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion

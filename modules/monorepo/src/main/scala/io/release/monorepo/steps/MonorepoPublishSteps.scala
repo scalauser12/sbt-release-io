@@ -5,7 +5,6 @@ import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import sbt.*
 import sbt.Keys.*
-import sbt.Project.extract // TODO: sbt 2 — verify Project.extract availability or add compat shim
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.util.control.NonFatal
@@ -26,11 +25,7 @@ private[monorepo] object MonorepoPublishSteps {
                              project.ref / releaseSnapshotDependencies,
                              ctx.state
                            )
-                         // TODO: sbt 2 — Scala 3 type inference may fail here; add explicit types
-                         result.toEither match {
-                           case Right(value) => Right(value.flatMap(_.value))
-                           case Left(cause)  => Left(cause)
-                         }
+                         _root_.io.release.steps.StepHelpers.aggregatedTaskValues(result)
                        }
         result      <- IO.fromEither {
                          checkResult.left
@@ -61,7 +56,7 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-clean",
     action = (ctx, project) =>
       IO.blocking {
-        val extracted = extract(ctx.state)
+        val extracted = Project.extract(ctx.state)
         val newState  =
           extracted.runAggregated(
             project.ref / (Global / _root_.io.release.ReleaseIOCompat.cleanKey),
@@ -79,7 +74,7 @@ private[monorepo] object MonorepoPublishSteps {
         logInfo(ctx, s"Skipping tests for ${project.name}")
       else
         IO.blocking {
-          val extracted = extract(ctx.state)
+          val extracted = Project.extract(ctx.state)
           val newState  =
             extracted.runAggregated(
               project.ref / Test / _root_.io.release.ReleaseIOCompat.testKey,
@@ -98,7 +93,7 @@ private[monorepo] object MonorepoPublishSteps {
         logInfo(ctx, s"Skipping publish for ${project.name}")
       else
         IO.blocking {
-          val extracted = extract(ctx.state)
+          val extracted = Project.extract(ctx.state)
           val newState  =
             extracted.runAggregated(project.ref / releasePublishArtifactsAction, ctx.state)
           ctx.withState(newState)
@@ -108,7 +103,7 @@ private[monorepo] object MonorepoPublishSteps {
       else
         for {
           missing <- IO.blocking {
-                       val extracted  = extract(ctx.state)
+                       val extracted  = Project.extract(ctx.state)
                        val aggregates = Project
                          .getProject(project.ref, extracted.structure)
                          .map(_.aggregate)

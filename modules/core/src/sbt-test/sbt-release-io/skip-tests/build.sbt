@@ -1,6 +1,6 @@
 import scala.sys.process._
 
-name := "skip-tests-test"
+name         := "skip-tests-test"
 scalaVersion := "2.12.18"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test

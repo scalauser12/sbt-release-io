@@ -11,6 +11,10 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sbt-version: ["1.12.3", "2.0.0-RC9"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -19,8 +23,8 @@ jobs:
           java-version: 17
           cache: sbt
       - uses: sbt/setup-sbt@v1
-      - name: Run unit tests
-        run: sbt test
+      - name: Run unit tests on sbt ${{ matrix.sbt-version }}
+        run: sbt -Dsbt.version=${{ matrix.sbt-version }} test
 
   core-scripted:
     runs-on: ubuntu-latest

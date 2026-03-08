@@ -9,8 +9,8 @@ $ exec git commit -m "Initial commit"
 > releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 
 # Verify both Scala versions were built (proves releaseIOCrossBuild setting works)
-> checkTargetDir 2.13 exists
-> checkTargetDir 2.12 exists
+$ exists marker/built-2.13.12
+$ exists marker/built-2.12.18
 
 # Verify release completed
 $ exec grep -q "0.2.0-SNAPSHOT" version.sbt

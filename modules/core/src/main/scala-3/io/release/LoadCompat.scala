@@ -7,8 +7,6 @@ import sbt.internal.BuildStructure
 /** sbt 2 compatibility layer for sbt.Load.
   * Delegates to LoadCompatBridge (in `package sbt`) which has access to `private[sbt]` internals.
   * This mirrors sbt-release's own scala-3 LoadCompat approach.
-  *
-  * TODO: verify sbt.internal.Load.reapply signature against actual sbt 2 release
   */
 object LoadCompat {
 

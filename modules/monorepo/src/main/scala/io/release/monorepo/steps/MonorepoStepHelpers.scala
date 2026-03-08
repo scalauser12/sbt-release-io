@@ -4,7 +4,6 @@ import _root_.io.release.monorepo.{MonorepoContext, ProjectReleaseInfo}
 import _root_.io.release.steps.StepHelpers.{required, runProcess}
 import cats.effect.IO
 import sbt.*
-import sbt.Project.extract
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.sys.process.*
@@ -135,7 +134,7 @@ private[monorepo] object MonorepoStepHelpers {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[File] = IO.blocking {
-    val extracted = extract(ctx.state)
+    val extracted = Project.extract(ctx.state)
     val useGlobal =
       extracted.get(_root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion)
     if (useGlobal)
@@ -191,7 +190,7 @@ private[monorepo] object MonorepoStepHelpers {
     required(ctx.vcs, "VCS not initialized") { vcs =>
       resolveRelativePaths(ctx, vcs).flatMap { paths =>
         IO.blocking {
-          val extracted = extract(ctx.state)
+          val extracted = Project.extract(ctx.state)
           (
             extracted.get(releaseVcsSign),
             extracted.get(releaseVcsSignOff),

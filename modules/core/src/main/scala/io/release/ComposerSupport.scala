@@ -68,7 +68,7 @@ private[release] object ComposerSupport {
     val interleavedSteps: Seq[C => IO[C]] = actions.flatMap { step =>
       Seq(
         (ctx: C) => if (ctx.failed) IO.pure(ctx) else step(ctx),
-        detectSbtFailure[C] _
+        (ctx: C) => detectSbtFailure[C](ctx)
       )
     }
     interleavedSteps

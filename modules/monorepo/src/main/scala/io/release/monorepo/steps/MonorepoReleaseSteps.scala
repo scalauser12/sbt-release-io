@@ -6,7 +6,6 @@ import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.required
 import sbt.*
-import sbt.Project.extract
 
 import scala.util.control.NonFatal
 
@@ -79,7 +78,7 @@ object MonorepoReleaseSteps {
       ctx: MonorepoContext,
       vcs: sbtrelease.Vcs
   ): IO[MonorepoContext] = {
-    val extracted        = extract(ctx.state)
+    val extracted        = Project.extract(ctx.state)
     val detectChanges    = extracted.get(releaseIOMonorepoDetectChanges)
     val customDetector   = extracted.get(releaseIOMonorepoChangeDetector)
     val useGlobalVersion = extracted.get(releaseIOMonorepoUseGlobalVersion)
@@ -190,7 +189,7 @@ object MonorepoReleaseSteps {
   val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-releases",
     action = ctx => {
-      val tagStrategy = extract(ctx.state).get(releaseIOMonorepoTagStrategy)
+      val tagStrategy = Project.extract(ctx.state).get(releaseIOMonorepoTagStrategy)
       tagStrategy match {
         case MonorepoTagStrategy.Unified    =>
           MonorepoVcsSteps.tagReleasesUnified.action(ctx)

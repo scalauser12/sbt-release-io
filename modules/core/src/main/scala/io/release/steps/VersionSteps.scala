@@ -7,7 +7,6 @@ import sbt.*
 import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
-import sbt.Project.extract // TODO: sbt 2 — verify Project.extract availability or add compat shim
 import sbtrelease.ReleasePlugin.autoImport.*
 
 import scala.sys.process.*
@@ -59,13 +58,13 @@ private[release] object VersionSteps {
 
     for {
       currentVer   <- {
-        val extracted     = extract(ctx.state)
+        val extracted     = Project.extract(ctx.state)
         val versionFile   = extracted.get(releaseVersionFile)
         val readVersionFn = extracted.get(releaseIOReadVersion)
         readVersionFn(versionFile)
       }
       data         <- IO.blocking {
-                        val extracted = extract(ctx.state)
+                        val extracted = Project.extract(ctx.state)
 
                         val (s1, releaseFn) = extracted.runTask(releaseVersion, ctx.state)
                         val (s2, nextFn)    = extracted.runTask(releaseNextVersion, s1)
@@ -135,7 +134,7 @@ private[release] object VersionSteps {
           commitResult            <- commitVersionNative(ctx, releaseCommitMessage)
           (resultCtx, currentHash) = commitResult
           finalCtx                <- IO.blocking {
-                                       val extracted        = extract(resultCtx.state)
+                                       val extracted        = Project.extract(resultCtx.state)
                                        val useGlobalVersion = extracted.get(releaseUseGlobalVersion)
                                        val versionSetting   =
                                          if (useGlobalVersion) ThisBuild / version := releaseVer
@@ -181,7 +180,7 @@ private[release] object VersionSteps {
       commitMessageKey: TaskKey[String]
   ): IO[(ReleaseContext, String)] =
     required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-      val extracted   = extract(ctx.state)
+      val extracted   = Project.extract(ctx.state)
       val versionFile = extracted.get(releaseVersionFile).getCanonicalFile
       val base        = vcs.baseDir.getCanonicalFile
 
@@ -233,7 +232,7 @@ private[release] object VersionSteps {
     }
 
   private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = {
-    val extracted   = extract(ctx.state)
+    val extracted   = Project.extract(ctx.state)
     val versionFile = extracted.get(releaseVersionFile)
     val writeFn     = extracted.get(releaseIOWriteVersion)
 

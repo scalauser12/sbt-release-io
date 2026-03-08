@@ -5,8 +5,8 @@ $ exec git config user.name "Test User"
 $ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src
 $ exec git commit -m "Initial commit"
 
-# Run release - process has only stepCommandAndRemaining("compile")
+# Run release - process has only stepCommandAndRemaining("compileAndMark")
 > releaseIO with-defaults
 
-# Verify compile ran (classes exist)
-$ exists target/scala-2.12/classes/Example$.class
+# Verify compile drained and the follow-up marker command ran
+$ exists marker/compile-ran
