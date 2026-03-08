@@ -6,7 +6,6 @@ import io.release.ReleaseIO.*
 import io.release.steps.ReleaseSteps
 import sbt.*
 import sbt.Keys.thisProject
-import sbt.Project.extract
 
 /**
  * Examples showing how to create custom release steps and compose them
@@ -100,7 +99,7 @@ object CustomStepExamples {
     ctx.versions match {
       case Some((releaseVer, _)) =>
         IO.blocking {
-          val baseDir  = extract(ctx.state).get(thisProject).base
+          val baseDir  = Project.extract(ctx.state).get(thisProject).base
           val file     = new java.io.File(baseDir, "CHANGELOG.md")
           val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
           val existing =
