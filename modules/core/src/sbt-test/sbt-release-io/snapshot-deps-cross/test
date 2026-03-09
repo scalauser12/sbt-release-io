@@ -7,3 +7,6 @@ $ exec git commit -m "Initial commit"
 
 # Release with cross flag should fail: 2.13 has a SNAPSHOT dependency
 -> releaseIO with-defaults cross release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+> checkGitCommitCount 1
+> checkNoGitTags
+> checkVersionUnchanged

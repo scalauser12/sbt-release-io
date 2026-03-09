@@ -93,7 +93,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 
 ### publish-to-check
 - Verifies that a missing `publishTo` setting fails at check phase
-- Catches misconfiguration before any commits or tags happen
+- Verifies the failure happens before any commit, tag, or `version.sbt` mutation
 
 ### run-clean
 - Verifies the default release flow executes `runClean` before tests
@@ -125,11 +125,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 
 ### snapshot-deps
 - Project with a SNAPSHOT dependency
-- Verifies release fails with appropriate error
+- Verifies release fails with appropriate error before any commit, tag, or `version.sbt` mutation
 
 ### snapshot-deps-cross
 - Cross-build project where only one Scala version has a SNAPSHOT dependency
-- Verifies `cross` release fails when any version has snapshot dependencies
+- Verifies `cross` release fails when any version has snapshot dependencies before any commit, tag, or `version.sbt` mutation
 
 ### tag-default
 - Tests tag name conflict handling with multiple scenarios
@@ -145,7 +145,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 
 ### untracked-files-fail
 - Tests default `releaseIgnoreUntrackedFiles` behavior (false)
-- Verifies untracked files block the release
+- Verifies untracked files block the release before any commit, tag, or `version.sbt` mutation
 
 ### version-bump
 - Tests different version bump strategies: Next, NextStable, Bugfix, Minor
