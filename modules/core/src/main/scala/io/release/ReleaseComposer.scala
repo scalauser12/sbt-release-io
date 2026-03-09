@@ -37,7 +37,7 @@ private[release] object ReleaseComposer {
         if (step.enableCrossBuild && crossBuild)
           (ctx: ReleaseContext) => runCrossBuild(step.check)(ctx)
         else step.check
-      acc *> wrappedCheck(initialCtx).void
+      acc *> runCheckedStep(wrappedCheck, initialCtx)
     }
 
     val startCtx = ComposerSupport.armOnFailure(initialCtx)
@@ -66,6 +66,24 @@ private[release] object ReleaseComposer {
         else
           IO.pure(finalCtx)
     } yield result
+  }
+
+  private def runCheckedStep(
+      check: ReleaseContext => IO[ReleaseContext],
+      initialCtx: ReleaseContext
+  ): IO[Unit] = {
+    val armedCtx = ComposerSupport.armOnFailure(initialCtx)
+
+    check(armedCtx)
+      .flatMap(ComposerSupport.detectSbtFailure)
+      .flatMap { checkedCtx =>
+        ComposerSupport.stripFailureCommand(checkedCtx).flatMap { strippedCtx =>
+          if (strippedCtx.failed)
+            IO.raiseError(new IllegalStateException("Check phase failed: sbt task failure detected"))
+          else
+            IO.unit
+        }
+      }
   }
 
   /** Run a step function across all crossScalaVersions using proper project reload. */

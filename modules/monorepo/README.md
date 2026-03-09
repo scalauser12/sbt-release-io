@@ -110,16 +110,17 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
 | 7 | `validate-versions` | Global | Fail if global-version mode is active but versions are inconsistent |
 | 8 | `run-clean` | PerProject | Clean selected project outputs; sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide |
-| 9 | `run-tests` | PerProject | Run `test` task (cross-build enabled, skippable) |
+| 9 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
 | 10 | `set-release-version` | PerProject | Write release version to `version.sbt` |
 | 11 | `commit-release-versions` | Global | Single commit staging all version files |
 | 12 | `tag-releases` | Global | Create per-project or unified tags |
-| 13 | `publish-artifacts` | PerProject | Publish artifacts (cross-build enabled, skippable) |
+| 13 | `publish-artifacts` | PerProject | Publish the selected project's artifacts (cross-build enabled, skippable) |
 | 14 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
 | 15 | `commit-next-versions` | Global | Single commit staging all version files |
 | 16 | `push-changes` | Global | Push branch + tags to tracking remote |
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order.
+Built-in task-backed per-project steps are project-scoped: child projects run only when they are themselves selected or discovered.
 
 ## Configuration
 
@@ -138,7 +139,7 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoVersionFile` | `ProjectRef => File` | `<projectBase>/version.sbt` | Per-project version file resolver |
+| `releaseIOMonorepoVersionFile` | `ProjectRef => File` | Scoped `releaseVersionFile` | Per-project version file resolver |
 | `releaseIOMonorepoReadVersion` | `File => IO[String]` | Regex parser (same as core) | Version file reader |
 | `releaseIOMonorepoWriteVersion` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Version file writer (default ignores `File` param) |
 | `releaseIOMonorepoUseGlobalVersion` | `Boolean` | `false` | Use root `version.sbt` instead of per-project files |

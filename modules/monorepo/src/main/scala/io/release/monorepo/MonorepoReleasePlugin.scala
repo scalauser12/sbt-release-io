@@ -184,11 +184,6 @@ trait MonorepoReleasePluginLike[T]
   ): Either[Throwable, Seq[ProjectReleaseInfo]] =
     Try {
       val allProjectRefs    = extracted.get(releaseIOMonorepoProjects)
-      val versionFileFn     = extracted.get(releaseIOMonorepoVersionFile)
-      val globalVersionFile =
-        if (useGlobalVersion)
-          Some(extracted.get(sbtrelease.ReleasePlugin.autoImport.releaseVersionFile))
-        else None
 
       def resolveVersions(projName: String): Option[(String, String)] = {
         val rel  = globalReleaseVersion.getOrElse(releaseVersionOverrides.getOrElse(projName, ""))
@@ -209,7 +204,7 @@ trait MonorepoReleasePluginLike[T]
           ref = ref,
           name = projName,
           baseDir = projBase,
-          versionFile = globalVersionFile.getOrElse(versionFileFn(ref)),
+          versionFile = MonorepoVersionFiles.resolve(extracted, ref, useGlobalVersion),
           versions = resolveVersions(projName)
         )
       }

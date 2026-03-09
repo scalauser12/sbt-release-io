@@ -156,6 +156,11 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Failure at `run-tests` propagates globally before any version/tag steps run
 - Verifies commit count, tags, and project version files remain untouched after failure
 
+### per-project-releaseversionfile
+- One project overrides upstream sbt-release `releaseVersionFile` without overriding `releaseIOMonorepoVersionFile`
+- Verifies the monorepo plugin reads, writes, commits, and tags the overridden file path correctly
+- Mixed formats are preserved: `core/version.properties` and `api/version.sbt`
+
 ### publish-skip-bypass
 - `publish / skip := true` per-project setting bypasses publishTo check for that project only
 
@@ -205,6 +210,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - 3-level aggregate hierarchy: root -> services -> api
 - Default `releaseIOMonorepoProjects` transitively discovers nested aggregates
 - Verifies both `services` and `api` are released without manual override
+- Verifies built-in `run-tests` and `publish-artifacts` steps stay project-scoped and do not re-run `api`
 
 ### topological-order
 - Projects listed in reverse order (api, middle, core)

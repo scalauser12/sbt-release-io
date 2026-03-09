@@ -1,0 +1,12 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Run monorepo release with explicit project selection and defaults
+> releaseIOMonorepo core api with-defaults
+
+# Verify mixed version-file formats were read, written, committed, and tagged correctly
+> checkAll

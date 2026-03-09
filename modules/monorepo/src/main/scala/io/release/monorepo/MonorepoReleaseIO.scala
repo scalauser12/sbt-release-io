@@ -176,26 +176,15 @@ trait MonorepoReleaseIO {
         IO.pure(s"""$key := "$ver"\n""")
       }
     },
-    // Default version file resolver: looks up baseDirectory from the loaded build structure.
-    // Uses loadedBuild (a SettingKey) instead of buildStructure (a TaskKey),
-    // since settings cannot depend on tasks.
-    releaseIOMonorepoVersionFile           := {
-      val projectBases: Map[ProjectRef, File] = loadedBuild.value.allProjectRefs.map {
-        case (ref, proj) => ref -> proj.base
-      }.toMap
-      val versionFileName                     =
-        sbtrelease.ReleasePlugin.autoImport.releaseVersionFile.value.getName
-      ref => {
-        val base = projectBases.getOrElse(
-          ref,
-          throw new IllegalStateException(
-            s"Cannot resolve baseDirectory for project '${ref.project}' in build ${ref.build}. " +
-              "Ensure the project is listed in releaseIOMonorepoProjects."
-          )
-        )
-        base / versionFileName
-      }
-    },
+    // Default version file resolver: honors each project's scoped sbt-release
+    // releaseVersionFile setting, so per-project overrides work without also
+    // overriding releaseIOMonorepoVersionFile. The public key keeps its
+    // ProjectRef => File shape; MonorepoVersionFiles detects this default resolver
+    // and upgrades it to the project's scoped releaseVersionFile at runtime.
+    releaseIOMonorepoVersionFile           := new MonorepoVersionFiles.DefaultProjectVersionFileResolver(
+      loadedBuild.value.allProjectRefs.map { case (ref, proj) => ref -> proj.base }.toMap,
+      sbtrelease.ReleasePlugin.autoImport.releaseVersionFile.value.getName
+    ),
     releaseIOMonorepoProjects              := {
       val build      = loadedBuild.value
       val root       = thisProjectRef.value

@@ -12,6 +12,13 @@ import scala.util.control.NonFatal
 /** Publish, test, clean, and dependency-check monorepo release steps. */
 private[monorepo] object MonorepoPublishSteps {
 
+  private def runProjectTask[A](ctx: MonorepoContext, key: TaskKey[A]): IO[MonorepoContext] =
+    IO.blocking {
+      val extracted     = Project.extract(ctx.state)
+      val (newState, _) = extracted.runTask(key, ctx.state)
+      ctx.withState(newState)
+    }
+
   /** Check for SNAPSHOT dependencies in each project. */
   val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "check-snapshot-dependencies",
@@ -20,33 +27,20 @@ private[monorepo] object MonorepoPublishSteps {
     check = (ctx, project) =>
       for {
         checkResult <- IO.blocking {
-                         val (_, result) =
-                           sbtrelease.Compat.runTaskAggregated(
-                             project.ref / releaseSnapshotDependencies,
-                             ctx.state
-                           )
-                         _root_.io.release.steps.StepHelpers.aggregatedTaskValues(result)
+                         val extracted = Project.extract(ctx.state)
+                         extracted.runTask(project.ref / releaseSnapshotDependencies, ctx.state)._2
                        }
-        result      <- IO.fromEither {
-                         checkResult.left
-                           .map(cause =>
-                             new IllegalStateException(
-                               s"Error checking snapshot dependencies for ${project.name}: $cause"
-                             )
-                           )
-                           .flatMap { deps =>
-                             if (deps.nonEmpty) {
-                               val depList = deps
-                                 .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
-                                 .mkString("\n")
-                               Left(
-                                 new IllegalStateException(
-                                   s"Snapshot dependencies found in ${project.name}:\n$depList"
-                                 )
-                               )
-                             } else Right(ctx)
-                           }
-                       }
+        result      <-
+          if (checkResult.nonEmpty) {
+            val depList = checkResult
+              .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
+              .mkString("\n")
+            IO.raiseError[MonorepoContext](
+              new IllegalStateException(
+                s"Snapshot dependencies found in ${project.name}:\n$depList"
+              )
+            )
+          } else IO.pure(ctx)
       } yield result,
     enableCrossBuild = true
   )
@@ -68,15 +62,7 @@ private[monorepo] object MonorepoPublishSteps {
       if (ctx.skipTests)
         logInfo(ctx, s"Skipping tests for ${project.name}")
       else
-        IO.blocking {
-          val extracted = Project.extract(ctx.state)
-          val newState  =
-            extracted.runAggregated(
-              project.ref / Test / _root_.io.release.ReleaseIOCompat.testKey,
-              ctx.state
-            )
-          ctx.withState(newState)
-        },
+        runProjectTask(ctx, project.ref / Test / _root_.io.release.ReleaseIOCompat.testKey),
     enableCrossBuild = true
   )
 
@@ -87,34 +73,22 @@ private[monorepo] object MonorepoPublishSteps {
       if (ctx.skipPublish)
         logInfo(ctx, s"Skipping publish for ${project.name}")
       else
-        IO.blocking {
-          val extracted = Project.extract(ctx.state)
-          val newState  =
-            extracted.runAggregated(project.ref / releasePublishArtifactsAction, ctx.state)
-          ctx.withState(newState)
-        },
+        runProjectTask(ctx, project.ref / releasePublishArtifactsAction),
     check = (ctx, project) =>
       if (ctx.skipPublish) IO.pure(ctx)
       else
         for {
           missing <- IO.blocking {
-                       val extracted  = Project.extract(ctx.state)
-                       val aggregates = Project
-                         .getProject(project.ref, extracted.structure)
-                         .map(_.aggregate)
-                         .getOrElse(Seq.empty)
-                       val allRefs    = project.ref +: aggregates
-                       allRefs.filter { ref =>
-                         val skipPublish =
-                           try extracted.runTask(ref / publish / Keys.skip, ctx.state)._2
-                           catch { case NonFatal(_) => false }
-                         if (skipPublish) false
-                         else {
-                           val publishTarget =
-                             try extracted.runTask(ref / publishTo, ctx.state)._2
-                             catch { case NonFatal(_) => None }
-                           publishTarget.isEmpty
-                         }
+                       val extracted   = Project.extract(ctx.state)
+                       val skipPublish =
+                         try extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2
+                         catch { case NonFatal(_) => false }
+                       if (skipPublish) Seq.empty
+                       else {
+                         val publishTarget =
+                           try extracted.runTask(project.ref / publishTo, ctx.state)._2
+                           catch { case NonFatal(_) => None }
+                         if (publishTarget.isEmpty) Seq(project.ref) else Seq.empty
                        }
                      }
           result  <-

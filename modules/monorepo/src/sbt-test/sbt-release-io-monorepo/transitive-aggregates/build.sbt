@@ -5,15 +5,39 @@ import scala.sys.process._
 
 lazy val api = (project in file("services/api"))
   .settings(
-    name         := "api",
-    scalaVersion := "2.12.18"
+    name                          := "api",
+    scalaVersion                  := "2.12.18",
+    publishTo                     := Some(Resolver.file("api-test-repo", baseDirectory.value / "repo")),
+    Test / test                   := {
+      val marker = baseDirectory.value / "marker" / "tests.log"
+      IO.createDirectory(marker.getParentFile)
+      IO.append(marker, "api\n")
+    },
+    releasePublishArtifactsAction := {
+      val marker = baseDirectory.value / "marker" / "publish.log"
+      IO.createDirectory(marker.getParentFile)
+      IO.append(marker, "api\n")
+    }
   )
 
 lazy val services = (project in file("services"))
   .aggregate(api)
   .settings(
-    name         := "services",
-    scalaVersion := "2.12.18"
+    name                          := "services",
+    scalaVersion                  := "2.12.18",
+    publishTo                     := Some(
+      Resolver.file("services-test-repo", baseDirectory.value / "repo")
+    ),
+    Test / test                   := {
+      val marker = baseDirectory.value / "marker" / "tests.log"
+      IO.createDirectory(marker.getParentFile)
+      IO.append(marker, "services\n")
+    },
+    releasePublishArtifactsAction := {
+      val marker = baseDirectory.value / "marker" / "publish.log"
+      IO.createDirectory(marker.getParentFile)
+      IO.append(marker, "services\n")
+    }
   )
 
 lazy val root = (project in file("."))
@@ -28,12 +52,7 @@ lazy val root = (project in file("."))
 
     releaseIOMonorepoDetectChanges := false,
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" ||
-      step.name == "publish-artifacts" ||
-      step.name == "run-clean" ||
-      step.name == "run-tests"
-    },
+    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(_.name == "push-changes"),
 
     releaseIgnoreUntrackedFiles := true,
 
@@ -59,6 +78,30 @@ lazy val root = (project in file("."))
       assert(
         apiContents.contains("1.1.0-SNAPSHOT"),
         s"Expected api version 1.1.0-SNAPSHOT but got: $apiContents"
+      )
+
+      val servicesTests = IO.readLines(file("services/marker/tests.log")).filter(_.nonEmpty)
+      assert(
+        servicesTests == List("services"),
+        s"Expected services tests to run once but got: ${servicesTests.mkString(", ")}"
+      )
+
+      val apiTests = IO.readLines(file("services/api/marker/tests.log")).filter(_.nonEmpty)
+      assert(
+        apiTests == List("api"),
+        s"Expected api tests to run once but got: ${apiTests.mkString(", ")}"
+      )
+
+      val servicesPublishes = IO.readLines(file("services/marker/publish.log")).filter(_.nonEmpty)
+      assert(
+        servicesPublishes == List("services"),
+        s"Expected services publish to run once but got: ${servicesPublishes.mkString(", ")}"
+      )
+
+      val apiPublishes = IO.readLines(file("services/api/marker/publish.log")).filter(_.nonEmpty)
+      assert(
+        apiPublishes == List("api"),
+        s"Expected api publish to run once but got: ${apiPublishes.mkString(", ")}"
       )
     }
   )

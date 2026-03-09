@@ -135,15 +135,7 @@ private[monorepo] object MonorepoStepHelpers {
       project: ProjectReleaseInfo
   ): IO[File] = IO.blocking {
     val extracted = Project.extract(ctx.state)
-    val useGlobal =
-      extracted.get(_root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion)
-    if (useGlobal)
-      extracted.get(sbtrelease.ReleasePlugin.autoImport.releaseVersionFile)
-    else {
-      val versionFileFn =
-        extracted.get(_root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile)
-      versionFileFn(project.ref)
-    }
+    _root_.io.release.monorepo.MonorepoVersionFiles.resolve(extracted, project.ref)
   }
 
   // ── VCS commit ────────────────────────────────────────────────────────

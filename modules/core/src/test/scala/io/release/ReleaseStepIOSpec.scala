@@ -104,6 +104,36 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
         }
       }
     }
+
+    "fail the check phase when a check returns FailureCommand" in {
+      contextResource.use { ctx =>
+        Ref.of[IO, List[String]](Nil).flatMap { observed =>
+          val failingCheck = ReleaseStepIO(
+            name = "failing-check",
+            action = c => observed.update(_ :+ "action1").as(c),
+            check = c =>
+              observed
+                .update(_ :+ "check1")
+                .as(c.copy(state = c.state.copy(remainingCommands = Compat.FailureCommand :: Nil)))
+          )
+
+          val skipped = ReleaseStepIO.io("skipped") { c =>
+            observed.update(_ :+ "action2").as(c)
+          }
+
+          ReleaseStepIO
+            .compose(Seq(failingCheck, skipped), crossBuild = false)(ctx)
+            .attempt
+            .flatMap { result =>
+              observed.get.map { obs =>
+                (result must beLeft.like { case e: IllegalStateException =>
+                  e.getMessage must contain("Check phase failed")
+                }) and (obs must_== List("check1"))
+              }
+            }
+        }
+      }
+    }
   }
 
   "ReleaseStepIO command steps" should {
