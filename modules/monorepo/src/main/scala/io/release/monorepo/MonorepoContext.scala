@@ -13,7 +13,7 @@ import sbtrelease.Vcs
   * @param ref         sbt project reference
   * @param name        project name (matches `ref.project`)
   * @param baseDir     project root directory
-  * @param versionFile path to the project's resolved version file
+  * @param versionFile most recently resolved version-file path for this project
   * @param versions    `(releaseVersion, nextVersion)` pair, set by version inquiry steps
   * @param tagName     VCS tag for this project's release, set by the tagging step
   * @param failed      set to true when this project's step action fails
@@ -47,14 +47,17 @@ object MonorepoTagStrategy {
   * Created by [[MonorepoReleasePluginLike.doMonorepoRelease]], then passed through
   * the composer. Global steps receive the context directly; per-project
   * steps receive both the context and the current [[ProjectReleaseInfo]].
+  * Built-in monorepo actions resolve project order, selection, version settings,
+  * and tag settings from the current `State` when they run; custom steps continue
+  * to receive and update the threaded snapshot context.
   *
   * @param state       the current `sbt.State`, updated between steps
   * @param vcs         VCS adapter (git), set by `initializeVcs`
-  * @param projects    subprojects in topological order
+  * @param projects    current snapshot of the participating subprojects
   * @param skipTests   when true, test steps are skipped
   * @param skipPublish when true, publish steps are skipped
   * @param interactive when true, steps may prompt for user input
-  * @param tagStrategy per-project or unified tagging
+  * @param tagStrategy current snapshot of the tagging strategy
   * @param attributes  arbitrary key-value store for inter-step communication
   * @param failed      set to true by the composer on step failure; subsequent steps are skipped
   */

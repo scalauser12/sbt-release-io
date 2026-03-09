@@ -4,6 +4,7 @@ import cats.effect.IO
 import _root_.io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
+import io.release.monorepo.internal.MonorepoTagResolver
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.{required, runProcess}
 import sbt.*
@@ -100,18 +101,13 @@ private[monorepo] object MonorepoVcsSteps {
         required(ctx.vcs, "VCS not initialized") { vcs =>
           required(project.versions, s"Versions not set for ${project.name}") {
             case (releaseVer, _) =>
-              IO.blocking {
-                val extracted = Project.extract(ctx.state)
-                (
-                  extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer),
-                  extracted.get(releaseVcsSign)
-                )
-              }.flatMap { case (tagName, sign) =>
+              IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
+                val tagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
                   vcs,
                   tagName,
                   s"Release ${project.name} $releaseVer",
-                  sign,
+                  settings.sign,
                   project.name
                 ) *>
                   logInfo(ctx, s"Tagged ${project.name} as $tagName")
@@ -135,16 +131,11 @@ private[monorepo] object MonorepoVcsSteps {
             case None           =>
               IO.raiseError(new IllegalStateException("No release versions set for any project"))
             case Some((rel, _)) =>
-              IO.blocking {
-                val extracted = Project.extract(ctx.state)
-                (
-                  extracted.get(releaseIOMonorepoUnifiedTagName)(rel),
-                  extracted.get(releaseVcsSign)
-                )
-              }.flatMap { case (tagName, sign) =>
+              IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
+                val tagName = settings.unifiedTagName(rel)
                 val summary =
                   versionSummary(ctx, { case (releaseVer, _) => releaseVer })
-                createTag(vcs, tagName, s"Release: $summary", sign, "release") *>
+                createTag(vcs, tagName, s"Release: $summary", settings.sign, "release") *>
                   logInfo(ctx, s"Tagged release as $tagName").as(
                     ctx.currentProjects.foldLeft(ctx) { (c, p) =>
                       c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))

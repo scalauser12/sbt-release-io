@@ -2,7 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import io.release.internal.{CoreReleasePlan, CoreReleasePlanner, ExecutionFlags, TagPlan, VersionPlan}
+import io.release.internal.{CoreReleasePlan, CoreReleasePlanner, CoreVersionResolver, ExecutionFlags}
 import io.release.{ReleaseKeys, TestSupport}
 import org.specs2.mutable.Specification
 
@@ -13,9 +13,9 @@ class VersionStepsSpec extends Specification {
 
   "VersionSteps.resolveVersionPlan" should {
 
-    "prefer the attached core release plan over fallback resolution" in withTempDir {
+    "use live version settings even when a startup plan is attached" in withTempDir {
       dir =>
-        val attachedFile = new File(dir, "attached-version.sbt")
+        val resolvedFile = new File(dir, "resolved-version.sbt")
         val state        =
           CoreReleasePlanner.attach(
             TestSupport
@@ -30,32 +30,32 @@ class VersionStepsSpec extends Specification {
                 interactive = false,
                 crossBuild = false
               ),
-              version = VersionPlan(
-                versionFile = attachedFile,
-                readVersion = _ => IO.pure("1.2.3-SNAPSHOT"),
-                writeVersion = (_, version) => IO.pure(s"attached=$version"),
-                releaseVersionOverride = Some("1.2.3"),
-                nextVersionOverride = Some("1.2.4-SNAPSHOT"),
-                useGlobalVersion = true
-              ),
-              tag = TagPlan(defaultAnswer = None)
+              releaseVersionOverride = Some("1.2.3"),
+              nextVersionOverride = Some("1.2.4-SNAPSHOT"),
+              tagDefault = None
             )
           )
 
         val result = VersionSteps.resolveVersionPlan(
           state,
-          _ => throw new IllegalStateException("fallback resolver should not run")
+          _ =>
+            CoreVersionResolver.ResolvedSettings(
+              versionFile = resolvedFile,
+              readVersion = _ => IO.pure("1.2.3-SNAPSHOT"),
+              writeVersion = (_, version) => IO.pure(s"resolved=$version"),
+              useGlobalVersion = true
+            )
         )
 
-        (result.versionFile must_== attachedFile) and
+        (result.versionFile must_== resolvedFile) and
           (result.releaseVersionOverride must beSome("1.2.3")) and
           (result.nextVersionOverride must beSome("1.2.4-SNAPSHOT")) and
           (result.useGlobalVersion must beTrue) and
-          (result.readVersion(attachedFile).unsafeRunSync() must_== "1.2.3-SNAPSHOT") and
-          (result.writeVersion(attachedFile, "1.2.3").unsafeRunSync() must_== "attached=1.2.3")
+          (result.readVersion(resolvedFile).unsafeRunSync() must_== "1.2.3-SNAPSHOT") and
+          (result.writeVersion(resolvedFile, "1.2.3").unsafeRunSync() must_== "resolved=1.2.3")
     }
 
-    "delegate fallback resolution to CoreReleasePlanner.resolve and preserve CLI overrides" in
+    "delegate live resolution to CoreVersionResolver and preserve CLI overrides from state" in
       withTempDir { dir =>
         val fallbackFile = new File(dir, "fallback-version.sbt")
         var resolverRuns = 0
@@ -69,7 +69,7 @@ class VersionStepsSpec extends Specification {
           state,
           _ => {
             resolverRuns += 1
-            CoreReleasePlanner.ResolvedSettings(
+            CoreVersionResolver.ResolvedSettings(
               versionFile = fallbackFile,
               readVersion = _ => IO.pure("1.9.9-SNAPSHOT"),
               writeVersion = (_, version) => IO.pure(s"fallback=$version"),

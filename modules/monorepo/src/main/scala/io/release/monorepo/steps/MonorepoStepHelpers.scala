@@ -1,6 +1,7 @@
 package io.release.monorepo.steps
 
 import _root_.io.release.monorepo.{MonorepoContext, MonorepoRuntime, ProjectReleaseInfo}
+import _root_.io.release.monorepo.internal.MonorepoVersionResolver
 import _root_.io.release.steps.StepHelpers.{required, runProcess}
 import cats.effect.IO
 import sbt.*
@@ -149,7 +150,7 @@ private[monorepo] object MonorepoStepHelpers {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[File] =
-    loadRuntime(ctx).map(resolveVersionFile(_, project))
+    MonorepoVersionResolver.resolve(ctx.state, project.ref).map(_.versionFile)
 
   // ── VCS commit ────────────────────────────────────────────────────────
 

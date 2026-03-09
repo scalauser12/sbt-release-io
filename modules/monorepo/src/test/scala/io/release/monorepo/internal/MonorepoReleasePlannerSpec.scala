@@ -1,7 +1,7 @@
 package io.release.monorepo.internal
 
 import io.release.internal.ExecutionFlags
-import io.release.monorepo.MonorepoTagStrategy
+import io.release.monorepo.ProjectReleaseInfo
 import org.specs2.mutable.Specification
 import sbt.ProjectRef
 
@@ -16,8 +16,7 @@ class MonorepoReleasePlannerSpec extends Specification {
 
     "reject duplicate per-project release-version overrides" in {
       val result = MonorepoReleasePlanner.validateOverrideInputs(
-        baseInputs.copy(releaseVersionPairs = Seq("core" -> "1.0.0", "core" -> "1.1.0")),
-        useGlobalVersion = false
+        baseInputs.copy(releaseVersionPairs = Seq("core" -> "1.0.0", "core" -> "1.1.0"))
       )
 
       result must beLeft.like { case message =>
@@ -27,8 +26,7 @@ class MonorepoReleasePlannerSpec extends Specification {
 
     "reject explicit project selection combined with all-changed" in {
       val result = MonorepoReleasePlanner.validateOverrideInputs(
-        baseInputs.copy(allChanged = true, selectedNames = Seq("core")),
-        useGlobalVersion = false
+        baseInputs.copy(allChanged = true, selectedNames = Seq("core"))
       )
 
       result must beLeft.like { case message =>
@@ -38,27 +36,21 @@ class MonorepoReleasePlannerSpec extends Specification {
 
     "derive the explicit selection mode from validated inputs" in {
       val result = MonorepoReleasePlanner.validateOverrideInputs(
-        baseInputs.copy(selectedNames = Seq("core")),
-        useGlobalVersion = false
+        baseInputs.copy(selectedNames = Seq("core"))
       )
 
       result must beRight.like { case validated =>
         validated.selectionMode must_== SelectionMode.ExplicitSelection
       }
     }
-  }
 
-  "MonorepoReleasePlanner.validateResolvedProjects" should {
-
-    "reject subset selection when global version mode is enabled" in {
-      val validated = validatedInputs(
-        baseInputs.copy(selectedNames = Seq("core")),
-        useGlobalVersion = true
+    "allow global overrides at startup before runtime global-version validation" in {
+      val result = MonorepoReleasePlanner.validateOverrideInputs(
+        baseInputs.copy(globalReleaseVersions = Seq("1.0.0"))
       )
 
-      MonorepoReleasePlanner.validateResolvedProjects(allProjects, validated) must beLeft.like {
-        case message =>
-          message must contain("Global version mode is active")
+      result must beRight.like { case validated =>
+        validated.globalReleaseVersion must beSome("1.0.0")
       }
     }
   }
@@ -101,7 +93,6 @@ class MonorepoReleasePlannerSpec extends Specification {
       crossBuild = false
     ),
     allChanged = false,
-    tagStrategy = MonorepoTagStrategy.PerProject,
     selectedNames = Nil,
     releaseVersionPairs = Nil,
     nextVersionPairs = Nil,
@@ -110,28 +101,15 @@ class MonorepoReleasePlannerSpec extends Specification {
   )
 
   private val allProjects = Seq(
-    projectPlan("core"),
-    projectPlan("api")
+    project("core"),
+    project("api")
   )
 
-  private def validatedInputs(
-      inputs: MonorepoReleasePlanner.Inputs,
-      useGlobalVersion: Boolean
-  ): MonorepoReleasePlanner.ValidatedInputs =
-    MonorepoReleasePlanner.validateOverrideInputs(inputs, useGlobalVersion) match {
-      case Right(validated) => validated
-      case Left(message)    => throw new RuntimeException(s"Expected valid inputs but got: $message")
-    }
-
-  private def projectPlan(name: String): ProjectPlan =
-    ProjectPlan(
+  private def project(name: String): ProjectReleaseInfo =
+    ProjectReleaseInfo(
       ref = ProjectRef(new URI("file:///tmp/test"), name),
       name = name,
       baseDir = new File(s"/tmp/test/$name"),
-      version = ProjectVersionPlan(
-        versionFile = new File(s"/tmp/test/$name/version.sbt"),
-        releaseVersionOverride = None,
-        nextVersionOverride = None
-      )
+      versionFile = new File(s"/tmp/test/$name/version.sbt")
     )
 }

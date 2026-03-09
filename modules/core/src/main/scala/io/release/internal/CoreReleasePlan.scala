@@ -15,12 +15,17 @@ private[release] final case class VersionPlan(
 
 /** Resolved tagging inputs for the core release flow. */
 private[release] final case class TagPlan(
+    state: sbt.State,
+    tagName: String,
+    tagComment: String,
+    sign: Boolean,
     defaultAnswer: Option[String]
 )
 
-/** Typed execution plan for the core release command. */
+/** Typed startup plan for the core release command. */
 private[release] final case class CoreReleasePlan(
     flags: ExecutionFlags,
-    version: VersionPlan,
-    tag: TagPlan
+    releaseVersionOverride: Option[String],
+    nextVersionOverride: Option[String],
+    tagDefault: Option[String]
 )

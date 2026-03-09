@@ -1,7 +1,7 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.internal.{CoreReleasePlanner, GitRuntime, SbtRuntime}
+import io.release.internal.{CoreTagResolver, CoreVersionResolver, GitRuntime, SbtRuntime, TagPlan}
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
 import _root_.io.release.steps.StepHelpers.*
@@ -40,34 +40,19 @@ private[release] object VcsSteps {
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
-        setup               <- IO.blocking {
-                                 val (s1, tagName)    = SbtRuntime.runTask(ctx.state, releaseTagName)
-                                 val (s2, tagComment) = SbtRuntime.runTask(s1, releaseTagComment)
-                                 val sign             = SbtRuntime.getSetting(s2, releaseVcsSign)
-                                 val defaultAnswer    = CoreReleasePlanner
-                                   .current(s2)
-                                   .flatMap(_.tag.defaultAnswer)
-                                   .orElse(s2.get(ReleaseKeys.tagDefault).flatten)
-                                 TagParams(
-                                   tagName = tagName,
-                                   tagComment = tagComment,
-                                   sign = sign,
-                                   defaultAnswer = defaultAnswer,
-                                   useDefaults = useDefaults(s2)
-                                 ) -> ctx.copy(state = s2)
-                               }
-        (params, updatedCtx) = setup
-        result              <- resolveTag(vcs, params, updatedCtx)
+        params <- IO.blocking(CoreTagResolver.resolve(ctx.state))
+        result <- resolveTag(vcs, params, ctx.copy(state = params.state))
       } yield result
     }
   }
 
   private def resolveTag(
       vcs: Vcs,
-      params: TagParams,
+      params: TagPlan,
       ctx: ReleaseContext
   ): IO[ReleaseContext] = {
-    val TagParams(tagName, tagComment, sign, defaultAnswer, useDefaults) = params
+    val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = params
+    val useDefaults                                          = CoreTagResolver.useDefaultsFor(params)
     for {
       exists <- IO.blocking(vcs.existsTag(tagName))
       result <- if (!exists)
@@ -75,7 +60,8 @@ private[release] object VcsSteps {
                     IO.blocking {
                       val newState = SbtRuntime.appendWithSession(
                         ctx.state,
-                        Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                        CoreVersionResolver.sessionSettings(ctx.state) ++
+                          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
                       )
                       ctx.copy(state = newState)
                     }
@@ -114,7 +100,8 @@ private[release] object VcsSteps {
                         )
                         val newState = SbtRuntime.appendWithSession(
                           ctx.state,
-                          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                          CoreVersionResolver.sessionSettings(ctx.state) ++
+                            Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
                         )
                         ctx.copy(state = newState)
                       }
@@ -128,7 +115,8 @@ private[release] object VcsSteps {
                         IO.blocking {
                           val newState = SbtRuntime.appendWithSession(
                             ctx.state,
-                            Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                            CoreVersionResolver.sessionSettings(ctx.state) ++
+                              Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
                           )
                           ctx.copy(state = newState)
                         }
@@ -141,7 +129,7 @@ private[release] object VcsSteps {
                         resolveTag(
                           vcs,
                           params
-                            .copy(tagName = newTagName, defaultAnswer = None, useDefaults = false),
+                            .copy(tagName = newTagName, defaultAnswer = None),
                           ctx
                         )
                   }
@@ -238,11 +226,4 @@ private[release] object VcsSteps {
           )
     } yield ()
 
-  private final case class TagParams(
-      tagName: String,
-      tagComment: String,
-      sign: Boolean,
-      defaultAnswer: Option[String],
-      useDefaults: Boolean
-  )
 }

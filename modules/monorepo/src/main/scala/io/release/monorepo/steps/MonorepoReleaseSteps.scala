@@ -2,7 +2,7 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.monorepo.*
-import io.release.monorepo.internal.{MonorepoReleasePlanner, SelectionMode}
+import io.release.monorepo.internal.{MonorepoOrderResolver, MonorepoReleasePlanner, MonorepoSelectionResolver, MonorepoTagResolver, SelectionMode}
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 
 /** Facade re-exporting all built-in monorepo release steps and default sequences. */
@@ -29,8 +29,9 @@ object MonorepoReleaseSteps {
   val resolveReleaseOrder: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "resolve-release-order",
     action = ctx =>
-      MonorepoReleasePlanner.require(ctx.state).flatMap { plan =>
-        val sortedProjects = plan.orderedReleaseInfos
+      MonorepoOrderResolver.resolve(ctx.state).flatMap { resolved =>
+        val sortedProjects = _root_.io.release.monorepo.internal.MonorepoProjectResolver
+          .mergeSnapshot(ctx.projects, resolved)
         val updated        = ctx.withProjects(sortedProjects)
         logInfo(updated, s"Release order: ${sortedProjects.map(_.name).mkString(" -> ")}")
       }
@@ -40,9 +41,9 @@ object MonorepoReleaseSteps {
     name = "detect-or-select-projects",
     action = ctx =>
       MonorepoReleasePlanner.require(ctx.state).flatMap { plan =>
-        plan.resolveSelectedProjects(ctx).flatMap { selected =>
-          val selectedInfos = selected.map(_.toReleaseInfo)
-          val message       = plan.selectionMode match {
+        MonorepoSelectionResolver.resolve(ctx, ctx.projects, plan).flatMap { result =>
+          val selectedInfos = result.projects
+          val message       = result.selectionMode match {
             case SelectionMode.ExplicitSelection =>
               s"Releasing explicitly selected projects: ${selectedInfos.map(_.name).mkString(", ")}"
             case SelectionMode.AllChanged        =>
@@ -53,13 +54,15 @@ object MonorepoReleaseSteps {
 
           if (selectedInfos.isEmpty) {
             val errorMessage =
-              plan.selectionMode match {
+              result.selectionMode match {
                 case SelectionMode.DetectChanges => "No projects have changed. Nothing to release."
                 case _                           => "No projects configured. Nothing to release."
               }
             IO.raiseError(new IllegalStateException(errorMessage))
           } else {
-            logInfo(ctx, message).map(_.withProjects(selectedInfos))
+            logInfo(ctx, message).map(
+              _.withProjects(selectedInfos).copy(tagStrategy = result.tagStrategy)
+            )
           }
         }
       }
@@ -68,14 +71,14 @@ object MonorepoReleaseSteps {
   val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-releases",
     action = ctx =>
-      MonorepoReleasePlanner.require(ctx.state).flatMap { plan =>
-        plan.tagStrategy match {
+      IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
+        settings.tagStrategy match {
           case MonorepoTagStrategy.Unified    =>
-            MonorepoVcsSteps.tagReleasesUnified.action(ctx)
+            MonorepoVcsSteps.tagReleasesUnified.action(ctx.copy(tagStrategy = settings.tagStrategy))
           case MonorepoTagStrategy.PerProject =>
             val pp = MonorepoVcsSteps.tagReleasesPerProject
             runPerProject(
-              ctx,
+              ctx.copy(tagStrategy = settings.tagStrategy),
               (currentCtx, project) =>
                 logInfo(currentCtx, s"${pp.name} [${project.name}]") *>
                   pp.action(currentCtx, project)

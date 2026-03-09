@@ -284,7 +284,6 @@ trait ReleasePluginIOLike[T]
         .put(ReleaseKeys.commandLineNextVersion, nextVersionArg)
         .put(ReleaseKeys.tagDefault, tagDefaultArg)
       val plan           = CoreReleasePlanner.build(
-        decoratedState,
         CoreReleasePlanner.Inputs(
           useDefaults = useDefaults,
           skipTests = skipTests,

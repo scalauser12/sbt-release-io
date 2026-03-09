@@ -121,9 +121,10 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order.
 Built-in task-backed per-project steps are project-scoped: child projects run only when they are themselves selected or discovered.
-Internal planning and CLI validation happen before execution begins; the public check/action step model
-still remains for compatibility, so check-phase context mutations are discarded even though planning has
-already resolved project selection and version inputs.
+Command-line flags and CLI override syntax are validated before execution begins, but built-in
+actions resolve project order, project selection, version-file handling, and tag settings from the
+current `State` when they run. The public check/action step model still remains for compatibility,
+so check-phase context mutations are discarded.
 
 ## Configuration
 
@@ -315,6 +316,12 @@ override protected def monorepoReleaseProcess(state: State) =
 
 `defaultsWithAfter` and `defaultsWithBefore` match the exact `step.name` strings shown in
 the default-step table above, such as `"tag-releases"` or `"publish-artifacts"`.
+
+Custom steps inserted before built-in monorepo actions may update session settings in `State`, and
+later built-in actions will read those live settings when they run. This applies to built-in order
+resolution, project selection, version resolution, and tagging. Custom `PerProject` steps still use
+the current `MonorepoContext.projects` snapshot unless they explicitly replace it themselves, and
+built-in checks still run from the initial check-phase state.
 
 > **Note:** Each helper inserts at a single position. To insert custom steps at multiple
 > non-adjacent positions, use the fully custom approach below.
@@ -519,7 +526,7 @@ Each project uses its own `crossScalaVersions`. A project with `Seq("2.13.12", "
 ### Two-phase execution
 
 1. **Check phase**: All step checks run against the initial context. State mutations are discarded. Any check failure aborts the entire release before actions execute.
-2. **Action phase**: Steps run sequentially, threading `MonorepoContext` through. Between every step, sbt's `FailureCommand` sentinel is inspected for task-level failures.
+2. **Action phase**: Steps run sequentially, threading `MonorepoContext` through. Built-in actions resolve project order, selection, version-file settings, and tag settings from the current `State` when they run. Between every step, sbt's `FailureCommand` sentinel is inspected for task-level failures.
 
 ### Per-project failure isolation
 

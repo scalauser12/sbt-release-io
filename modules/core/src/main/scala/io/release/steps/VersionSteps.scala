@@ -1,7 +1,7 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.internal.{CoreReleasePlanner, GitRuntime, SbtRuntime, VersionPlan}
+import io.release.internal.{CoreVersionResolver, GitRuntime, SbtRuntime, VersionPlan}
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
 import _root_.io.release.steps.StepHelpers.*
@@ -68,11 +68,7 @@ private[release] object VersionSteps {
                           nextVersionFn = nextFn,
                           releaseVersionArg = versionPlan.releaseVersionOverride,
                           nextVersionArg = versionPlan.nextVersionOverride,
-                          useDefaults = CoreReleasePlanner
-                            .current(s2)
-                            .map(_.flags.useDefaults)
-                            .orElse(s2.get(ReleaseKeys.useDefaults))
-                            .getOrElse(false)
+                          useDefaults = useDefaults(s2)
                         )
                       }
       releaseVer   <-
@@ -136,7 +132,7 @@ private[release] object VersionSteps {
                                          else version                                          := releaseVer
                                        val newState       = SbtRuntime.appendWithSession(
                                          resultCtx.state,
-                                         Seq(
+                                         CoreVersionResolver.sessionSettings(resultCtx.state) ++ Seq(
                                            packageOptions += ManifestAttributes(
                                              "Vcs-Release-Hash" -> currentHash
                                            ),
@@ -212,7 +208,10 @@ private[release] object VersionSteps {
                     )
                     val setting  =
                       if (versionPlan.useGlobalVersion) ThisBuild / version := ver else version := ver
-                    val newState = SbtRuntime.appendWithSession(ctx.state, Seq(setting))
+                    val newState = SbtRuntime.appendWithSession(
+                      ctx.state,
+                      CoreVersionResolver.sessionSettings(ctx.state) ++ Seq(setting)
+                    )
                     ctx.copy(state = newState)
                   }
     } yield result
@@ -220,17 +219,8 @@ private[release] object VersionSteps {
 
   private[release] def resolveVersionPlan(
       state: State,
-      resolveSettings: State => CoreReleasePlanner.ResolvedSettings = CoreReleasePlanner.resolve
+      resolveSettings: State => CoreVersionResolver.ResolvedSettings =
+        CoreVersionResolver.resolveCurrentSettings
   ): VersionPlan =
-    CoreReleasePlanner.current(state).map(_.version).getOrElse {
-      val settings = resolveSettings(state)
-      VersionPlan(
-        versionFile = settings.versionFile,
-        readVersion = settings.readVersion,
-        writeVersion = settings.writeVersion,
-        releaseVersionOverride = state.get(ReleaseKeys.commandLineReleaseVersion).flatten,
-        nextVersionOverride = state.get(ReleaseKeys.commandLineNextVersion).flatten,
-        useGlobalVersion = settings.useGlobalVersion
-      )
-    }
+    CoreVersionResolver.resolve(state, resolveSettings)
 }

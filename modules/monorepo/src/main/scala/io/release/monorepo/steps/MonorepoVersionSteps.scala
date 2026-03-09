@@ -7,6 +7,7 @@ import cats.effect.IO
 import io.release.ReleaseKeys
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
+import io.release.monorepo.internal.MonorepoVersionResolver
 import io.release.monorepo.internal.MonorepoInternalKeys
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.internal.SbtRuntime
@@ -38,14 +39,20 @@ private[monorepo] object MonorepoVersionSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     for {
-      runtime                                              <- loadRuntime(ctx)
-      versionFile                                           = resolveVersionFile(runtime, project)
-      currentVer                                           <- runtime.readVersion(versionFile)
+      versionInputs                                        <- MonorepoVersionResolver.resolve(
+                                                                ctx.state,
+                                                                project.ref
+                                                              )
+      currentVer                                           <- versionInputs.readVersion(
+                                                                versionInputs.versionFile
+                                                              )
       data                                                 <- IO.blocking {
+                                                                val extracted        =
+                                                                  Project.extract(ctx.state)
                                                                 val (s1, releaseFn) =
-                                                                  runtime.extracted.runTask(project.ref / releaseVersion, ctx.state)
+                                                                  extracted.runTask(project.ref / releaseVersion, ctx.state)
                                                                 val (s2, nextFn)    =
-                                                                  runtime.extracted.runTask(project.ref / releaseNextVersion, s1)
+                                                                  extracted.runTask(project.ref / releaseNextVersion, s1)
                                                                 val useDefaults     =
                                                                   s2.get(ReleaseKeys.useDefaults).getOrElse(false)
                                                                 (s2, releaseFn(currentVer), nextFn, useDefaults)
@@ -72,7 +79,12 @@ private[monorepo] object MonorepoVersionSteps {
                                                               ).as(
                                                                 ctx
                                                                   .withState(updatedState)
-                                                                  .updateProject(project.ref)(_.copy(versions = Some((releaseVer, nextVer))))
+                                                                  .updateProject(project.ref)(
+                                                                    _.copy(
+                                                                      versionFile = versionInputs.versionFile,
+                                                                      versions = Some((releaseVer, nextVer))
+                                                                    )
+                                                                  )
                                                               )
     } yield result
 
@@ -138,11 +150,12 @@ private[monorepo] object MonorepoVersionSteps {
       ver: String
   ): IO[MonorepoContext] =
     for {
-      runtime    <- loadRuntime(ctx)
-      versionFile = resolveVersionFile(runtime, project)
+      versionInputs <- MonorepoVersionResolver.resolve(ctx.state, project.ref)
+      preserved     <- MonorepoVersionResolver.sessionSettings(ctx.state)
+      versionFile    = versionInputs.versionFile
       result     <-
         if (
-          runtime.useGlobalVersion && ctx.state
+          versionInputs.useGlobalVersion && ctx.state
             .get(MonorepoInternalKeys.globalVersionWritten)
             .flatten
             .contains(ver)
@@ -150,19 +163,26 @@ private[monorepo] object MonorepoVersionSteps {
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
         else
           for {
-            contents <- runtime.writeVersion(versionFile, ver)
+            contents <- versionInputs.writeVersion(versionFile, ver)
             newState <- IO.blocking {
                           Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
                           val setting   =
-                            if (runtime.useGlobalVersion) ThisBuild / version := ver
+                            if (versionInputs.useGlobalVersion) ThisBuild / version := ver
                             else project.ref / version                        := ver
-                          val baseState = SbtRuntime.appendWithSession(ctx.state, Seq(setting))
-                          if (runtime.useGlobalVersion)
+                          val baseState = SbtRuntime.appendWithSession(
+                            ctx.state,
+                            preserved ++ Seq(setting)
+                          )
+                          if (versionInputs.useGlobalVersion)
                             baseState.put(MonorepoInternalKeys.globalVersionWritten, Some(ver))
                           else baseState
                         }
             r        <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
-                          .as(ctx.withState(newState))
+                          .as(
+                            ctx
+                              .withState(newState)
+                              .updateProject(project.ref)(_.copy(versionFile = versionFile))
+                          )
           } yield r
     } yield result
 }

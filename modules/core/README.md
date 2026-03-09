@@ -241,6 +241,11 @@ the default-step list below, such as `"check-clean-working-dir"` or `"publish-ar
 
 These helpers read from the `releaseIOProcess` setting (including any `build.sbt` filtering), so your override builds on all configured steps.
 
+Custom steps inserted before a built-in action may update session settings in `State`, and the
+later built-in action will read those live settings when it runs. This applies to built-in actions
+such as version resolution and tagging. It does not change the two-phase model: built-in `check`
+functions still run from the initial check-phase state.
+
 > **Note:** Each helper inserts at a single position. To insert custom steps at multiple
 > non-adjacent positions, use the fully custom approach below.
 
@@ -419,8 +424,9 @@ The default release process includes:
 13. **push-changes** - Push commits and tags to remote
 
 These names are the stable built-in insertion points for `defaultsWithAfter` and `defaultsWithBefore`.
-Internal planning resolves flags, version-file handling, and tag defaults before the composed release
-program starts, while the public check/action step model remains unchanged for compatibility.
+Command-line flags and other run invariants are captured before execution starts, but built-in
+actions resolve operational settings such as version-file handling and tagging from the current
+`State` when they run. The public check/action step model remains unchanged for compatibility.
 
 ## Testing
 
