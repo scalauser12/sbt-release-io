@@ -183,7 +183,7 @@ trait MonorepoReleasePluginLike[T]
       useGlobalVersion: Boolean = false
   ): Either[Throwable, Seq[ProjectReleaseInfo]] =
     Try {
-      val allProjectRefs    = extracted.get(releaseIOMonorepoProjects)
+      val allProjectRefs = extracted.get(releaseIOMonorepoProjects)
 
       def resolveVersions(projName: String): Option[(String, String)] = {
         val rel  = globalReleaseVersion.getOrElse(releaseVersionOverrides.getOrElse(projName, ""))

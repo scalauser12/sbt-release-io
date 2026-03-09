@@ -79,7 +79,9 @@ private[release] object ReleaseComposer {
       .flatMap { checkedCtx =>
         ComposerSupport.stripFailureCommand(checkedCtx).flatMap { strippedCtx =>
           if (strippedCtx.failed)
-            IO.raiseError(new IllegalStateException("Check phase failed: sbt task failure detected"))
+            IO.raiseError(
+              new IllegalStateException("Check phase failed: sbt task failure detected")
+            )
           else
             IO.unit
         }

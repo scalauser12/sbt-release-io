@@ -7,12 +7,11 @@ lazy val api = (project in file("services/api"))
   .settings(
     name                          := "api",
     scalaVersion                  := "2.12.18",
+    libraryDependencies           += "org.scalatest" %% "scalatest" % "3.2.15" % Test,
     publishTo                     := Some(Resolver.file("api-test-repo", baseDirectory.value / "repo")),
-    Test / test                   := {
-      val marker = baseDirectory.value / "marker" / "tests.log"
-      IO.createDirectory(marker.getParentFile)
-      IO.append(marker, "api\n")
-    },
+    Test / testOptions            += Tests.Setup(() =>
+      System.setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
+    ),
     releasePublishArtifactsAction := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
@@ -25,14 +24,13 @@ lazy val services = (project in file("services"))
   .settings(
     name                          := "services",
     scalaVersion                  := "2.12.18",
+    libraryDependencies           += "org.scalatest" %% "scalatest" % "3.2.15" % Test,
     publishTo                     := Some(
       Resolver.file("services-test-repo", baseDirectory.value / "repo")
     ),
-    Test / test                   := {
-      val marker = baseDirectory.value / "marker" / "tests.log"
-      IO.createDirectory(marker.getParentFile)
-      IO.append(marker, "services\n")
-    },
+    Test / testOptions            += Tests.Setup(() =>
+      System.setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
+    ),
     releasePublishArtifactsAction := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
