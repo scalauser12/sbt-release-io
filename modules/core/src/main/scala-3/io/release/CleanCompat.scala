@@ -9,13 +9,11 @@ import sbt.*
   * plugin keeps using the project-scoped `clean` task because `cleanFull` is build-wide and would
   * wipe outputs for untouched projects.
   */
-object CleanCompat {
+object CleanCompat:
 
   def runBuild(state: State, ref: ProjectRef): State =
     CommandStepSupport.runCommandAndRemaining(state, BasicCommandStrings.CleanFull)
 
-  def runProject(state: State, ref: ProjectRef): State = {
+  def runProject(state: State, ref: ProjectRef): State =
     val extracted = Project.extract(state)
     extracted.runAggregated(ref / (Global / Keys.clean), state)
-  }
-}

@@ -8,10 +8,9 @@ import sbt.internal.BuildStructure
   * Delegates to a bridge in `package sbt`, which has access to `private[sbt]` internals.
   * Not a supported public extension point.
   */
-private[release] object LoadCompat {
+private[release] object LoadCompat:
 
   def reapply(newSettings: Seq[Setting[?]], structure: BuildStructure)(using
       display: Show[ScopedKey[?]]
   ): BuildStructure =
     sbt.ReleaseIOLoadCompatBridge.reapply(newSettings, structure)
-}

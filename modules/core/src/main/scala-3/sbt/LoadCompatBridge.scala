@@ -7,10 +7,9 @@ import sbt.internal.BuildStructure
   * The name is intentionally scoped to sbt-release-io to avoid classpath collisions
   * with other plugins using the same bridge pattern.
   */
-object ReleaseIOLoadCompatBridge {
+object ReleaseIOLoadCompatBridge:
 
   def reapply(newSettings: Seq[Setting[?]], structure: BuildStructure)(using
       display: Show[ScopedKey[?]]
   ): BuildStructure =
     sbt.internal.Load.reapply(newSettings, structure)
-}

@@ -7,6 +7,5 @@ import sbt.*
   *
   * In sbt 2, `test` becomes an InputKey, replaced by `testFull` as a `TaskKey[TestResult]`.
   */
-object ReleaseIOCompat {
+object ReleaseIOCompat:
   def testKey: TaskKey[sbt.protocol.testing.TestResult] = sbt.Keys.testFull
-}
