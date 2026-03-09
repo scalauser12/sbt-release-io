@@ -3,10 +3,11 @@ package sbt
 import sbt.Def.ScopedKey
 import sbt.internal.BuildStructure
 
-/** Bridge in `package sbt` to access `private[sbt]` Load.reapply.
-  * Called by io.release.LoadCompat.
+/** Plugin-specific bridge in `package sbt` to access `private[sbt]` `Load.reapply`.
+  * The name is intentionally scoped to sbt-release-io to avoid classpath collisions
+  * with other plugins using the same bridge pattern.
   */
-object LoadCompatBridge {
+object ReleaseIOLoadCompatBridge {
 
   def reapply(newSettings: Seq[Setting[?]], structure: BuildStructure)(using
       display: Show[ScopedKey[?]]
