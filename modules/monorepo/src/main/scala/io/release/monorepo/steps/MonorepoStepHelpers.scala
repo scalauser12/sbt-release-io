@@ -134,8 +134,7 @@ private[monorepo] object MonorepoStepHelpers {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[File] = IO.blocking {
-    val extracted = Project.extract(ctx.state)
-    _root_.io.release.monorepo.MonorepoVersionFiles.resolve(extracted, project.ref)
+    _root_.io.release.monorepo.MonorepoVersionFiles.resolve(ctx.state, project.ref)
   }
 
   // ── VCS commit ────────────────────────────────────────────────────────

@@ -5,7 +5,9 @@ import cats.effect.IO
 /** A monorepo release step that can operate at global scope or per-project scope.
   *
   * Steps are executed in two phases by the composer:
-  *  1. '''Check phase''' — validates all steps before any actions execute.
+  *  1. '''Check phase''' — validates all steps before any actions execute. Only the returned
+  *     context/state is discarded; external side effects performed by checks are not rolled back.
+  *     Custom checks should therefore be side-effect free and safe to run more than once.
   *  2. '''Action phase''' — runs steps sequentially, with per-project failure isolation
   *     for [[MonorepoStepIO.PerProject]] steps and global failure propagation for [[MonorepoStepIO.Global]] steps.
   *

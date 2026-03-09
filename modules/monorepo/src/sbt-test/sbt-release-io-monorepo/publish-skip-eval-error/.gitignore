@@ -1,0 +1,5 @@
+target/
+project/target/
+project/project/
+global/
+out.log

@@ -34,7 +34,9 @@ private[monorepo] object MonorepoComposer {
     * '''Phase 1 -- Checks:''' Each step's check runs against the initial context
     * (with `onFailure` armed for `FailureCommand` detection). Check state mutations
     * are intentionally discarded, except for failure detection via `FailureCommand`.
-    * Any check failure short-circuits the entire release before any actions execute.
+    * External side effects performed by checks are not rolled back, so custom checks
+    * should be side-effect free and safe to run more than once. Any check failure
+    * short-circuits the entire release before any actions execute.
     *
     * '''Phase 2 -- Actions:''' Each step's action runs in sequence, threading
     * [[MonorepoContext]] through. Between every step, sbt's `FailureCommand` sentinel

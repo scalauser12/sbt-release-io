@@ -7,7 +7,9 @@ import sbt.Keys.*
 /** Orchestrates the two-phase execution model for [[ReleaseStepIO]] sequences.
   *
   * '''Phase 1 — Checks:''' Each step's `check` runs against the initial context.
-  * State mutations are discarded; any failure aborts before actions execute.
+  * Only the returned context/state is discarded; external side effects performed by checks are
+  * not rolled back. Custom checks should therefore be side-effect free and safe to run more than
+  * once. Any failure aborts before actions execute.
   * Cross-build wrapping is applied so checks validate each Scala version.
   *
   * '''Phase 2 — Actions:''' Steps run sequentially with `onFailure` armed for
@@ -37,7 +39,7 @@ private[release] object ReleaseComposer {
         if (step.enableCrossBuild && crossBuild)
           (ctx: ReleaseContext) => runCrossBuild(step.check)(ctx)
         else step.check
-      acc *> runCheckedStep(wrappedCheck, initialCtx)
+      acc *> runCheckedStep(step.name, wrappedCheck, initialCtx)
     }
 
     val startCtx = ComposerSupport.armOnFailure(initialCtx)
@@ -69,23 +71,27 @@ private[release] object ReleaseComposer {
   }
 
   private def runCheckedStep(
+      stepName: String,
       check: ReleaseContext => IO[ReleaseContext],
       initialCtx: ReleaseContext
   ): IO[Unit] = {
     val armedCtx = ComposerSupport.armOnFailure(initialCtx)
 
-    check(armedCtx)
-      .flatMap(ComposerSupport.detectSbtFailure)
-      .flatMap { checkedCtx =>
-        ComposerSupport.stripFailureCommand(checkedCtx).flatMap { strippedCtx =>
-          if (strippedCtx.failed)
-            IO.raiseError(
-              new IllegalStateException("Check phase failed: sbt task failure detected")
-            )
-          else
-            IO.unit
+    IO.blocking(initialCtx.state.log.info(s"$LogPrefix Checking step: $stepName")) *>
+      check(armedCtx)
+        .flatMap(ComposerSupport.detectSbtFailure)
+        .flatMap { checkedCtx =>
+          ComposerSupport.stripFailureCommand(checkedCtx).flatMap { strippedCtx =>
+            if (strippedCtx.failed)
+              IO.raiseError(
+                new IllegalStateException(
+                  s"Check phase failed in step '$stepName': sbt task failure detected"
+                )
+              )
+            else
+              IO.unit
+          }
         }
-      }
   }
 
   /** Run a step function across all crossScalaVersions using proper project reload. */

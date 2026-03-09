@@ -24,7 +24,7 @@ lazy val root = (project in file("."))
     // Point version files to .properties files instead of version.sbt
     releaseIOMonorepoVersionFile := {
       val build = loadedBuild.value
-      (ref: ProjectRef) => {
+      (ref: ProjectRef, _: State) => {
         val projBase = build.allProjectRefs
           .find(_._1 == ref)
           .map(_._2.base)

@@ -5,6 +5,7 @@ import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.steps.VersionSteps
 import sbt.*
 import sbt.Keys.*
+import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
 
 /** Setting keys and factory methods for the monorepo release plugin.
   *
@@ -28,8 +29,16 @@ trait MonorepoReleaseIO {
 
   // ── Version settings ──────────────────────────────────────────────────
 
-  /** Per-project version file resolver. Default: `<projectBase>/version.sbt`. */
-  val releaseIOMonorepoVersionFile: SettingKey[ProjectRef => File] = _releaseIOMonorepoVersionFile
+  /** State-aware resolver for a project's version file.
+    *
+    * Custom resolvers can inspect the current `State` if the file location depends on
+    * build state rather than project identity alone.
+    */
+  type MonorepoVersionFileResolver = MonorepoReleaseIO.MonorepoVersionFileResolver
+
+  /** Per-project version file resolver. Default: scoped sbt-release `releaseVersionFile`. */
+  val releaseIOMonorepoVersionFile: SettingKey[MonorepoVersionFileResolver] =
+    _releaseIOMonorepoVersionFile
 
   /** Per-project version reader. Default: same regex as core `defaultReadVersion`. */
   val releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] = _releaseIOMonorepoReadVersion
@@ -176,15 +185,12 @@ trait MonorepoReleaseIO {
         IO.pure(s"""$key := "$ver"\n""")
       }
     },
-    // Default version file resolver: honors each project's scoped sbt-release
-    // releaseVersionFile setting, so per-project overrides work without also
-    // overriding releaseIOMonorepoVersionFile. The public key keeps its
-    // ProjectRef => File shape; MonorepoVersionFiles detects this default resolver
-    // and upgrades it to the project's scoped releaseVersionFile at runtime.
-    releaseIOMonorepoVersionFile           := new MonorepoVersionFiles.DefaultProjectVersionFileResolver(
-      loadedBuild.value.allProjectRefs.map { case (ref, proj) => ref -> proj.base }.toMap,
-      sbtrelease.ReleasePlugin.autoImport.releaseVersionFile.value.getName
-    ),
+    // The default per-project resolver mirrors each project's scoped sbt-release
+    // releaseVersionFile setting. Global-version mode still bypasses this resolver
+    // and uses the shared root releaseVersionFile instead.
+    releaseIOMonorepoVersionFile           := { (ref: ProjectRef, state: State) =>
+      Project.extract(state).get(ref / releaseVersionFile)
+    },
     releaseIOMonorepoProjects              := {
       val build      = loadedBuild.value
       val root       = thisProjectRef.value
@@ -204,6 +210,8 @@ trait MonorepoReleaseIO {
 
 object MonorepoReleaseIO extends MonorepoReleaseIO {
 
+  override type MonorepoVersionFileResolver = (ProjectRef, State) => File
+
   // Canonical key definitions — created exactly once, shared across all mix-ins.
   private[monorepo] lazy val _releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] =
     SettingKey[Seq[ProjectRef]](
@@ -217,10 +225,11 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       "The ordered sequence of monorepo release steps"
     )
 
-  private[monorepo] lazy val _releaseIOMonorepoVersionFile: SettingKey[ProjectRef => File] =
-    SettingKey[ProjectRef => File](
+  private[monorepo] lazy val _releaseIOMonorepoVersionFile
+      : SettingKey[MonorepoVersionFileResolver] =
+    SettingKey[MonorepoVersionFileResolver](
       "releaseIOMonorepoVersionFile",
-      "Per-project version file resolver"
+      "Per-project version file resolver: (ProjectRef, State) => File"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] =

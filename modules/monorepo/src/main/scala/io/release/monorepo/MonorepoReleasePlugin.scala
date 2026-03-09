@@ -172,9 +172,10 @@ trait MonorepoReleasePluginLike[T]
   // ── Project resolution ────────────────────────────────────────────
 
   /** Resolve all monorepo projects from sbt settings.
-    * Wrapped in `Try` because `versionFileFn(ref)` can throw for misconfigured projects.
+    * Wrapped in `Try` because custom version-file resolvers can throw.
     */
   private def resolveProjects(
+      state: State,
       extracted: Extracted,
       releaseVersionOverrides: Map[String, String],
       nextVersionOverrides: Map[String, String],
@@ -204,7 +205,7 @@ trait MonorepoReleasePluginLike[T]
           ref = ref,
           name = projName,
           baseDir = projBase,
-          versionFile = MonorepoVersionFiles.resolve(extracted, ref, useGlobalVersion),
+          versionFile = MonorepoVersionFiles.resolve(extracted, state, ref, useGlobalVersion),
           versions = resolveVersions(projName)
         )
       }
@@ -298,6 +299,7 @@ trait MonorepoReleasePluginLike[T]
       // ── Project resolution ──
       allProjects <-
         resolveProjects(
+          state,
           extracted,
           releaseVersionOverrides,
           nextVersionOverrides,

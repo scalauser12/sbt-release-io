@@ -7,13 +7,16 @@ import sbt.*
   *
   * Steps are executed in two phases by [[ReleaseStepIO.compose]]:
   *  1. '''Check phase''' — all `check` functions run against the initial context for validation.
-  *     State mutations are discarded; any failure aborts before actions execute.
+  *     Only the returned context/state is discarded; any external side effects performed by a
+  *     check still happen. Custom checks should therefore be side-effect free and safe to run
+  *     more than once. Any failure aborts before actions execute.
   *  2. '''Action phase''' — all `action` functions run sequentially, threading context through.
   *     Between each step, sbt's `FailureCommand` sentinel is inspected for silent task failures.
   *
   * @param name             human-readable step name, used in log output
   * @param action           the main step logic; receives and returns a [[ReleaseContext]]
-  * @param check            optional pre-flight validation; defaults to no-op
+  * @param check            optional pre-flight validation; defaults to no-op. Checks should be
+  *                         side-effect free because their external effects are not rolled back.
   * @param enableCrossBuild when true and cross-build is active, runs once per `crossScalaVersions`
   */
 case class ReleaseStepIO(

@@ -127,7 +127,8 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
             .flatMap { result =>
               observed.get.map { obs =>
                 (result must beLeft.like { case e: IllegalStateException =>
-                  e.getMessage must contain("Check phase failed")
+                  (e.getMessage must contain("Check phase failed")) and
+                    (e.getMessage must contain("failing-check"))
                 }) and (obs must_== List("check1"))
               }
             }

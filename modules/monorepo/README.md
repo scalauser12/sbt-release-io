@@ -139,7 +139,7 @@ Built-in task-backed per-project steps are project-scoped: child projects run on
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoVersionFile` | `ProjectRef => File` | Scoped `releaseVersionFile` | Per-project version file resolver |
+| `releaseIOMonorepoVersionFile` | `MonorepoVersionFileResolver` | Scoped `releaseVersionFile` | Per-project version file resolver `(ProjectRef, State) => File` |
 | `releaseIOMonorepoReadVersion` | `File => IO[String]` | Regex parser (same as core) | Version file reader |
 | `releaseIOMonorepoWriteVersion` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Version file writer (default ignores `File` param) |
 | `releaseIOMonorepoUseGlobalVersion` | `Boolean` | `false` | Use root `version.sbt` instead of per-project files |
@@ -310,6 +310,9 @@ override protected def monorepoReleaseProcess(state: State) =
   )
 ```
 
+`defaultsWithAfter` and `defaultsWithBefore` match the exact `step.name` strings shown in
+the default-step table above, such as `"tag-releases"` or `"publish-artifacts"`.
+
 > **Note:** Each helper inserts at a single position. To insert custom steps at multiple
 > non-adjacent positions, use the fully custom approach below.
 
@@ -390,6 +393,10 @@ resourcePerProjectStepWithCheck("validated-publish", enableCrossBuild = true) {
     IO.blocking { client.get(s"/can-publish/${project.name}"); ctx }
 }
 ```
+
+Checks run as real effects before any actions execute. Only the returned context/state is
+discarded after the check phase; external side effects are not rolled back. Custom checks
+should therefore be side-effect free and safe to run more than once.
 
 ### Enabling in build.sbt
 

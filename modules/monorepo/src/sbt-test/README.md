@@ -70,6 +70,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### custom-version-format
 - Tests `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoWriteVersion`
 - Uses `.properties` files instead of default `version.sbt` format
+- Uses the state-aware `releaseIOMonorepoVersionFile` resolver signature
 - Verifies custom format preserved in working directory, git tags, and that `app.name=` lines are not clobbered
 
 ### detect-changes-disabled
@@ -163,6 +164,14 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 
 ### publish-skip-bypass
 - `publish / skip := true` per-project setting bypasses publishTo check for that project only
+
+### publish-skip-eval-error
+- `publish / skip` throws during publish preflight evaluation
+- Release fails with the wrapped project-scoped error message and preserves the original cause text
+
+### publish-to-eval-error
+- `publishTo` throws during publish preflight evaluation
+- Release fails with the wrapped project-scoped error message and preserves the original cause text
 
 ### push-changes-tracking-remote
 - Push-changes uses tracking remote, not `remote.pushDefault`

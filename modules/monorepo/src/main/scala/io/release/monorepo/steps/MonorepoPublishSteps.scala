@@ -19,6 +19,41 @@ private[monorepo] object MonorepoPublishSteps {
       ctx.withState(newState)
     }
 
+  private def evaluateProjectTask[A](
+      ctx: MonorepoContext,
+      key: TaskKey[A],
+      failureMessage: String
+  ): IO[A] =
+    IO.blocking {
+      val extracted = Project.extract(ctx.state)
+
+      try extracted.runTask(key, ctx.state)._2
+      catch {
+        case NonFatal(cause) =>
+          throw new IllegalStateException(failureMessage, cause)
+      }
+    }
+
+  private def evaluatePublishSkip(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Boolean] =
+    evaluateProjectTask(
+      ctx,
+      project.ref / publish / Keys.skip,
+      s"Failed to evaluate publish / skip for ${project.name}"
+    )
+
+  private def evaluatePublishTarget(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Option[Resolver]] =
+    evaluateProjectTask(
+      ctx,
+      project.ref / publishTo,
+      s"Failed to evaluate publishTo for ${project.name}"
+    )
+
   /** Check for SNAPSHOT dependencies in each project. */
   val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "check-snapshot-dependencies",
@@ -78,24 +113,15 @@ private[monorepo] object MonorepoPublishSteps {
       if (ctx.skipPublish) IO.pure(ctx)
       else
         for {
-          missing <- IO.blocking {
-                       val extracted   = Project.extract(ctx.state)
-                       val skipPublish =
-                         try extracted.runTask(project.ref / publish / Keys.skip, ctx.state)._2
-                         catch { case NonFatal(_) => false }
-                       if (skipPublish) Seq.empty
-                       else {
-                         val publishTarget =
-                           try extracted.runTask(project.ref / publishTo, ctx.state)._2
-                           catch { case NonFatal(_) => None }
-                         if (publishTarget.isEmpty) Seq(project.ref) else Seq.empty
-                       }
-                     }
-          result  <-
-            if (missing.nonEmpty)
+          publishSkipped <- evaluatePublishSkip(ctx, project)
+          publishTarget  <-
+            if (publishSkipped) IO.pure(Option.empty[Resolver])
+            else evaluatePublishTarget(ctx, project)
+          result         <-
+            if (!publishSkipped && publishTarget.isEmpty)
               IO.raiseError[MonorepoContext](
                 new IllegalStateException(
-                  s"publishTo not configured for: ${missing.map(_.project).mkString(", ")}. " +
+                  s"publishTo not configured for: ${project.ref.project}. " +
                     "Set publishTo or add `publish / skip := true`."
                 )
               )

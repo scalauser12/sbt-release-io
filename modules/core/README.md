@@ -236,6 +236,9 @@ override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseSt
   )
 ```
 
+`defaultsWithAfter` and `defaultsWithBefore` match the exact `step.name` strings shown in
+the default-step list below, such as `"check-clean-working-dir"` or `"publish-artifacts"`.
+
 These helpers read from the `releaseIOProcess` setting (including any `build.sbt` filtering), so your override builds on all configured steps.
 
 > **Note:** Each helper inserts at a single position. To insert custom steps at multiple
@@ -401,19 +404,21 @@ releasePublishArtifactsAction := publish.value
 
 The default release process includes:
 
-1. **initializeVcs** - Detect and initialize VCS (Git/Mercurial/Subversion)
-2. **checkCleanWorkingDir** - Verify no uncommitted changes
-3. **checkSnapshotDependencies** - Verify no snapshot dependencies
-4. **inquireVersions** - Determine release and next versions
-5. **runClean** - Clean project build outputs (`clean` on sbt 1, build-wide `cleanFull` on sbt 2)
-6. **runTests** - Run tests (unless `skip-tests`)
-7. **setReleaseVersion** - Update version.sbt to release version
-8. **commitReleaseVersion** - Commit version change
-9. **tagRelease** - Create Git tag
-10. **publishArtifacts** - Publish to repository
-11. **setNextVersion** - Update version.sbt to next snapshot
-12. **commitNextVersion** - Commit version change
-13. **pushChanges** - Push commits and tags to remote
+1. **initialize-vcs** - Detect and initialize VCS (Git/Mercurial/Subversion)
+2. **check-clean-working-dir** - Verify no uncommitted changes
+3. **check-snapshot-dependencies** - Verify no snapshot dependencies
+4. **inquire-versions** - Determine release and next versions
+5. **run-clean** - Clean project build outputs (`clean` on sbt 1, build-wide `cleanFull` on sbt 2)
+6. **run-tests** - Run tests (unless `skip-tests`)
+7. **set-release-version** - Update version.sbt to release version
+8. **commit-release-version** - Commit version change
+9. **tag-release** - Create Git tag
+10. **publish-artifacts** - Publish to repository
+11. **set-next-version** - Update version.sbt to next snapshot
+12. **commit-next-version** - Commit version change
+13. **push-changes** - Push commits and tags to remote
+
+These names are the stable built-in insertion points for `defaultsWithAfter` and `defaultsWithBefore`.
 
 ## Testing
 

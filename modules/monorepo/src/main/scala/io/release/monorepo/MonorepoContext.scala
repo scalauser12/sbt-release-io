@@ -13,7 +13,7 @@ import sbtrelease.Vcs
   * @param ref         sbt project reference
   * @param name        project name (matches `ref.project`)
   * @param baseDir     project root directory
-  * @param versionFile path to the project's `version.sbt`
+  * @param versionFile path to the project's resolved version file
   * @param versions    `(releaseVersion, nextVersion)` pair, set by version inquiry steps
   * @param tagName     VCS tag for this project's release, set by the tagging step
   * @param failed      set to true when this project's step action fails
