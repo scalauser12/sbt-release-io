@@ -323,6 +323,88 @@ resolution, project selection, version resolution, and tagging. Custom `PerProje
 the current `MonorepoContext.projects` snapshot unless they explicitly replace it themselves, and
 built-in checks still run from the initial check-phase state.
 
+#### Custom step timing
+
+- The step list is frozen when the command starts.
+- Built-in **Global** actions such as `resolve-release-order` and `detect-or-select-projects`
+  read the current `State` when they run.
+- Built-in **checks** still run from the initial check-phase state.
+- Custom `PerProject` steps keep using `ctx.projects` until you replace that snapshot yourself.
+
+Example: rewrite the project set that built-in order/selection will use:
+
+```scala
+// project/MyReleasePlugin.scala
+import sbt.*
+import _root_.cats.effect.{IO, Resource}
+import _root_.io.release.monorepo.*
+import _root_.io.release.monorepo.MonorepoReleaseIO.*
+
+object MyReleasePlugin extends MonorepoReleasePluginLike[Unit] {
+  override def trigger               = noTrigger
+  override protected def commandName = "releaseLateBoundProjects"
+  override def resource: Resource[IO, Unit] = Resource.unit
+
+  private val selectOnlyCore =
+    MonorepoStepIO.Global(
+      name = "select-only-core",
+      action = ctx =>
+        IO.blocking {
+          val extracted    = Project.extract(ctx.state)
+          val root         = extracted.get(baseDirectory)
+          val updatedState = extracted.appendWithSession(
+            Seq(
+              releaseIOMonorepoProjects := Seq(ProjectRef(root, "core"))
+            ),
+            ctx.state
+          )
+          ctx.withState(updatedState)
+        }
+    )
+
+  override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
+    defaultsWithBefore(state, "resolve-release-order")((_: Unit) => selectOnlyCore)
+}
+```
+
+Example: update `ctx.projects` explicitly for later custom `PerProject` steps:
+
+```scala
+// project/MyReleasePlugin.scala
+import sbt.*
+import _root_.cats.effect.{IO, Resource}
+import _root_.io.release.monorepo.*
+
+object MyReleasePlugin extends MonorepoReleasePluginLike[Unit] {
+  override def trigger               = noTrigger
+  override protected def commandName = "releaseFilteredProjects"
+  override def resource: Resource[IO, Unit] = Resource.unit
+
+  private val keepLibrariesOnly =
+    MonorepoStepIO.Global("keep-libraries-only") { ctx =>
+      IO.pure(ctx.withProjects(ctx.projects.filter(_.name.startsWith("lib-"))))
+    }
+
+  private val announce =
+    MonorepoStepIO.PerProject("announce") { (ctx, project) =>
+      IO.blocking {
+        ctx.state.log.info(s"Running custom logic for ${project.name}")
+        ctx
+      }
+    }
+
+  override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
+    defaultsWithAfter(state, "detect-or-select-projects")(
+      (_: Unit) => keepLibrariesOnly,
+      (_: Unit) => announce
+    )
+}
+```
+
+Use the first pattern when you want later built-in monorepo steps to see new settings from
+`State`. Use the second pattern when you want later custom `PerProject` steps to iterate a
+different `ctx.projects` snapshot.
+
 > **Note:** Each helper inserts at a single position. To insert custom steps at multiple
 > non-adjacent positions, use the fully custom approach below.
 

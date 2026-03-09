@@ -246,6 +246,51 @@ later built-in action will read those live settings when it runs. This applies t
 such as version resolution and tagging. It does not change the two-phase model: built-in `check`
 functions still run from the initial check-phase state.
 
+#### Custom step timing
+
+- The step list is frozen when the command starts.
+- Built-in **actions** read the current `State` when they run.
+- Built-in **checks** still run from the initial check-phase state.
+
+Example: rewrite version settings before the built-in `inquire-versions` step:
+
+```scala
+// project/MyReleasePlugin.scala
+import sbt.*
+import _root_.cats.effect.{IO, Resource}
+import _root_.io.release.*
+import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
+
+object MyReleasePlugin extends ReleasePluginIOLike[Unit] {
+  override def trigger               = noTrigger
+  override protected def commandName = "releaseLateBoundVersion"
+  override def resource: Resource[IO, Unit] = Resource.unit
+
+  private val rewriteVersionSettings =
+    ReleaseStepIO.io("rewrite-version-settings") { ctx =>
+      IO.blocking {
+        val extracted    = Project.extract(ctx.state)
+        val updatedState = extracted.appendWithSession(
+          Seq(
+            releaseVersionFile := baseDirectory.value / "version.properties",
+            releaseIOReadVersion := { file =>
+              IO.blocking(sbt.IO.read(file).trim)
+            },
+            releaseIOWriteVersion := { (_, version) =>
+              IO.pure(version + "\n")
+            }
+          ),
+          ctx.state
+        )
+        ctx.withState(updatedState)
+      }
+    }
+
+  override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
+    defaultsWithBefore(state, "inquire-versions")((_: Unit) => rewriteVersionSettings)
+}
+```
+
 > **Note:** Each helper inserts at a single position. To insert custom steps at multiple
 > non-adjacent positions, use the fully custom approach below.
 
