@@ -10,30 +10,13 @@ import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
   */
 private[monorepo] object MonorepoVersionFiles {
 
-  def resolveConfiguredVersionFile(extracted: Extracted, state: State, ref: ProjectRef): File =
-    extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersionFile)(ref, state)
+  private def resolveConfiguredVersionFile(runtime: MonorepoRuntime, ref: ProjectRef): File =
+    runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersionFile)(ref, runtime.state)
 
-  def resolve(
-      extracted: Extracted,
-      state: State,
-      ref: ProjectRef,
-      useGlobalVersion: Boolean
-  ): File =
-    if (useGlobalVersion) extracted.get(releaseVersionFile)
-    else resolveConfiguredVersionFile(extracted, state, ref)
+  def resolve(runtime: MonorepoRuntime, ref: ProjectRef): File =
+    if (runtime.useGlobalVersion) runtime.extracted.get(releaseVersionFile)
+    else resolveConfiguredVersionFile(runtime, ref)
 
-  def resolve(state: State, ref: ProjectRef, useGlobalVersion: Boolean): File = {
-    val extracted = Project.extract(state)
-    resolve(extracted, state, ref, useGlobalVersion)
-  }
-
-  def resolve(state: State, ref: ProjectRef): File = {
-    val extracted = Project.extract(state)
-    resolve(
-      extracted,
-      state,
-      ref,
-      extracted.get(MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion)
-    )
-  }
+  def resolve(state: State, ref: ProjectRef): File =
+    resolve(MonorepoRuntime.fromState(state), ref)
 }

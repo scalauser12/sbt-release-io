@@ -4,7 +4,6 @@ import cats.effect.IO
 import sbt.*
 import sbtrelease.Vcs
 
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /** Git diff-based change detection for monorepo subprojects. */
@@ -16,6 +15,18 @@ private[monorepo] object ChangeDetection {
     case object NoMatchingTag                      extends TagLookupResult
     final case class LookupFailed(details: String) extends TagLookupResult
   }
+
+  private final case class ProjectTagLookup(pattern: String, result: TagLookupResult)
+
+  private final case class DetectionInputs(
+      vcs: Vcs,
+      state: State,
+      globalExcludes: Set[String],
+      projectRelPaths: Seq[(String, String)],
+      sharedPaths: Seq[String],
+      unifiedLookup: Option[ProjectTagLookup],
+      tagNameFn: (String, String) => String
+  )
 
   /** Normalize path separators to forward slashes to match git output on all platforms.
     * Uses canonical paths to handle symlinks (e.g. macOS /var → /private/var).
@@ -97,74 +108,94 @@ private[monorepo] object ChangeDetection {
       sharedPaths: Seq[String] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     IO.blocking {
-      val globalExcludes: Set[String] = additionalExcludeFiles.flatMap { f =>
-        gitRelativize(vcs.baseDir, f)
-      }.toSet
+      val inputs = DetectionInputs(
+        vcs = vcs,
+        state = state,
+        globalExcludes = additionalExcludeFiles.flatMap(gitRelativize(vcs.baseDir, _)).toSet,
+        projectRelPaths =
+          projects.flatMap(p => gitRelativize(vcs.baseDir, p.baseDir).map(p.name -> _)),
+        sharedPaths = sharedPaths,
+        unifiedLookup = unifiedLookup(tagStrategy, unifiedTagNameFn, vcs),
+        tagNameFn = tagNameFn
+      )
 
-      // Pre-compute relative paths for all projects so parent projects
-      // can exclude nested child project directories from their diff results.
-      val projectRelPaths: Seq[(String, String)] = projects.flatMap { p =>
-        gitRelativize(vcs.baseDir, p.baseDir).map(p.name -> _)
-      }
+      val (_, changedProjects) =
+        projects.foldLeft(Map.empty[String, Boolean] -> Vector.empty[ProjectReleaseInfo]) {
+          case ((sharedPathCache, acc), project) =>
+            val ProjectTagLookup(tagPattern, tagLookup) = selectTagLookup(inputs, project)
+            val excludes                                =
+              inputs.globalExcludes ++ gitRelativize(vcs.baseDir, project.versionFile).toSet
+            val (updatedCache, sharedChanged)           =
+              sharedPathsChanged(inputs, sharedPathCache, tagLookup)
+            val excludedChildDirs                       = childDirPrefixes(inputs, project)
+            val changed                                 =
+              sharedChanged || hasChangedSinceLastTag(
+                vcs,
+                project,
+                tagPattern,
+                tagLookup,
+                state,
+                excludes,
+                excludedChildDirs
+              )
 
-      // Pre-compute the tag lookup for unified mode to avoid redundant git calls.
-      val unifiedLookup: Option[(String, TagLookupResult)] = tagStrategy match {
-        case MonorepoTagStrategy.Unified =>
-          val pattern = unifiedTagNameFn("*")
-          Some((pattern, lookupLastTag(vcs, pattern)))
-        case _                           => None
-      }
-
-      // Cache shared path results per tag to avoid redundant git diff calls
-      // when multiple projects share the same tag.
-      val sharedPathCache = mutable.Map.empty[String, Boolean]
-
-      projects.filter { project =>
-        val (tagPattern, tagLookup) = unifiedLookup match {
-          case Some(precomputed) => precomputed
-          case None              =>
-            val p = tagNameFn(project.name, "*")
-            (p, lookupLastTag(vcs, p))
-        }
-        val versionFileExclude      =
-          gitRelativize(vcs.baseDir, project.versionFile).toSet
-        val excludes                = globalExcludes ++ versionFileExclude
-
-        // Check shared paths against this project's own tag.
-        val sharedChanged = tagLookup match {
-          case TagLookupResult.TagFound(tag) if sharedPaths.nonEmpty =>
-            sharedPathCache.getOrElseUpdate(
-              tag,
-              checkSharedPaths(vcs, tag, state, sharedPaths)
-            )
-          case _                                                     => false
+            val nextProjects = if (changed) acc :+ project else acc
+            updatedCache -> nextProjects
         }
 
-        // Exclude files under child project directories to avoid false
-        // positives when a parent's diff scope encompasses nested projects.
-        // For root projects (scope "."), any non-root sibling is a child.
-        // For non-root projects, only paths strictly nested under them qualify.
-        val childDirPrefixes = resolveDiffScope(vcs, project) match {
-          case Right(scope) =>
-            projectRelPaths.collect {
-              case (name, path)
-                  if name != project.name && path != "." && path.nonEmpty &&
-                    (scope == "." || path.startsWith(scope + "/")) =>
-                path
-            }.toSet
-          case _            => Set.empty[String]
-        }
+      changedProjects
+    }
 
-        sharedChanged || hasChangedSinceLastTag(
-          vcs,
-          project,
-          tagPattern,
-          tagLookup,
-          state,
-          excludes,
-          childDirPrefixes
-        )
-      }
+  private def unifiedLookup(
+      tagStrategy: MonorepoTagStrategy,
+      unifiedTagNameFn: String => String,
+      vcs: Vcs
+  ): Option[ProjectTagLookup] =
+    tagStrategy match {
+      case MonorepoTagStrategy.Unified =>
+        val pattern = unifiedTagNameFn("*")
+        Some(ProjectTagLookup(pattern, lookupLastTag(vcs, pattern)))
+      case _                           => None
+    }
+
+  private def selectTagLookup(
+      inputs: DetectionInputs,
+      project: ProjectReleaseInfo
+  ): ProjectTagLookup =
+    inputs.unifiedLookup.getOrElse {
+      val pattern = inputs.tagNameFn(project.name, "*")
+      ProjectTagLookup(pattern, lookupLastTag(inputs.vcs, pattern))
+    }
+
+  private def sharedPathsChanged(
+      inputs: DetectionInputs,
+      cache: Map[String, Boolean],
+      tagLookup: TagLookupResult
+  ): (Map[String, Boolean], Boolean) =
+    tagLookup match {
+      case TagLookupResult.TagFound(tag) if inputs.sharedPaths.nonEmpty =>
+        cache.get(tag) match {
+          case Some(changed) => cache -> changed
+          case None          =>
+            val changed = checkSharedPaths(inputs.vcs, tag, inputs.state, inputs.sharedPaths)
+            cache.updated(tag, changed) -> changed
+        }
+      case _                                                            => cache -> false
+    }
+
+  private def childDirPrefixes(
+      inputs: DetectionInputs,
+      project: ProjectReleaseInfo
+  ): Set[String] =
+    resolveDiffScope(inputs.vcs, project) match {
+      case Right(scope) =>
+        inputs.projectRelPaths.collect {
+          case (name, path)
+              if name != project.name && path != "." && path.nonEmpty &&
+                (scope == "." || path.startsWith(scope + "/")) =>
+            path
+        }.toSet
+      case _            => Set.empty[String]
     }
 
   /** Check whether any shared (root-level) paths have changed since the given tag.

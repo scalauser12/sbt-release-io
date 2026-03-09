@@ -1,6 +1,6 @@
 package io.release.monorepo.steps
 
-import _root_.io.release.monorepo.{MonorepoContext, ProjectReleaseInfo}
+import _root_.io.release.monorepo.{MonorepoContext, MonorepoRuntime, ProjectReleaseInfo}
 import _root_.io.release.steps.StepHelpers.{required, runProcess}
 import cats.effect.IO
 import sbt.*
@@ -113,29 +113,43 @@ private[monorepo] object MonorepoStepHelpers {
       ctx: MonorepoContext,
       vcs: sbtrelease.Vcs
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
+    loadRuntime(ctx).flatMap(resolveRelativePaths(ctx, vcs, _))
+
+  private def resolveRelativePaths(
+      ctx: MonorepoContext,
+      vcs: sbtrelease.Vcs,
+      runtime: MonorepoRuntime
+  ): IO[Seq[(ProjectReleaseInfo, String)]] =
     IO.blocking(vcs.baseDir.getCanonicalFile).flatMap { base =>
       ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
         (acc, project) =>
           acc.flatMap { paths =>
-            resolveVersionFile(ctx, project).flatMap { versionFile =>
-              IO.blocking(versionFile.getCanonicalFile).flatMap { canonicalFile =>
-                IO.fromOption(sbt.IO.relativize(base, canonicalFile))(
-                  new IllegalStateException(
-                    s"Version file [${canonicalFile.getPath}] is outside VCS root [$base]"
-                  )
-                ).map(rel => paths :+ (project, rel))
-              }
+            val versionFile = resolveVersionFile(runtime, project)
+            IO.blocking(versionFile.getCanonicalFile).flatMap { canonicalFile =>
+              IO.fromOption(sbt.IO.relativize(base, canonicalFile))(
+                new IllegalStateException(
+                  s"Version file [${canonicalFile.getPath}] is outside VCS root [$base]"
+                )
+              ).map(rel => paths :+ (project, rel))
             }
           }
       }
     }
 
+  private[steps] def loadRuntime(ctx: MonorepoContext): IO[MonorepoRuntime] =
+    IO.blocking(_root_.io.release.monorepo.MonorepoRuntime.fromState(ctx.state))
+
+  private[steps] def resolveVersionFile(
+      runtime: MonorepoRuntime,
+      project: ProjectReleaseInfo
+  ): File =
+    _root_.io.release.monorepo.MonorepoVersionFiles.resolve(runtime, project.ref)
+
   private[steps] def resolveVersionFile(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): IO[File] = IO.blocking {
-    _root_.io.release.monorepo.MonorepoVersionFiles.resolve(ctx.state, project.ref)
-  }
+  ): IO[File] =
+    loadRuntime(ctx).map(resolveVersionFile(_, project))
 
   // ── VCS commit ────────────────────────────────────────────────────────
 
@@ -179,20 +193,20 @@ private[monorepo] object MonorepoStepHelpers {
       selector: ((String, String)) => String
   ): IO[MonorepoContext] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
-      resolveRelativePaths(ctx, vcs).flatMap { paths =>
-        IO.blocking {
-          val extracted = Project.extract(ctx.state)
-          (
-            extracted.get(releaseVcsSign),
-            extracted.get(releaseVcsSignOff),
-            extracted.get(
-              _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion
-            )
-          )
-        }.flatMap { case (sign, signOff, useGlobalVersion) =>
+      for {
+        runtime        <- loadRuntime(ctx)
+        paths          <- resolveRelativePaths(ctx, vcs, runtime)
+        settings       <- IO.blocking {
+                            (
+                              runtime.extracted.get(releaseVcsSign),
+                              runtime.extracted.get(releaseVcsSignOff)
+                            )
+                          }
+        (sign, signOff) = settings
+        result         <- {
           // In global-version mode, all projects must agree before committing.
           val consistencyCheck =
-            if (useGlobalVersion)
+            if (runtime.useGlobalVersion)
               validateVersionConsistency(
                 ctx.currentProjects,
                 selector,
@@ -208,6 +222,6 @@ private[monorepo] object MonorepoStepHelpers {
               commitIfChanged(vcs, s"$msgPrefix: $summary", sign, signOff, ctx)
             }
         }
-      }
+      } yield result
     }
 }

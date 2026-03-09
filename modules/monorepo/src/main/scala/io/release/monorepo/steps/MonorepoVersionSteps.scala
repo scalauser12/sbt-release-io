@@ -1,5 +1,8 @@
 package io.release.monorepo.steps
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+
 import cats.effect.IO
 import io.release.ReleaseKeys
 import io.release.monorepo.*
@@ -33,18 +36,16 @@ private[monorepo] object MonorepoVersionSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     for {
-      versionFile                                          <- resolveVersionFile(ctx, project)
-      setup                                                <- IO.blocking {
-                                                                val extracted = Project.extract(ctx.state)
-                                                                val readFn    = extracted.get(releaseIOMonorepoReadVersion)
-                                                                (extracted, readFn)
-                                                              }
-      (extracted, readFn)                                   = setup
-      currentVer                                           <- readFn(versionFile)
+      runtime                                              <- loadRuntime(ctx)
+      versionFile                                           = resolveVersionFile(runtime, project)
+      currentVer                                           <- runtime.readVersion(versionFile)
       data                                                 <- IO.blocking {
-                                                                val (s1, releaseFn) = extracted.runTask(project.ref / releaseVersion, ctx.state)
-                                                                val (s2, nextFn)    = extracted.runTask(project.ref / releaseNextVersion, s1)
-                                                                val useDefaults     = s2.get(ReleaseKeys.useDefaults).getOrElse(false)
+                                                                val (s1, releaseFn) =
+                                                                  runtime.extracted.runTask(project.ref / releaseVersion, ctx.state)
+                                                                val (s2, nextFn)    =
+                                                                  runtime.extracted.runTask(project.ref / releaseNextVersion, s1)
+                                                                val useDefaults     =
+                                                                  s2.get(ReleaseKeys.useDefaults).getOrElse(false)
                                                                 (s2, releaseFn(currentVer), nextFn, useDefaults)
                                                               }
       (updatedState, suggestedRelease, nextFn, useDefaults) = data
@@ -77,12 +78,8 @@ private[monorepo] object MonorepoVersionSteps {
   val validateVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "validate-versions",
     action = ctx =>
-      IO.blocking(
-        Project
-          .extract(ctx.state)
-          .get(_root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion)
-      ).flatMap { useGlobal =>
-        if (useGlobal)
+      loadRuntime(ctx).flatMap { runtime =>
+        if (runtime.useGlobalVersion)
           validateVersionConsistency(
             ctx.currentProjects,
             { case (rel, _) => rel },
@@ -139,31 +136,23 @@ private[monorepo] object MonorepoVersionSteps {
       ver: String
   ): IO[MonorepoContext] =
     for {
-      versionFile                    <- resolveVersionFile(ctx, project)
-      setup                          <- IO.blocking {
-                                          val extracted = Project.extract(ctx.state)
-                                          val writeFn   = extracted.get(releaseIOMonorepoWriteVersion)
-                                          val useGlobal = extracted.get(
-                                            _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion
-                                          )
-                                          (extracted, writeFn, useGlobal)
-                                        }
-      (extracted, writeFn, useGlobal) = setup
-      result                         <-
-        if (useGlobal && ctx.attr("global-version-written").contains(ver))
+      runtime    <- loadRuntime(ctx)
+      versionFile = resolveVersionFile(runtime, project)
+      result     <-
+        if (runtime.useGlobalVersion && ctx.attr("global-version-written").contains(ver))
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
         else
           for {
-            contents <- writeFn(versionFile, ver)
+            contents <- runtime.writeVersion(versionFile, ver)
             newState <- IO.blocking {
-                          java.nio.file.Files.write(versionFile.toPath, contents.getBytes("UTF-8"))
+                          Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
                           val setting =
-                            if (useGlobal) ThisBuild / version := ver
-                            else project.ref / version         := ver
-                          extracted.appendWithSession(Seq(setting), ctx.state)
+                            if (runtime.useGlobalVersion) ThisBuild / version := ver
+                            else project.ref / version                        := ver
+                          runtime.extracted.appendWithSession(Seq(setting), ctx.state)
                         }
             r        <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
                           .as(ctx.withState(newState))
-          } yield if (useGlobal) r.withAttr("global-version-written", ver) else r
+          } yield if (runtime.useGlobalVersion) r.withAttr("global-version-written", ver) else r
     } yield result
 }

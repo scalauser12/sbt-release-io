@@ -175,16 +175,14 @@ trait MonorepoReleasePluginLike[T]
     * Wrapped in `Try` because custom version-file resolvers can throw.
     */
   private def resolveProjects(
-      state: State,
-      extracted: Extracted,
+      runtime: MonorepoRuntime,
       releaseVersionOverrides: Map[String, String],
       nextVersionOverrides: Map[String, String],
       globalReleaseVersion: Option[String] = None,
-      globalNextVersion: Option[String] = None,
-      useGlobalVersion: Boolean = false
+      globalNextVersion: Option[String] = None
   ): Either[Throwable, Seq[ProjectReleaseInfo]] =
     Try {
-      val allProjectRefs = extracted.get(releaseIOMonorepoProjects)
+      val allProjectRefs = runtime.extracted.get(releaseIOMonorepoProjects)
 
       def resolveVersions(projName: String): Option[(String, String)] = {
         val rel  = globalReleaseVersion.getOrElse(releaseVersionOverrides.getOrElse(projName, ""))
@@ -194,7 +192,7 @@ trait MonorepoReleasePluginLike[T]
 
       allProjectRefs.map { ref =>
         val projBase =
-          (ref / baseDirectory).get(extracted.structure.data).getOrElse {
+          (ref / baseDirectory).get(runtime.extracted.structure.data).getOrElse {
             throw new IllegalStateException(
               s"Cannot resolve baseDirectory for project '${ref.project}'. " +
                 "Ensure the project is correctly defined in the build."
@@ -205,7 +203,7 @@ trait MonorepoReleasePluginLike[T]
           ref = ref,
           name = projName,
           baseDir = projBase,
-          versionFile = MonorepoVersionFiles.resolve(extracted, state, ref, useGlobalVersion),
+          versionFile = MonorepoVersionFiles.resolve(runtime, ref),
           versions = resolveVersions(projName)
         )
       }
@@ -232,8 +230,9 @@ trait MonorepoReleasePluginLike[T]
       if (condition) Left(failWith(msg)) else Right(())
 
     val extracted               = Project.extract(state)
+    val runtime                 = MonorepoRuntime.fromExtracted(state, extracted)
     val flags                   = parseFlags(args, extracted)
-    val useGlobalVersion        = extracted.get(releaseIOMonorepoUseGlobalVersion)
+    val useGlobalVersion        = runtime.useGlobalVersion
     val selectedNames           = args.collect { case SelectProject(name) => name }
     val releaseVersionPairs     = args.collect { case ReleaseVersion(p, v) => p -> v }
     val nextVersionPairs        = args.collect { case NextVersion(p, v) => p -> v }
@@ -299,13 +298,11 @@ trait MonorepoReleasePluginLike[T]
       // ── Project resolution ──
       allProjects <-
         resolveProjects(
-          state,
-          extracted,
+          runtime,
           releaseVersionOverrides,
           nextVersionOverrides,
           globalReleaseVersion,
-          globalNextVersion,
-          useGlobalVersion
+          globalNextVersion
         ).left.map(e => failWith(Option(e.getMessage).getOrElse(e.toString)))
 
       validNames       = allProjects.map(_.name).toSet
