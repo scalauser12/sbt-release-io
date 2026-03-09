@@ -18,7 +18,7 @@ lazy val api = (project in file("api"))
     releaseTestTask := ()
   )
 
-val checkNoTags     = taskKey[Unit]("Verify no release tags were created")
+val checkFailureArtifacts = taskKey[Unit]("Verify run-tests failure stops all later release mutations")
 val runReleaseTests = MonorepoStepIO.PerProject(
   name = "run-tests",
   action = (ctx, project) =>
@@ -42,9 +42,23 @@ lazy val root = (project in file("."))
       .map(step => if (step.name == "run-tests") runReleaseTests else step)
       .filterNot(step => step.name == "push-changes" || step.name == "publish-artifacts"),
     releaseIgnoreUntrackedFiles := true,
-    checkNoTags                 := {
+    checkFailureArtifacts       := {
+      val commitCount = "git rev-list --count HEAD".!!.trim.toInt
+      assert(commitCount == 1, s"Expected only the initial commit after failure, found $commitCount")
+
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
-      // After failure, all subsequent steps (including tagging) should be skipped
       assert(tags.isEmpty, s"Expected no tags after failure but found: ${tags.mkString(", ")}")
+
+      val coreContents = IO.read(file("core/version.sbt"))
+      assert(
+        coreContents.contains("""version := "0.1.0-SNAPSHOT""""),
+        s"Expected core/version.sbt to remain at 0.1.0-SNAPSHOT but got: $coreContents"
+      )
+
+      val apiContents = IO.read(file("api/version.sbt"))
+      assert(
+        apiContents.contains("""version := "0.1.0-SNAPSHOT""""),
+        s"Expected api/version.sbt to remain at 0.1.0-SNAPSHOT but got: $apiContents"
+      )
     }
   )

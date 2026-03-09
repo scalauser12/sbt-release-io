@@ -10,3 +10,4 @@ $ exec touch untracked-file.txt
 
 # Release should fail in check phase because untracked files are present
 -> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+> checkFailureArtifacts

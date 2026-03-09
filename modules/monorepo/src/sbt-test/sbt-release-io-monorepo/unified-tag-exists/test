@@ -10,3 +10,4 @@ $ exec git tag v1.0.0
 
 # Release should fail because v1.0.0 unified tag already exists
 -> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
+> checkFailureArtifacts

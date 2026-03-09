@@ -7,3 +7,4 @@ $ exec git commit -m "Initial commit"
 
 # Unified tag with different release versions (core=1.0.0 vs api=2.0.0) should fail
 -> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=2.0.0 next-version api=2.1.0-SNAPSHOT
+> checkFailureArtifacts

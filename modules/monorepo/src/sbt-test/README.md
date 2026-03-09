@@ -86,6 +86,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### dirty-working-dir
 - Untracked files abort release in check phase
 - Tests `releaseIgnoreUntrackedFiles` behavior
+- Verifies failure happens before any commit, tag, or version-file mutation
 
 ### empty-override-value
 - Empty override values (e.g., `release-version core=`) are rejected as parse errors
@@ -152,7 +153,8 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 
 ### per-project-failure
 - One project (core) fails with tag already existing
-- Api succeeds due to per-project error isolation; failure propagates to global for post-tag steps
+- Failure at `run-tests` propagates globally before any version/tag steps run
+- Verifies commit count, tags, and project version files remain untouched after failure
 
 ### publish-skip-bypass
 - `publish / skip := true` per-project setting bypasses publishTo check for that project only
@@ -214,10 +216,12 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 
 ### unified-tag-exists
 - Pre-existing unified tag causes release failure
+- Verifies the pre-existing tag is preserved, release-version commit is allowed, and next-version writes are skipped
 
 ### unified-tag-version-mismatch
 - Different release versions with unified tag strategy
 - Fails because unified tags require matching versions across all projects
+- Verifies validation failure leaves tags and version files untouched
 
 ### unified-tags
 - Single unified tag (`v1.0.0`) for entire monorepo instead of per-project tags
