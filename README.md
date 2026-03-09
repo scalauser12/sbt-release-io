@@ -20,7 +20,7 @@ An sbt plugin suite that wraps [sbt-release](https://github.com/sbt/sbt-release)
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.4.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.4.2")
 ```
 
 ```bash
@@ -32,7 +32,7 @@ sbt "releaseIO with-defaults"
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.4.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.4.2")
 ```
 
 In `build.sbt`:
