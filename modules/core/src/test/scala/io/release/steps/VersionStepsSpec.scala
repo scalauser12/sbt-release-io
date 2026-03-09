@@ -2,7 +2,12 @@ package io.release.steps
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import io.release.internal.{CoreReleasePlan, CoreReleasePlanner, CoreVersionResolver, ExecutionFlags}
+import io.release.internal.{
+  CoreReleasePlan,
+  CoreReleasePlanner,
+  CoreVersionResolver,
+  ExecutionFlags
+}
 import io.release.{ReleaseKeys, TestSupport}
 import org.specs2.mutable.Specification
 
@@ -13,46 +18,45 @@ class VersionStepsSpec extends Specification {
 
   "VersionSteps.resolveVersionPlan" should {
 
-    "use live version settings even when a startup plan is attached" in withTempDir {
-      dir =>
-        val resolvedFile = new File(dir, "resolved-version.sbt")
-        val state        =
-          CoreReleasePlanner.attach(
-            TestSupport
-              .dummyState(dir)
-              .put(ReleaseKeys.commandLineReleaseVersion, Some("9.9.9"))
-              .put(ReleaseKeys.commandLineNextVersion, Some("10.0.0-SNAPSHOT")),
-            CoreReleasePlan(
-              flags = ExecutionFlags(
-                useDefaults = false,
-                skipTests = false,
-                skipPublish = false,
-                interactive = false,
-                crossBuild = false
-              ),
-              releaseVersionOverride = Some("1.2.3"),
-              nextVersionOverride = Some("1.2.4-SNAPSHOT"),
-              tagDefault = None
-            )
+    "use live version settings even when a startup plan is attached" in withTempDir { dir =>
+      val resolvedFile = new File(dir, "resolved-version.sbt")
+      val state        =
+        CoreReleasePlanner.attach(
+          TestSupport
+            .dummyState(dir)
+            .put(ReleaseKeys.commandLineReleaseVersion, Some("9.9.9"))
+            .put(ReleaseKeys.commandLineNextVersion, Some("10.0.0-SNAPSHOT")),
+          CoreReleasePlan(
+            flags = ExecutionFlags(
+              useDefaults = false,
+              skipTests = false,
+              skipPublish = false,
+              interactive = false,
+              crossBuild = false
+            ),
+            releaseVersionOverride = Some("1.2.3"),
+            nextVersionOverride = Some("1.2.4-SNAPSHOT"),
+            tagDefault = None
           )
-
-        val result = VersionSteps.resolveVersionPlan(
-          state,
-          _ =>
-            CoreVersionResolver.ResolvedSettings(
-              versionFile = resolvedFile,
-              readVersion = _ => IO.pure("1.2.3-SNAPSHOT"),
-              writeVersion = (_, version) => IO.pure(s"resolved=$version"),
-              useGlobalVersion = true
-            )
         )
 
-        (result.versionFile must_== resolvedFile) and
-          (result.releaseVersionOverride must beSome("1.2.3")) and
-          (result.nextVersionOverride must beSome("1.2.4-SNAPSHOT")) and
-          (result.useGlobalVersion must beTrue) and
-          (result.readVersion(resolvedFile).unsafeRunSync() must_== "1.2.3-SNAPSHOT") and
-          (result.writeVersion(resolvedFile, "1.2.3").unsafeRunSync() must_== "resolved=1.2.3")
+      val result = VersionSteps.resolveVersionPlan(
+        state,
+        _ =>
+          CoreVersionResolver.ResolvedSettings(
+            versionFile = resolvedFile,
+            readVersion = _ => IO.pure("1.2.3-SNAPSHOT"),
+            writeVersion = (_, version) => IO.pure(s"resolved=$version"),
+            useGlobalVersion = true
+          )
+      )
+
+      (result.versionFile must_== resolvedFile) and
+        (result.releaseVersionOverride must beSome("1.2.3")) and
+        (result.nextVersionOverride must beSome("1.2.4-SNAPSHOT")) and
+        (result.useGlobalVersion must beTrue) and
+        (result.readVersion(resolvedFile).unsafeRunSync() must_== "1.2.3-SNAPSHOT") and
+        (result.writeVersion(resolvedFile, "1.2.3").unsafeRunSync() must_== "resolved=1.2.3")
     }
 
     "delegate live resolution to CoreVersionResolver and preserve CLI overrides from state" in

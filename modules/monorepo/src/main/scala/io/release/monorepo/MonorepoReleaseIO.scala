@@ -109,15 +109,15 @@ trait MonorepoReleaseIO {
 
   /** Create a global monorepo release step from a context-transforming IO action. */
   def globalStep(name: String)(
-      action: MonorepoContext => IO[MonorepoContext]
+      execute: MonorepoContext => IO[MonorepoContext]
   ): MonorepoStepIO.Global =
-    MonorepoStepIO.Global(name, action)
+    MonorepoStepIO.Global(name, execute)
 
   /** Create a per-project monorepo release step from a project-level IO action. */
   def perProjectStep(name: String, enableCrossBuild: Boolean = false)(
-      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+      execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
   ): MonorepoStepIO.PerProject =
-    MonorepoStepIO.PerProject(name, action, enableCrossBuild = enableCrossBuild)
+    MonorepoStepIO.PerProject(name, execute, enableCrossBuild = enableCrossBuild)
 
   // ── Resource-aware factory methods ─────────────────────────────────
 
@@ -143,21 +143,21 @@ trait MonorepoReleaseIO {
   ): T => MonorepoStepIO =
     (t: T) => MonorepoStepIO.PerProject(name, f(t), enableCrossBuild = enableCrossBuild)
 
-  /** Create a resource-aware global monorepo step with a check phase. */
-  def resourceGlobalStepWithCheck[T](name: String)(
-      action: T => MonorepoContext => IO[MonorepoContext]
+  /** Create a resource-aware global monorepo step with a validation phase. */
+  def resourceGlobalStepWithValidation[T](name: String)(
+      execute: T => MonorepoContext => IO[MonorepoContext]
   )(
-      check: T => MonorepoContext => IO[MonorepoContext]
+      validate: T => MonorepoContext => IO[Unit]
   ): T => MonorepoStepIO =
-    (t: T) => MonorepoStepIO.Global(name, action(t), check(t))
+    (t: T) => MonorepoStepIO.Global(name, execute(t), validate(t))
 
-  /** Create a resource-aware per-project monorepo step with a check phase. */
-  def resourcePerProjectStepWithCheck[T](name: String, enableCrossBuild: Boolean = false)(
-      action: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+  /** Create a resource-aware per-project monorepo step with a validation phase. */
+  def resourcePerProjectStepWithValidation[T](name: String, enableCrossBuild: Boolean = false)(
+      execute: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
   )(
-      check: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+      validate: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
   ): T => MonorepoStepIO =
-    (t: T) => MonorepoStepIO.PerProject(name, action(t), check(t), enableCrossBuild)
+    (t: T) => MonorepoStepIO.PerProject(name, execute(t), validate(t), enableCrossBuild)
 
   // ── Default settings ──────────────────────────────────────────────────
 

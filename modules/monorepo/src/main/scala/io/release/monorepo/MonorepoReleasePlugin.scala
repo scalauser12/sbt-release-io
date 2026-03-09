@@ -14,7 +14,11 @@ import _root_.io.release.ReleaseKeys
 import _root_.io.release.ReleasePluginIO
 import _root_.io.release.internal.ExecutionFlags
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
-import _root_.io.release.monorepo.internal.{MonorepoProjectResolver, MonorepoReleasePlan, MonorepoReleasePlanner}
+import _root_.io.release.monorepo.internal.{
+  MonorepoProjectResolver,
+  MonorepoReleasePlan,
+  MonorepoReleasePlanner
+}
 
 /** Base trait for resource-parameterized monorepo release plugins. Each release step
   * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the

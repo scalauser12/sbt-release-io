@@ -7,7 +7,7 @@ import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
 
 import scala.util.control.NonFatal
 
-/** Resolves the selected monorepo project set from the current state and context snapshot. */
+/** Resolves the selected monorepo project set from the current live state. */
 private[monorepo] object MonorepoSelectionResolver {
 
   final case class SelectionResult(
@@ -18,42 +18,40 @@ private[monorepo] object MonorepoSelectionResolver {
 
   def resolve(
       ctx: MonorepoContext,
-      currentProjects: Seq[ProjectReleaseInfo],
       plan: MonorepoReleasePlan
   ): IO[SelectionResult] =
     for {
-      runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-      tagSettings  <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
-      ordered      <- if (currentProjects.nonEmpty) IO.pure(currentProjects)
-                      else MonorepoProjectResolver.resolveAll(ctx.state)
-      validated    <- IO.fromEither(
-                        validateResolvedProjects(ordered, plan, runtime.useGlobalVersion)
-                          .left
-                          .map(new IllegalStateException(_))
-                      )
-      selected     <- plan.selectionMode match {
-                        case SelectionMode.ExplicitSelection =>
-                          IO.pure(ordered.filter(p => validated.selectedNames.contains(p.name)))
-                        case SelectionMode.AllChanged        =>
-                          IO.pure(ordered)
-                        case SelectionMode.DetectChanges     =>
-                          detectSelectedProjects(
-                            ctx,
-                            ordered,
-                            runtime,
-                            tagSettings
-                          )
-                      }
-      constrained  <- MonorepoReleasePlanner.enforceGlobalVersionAllOrNothing(
-                        ordered,
-                        selected,
-                        runtime.useGlobalVersion
-                      )
-      withVersions  = MonorepoProjectResolver.applyVersionOverrides(
-                        constrained,
-                        validated,
-                        runtime.useGlobalVersion
-                      )
+      runtime     <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
+      tagSettings <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
+      liveOrdered <- MonorepoOrderResolver.resolve(ctx.state)
+      ordered      = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
+      validated   <- IO.fromEither(
+                       validateResolvedProjects(ordered, plan, runtime.useGlobalVersion).left
+                         .map(new IllegalStateException(_))
+                     )
+      selected    <- plan.selectionMode match {
+                       case SelectionMode.ExplicitSelection =>
+                         IO.pure(ordered.filter(p => validated.selectedNames.contains(p.name)))
+                       case SelectionMode.AllChanged        =>
+                         IO.pure(ordered)
+                       case SelectionMode.DetectChanges     =>
+                         detectSelectedProjects(
+                           ctx,
+                           ordered,
+                           runtime,
+                           tagSettings
+                         )
+                     }
+      constrained <- MonorepoReleasePlanner.enforceGlobalVersionAllOrNothing(
+                       ordered,
+                       selected,
+                       runtime.useGlobalVersion
+                     )
+      withVersions = MonorepoProjectResolver.applyVersionOverrides(
+                       constrained,
+                       validated,
+                       runtime.useGlobalVersion
+                     )
     } yield SelectionResult(
       projects = withVersions,
       selectionMode = validated.selectionMode,

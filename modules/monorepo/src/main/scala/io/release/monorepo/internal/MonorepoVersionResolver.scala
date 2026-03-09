@@ -27,13 +27,15 @@ private[monorepo] object MonorepoVersionResolver {
 
   def sessionSettings(state: State): IO[Seq[sbt.Setting[?]]] =
     IO.blocking {
-      val runtime = MonorepoRuntime.fromState(state)
+      val runtime      = MonorepoRuntime.fromState(state)
       Seq(
-        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile :=
-          runtime.extracted.get(_root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile),
-        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoReadVersion :=
+        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile      :=
+          runtime.extracted.get(
+            _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile
+          ),
+        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoReadVersion      :=
           runtime.readVersion,
-        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoWriteVersion :=
+        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoWriteVersion     :=
           runtime.writeVersion,
         _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion :=
           runtime.useGlobalVersion

@@ -6,9 +6,9 @@ import io.release.ReleaseCtx
 /** Shared two-phase execution helpers used by core and monorepo composers. */
 private[release] object ExecutionEngine {
 
-  final case class CheckStep[C <: ReleaseCtx[C]](
+  final case class ValidationStep[C <: ReleaseCtx[C]](
       name: String,
-      run: C => IO[C]
+      run: C => IO[Unit]
   )
 
   final case class ActionStep[C <: ReleaseCtx[C]](
@@ -16,13 +16,13 @@ private[release] object ExecutionEngine {
       run: C => IO[C]
   )
 
-  def runChecks[C <: ReleaseCtx[C]](
+  def runValidations[C <: ReleaseCtx[C]](
       logPrefix: String,
-      checks: Seq[CheckStep[C]],
+      validations: Seq[ValidationStep[C]],
       initialCtx: C
   ): IO[Unit] =
-    checks.foldLeft(IO.unit) { (acc, step) =>
-      acc *> runCheckedStep(logPrefix, step, initialCtx)
+    validations.foldLeft(IO.unit) { (acc, step) =>
+      acc *> runValidationStep(logPrefix, step, initialCtx)
     }
 
   def runActions[C <: ReleaseCtx[C]](
@@ -31,28 +31,11 @@ private[release] object ExecutionEngine {
   ): IO[FailureHandling.ExecutionResult[C]] =
     FailureHandling.runActionPhase(actions.map(_.run))(startCtx)
 
-  private def runCheckedStep[C <: ReleaseCtx[C]](
+  private def runValidationStep[C <: ReleaseCtx[C]](
       logPrefix: String,
-      step: CheckStep[C],
+      step: ValidationStep[C],
       initialCtx: C
-  ): IO[Unit] = {
-    val armedCtx = FailureHandling.armOnFailure(initialCtx)
-
-    IO.blocking(initialCtx.state.log.info(s"$logPrefix Checking step: ${step.name}")) *>
-      step
-        .run(armedCtx)
-        .flatMap(FailureHandling.detectSbtFailure)
-        .flatMap { checkedCtx =>
-          FailureHandling.stripFailureCommand(checkedCtx).flatMap { strippedCtx =>
-            if (strippedCtx.failed)
-              IO.raiseError(
-                new IllegalStateException(
-                  s"Check phase failed in step '${step.name}': sbt task failure detected"
-                )
-              )
-            else
-              IO.unit
-          }
-        }
-  }
+  ): IO[Unit] =
+    IO.blocking(initialCtx.state.log.info(s"$logPrefix Validating step: ${step.name}")) *>
+      step.run(initialCtx)
 }

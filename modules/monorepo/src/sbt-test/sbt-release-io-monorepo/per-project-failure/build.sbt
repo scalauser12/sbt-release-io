@@ -21,7 +21,7 @@ lazy val api = (project in file("api"))
 val checkFailureArtifacts = taskKey[Unit]("Verify run-tests failure stops all later release mutations")
 val runReleaseTests = MonorepoStepIO.PerProject(
   name = "run-tests",
-  action = (ctx, project) =>
+  execute = (ctx, project) =>
     if (ctx.skipTests)
       _root_.cats.effect.IO.pure(ctx)
     else

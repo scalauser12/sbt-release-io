@@ -13,7 +13,7 @@ class MonorepoProjectResolverSpec extends Specification {
   "MonorepoProjectResolver.applyVersionOverrides" should {
 
     "apply per-project overrides in non-global mode" in {
-      val plan    = MonorepoReleasePlan(
+      val plan   = MonorepoReleasePlan(
         flags = ExecutionFlags(false, false, false, false, false),
         selectionMode = SelectionMode.ExplicitSelection,
         selectedNames = Seq("core"),
@@ -22,13 +22,13 @@ class MonorepoProjectResolverSpec extends Specification {
         globalReleaseVersion = None,
         globalNextVersion = None
       )
-      val result  = MonorepoProjectResolver.applyVersionOverrides(
+      val result = MonorepoProjectResolver.applyVersionOverrides(
         Seq(project("core"), project("api")),
         plan,
         useGlobalVersion = false
       )
-      val core    = result.find(_.name == "core").get
-      val api     = result.find(_.name == "api").get
+      val core   = result.find(_.name == "core").get
+      val api    = result.find(_.name == "api").get
 
       (core.versions must beSome("1.0.0" -> "1.1.0-SNAPSHOT")) and
         (api.versions must beNone)

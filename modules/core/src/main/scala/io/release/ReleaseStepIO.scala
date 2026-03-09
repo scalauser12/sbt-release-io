@@ -4,26 +4,24 @@ import cats.effect.IO
 import io.release.internal.SbtRuntime
 import sbt.*
 
-/** A single release step with an optional check phase and cross-build support.
+/** A single release step with explicit validation and execution phases.
   *
   * Steps are executed in two phases by [[ReleaseStepIO.compose]]:
-  *  1. '''Check phase''' — all `check` functions run against the initial context for validation.
-  *     Only the returned context/state is discarded; any external side effects performed by a
-  *     check still happen. Custom checks should therefore be side-effect free and safe to run
-  *     more than once. Any failure aborts before actions execute.
-  *  2. '''Action phase''' — all `action` functions run sequentially, threading context through.
-  *     Between each step, sbt's `FailureCommand` sentinel is inspected for silent task failures.
+  *  1. '''Validation phase''' — all `validate` functions run against the initial context.
+  *     Validations may fail the release, but they do not thread updated context through the phase.
+  *  2. '''Execution phase''' — all `execute` functions run sequentially, threading context
+  *     through the release. Between each step, sbt's `FailureCommand` sentinel is inspected for
+  *     silent task failures.
   *
   * @param name             human-readable step name, used in log output
-  * @param action           the main step logic; receives and returns a [[ReleaseContext]]
-  * @param check            optional pre-flight validation; defaults to no-op. Checks should be
-  *                         side-effect free because their external effects are not rolled back.
+  * @param execute          the main step logic; receives and returns a [[ReleaseContext]]
+  * @param validate         optional pre-flight validation; defaults to no-op
   * @param enableCrossBuild when true and cross-build is active, runs once per `crossScalaVersions`
   */
 case class ReleaseStepIO(
     name: String,
-    action: ReleaseContext => IO[ReleaseContext],
-    check: ReleaseContext => IO[ReleaseContext] = ctx => IO.pure(ctx),
+    execute: ReleaseContext => IO[ReleaseContext],
+    validate: ReleaseContext => IO[Unit] = _ => IO.unit,
     enableCrossBuild: Boolean = false
 )
 
@@ -41,7 +39,7 @@ object ReleaseStepIO {
   def fromTask[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
     ReleaseStepIO(
       name = key.key.label,
-      action = ctx =>
+      execute = ctx =>
         IO.blocking {
           val (newState, _) = SbtRuntime.runTask(ctx.state, key)
           ctx.copy(state = newState)
@@ -59,7 +57,7 @@ object ReleaseStepIO {
   ): ReleaseStepIO =
     ReleaseStepIO(
       name = key.key.label,
-      action = ctx =>
+      execute = ctx =>
         IO.blocking {
           val (newState, _) = SbtRuntime.runInputTask(ctx.state, key, args)
           ctx.copy(state = newState)
@@ -74,7 +72,7 @@ object ReleaseStepIO {
   def fromTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
     ReleaseStepIO(
       name = s"${key.key.label} (aggregated)",
-      action = ctx =>
+      execute = ctx =>
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
           val newState  = extracted.runAggregated(extracted.currentRef / key, ctx.state)
@@ -87,7 +85,7 @@ object ReleaseStepIO {
   def fromCommand(command: String): ReleaseStepIO =
     ReleaseStepIO(
       name = s"command: $command",
-      action = ctx =>
+      execute = ctx =>
         IO.blocking {
           val newState = Command.process(
             command,
@@ -107,14 +105,14 @@ object ReleaseStepIO {
   def fromCommandAndRemaining(command: String): ReleaseStepIO =
     ReleaseStepIO(
       name = s"command+remaining: $command",
-      action = ctx =>
+      execute = ctx =>
         IO.blocking {
           ctx.copy(state = CommandStepSupport.runCommandAndRemaining(ctx.state, command))
         }
     )
 
   /** Compose a sequence of steps into a two-phase IO program.
-    * When `crossBuild` is true, both checks and actions with `enableCrossBuild` are
+    * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.
     */
   def compose(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(

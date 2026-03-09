@@ -12,22 +12,22 @@ import scala.sys.process.Process
 
 class VcsStepsSpec extends Specification with CatsEffect {
 
-  "VcsSteps.pushChanges.check" should {
+  "VcsSteps.pushChanges.validate" should {
 
-    "allow check phase to pass with a broken tracking remote when upstream is configured" in {
+    "allow validation to pass with a broken tracking remote when upstream is configured" in {
       releaseContextResource.use { ctx =>
-        VcsSteps.pushChanges.check(ctx).map { result =>
-          result.state.configuration.baseDirectory() must_== ctx.state.configuration.baseDirectory()
+        VcsSteps.pushChanges.validate(ctx).map { result =>
+          result must beEqualTo(())
         }
       }
     }
   }
 
-  "VcsSteps.pushChanges.action" should {
+  "VcsSteps.pushChanges.execute" should {
 
     "fail during remote preflight in non-interactive mode before pushing" in {
       releaseContextResource.use { ctx =>
-        VcsSteps.pushChanges.action(ctx).attempt.map {
+        VcsSteps.pushChanges.execute(ctx).attempt.map {
           case Left(err: IllegalStateException) =>
             err.getMessage must contain("Aborting the release due to remote check failure.")
           case other                            =>

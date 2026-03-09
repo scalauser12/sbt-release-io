@@ -29,7 +29,7 @@ val checkTestsSkipped = taskKey[Unit]("Verify tests were skipped")
 val checkGitTags      = taskKey[Unit]("Check git tags")
 val runReleaseTests   = MonorepoStepIO.PerProject(
   name = "run-tests",
-  action = (ctx, project) =>
+  execute = (ctx, project) =>
     if (ctx.skipTests)
       _root_.cats.effect.IO.pure(ctx)
     else

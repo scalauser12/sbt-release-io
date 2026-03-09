@@ -14,7 +14,7 @@ object LateBoundDetectPlugin extends MonorepoReleasePluginLike[Unit] {
     defaultsWithBefore(state, "detect-or-select-projects")((_: Unit) =>
       MonorepoStepIO.Global(
         name = "late-bound-detect-settings",
-        action = ctx =>
+        execute = ctx =>
           IO.blocking {
             val extracted    = Project.extract(ctx.state)
             val updatedState = extracted.appendWithSession(

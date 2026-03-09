@@ -86,13 +86,13 @@ trait ReleaseIO {
   ): T => ReleaseStepIO =
     (t: T) => ReleaseStepIO(name, f(t), enableCrossBuild = enableCrossBuild)
 
-  /** Create a resource-aware release step with a check phase. */
-  def resourceStepWithCheck[T](name: String, enableCrossBuild: Boolean = false)(
-      action: T => ReleaseContext => IO[ReleaseContext]
+  /** Create a resource-aware release step with a validation phase. */
+  def resourceStepWithValidation[T](name: String, enableCrossBuild: Boolean = false)(
+      execute: T => ReleaseContext => IO[ReleaseContext]
   )(
-      check: T => ReleaseContext => IO[ReleaseContext]
+      validate: T => ReleaseContext => IO[Unit]
   ): T => ReleaseStepIO =
-    (t: T) => ReleaseStepIO(name, action(t), check(t), enableCrossBuild)
+    (t: T) => ReleaseStepIO(name, execute(t), validate(t), enableCrossBuild)
 
 }
 

@@ -24,7 +24,7 @@ object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
     defaultsWith(state)((acquired: java.io.File) =>
       MonorepoStepIO.Global(
         name = "use-resource",
-        action = ctx =>
+        execute = ctx =>
           IO {
             assert(acquired.exists(), s"Resource should exist: ${acquired.getAbsolutePath}")
             sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "step-used-resource"))

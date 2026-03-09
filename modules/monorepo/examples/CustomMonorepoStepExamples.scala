@@ -22,6 +22,8 @@ import sbt.Keys.*
  */
 object CustomMonorepoStepExamples {
 
+  private val releaseCompletedKey = AttributeKey[Boolean]("releaseCompleted")
+
   /** How to read this file (recommended path):
     *  1. Start with `minimalProcess` for an immediate working setup.
     *  2. Move to `firstCustomProcess` for the smallest meaningful customization.
@@ -81,7 +83,7 @@ object CustomMonorepoStepExamples {
 
   val validateBranch: MonorepoStepIO = MonorepoStepIO.Global(
     name = "validate-branch",
-    action = { ctx =>
+    execute = { ctx =>
       ctx.vcs match {
         case Some(vcs) =>
           for {
@@ -144,7 +146,7 @@ object CustomMonorepoStepExamples {
   // --- Global step: store a custom attribute ---
 
   val markReleaseDone: MonorepoStepIO = globalStep("mark-done") { ctx =>
-    IO.pure(ctx.withAttr("release-completed", "true"))
+    IO.pure(ctx.withMetadata(releaseCompletedKey, true))
   }
 
   // --- Conditional per-project step: skip failed projects ---

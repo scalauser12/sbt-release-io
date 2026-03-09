@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import io.release.TestSupport
 import org.specs2.mutable.Specification
+import sbt.AttributeKey
 import sbt.State
 
 import java.nio.file.Files
@@ -30,13 +31,17 @@ class MonorepoContextSpec extends Specification {
       ctx.currentProjects.map(_.name) must_== Seq("api")
     }
 
-    "manage attributes" in withState { state =>
+    "manage typed metadata" in withState { state =>
       val ctx     = MonorepoContext(state = state)
-      val updated = ctx.withAttr("key1", "val1").withAttr("key2", "val2")
+      val key1    = AttributeKey[String]("key1")
+      val key2    = AttributeKey[Int]("key2")
+      val updated = ctx.withMetadata(key1, "val1").withMetadata(key2, 2)
+      val removed = updated.withoutMetadata(key1)
 
-      (updated.attr("key1") must beSome("val1")) and
-        (updated.attr("key2") must beSome("val2")) and
-        (updated.attr("missing") must beNone)
+      (updated.metadata(key1) must beSome("val1")) and
+        (updated.metadata(key2) must beSome(2)) and
+        (removed.metadata(key1) must beNone) and
+        (removed.metadata(key2) must beSome(2))
     }
 
     "mark as failed" in withState { state =>
@@ -59,7 +64,8 @@ class MonorepoContextSpec extends Specification {
       val proj = dummyProject("test")
       (proj.versions must beNone) and
         (proj.tagName must beNone) and
-        (proj.failed must_== false)
+        (proj.failed must_== false) and
+        (proj.failureCause must beNone)
     }
   }
 

@@ -241,16 +241,16 @@ the default-step list below, such as `"check-clean-working-dir"` or `"publish-ar
 
 These helpers read from the `releaseIOProcess` setting (including any `build.sbt` filtering), so your override builds on all configured steps.
 
-Custom steps inserted before a built-in action may update session settings in `State`, and the
-later built-in action will read those live settings when it runs. This applies to built-in actions
-such as version resolution and tagging. It does not change the two-phase model: built-in `check`
-functions still run from the initial check-phase state.
+Custom steps inserted before a built-in execute step may update session settings in `State`, and
+the later built-in execute step will read those live settings when it runs. This applies to built-in
+steps such as version resolution and tagging. It does not change the two-phase model: built-in
+`validate` functions still run from the initial validation-phase state.
 
 #### Custom step timing
 
 - The step list is frozen when the command starts.
-- Built-in **actions** read the current `State` when they run.
-- Built-in **checks** still run from the initial check-phase state.
+- Built-in **execute** functions read the current `State` when they run.
+- Built-in **validate** functions still run from the initial validation-phase state.
 
 Example: rewrite version settings before the built-in `inquire-versions` step:
 
@@ -470,8 +470,17 @@ The default release process includes:
 
 These names are the stable built-in insertion points for `defaultsWithAfter` and `defaultsWithBefore`.
 Command-line flags and other run invariants are captured before execution starts, but built-in
-actions resolve operational settings such as version-file handling and tagging from the current
-`State` when they run. The public check/action step model remains unchanged for compatibility.
+execute steps resolve operational settings such as version-file handling and tagging from the current
+`State` when they run. Custom steps now use the public `validate`/`execute` model directly.
+
+## Migrating Custom Steps
+
+If you are updating a custom plugin or build from an older release:
+
+- rename `step.check` to `step.validate`
+- rename `step.action` to `step.execute`
+- rename `resourceStepWithCheck` to `resourceStepWithValidation`
+- replace string attributes with typed metadata via `ctx.withMetadata`, `ctx.metadata`, and `AttributeKey[A]`
 
 ## Testing
 

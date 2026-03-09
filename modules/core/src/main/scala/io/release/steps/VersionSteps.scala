@@ -119,8 +119,8 @@ private[release] object VersionSteps {
 
   val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
     name = "commit-release-version",
-    check = VcsSteps.checkCleanWorkingDirInternal(_, logStartHash = false),
-    action = ctx =>
+    validate = VcsSteps.validateCleanWorkingDir(_, logStartHash = false),
+    execute = ctx =>
       requireVersions(ctx) { case (releaseVer, _) =>
         for {
           commitResult            <- commitVersionNative(ctx, releaseCommitMessage)
@@ -176,22 +176,22 @@ private[release] object VersionSteps {
         (versionPlan, sign, signOff)
       }.flatMap { case (versionPlan, sign, signOff) =>
         GitRuntime.relativizeToBase(vcs, versionPlan.versionFile).flatMap { relativePath =>
-        for {
-          _      <- GitRuntime.add(vcs, relativePath)
-          status <- GitRuntime.trackedStatus(vcs)
-          result <- if (status.nonEmpty) {
-                      for {
-                        commitData        <- IO.blocking(SbtRuntime.runTask(ctx.state, commitMessageKey))
-                        (commitState, msg) = commitData
-                        _                 <- GitRuntime.commit(vcs, msg, sign, signOff)
-                        r                 <- IO.blocking(
-                                               (ctx.copy(state = commitState), vcs.currentHash)
-                                             )
-                      } yield r
-                    } else {
-                      IO.blocking((ctx, vcs.currentHash))
-                    }
-        } yield result
+          for {
+            _      <- GitRuntime.add(vcs, relativePath)
+            status <- GitRuntime.trackedStatus(vcs)
+            result <- if (status.nonEmpty) {
+                        for {
+                          commitData        <- IO.blocking(SbtRuntime.runTask(ctx.state, commitMessageKey))
+                          (commitState, msg) = commitData
+                          _                 <- GitRuntime.commit(vcs, msg, sign, signOff)
+                          r                 <- IO.blocking(
+                                                 (ctx.copy(state = commitState), vcs.currentHash)
+                                               )
+                        } yield r
+                      } else {
+                        IO.blocking((ctx, vcs.currentHash))
+                      }
+          } yield result
         }
       }
     }
@@ -199,21 +199,21 @@ private[release] object VersionSteps {
   private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = {
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx.state))
-      contents <- versionPlan.writeVersion(versionPlan.versionFile, ver)
-      result   <- IO.blocking {
-                    java.nio.file.Files
-                      .write(versionPlan.versionFile.toPath, contents.getBytes("UTF-8"))
-                    ctx.state.log.info(
-                      s"[release-io] Wrote version $ver to ${versionPlan.versionFile.getName}"
-                    )
-                    val setting  =
-                      if (versionPlan.useGlobalVersion) ThisBuild / version := ver else version := ver
-                    val newState = SbtRuntime.appendWithSession(
-                      ctx.state,
-                      CoreVersionResolver.sessionSettings(ctx.state) ++ Seq(setting)
-                    )
-                    ctx.copy(state = newState)
-                  }
+      contents    <- versionPlan.writeVersion(versionPlan.versionFile, ver)
+      result      <- IO.blocking {
+                       java.nio.file.Files
+                         .write(versionPlan.versionFile.toPath, contents.getBytes("UTF-8"))
+                       ctx.state.log.info(
+                         s"[release-io] Wrote version $ver to ${versionPlan.versionFile.getName}"
+                       )
+                       val setting  =
+                         if (versionPlan.useGlobalVersion) ThisBuild / version := ver else version := ver
+                       val newState = SbtRuntime.appendWithSession(
+                         ctx.state,
+                         CoreVersionResolver.sessionSettings(ctx.state) ++ Seq(setting)
+                       )
+                       ctx.copy(state = newState)
+                     }
     } yield result
   }
 

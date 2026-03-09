@@ -14,7 +14,7 @@ object LateBoundMonorepoVersionPlugin extends MonorepoReleasePluginLike[Unit] {
     defaultsWithBefore(state, "inquire-versions")((_: Unit) =>
       MonorepoStepIO.Global(
         name = "late-bound-version-settings",
-        action = ctx =>
+        execute = ctx =>
           IO.blocking {
             val extracted    = Project.extract(ctx.state)
             val updatedState = extracted.appendWithSession(

@@ -19,21 +19,21 @@ private[release] object VcsSteps {
 
   val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
     name = "check-clean-working-dir",
-    action = ctx => IO.pure(ctx),
-    check = checkCleanWorkingDirInternal(_, logStartHash = true)
+    execute = ctx => IO.pure(ctx),
+    validate = validateCleanWorkingDir(_, logStartHash = true)
   )
 
-  def checkCleanWorkingDirInternal(
+  def validateCleanWorkingDir(
       ctx: ReleaseContext,
       logStartHash: Boolean
-  ): IO[ReleaseContext] =
+  ): IO[Unit] =
     GitRuntime.checkCleanWorkingDir(ctx.state).flatMap { result =>
       IO.blocking {
         if (logStartHash)
           ctx.state.log.info(
             s"[release-io] Starting release process off commit: ${result.currentHash}"
           )
-        ctx.withVcs(result.vcs)
+        ()
       }
     }
 
@@ -116,7 +116,9 @@ private[release] object VcsSteps {
                           val newState = SbtRuntime.appendWithSession(
                             ctx.state,
                             CoreVersionResolver.sessionSettings(ctx.state) ++
-                              Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                              Seq(
+                                packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
+                              )
                           )
                           ctx.copy(state = newState)
                         }
@@ -139,8 +141,8 @@ private[release] object VcsSteps {
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO(
     name = "push-changes",
-    check = ctx =>
-      requireVcs(ctx) { vcs =>
+    validate = ctx =>
+      required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
         for {
           hasUp <- IO.blocking(vcs.hasUpstream)
           _     <-
@@ -154,9 +156,9 @@ private[release] object VcsSteps {
                   )
                 )
               }
-        } yield ctx
+        } yield ()
       },
-    action = ctx =>
+    execute = ctx =>
       requireVcs(ctx) { vcs =>
         for {
           hasUp  <- IO.blocking(vcs.hasUpstream)

@@ -6,11 +6,11 @@ name                        := "check-phase-test"
 scalaVersion                := "2.12.18"
 releaseIgnoreUntrackedFiles := true
 
-// Step whose check always fails; action creates a marker file to prove it ran
+// Step whose validation always fails; execute creates a marker file to prove it ran
 val stepWithFailingCheck = ReleaseStepIO(
   name = "step-with-failing-check",
-  action = (ctx: ReleaseContext) => _root_.cats.effect.IO { IO.touch(file("action-ran")); ctx },
-  check = (_: ReleaseContext) =>
+  execute = (ctx: ReleaseContext) => _root_.cats.effect.IO { IO.touch(file("action-ran")); ctx },
+  validate = (_: ReleaseContext) =>
     _root_.cats.effect.IO.raiseError(new RuntimeException("check always fails"))
 )
 

@@ -24,7 +24,7 @@ lazy val api = (project in file("api"))
 val checkAll = taskKey[Unit]("Run all verification checks")
 val recordOrderStep = MonorepoStepIO.PerProject(
   name = "record-order",
-  action = (ctx, project) =>
+  execute = (ctx, project) =>
     _root_.cats.effect.IO.blocking {
       val writer = new java.io.FileWriter(file("order.txt"), true)
       writer.write(project.name + "\n")

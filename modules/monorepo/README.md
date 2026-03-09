@@ -103,10 +103,10 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 | # | Step | Type | Description |
 |---|------|------|-------------|
 | 1 | `initialize-vcs` | Global | Detect git, store VCS adapter in context |
-| 2 | `check-clean-working-dir` | Global | Fail if uncommitted changes exist (check phase only) |
+| 2 | `check-clean-working-dir` | Global | Validation-only step that fails if uncommitted changes exist |
 | 3 | `resolve-release-order` | Global | Topologically sort projects by dependencies |
 | 4 | `detect-or-select-projects` | Global | Run change detection or use explicit CLI selection |
-| 5 | `check-snapshot-dependencies` | PerProject | Fail if any SNAPSHOT dependencies found (check phase only, cross-build) |
+| 5 | `check-snapshot-dependencies` | PerProject | Validation-only step that fails if any SNAPSHOT dependencies are found (cross-build) |
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
 | 7 | `validate-versions` | Global | Fail if global-version mode is active but versions are inconsistent |
 | 8 | `run-clean` | PerProject | Clean selected project outputs; sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide |
@@ -122,9 +122,8 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 **Global** steps run once. **PerProject** steps run once per selected project in topological order.
 Built-in task-backed per-project steps are project-scoped: child projects run only when they are themselves selected or discovered.
 Command-line flags and CLI override syntax are validated before execution begins, but built-in
-actions resolve project order, project selection, version-file handling, and tag settings from the
-current `State` when they run. The public check/action step model still remains for compatibility,
-so check-phase context mutations are discarded.
+execute steps resolve project order, project selection, version-file handling, and tag settings from the
+current `State` when they run. Custom steps now use the public `validate`/`execute` model directly.
 
 ## Configuration
 
@@ -317,18 +316,18 @@ override protected def monorepoReleaseProcess(state: State) =
 `defaultsWithAfter` and `defaultsWithBefore` match the exact `step.name` strings shown in
 the default-step table above, such as `"tag-releases"` or `"publish-artifacts"`.
 
-Custom steps inserted before built-in monorepo actions may update session settings in `State`, and
-later built-in actions will read those live settings when they run. This applies to built-in order
+Custom steps inserted before built-in monorepo execute steps may update session settings in `State`, and
+later built-in execute steps will read those live settings when they run. This applies to built-in order
 resolution, project selection, version resolution, and tagging. Custom `PerProject` steps still use
 the current `MonorepoContext.projects` snapshot unless they explicitly replace it themselves, and
-built-in checks still run from the initial check-phase state.
+built-in validation still runs against the setup-selected snapshot rather than threading later context changes backward.
 
 #### Custom step timing
 
 - The step list is frozen when the command starts.
-- Built-in **Global** actions such as `resolve-release-order` and `detect-or-select-projects`
+- Built-in **Global** execute steps such as `resolve-release-order` and `detect-or-select-projects`
   read the current `State` when they run.
-- Built-in **checks** still run from the initial check-phase state.
+- Built-in **validate** functions after `detect-or-select-projects` run against the selected snapshot.
 - Custom `PerProject` steps keep using `ctx.projects` until you replace that snapshot yourself.
 
 Example: rewrite the project set that built-in order/selection will use:
@@ -348,7 +347,7 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[Unit] {
   private val selectOnlyCore =
     MonorepoStepIO.Global(
       name = "select-only-core",
-      action = ctx =>
+      execute = ctx =>
         IO.blocking {
           val extracted    = Project.extract(ctx.state)
           val root         = extracted.get(baseDirectory)
@@ -467,28 +466,27 @@ This bypasses the `releaseIOMonorepoProcess` setting entirely — the step list 
 in the plugin. Use `defaultsWith`, `defaultsWithAfter`, or `defaultsWithBefore` (shown above)
 if you want to keep the setting-based defaults and only add extra steps.
 
-### Resource-aware steps with checks
+### Resource-aware steps with validation
 
 ```scala
-// Global step with a check phase
-resourceGlobalStepWithCheck("validated-push") { client => ctx =>
+// Global step with a validation phase
+resourceGlobalStepWithValidation("validated-push") { client => ctx =>
   IO.blocking { client.post("/push", "pushing"); ctx }
 } { client => ctx =>
-  IO.blocking { client.get("/can-push"); ctx }
+  IO.blocking { client.get("/can-push"); () }
 }
 
-// Per-project step with a check phase
-resourcePerProjectStepWithCheck("validated-publish", enableCrossBuild = true) {
+// Per-project step with a validation phase
+resourcePerProjectStepWithValidation("validated-publish", enableCrossBuild = true) {
   client => (ctx, project) =>
     IO.blocking { client.post(s"/publish/${project.name}", "ok"); ctx }
 } { client => (ctx, project) =>
-    IO.blocking { client.get(s"/can-publish/${project.name}"); ctx }
+    IO.blocking { client.get(s"/can-publish/${project.name}"); () }
 }
 ```
 
-Checks run as real effects before any actions execute. Only the returned context/state is
-discarded after the check phase; external side effects are not rolled back. Custom checks
-should therefore be side-effect free and safe to run more than once.
+Validation runs before execute. It may fail the release, but it does not thread updated context
+through the phase. Custom validation should therefore avoid relying on mutated context as an output.
 
 ### Enabling in build.sbt
 
@@ -605,18 +603,19 @@ Each project uses its own `crossScalaVersions`. A project with `Seq("2.13.12", "
 
 ## Execution Model
 
-### Two-phase execution
+### Validate / Execute Model
 
-1. **Check phase**: All step checks run against the initial context. State mutations are discarded. Any check failure aborts the entire release before actions execute.
-2. **Action phase**: Steps run sequentially, threading `MonorepoContext` through. Built-in actions resolve project order, selection, version-file settings, and tag settings from the current `State` when they run. Between every step, sbt's `FailureCommand` sentinel is inspected for task-level failures.
+1. **Setup segment**: Steps up to and including the first `detect-or-select-projects` run as `validate` then `execute` sequentially. This is the boundary where built-in order and selection can be reshaped from live `State`.
+2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup.
+3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Built-in execute steps resolve project order, selection, version-file settings, and tag settings from the current `State` when they run. Between every step, sbt's `FailureCommand` sentinel is inspected for task-level failures.
 
 ### Per-project failure isolation
 
 In a monorepo release, multiple sub-projects run through each **PerProject** step in sequence.
-If one project's action throws an exception, the plugin **isolates** the failure to that project
+If one project's execute function throws an exception, the plugin **isolates** the failure to that project
 so the remaining projects in the same step can still complete.
 
-#### What happens when a per-project action fails
+#### What happens when a per-project execute fails
 
 1. The exception is caught and the error message is logged.
 2. The project is marked as **failed** internally.
@@ -624,8 +623,17 @@ so the remaining projects in the same step can still complete.
 4. Once the step finishes, the plugin checks whether any project is marked failed.
    If so, the global release context is marked failed and **all subsequent steps**
    (both Global and PerProject) are skipped entirely.
-5. At the end of the release, a `RuntimeException("Monorepo release process failed")`
-   is raised so the overall sbt command exits with an error.
+5. At the end of the release, the overall failure keeps a `MonorepoProjectFailures` cause so the per-project root exceptions remain available.
+
+## Migrating Custom Steps
+
+If you are updating a custom plugin or build from an older release:
+
+- rename `check` to `validate`
+- rename `action` to `execute`
+- rename `resourceGlobalStepWithCheck` to `resourceGlobalStepWithValidation`
+- rename `resourcePerProjectStepWithCheck` to `resourcePerProjectStepWithValidation`
+- replace `withAttr` / `attr` string keys with typed metadata via `withMetadata`, `metadata`, and `AttributeKey[A]`
 
 #### Example
 

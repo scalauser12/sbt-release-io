@@ -14,7 +14,7 @@ object LateBoundProjectsPlugin extends MonorepoReleasePluginLike[Unit] {
     defaultsWithBefore(state, "resolve-release-order")((_: Unit) =>
       MonorepoStepIO.Global(
         name = "late-bound-projects-setting",
-        action = ctx =>
+        execute = ctx =>
           IO.blocking {
             val extracted    = Project.extract(ctx.state)
             val baseDir      = extracted.get(sbt.Keys.baseDirectory)

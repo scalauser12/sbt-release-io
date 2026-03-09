@@ -24,7 +24,7 @@ private[monorepo] object MonorepoVersionSteps {
     */
   val inquireVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "inquire-versions",
-    action = (ctx, project) =>
+    execute = (ctx, project) =>
       project.versions match {
         case Some((rel, next)) if rel.nonEmpty && next.nonEmpty =>
           logInfo(ctx, s"${project.name}: pre-set -> $rel (next: $next)")
@@ -47,7 +47,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                                 versionInputs.versionFile
                                                               )
       data                                                 <- IO.blocking {
-                                                                val extracted        =
+                                                                val extracted       =
                                                                   Project.extract(ctx.state)
                                                                 val (s1, releaseFn) =
                                                                   extracted.runTask(project.ref / releaseVersion, ctx.state)
@@ -91,7 +91,7 @@ private[monorepo] object MonorepoVersionSteps {
   /** Validate version consistency in global-version mode (before writing to shared file). */
   val validateVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "validate-versions",
-    action = ctx =>
+    execute = ctx =>
       loadRuntime(ctx).flatMap { runtime =>
         if (runtime.useGlobalVersion)
           validateVersionConsistency(
@@ -102,7 +102,11 @@ private[monorepo] object MonorepoVersionSteps {
             ctx.currentProjects,
             { case (_, next) => next },
             "Global version mode requires all projects to have the same next version"
-          ) *> logInfo(ctx, "Version consistency validated for global version mode")
+          ) *> IO.blocking(
+            ctx.state.log.info(
+              "[release-io-monorepo] Version consistency validated for global version mode"
+            )
+          ).as(ctx)
         else IO.pure(ctx)
       }
   )
@@ -110,7 +114,7 @@ private[monorepo] object MonorepoVersionSteps {
   /** Write release versions to per-project version files. */
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "set-release-version",
-    action = (ctx, project) =>
+    execute = (ctx, project) =>
       project.versions match {
         case Some((releaseVer, _)) => writeProjectVersion(ctx, project, releaseVer)
         case None                  =>
@@ -121,7 +125,7 @@ private[monorepo] object MonorepoVersionSteps {
   /** Write next snapshot versions to per-project version files. */
   val setNextVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "set-next-version",
-    action = (ctx, project) =>
+    execute = (ctx, project) =>
       project.versions match {
         case Some((_, nextVer)) => writeProjectVersion(ctx, project, nextVer)
         case None               =>
@@ -132,14 +136,14 @@ private[monorepo] object MonorepoVersionSteps {
   /** Single commit for all release version files. */
   val commitReleaseVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-release-versions",
-    action =
+    execute =
       ctx => commitVersions(ctx, "Setting release versions", { case (releaseVer, _) => releaseVer })
   )
 
   /** Single commit for all next version files. */
   val commitNextVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-next-versions",
-    action = ctx => commitVersions(ctx, "Setting next versions", { case (_, nextVer) => nextVer })
+    execute = ctx => commitVersions(ctx, "Setting next versions", { case (_, nextVer) => nextVer })
   )
 
   // --- private helpers ---
@@ -153,7 +157,7 @@ private[monorepo] object MonorepoVersionSteps {
       versionInputs <- MonorepoVersionResolver.resolve(ctx.state, project.ref)
       preserved     <- MonorepoVersionResolver.sessionSettings(ctx.state)
       versionFile    = versionInputs.versionFile
-      result     <-
+      result        <-
         if (
           versionInputs.useGlobalVersion && ctx.state
             .get(MonorepoInternalKeys.globalVersionWritten)
@@ -168,7 +172,7 @@ private[monorepo] object MonorepoVersionSteps {
                           Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
                           val setting   =
                             if (versionInputs.useGlobalVersion) ThisBuild / version := ver
-                            else project.ref / version                        := ver
+                            else project.ref / version                              := ver
                           val baseState = SbtRuntime.appendWithSession(
                             ctx.state,
                             preserved ++ Seq(setting)

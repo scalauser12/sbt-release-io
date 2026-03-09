@@ -23,7 +23,7 @@ object CustomPlugin extends ReleasePluginIOLike[java.io.File] {
     defaultsWith(state)((acquired: java.io.File) =>
       ReleaseStepIO(
         name = "use-resource",
-        action = (ctx: ReleaseContext) =>
+        execute = (ctx: ReleaseContext) =>
           IO {
             assert(acquired.exists(), s"Resource should exist: ${acquired.getAbsolutePath}")
             sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "step-used-resource"))

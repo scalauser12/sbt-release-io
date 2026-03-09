@@ -15,8 +15,8 @@ private[release] object PublishSteps {
 
   val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO(
     name = "check-snapshot-dependencies",
-    action = ctx => IO.pure(ctx),
-    check = ctx =>
+    execute = ctx => IO.pure(ctx),
+    validate = ctx =>
       for {
         checkResult <- IO.blocking {
                          val extracted   = SbtRuntime.extracted(ctx.state)
@@ -28,7 +28,7 @@ private[release] object PublishSteps {
                        }
         result      <- checkResult match {
                          case Left(cause)                  =>
-                           IO.raiseError[ReleaseContext](
+                           IO.raiseError[Unit](
                              new IllegalStateException(
                                "Error checking for snapshot dependencies: " + cause
                              )
@@ -40,7 +40,7 @@ private[release] object PublishSteps {
                            val msg     = s"Snapshot dependencies found:\n$depList"
 
                            if (!ctx.interactive) {
-                             IO.raiseError[ReleaseContext](new IllegalStateException(msg))
+                             IO.raiseError[Unit](new IllegalStateException(msg))
                            } else {
                              IO.blocking(ctx.state.log.warn(msg)) *>
                                confirmContinue(
@@ -48,9 +48,9 @@ private[release] object PublishSteps {
                                  prompt = "Do you want to continue (y/n)? [n] ",
                                  defaultYes = false,
                                  abortMessage = "Aborting release due to snapshot dependencies."
-                               ).as(ctx)
+                               ).void
                            }
-                         case Right(_)                     => IO.pure(ctx)
+                         case Right(_)                     => IO.unit
                        }
       } yield result,
     enableCrossBuild = true
@@ -58,7 +58,7 @@ private[release] object PublishSteps {
 
   val publishArtifacts: ReleaseStepIO = ReleaseStepIO(
     name = "publish-artifacts",
-    action = ctx =>
+    execute = ctx =>
       if (ctx.skipPublish) {
         IO.blocking(ctx.state.log.info("[release-io] Skipping publish")).as(ctx)
       } else {
@@ -69,8 +69,8 @@ private[release] object PublishSteps {
           ctx.copy(state = newState)
         }
       },
-    check = ctx =>
-      if (ctx.skipPublish) IO.pure(ctx)
+    validate = ctx =>
+      if (ctx.skipPublish) IO.unit
       else
         for {
           missing <- IO.blocking {
@@ -82,20 +82,20 @@ private[release] object PublishSteps {
                      }
           result  <- if (missing.nonEmpty) {
                        val names = missing.map(_.project)
-                       IO.raiseError[ReleaseContext](
+                       IO.raiseError[Unit](
                          new IllegalStateException(
                            s"publishTo not configured for: ${names.mkString(", ")}. " +
                              "Set publishTo or add `publish / skip := true`."
                          )
                        )
-                     } else IO.pure(ctx)
+                     } else IO.unit
         } yield result,
     enableCrossBuild = true
   )
 
   val runTests: ReleaseStepIO = ReleaseStepIO(
     name = "run-tests",
-    action = ctx =>
+    execute = ctx =>
       if (ctx.skipTests) {
         IO.blocking(ctx.state.log.info("[release-io] Skipping tests")).as(ctx)
       } else {
@@ -111,7 +111,7 @@ private[release] object PublishSteps {
 
   val runClean: ReleaseStepIO = ReleaseStepIO(
     name = "run-clean",
-    action = ctx =>
+    execute = ctx =>
       IO.blocking {
         val extracted = SbtRuntime.extracted(ctx.state)
         val ref       = extracted.get(thisProjectRef)

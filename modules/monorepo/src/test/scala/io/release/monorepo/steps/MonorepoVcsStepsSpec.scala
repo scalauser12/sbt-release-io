@@ -13,22 +13,22 @@ import scala.sys.process.Process
 
 class MonorepoVcsStepsSpec extends Specification with CatsEffect {
 
-  "MonorepoVcsSteps.pushChanges.check" should {
+  "MonorepoVcsSteps.pushChanges.validate" should {
 
-    "allow check phase to pass with a broken tracking remote when upstream is configured" in {
+    "allow validation to pass with a broken tracking remote when upstream is configured" in {
       monorepoContextResource.use { ctx =>
-        MonorepoVcsSteps.pushChanges.check(ctx).map { result =>
-          result.state.configuration.baseDirectory() must_== ctx.state.configuration.baseDirectory()
+        MonorepoVcsSteps.pushChanges.validate(ctx).map { result =>
+          result must beEqualTo(())
         }
       }
     }
   }
 
-  "MonorepoVcsSteps.pushChanges.action" should {
+  "MonorepoVcsSteps.pushChanges.execute" should {
 
     "fail during remote preflight before any push attempt" in {
       monorepoContextResource.use { ctx =>
-        MonorepoVcsSteps.pushChanges.action(ctx).attempt.map {
+        MonorepoVcsSteps.pushChanges.execute(ctx).attempt.map {
           case Left(err: IllegalStateException) =>
             err.getMessage must contain("Remote check failed. Aborting release.")
           case other                            =>

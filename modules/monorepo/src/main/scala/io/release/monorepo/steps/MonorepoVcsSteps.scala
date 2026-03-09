@@ -66,15 +66,18 @@ private[monorepo] object MonorepoVcsSteps {
 
   val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "initialize-vcs",
-    action = ctx => VcsOps.detectAndInit(ctx)
+    execute = ctx => VcsOps.detectAndInit(ctx)
   )
 
   val checkCleanWorkingDir: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "check-clean-working-dir",
-    action = ctx => IO.pure(ctx),
-    check = ctx =>
+    execute = ctx => IO.pure(ctx),
+    validate = ctx =>
       VcsOps.checkCleanWorkingDir(ctx.state).flatMap { result =>
-        logInfo(ctx, s"Starting release off commit: ${result.currentHash}")
+        IO.blocking(
+          ctx.state.log
+            .info(s"[release-io-monorepo] Starting release off commit: ${result.currentHash}")
+        )
       }
   )
 
@@ -97,7 +100,7 @@ private[monorepo] object MonorepoVcsSteps {
   private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
     MonorepoStepIO.PerProject(
       name = "tag-release",
-      action = (ctx, project) =>
+      execute = (ctx, project) =>
         required(ctx.vcs, "VCS not initialized") { vcs =>
           required(project.versions, s"Versions not set for ${project.name}") {
             case (releaseVer, _) =>
@@ -119,7 +122,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   private[monorepo] val tagReleasesUnified: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-release",
-    action = ctx =>
+    execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         validateVersionConsistency(
           ctx.currentProjects,
@@ -153,7 +156,7 @@ private[monorepo] object MonorepoVcsSteps {
     */
   val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "push-changes",
-    check = ctx =>
+    validate = ctx =>
       ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
         for {
           hasUpAndBranch <- IO.blocking((vcs.hasUpstream, vcs.currentBranch))
@@ -165,9 +168,9 @@ private[monorepo] object MonorepoVcsSteps {
                   "Set up a remote tracking branch or remove pushChanges from the release process."
               )
             )
-        } yield ctx
+        } yield ()
       },
-    action = ctx =>
+    execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         for {
           hasUp  <- IO.blocking(vcs.hasUpstream)

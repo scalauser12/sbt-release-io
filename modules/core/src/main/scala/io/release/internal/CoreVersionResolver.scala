@@ -37,12 +37,16 @@ private[release] object CoreVersionResolver {
       versionFile = settings.versionFile,
       readVersion = settings.readVersion,
       writeVersion = settings.writeVersion,
-      releaseVersionOverride = plan.flatMap(_.releaseVersionOverride).orElse(
-        state.get(ReleaseKeys.commandLineReleaseVersion).flatten
-      ),
-      nextVersionOverride = plan.flatMap(_.nextVersionOverride).orElse(
-        state.get(ReleaseKeys.commandLineNextVersion).flatten
-      ),
+      releaseVersionOverride = plan
+        .flatMap(_.releaseVersionOverride)
+        .orElse(
+          state.get(ReleaseKeys.commandLineReleaseVersion).flatten
+        ),
+      nextVersionOverride = plan
+        .flatMap(_.nextVersionOverride)
+        .orElse(
+          state.get(ReleaseKeys.commandLineNextVersion).flatten
+        ),
       useGlobalVersion = settings.useGlobalVersion
     )
   }
@@ -51,9 +55,9 @@ private[release] object CoreVersionResolver {
     val settings = resolveCurrentSettings(state)
 
     Seq(
-      releaseVersionFile := settings.versionFile,
-      releaseIOReadVersion := settings.readVersion,
-      releaseIOWriteVersion := settings.writeVersion,
+      releaseVersionFile      := settings.versionFile,
+      releaseIOReadVersion    := settings.readVersion,
+      releaseIOWriteVersion   := settings.writeVersion,
       releaseUseGlobalVersion := settings.useGlobalVersion
     )
   }

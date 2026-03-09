@@ -25,7 +25,7 @@ val checkFailureArtifacts =
   taskKey[Unit]("Verify empty crossScalaVersions fails release before api marker/tag/commit steps")
 val crossBuildMarkerStep = MonorepoStepIO.PerProject(
   name = "write-cross-markers",
-  action = (ctx, project) =>
+  execute = (ctx, project) =>
     _root_.cats.effect.IO.blocking {
       val extracted      = sbt.Project.extract(ctx.state)
       val (newState, sv) = extracted.runTask(project.ref / markerScalaVersion, ctx.state)

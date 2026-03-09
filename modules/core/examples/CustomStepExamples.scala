@@ -13,6 +13,8 @@ import sbt.Keys.thisProject
  */
 object CustomStepExamples {
 
+  private val releaseCompletedKey = AttributeKey[Boolean]("releaseCompleted")
+
   /** How to read this file (recommended path):
     *  1. Start with `minimalProcess` for an immediate working setup.
     *  2. Move to `firstCustomProcess` for the smallest meaningful customization.
@@ -118,7 +120,7 @@ object CustomStepExamples {
   // --- Custom step: pure transformation ---
 
   val markReleaseDone: ReleaseStepIO = ReleaseStepIO.pure("mark-done") { ctx =>
-    ctx.withAttr("release-completed", "true")
+    ctx.withMetadata(releaseCompletedKey, true)
   }
 
   // --- Composing a custom release process ---
@@ -165,7 +167,7 @@ object CustomStepExamples {
       step: ReleaseStepIO
   ): ReleaseStepIO =
     ReleaseStepIO.io(s"conditional-$name") { ctx =>
-      if (condition(ctx)) step.action(ctx)
+      if (condition(ctx)) step.execute(ctx)
       else IO.println(s"[release-io] Skipping $name (condition not met)").as(ctx)
     }
 

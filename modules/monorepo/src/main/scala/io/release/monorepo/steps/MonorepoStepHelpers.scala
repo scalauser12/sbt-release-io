@@ -1,6 +1,12 @@
 package io.release.monorepo.steps
 
-import _root_.io.release.monorepo.{MonorepoContext, MonorepoRuntime, ProjectReleaseInfo}
+import _root_.io.release.monorepo.{
+  MonorepoContext,
+  MonorepoProjectFailure,
+  MonorepoProjectFailures,
+  MonorepoRuntime,
+  ProjectReleaseInfo
+}
 import _root_.io.release.monorepo.internal.MonorepoVersionResolver
 import _root_.io.release.steps.StepHelpers.{required, runProcess}
 import cats.effect.IO
@@ -15,7 +21,13 @@ private[monorepo] object MonorepoStepHelpers {
 
   /** If any project is marked failed, propagate failure to the global context. */
   def propagateFailures(ctx: MonorepoContext): MonorepoContext =
-    if (ctx.projects.exists(_.failed)) ctx.fail else ctx
+    if (ctx.projects.exists(_.failed)) {
+      val failures = ctx.projects.collect {
+        case project if project.failed =>
+          MonorepoProjectFailure(project.name, project.failureCause)
+      }
+      ctx.failWith(new MonorepoProjectFailures(failures))
+    } else ctx
 
   /** Run a per-project action across all non-failed projects, with error isolation.
     * Each project failure is logged and marks the project as failed without aborting others.
@@ -37,7 +49,9 @@ private[monorepo] object MonorepoStepHelpers {
                     s"[release-io-monorepo] ${latestProj.name}: ${Option(err.getMessage).getOrElse(err.toString)}"
                   )
                 ) *> IO.pure(
-                  currentCtx.updateProject(latestProj.ref)(_.copy(failed = true))
+                  currentCtx.updateProject(latestProj.ref)(
+                    _.copy(failed = true, failureCause = Some(err))
+                  )
                 )
               case fatal         => IO.raiseError(fatal)
             }

@@ -2,7 +2,13 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.monorepo.*
-import io.release.monorepo.internal.{MonorepoOrderResolver, MonorepoReleasePlanner, MonorepoSelectionResolver, MonorepoTagResolver, SelectionMode}
+import io.release.monorepo.internal.{
+  MonorepoOrderResolver,
+  MonorepoReleasePlanner,
+  MonorepoSelectionResolver,
+  MonorepoTagResolver,
+  SelectionMode
+}
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 
 /** Facade re-exporting all built-in monorepo release steps and default sequences. */
@@ -28,7 +34,7 @@ object MonorepoReleaseSteps {
 
   val resolveReleaseOrder: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "resolve-release-order",
-    action = ctx =>
+    execute = ctx =>
       MonorepoOrderResolver.resolve(ctx.state).flatMap { resolved =>
         val sortedProjects = _root_.io.release.monorepo.internal.MonorepoProjectResolver
           .mergeSnapshot(ctx.projects, resolved)
@@ -39,9 +45,9 @@ object MonorepoReleaseSteps {
 
   val detectOrSelectProjects: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "detect-or-select-projects",
-    action = ctx =>
+    execute = ctx =>
       MonorepoReleasePlanner.require(ctx.state).flatMap { plan =>
-        MonorepoSelectionResolver.resolve(ctx, ctx.projects, plan).flatMap { result =>
+        MonorepoSelectionResolver.resolve(ctx, plan).flatMap { result =>
           val selectedInfos = result.projects
           val message       = result.selectionMode match {
             case SelectionMode.ExplicitSelection =>
@@ -70,18 +76,19 @@ object MonorepoReleaseSteps {
 
   val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-releases",
-    action = ctx =>
+    execute = ctx =>
       IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
         settings.tagStrategy match {
           case MonorepoTagStrategy.Unified    =>
-            MonorepoVcsSteps.tagReleasesUnified.action(ctx.copy(tagStrategy = settings.tagStrategy))
+            MonorepoVcsSteps.tagReleasesUnified
+              .execute(ctx.copy(tagStrategy = settings.tagStrategy))
           case MonorepoTagStrategy.PerProject =>
             val pp = MonorepoVcsSteps.tagReleasesPerProject
             runPerProject(
               ctx.copy(tagStrategy = settings.tagStrategy),
               (currentCtx, project) =>
                 logInfo(currentCtx, s"${pp.name} [${project.name}]") *>
-                  pp.action(currentCtx, project)
+                  pp.execute(currentCtx, project)
             ).map(propagateFailures)
         }
       }

@@ -3,6 +3,7 @@ package io.release
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Ref, Resource}
 import org.specs2.mutable.Specification
+import sbt.AttributeKey
 import sbtrelease.Compat
 
 import java.nio.file.Files
@@ -10,21 +11,21 @@ import java.nio.file.Files
 class ReleaseStepIOSpec extends Specification with CatsEffect {
 
   "ReleaseStepIO.compose" should {
-    "run checks before actions and fail fast on check error" in {
+    "run validations before executes and fail fast on validation error" in {
       contextResource.use { ctx =>
         Ref.of[IO, List[String]](Nil).flatMap { observed =>
           val step1 = ReleaseStepIO(
             name = "step1",
-            action = c => observed.update(_ :+ "action1").as(c),
-            check = c => observed.update(_ :+ "check1").as(c)
+            execute = c => observed.update(_ :+ "execute1").as(c),
+            validate = _ => observed.update(_ :+ "validate1")
           )
 
           val step2 = ReleaseStepIO(
             name = "step2",
-            action = c => observed.update(_ :+ "action2").as(c),
-            check = _ =>
-              observed.update(_ :+ "check2") *>
-                IO.raiseError(new RuntimeException("check failed"))
+            execute = c => observed.update(_ :+ "execute2").as(c),
+            validate = _ =>
+              observed.update(_ :+ "validate2") *>
+                IO.raiseError(new RuntimeException("validation failed"))
           )
 
           ReleaseStepIO
@@ -33,23 +34,23 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
             .flatMap { result =>
               observed.get.map { obs =>
                 (result must beLeft.like { case e: RuntimeException =>
-                  e.getMessage must contain("check failed")
-                }) and (obs must_== List("check1", "check2"))
+                  e.getMessage must contain("validation failed")
+                }) and (obs must_== List("validate1", "validate2"))
               }
             }
         }
       }
     }
 
-    "mark the release as failed when an action throws and skip remaining actions" in {
+    "mark the release as failed when an execute throws and skip remaining executes" in {
       contextResource.use { ctx =>
         Ref.of[IO, List[String]](Nil).flatMap { observed =>
           val failing = ReleaseStepIO.io("failing") { _ =>
-            observed.update(_ :+ "action1") *> IO.raiseError(new RuntimeException("boom"))
+            observed.update(_ :+ "execute1") *> IO.raiseError(new RuntimeException("boom"))
           }
 
           val skipped = ReleaseStepIO.io("skipped") { c =>
-            observed.update(_ :+ "action2").as(c)
+            observed.update(_ :+ "execute2").as(c)
           }
 
           ReleaseStepIO
@@ -59,7 +60,7 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
               observed.get.map { obs =>
                 (result must beLeft.like { case e: RuntimeException =>
                   e.getMessage must contain("Release process failed")
-                }) and (obs must_== List("action1"))
+                }) and (obs must_== List("execute1"))
               }
             }
         }
@@ -78,17 +79,17 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
       }
     }
 
-    "detect FailureCommand sentinel and skip subsequent actions" in {
+    "detect FailureCommand sentinel and skip subsequent executes" in {
       contextResource.use { ctx =>
         Ref.of[IO, List[String]](Nil).flatMap { observed =>
           val injectFailure = ReleaseStepIO.io("inject-failure-command") { c =>
             observed
-              .update(_ :+ "action1")
+              .update(_ :+ "execute1")
               .as(c.copy(state = c.state.copy(remainingCommands = Compat.FailureCommand :: Nil)))
           }
 
           val skipped = ReleaseStepIO.io("skipped") { c =>
-            observed.update(_ :+ "action2").as(c)
+            observed.update(_ :+ "execute2").as(c)
           }
 
           ReleaseStepIO
@@ -98,40 +99,30 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
               observed.get.map { obs =>
                 (result must beLeft.like { case e: RuntimeException =>
                   e.getMessage must contain("Release process failed")
-                }) and (obs must_== List("action1"))
+                }) and (obs must_== List("execute1"))
               }
             }
         }
       }
     }
+  }
 
-    "fail the check phase when a check returns FailureCommand" in {
+  "ReleaseContext metadata" should {
+    "store typed values immutably" in {
       contextResource.use { ctx =>
-        Ref.of[IO, List[String]](Nil).flatMap { observed =>
-          val failingCheck = ReleaseStepIO(
-            name = "failing-check",
-            action = c => observed.update(_ :+ "action1").as(c),
-            check = c =>
-              observed
-                .update(_ :+ "check1")
-                .as(c.copy(state = c.state.copy(remainingCommands = Compat.FailureCommand :: Nil)))
-          )
+        IO {
+          val releaseCompleted = AttributeKey[Boolean]("releaseCompleted")
+          val attemptCount     = AttributeKey[Int]("attemptCount")
+          val updated          = ctx
+            .withMetadata(releaseCompleted, true)
+            .withMetadata(attemptCount, 2)
+          val removed          = updated.withoutMetadata(releaseCompleted)
 
-          val skipped = ReleaseStepIO.io("skipped") { c =>
-            observed.update(_ :+ "action2").as(c)
-          }
-
-          ReleaseStepIO
-            .compose(Seq(failingCheck, skipped), crossBuild = false)(ctx)
-            .attempt
-            .flatMap { result =>
-              observed.get.map { obs =>
-                (result must beLeft.like { case e: IllegalStateException =>
-                  (e.getMessage must contain("Check phase failed")) and
-                    (e.getMessage must contain("failing-check"))
-                }) and (obs must_== List("check1"))
-              }
-            }
+          (ctx.metadata(releaseCompleted) must beNone) and
+            (updated.metadata(releaseCompleted) must beSome(true)) and
+            (updated.metadata(attemptCount) must beSome(2)) and
+            (removed.metadata(releaseCompleted) must beNone) and
+            (removed.metadata(attemptCount) must beSome(2))
         }
       }
     }
@@ -141,7 +132,7 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
     "surface command parse failures for fromCommand" in {
       contextResource.use { ctx =>
         val step = ReleaseStepIO.fromCommand("this-command-does-not-exist")
-        step.action(ctx).attempt.map {
+        step.execute(ctx).attempt.map {
           case Left(e: RuntimeException) => e.getMessage must contain("Failed to parse command")
           case other                     => ko(s"Expected RuntimeException but got $other")
         }
@@ -151,7 +142,7 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
     "surface command parse failures for fromCommandAndRemaining" in {
       contextResource.use { ctx =>
         val step = ReleaseStepIO.fromCommandAndRemaining("this-command-does-not-exist")
-        step.action(ctx).attempt.map {
+        step.execute(ctx).attempt.map {
           case Left(e: RuntimeException) => e.getMessage must contain("Failed to parse command")
           case other                     => ko(s"Expected RuntimeException but got $other")
         }

@@ -112,21 +112,21 @@ trait ReleasePluginIOLike[T]
 
   /** Standalone sbt commands for invoking individual release steps outside the `releaseIO` flow. */
   protected lazy val releaseExtraCommands: Seq[Command] = Seq(
-    releaseStepCommand("release-vcs-checks", checkOnly(ReleaseSteps.checkCleanWorkingDir)),
+    releaseStepCommand("release-vcs-checks", validateOnly(ReleaseSteps.checkCleanWorkingDir)),
     releaseStepCommand(
       "release-check-snapshot-dependencies",
-      checkOnly(ReleaseSteps.checkSnapshotDependencies)
+      validateOnly(ReleaseSteps.checkSnapshotDependencies)
     ),
-    releaseStepCommand("release-inquire-versions", actionOnly(ReleaseSteps.inquireVersions)),
-    releaseStepCommand("release-set-release-version", actionOnly(ReleaseSteps.setReleaseVersion)),
-    releaseStepCommand("release-set-next-version", actionOnly(ReleaseSteps.setNextVersion)),
+    releaseStepCommand("release-inquire-versions", executeOnly(ReleaseSteps.inquireVersions)),
+    releaseStepCommand("release-set-release-version", executeOnly(ReleaseSteps.setReleaseVersion)),
+    releaseStepCommand("release-set-next-version", executeOnly(ReleaseSteps.setNextVersion)),
     releaseStepCommand(
       "release-commit-release-version",
-      actionOnly(ReleaseSteps.commitReleaseVersion)
+      executeOnly(ReleaseSteps.commitReleaseVersion)
     ),
-    releaseStepCommand("release-commit-next-version", actionOnly(ReleaseSteps.commitNextVersion)),
-    releaseStepCommand("release-tag-release", actionOnly(ReleaseSteps.tagRelease)),
-    releaseStepCommand("release-push-changes", actionOnly(ReleaseSteps.pushChanges))
+    releaseStepCommand("release-commit-next-version", executeOnly(ReleaseSteps.commitNextVersion)),
+    releaseStepCommand("release-tag-release", executeOnly(ReleaseSteps.tagRelease)),
+    releaseStepCommand("release-push-changes", executeOnly(ReleaseSteps.pushChanges))
   )
 
   override lazy val projectSettings: Seq[Setting[?]] =
@@ -173,13 +173,13 @@ trait ReleasePluginIOLike[T]
   protected def releaseIOCommand: Setting[?] =
     commands += Command(commandName)(_ => releaseParser)(doReleaseIO)
 
-  /** Strip the check phase from a step, keeping only the action. */
-  protected def actionOnly(step: ReleaseStepIO): ReleaseStepIO =
-    step.copy(check = ctx => IO.pure(ctx))
+  /** Strip the validation phase from a step, keeping only execute. */
+  protected def executeOnly(step: ReleaseStepIO): ReleaseStepIO =
+    step.copy(validate = _ => IO.unit)
 
-  /** Strip the action phase from a step, keeping only the check. */
-  protected def checkOnly(step: ReleaseStepIO): ReleaseStepIO =
-    step.copy(action = ctx => IO.pure(ctx))
+  /** Strip the execute phase from a step, keeping only validate. */
+  protected def validateOnly(step: ReleaseStepIO): ReleaseStepIO =
+    step.copy(execute = ctx => IO.pure(ctx))
 
   /** Wrap a release step as a standalone sbt Command. */
   protected def releaseStepCommand(name: String, step: ReleaseStepIO): Command =

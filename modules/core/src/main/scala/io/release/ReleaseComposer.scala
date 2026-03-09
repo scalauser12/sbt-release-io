@@ -7,42 +7,35 @@ import sbt.Keys.*
 
 /** Orchestrates the two-phase execution model for [[ReleaseStepIO]] sequences.
   *
-  * '''Phase 1 — Checks:''' Each step's `check` runs against the initial context.
-  * Only the returned context/state is discarded; external side effects performed by checks are
-  * not rolled back. Custom checks should therefore be side-effect free and safe to run more than
-  * once. Any failure aborts before actions execute.
-  * Cross-build wrapping is applied so checks validate each Scala version.
+  * '''Phase 1 — Validation:''' Each step's `validate` runs against the initial context.
+  * Validation is non-threading: it may fail the release, but it does not update the shared
+  * release context. Cross-build wrapping is applied so validations run for each Scala version.
   *
-  * '''Phase 2 — Actions:''' Steps run sequentially with `onFailure` armed for
+  * '''Phase 2 — Execution:''' Steps run sequentially with `onFailure` armed for
   * `FailureCommand` detection. Between every step, `failureCheck` inspects
   * `remainingCommands` for the sentinel, marks the context as failed, and re-arms
   * `onFailure`. Once failed, subsequent steps are skipped.
-  *
-  * Called by [[ReleaseStepIO.compose]], which is the public entry point.
-  *
-  * @see [[ReleaseStepIO]] for the step data model
-  * @see [[ReleasePluginIOLike.doReleaseIO]] for the top-level command handler
   */
 private[release] object ReleaseComposer {
 
   private val LogPrefix = "[release-io]"
 
   /** Compose a sequence of steps into a two-phase IO program.
-    * When `crossBuild` is true, both checks and actions with `enableCrossBuild` are
+    * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.
     */
   def compose(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] = {
 
-    val checkPhase: IO[Unit] = ExecutionEngine.runChecks(
+    val validationPhase: IO[Unit] = ExecutionEngine.runValidations(
       logPrefix = LogPrefix,
-      checks = steps.map { step =>
-        val wrappedCheck =
+      validations = steps.map { step =>
+        val wrappedValidation =
           if (step.enableCrossBuild && crossBuild)
-            (ctx: ReleaseContext) => runCrossBuild(step.check)(ctx)
-          else step.check
-        ExecutionEngine.CheckStep(step.name, wrappedCheck)
+            (ctx: ReleaseContext) => runCrossBuild(c => step.validate(c).as(c))(ctx).void
+          else step.validate
+        ExecutionEngine.ValidationStep(step.name, wrappedValidation)
       },
       initialCtx = initialCtx
     )
@@ -51,7 +44,7 @@ private[release] object ReleaseComposer {
 
     val wrappedActions = steps.map { step =>
       val baseAction = (ctx: ReleaseContext) =>
-        IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *> step.action(
+        IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *> step.execute(
           ctx
         )
 
@@ -67,7 +60,7 @@ private[release] object ReleaseComposer {
     }
 
     for {
-      _        <- checkPhase
+      _        <- validationPhase
       result   <- ExecutionEngine.runActions(wrappedActions, startCtx)
       finalCtx <- result.ensureSucceeded("Release process failed")
     } yield finalCtx

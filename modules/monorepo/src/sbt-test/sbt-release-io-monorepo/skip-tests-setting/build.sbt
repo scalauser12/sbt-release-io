@@ -28,7 +28,7 @@ lazy val api = (project in file("api"))
 val checkAll        = taskKey[Unit]("Run all verification checks")
 val runReleaseTests = MonorepoStepIO.PerProject(
   name = "run-tests",
-  action = (ctx, project) =>
+  execute = (ctx, project) =>
     if (ctx.skipTests)
       _root_.cats.effect.IO.pure(ctx)
     else
