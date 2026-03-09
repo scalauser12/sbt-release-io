@@ -121,6 +121,9 @@ sbt "releaseIOMonorepo skip-tests with-defaults"
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order.
 Built-in task-backed per-project steps are project-scoped: child projects run only when they are themselves selected or discovered.
+Internal planning and CLI validation happen before execution begins; the public check/action step model
+still remains for compatibility, so check-phase context mutations are discarded even though planning has
+already resolved project selection and version inputs.
 
 ## Configuration
 

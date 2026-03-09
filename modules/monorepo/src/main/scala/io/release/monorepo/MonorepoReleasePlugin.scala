@@ -1,7 +1,6 @@
 package io.release.monorepo
 
 import scala.language.implicitConversions
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import cats.effect.unsafe.implicits.global
@@ -13,7 +12,9 @@ import sbt.complete.Parser
 
 import _root_.io.release.ReleaseKeys
 import _root_.io.release.ReleasePluginIO
+import _root_.io.release.internal.ExecutionFlags
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
+import _root_.io.release.monorepo.internal.{MonorepoReleasePlan, MonorepoReleasePlanner}
 
 /** Base trait for resource-parameterized monorepo release plugins. Each release step
   * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the
@@ -169,227 +170,43 @@ trait MonorepoReleasePluginLike[T]
     )
   }
 
-  // ── Project resolution ────────────────────────────────────────────
-
-  /** Resolve all monorepo projects from sbt settings.
-    * Wrapped in `Try` because custom version-file resolvers can throw.
-    */
-  private def resolveProjects(
-      runtime: MonorepoRuntime,
-      releaseVersionOverrides: Map[String, String],
-      nextVersionOverrides: Map[String, String],
-      globalReleaseVersion: Option[String] = None,
-      globalNextVersion: Option[String] = None
-  ): Either[Throwable, Seq[ProjectReleaseInfo]] =
-    Try {
-      val allProjectRefs = runtime.extracted.get(releaseIOMonorepoProjects)
-
-      def resolveVersions(projName: String): Option[(String, String)] = {
-        val rel  = globalReleaseVersion.getOrElse(releaseVersionOverrides.getOrElse(projName, ""))
-        val next = globalNextVersion.getOrElse(nextVersionOverrides.getOrElse(projName, ""))
-        if (rel.nonEmpty || next.nonEmpty) Some((rel, next)) else None
-      }
-
-      allProjectRefs.map { ref =>
-        val projBase =
-          (ref / baseDirectory).get(runtime.extracted.structure.data).getOrElse {
-            throw new IllegalStateException(
-              s"Cannot resolve baseDirectory for project '${ref.project}'. " +
-                "Ensure the project is correctly defined in the build."
-            )
-          }
-        val projName = ref.project
-        ProjectReleaseInfo(
-          ref = ref,
-          name = projName,
-          baseDir = projBase,
-          versionFile = MonorepoVersionFiles.resolve(runtime, ref),
-          versions = resolveVersions(projName)
-        )
-      }
-    }.toEither
-
-  // ── Argument validation ───────────────────────────────────────────
-
-  /** Validate parsed arguments and resolve projects. Returns the selected projects, flags,
-    * and selected project names, or a failed `State` on validation error.
-    */
-  private def validateArgs(
-      state: State,
-      args: Seq[MonorepoArg]
-  ): Either[State, (Seq[ProjectReleaseInfo], ReleaseFlags, Seq[String])] = {
+  private def plannerInputs(
+      args: Seq[MonorepoArg],
+      flags: ReleaseFlags
+  ): MonorepoReleasePlanner.Inputs = {
     import MonorepoArg.*
 
-    def failWith(msg: String): State = {
-      state.log.error(s"[release-io-monorepo] $msg")
-      state.fail
-    }
-
-    /** Fails with msg when condition is true. Use for error conditions. */
-    def failWhen(condition: Boolean, msg: => String): Either[State, Unit] =
-      if (condition) Left(failWith(msg)) else Right(())
-
-    val extracted               = Project.extract(state)
-    val runtime                 = MonorepoRuntime.fromExtracted(state, extracted)
-    val flags                   = parseFlags(args, extracted)
-    val useGlobalVersion        = runtime.useGlobalVersion
-    val selectedNames           = args.collect { case SelectProject(name) => name }
-    val releaseVersionPairs     = args.collect { case ReleaseVersion(p, v) => p -> v }
-    val nextVersionPairs        = args.collect { case NextVersion(p, v) => p -> v }
-    val releaseVersionOverrides = releaseVersionPairs.toMap
-    val nextVersionOverrides    = nextVersionPairs.toMap
-    val globalReleaseVersions   = args.collect { case GlobalReleaseVersion(v) => v }
-    val globalNextVersions      = args.collect { case GlobalNextVersion(v) => v }
-    val globalReleaseVersion    = globalReleaseVersions.headOption
-    val globalNextVersion       = globalNextVersions.headOption
-
-    for {
-      // ── Input format validation ──
-      _ <- failWhen(
-             releaseVersionOverrides.exists { case (p, v) => p.isEmpty || v.isEmpty },
-             "Invalid release-version format. Expected project=version"
-           )
-      _ <- failWhen(
-             nextVersionOverrides.exists { case (p, v) => p.isEmpty || v.isEmpty },
-             "Invalid next-version format. Expected project=version"
-           )
-      _ <- failWhen(
-             globalReleaseVersions.exists(_.isEmpty),
-             "Invalid release-version format. Expected a non-empty version string"
-           )
-      _ <- failWhen(
-             globalNextVersions.exists(_.isEmpty),
-             "Invalid next-version format. Expected a non-empty version string"
-           )
-      // ── Per-project override duplicate detection ──
-      _ <- failWhen(
-             releaseVersionPairs.groupBy(_._1).exists(_._2.length > 1),
-             "Duplicate per-project release-version overrides: " +
-               releaseVersionPairs.groupBy(_._1).filter(_._2.length > 1).keys.mkString(", ")
-           )
-      _ <- failWhen(
-             nextVersionPairs.groupBy(_._1).exists(_._2.length > 1),
-             "Duplicate per-project next-version overrides: " +
-               nextVersionPairs.groupBy(_._1).filter(_._2.length > 1).keys.mkString(", ")
-           )
-      // ── Override multiplicity & conflict ──
-      _ <- failWhen(
-             globalReleaseVersions.length > 1,
-             "Multiple global release-version overrides provided. Only one is allowed"
-           )
-      _ <- failWhen(
-             globalNextVersions.length > 1,
-             "Multiple global next-version overrides provided. Only one is allowed"
-           )
-      _ <- failWhen(
-             !useGlobalVersion &&
-               (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty),
-             "Global version overrides (release-version <version>) are only supported " +
-               "when releaseIOMonorepoUseGlobalVersion is enabled. " +
-               "Use per-project overrides (release-version <project>=<version>) instead."
-           )
-      // Requires malformed-entry validations above to have short-circuited first.
-      _ <- failWhen(
-             (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty) &&
-               (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
-             "Cannot mix global version overrides with per-project version overrides"
-           )
-
-      // ── Project resolution ──
-      allProjects <-
-        resolveProjects(
-          runtime,
-          releaseVersionOverrides,
-          nextVersionOverrides,
-          globalReleaseVersion,
-          globalNextVersion
-        ).left.map(e => failWith(Option(e.getMessage).getOrElse(e.toString)))
-
-      validNames       = allProjects.map(_.name).toSet
-      invalidOverrides =
-        (releaseVersionOverrides.keySet ++ nextVersionOverrides.keySet) -- validNames
-
-      _ <- failWhen(
-             invalidOverrides.nonEmpty,
-             s"Unknown projects in version overrides: " +
-               s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}"
-           )
-
-      // ── Project name validation ──
-      invalid = selectedNames.filterNot(validNames.contains)
-      _      <- failWhen(
-                  selectedNames.nonEmpty && invalid.nonEmpty,
-                  s"Unknown projects: ${invalid.mkString(", ")}. " +
-                    s"Available: ${validNames.mkString(", ")}"
-                )
-
-      // ── Global version mode constraints ──
-      _ <- failWhen(
-             useGlobalVersion && selectedNames.nonEmpty &&
-               selectedNames.toSet != validNames,
-             s"Global version mode is active — all projects share a single " +
-               s"version file. Selecting a subset of projects (${selectedNames.mkString(", ")}) is " +
-               s"not supported. Release all projects or disable releaseIOMonorepoUseGlobalVersion."
-           )
-      _ <- failWhen(
-             useGlobalVersion &&
-               (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
-             "Global version mode is active — all projects share a single version. " +
-               "Per-project version overrides (release-version project=version) are not supported. " +
-               "Use global overrides (release-version <version>) or remove per-project overrides."
-           )
-
-      // ── Selection & override consistency ──
-      _ <- failWhen(
-             flags.allChanged && selectedNames.nonEmpty,
-             "Cannot combine 'all-changed' with explicit project selection. " +
-               s"Either use 'all-changed' alone or specify projects explicitly."
-           )
-
-      selectedProjects =
-        if (selectedNames.nonEmpty) allProjects.filter(p => selectedNames.contains(p.name))
-        else allProjects
-
-      // Only relevant when explicit project selection is active (selectedNames.nonEmpty).
-      unusedOverrides =
-        if (selectedNames.nonEmpty)
-          (releaseVersionOverrides.keySet ++ nextVersionOverrides.keySet) --
-            selectedProjects.map(_.name).toSet
-        else Set.empty[String]
-      _              <- failWhen(
-                          unusedOverrides.nonEmpty,
-                          s"Version overrides target non-selected projects: " +
-                            s"${unusedOverrides.mkString(", ")}. " +
-                            s"Selected: ${selectedProjects.map(_.name).mkString(", ")}"
-                        )
-
-      _ <- failWhen(
-             selectedProjects.isEmpty,
-             s"No projects selected for monorepo release. " +
-               s"Available: ${validNames.mkString(", ")}"
-           )
-    } yield (selectedProjects, flags, selectedNames)
+    MonorepoReleasePlanner.Inputs(
+      flags = ExecutionFlags(
+        useDefaults = flags.useDefaults,
+        skipTests = flags.skipTests,
+        skipPublish = flags.skipPublish,
+        interactive = flags.interactive,
+        crossBuild = flags.crossBuild
+      ),
+      allChanged = flags.allChanged,
+      tagStrategy = flags.tagStrategy,
+      selectedNames = args.collect { case SelectProject(name) => name },
+      releaseVersionPairs = args.collect { case ReleaseVersion(p, v) => p -> v },
+      nextVersionPairs = args.collect { case NextVersion(p, v) => p -> v },
+      globalReleaseVersions = args.collect { case GlobalReleaseVersion(v) => v },
+      globalNextVersions = args.collect { case GlobalNextVersion(v) => v }
+    )
   }
 
   // ── Context building ──────────────────────────────────────────────
 
   private def buildContext(
       state: State,
-      projects: Seq[ProjectReleaseInfo],
-      flags: ReleaseFlags,
-      selectedNames: Seq[String]
+      plan: MonorepoReleasePlan
   ): MonorepoContext =
     MonorepoContext(
       state = state,
-      projects = projects,
-      skipTests = flags.skipTests,
-      skipPublish = flags.skipPublish,
-      interactive = flags.interactive && !flags.useDefaults,
-      tagStrategy = flags.tagStrategy,
-      attributes =
-        if (selectedNames.nonEmpty) Map("projects-selected" -> "true")
-        else if (flags.allChanged) Map("all-changed" -> "true")
-        else Map.empty
+      projects = plan.allReleaseInfos,
+      skipTests = plan.flags.skipTests,
+      skipPublish = plan.flags.skipPublish,
+      interactive = plan.flags.interactive && !plan.flags.useDefaults,
+      tagStrategy = plan.tagStrategy
     )
 
   private def logReleaseStart(
@@ -407,43 +224,42 @@ trait MonorepoReleasePluginLike[T]
   // ── Release execution ───────────────────────────────────────────────
 
   protected def doMonorepoRelease(state: State, args: Seq[MonorepoArg]): State =
-    validateArgs(state, args) match {
-      case Left(failedState)                               => failedState
-      case Right((selectedProjects, flags, selectedNames)) =>
-        try {
-          // Store parsed flags in State so steps (e.g. MonorepoVersionSteps) can read them.
-          val decoratedState = state
-            .put(ReleaseKeys.useDefaults, flags.useDefaults)
-            .put(ReleaseKeys.skipTests, flags.skipTests)
-            .put(ReleaseKeys.cross, flags.crossBuild)
+    try {
+      val extracted      = Project.extract(state)
+      val flags          = parseFlags(args, extracted)
+      val decoratedState = state
+        .put(ReleaseKeys.useDefaults, flags.useDefaults)
+        .put(ReleaseKeys.skipTests, flags.skipTests)
+        .put(ReleaseKeys.cross, flags.crossBuild)
+      val plannedEither  =
+        MonorepoReleasePlanner.build(decoratedState, plannerInputs(args, flags)).unsafeRunSync()
 
-          // Guards both monorepoReleaseProcess (can throw on misconfiguration) and
-          // unsafeRunSync() (propagates IO failures as exceptions).
-          val stepFns    = monorepoReleaseProcess(decoratedState)
-          val initialCtx = buildContext(decoratedState, selectedProjects, flags, selectedNames)
+      plannedEither match {
+        case Left(failedState) => failedState
+        case Right(plan)       =>
+          val plannedState = MonorepoReleasePlanner.attach(decoratedState, plan)
+          val stepFns      = monorepoReleaseProcess(plannedState)
+          val initialCtx   = buildContext(plannedState, plan)
 
-          logReleaseStart(decoratedState, stepFns.length, selectedProjects.length, flags)
+          logReleaseStart(plannedState, stepFns.length, plan.allProjects.length, flags)
 
-          // The resource is acquired once and shared across all steps; it is released after all
-          // steps complete (or immediately on failure). Each step function receives the resource T.
           val program = resource.use { t =>
             val steps = stepFns.map(_(t))
             MonorepoStepIO.compose(steps, flags.crossBuild)(initialCtx)
           }
 
-          // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
           val finalCtx = program.unsafeRunSync()
           finalCtx.state.log.info(
             "[release-io-monorepo] Monorepo release completed successfully!"
           )
           finalCtx.state
-        } catch {
-          case NonFatal(e) =>
-            state.log.error(
-              s"[release-io-monorepo] Release failed: ${Option(e.getMessage).getOrElse(e.toString)}"
-            )
-            state.fail
-        }
+      }
+    } catch {
+      case NonFatal(e) =>
+        state.log.error(
+          s"[release-io-monorepo] Release failed: ${Option(e.getMessage).getOrElse(e.toString)}"
+        )
+        state.fail
     }
 }
 

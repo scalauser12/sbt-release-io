@@ -2,6 +2,7 @@ package io.release
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
+import io.release.internal.CoreReleasePlanner
 import io.release.steps.ReleaseSteps
 import sbt.*
 import sbt.Keys.*
@@ -282,17 +283,31 @@ trait ReleasePluginIOLike[T]
         .put(ReleaseKeys.commandLineReleaseVersion, releaseVersionArg)
         .put(ReleaseKeys.commandLineNextVersion, nextVersionArg)
         .put(ReleaseKeys.tagDefault, tagDefaultArg)
+      val plan           = CoreReleasePlanner.build(
+        decoratedState,
+        CoreReleasePlanner.Inputs(
+          useDefaults = useDefaults,
+          skipTests = skipTests,
+          skipPublish = skipPublish,
+          interactive = interactive,
+          crossBuild = crossEnabled,
+          releaseVersionOverride = releaseVersionArg,
+          nextVersionOverride = nextVersionArg,
+          tagDefault = tagDefaultArg
+        )
+      )
+      val plannedState   = CoreReleasePlanner.attach(decoratedState, plan)
 
       val initialCtx = initialContext(
-        decoratedState,
+        plannedState,
         skipTests = skipTests,
         skipPublish = skipPublish,
         interactive = interactive
       )
 
-      decoratedState.log.info("[release-io] Starting release process...")
-      decoratedState.log.info(s"[release-io] ${stepFns.length} steps to execute")
-      if (crossEnabled) decoratedState.log.info("[release-io] Cross-build enabled")
+      plannedState.log.info("[release-io] Starting release process...")
+      plannedState.log.info(s"[release-io] ${stepFns.length} steps to execute")
+      if (crossEnabled) plannedState.log.info("[release-io] Cross-build enabled")
 
       val program = resource.use { t =>
         val steps = stepFns.map(_(t))

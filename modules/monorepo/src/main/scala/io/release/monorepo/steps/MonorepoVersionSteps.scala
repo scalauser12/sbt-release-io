@@ -7,7 +7,9 @@ import cats.effect.IO
 import io.release.ReleaseKeys
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
+import io.release.monorepo.internal.MonorepoInternalKeys
 import io.release.monorepo.steps.MonorepoStepHelpers.*
+import io.release.internal.SbtRuntime
 import sbt.*
 import sbt.Keys.*
 import sbtrelease.ReleasePlugin.autoImport.*
@@ -139,20 +141,28 @@ private[monorepo] object MonorepoVersionSteps {
       runtime    <- loadRuntime(ctx)
       versionFile = resolveVersionFile(runtime, project)
       result     <-
-        if (runtime.useGlobalVersion && ctx.attr("global-version-written").contains(ver))
+        if (
+          runtime.useGlobalVersion && ctx.state
+            .get(MonorepoInternalKeys.globalVersionWritten)
+            .flatten
+            .contains(ver)
+        )
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
         else
           for {
             contents <- runtime.writeVersion(versionFile, ver)
             newState <- IO.blocking {
                           Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
-                          val setting =
+                          val setting   =
                             if (runtime.useGlobalVersion) ThisBuild / version := ver
                             else project.ref / version                        := ver
-                          runtime.extracted.appendWithSession(Seq(setting), ctx.state)
+                          val baseState = SbtRuntime.appendWithSession(ctx.state, Seq(setting))
+                          if (runtime.useGlobalVersion)
+                            baseState.put(MonorepoInternalKeys.globalVersionWritten, Some(ver))
+                          else baseState
                         }
             r        <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
                           .as(ctx.withState(newState))
-          } yield if (runtime.useGlobalVersion) r.withAttr("global-version-written", ver) else r
+          } yield r
     } yield result
 }

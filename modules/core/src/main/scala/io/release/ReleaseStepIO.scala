@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.SbtRuntime
 import sbt.*
 
 /** A single release step with an optional check phase and cross-build support.
@@ -42,8 +43,7 @@ object ReleaseStepIO {
       name = key.key.label,
       action = ctx =>
         IO.blocking {
-          val extracted     = Project.extract(ctx.state)
-          val (newState, _) = extracted.runTask(key, ctx.state)
+          val (newState, _) = SbtRuntime.runTask(ctx.state, key)
           ctx.copy(state = newState)
         },
       enableCrossBuild = enableCrossBuild
@@ -61,8 +61,7 @@ object ReleaseStepIO {
       name = key.key.label,
       action = ctx =>
         IO.blocking {
-          val extracted     = Project.extract(ctx.state)
-          val (newState, _) = extracted.runInputTask(key, args, ctx.state)
+          val (newState, _) = SbtRuntime.runInputTask(ctx.state, key, args)
           ctx.copy(state = newState)
         },
       enableCrossBuild = enableCrossBuild
@@ -77,7 +76,7 @@ object ReleaseStepIO {
       name = s"${key.key.label} (aggregated)",
       action = ctx =>
         IO.blocking {
-          val extracted = Project.extract(ctx.state)
+          val extracted = SbtRuntime.extracted(ctx.state)
           val newState  = extracted.runAggregated(extracted.currentRef / key, ctx.state)
           ctx.copy(state = newState)
         },

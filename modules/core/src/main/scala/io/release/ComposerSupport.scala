@@ -1,9 +1,7 @@
 package io.release
 
 import cats.effect.IO
-import sbtrelease.Compat
-
-import scala.util.control.NonFatal
+import io.release.internal.FailureHandling
 
 /** Shared two-phase execution utilities used by both [[ReleaseComposer]] and the
   * monorepo `MonorepoComposer`.
@@ -13,35 +11,22 @@ import scala.util.control.NonFatal
   */
 private[release] object ComposerSupport {
 
-  private val FailureCommand = Compat.FailureCommand
-
   /** Arm `onFailure` so sbt injects `FailureCommand` when a task fails without throwing. */
   def armOnFailure[C <: ReleaseCtx[C]](ctx: C): C =
-    ctx.withState(ctx.state.copy(onFailure = Some(FailureCommand)))
+    FailureHandling.armOnFailure(ctx)
 
   /** Between-step hook: detects sbt's `FailureCommand` sentinel in `remainingCommands`,
     * marks the context as failed, strips the sentinel, and re-arms `onFailure`.
     */
-  def detectSbtFailure[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO {
-    val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
-    if (hasFailure) {
-      val cleaned = ctx.state.copy(remainingCommands = ctx.state.remainingCommands.drop(1))
-      ctx.withState(cleaned).fail
-    } else armOnFailure(ctx)
-  }
+  def detectSbtFailure[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+    FailureHandling.detectSbtFailure(ctx)
 
   /** Strip any remaining `FailureCommand` sentinel and clear `onFailure`
     * after all steps complete, so the returned state does not leak the
     * armed handler into subsequent commands in the same sbt session.
     */
-  def stripFailureCommand[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO {
-    val cleaned = ctx.state.remainingCommands.toList match {
-      case head :: tail if head == FailureCommand =>
-        ctx.state.copy(remainingCommands = tail)
-      case _                                      => ctx.state
-    }
-    ctx.withState(cleaned.copy(onFailure = None))
-  }
+  def stripFailureCommand[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+    FailureHandling.stripFailureCommand(ctx)
 
   /** Wrap a step function with error recovery: catch `NonFatal` exceptions,
     * log the error, and mark the context as failed instead of propagating.
@@ -49,15 +34,7 @@ private[release] object ComposerSupport {
   def withErrorRecovery[C <: ReleaseCtx[C]](logPrefix: String)(
       f: C => IO[C]
   ): C => IO[C] =
-    (ctx: C) =>
-      f(ctx).handleErrorWith {
-        case NonFatal(err) =>
-          IO.blocking(
-            ctx.state.log
-              .error(s"$logPrefix Error: ${Option(err.getMessage).getOrElse(err.toString)}")
-          ) *> IO.pure(ctx.failWith(err))
-        case fatal         => IO.raiseError(fatal)
-      }
+    FailureHandling.withErrorRecovery(logPrefix)(f)
 
   /** Run the action phase: interleave each action with failure detection,
     * skip failed contexts, and strip the FailureCommand sentinel at the end.
@@ -65,14 +42,6 @@ private[release] object ComposerSupport {
   def runActionPhase[C <: ReleaseCtx[C]](
       actions: Seq[C => IO[C]]
   )(startCtx: C): IO[C] = {
-    val interleavedSteps: Seq[C => IO[C]] = actions.flatMap { step =>
-      Seq(
-        (ctx: C) => if (ctx.failed) IO.pure(ctx) else step(ctx),
-        (ctx: C) => detectSbtFailure[C](ctx)
-      )
-    }
-    interleavedSteps
-      .foldLeft(IO.pure(startCtx)) { (ioCtx, f) => ioCtx.flatMap(f) }
-      .flatMap(stripFailureCommand[C])
+    FailureHandling.runActionPhase(actions)(startCtx).map(_.context)
   }
 }

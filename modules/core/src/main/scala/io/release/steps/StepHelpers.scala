@@ -1,6 +1,7 @@
 package io.release.steps
 
 import cats.effect.IO
+import io.release.internal.CoreReleasePlanner
 import io.release.{ReleaseContext, ReleaseKeys}
 import sbt.{EvaluateTask, Incomplete, Result}
 import sbtrelease.Vcs
@@ -10,6 +11,13 @@ import scala.sys.process.*
 
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
+
+  def useDefaults(state: sbt.State): Boolean =
+    CoreReleasePlanner
+      .current(state)
+      .map(_.flags.useDefaults)
+      .orElse(state.get(ReleaseKeys.useDefaults))
+      .getOrElse(false)
 
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
     opt.fold(IO.raiseError[B](new IllegalStateException(error)))(f)
@@ -47,12 +55,11 @@ private[release] object StepHelpers {
       defaultYes: Boolean,
       abortMessage: String
   ): IO[Unit] = {
-    val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
     if (!ctx.interactive)
       IO.raiseError(new IllegalStateException(abortMessage))
     else {
       val decisionIO =
-        if (useDefaults) IO.pure(defaultYes)
+        if (useDefaults(ctx.state)) IO.pure(defaultYes)
         else askYesNo(prompt, defaultYes = defaultYes)
 
       decisionIO.flatMap { continue =>

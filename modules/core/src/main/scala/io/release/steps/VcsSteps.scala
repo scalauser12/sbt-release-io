@@ -1,10 +1,10 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.steps.StepHelpers.*
-import _root_.io.release.VcsOps
+import io.release.internal.{CoreReleasePlanner, GitRuntime, SbtRuntime}
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
+import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbtrelease.ReleasePlugin.autoImport.*
@@ -14,7 +14,7 @@ import sbtrelease.Vcs
 private[release] object VcsSteps {
 
   val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
-    VcsOps.detectAndInit(ctx)
+    GitRuntime.detectAndInit(ctx)
   }
 
   val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
@@ -27,7 +27,7 @@ private[release] object VcsSteps {
       ctx: ReleaseContext,
       logStartHash: Boolean
   ): IO[ReleaseContext] =
-    VcsOps.checkCleanWorkingDir(ctx.state).flatMap { result =>
+    GitRuntime.checkCleanWorkingDir(ctx.state).flatMap { result =>
       IO.blocking {
         if (logStartHash)
           ctx.state.log.info(
@@ -41,15 +41,20 @@ private[release] object VcsSteps {
     requireVcs(ctx) { vcs =>
       for {
         setup               <- IO.blocking {
-                                 val extracted        = Project.extract(ctx.state)
-                                 val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
-                                 val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
-                                 val sign             = extracted.get(releaseVcsSign)
-                                 val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
-                                 val useDefaults      =
-                                   s2.get(ReleaseKeys.useDefaults).getOrElse(false)
-                                 TagParams(tagName, tagComment, sign, defaultAnswer, useDefaults) ->
-                                   ctx.copy(state = s2)
+                                 val (s1, tagName)    = SbtRuntime.runTask(ctx.state, releaseTagName)
+                                 val (s2, tagComment) = SbtRuntime.runTask(s1, releaseTagComment)
+                                 val sign             = SbtRuntime.getSetting(s2, releaseVcsSign)
+                                 val defaultAnswer    = CoreReleasePlanner
+                                   .current(s2)
+                                   .flatMap(_.tag.defaultAnswer)
+                                   .orElse(s2.get(ReleaseKeys.tagDefault).flatten)
+                                 TagParams(
+                                   tagName = tagName,
+                                   tagComment = tagComment,
+                                   sign = sign,
+                                   defaultAnswer = defaultAnswer,
+                                   useDefaults = useDefaults(s2)
+                                 ) -> ctx.copy(state = s2)
                                }
         (params, updatedCtx) = setup
         result              <- resolveTag(vcs, params, updatedCtx)
@@ -66,14 +71,12 @@ private[release] object VcsSteps {
     for {
       exists <- IO.blocking(vcs.existsTag(tagName))
       result <- if (!exists)
-                  runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'") *>
+                  GitRuntime.tag(vcs, tagName, tagComment, sign) *>
                     IO.blocking {
-                      val newState = Project
-                        .extract(ctx.state)
-                        .appendWithSession(
-                          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
-                          ctx.state
-                        )
+                      val newState = SbtRuntime.appendWithSession(
+                        ctx.state,
+                        Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                      )
                       ctx.copy(state = newState)
                     }
                 else {
@@ -94,9 +97,9 @@ private[release] object VcsSteps {
                     case None                     =>
                       IO.print(
                         s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-                      ) *>
-                        IO.readLine
+                      ) *> IO.readLine
                   }
+
                   effectiveAnswer.flatMap {
                     case "a" | "A" | "" =>
                       IO.raiseError(
@@ -106,44 +109,34 @@ private[release] object VcsSteps {
                       )
                     case "k" | "K"      =>
                       IO.blocking {
-                        ctx.state.log
-                          .warn(
-                            s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
-                          )
-                        val newState = Project
-                          .extract(ctx.state)
-                          .appendWithSession(
-                            Seq(
-                              packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                            ),
-                            ctx.state
-                          )
+                        ctx.state.log.warn(
+                          s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
+                        )
+                        val newState = SbtRuntime.appendWithSession(
+                          ctx.state,
+                          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                        )
                         ctx.copy(state = newState)
                       }
                     case "o" | "O"      =>
                       IO.blocking(
-                        ctx.state.log
-                          .warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")
+                        ctx.state.log.warn(
+                          s"[release-io] Tag [$tagName] already exists. Overwriting."
+                        )
                       ) *>
-                        runProcess(
-                          vcs.tag(tagName, tagComment, sign = sign),
-                          s"vcs tag '$tagName'"
-                        ) *>
+                        GitRuntime.tag(vcs, tagName, tagComment, sign) *>
                         IO.blocking {
-                          val newState = Project
-                            .extract(ctx.state)
-                            .appendWithSession(
-                              Seq(
-                                packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                              ),
-                              ctx.state
-                            )
+                          val newState = SbtRuntime.appendWithSession(
+                            ctx.state,
+                            Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                          )
                           ctx.copy(state = newState)
                         }
                     case newTagName     =>
                       IO.blocking(
-                        ctx.state.log
-                          .info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
+                        ctx.state.log.info(
+                          s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName]."
+                        )
                       ) *>
                         resolveTag(
                           vcs,
@@ -214,11 +207,10 @@ private[release] object VcsSteps {
                           ).as(ctx)
                       } yield r
                     else if (!ctx.interactive)
-                      runProcess(vcs.pushChanges, "vcs push").as(ctx)
+                      GitRuntime.pushChanges(vcs).as(ctx)
                     else {
-                      val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
-                      val decisionIO  =
-                        if (useDefaults) IO.pure(true)
+                      val decisionIO =
+                        if (useDefaults(ctx.state)) IO.pure(true)
                         else
                           askYesNo(
                             prompt = "Push changes to the remote repository (y/n)? [y] ",
@@ -226,7 +218,7 @@ private[release] object VcsSteps {
                           )
 
                       decisionIO.flatMap {
-                        case true  => runProcess(vcs.pushChanges, "vcs push").as(ctx)
+                        case true  => GitRuntime.pushChanges(vcs).as(ctx)
                         case false =>
                           IO.blocking(
                             ctx.state.log.warn(

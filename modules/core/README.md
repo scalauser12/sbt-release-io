@@ -419,6 +419,8 @@ The default release process includes:
 13. **push-changes** - Push commits and tags to remote
 
 These names are the stable built-in insertion points for `defaultsWithAfter` and `defaultsWithBefore`.
+Internal planning resolves flags, version-file handling, and tag defaults before the composed release
+program starts, while the public check/action step model remains unchanged for compatibility.
 
 ## Testing
 
