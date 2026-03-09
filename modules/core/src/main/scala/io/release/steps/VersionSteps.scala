@@ -1,7 +1,6 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.{releaseIOReadVersion, releaseIOWriteVersion}
 import io.release.internal.{CoreReleasePlanner, GitRuntime, SbtRuntime, VersionPlan}
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
 import sbt.*
@@ -45,8 +44,6 @@ private[release] object VersionSteps {
     }
 
   val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") { ctx =>
-    val versionPlan = resolveVersionPlan(ctx.state)
-
     final case class InquireData(
         state: State,
         currentVersion: String,
@@ -58,6 +55,7 @@ private[release] object VersionSteps {
     )
 
     for {
+      versionPlan  <- IO.blocking(resolveVersionPlan(ctx.state))
       currentVer   <- versionPlan.readVersion(versionPlan.versionFile)
       data         <- IO.blocking {
                         val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseVersion)
@@ -82,7 +80,7 @@ private[release] object VersionSteps {
           case Some(v)                                      => IO.pure(v)
           case None if !ctx.interactive || data.useDefaults => IO.pure(data.suggestedRelease)
           case None                                         =>
-            IO(data.state.log.info("Press enter to use the default value")) *>
+            IO.blocking(data.state.log.info("Press enter to use the default value")) *>
               readVersionPrompt(
                 prompt = s"Release version [${data.suggestedRelease}] : ",
                 defaultVersion = data.suggestedRelease
@@ -175,11 +173,13 @@ private[release] object VersionSteps {
       commitMessageKey: TaskKey[String]
   ): IO[(ReleaseContext, String)] =
     required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-      val versionPlan = resolveVersionPlan(ctx.state)
-      val sign        = SbtRuntime.getSetting(ctx.state, releaseVcsSign)
-      val signOff     = SbtRuntime.getSetting(ctx.state, releaseVcsSignOff)
-
-      GitRuntime.relativizeToBase(vcs, versionPlan.versionFile).flatMap { relativePath =>
+      IO.blocking {
+        val versionPlan = resolveVersionPlan(ctx.state)
+        val sign        = SbtRuntime.getSetting(ctx.state, releaseVcsSign)
+        val signOff     = SbtRuntime.getSetting(ctx.state, releaseVcsSignOff)
+        (versionPlan, sign, signOff)
+      }.flatMap { case (versionPlan, sign, signOff) =>
+        GitRuntime.relativizeToBase(vcs, versionPlan.versionFile).flatMap { relativePath =>
         for {
           _      <- GitRuntime.add(vcs, relativePath)
           status <- GitRuntime.trackedStatus(vcs)
@@ -196,13 +196,13 @@ private[release] object VersionSteps {
                       IO.blocking((ctx, vcs.currentHash))
                     }
         } yield result
+        }
       }
     }
 
   private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = {
-    val versionPlan = resolveVersionPlan(ctx.state)
-
     for {
+      versionPlan <- IO.blocking(resolveVersionPlan(ctx.state))
       contents <- versionPlan.writeVersion(versionPlan.versionFile, ver)
       result   <- IO.blocking {
                     java.nio.file.Files
@@ -218,15 +218,19 @@ private[release] object VersionSteps {
     } yield result
   }
 
-  private def resolveVersionPlan(state: State): VersionPlan =
+  private[release] def resolveVersionPlan(
+      state: State,
+      resolveSettings: State => CoreReleasePlanner.ResolvedSettings = CoreReleasePlanner.resolve
+  ): VersionPlan =
     CoreReleasePlanner.current(state).map(_.version).getOrElse {
+      val settings = resolveSettings(state)
       VersionPlan(
-        versionFile = SbtRuntime.getSetting(state, releaseVersionFile),
-        readVersion = SbtRuntime.getSetting(state, releaseIOReadVersion),
-        writeVersion = SbtRuntime.getSetting(state, releaseIOWriteVersion),
+        versionFile = settings.versionFile,
+        readVersion = settings.readVersion,
+        writeVersion = settings.writeVersion,
         releaseVersionOverride = state.get(ReleaseKeys.commandLineReleaseVersion).flatten,
         nextVersionOverride = state.get(ReleaseKeys.commandLineNextVersion).flatten,
-        useGlobalVersion = SbtRuntime.getSetting(state, releaseUseGlobalVersion)
+        useGlobalVersion = settings.useGlobalVersion
       )
     }
 }

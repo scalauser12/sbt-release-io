@@ -154,42 +154,18 @@ private[release] object VcsSteps {
     check = ctx =>
       requireVcs(ctx) { vcs =>
         for {
-          hasUp          <- IO.blocking(vcs.hasUpstream)
-          _              <-
+          hasUp <- IO.blocking(vcs.hasUpstream)
+          _     <-
             if (hasUp) IO.unit
             else
-              IO.raiseError(
-                new IllegalStateException(
-                  s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
-                    "Set up a remote tracking branch or remove pushChanges from the release process."
+              IO.blocking(vcs.currentBranch).flatMap { branch =>
+                IO.raiseError(
+                  new IllegalStateException(
+                    s"[release-io] No tracking branch configured for branch '$branch'. " +
+                      "Set up a remote tracking branch or remove pushChanges from the release process."
+                  )
                 )
-              )
-          remoteExitCode <- IO.blocking {
-                              ctx.state.log.info(
-                                s"[release-io] Checking remote [${vcs.trackingRemote}] ..."
-                              )
-                              vcs.checkRemote(vcs.trackingRemote).!
-                            }
-          _              <-
-            if (remoteExitCode == 0) IO.unit
-            else
-              confirmContinue(
-                ctx,
-                prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                defaultYes = false,
-                abortMessage = "Aborting the release due to remote check failure."
-              )
-          behindRemote   <- IO.blocking(vcs.isBehindRemote)
-          _              <-
-            if (!behindRemote) IO.unit
-            else
-              confirmContinue(
-                ctx,
-                prompt =
-                  "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
-                defaultYes = false,
-                abortMessage = "Merge the upstream commits and run release again."
-              )
+              }
         } yield ctx
       },
     action = ctx =>
@@ -206,30 +182,61 @@ private[release] object VcsSteps {
                             )
                           ).as(ctx)
                       } yield r
-                    else if (!ctx.interactive)
-                      GitRuntime.pushChanges(vcs).as(ctx)
-                    else {
-                      val decisionIO =
-                        if (useDefaults(ctx.state)) IO.pure(true)
-                        else
-                          askYesNo(
-                            prompt = "Push changes to the remote repository (y/n)? [y] ",
-                            defaultYes = true
-                          )
+                    else
+                      validatePushRemote(ctx, vcs) *>
+                        (if (!ctx.interactive)
+                           GitRuntime.pushChanges(vcs).as(ctx)
+                         else {
+                           val decisionIO =
+                             if (useDefaults(ctx.state)) IO.pure(true)
+                             else
+                               askYesNo(
+                                 prompt = "Push changes to the remote repository (y/n)? [y] ",
+                                 defaultYes = true
+                               )
 
-                      decisionIO.flatMap {
-                        case true  => GitRuntime.pushChanges(vcs).as(ctx)
-                        case false =>
-                          IO.blocking(
-                            ctx.state.log.warn(
-                              "[release-io] Remember to push the changes yourself!"
-                            )
-                          ).as(ctx)
-                      }
-                    }
+                           decisionIO.flatMap {
+                             case true  => GitRuntime.pushChanges(vcs).as(ctx)
+                             case false =>
+                               IO.blocking(
+                                 ctx.state.log.warn(
+                                   "[release-io] Remember to push the changes yourself!"
+                                 )
+                               ).as(ctx)
+                           }
+                         })
         } yield result
       }
   )
+
+  private def validatePushRemote(ctx: ReleaseContext, vcs: Vcs): IO[Unit] =
+    for {
+      remote         <- IO.blocking(vcs.trackingRemote)
+      remoteExitCode <- IO.blocking {
+                          ctx.state.log.info(s"[release-io] Checking remote [$remote] ...")
+                          vcs.checkRemote(remote).!
+                        }
+      _              <-
+        if (remoteExitCode == 0) IO.unit
+        else
+          confirmContinue(
+            ctx,
+            prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+            defaultYes = false,
+            abortMessage = "Aborting the release due to remote check failure."
+          )
+      behindRemote   <- IO.blocking(vcs.isBehindRemote)
+      _              <-
+        if (!behindRemote) IO.unit
+        else
+          confirmContinue(
+            ctx,
+            prompt =
+              "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
+            defaultYes = false,
+            abortMessage = "Merge the upstream commits and run release again."
+          )
+    } yield ()
 
   private final case class TagParams(
       tagName: String,

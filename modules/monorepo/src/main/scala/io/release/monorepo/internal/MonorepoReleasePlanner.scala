@@ -51,80 +51,85 @@ private[monorepo] object MonorepoReleasePlanner {
       new IllegalStateException("Monorepo release plan not initialized")
     )
 
-  def build(state: State, inputs: Inputs): IO[Either[State, MonorepoReleasePlan]] = {
-    val extracted = Project.extract(state)
-    val runtime   = MonorepoRuntime.fromExtracted(state, extracted)
+  def build(state: State, inputs: Inputs): IO[Either[State, MonorepoReleasePlan]] =
+    IO.blocking {
+      val extracted = Project.extract(state)
+      MonorepoRuntime.fromExtracted(state, extracted)
+    }.flatMap { runtime =>
 
-    def failWith(msg: String): State = {
-      state.log.error(s"[release-io-monorepo] $msg")
-      state.fail
-    }
-
-    def resolveProjects(validated: ValidatedInputs): Either[State, Seq[ProjectPlan]] =
-      Try {
-        val allProjectRefs = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoProjects)
-
-        def resolveVersions(projectName: String): (Option[String], Option[String]) = {
-          val release =
-            validated.globalReleaseVersion.orElse(
-              validated.releaseVersionOverrides.get(projectName)
-            )
-          val next    =
-            validated.globalNextVersion.orElse(validated.nextVersionOverrides.get(projectName))
-          release -> next
+      def failWith(msg: String): IO[State] =
+        IO.blocking {
+          state.log.error(s"[release-io-monorepo] $msg")
+          state.fail
         }
 
-        allProjectRefs.map { ref =>
-          val baseDir                         =
-            (ref / baseDirectory).get(runtime.extracted.structure.data).getOrElse {
-              throw new IllegalStateException(
-                s"Cannot resolve baseDirectory for project '${ref.project}'. " +
-                  "Ensure the project is correctly defined in the build."
+      def resolveProjects(validated: ValidatedInputs): Either[String, Seq[ProjectPlan]] =
+        Try {
+          val allProjectRefs = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoProjects)
+
+          def resolveVersions(projectName: String): (Option[String], Option[String]) = {
+            val release =
+              validated.globalReleaseVersion.orElse(
+                validated.releaseVersionOverrides.get(projectName)
+              )
+            val next    =
+              validated.globalNextVersion.orElse(validated.nextVersionOverrides.get(projectName))
+            release -> next
+          }
+
+          allProjectRefs.map { ref =>
+            val baseDir                         =
+              (ref / baseDirectory).get(runtime.extracted.structure.data).getOrElse {
+                throw new IllegalStateException(
+                  s"Cannot resolve baseDirectory for project '${ref.project}'. " +
+                    "Ensure the project is correctly defined in the build."
+                )
+              }
+            val (releaseOverride, nextOverride) = resolveVersions(ref.project)
+            ProjectPlan(
+              ref = ref,
+              name = ref.project,
+              baseDir = baseDir,
+              version = ProjectVersionPlan(
+                versionFile = MonorepoVersionFiles.resolve(runtime, ref),
+                releaseVersionOverride = releaseOverride,
+                nextVersionOverride = nextOverride
+              )
+            )
+          }
+        }.toEither.left.map(e => Option(e.getMessage).getOrElse(e.toString))
+
+      val basePlan = for {
+        validated   <- validateOverrideInputs(inputs, runtime.useGlobalVersion)
+        allProjects <- resolveProjects(validated)
+        _           <- validateResolvedProjects(allProjects, validated)
+      } yield validated -> allProjects
+
+      basePlan match {
+        case Left(message)                    => failWith(message).map(Left(_))
+        case Right((validated, allProjects)) =>
+          DependencyGraph
+            .topologicalSort(allProjects.map(_.ref), state)
+            .map { orderedRefs =>
+              val orderedProjects = orderedRefs.flatMap(ref => allProjects.find(_.ref == ref))
+              val selection       = buildSelectionPlan(runtime, validated, orderedProjects)
+              Right(
+                MonorepoReleasePlan(
+                  flags = validated.flags,
+                  tagStrategy = validated.tagStrategy,
+                  allProjects = allProjects,
+                  orderedProjects = orderedProjects,
+                  selection = selection
+                )
               )
             }
-          val (releaseOverride, nextOverride) = resolveVersions(ref.project)
-          ProjectPlan(
-            ref = ref,
-            name = ref.project,
-            baseDir = baseDir,
-            version = ProjectVersionPlan(
-              versionFile = MonorepoVersionFiles.resolve(runtime, ref),
-              releaseVersionOverride = releaseOverride,
-              nextVersionOverride = nextOverride
-            )
-          )
-        }
-      }.toEither.left.map(e => failWith(Option(e.getMessage).getOrElse(e.toString)))
-
-    val basePlan = for {
-      validated   <- validateOverrideInputs(inputs, runtime.useGlobalVersion).left.map(failWith)
-      allProjects <- resolveProjects(validated)
-      _           <- validateResolvedProjects(allProjects, validated).left.map(failWith)
-    } yield validated -> allProjects
-
-    basePlan match {
-      case Left(failedState)               => IO.pure(Left(failedState))
-      case Right((validated, allProjects)) =>
-        DependencyGraph
-          .topologicalSort(allProjects.map(_.ref), state)
-          .map { orderedRefs =>
-            val orderedProjects = orderedRefs.flatMap(ref => allProjects.find(_.ref == ref))
-            val selection       = buildSelectionPlan(runtime, validated, orderedProjects)
-            Right(
-              MonorepoReleasePlan(
-                flags = validated.flags,
-                tagStrategy = validated.tagStrategy,
-                allProjects = allProjects,
-                orderedProjects = orderedProjects,
-                selection = selection
-              )
-            )
-          }
-          .handleError { case NonFatal(err) =>
-            Left(failWith(Option(err.getMessage).getOrElse(err.toString)))
-          }
+            .handleErrorWith {
+              case NonFatal(err) =>
+                failWith(Option(err.getMessage).getOrElse(err.toString)).map(Left(_))
+              case fatal         => IO.raiseError(fatal)
+            }
+      }
     }
-  }
 
   private def buildSelectionPlan(
       runtime: MonorepoRuntime,

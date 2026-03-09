@@ -42,7 +42,7 @@ private[release] object PublishSteps {
                            if (!ctx.interactive) {
                              IO.raiseError[ReleaseContext](new IllegalStateException(msg))
                            } else {
-                             IO(ctx.state.log.warn(msg)) *>
+                             IO.blocking(ctx.state.log.warn(msg)) *>
                                confirmContinue(
                                  ctx,
                                  prompt = "Do you want to continue (y/n)? [n] ",
@@ -60,7 +60,7 @@ private[release] object PublishSteps {
     name = "publish-artifacts",
     action = ctx =>
       if (ctx.skipPublish) {
-        IO(ctx.state.log.info("[release-io] Skipping publish")).as(ctx)
+        IO.blocking(ctx.state.log.info("[release-io] Skipping publish")).as(ctx)
       } else {
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
@@ -97,7 +97,7 @@ private[release] object PublishSteps {
     name = "run-tests",
     action = ctx =>
       if (ctx.skipTests) {
-        IO(ctx.state.log.info("[release-io] Skipping tests")).as(ctx)
+        IO.blocking(ctx.state.log.info("[release-io] Skipping tests")).as(ctx)
       } else {
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)

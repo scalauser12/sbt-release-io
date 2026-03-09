@@ -163,7 +163,7 @@ private[monorepo] object MonorepoVcsSteps {
   val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "push-changes",
     check = ctx =>
-      VcsOps.detectVcs(ctx.state).flatMap { vcs =>
+      ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
         for {
           hasUpAndBranch <- IO.blocking((vcs.hasUpstream, vcs.currentBranch))
           (hasUp, branch) = hasUpAndBranch
@@ -172,18 +172,6 @@ private[monorepo] object MonorepoVcsSteps {
               new IllegalStateException(
                 s"No tracking branch configured for '$branch'. " +
                   "Set up a remote tracking branch or remove pushChanges from the release process."
-              )
-            )
-          remote         <- IO.blocking(vcs.trackingRemote)
-          remoteCode     <- IO.blocking(vcs.checkRemote(remote).!)
-          _              <- IO.raiseUnless(remoteCode == 0)(
-                              new IllegalStateException("Remote check failed. Aborting release.")
-                            )
-          behind         <- IO.blocking(vcs.isBehindRemote)
-          _              <-
-            IO.raiseWhen(behind)(
-              new IllegalStateException(
-                "Upstream has unmerged commits. Merge first or remove pushChanges from process."
               )
             )
         } yield ctx
@@ -196,7 +184,7 @@ private[monorepo] object MonorepoVcsSteps {
             if (!hasUp)
               logWarn(ctx, "No upstream branch, changes were NOT pushed.")
             else
-              vcs.commandName match {
+              validatePushRemote(vcs) *> (vcs.commandName match {
                 case "git" =>
                   val tags = ctx.currentProjects.flatMap(_.tagName).distinct
                   for {
@@ -233,9 +221,25 @@ private[monorepo] object MonorepoVcsSteps {
 
                 case _ =>
                   runProcess(vcs.pushChanges, "vcs push").as(ctx)
-              }
+              })
         } yield result
       }
   )
+
+  private def validatePushRemote(vcs: Vcs): IO[Unit] =
+    for {
+      remote     <- IO.blocking(vcs.trackingRemote)
+      remoteCode <- IO.blocking(vcs.checkRemote(remote).!)
+      _          <- IO.raiseUnless(remoteCode == 0)(
+                      new IllegalStateException("Remote check failed. Aborting release.")
+                    )
+      behind     <- IO.blocking(vcs.isBehindRemote)
+      _          <-
+        IO.raiseWhen(behind)(
+          new IllegalStateException(
+            "Upstream has unmerged commits. Merge first or remove pushChanges from process."
+          )
+        )
+    } yield ()
 
 }
