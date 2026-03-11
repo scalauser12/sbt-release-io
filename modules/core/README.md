@@ -6,11 +6,11 @@ An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with 
 
 ## Features
 
-- **IO-based release steps**: All release steps return `IO[ReleaseContext]` for composable, referentially transparent operations
+- **IO-based release steps**: `execute` steps return `IO[ReleaseContext]`, and `validate` steps return `IO[Unit]`
 - **Full compatibility**: Native IO implementations for VCS commits, tagging, and version management; delegates to upstream sbt-release 1.4.0 for settings
 - **Flexible step composition**: Create custom release steps using cats-effect IO
 - **Better error handling**: Graceful failure handling with the IO monad
-- **Cross-build support**: Run both checks and actions across multiple Scala versions
+- **Cross-build support**: Run both validation and execution phases across multiple Scala versions
 - **Upstream-style helper commands**: Run individual release phases with `release-*` commands
 - **Optional interactive mode**: Enable upstream-like prompts for versions, confirmation, and push
 - **Configurable**: Respects all upstream sbt-release settings (commit messages, signing, version bumping, etc.)
@@ -515,15 +515,16 @@ sbt-release chains `State => State` functions via `Function.chain`. Each step tr
 
 ### sbt-release-io
 
-sbt-release-io builds a single `IO[ReleaseContext]` program from all steps, then executes it with `unsafeRunSync()` on the sbt command thread. The entire release — checks, actions, cross-builds, resource lifecycle — completes before control returns to sbt.
+sbt-release-io builds a single `IO[ReleaseContext]` release program from all configured steps, then executes it with `unsafeRunSync()` on the sbt command thread. Validation runs first against the initial validation-phase context, then execute steps run sequentially on the current context and state. The entire release — validation, execution, cross-builds, and resource lifecycle — completes before control returns to sbt.
 
 ### Advantages of the IO model
 
 - **Resource safety**: `Resource.use` guarantees cleanup (close connections, release locks) even on failure or interruption. sbt-release has no equivalent — cleanup requires manual `try/finally` in each step.
 - **Composability**: Steps compose with `for`/`flatMap` and standard cats-effect combinators. Custom steps can use `IO.blocking`, `IO.race`, `IO.timeout`, retry logic, etc. sbt-release steps are opaque `State => State` functions with no built-in combinators.
+- **Explicit validation boundary**: `validate` and `execute` are separate public phases. Validation is side-effect-aware but context-non-threading, which makes preflight behavior much clearer than a single overloaded step function.
 - **Explicit blocking boundaries**: `IO.blocking` marks which operations shell out to git or run sbt tasks. The cats-effect runtime dispatches these to a blocking thread pool, keeping the compute pool free. sbt-release runs everything on the sbt command thread with no distinction.
-- **Typed context threading**: `ReleaseContext` carries VCS, versions, and attributes through the step chain with type safety. sbt-release uses untyped `State` attributes (`state.get(key)`) that can fail at runtime if a prior step didn't set the expected attribute.
-- **Cross-build checks**: Both checks and actions are cross-built when `enableCrossBuild = true`. sbt-release only cross-builds actions, not checks — a SNAPSHOT dependency present only under a non-default Scala version can slip through.
+- **Typed context threading**: `ReleaseContext` carries VCS, versions, and typed metadata through the step chain with type safety. sbt-release uses untyped `State` attributes (`state.get(key)`) that can fail at runtime if a prior step didn't set the expected attribute.
+- **Cross-build validation**: Both `validate` and `execute` phases are cross-built when `enableCrossBuild = true`. sbt-release only cross-builds actions, not preflight validation — a SNAPSHOT dependency present only under a non-default Scala version can slip through.
 - **Custom plugins with resources**: `ReleasePluginIOLike[T]` lets you define a plugin parameterized by a resource type (HTTP client, temp directory, etc.) that is acquired once and shared across all steps.
 
 ### Trade-offs
@@ -537,10 +538,10 @@ sbt-release-io builds a single `IO[ReleaseContext]` program from all steps, then
 
 | Aspect | sbt-release | sbt-release-io |
 |--------|-------------|----------------|
-| Step type | `State => State` | `ReleaseContext => IO[ReleaseContext]` |
-| Execution | Cooperative with sbt event loop | Single blocking `unsafeRunSync` call |
+| Step type | `State => State` | `validate: ReleaseContext => IO[Unit]` plus `execute: ReleaseContext => IO[ReleaseContext]` |
+| Execution | Cooperative with sbt event loop | Single blocking `unsafeRunSync` with validate-then-execute |
 | Resource management | Manual | `Resource.use` with guaranteed cleanup |
-| Cross-build checks | Actions only | Both checks and actions |
+| Cross-build validation | Actions only | Both `validate` and `execute` phases |
 | Custom plugin resources | Not supported | `ReleasePluginIOLike[T]` |
 | Error handling | `FailureCommand` sentinel in State | `IO.raiseError` + `handleErrorWith` |
 | Composability | `Function.chain` | Monadic (`for`/`flatMap`) |
