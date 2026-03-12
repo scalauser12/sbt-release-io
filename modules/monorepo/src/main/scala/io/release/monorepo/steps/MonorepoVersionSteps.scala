@@ -67,7 +67,9 @@ private[monorepo] object MonorepoVersionSteps {
         case _                                                  =>
           resolve(ctx.state, project.ref).flatMap { versionInputs =>
             if (versionInputs.useGlobalVersion) {
-              ctx.currentProjects.flatMap(_.versions).headOption match {
+              ctx.currentProjects
+                .flatMap(_.versions)
+                .find { case (r, n) => r.nonEmpty && n.nonEmpty } match {
                 case Some(versions) =>
                   logInfo(
                     ctx,
