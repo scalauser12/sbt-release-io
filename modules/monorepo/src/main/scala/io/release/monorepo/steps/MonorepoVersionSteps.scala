@@ -108,45 +108,43 @@ private[monorepo] object MonorepoVersionSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     for {
-      versionInputs                                        <- resolve(ctx.state, project.ref)
-      currentVer                                           <- versionInputs.readVersion(versionInputs.versionFile)
-      data                                                 <- IO.blocking {
-                                                                val extracted   = Project.extract(ctx.state)
-                                                                val releaseFn   = extracted.get(project.ref / releaseIOVersion)
-                                                                val nextFn      = extracted.get(project.ref / releaseIONextVersion)
-                                                                val useDefaults =
-                                                                  StepHelpers.useDefaults(ctx.state)
-                                                                (ctx.state, releaseFn(currentVer), nextFn, useDefaults)
-                                                              }
-      (updatedState, suggestedRelease, nextFn, useDefaults) = data
-      releaseVer                                           <- promptOrDefault(
-                                                                project.releaseVersion,
-                                                                suggestedRelease,
-                                                                s"Release version for ${project.name}",
-                                                                ctx.interactive,
-                                                                useDefaults
-                                                              )
-      suggestedNext                                         = nextFn(releaseVer)
-      nextVer                                              <- promptOrDefault(
-                                                                project.nextVersion,
-                                                                suggestedNext,
-                                                                s"Next version for ${project.name}",
-                                                                ctx.interactive,
-                                                                useDefaults
-                                                              )
-      result                                               <- logInfo(
-                                                                ctx,
-                                                                s"${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
-                                                              ).as(
-                                                                ctx
-                                                                  .withState(updatedState)
-                                                                  .updateProject(project.ref)(
-                                                                    _.copy(
-                                                                      versionFile = versionInputs.versionFile,
-                                                                      versions = Some((releaseVer, nextVer))
-                                                                    )
-                                                                  )
-                                                              )
+      versionInputs                          <- resolve(ctx.state, project.ref)
+      currentVer                             <- versionInputs.readVersion(versionInputs.versionFile)
+      data                                   <- IO.blocking {
+                                                  val extracted   = Project.extract(ctx.state)
+                                                  val releaseFn   = extracted.get(project.ref / releaseIOVersion)
+                                                  val nextFn      = extracted.get(project.ref / releaseIONextVersion)
+                                                  val useDefaults =
+                                                    StepHelpers.useDefaults(ctx.state)
+                                                  (releaseFn(currentVer), nextFn, useDefaults)
+                                                }
+      (suggestedRelease, nextFn, useDefaults) = data
+      releaseVer                             <- promptOrDefault(
+                                                  project.releaseVersion,
+                                                  suggestedRelease,
+                                                  s"Release version for ${project.name}",
+                                                  ctx.interactive,
+                                                  useDefaults
+                                                )
+      suggestedNext                           = nextFn(releaseVer)
+      nextVer                                <- promptOrDefault(
+                                                  project.nextVersion,
+                                                  suggestedNext,
+                                                  s"Next version for ${project.name}",
+                                                  ctx.interactive,
+                                                  useDefaults
+                                                )
+      result                                 <- logInfo(
+                                                  ctx,
+                                                  s"${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
+                                                ).as(
+                                                  ctx.updateProject(project.ref)(
+                                                    _.copy(
+                                                      versionFile = versionInputs.versionFile,
+                                                      versions = Some((releaseVer, nextVer))
+                                                    )
+                                                  )
+                                                )
     } yield result
 
   /** Validate version consistency in global-version mode (before writing to shared file). */
@@ -231,8 +229,10 @@ private[monorepo] object MonorepoVersionSteps {
         else
           for {
             contents <- versionInputs.writeVersion(versionFile, ver)
-            newState <- IO.blocking {
+            _        <- IO.blocking {
                           Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
+                        }
+            newState <- IO.blocking {
                           val setting       =
                             if (versionInputs.useGlobalVersion) ThisBuild / version := ver
                             else project.ref / version                              := ver

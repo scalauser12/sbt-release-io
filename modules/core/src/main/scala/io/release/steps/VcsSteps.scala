@@ -1,5 +1,6 @@
 package io.release.steps
 
+import cats.Monad
 import cats.effect.IO
 import io.release.internal.{CoreReleasePlan, SbtRuntime, TagPlan}
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
@@ -68,69 +69,55 @@ private[release] object VcsSteps {
       vcs: Vcs,
       params: TagPlan,
       ctx: ReleaseContext
-  ): IO[ReleaseContext] = {
-    val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = params
-    val useDefaults                                          = StepHelpers.useDefaults(params.state)
-    for {
-      exists <- vcs.existsTag(tagName)
-      result <- if (!exists)
-                  vcs.tag(tagName, tagComment, sign) *>
-                    IO.blocking {
-                      val newState = SbtRuntime.appendWithSession(
-                        ctx.state,
-                        VersionSteps.sessionSettings(ctx.state) ++
-                          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
-                      )
-                      ctx.copy(state = newState)
-                    }
-                else {
-                  val effectiveAnswer: IO[String] = defaultAnswer match {
-                    case Some(ans)                => IO.pure(ans)
-                    case None if useDefaults      =>
-                      IO.blocking(
-                        ctx.state.log.warn(
-                          s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
-                        )
-                      ).as("a")
-                    case None if !ctx.interactive =>
-                      IO.raiseError(
-                        new IllegalStateException(
-                          s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
-                        )
-                      )
-                    case None                     =>
-                      IO.print(
-                        s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-                      ) *> IO.readLine
-                  }
-
-                  effectiveAnswer.flatMap {
-                    case "a" | "A" | "" =>
-                      IO.raiseError(
-                        new IllegalStateException(
-                          s"Tag [$tagName] already exists. Aborting release!"
-                        )
-                      )
-                    case "k" | "K"      =>
+  ): IO[ReleaseContext] =
+    Monad[IO].tailRecM(params) { currentParams =>
+      val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = currentParams
+      val useDefaults                                          = StepHelpers.useDefaults(currentParams.state)
+      for {
+        exists <- vcs.existsTag(tagName)
+        result <- if (!exists)
+                    (vcs.tag(tagName, tagComment, sign) *>
                       IO.blocking {
-                        ctx.state.log.warn(
-                          s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
-                        )
                         val newState = SbtRuntime.appendWithSession(
                           ctx.state,
                           VersionSteps.sessionSettings(ctx.state) ++
                             Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
                         )
                         ctx.copy(state = newState)
-                      }
-                    case "o" | "O"      =>
-                      IO.blocking(
-                        ctx.state.log.warn(
-                          s"[release-io] Tag [$tagName] already exists. Overwriting."
+                      }).map(Right(_))
+                  else {
+                    val effectiveAnswer: IO[String] = defaultAnswer match {
+                      case Some(ans)                => IO.pure(ans)
+                      case None if useDefaults      =>
+                        IO.blocking(
+                          ctx.state.log.warn(
+                            s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
+                          )
+                        ).as("a")
+                      case None if !ctx.interactive =>
+                        IO.raiseError(
+                          new IllegalStateException(
+                            s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
+                          )
                         )
-                      ) *>
-                        vcs.tag(tagName, tagComment, sign, force = true) *>
+                      case None                     =>
+                        IO.print(
+                          s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
+                        ) *> IO.readLine
+                    }
+
+                    effectiveAnswer.flatMap {
+                      case "a" | "A" | "" =>
+                        IO.raiseError(
+                          new IllegalStateException(
+                            s"Tag [$tagName] already exists. Aborting release!"
+                          )
+                        )
+                      case "k" | "K"      =>
                         IO.blocking {
+                          ctx.state.log.warn(
+                            s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
+                          )
                           val newState = SbtRuntime.appendWithSession(
                             ctx.state,
                             VersionSteps.sessionSettings(ctx.state) ++
@@ -138,24 +125,35 @@ private[release] object VcsSteps {
                                 packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
                               )
                           )
-                          ctx.copy(state = newState)
+                          Right(ctx.copy(state = newState))
                         }
-                    case newTagName     =>
-                      IO.blocking(
-                        ctx.state.log.info(
-                          s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName]."
-                        )
-                      ) *>
-                        resolveTag(
-                          vcs,
-                          params
-                            .copy(tagName = newTagName, defaultAnswer = None),
-                          ctx
-                        )
+                      case "o" | "O"      =>
+                        IO.blocking(
+                          ctx.state.log.warn(
+                            s"[release-io] Tag [$tagName] already exists. Overwriting."
+                          )
+                        ) *>
+                          vcs.tag(tagName, tagComment, sign, force = true) *>
+                          IO.blocking {
+                            val newState = SbtRuntime.appendWithSession(
+                              ctx.state,
+                              VersionSteps.sessionSettings(ctx.state) ++
+                                Seq(
+                                  packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
+                                )
+                            )
+                            Right(ctx.copy(state = newState))
+                          }
+                      case newTagName     =>
+                        IO.blocking(
+                          ctx.state.log.info(
+                            s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName]."
+                          )
+                        ).as(Left(currentParams.copy(tagName = newTagName, defaultAnswer = None)))
+                    }
                   }
-                }
-    } yield result
-  }
+      } yield result
+    }
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO(
     name = "push-changes",

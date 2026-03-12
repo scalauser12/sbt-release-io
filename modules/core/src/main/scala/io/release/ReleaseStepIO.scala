@@ -87,14 +87,7 @@ object ReleaseStepIO {
       name = s"command: $command",
       execute = ctx =>
         IO.blocking {
-          val newState = Command.process(
-            command,
-            ctx.state,
-            (msg: String) => {
-              throw new IllegalStateException(s"Failed to parse command '$command': $msg")
-            }
-          )
-          ctx.copy(state = newState)
+          ctx.copy(state = SbtRuntime.processCommand(ctx.state, command))
         }
     )
 

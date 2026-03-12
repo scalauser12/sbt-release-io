@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import _root_.io.release.internal.{ExecutionEngine, SbtRuntime}
-import cats.effect.IO
+import cats.effect.{IO, Ref}
 import io.release.monorepo.steps.MonorepoStepHelpers
 import sbt.{internal => _, *}
 import sbt.Keys.*
@@ -196,26 +196,29 @@ private[monorepo] object MonorepoComposer {
           )
         )
       case versions =>
-        versions
-          .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-            ioCtx.flatMap { currentCtx =>
-              if (currentCtx.failed) IO.pure(currentCtx)
-              else
-                for {
-                  _        <- IO.blocking(
-                                currentCtx.state.log.info(
-                                  s"$LogPrefix Cross-building with Scala $version"
+        Ref[IO].of(ctx).flatMap { lastGood =>
+          versions
+            .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+              ioCtx.flatMap { currentCtx =>
+                if (currentCtx.failed) IO.pure(currentCtx)
+                else
+                  for {
+                    _        <- IO.blocking(
+                                  currentCtx.state.log.info(
+                                    s"$LogPrefix Cross-building with Scala $version"
+                                  )
                                 )
-                              )
-                  switched <- switchTo(version)(currentCtx)
-                  result   <- action(switched)
-                } yield result
+                    switched <- switchTo(version)(currentCtx)
+                    result   <- action(switched)
+                    _        <- lastGood.set(result)
+                  } yield result
+              }
             }
-          }
-          .flatMap(restoreEntry)
-          .handleErrorWith { err =>
-            restoreEntry(ctx).attempt *> IO.raiseError(err)
-          }
+            .flatMap(restoreEntry)
+            .handleErrorWith { err =>
+              lastGood.get.flatMap(restoreEntry).attempt *> IO.raiseError(err)
+            }
+        }
     }
   }
 }

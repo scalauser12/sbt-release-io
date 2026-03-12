@@ -213,20 +213,11 @@ trait ReleasePluginIOLike[T]
       interactive: Boolean
   ): ReleaseContext = {
     val maybeVersions = state.get(ReleaseKeys.versions)
-    // Attempt VCS detection so the initial context has VCS info
-    // even before the initializeVcs step runs.
-    val maybeVcs      = scala.util
-      .Try {
-        val base = Project.extract(state).get(sbt.Keys.thisProject).base
-        _root_.io.release.vcs.Vcs.detect(base).unsafeRunSync()
-      }
-      .toOption
-      .flatten
 
     ReleaseContext(
       state = state,
       versions = maybeVersions,
-      vcs = maybeVcs,
+      vcs = None,
       skipTests = skipTests,
       skipPublish = skipPublish,
       interactive = interactive
@@ -254,15 +245,15 @@ trait ReleasePluginIOLike[T]
 
       if (args.count(_.isInstanceOf[ReleaseVersion]) > 1)
         state.log.warn(
-          s"[release-io] Multiple release-version args provided; using '${releaseVersionArg.get}'"
+          s"[release-io] Multiple release-version args provided; using '${releaseVersionArg.getOrElse("<unknown>")}'"
         )
       if (args.count(_.isInstanceOf[NextVersion]) > 1)
         state.log.warn(
-          s"[release-io] Multiple next-version args provided; using '${nextVersionArg.get}'"
+          s"[release-io] Multiple next-version args provided; using '${nextVersionArg.getOrElse("<unknown>")}'"
         )
       if (args.count(_.isInstanceOf[TagDefault]) > 1)
         state.log.warn(
-          s"[release-io] Multiple default-tag-exists-answer args provided; using '${tagDefaultArg.get}'"
+          s"[release-io] Multiple default-tag-exists-answer args provided; using '${tagDefaultArg.getOrElse("<unknown>")}'"
         )
 
       val cleanState = state

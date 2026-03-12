@@ -31,6 +31,28 @@ class Git(val baseDir: File) extends Vcs {
       else IO.unit
     }
 
+  private def runLines(args: String*)(context: => String): IO[Seq[String]] =
+    IO.blocking {
+      val sb    = new StringBuilder
+      val lines = List.newBuilder[String]
+      val code  = cmd(args*).!(
+        ProcessLogger(
+          line => { lines += line; () },
+          err => { sb.append(err).append('\n'); () }
+        )
+      )
+      (code, lines.result(), sb.toString.trim)
+    }.flatMap { case (code, result, stderr) =>
+      if (code != 0)
+        IO.raiseError(
+          new IllegalStateException(
+            s"$context failed with exit code $code" +
+              (if (stderr.nonEmpty) s": $stderr" else "")
+          )
+        )
+      else IO.pure(result)
+    }
+
   // ── Queries ──────────────────────────────────────────────────────────
 
   def currentHash: IO[String] =
@@ -68,13 +90,13 @@ class Git(val baseDir: File) extends Vcs {
     )
 
   def modifiedFiles: IO[Seq[String]] =
-    IO.blocking(cmd("ls-files", "--modified", "--exclude-standard").lineStream.toList)
+    runLines("ls-files", "--modified", "--exclude-standard")("git ls-files --modified")
 
   def stagedFiles: IO[Seq[String]] =
-    IO.blocking(cmd("diff", "--cached", "--name-only").lineStream.toList)
+    runLines("diff", "--cached", "--name-only")("git diff --cached --name-only")
 
   def untrackedFiles: IO[Seq[String]] =
-    IO.blocking(cmd("ls-files", "--other", "--exclude-standard").lineStream.toList)
+    runLines("ls-files", "--other", "--exclude-standard")("git ls-files --other")
 
   def status: IO[String] =
     IO.blocking {

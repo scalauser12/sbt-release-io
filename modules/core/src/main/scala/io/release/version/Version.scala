@@ -1,5 +1,6 @@
 package io.release.version
 
+import java.util.regex.Pattern
 import scala.util.control.Exception.allCatch
 import scala.util.matching.Regex
 
@@ -57,11 +58,11 @@ case class Version(major: Int, subversions: Seq[Int], qualifier: Option[String])
         val qualifierEndsWithNumberR = """[0-9]*$""".r
 
         val opt = for {
-          versionNumberStr <- qualifierEndsWithNumberR.findFirstIn(rawQualifier)
+          versionNumberStr <- qualifierEndsWithNumberR.findFirstIn(rawQualifier).filter(_.nonEmpty)
           versionNumber    <- allCatch.opt(versionNumberStr.toInt)
           newVersionNumber  = versionNumber + 1
           newQualifier      =
-            rawQualifier.replaceFirst(versionNumberStr, newVersionNumber.toString)
+            rawQualifier.replaceFirst(Pattern.quote(versionNumberStr), newVersionNumber.toString)
         } yield Version(major, subversions, Some(newQualifier))
 
         opt.getOrElse(this.withoutQualifier)

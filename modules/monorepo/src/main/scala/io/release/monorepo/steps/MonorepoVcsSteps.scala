@@ -99,7 +99,12 @@ private[monorepo] object MonorepoVcsSteps {
             )
           )
         else if (!ctx.interactive)
-          IO.raiseError(
+          IO.blocking(
+            ctx.state.log.warn(
+              s"[release-io-monorepo] Tag [$tagName] already exists for $label. " +
+                "Aborting (non-interactive mode)."
+            )
+          ) *> IO.raiseError(
             new IllegalStateException(
               s"Tag [$tagName] already exists for $label. " +
                 "Aborting release in non-interactive mode."

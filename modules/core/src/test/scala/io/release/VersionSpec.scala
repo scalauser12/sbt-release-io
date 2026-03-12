@@ -57,7 +57,9 @@ class VersionSpec extends Specification {
             testBumpNext("1-rc-1", "1-rc-2") and
             testBumpNext("1-rc.1", "1-rc.2") and
             testBumpNext("1-beta-1", "1-beta-2") and
-            testBumpNext("1-beta.1", "1-beta.2")
+            testBumpNext("1-beta.1", "1-beta.2") and
+            testBumpNext("1-rc11", "1-rc12") and
+            testBumpNext("1-RC11", "1-RC12")
         }
       }
 
