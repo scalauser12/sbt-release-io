@@ -17,7 +17,7 @@ trait MonorepoReleaseIO {
 
   // ── Core settings ─────────────────────────────────────────────────────
 
-  /** Which subprojects participate in monorepo releases. Default: all aggregated projects. */
+  /** Which subprojects participate in monorepo releases. Default: all transitively aggregated projects. */
   val releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] = _releaseIOMonorepoProjects
 
   /** The ordered sequence of monorepo release steps.
@@ -36,7 +36,7 @@ trait MonorepoReleaseIO {
     */
   type MonorepoVersionFileResolver = MonorepoReleaseIO.MonorepoVersionFileResolver
 
-  /** Per-project version file resolver. Default: scoped sbt-release `releaseVersionFile`. */
+  /** Per-project version file resolver. Default: scoped `releaseIOVersionFile`. */
   val releaseIOMonorepoVersionFile: SettingKey[MonorepoVersionFileResolver] =
     _releaseIOMonorepoVersionFile
 
@@ -190,9 +190,9 @@ trait MonorepoReleaseIO {
         IO.pure(s"""$key := "$ver"\n""")
       }
     },
-    // The default per-project resolver mirrors each project's scoped sbt-release
-    // releaseVersionFile setting. Global-version mode still bypasses this resolver
-    // and uses the shared root releaseVersionFile instead.
+    // The default per-project resolver mirrors each project's scoped
+    // releaseIOVersionFile setting. Global-version mode still bypasses this resolver
+    // and uses the shared root releaseIOVersionFile instead.
     releaseIOMonorepoVersionFile            := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / releaseIOVersionFile)
     },
