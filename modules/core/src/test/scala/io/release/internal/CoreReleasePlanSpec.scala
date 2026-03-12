@@ -2,12 +2,12 @@ package io.release.internal
 
 import org.specs2.mutable.Specification
 
-class CoreReleasePlannerSpec extends Specification {
+class CoreReleasePlanSpec extends Specification {
 
-  "CoreReleasePlanner.build" should {
+  "CoreReleasePlan.build" should {
 
     "carry only stable flags and CLI overrides into the plan" in {
-      val inputs = CoreReleasePlanner.Inputs(
+      val inputs = CoreReleasePlan.Inputs(
         useDefaults = true,
         skipTests = true,
         skipPublish = false,
@@ -18,7 +18,7 @@ class CoreReleasePlannerSpec extends Specification {
         tagDefault = Some("k")
       )
 
-      val plan = CoreReleasePlanner.build(inputs)
+      val plan = CoreReleasePlan.build(inputs)
 
       (plan.flags must_== ExecutionFlags(
         useDefaults = true,
@@ -33,8 +33,8 @@ class CoreReleasePlannerSpec extends Specification {
     }
 
     "leave optional overrides empty when they are not provided" in {
-      val plan = CoreReleasePlanner.build(
-        CoreReleasePlanner.Inputs(
+      val plan = CoreReleasePlan.build(
+        CoreReleasePlan.Inputs(
           useDefaults = false,
           skipTests = false,
           skipPublish = true,

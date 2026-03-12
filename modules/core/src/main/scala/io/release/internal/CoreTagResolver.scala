@@ -18,7 +18,7 @@ private[release] object CoreTagResolver {
       tagName = tagName,
       tagComment = tagComment,
       sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
-      defaultAnswer = CoreReleasePlanner.current(s2).flatMap(_.tagDefault)
+      defaultAnswer = CoreReleasePlan.current(s2).flatMap(_.tagDefault)
     )
   }
 

@@ -34,7 +34,7 @@ private[release] object CoreVersionResolver {
       resolveSettings: State => ResolvedSettings = resolveCurrentSettings
   ): VersionPlan = {
     val settings = resolveSettings(state)
-    val plan     = CoreReleasePlanner.current(state)
+    val plan     = CoreReleasePlan.current(state)
 
     VersionPlan(
       versionFile = settings.versionFile,

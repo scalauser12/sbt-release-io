@@ -2,12 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import io.release.internal.{
-  CoreReleasePlan,
-  CoreReleasePlanner,
-  CoreVersionResolver,
-  ExecutionFlags
-}
+import io.release.internal.{CoreReleasePlan, CoreVersionResolver, ExecutionFlags}
 import io.release.TestSupport
 import org.specs2.mutable.Specification
 
@@ -21,7 +16,7 @@ class VersionStepsSpec extends Specification {
     "use live version settings even when a startup plan is attached" in withTempDir { dir =>
       val resolvedFile = new File(dir, "resolved-version.sbt")
       val state        =
-        CoreReleasePlanner.attach(
+        CoreReleasePlan.attach(
           TestSupport.dummyState(dir),
           CoreReleasePlan(
             flags = ExecutionFlags(
@@ -61,7 +56,7 @@ class VersionStepsSpec extends Specification {
         val fallbackFile = new File(dir, "fallback-version.sbt")
         var resolverRuns = 0
         val state        =
-          CoreReleasePlanner.attach(
+          CoreReleasePlan.attach(
             TestSupport.dummyState(dir),
             CoreReleasePlan(
               flags = ExecutionFlags(

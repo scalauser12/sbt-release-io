@@ -2,7 +2,7 @@ package io.release
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import io.release.internal.CoreReleasePlanner
+import io.release.internal.CoreReleasePlan
 import io.release.steps.ReleaseSteps
 import sbt.{internal => _, *}
 import sbt.Keys.*
@@ -273,8 +273,8 @@ trait ReleasePluginIOLike[T]
         .remove(_root_.io.release.internal.InternalKeys.executionFlags)
         .remove(_root_.io.release.internal.InternalKeys.coreReleasePlan)
 
-      val plan         = CoreReleasePlanner.build(
-        CoreReleasePlanner.Inputs(
+      val plan         = CoreReleasePlan.build(
+        CoreReleasePlan.Inputs(
           useDefaults = useDefaults,
           skipTests = skipTests,
           skipPublish = skipPublish,
@@ -285,7 +285,7 @@ trait ReleasePluginIOLike[T]
           tagDefault = tagDefaultArg
         )
       )
-      val plannedState = CoreReleasePlanner.attach(cleanState, plan)
+      val plannedState = CoreReleasePlan.attach(cleanState, plan)
 
       val initialCtx = initialContext(
         plannedState,
