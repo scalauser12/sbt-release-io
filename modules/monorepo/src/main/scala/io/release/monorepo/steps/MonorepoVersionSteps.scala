@@ -62,8 +62,14 @@ private[monorepo] object MonorepoVersionSteps {
     execute = (ctx, project) =>
       project.versions match {
         case Some((rel, next)) if rel.nonEmpty && next.nonEmpty =>
-          logInfo(ctx, s"${project.name}: pre-set -> $rel (next: $next)")
-            .as(ctx.updateProject(project.ref)(_.copy(versions = Some((rel, next)))))
+          resolve(ctx.state, project.ref).flatMap { versionInputs =>
+            logInfo(ctx, s"${project.name}: pre-set -> $rel (next: $next)")
+              .as(
+                ctx.updateProject(project.ref)(
+                  _.copy(versionFile = versionInputs.versionFile, versions = Some((rel, next)))
+                )
+              )
+          }
         case _                                                  =>
           resolve(ctx.state, project.ref).flatMap { versionInputs =>
             // In global-version mode with an interactive prompt (not use-defaults),

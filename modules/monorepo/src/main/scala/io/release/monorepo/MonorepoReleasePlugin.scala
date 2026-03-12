@@ -211,7 +211,7 @@ trait MonorepoReleasePluginLike[T]
           ),
           skipTests = plan.flags.skipTests,
           skipPublish = plan.flags.skipPublish,
-          interactive = plan.flags.interactive && !plan.flags.useDefaults,
+          interactive = plan.flags.interactive,
           tagStrategy = flags.tagStrategy
         ).withReleasePlan(plan)
       }
