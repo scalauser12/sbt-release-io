@@ -1,20 +1,20 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.internal.{CoreTagResolver, CoreVersionResolver, GitRuntime, SbtRuntime, TagPlan}
-import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
-import sbt.*
+import io.release.internal.{CoreTagResolver, CoreVersionResolver, SbtRuntime, TagPlan}
+import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
+import sbt.{internal => _, *}
 import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
-import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.Vcs
+
+import _root_.io.release.vcs.Vcs
 
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
 
   val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
-    GitRuntime.detectAndInit(ctx)
+    VcsOps.detectAndInit(ctx)
   }
 
   val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
@@ -26,8 +26,12 @@ private[release] object VcsSteps {
   def validateCleanWorkingDir(
       ctx: ReleaseContext,
       logStartHash: Boolean
-  ): IO[Unit] =
-    GitRuntime.checkCleanWorkingDir(ctx.state).flatMap { result =>
+  ): IO[Unit] = {
+    val checkIO = ctx.vcs match {
+      case Some(vcs) => VcsOps.checkCleanWorkingDir(ctx.state, vcs)
+      case None      => VcsOps.checkCleanWorkingDir(ctx.state)
+    }
+    checkIO.flatMap { result =>
       IO.blocking {
         if (logStartHash)
           ctx.state.log.info(
@@ -36,6 +40,7 @@ private[release] object VcsSteps {
         ()
       }
     }
+  }
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
@@ -52,11 +57,11 @@ private[release] object VcsSteps {
       ctx: ReleaseContext
   ): IO[ReleaseContext] = {
     val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = params
-    val useDefaults                                          = CoreTagResolver.useDefaultsFor(params)
+    val useDefaults                                          = StepHelpers.useDefaults(params.state)
     for {
-      exists <- IO.blocking(vcs.existsTag(tagName))
+      exists <- vcs.existsTag(tagName)
       result <- if (!exists)
-                  GitRuntime.tag(vcs, tagName, tagComment, sign) *>
+                  vcs.tag(tagName, tagComment, sign) *>
                     IO.blocking {
                       val newState = SbtRuntime.appendWithSession(
                         ctx.state,
@@ -111,7 +116,7 @@ private[release] object VcsSteps {
                           s"[release-io] Tag [$tagName] already exists. Overwriting."
                         )
                       ) *>
-                        GitRuntime.tag(vcs, tagName, tagComment, sign) *>
+                        vcs.tag(tagName, tagComment, sign, force = true) *>
                         IO.blocking {
                           val newState = SbtRuntime.appendWithSession(
                             ctx.state,
@@ -144,11 +149,11 @@ private[release] object VcsSteps {
     validate = ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
         for {
-          hasUp <- IO.blocking(vcs.hasUpstream)
-          _     <-
+          hasUp  <- vcs.hasUpstream
+          _      <-
             if (hasUp) IO.unit
             else
-              IO.blocking(vcs.currentBranch).flatMap { branch =>
+              vcs.currentBranch.flatMap { branch =>
                 IO.raiseError(
                   new IllegalStateException(
                     s"[release-io] No tracking branch configured for branch '$branch'. " +
@@ -156,56 +161,53 @@ private[release] object VcsSteps {
                   )
                 )
               }
+          // Best-effort check using local tracking refs (no fetch).
+          // If tracking refs are missing (e.g. remote never fetched), treat as not behind.
+          behind <- vcs.isBehindRemote.handleError(_ => false)
+          _      <-
+            if (!behind) IO.unit
+            else
+              confirmContinue(
+                ctx,
+                prompt =
+                  "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
+                defaultYes = false,
+                abortMessage = "Merge the upstream commits and run release again."
+              )
         } yield ()
       },
     execute = ctx =>
       requireVcs(ctx) { vcs =>
-        for {
-          hasUp  <- IO.blocking(vcs.hasUpstream)
-          result <- if (!hasUp)
-                      for {
-                        branch <- IO.blocking(vcs.currentBranch)
-                        r      <-
-                          IO.blocking(
-                            ctx.state.log.info(
-                              s"[release-io] Changes were NOT pushed, because no upstream branch is configured for branch '$branch'."
-                            )
-                          ).as(ctx)
-                      } yield r
-                    else
-                      validatePushRemote(ctx, vcs) *>
-                        (if (!ctx.interactive)
-                           GitRuntime.pushChanges(vcs).as(ctx)
-                         else {
-                           val decisionIO =
-                             if (useDefaults(ctx.state)) IO.pure(true)
-                             else
-                               askYesNo(
-                                 prompt = "Push changes to the remote repository (y/n)? [y] ",
-                                 defaultYes = true
-                               )
+        validatePushRemote(ctx, vcs) *>
+          (if (!ctx.interactive)
+             vcs.pushChanges.as(ctx)
+           else {
+             val decisionIO =
+               if (useDefaults(ctx.state)) IO.pure(true)
+               else
+                 askYesNo(
+                   prompt = "Push changes to the remote repository (y/n)? [y] ",
+                   defaultYes = true
+                 )
 
-                           decisionIO.flatMap {
-                             case true  => GitRuntime.pushChanges(vcs).as(ctx)
-                             case false =>
-                               IO.blocking(
-                                 ctx.state.log.warn(
-                                   "[release-io] Remember to push the changes yourself!"
-                                 )
-                               ).as(ctx)
-                           }
-                         })
-        } yield result
+             decisionIO.flatMap {
+               case true  => vcs.pushChanges.as(ctx)
+               case false =>
+                 IO.blocking(
+                   ctx.state.log.warn(
+                     "[release-io] Remember to push the changes yourself!"
+                   )
+                 ).as(ctx)
+             }
+           })
       }
   )
 
   private def validatePushRemote(ctx: ReleaseContext, vcs: Vcs): IO[Unit] =
     for {
-      remote         <- IO.blocking(vcs.trackingRemote)
-      remoteExitCode <- IO.blocking {
-                          ctx.state.log.info(s"[release-io] Checking remote [$remote] ...")
-                          vcs.checkRemote(remote).!
-                        }
+      remote         <- vcs.trackingRemote
+      _              <- IO.blocking(ctx.state.log.info(s"[release-io] Checking remote [$remote] ..."))
+      remoteExitCode <- vcs.checkRemote(remote)
       _              <-
         if (remoteExitCode == 0) IO.unit
         else
@@ -214,17 +216,6 @@ private[release] object VcsSteps {
             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
             defaultYes = false,
             abortMessage = "Aborting the release due to remote check failure."
-          )
-      behindRemote   <- IO.blocking(vcs.isBehindRemote)
-      _              <-
-        if (!behindRemote) IO.unit
-        else
-          confirmContinue(
-            ctx,
-            prompt =
-              "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
-            defaultYes = false,
-            abortMessage = "Merge the upstream commits and run release again."
           )
     } yield ()
 

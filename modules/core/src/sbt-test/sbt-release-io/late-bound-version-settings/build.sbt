@@ -2,7 +2,7 @@ name := "late-bound-version-settings"
 
 scalaVersion := "2.12.18"
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 enablePlugins(LateBoundVersionPlugin)
 

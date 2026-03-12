@@ -18,11 +18,11 @@ object LateBoundVersionPlugin extends ReleasePluginIOLike[Unit] {
           val runtimeVersion = baseDir / "version.properties"
           val updatedState   = extracted.appendWithSession(
             Seq(
-              sbtrelease.ReleasePlugin.autoImport.releaseVersionFile := runtimeVersion,
-              releaseIOReadVersion := { file =>
+              _root_.io.release.ReleaseIO.releaseIOVersionFile := runtimeVersion,
+              releaseIOReadVersion                             := { file =>
                 IO.blocking(sbt.IO.read(file).trim)
               },
-              releaseIOWriteVersion := { (_, version) =>
+              releaseIOWriteVersion                            := { (_, version) =>
                 IO.pure(version + "\n")
               }
             ),

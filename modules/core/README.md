@@ -11,7 +11,6 @@ An sbt plugin that wraps [sbt-release](https://github.com/sbt/sbt-release) with 
 - **Flexible step composition**: Create custom release steps using cats-effect IO
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
-- **Upstream-style helper commands**: Run individual release phases with `release-*` commands
 - **Optional interactive mode**: Enable upstream-like prompts for versions, confirmation, and push
 - **Configurable**: Respects all upstream sbt-release settings (commit messages, signing, version bumping, etc.)
 
@@ -50,22 +49,6 @@ sbt "releaseIO release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 
 # Combine options
 sbt "releaseIO with-defaults skip-tests release-version 1.0.0"
-```
-
-### Extra Commands
-
-The plugin also provides upstream-style helper commands for running individual phases:
-
-```bash
-sbt release-vcs-checks
-sbt release-check-snapshot-dependencies
-sbt release-inquire-versions
-sbt release-set-release-version
-sbt release-set-next-version
-sbt release-commit-release-version
-sbt release-commit-next-version
-sbt release-tag-release
-sbt release-push-changes
 ```
 
 ### Configuration
@@ -259,7 +242,7 @@ Example: rewrite version settings before the built-in `inquire-versions` step:
 import sbt.*
 import _root_.cats.effect.{IO, Resource}
 import _root_.io.release.*
-import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
+import _root_.io.release.ReleaseIO.releaseIOVersionFile
 
 object MyReleasePlugin extends ReleasePluginIOLike[Unit] {
   override def trigger               = noTrigger
@@ -272,7 +255,7 @@ object MyReleasePlugin extends ReleasePluginIOLike[Unit] {
         val extracted    = Project.extract(ctx.state)
         val updatedState = extracted.appendWithSession(
           Seq(
-            releaseVersionFile := baseDirectory.value / "version.properties",
+            releaseIOVersionFile := baseDirectory.value / "version.properties",
             releaseIOReadVersion := { file =>
               IO.blocking(sbt.IO.read(file).trim)
             },
@@ -430,24 +413,22 @@ releaseIOProcess := ReleaseSteps.defaults.flatMap {
 }
 ```
 
-### Upstream sbt-release Settings
+### Settings
 
-All upstream sbt-release settings are supported:
+All release settings use the `releaseIO` prefix:
 
 ```scala
-import sbtrelease.ReleasePlugin.autoImport._
-
-releaseVersionBump := sbtrelease.Version.Bump.Minor
-releaseTagName := s"v${version.value}"
-releaseTagComment := s"Releasing ${version.value}"
-releaseCommitMessage := s"Setting version to ${version.value}"
-releaseNextCommitMessage := s"Setting version to ${version.value}"
-releaseIgnoreUntrackedFiles := false
-releaseVcsSign := false
-releaseVcsSignOff := false
-releaseVersionFile := baseDirectory.value / "version.sbt"
-releaseUseGlobalVersion := true
-releasePublishArtifactsAction := publish.value
+releaseIOVersionBump := _root_.io.release.version.Version.Bump.Minor
+releaseIOTagName := s"v${releaseIORuntimeVersion.value}"
+releaseIOTagComment := s"Releasing ${releaseIORuntimeVersion.value}"
+releaseIOCommitMessage := s"Setting version to ${releaseIORuntimeVersion.value}"
+releaseIONextCommitMessage := s"Setting version to ${releaseIORuntimeVersion.value}"
+releaseIOIgnoreUntrackedFiles := false
+releaseIOVcsSign := false
+releaseIOVcsSignOff := false
+releaseIOVersionFile := baseDirectory.value / "version.sbt"
+releaseIOUseGlobalVersion := true
+releaseIOPublishArtifactsAction := publish.value
 ```
 
 ## Default Release Steps

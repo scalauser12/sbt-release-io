@@ -5,12 +5,11 @@ import scala.util.control.NonFatal
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 
-import _root_.io.release.ReleaseKeys
 import _root_.io.release.ReleasePluginIO
 import _root_.io.release.internal.ExecutionFlags
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
@@ -46,6 +45,7 @@ import _root_.io.release.monorepo.internal.{
   */
 trait MonorepoReleasePluginLike[T]
     extends AutoPlugin
+    with _root_.io.release.monorepo.MonorepoReleaseIO
     with _root_.io.release.PluginLikeSupport[MonorepoStepIO, T] {
 
   override def requires: Plugins = ReleasePluginIO
@@ -217,7 +217,7 @@ trait MonorepoReleasePluginLike[T]
           skipPublish = plan.flags.skipPublish,
           interactive = plan.flags.interactive && !plan.flags.useDefaults,
           tagStrategy = flags.tagStrategy
-        )
+        ).withReleasePlan(plan)
       }
     }
 
@@ -237,35 +237,54 @@ trait MonorepoReleasePluginLike[T]
 
   protected def doMonorepoRelease(state: State, args: Seq[MonorepoArg]): State =
     try {
-      val extracted      = Project.extract(state)
-      val flags          = parseFlags(args, extracted)
-      val decoratedState = state
-        .put(ReleaseKeys.useDefaults, flags.useDefaults)
-        .put(ReleaseKeys.skipTests, flags.skipTests)
-        .put(ReleaseKeys.cross, flags.crossBuild)
-      val plannedEither  =
-        MonorepoReleasePlanner.build(decoratedState, plannerInputs(args, flags)).unsafeRunSync()
+      val extracted = Project.extract(state)
+      val flags     = parseFlags(args, extracted)
 
-      plannedEither match {
-        case Left(failedState) => failedState
-        case Right(plan)       =>
-          val plannedState = MonorepoReleasePlanner.attach(decoratedState, plan)
-          val stepFns      = monorepoReleaseProcess(plannedState)
-          val initialCtx   = buildContext(plannedState, flags, plan).unsafeRunSync()
+      val cleanState = state
+        .remove(_root_.io.release.ReleaseKeys.runtimeVersionOverride)
+        .remove(_root_.io.release.ReleaseKeys.versions)
+        .remove(_root_.io.release.internal.InternalKeys.executionFlags)
+        .remove(_root_.io.release.internal.InternalKeys.coreReleasePlan)
+        .remove(internal.MonorepoInternalKeys.globalVersionWritten)
 
-          logReleaseStart(plannedState, stepFns.length, initialCtx.projects.length, flags)
+      val program: IO[State] = for {
+        plannedEither <- MonorepoReleasePlanner.build(cleanState, plannerInputs(args, flags))
+        result        <- plannedEither match {
+                           case Left(failedState) => IO.pure(failedState)
+                           case Right(plan)       =>
+                             val plannedState =
+                               cleanState.put(
+                                 _root_.io.release.internal.InternalKeys.executionFlags,
+                                 plan.flags
+                               )
+                             val stepFns      = monorepoReleaseProcess(plannedState)
+                             for {
+                               initialCtx <- buildContext(plannedState, flags, plan)
+                               _          <- IO.blocking(
+                                               logReleaseStart(
+                                                 plannedState,
+                                                 stepFns.length,
+                                                 initialCtx.projects.length,
+                                                 flags
+                                               )
+                                             )
+                               finalCtx   <- resource.use { t =>
+                                               val steps = stepFns.map(_(t))
+                                               MonorepoStepIO.compose(steps, flags.crossBuild)(
+                                                 initialCtx
+                                               )
+                                             }
+                               _          <- IO.blocking(
+                                               finalCtx.state.log.info(
+                                                 "[release-io-monorepo] Monorepo release completed successfully!"
+                                               )
+                                             )
+                             } yield finalCtx.state
+                         }
+      } yield result
 
-          val program = resource.use { t =>
-            val steps = stepFns.map(_(t))
-            MonorepoStepIO.compose(steps, flags.crossBuild)(initialCtx)
-          }
-
-          val finalCtx = program.unsafeRunSync()
-          finalCtx.state.log.info(
-            "[release-io-monorepo] Monorepo release completed successfully!"
-          )
-          finalCtx.state
-      }
+      // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
+      program.unsafeRunSync()
     } catch {
       case NonFatal(e) =>
         state.log.error(

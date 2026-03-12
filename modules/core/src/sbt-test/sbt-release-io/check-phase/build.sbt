@@ -4,7 +4,7 @@ import _root_.io.release.steps.ReleaseSteps
 
 name                        := "check-phase-test"
 scalaVersion                := "2.12.18"
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 // Step whose validation always fails; execute creates a marker file to prove it ran
 val stepWithFailingCheck = ReleaseStepIO(

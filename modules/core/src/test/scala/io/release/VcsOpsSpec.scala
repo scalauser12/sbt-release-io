@@ -3,12 +3,10 @@ package io.release
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
 import org.specs2.mutable.Specification
-import sbtrelease.Vcs
+import _root_.io.release.vcs.Vcs
 
 import java.io.File
 import java.nio.file.Files
-import scala.sys.process.Process
-
 class VcsOpsSpec extends Specification with CatsEffect {
 
   "VcsOps.detectVcsFromBase" should {
@@ -90,7 +88,7 @@ class VcsOpsSpec extends Specification with CatsEffect {
   private val gitRepoResource: Resource[IO, File] =
     tempDirResource.evalMap { dir =>
       IO.blocking {
-        initGitRepo(dir)
+        TestSupport.initGitRepo(dir)
         dir
       }
     }
@@ -99,23 +97,18 @@ class VcsOpsSpec extends Specification with CatsEffect {
     gitRepoResource.evalMap { repo =>
       IO.blocking {
         sbt.IO.write(new File(repo, "file.txt"), "initial")
-        runGit(repo, "add", ".")
-        runGit(repo, "commit", "-m", "Initial commit")
-        val vcs = Vcs
-          .detect(repo)
-          .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-        (repo, vcs)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        repo
+      }.flatMap { r =>
+        Vcs.detect(r).flatMap {
+          case Some(vcs) => IO.pure((r, vcs))
+          case None      =>
+            IO.raiseError(
+              new RuntimeException(s"Failed to detect VCS in ${r.getAbsolutePath}")
+            )
+        }
       }
     }
-
-  private def initGitRepo(repo: File): Unit = {
-    runGit(repo, "init")
-    runGit(repo, "config", "user.email", "test@example.com")
-    runGit(repo, "config", "user.name", "Test User")
-    ()
-  }
-
-  private def runGit(repo: File, args: String*): String =
-    Process(Seq("git") ++ args, repo).!!
 
 }

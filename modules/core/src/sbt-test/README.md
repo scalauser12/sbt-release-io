@@ -14,7 +14,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ## Available Tests
 
 ### check-phase
-- Verifies that check-phase failures prevent action execution
+- Verifies that validation-phase failures prevent step execution
 
 ### command-line-version-numbers
 - Specifies release and next versions via `release-version` / `next-version` args
@@ -62,15 +62,6 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies exit codes from `releaseIO` (0 for success, 1 for failure)
 - Tests both `fromCommand` and `fromCommandAndRemaining` step factories
 
-### extra-commands
-- Verifies upstream-style helper commands are registered
-- Covers `release-vcs-checks`, version inquire/set/commit, and tagging commands
-- Ensures command chaining works via state attributes between commands
-
-### extra-commands-individual
-- Runs each standalone release command in isolation
-- Verifies state flows correctly between commands (inquire → set → commit → tag → etc.)
-
 ### fail-test
 - Verifies that failing tests abort the release before later steps execute
 - Checks that a marker file is not created when tests fail
@@ -104,8 +95,8 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Multi-project setup with one passing and one failing test
 
 ### resource-step-with-check
-- Tests `resourceStepWithCheck` in a custom plugin
-- Verifies both check and action phases run for resource-aware steps
+- Tests `resourceStepWithValidation` in a custom plugin
+- Verifies both validate and execute phases run for resource-aware steps
 
 ### simple
 - Tests the basic release workflow end-to-end

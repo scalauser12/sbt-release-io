@@ -4,7 +4,7 @@ lazy val root = (project in file("."))
     name                        := "publish-multi-project-test",
     scalaVersion                := "2.12.18",
     publishTo                   := Some(Resolver.file("file", new File("."))),
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
     releaseIOProcess            := releaseIOProcess.value.filterNot(_.name == "push-changes")
   )
 

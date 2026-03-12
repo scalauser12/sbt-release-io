@@ -1,18 +1,17 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name         := "custom-tag-test"
 scalaVersion := "2.12.18"
 
-// Custom tag name with prefix (use runtimeVersion which is evaluated at tag time)
-import _root_.sbtrelease.ReleasePlugin.runtimeVersion
-releaseTagName := s"release-${runtimeVersion.value}"
+// Custom tag name with prefix (version is evaluated at tag time)
+releaseIOTagName := s"release-${releaseIORuntimeVersion.value}"
 
 // Skip push and publish steps in tests
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
   step.name == "push-changes" || step.name == "publish-artifacts"
 }
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 val checkCustomTag = taskKey[Unit]("Check that custom tag was created")
 checkCustomTag := {

@@ -7,10 +7,10 @@ import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.monorepo.internal.MonorepoTagResolver
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.{required, runProcess}
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.*
-import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.Vcs
+
+import _root_.io.release.vcs.Vcs
 
 import scala.sys.process.Process
 
@@ -25,43 +25,43 @@ private[monorepo] object MonorepoVcsSteps {
 
   private def resolveGitPushTarget(vcs: Vcs): IO[GitPushTarget] =
     for {
-      resolved <- IO.blocking {
-                    val localBranch = vcs.currentBranch
-                    val remote      = vcs.trackingRemote
-                    val upstreamRef =
-                      Process(
-                        Seq(
-                          "git",
-                          "rev-parse",
-                          "--abbrev-ref",
-                          "--symbolic-full-name",
-                          "@{upstream}"
-                        ),
-                        vcs.baseDir
-                      ).!!.trim
-
-                    val remotePrefix = s"$remote/"
-                    if (!upstreamRef.startsWith(remotePrefix))
-                      Left(
-                        s"Upstream '$upstreamRef' for branch '$localBranch' does not match tracking remote '$remote'."
-                      )
-                    else {
-                      val upstreamBranch = upstreamRef.stripPrefix(remotePrefix)
-                      if (upstreamBranch.isEmpty)
-                        Left(
-                          s"Unable to resolve upstream branch from '$upstreamRef' for tracking remote '$remote'."
-                        )
-                      else
-                        Right(
-                          GitPushTarget(
-                            remote = remote,
-                            localBranch = localBranch,
-                            upstreamBranch = upstreamBranch
-                          )
-                        )
-                    }
-                  }
-      target   <- IO.fromEither(resolved.left.map(new IllegalStateException(_)))
+      localBranch <- vcs.currentBranch
+      remote      <- vcs.trackingRemote
+      upstreamRef <- IO.blocking(
+                       Process(
+                         Seq(
+                           "git",
+                           "rev-parse",
+                           "--abbrev-ref",
+                           "--symbolic-full-name",
+                           "@{upstream}"
+                         ),
+                         vcs.baseDir
+                       ).!!.trim
+                     )
+      resolved     = {
+        val remotePrefix = s"$remote/"
+        if (!upstreamRef.startsWith(remotePrefix))
+          Left(
+            s"Upstream '$upstreamRef' for branch '$localBranch' does not match tracking remote '$remote'."
+          )
+        else {
+          val upstreamBranch = upstreamRef.stripPrefix(remotePrefix)
+          if (upstreamBranch.isEmpty)
+            Left(
+              s"Unable to resolve upstream branch from '$upstreamRef' for tracking remote '$remote'."
+            )
+          else
+            Right(
+              GitPushTarget(
+                remote = remote,
+                localBranch = localBranch,
+                upstreamBranch = upstreamBranch
+              )
+            )
+        }
+      }
+      target      <- IO.fromEither(resolved.left.map(new IllegalStateException(_)))
     } yield target
 
   val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
@@ -88,13 +88,13 @@ private[monorepo] object MonorepoVcsSteps {
       sign: Boolean,
       label: String
   ): IO[Unit] =
-    IO.blocking(vcs.existsTag(tagName)).flatMap {
+    vcs.existsTag(tagName).flatMap {
       case true  =>
         IO.raiseError(
           new IllegalStateException(s"Tag [$tagName] already exists for $label. Aborting.")
         )
       case false =>
-        runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'")
+        vcs.tag(tagName, comment, sign = sign)
     }
 
   private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
@@ -104,6 +104,8 @@ private[monorepo] object MonorepoVcsSteps {
         required(ctx.vcs, "VCS not initialized") { vcs =>
           required(project.versions, s"Versions not set for ${project.name}") {
             case (releaseVer, _) =>
+              // Resolved per-project: tag name/comment depend on releaseIORuntimeVersion
+              // which varies by project.
               IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
                 val tagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
@@ -159,81 +161,76 @@ private[monorepo] object MonorepoVcsSteps {
     validate = ctx =>
       ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
         for {
-          hasUpAndBranch <- IO.blocking((vcs.hasUpstream, vcs.currentBranch))
-          (hasUp, branch) = hasUpAndBranch
-          _              <-
+          hasUp  <- vcs.hasUpstream
+          branch <- vcs.currentBranch
+          _      <-
             IO.raiseUnless(hasUp)(
               new IllegalStateException(
                 s"No tracking branch configured for '$branch'. " +
                   "Set up a remote tracking branch or remove pushChanges from the release process."
               )
             )
+          // Best-effort check using local tracking refs (no fetch).
+          // If tracking refs are missing (e.g. remote never fetched), treat as not behind.
+          behind <- vcs.isBehindRemote.handleError(_ => false)
+          _      <-
+            IO.raiseWhen(behind)(
+              new IllegalStateException(
+                "Upstream has unmerged commits. Merge first or remove pushChanges from process."
+              )
+            )
         } yield ()
       },
     execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        for {
-          hasUp  <- IO.blocking(vcs.hasUpstream)
-          result <-
-            if (!hasUp)
-              logWarn(ctx, "No upstream branch, changes were NOT pushed.")
-            else
-              validatePushRemote(vcs) *> (vcs.commandName match {
-                case "git" =>
-                  val tags = ctx.currentProjects.flatMap(_.tagName).distinct
-                  for {
-                    pushTarget <- resolveGitPushTarget(vcs)
-                    _          <- logInfo(
-                                    ctx,
-                                    s"Pushing branch ${pushTarget.localBranch} " +
-                                      s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
-                                  )
-                    _          <- runProcess(
-                                    Process(
-                                      Seq(
-                                        "git",
-                                        "push",
-                                        pushTarget.remote,
-                                        s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                                      ),
-                                      vcs.baseDir
-                                    ),
-                                    s"git push ${pushTarget.remote} ${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                                  )
-                    _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
-                                    acc *>
-                                      logInfo(ctx, s"Pushing tag $tag").void *>
-                                      runProcess(
-                                        Process(
-                                          Seq("git", "push", pushTarget.remote, tag),
-                                          vcs.baseDir
-                                        ),
-                                        s"git push tag '$tag'"
-                                      )
-                                  }
-                  } yield ctx
+        validatePushRemote(vcs) *> (vcs.commandName match {
+          case "git" =>
+            val tags = ctx.currentProjects.flatMap(_.tagName).distinct
+            for {
+              pushTarget <- resolveGitPushTarget(vcs)
+              _          <- logInfo(
+                              ctx,
+                              s"Pushing branch ${pushTarget.localBranch} " +
+                                s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
+                            )
+              _          <- runProcess(
+                              Process(
+                                Seq(
+                                  "git",
+                                  "push",
+                                  pushTarget.remote,
+                                  s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
+                                ),
+                                vcs.baseDir
+                              ),
+                              s"git push ${pushTarget.remote} ${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
+                            )
+              _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
+                              acc *>
+                                logInfo(ctx, s"Pushing tag $tag").void *>
+                                runProcess(
+                                  Process(
+                                    Seq("git", "push", pushTarget.remote, tag),
+                                    vcs.baseDir
+                                  ),
+                                  s"git push tag '$tag'"
+                                )
+                            }
+            } yield ctx
 
-                case _ =>
-                  runProcess(vcs.pushChanges, "vcs push").as(ctx)
-              })
-        } yield result
+          case _ =>
+            vcs.pushChanges.as(ctx)
+        })
       }
   )
 
   private def validatePushRemote(vcs: Vcs): IO[Unit] =
     for {
-      remote     <- IO.blocking(vcs.trackingRemote)
-      remoteCode <- IO.blocking(vcs.checkRemote(remote).!)
+      remote     <- vcs.trackingRemote
+      remoteCode <- vcs.checkRemote(remote)
       _          <- IO.raiseUnless(remoteCode == 0)(
                       new IllegalStateException("Remote check failed. Aborting release.")
                     )
-      behind     <- IO.blocking(vcs.isBehindRemote)
-      _          <-
-        IO.raiseWhen(behind)(
-          new IllegalStateException(
-            "Upstream has unmerged commits. Merge first or remove pushChanges from process."
-          )
-        )
     } yield ()
 
 }

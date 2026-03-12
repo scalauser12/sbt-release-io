@@ -4,7 +4,7 @@ import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Ref, Resource}
 import org.specs2.mutable.Specification
 import sbt.AttributeKey
-import sbtrelease.Compat
+import io.release.internal.SbtCompat
 
 import java.nio.file.Files
 
@@ -85,7 +85,7 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
           val injectFailure = ReleaseStepIO.io("inject-failure-command") { c =>
             observed
               .update(_ :+ "execute1")
-              .as(c.copy(state = c.state.copy(remainingCommands = Compat.FailureCommand :: Nil)))
+              .as(c.copy(state = c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)))
           }
 
           val skipped = ReleaseStepIO.io("skipped") { c =>

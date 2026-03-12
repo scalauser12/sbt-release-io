@@ -87,7 +87,7 @@ object CustomMonorepoStepExamples {
       ctx.vcs match {
         case Some(vcs) =>
           for {
-            branch <- IO.blocking(vcs.currentBranch)
+            branch <- vcs.currentBranch
             result <- if (branch == "main" || branch == "master") IO.pure(ctx)
                       else
                         IO.raiseError(

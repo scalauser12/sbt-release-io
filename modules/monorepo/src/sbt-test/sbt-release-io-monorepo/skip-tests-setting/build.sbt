@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoStepIO
 
 val releaseTestTask = taskKey[Unit]("Fixture-local test task used by the monorepo release step")
@@ -52,7 +52,7 @@ lazy val root = (project in file("."))
       .map(step => if (step.name == "run-tests") runReleaseTests else step)
       .filterNot(step => step.name == "push-changes" || step.name == "publish-artifacts"),
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkAll := {
       // Verify tests did NOT run (no marker files should exist)

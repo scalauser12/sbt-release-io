@@ -1,5 +1,4 @@
-import scala.sys.process._
-import sbtrelease.ReleasePlugin.autoImport._
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
@@ -24,8 +23,8 @@ lazy val root = (project in file("."))
 
     releaseIOMonorepoUseGlobalVersion := true,
 
-    // In global mode, resolveVersionFile uses releaseVersionFile (from sbt-release)
-    releaseVersionFile := file("version.properties"),
+    // In global mode, resolveVersionFile uses releaseIOVersionFile
+    releaseIOVersionFile := file("version.properties"),
 
     // Custom reader: parse app.version=x.y.z from properties file
     releaseIOMonorepoReadVersion := { (f: File) =>
@@ -60,7 +59,7 @@ lazy val root = (project in file("."))
       step.name == "run-clean" || step.name == "run-tests"
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkAll := {
       // Check version.properties has next version and preserved app.name

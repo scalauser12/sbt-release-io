@@ -24,7 +24,7 @@ lazy val root = (project in file("."))
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
     checkLateBoundSelection     := {
       val tags        = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toSet
       val coreVersion = IO.read(file("core/version.sbt"))

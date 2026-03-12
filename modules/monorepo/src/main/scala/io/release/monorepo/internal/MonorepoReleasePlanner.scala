@@ -33,17 +33,6 @@ private[monorepo] object MonorepoReleasePlanner {
       else SelectionMode.DetectChanges
   }
 
-  def attach(state: State, plan: MonorepoReleasePlan): State =
-    state.put(MonorepoInternalKeys.monorepoReleasePlan, plan)
-
-  def current(state: State): Option[MonorepoReleasePlan] =
-    state.get(MonorepoInternalKeys.monorepoReleasePlan)
-
-  def require(state: State): IO[MonorepoReleasePlan] =
-    IO.fromOption(current(state))(
-      new IllegalStateException("Monorepo release plan not initialized")
-    )
-
   def build(state: State, inputs: Inputs): IO[Either[State, MonorepoReleasePlan]] =
     validateOverrideInputs(inputs) match {
       case Left(message)    =>

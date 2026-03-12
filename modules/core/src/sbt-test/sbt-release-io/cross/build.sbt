@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import sbt.IO
 import _root_.io.release.ReleaseStepIO
 
@@ -35,7 +35,7 @@ releaseIOProcess := releaseIOProcess.value
     else Seq(step)
   }
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")
 checkGitTag := {

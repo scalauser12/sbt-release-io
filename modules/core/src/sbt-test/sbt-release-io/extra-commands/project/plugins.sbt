@@ -1,4 +1,0 @@
-sys.props.get("plugin.version") match {
-  case Some(ver) => addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % ver)
-  case _         => sys.error("Plugin version not set")
-}

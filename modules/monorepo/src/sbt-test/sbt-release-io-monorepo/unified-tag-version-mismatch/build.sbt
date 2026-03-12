@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
@@ -22,7 +22,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoProcess     := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts"
     },
-    releaseIgnoreUntrackedFiles  := true,
+    releaseIOIgnoreUntrackedFiles  := true,
     checkFailureArtifacts        := {
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
       assert(

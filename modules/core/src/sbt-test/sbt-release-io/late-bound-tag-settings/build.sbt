@@ -4,7 +4,7 @@ name := "late-bound-tag-settings"
 
 scalaVersion := "2.12.18"
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 enablePlugins(LateBoundTagPlugin)
 

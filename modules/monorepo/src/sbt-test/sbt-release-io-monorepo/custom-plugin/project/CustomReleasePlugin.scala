@@ -1,7 +1,7 @@
 import _root_.cats.effect.{IO, Resource}
 import _root_.io.release.monorepo.*
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
-import sbt._
+import sbt.*
 
 object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
   override def trigger = noTrigger

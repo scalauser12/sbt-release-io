@@ -54,7 +54,7 @@ lazy val root = (project in file("."))
 
       Seq(detectOrSelectProjects, publishArtifacts)
     },
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
     expectPublishToEvalFailure  := {
       val sbtVersionProp    = sbtVersion.value
       val pluginVersionProp =

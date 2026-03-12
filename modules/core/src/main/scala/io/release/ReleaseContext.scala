@@ -1,8 +1,8 @@
 package io.release
 
-import sbt.*
+import _root_.io.release.vcs.Vcs
+import sbt.{internal => _, *}
 import sbt.internal.util.AttributeMap
-import sbtrelease.Vcs
 
 /** Immutable context threaded through each release step during validation and execution.
   *
@@ -21,7 +21,9 @@ import sbtrelease.Vcs
   */
 case class ReleaseContext(
     state: State,
-    versions: Option[(String, String)] = None, // (releaseVersion, nextVersion)
+    // (releaseVersion, nextVersion) — also mirrored on State via ReleaseKeys.versions
+    // so that sbt settings can read it; see ReleaseKeys.versions Scaladoc.
+    versions: Option[(String, String)] = None,
     vcs: Option[Vcs] = None,
     skipTests: Boolean = false,
     skipPublish: Boolean = false,

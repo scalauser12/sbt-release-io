@@ -1,10 +1,10 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.internal.CoreReleasePlanner
-import io.release.{ReleaseContext, ReleaseKeys}
+import io.release.ReleaseContext
+import io.release.internal.InternalKeys
+import _root_.io.release.vcs.Vcs
 import sbt.{EvaluateTask, Incomplete, Result}
-import sbtrelease.Vcs
 import sbt.internal.Aggregation.KeyValue
 
 import scala.sys.process.*
@@ -13,11 +13,7 @@ import scala.sys.process.*
 private[release] object StepHelpers {
 
   def useDefaults(state: sbt.State): Boolean =
-    CoreReleasePlanner
-      .current(state)
-      .map(_.flags.useDefaults)
-      .orElse(state.get(ReleaseKeys.useDefaults))
-      .getOrElse(false)
+    state.get(InternalKeys.executionFlags).exists(_.useDefaults)
 
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
     opt.fold(IO.raiseError[B](new IllegalStateException(error)))(f)
@@ -67,6 +63,16 @@ private[release] object StepHelpers {
         else IO.raiseError(new IllegalStateException(abortMessage))
       }
     }
+  }
+
+  /** Parse raw version input: trim whitespace, return default if empty, validate otherwise. */
+  def parseVersionInput(raw: String, default: String): IO[String] = {
+    val input = Option(raw).map(_.trim).getOrElse("")
+    if (input.isEmpty) IO.pure(default)
+    else
+      IO.fromOption(_root_.io.release.version.Version(input).map(_.render))(
+        new IllegalArgumentException(s"Invalid version format: '$input'")
+      )
   }
 
   def aggregatedTaskValues[T](

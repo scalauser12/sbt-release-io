@@ -4,7 +4,7 @@ scalaVersion := "2.12.18"
 // No publishTo configured, but publish/skip bypasses the check
 publish / skip := true
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
   step.name == "push-changes"

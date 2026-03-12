@@ -3,15 +3,15 @@ package io.release.monorepo
 import _root_.io.release.internal.{ExecutionEngine, FailureHandling, SbtRuntime}
 import cats.effect.IO
 import io.release.monorepo.steps.MonorepoStepHelpers
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.*
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary. */
 private[monorepo] object MonorepoComposer {
 
-  private val LogPrefix         = "[release-io-monorepo]"
-  private val SelectionBoundary = "detect-or-select-projects"
-  private val FailureMessage    = "Monorepo release process failed"
+  private val LogPrefix                   = "[release-io-monorepo]"
+  private[monorepo] val SelectionBoundary = "detect-or-select-projects"
+  private val FailureMessage              = "Monorepo release process failed"
 
   def compose(steps: Seq[MonorepoStepIO], crossBuild: Boolean = false)(
       initialCtx: MonorepoContext
@@ -45,7 +45,10 @@ private[monorepo] object MonorepoComposer {
   private def splitAtBoundary(
       steps: Seq[MonorepoStepIO]
   ): Option[(Seq[MonorepoStepIO], Seq[MonorepoStepIO])] = {
-    val boundaryIndex = steps.indexWhere(_.name == SelectionBoundary)
+    val boundaryIndex = steps.indexWhere {
+      case g: MonorepoStepIO.Global => g.isSelectionBoundary
+      case _                        => false
+    }
     if (boundaryIndex < 0) None
     else Some(steps.splitAt(boundaryIndex + 1))
   }
@@ -115,15 +118,14 @@ private[monorepo] object MonorepoComposer {
       step: MonorepoStepIO,
       crossBuild: Boolean,
       ctx: MonorepoContext
-  ): IO[MonorepoContext] =
-    {
-      val actions: Seq[MonorepoContext => IO[MonorepoContext]] =
-        Seq((currentCtx: MonorepoContext) => executeStep(step, crossBuild, currentCtx))
+  ): IO[MonorepoContext] = {
+    val actions: Seq[MonorepoContext => IO[MonorepoContext]] =
+      Seq((currentCtx: MonorepoContext) => executeStep(step, crossBuild, currentCtx))
 
-      FailureHandling
-        .runActionPhase(actions)(FailureHandling.armOnFailure(ctx))
-        .map(_.context)
-    }
+    FailureHandling
+      .runActionPhase(actions)(FailureHandling.armOnFailure(ctx))
+      .map(_.context)
+  }
 
   private def executeStep(
       step: MonorepoStepIO,
@@ -219,6 +221,9 @@ private[monorepo] object MonorepoComposer {
             }
           }
           .flatMap(restoreEntry)
+          .handleErrorWith { err =>
+            restoreEntry(ctx).attempt *> IO.raiseError(err)
+          }
     }
   }
 }

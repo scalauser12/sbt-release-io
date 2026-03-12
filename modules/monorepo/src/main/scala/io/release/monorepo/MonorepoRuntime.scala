@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import sbt.*
+import sbt.{internal => _, *}
 
 /** Frequently reused monorepo settings resolved from a single sbt state snapshot. */
 private[monorepo] final case class MonorepoRuntime(

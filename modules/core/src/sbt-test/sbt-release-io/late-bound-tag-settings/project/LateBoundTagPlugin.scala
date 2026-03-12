@@ -16,7 +16,7 @@ object LateBoundTagPlugin extends ReleasePluginIOLike[Unit] {
           val extracted    = Project.extract(ctx.state)
           val updatedState = extracted.appendWithSession(
             Seq(
-              sbtrelease.ReleasePlugin.autoImport.releaseTagName := "late-bound-runtime-tag"
+              _root_.io.release.ReleaseIO.releaseIOTagName := "late-bound-runtime-tag"
             ),
             ctx.state
           )

@@ -1,6 +1,6 @@
-import sbt._
-import sbt.Keys._
-import _root_.io.release._
+import sbt.*
+import sbt.Keys.*
+import _root_.io.release.*
 import _root_.cats.effect.{IO, Resource}
 
 object ResourceStepWithCheckPlugin extends ReleasePluginIOLike[java.io.File] {

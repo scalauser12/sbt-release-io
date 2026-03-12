@@ -1,6 +1,6 @@
 package io.release
 
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.clean
 
 /** Internal sbt-version compatibility shim shared across the core and monorepo modules.

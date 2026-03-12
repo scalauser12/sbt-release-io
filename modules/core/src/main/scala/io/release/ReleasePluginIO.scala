@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import io.release.internal.CoreReleasePlanner
 import io.release.steps.ReleaseSteps
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
@@ -38,7 +38,7 @@ trait ReleasePluginIOLike[T]
     with ReleaseIO
     with PluginLikeSupport[ReleaseStepIO, T] {
 
-  override def requires: Plugins = sbtrelease.ReleasePlugin
+  override def requires: Plugins = sbt.plugins.JvmPlugin
 
   protected def stepName(step: ReleaseStepIO): String = step.name
 
@@ -100,37 +100,65 @@ trait ReleasePluginIOLike[T]
 
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] = Seq(
-    releaseIOProcess      := ReleaseSteps.defaults,
-    releaseIOCrossBuild   := false,
-    releaseIOSkipPublish  := false,
-    releaseIOInteractive  := false,
-    releaseIOReadVersion  := ReleaseSteps.defaultReadVersion,
-    releaseIOWriteVersion := ReleaseSteps.defaultWriteVersion(
-      sbtrelease.ReleasePlugin.autoImport.releaseUseGlobalVersion.value
-    )
-  )
-
-  /** Standalone sbt commands for invoking individual release steps outside the `releaseIO` flow. */
-  protected lazy val releaseExtraCommands: Seq[Command] = Seq(
-    releaseStepCommand("release-vcs-checks", validateOnly(ReleaseSteps.checkCleanWorkingDir)),
-    releaseStepCommand(
-      "release-check-snapshot-dependencies",
-      validateOnly(ReleaseSteps.checkSnapshotDependencies)
+    releaseIOProcess                := ReleaseSteps.defaults,
+    releaseIOCrossBuild             := false,
+    releaseIOSkipPublish            := false,
+    releaseIOInteractive            := false,
+    releaseIOReadVersion            := ReleaseSteps.defaultReadVersion,
+    releaseIOWriteVersion           := ReleaseSteps.defaultWriteVersion(
+      releaseIOUseGlobalVersion.value
     ),
-    releaseStepCommand("release-inquire-versions", executeOnly(ReleaseSteps.inquireVersions)),
-    releaseStepCommand("release-set-release-version", executeOnly(ReleaseSteps.setReleaseVersion)),
-    releaseStepCommand("release-set-next-version", executeOnly(ReleaseSteps.setNextVersion)),
-    releaseStepCommand(
-      "release-commit-release-version",
-      executeOnly(ReleaseSteps.commitReleaseVersion)
-    ),
-    releaseStepCommand("release-commit-next-version", executeOnly(ReleaseSteps.commitNextVersion)),
-    releaseStepCommand("release-tag-release", executeOnly(ReleaseSteps.tagRelease)),
-    releaseStepCommand("release-push-changes", executeOnly(ReleaseSteps.pushChanges))
+    releaseIOVersionFile            := baseDirectory.value / "version.sbt",
+    releaseIOUseGlobalVersion       := true,
+    releaseIOVcsSign                := false,
+    releaseIOVcsSignOff             := false,
+    releaseIOIgnoreUntrackedFiles   := false,
+    releaseIORuntimeVersion         := {
+      val st = sbt.Keys.state.value
+      st.get(ReleaseKeys.runtimeVersionOverride).getOrElse(Keys.version.value)
+    },
+    releaseIOTagName                := s"v${releaseIORuntimeVersion.value}",
+    releaseIOTagComment             := s"Releasing ${releaseIORuntimeVersion.value}",
+    releaseIOCommitMessage          := s"Setting version to ${releaseIORuntimeVersion.value}",
+    releaseIONextCommitMessage      := s"Setting version to ${releaseIORuntimeVersion.value}",
+    releaseIOVersionBump            := _root_.io.release.version.Version.Bump.default,
+    releaseIOVersion                := {
+      val bump = releaseIOVersionBump.value
+      ver =>
+        _root_.io.release.version
+          .Version(ver)
+          .map { v =>
+            bump match {
+              case _root_.io.release.version.Version.Bump.Next =>
+                if (v.isSnapshot) v.withoutSnapshot.render
+                else
+                  throw new IllegalArgumentException(
+                    s"[release-io] Expected snapshot version, got: $ver"
+                  )
+              case _                                           => v.withoutQualifier.render
+            }
+          }
+          .getOrElse(
+            throw new IllegalArgumentException(s"[release-io] Cannot parse version: $ver")
+          )
+    },
+    releaseIONextVersion            := {
+      val bump = releaseIOVersionBump.value
+      ver =>
+        _root_.io.release.version
+          .Version(ver)
+          .map(_.bump(bump).asSnapshot.render)
+          .getOrElse(
+            throw new IllegalArgumentException(s"[release-io] Cannot parse version: $ver")
+          )
+    },
+    ReleaseIOCompat.snapshotDependenciesSetting,
+    releaseIOPublishArtifactsChecks := true,
+    releaseIOPublishArtifactsAction := publish.value
   )
 
   override lazy val projectSettings: Seq[Setting[?]] =
-    baseReleaseSettings ++ defaultSettingsValues ++ Seq(commands ++= releaseExtraCommands)
+    baseReleaseSettings ++ defaultSettingsValues
 
   /** Parse results for command-line arguments. */
   protected sealed trait ReleaseArg
@@ -173,44 +201,6 @@ trait ReleasePluginIOLike[T]
   protected def releaseIOCommand: Setting[?] =
     commands += Command(commandName)(_ => releaseParser)(doReleaseIO)
 
-  /** Strip the validation phase from a step, keeping only execute. */
-  protected def executeOnly(step: ReleaseStepIO): ReleaseStepIO =
-    step.copy(validate = _ => IO.unit)
-
-  /** Strip the execute phase from a step, keeping only validate. */
-  protected def validateOnly(step: ReleaseStepIO): ReleaseStepIO =
-    step.copy(execute = ctx => IO.pure(ctx))
-
-  /** Wrap a release step as a standalone sbt Command. */
-  protected def releaseStepCommand(name: String, step: ReleaseStepIO): Command =
-    Command.command(name) { state =>
-      runExtraReleaseSteps(state, Seq(step))
-    }
-
-  /** Run release steps outside the main `releaseIO` flow (e.g. as standalone commands).
-    * Hydrates the context from existing state attributes set by prior steps.
-    */
-  protected def runExtraReleaseSteps(state: State, steps: Seq[ReleaseStepIO]): State = {
-    import scala.util.control.NonFatal
-    try {
-      val crossEnabled =
-        crossBuildEnabled(state) || state.get(ReleaseKeys.cross).getOrElse(false)
-      val skipTests    = state.get(ReleaseKeys.skipTests).getOrElse(false)
-      val skipPublish  = skipPublishEnabled(state)
-      val interactive  = interactiveEnabled(state)
-      val ctx          = initialContext(state, skipTests, skipPublish, interactive)
-      // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
-      val finalCtx     = ReleaseStepIO.compose(steps, crossEnabled)(ctx).unsafeRunSync()
-      finalCtx.state
-    } catch {
-      case NonFatal(e) =>
-        state.log.error(
-          s"[release-io] Step failed: ${Option(e.getMessage).getOrElse(e.toString)}"
-        )
-        state.fail
-    }
-  }
-
   /** Build the initial release context from the current state.
     *
     * Besides command-line flags, this hydrates versions/VCS from state/settings so partial
@@ -223,14 +213,15 @@ trait ReleasePluginIOLike[T]
       interactive: Boolean
   ): ReleaseContext = {
     val maybeVersions = state.get(ReleaseKeys.versions)
-    val maybeVcs      =
-      try {
-        Project.extract(state).get(sbtrelease.ReleasePlugin.autoImport.releaseVcs)
-      } catch {
-        case scala.util.control.NonFatal(e) =>
-          state.log.debug(s"[release-io] VCS detection skipped: ${e.getMessage}")
-          None
+    // Attempt VCS detection so the initial context has VCS info
+    // even before the initializeVcs step runs.
+    val maybeVcs      = scala.util
+      .Try {
+        val base = Project.extract(state).get(sbt.Keys.thisProject).base
+        _root_.io.release.vcs.Vcs.detect(base).unsafeRunSync()
       }
+      .toOption
+      .flatten
 
     ReleaseContext(
       state = state,
@@ -276,14 +267,13 @@ trait ReleasePluginIOLike[T]
           s"[release-io] Multiple default-tag-exists-answer args provided; using '${tagDefaultArg.get}'"
         )
 
-      val decoratedState = state
-        .put(ReleaseKeys.useDefaults, useDefaults)
-        .put(ReleaseKeys.skipTests, skipTests)
-        .put(ReleaseKeys.cross, crossEnabled)
-        .put(ReleaseKeys.commandLineReleaseVersion, releaseVersionArg)
-        .put(ReleaseKeys.commandLineNextVersion, nextVersionArg)
-        .put(ReleaseKeys.tagDefault, tagDefaultArg)
-      val plan           = CoreReleasePlanner.build(
+      val cleanState = state
+        .remove(ReleaseKeys.runtimeVersionOverride)
+        .remove(ReleaseKeys.versions)
+        .remove(_root_.io.release.internal.InternalKeys.executionFlags)
+        .remove(_root_.io.release.internal.InternalKeys.coreReleasePlan)
+
+      val plan         = CoreReleasePlanner.build(
         CoreReleasePlanner.Inputs(
           useDefaults = useDefaults,
           skipTests = skipTests,
@@ -295,7 +285,7 @@ trait ReleasePluginIOLike[T]
           tagDefault = tagDefaultArg
         )
       )
-      val plannedState   = CoreReleasePlanner.attach(decoratedState, plan)
+      val plannedState = CoreReleasePlanner.attach(cleanState, plan)
 
       val initialCtx = initialContext(
         plannedState,

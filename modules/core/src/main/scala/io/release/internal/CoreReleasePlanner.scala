@@ -1,7 +1,7 @@
 package io.release.internal
 
 import cats.effect.IO
-import sbt.*
+import sbt.{internal => _, *}
 
 /** Builds and stores the typed execution plan for the core release command. */
 private[release] object CoreReleasePlanner {
@@ -34,7 +34,9 @@ private[release] object CoreReleasePlanner {
   }
 
   def attach(state: State, plan: CoreReleasePlan): State =
-    state.put(InternalKeys.coreReleasePlan, plan)
+    state
+      .put(InternalKeys.coreReleasePlan, plan)
+      .put(InternalKeys.executionFlags, plan.flags)
 
   def current(state: State): Option[CoreReleasePlan] =
     state.get(InternalKeys.coreReleasePlan)

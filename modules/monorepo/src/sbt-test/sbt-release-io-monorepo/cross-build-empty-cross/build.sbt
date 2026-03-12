@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoStepIO
 
 val Scala213 = "2.13.12"
@@ -44,7 +44,7 @@ lazy val root = (project in file("."))
     name := "cross-build-empty-cross-test",
 
     releaseIOMonorepoProcess := {
-      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps._
+      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.*
 
       Seq(
         initializeVcs,
@@ -60,7 +60,7 @@ lazy val root = (project in file("."))
       )
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkFailureArtifacts := {
       val coreBase         = file("core/marker")

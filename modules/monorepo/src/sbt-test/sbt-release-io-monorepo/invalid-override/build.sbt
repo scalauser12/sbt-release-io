@@ -15,5 +15,5 @@ lazy val root = (project in file("."))
       step.name == "push-changes" || step.name == "publish-artifacts"
     },
 
-    releaseIgnoreUntrackedFiles := true
+    releaseIOIgnoreUntrackedFiles := true
   )

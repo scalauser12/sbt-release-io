@@ -27,5 +27,5 @@ lazy val root = (project in file("."))
       step.name == "check-clean-working-dir"
     },
 
-    releaseIgnoreUntrackedFiles := true
+    releaseIOIgnoreUntrackedFiles := true
   )

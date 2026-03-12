@@ -5,12 +5,10 @@ import cats.effect.{IO, Resource}
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
 import org.specs2.mutable.Specification
-import sbtrelease.Vcs
+import _root_.io.release.vcs.Vcs
 
 import java.io.File
 import java.nio.file.Files
-import scala.sys.process.Process
-
 class MonorepoVcsStepsSpec extends Specification with CatsEffect {
 
   "MonorepoVcsSteps.pushChanges.validate" should {
@@ -45,8 +43,7 @@ class MonorepoVcsStepsSpec extends Specification with CatsEffect {
 
   private val monorepoContextResource: Resource[IO, MonorepoContext] =
     tempDirResource.evalMap { repo =>
-      IO.blocking {
-        val vcs = initRepoWithBrokenRemote(repo)
+      initRepoWithBrokenRemote(repo).map { vcs =>
         MonorepoContext(
           state = TestSupport.dummyState(repo),
           vcs = Some(vcs),
@@ -55,27 +52,30 @@ class MonorepoVcsStepsSpec extends Specification with CatsEffect {
       }
     }
 
-  private def initRepoWithBrokenRemote(repo: File): Vcs = {
-    initGitRepo(repo)
-    sbt.IO.write(new File(repo, "file.txt"), "initial")
-    runGit(repo, "add", ".")
-    runGit(repo, "commit", "-m", "Initial commit")
-    runGit(repo, "branch", "-M", "main")
-    runGit(repo, "remote", "add", "origin", new File(repo, "missing-remote.git").getAbsolutePath)
-    runGit(repo, "config", "branch.main.remote", "origin")
-    runGit(repo, "config", "branch.main.merge", "refs/heads/main")
-    Vcs
-      .detect(repo)
-      .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+  private def initRepoWithBrokenRemote(repo: File): IO[Vcs] = {
+    IO.blocking {
+      TestSupport.initGitRepo(repo)
+      sbt.IO.write(new File(repo, "file.txt"), "initial")
+      TestSupport.runGit(repo, "add", ".")
+      TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+      TestSupport.runGit(repo, "branch", "-M", "main")
+      TestSupport.runGit(
+        repo,
+        "remote",
+        "add",
+        "origin",
+        new File(repo, "missing-remote.git").getAbsolutePath
+      )
+      TestSupport.runGit(repo, "config", "branch.main.remote", "origin")
+      TestSupport.runGit(repo, "config", "branch.main.merge", "refs/heads/main")
+      repo
+    }.flatMap { r =>
+      Vcs.detect(r).flatMap {
+        case Some(vcs) => IO.pure(vcs)
+        case None      =>
+          IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${r.getAbsolutePath}"))
+      }
+    }
   }
 
-  private def initGitRepo(repo: File): Unit = {
-    runGit(repo, "init")
-    runGit(repo, "config", "user.email", "test@example.com")
-    runGit(repo, "config", "user.name", "Test User")
-    ()
-  }
-
-  private def runGit(repo: File, args: String*): String =
-    Process(Seq("git") ++ args, repo).!!
 }

@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoStepIO
 
 lazy val base = (project in file("base"))
@@ -47,7 +47,7 @@ lazy val root = (project in file("."))
         filtered :+ recordOrderStep
       }
     },
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
     checkAll                    := {
       // Check execution order
       val marker = baseDirectory.value / "order.txt"

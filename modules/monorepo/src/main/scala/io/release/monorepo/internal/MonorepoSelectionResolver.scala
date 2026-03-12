@@ -2,8 +2,8 @@ package io.release.monorepo.internal
 
 import cats.effect.IO
 import io.release.monorepo.*
+import _root_.io.release.ReleaseIO.releaseIOVersionFile
 import sbt.State
-import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
 
 import scala.util.control.NonFatal
 
@@ -78,7 +78,7 @@ private[monorepo] object MonorepoSelectionResolver {
             runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes)
           val globalExcludes =
             if (runtime.useGlobalVersion)
-              Seq(runtime.extracted.get(releaseVersionFile))
+              Seq(runtime.extracted.get(releaseIOVersionFile))
             else Seq.empty
           val sharedPaths    = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
 

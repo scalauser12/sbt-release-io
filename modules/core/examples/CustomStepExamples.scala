@@ -65,7 +65,7 @@ object CustomStepExamples {
     ctx.vcs match {
       case Some(vcs) =>
         for {
-          branch <- IO.blocking(vcs.currentBranch)
+          branch <- vcs.currentBranch
           result <- if (branch == "main" || branch == "master")
                       IO.pure(ctx)
                     else
@@ -230,17 +230,19 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       ReleaseSteps.checkCleanWorkingDir,
       // 1st resource step — validate branch via API
       resourceStep[HttpClient]("validate-branch") { client => ctx =>
-        IO.blocking {
-          val allowed = client.get("/allowed-branches").split(",").toSet
+        IO.blocking(client.get("/allowed-branches").split(",").toSet).flatMap { allowed =>
           ctx.vcs match {
             case Some(vcs) =>
-              val branch = vcs.currentBranch
-              if (!allowed.contains(branch))
-                throw new RuntimeException(s"Branch '$branch' is not allowed for release")
+              vcs.currentBranch.flatMap { branch =>
+                if (!allowed.contains(branch))
+                  IO.raiseError(
+                    new RuntimeException(s"Branch '$branch' is not allowed for release")
+                  )
+                else IO.pure(ctx)
+              }
             case None      =>
-              throw new RuntimeException("VCS not initialized")
+              IO.raiseError(new RuntimeException("VCS not initialized"))
           }
-          ctx
         }
       },
       ReleaseSteps.checkSnapshotDependencies,

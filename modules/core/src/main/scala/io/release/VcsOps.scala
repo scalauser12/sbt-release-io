@@ -1,10 +1,9 @@
 package io.release
 
+import _root_.io.release.vcs.Vcs
 import cats.effect.IO
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.*
-import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.Vcs
 
 /** Shared VCS operations used by both core and monorepo release steps.
   *
@@ -15,28 +14,19 @@ import sbtrelease.Vcs
   */
 private[release] object VcsOps {
 
-  /** Detect VCS at the project base, append `releaseVcs` to the sbt session,
-    * and return the context with updated state and VCS adapter.
-    */
+  /** Detect VCS at the project base and return the context with the VCS adapter. */
   def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO.defer {
     val extracted = Project.extract(ctx.state)
     val baseDir   = extracted.get(thisProject).base
-    IO.blocking(Vcs.detect(baseDir)).flatMap {
-      case Some(vcs) =>
-        IO.blocking {
-          val newState = extracted.appendWithSession(
-            Seq(releaseVcs := Some(vcs)),
-            ctx.state
-          )
-          ctx.withState(newState).withVcs(vcs)
-        }
+    Vcs.detect(baseDir).flatMap {
+      case Some(vcs) => IO.pure(ctx.withVcs(vcs))
       case None      =>
         IO.raiseError(new IllegalStateException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
     }
   }
 
   private[release] def detectVcsFromBase(base: java.io.File): IO[Vcs] =
-    IO.blocking(Vcs.detect(base)).flatMap {
+    Vcs.detect(base).flatMap {
       case Some(vcs) => IO.pure(vcs)
       case None      =>
         IO.raiseError(new IllegalStateException(s"No VCS detected at ${base.getAbsolutePath}"))
@@ -56,10 +46,19 @@ private[release] object VcsOps {
     */
   def checkCleanWorkingDir(state: State): IO[CleanCheckResult] = IO.defer {
     val extracted       = Project.extract(state)
-    val ignoreUntracked = extracted.get(releaseIgnoreUntrackedFiles)
+    val ignoreUntracked = extracted.get(ReleaseIO.releaseIOIgnoreUntrackedFiles)
     val base            = extracted.get(thisProject).base
 
     detectVcsFromBase(base).flatMap(checkCleanFromVcs(_, ignoreUntracked))
+  }
+
+  /** Validate clean working directory using an already-detected VCS adapter, reading settings
+    * from the given state.
+    */
+  def checkCleanWorkingDir(state: State, vcs: Vcs): IO[CleanCheckResult] = {
+    val ignoreUntracked =
+      Project.extract(state).getOpt(ReleaseIO.releaseIOIgnoreUntrackedFiles).getOrElse(false)
+    checkCleanFromVcs(vcs, ignoreUntracked)
   }
 
   /** Core clean-working-directory validation against an already-detected VCS adapter. */
@@ -68,29 +67,46 @@ private[release] object VcsOps {
       ignoreUntracked: Boolean
   ): IO[CleanCheckResult] =
     for {
-      vcsInfo                           <- IO.blocking(
-                                             (vcs.modifiedFiles, vcs.untrackedFiles, vcs.currentHash)
-                                           )
-      (modified, untracked, currentHash) = vcsInfo
-      _                                 <- IO.raiseWhen(modified.nonEmpty)(
-                                             new IllegalStateException(
-                                               s"""Aborting release: unstaged modified files
-                                                  |
-                                                  |Modified files:
-                                                  |
-                                                  |${modified.map(" - " + _).mkString("\n")}
-                                                  |""".stripMargin
-                                             )
-                                           )
-      _                                 <- IO.raiseWhen(untracked.nonEmpty && !ignoreUntracked)(
-                                             new IllegalStateException(
-                                               s"""Aborting release: untracked files. Remove them or specify 'releaseIgnoreUntrackedFiles := true' in settings
-                                                  |
-                                                  |Untracked files:
-                                                  |
-                                                  |${untracked.map(" - " + _).mkString("\n")}
-                                                  |""".stripMargin
-                                             )
-                                           )
+      modified    <- vcs.modifiedFiles
+      untracked   <- vcs.untrackedFiles
+      currentHash <- vcs.currentHash
+      _           <- IO.raiseWhen(modified.nonEmpty)(
+                       new IllegalStateException(
+                         s"""Aborting release: unstaged modified files
+                            |
+                            |Modified files:
+                            |
+                            |${modified.map(" - " + _).mkString("\n")}
+                            |""".stripMargin
+                       )
+                     )
+      _           <- IO.raiseWhen(untracked.nonEmpty && !ignoreUntracked)(
+                       new IllegalStateException(
+                         s"""Aborting release: untracked files. Remove them or specify 'releaseIOIgnoreUntrackedFiles := true' in settings
+                            |
+                            |Untracked files:
+                            |
+                            |${untracked.map(" - " + _).mkString("\n")}
+                            |""".stripMargin
+                       )
+                     )
     } yield CleanCheckResult(vcs, currentHash)
+
+  /** Resolve file path relative to VCS base directory. */
+  def relativizeToBase(vcs: Vcs, file: java.io.File): IO[String] =
+    IO.blocking {
+      val base      = vcs.baseDir.getCanonicalFile
+      val canonical = file.getCanonicalFile
+      (base, canonical)
+    }.flatMap { case (base, canonical) =>
+      IO.fromOption(sbt.IO.relativize(base, canonical))(
+        new IllegalStateException(
+          s"Version file [$canonical] is outside of VCS root [$base]"
+        )
+      )
+    }
+
+  /** Status of tracked files only (excludes untracked `?` lines). */
+  def trackedStatus(vcs: Vcs): IO[String] =
+    vcs.status.map(_.linesIterator.filterNot(_.startsWith("?")).mkString("\n"))
 }

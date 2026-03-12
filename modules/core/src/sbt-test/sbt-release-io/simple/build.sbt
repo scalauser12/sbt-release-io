@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name := "simple-test"
 
@@ -10,12 +10,12 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
 }
 
 // Ignore untracked files in tests (test script itself is untracked)
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 // Custom verification tasks (following upstream sbt-release pattern)
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {
-  import sbt.complete.DefaultParsers._
+  import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<count>").parsed.head.toInt
   val actual   = "git log --oneline".!!.trim.linesIterator.length
   assert(actual == expected, s"Expected $expected commits but found $actual")

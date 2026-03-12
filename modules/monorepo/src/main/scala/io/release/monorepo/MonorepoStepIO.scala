@@ -24,7 +24,8 @@ object MonorepoStepIO {
   case class Global(
       name: String,
       execute: MonorepoContext => IO[MonorepoContext],
-      validate: MonorepoContext => IO[Unit] = _ => IO.unit
+      validate: MonorepoContext => IO[Unit] = _ => IO.unit,
+      isSelectionBoundary: Boolean = false
   ) extends MonorepoStepIO
 
   /** A step that runs once per selected project in topological order

@@ -1,7 +1,7 @@
 package io.release.monorepo
 
-import sbt.*
-import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
+import _root_.io.release.ReleaseIO.releaseIOVersionFile
+import sbt.{internal => _, *}
 
 /** Shared version-file resolution for monorepo release steps and project discovery.
   *
@@ -14,7 +14,7 @@ private[monorepo] object MonorepoVersionFiles {
     runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersionFile)(ref, runtime.state)
 
   def resolve(runtime: MonorepoRuntime, ref: ProjectRef): File =
-    if (runtime.useGlobalVersion) runtime.extracted.get(releaseVersionFile)
+    if (runtime.useGlobalVersion) runtime.extracted.get(releaseIOVersionFile)
     else resolveConfiguredVersionFile(runtime, ref)
 
   def resolve(state: State, ref: ProjectRef): File =

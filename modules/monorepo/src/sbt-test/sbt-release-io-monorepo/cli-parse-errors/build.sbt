@@ -12,5 +12,5 @@ lazy val root = (project in file("."))
     releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts"
     },
-    releaseIgnoreUntrackedFiles := true
+    releaseIOIgnoreUntrackedFiles := true
   )

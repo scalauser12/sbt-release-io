@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.IO
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Def.ScopedKey
 import sbt.Keys.*
 import sbt.util.Show
@@ -36,7 +36,7 @@ private[release] object CrossBuildSupport {
     }
 
   /** Check if a setting should be excluded during cross-build (scalaVersion, scalaHome). */
-  private[release] def crossExclude(s: Setting[?]): Boolean =
+  private def crossExclude(s: Setting[?]): Boolean =
     s.key match {
       case ScopedKey(Scope(_, Zero, Zero, _), key)
           if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>

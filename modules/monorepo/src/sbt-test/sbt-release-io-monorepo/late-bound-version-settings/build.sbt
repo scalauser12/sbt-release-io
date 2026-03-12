@@ -16,7 +16,7 @@ lazy val root = (project in file("."))
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIgnoreUntrackedFiles   := true,
+    releaseIOIgnoreUntrackedFiles   := true,
     checkLateBoundVersionFile     := {
       val runtimeVersion = IO.read(file("core/version.properties")).trim
       val scopedVersion  = IO.read(file("core/version.sbt")).trim

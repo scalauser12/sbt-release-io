@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoStepIO
 
 lazy val core = (project in file("core"))
@@ -58,7 +58,7 @@ lazy val root = (project in file("."))
       }
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkAll := {
       // Check execution order

@@ -1,8 +1,8 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import sbt.*
-import sbtrelease.Vcs
+import sbt.{internal => _, *}
+import _root_.io.release.vcs.Vcs
 
 import scala.util.{Failure, Success, Try}
 

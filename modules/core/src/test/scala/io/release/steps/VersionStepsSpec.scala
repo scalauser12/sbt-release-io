@@ -8,7 +8,7 @@ import io.release.internal.{
   CoreVersionResolver,
   ExecutionFlags
 }
-import io.release.{ReleaseKeys, TestSupport}
+import io.release.TestSupport
 import org.specs2.mutable.Specification
 
 import java.io.File
@@ -22,10 +22,7 @@ class VersionStepsSpec extends Specification {
       val resolvedFile = new File(dir, "resolved-version.sbt")
       val state        =
         CoreReleasePlanner.attach(
-          TestSupport
-            .dummyState(dir)
-            .put(ReleaseKeys.commandLineReleaseVersion, Some("9.9.9"))
-            .put(ReleaseKeys.commandLineNextVersion, Some("10.0.0-SNAPSHOT")),
+          TestSupport.dummyState(dir),
           CoreReleasePlan(
             flags = ExecutionFlags(
               useDefaults = false,
@@ -59,15 +56,26 @@ class VersionStepsSpec extends Specification {
         (result.writeVersion(resolvedFile, "1.2.3").unsafeRunSync() must_== "resolved=1.2.3")
     }
 
-    "delegate live resolution to CoreVersionResolver and preserve CLI overrides from state" in
+    "delegate live resolution to CoreVersionResolver and read overrides from plan" in
       withTempDir { dir =>
         val fallbackFile = new File(dir, "fallback-version.sbt")
         var resolverRuns = 0
         val state        =
-          TestSupport
-            .dummyState(dir)
-            .put(ReleaseKeys.commandLineReleaseVersion, Some("2.0.0"))
-            .put(ReleaseKeys.commandLineNextVersion, Some("2.0.1-SNAPSHOT"))
+          CoreReleasePlanner.attach(
+            TestSupport.dummyState(dir),
+            CoreReleasePlan(
+              flags = ExecutionFlags(
+                useDefaults = false,
+                skipTests = false,
+                skipPublish = false,
+                interactive = false,
+                crossBuild = false
+              ),
+              releaseVersionOverride = Some("2.0.0"),
+              nextVersionOverride = Some("2.0.1-SNAPSHOT"),
+              tagDefault = None
+            )
+          )
 
         val result = VersionSteps.resolveVersionPlan(
           state,

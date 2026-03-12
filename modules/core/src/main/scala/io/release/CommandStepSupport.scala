@@ -1,13 +1,16 @@
 package io.release
 
-import sbt.*
-import sbtrelease.Compat
+import sbt.{internal => _, *}
+import _root_.io.release.internal.SbtCompat
 
 /** Shared support for running sbt commands inside release steps while preserving
   * and draining the remaining command queue.
   */
 private[release] object CommandStepSupport {
 
+  /** Processes an sbt command synchronously. Performs blocking I/O;
+    * callers must wrap in `IO.blocking`.
+    */
   def processCommand(state: State, command: String): State =
     Command.process(
       command,
@@ -19,7 +22,7 @@ private[release] object CommandStepSupport {
     * caller's original remaining command queue.
     */
   def runCommandAndRemaining(state: State, command: String): State = {
-    val FailureCommand = Compat.FailureCommand
+    val FailureCommand = SbtCompat.FailureCommand
     val savedRemaining = state.remainingCommands
 
     @scala.annotation.tailrec

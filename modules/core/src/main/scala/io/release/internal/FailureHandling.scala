@@ -2,14 +2,12 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
-import sbtrelease.Compat
-
 import scala.util.control.NonFatal
 
 /** Shared failure-detection protocol for core and monorepo execution. */
 private[release] object FailureHandling {
 
-  private val FailureCommand = Compat.FailureCommand
+  private val FailureCommand = SbtCompat.FailureCommand
 
   final case class ExecutionResult[C <: ReleaseCtx[C]](context: C) {
     def ensureSucceeded(message: String): IO[C] =

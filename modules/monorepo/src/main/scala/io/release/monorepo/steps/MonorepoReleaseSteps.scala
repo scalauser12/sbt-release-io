@@ -2,9 +2,9 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.monorepo.*
+import _root_.io.release.monorepo.MonorepoComposer
 import io.release.monorepo.internal.{
   MonorepoOrderResolver,
-  MonorepoReleasePlanner,
   MonorepoSelectionResolver,
   MonorepoTagResolver,
   SelectionMode
@@ -44,9 +44,12 @@ object MonorepoReleaseSteps {
   )
 
   val detectOrSelectProjects: MonorepoStepIO.Global = MonorepoStepIO.Global(
-    name = "detect-or-select-projects",
+    name = MonorepoComposer.SelectionBoundary,
+    isSelectionBoundary = true,
     execute = ctx =>
-      MonorepoReleasePlanner.require(ctx.state).flatMap { plan =>
+      IO.fromOption(ctx.releasePlan)(
+        new IllegalStateException("Monorepo release plan not initialized")
+      ).flatMap { plan =>
         MonorepoSelectionResolver.resolve(ctx, plan).flatMap { result =>
           val selectedInfos = result.projects
           val message       = result.selectionMode match {

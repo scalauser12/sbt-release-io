@@ -1,10 +1,13 @@
 package io.release.internal
 
 import cats.effect.IO
-import io.release.ReleaseIO.{releaseIOReadVersion, releaseIOWriteVersion}
-import io.release.ReleaseKeys
-import sbt.*
-import sbtrelease.ReleasePlugin.autoImport.{releaseUseGlobalVersion, releaseVersionFile}
+import io.release.ReleaseIO.{
+  releaseIOReadVersion,
+  releaseIOUseGlobalVersion,
+  releaseIOVersionFile,
+  releaseIOWriteVersion
+}
+import sbt.{internal => _, *}
 
 import java.io.File
 
@@ -20,10 +23,10 @@ private[release] object CoreVersionResolver {
 
   def resolveCurrentSettings(state: State): ResolvedSettings =
     ResolvedSettings(
-      versionFile = SbtRuntime.getSetting(state, releaseVersionFile),
+      versionFile = SbtRuntime.getSetting(state, releaseIOVersionFile),
       readVersion = SbtRuntime.getSetting(state, releaseIOReadVersion),
       writeVersion = SbtRuntime.getSetting(state, releaseIOWriteVersion),
-      useGlobalVersion = SbtRuntime.getSetting(state, releaseUseGlobalVersion)
+      useGlobalVersion = SbtRuntime.getSetting(state, releaseIOUseGlobalVersion)
     )
 
   def resolve(
@@ -37,16 +40,8 @@ private[release] object CoreVersionResolver {
       versionFile = settings.versionFile,
       readVersion = settings.readVersion,
       writeVersion = settings.writeVersion,
-      releaseVersionOverride = plan
-        .flatMap(_.releaseVersionOverride)
-        .orElse(
-          state.get(ReleaseKeys.commandLineReleaseVersion).flatten
-        ),
-      nextVersionOverride = plan
-        .flatMap(_.nextVersionOverride)
-        .orElse(
-          state.get(ReleaseKeys.commandLineNextVersion).flatten
-        ),
+      releaseVersionOverride = plan.flatMap(_.releaseVersionOverride),
+      nextVersionOverride = plan.flatMap(_.nextVersionOverride),
       useGlobalVersion = settings.useGlobalVersion
     )
   }
@@ -55,10 +50,10 @@ private[release] object CoreVersionResolver {
     val settings = resolveCurrentSettings(state)
 
     Seq(
-      releaseVersionFile      := settings.versionFile,
-      releaseIOReadVersion    := settings.readVersion,
-      releaseIOWriteVersion   := settings.writeVersion,
-      releaseUseGlobalVersion := settings.useGlobalVersion
+      releaseIOVersionFile      := settings.versionFile,
+      releaseIOReadVersion      := settings.readVersion,
+      releaseIOWriteVersion     := settings.writeVersion,
+      releaseIOUseGlobalVersion := settings.useGlobalVersion
     )
   }
 }

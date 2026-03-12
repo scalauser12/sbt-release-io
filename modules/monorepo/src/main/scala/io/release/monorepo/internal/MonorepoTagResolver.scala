@@ -1,8 +1,8 @@
 package io.release.monorepo.internal
 
+import _root_.io.release.ReleaseIO.releaseIOVcsSign
 import io.release.monorepo.{MonorepoReleaseIO, MonorepoTagStrategy}
-import sbt.*
-import sbtrelease.ReleasePlugin.autoImport.releaseVcsSign
+import sbt.{internal => _, *}
 
 /** Resolves monorepo tagging inputs from the current sbt state. */
 private[monorepo] object MonorepoTagResolver {
@@ -20,7 +20,7 @@ private[monorepo] object MonorepoTagResolver {
       tagStrategy = extracted.get(MonorepoReleaseIO.releaseIOMonorepoTagStrategy),
       perProjectTagName = extracted.get(MonorepoReleaseIO.releaseIOMonorepoTagName),
       unifiedTagName = extracted.get(MonorepoReleaseIO.releaseIOMonorepoUnifiedTagName),
-      sign = extracted.get(releaseVcsSign)
+      sign = extracted.get(releaseIOVcsSign)
     )
   }
 }

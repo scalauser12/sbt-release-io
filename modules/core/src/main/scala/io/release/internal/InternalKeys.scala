@@ -7,4 +7,7 @@ private[release] object InternalKeys {
 
   val coreReleasePlan: AttributeKey[CoreReleasePlan] =
     AttributeKey[CoreReleasePlan]("releaseIOInternalCorePlan")
+
+  val executionFlags: AttributeKey[ExecutionFlags] =
+    AttributeKey[ExecutionFlags]("releaseIOExecutionFlags")
 }

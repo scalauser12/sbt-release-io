@@ -1,10 +1,10 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name := "empty-commit-noop-test"
 
 scalaVersion := "2.12.18"
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 // Standard release process - verifies release completes with version 0.1.0-SNAPSHOT
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
@@ -13,7 +13,7 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {
-  import sbt.complete.DefaultParsers._
+  import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<count>").parsed.head.toInt
   val actual   = "git log --oneline".!!.trim.linesIterator.length
   assert(actual == expected, s"Expected $expected commits but found $actual")

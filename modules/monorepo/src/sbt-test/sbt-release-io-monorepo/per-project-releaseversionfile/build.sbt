@@ -1,11 +1,10 @@
-import scala.sys.process._
-import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
-    name               := "core",
-    scalaVersion       := "2.12.18",
-    releaseVersionFile := baseDirectory.value / "version.properties"
+    name                 := "core",
+    scalaVersion         := "2.12.18",
+    releaseIOVersionFile := baseDirectory.value / "version.properties"
   )
 
 lazy val api = (project in file("api"))
@@ -43,11 +42,11 @@ lazy val root = (project in file("."))
             .collectFirst {
               case line if line.startsWith("""ThisBuild / version := """) =>
                 line.stripPrefix("""ThisBuild / version := """).drop(1).takeWhile(_ != '"')
-              case line if line.startsWith("""version := """) =>
+              case line if line.startsWith("""version := """)             =>
                 line.stripPrefix("""version := """).drop(1).takeWhile(_ != '"')
             } match {
             case Some(version) => _root_.cats.effect.IO.pure(version)
-            case None    =>
+            case None          =>
               _root_.cats.effect.IO.raiseError(
                 new RuntimeException(
                   "Could not parse version from " + f.getName + ". Expected format: version := x.y.z"
@@ -77,7 +76,7 @@ lazy val root = (project in file("."))
       step.name == "run-clean" || step.name == "run-tests"
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkAll := {
       val coreProps = IO.read(file("core/version.properties"))

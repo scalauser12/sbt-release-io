@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
@@ -25,7 +25,7 @@ lazy val root = (project in file("."))
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIgnoreUntrackedFiles       := true,
+    releaseIOIgnoreUntrackedFiles       := true,
     checkVersionFileFormat            := {
       val contents = IO.read(file("version.sbt"))
       // Must contain "ThisBuild / version" prefix

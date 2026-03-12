@@ -2,7 +2,7 @@ package io.release.monorepo.internal
 
 import cats.effect.IO
 import io.release.monorepo.{MonorepoReleaseIO, MonorepoRuntime, ProjectReleaseInfo}
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.baseDirectory
 
 /** Resolves monorepo project metadata from the current sbt state. */

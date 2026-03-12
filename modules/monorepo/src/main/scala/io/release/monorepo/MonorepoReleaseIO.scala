@@ -3,9 +3,9 @@ package io.release.monorepo
 import cats.effect.IO
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.steps.VersionSteps
-import sbt.*
+import _root_.io.release.ReleaseIO.releaseIOVersionFile
+import sbt.{internal => _, *}
 import sbt.Keys.*
-import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
 
 /** Setting keys and factory methods for the monorepo release plugin.
   *
@@ -105,6 +105,10 @@ trait MonorepoReleaseIO {
   /** Interactive mode. Default: false. */
   val releaseIOMonorepoInteractive: SettingKey[Boolean] = _releaseIOMonorepoInteractive
 
+  /** When false, skips publishTo/skip validation in the monorepo publishArtifacts step. */
+  val releaseIOMonorepoPublishArtifactsChecks: SettingKey[Boolean] =
+    _releaseIOMonorepoPublishArtifactsChecks
+
   // ── Factory methods ──────────────────────────────────────────────────
 
   /** Create a global monorepo release step from a context-transforming IO action. */
@@ -162,23 +166,24 @@ trait MonorepoReleaseIO {
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
-    releaseIOMonorepoProcess               := MonorepoReleaseSteps.defaults,
-    releaseIOMonorepoCrossBuild            := false,
-    releaseIOMonorepoSkipTests             := false,
-    releaseIOMonorepoSkipPublish           := false,
-    releaseIOMonorepoInteractive           := false,
-    releaseIOMonorepoDetectChanges         := true,
-    releaseIOMonorepoChangeDetector        := None,
-    releaseIOMonorepoDetectChangesExcludes := Seq.empty,
-    releaseIOMonorepoSharedPaths           := Seq("build.sbt", "project/"),
-    releaseIOMonorepoUseGlobalVersion      := false,
-    releaseIOMonorepoTagStrategy           := MonorepoTagStrategy.PerProject,
-    releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name/v$ver"),
-    releaseIOMonorepoUnifiedTagName        := ((ver: String) => s"v$ver"),
-    releaseIOMonorepoReadVersion           := VersionSteps.defaultReadVersion,
+    releaseIOMonorepoProcess                := MonorepoReleaseSteps.defaults,
+    releaseIOMonorepoCrossBuild             := false,
+    releaseIOMonorepoSkipTests              := false,
+    releaseIOMonorepoSkipPublish            := false,
+    releaseIOMonorepoPublishArtifactsChecks := true,
+    releaseIOMonorepoInteractive            := false,
+    releaseIOMonorepoDetectChanges          := true,
+    releaseIOMonorepoChangeDetector         := None,
+    releaseIOMonorepoDetectChangesExcludes  := Seq.empty,
+    releaseIOMonorepoSharedPaths            := Seq("build.sbt", "project/"),
+    releaseIOMonorepoUseGlobalVersion       := false,
+    releaseIOMonorepoTagStrategy            := MonorepoTagStrategy.PerProject,
+    releaseIOMonorepoTagName                := ((name: String, ver: String) => s"$name/v$ver"),
+    releaseIOMonorepoUnifiedTagName         := ((ver: String) => s"v$ver"),
+    releaseIOMonorepoReadVersion            := VersionSteps.defaultReadVersion,
     // releaseIOMonorepoUseGlobalVersion is captured at build load time.
     // Custom implementations may read from State at call time if dynamic behavior is needed.
-    releaseIOMonorepoWriteVersion          := {
+    releaseIOMonorepoWriteVersion           := {
       val useGlobal = releaseIOMonorepoUseGlobalVersion.value
       (_, ver) => {
         val key = if (useGlobal) "ThisBuild / version" else "version"
@@ -188,10 +193,10 @@ trait MonorepoReleaseIO {
     // The default per-project resolver mirrors each project's scoped sbt-release
     // releaseVersionFile setting. Global-version mode still bypasses this resolver
     // and uses the shared root releaseVersionFile instead.
-    releaseIOMonorepoVersionFile           := { (ref: ProjectRef, state: State) =>
-      Project.extract(state).get(ref / releaseVersionFile)
+    releaseIOMonorepoVersionFile            := { (ref: ProjectRef, state: State) =>
+      Project.extract(state).get(ref / releaseIOVersionFile)
     },
-    releaseIOMonorepoProjects              := {
+    releaseIOMonorepoProjects               := {
       val build      = loadedBuild.value
       val root       = thisProjectRef.value
       val projectMap = build.allProjectRefs.map { case (ref, proj) => ref -> proj.aggregate }.toMap
@@ -316,5 +321,11 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Boolean](
       "releaseIOMonorepoInteractive",
       "Whether to enable interactive prompts during monorepo release"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoPublishArtifactsChecks: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoPublishArtifactsChecks",
+      "Whether to run publishTo validation checks for the monorepo publish step"
     )
 }

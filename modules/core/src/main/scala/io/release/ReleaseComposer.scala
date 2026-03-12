@@ -2,7 +2,7 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.{ExecutionEngine, FailureHandling, SbtRuntime}
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.*
 
 /** Orchestrates the two-phase execution model for [[ReleaseStepIO]] sequences.
@@ -89,14 +89,20 @@ private[release] object ReleaseComposer {
         } yield result
       }
 
-      for {
-        finalCtx <- finalIO
-        result   <- currentVersion match {
-                      case Some(ver) =>
-                        SbtRuntime.switchScalaVersion(finalCtx.state, ver).map(finalCtx.withState)
-                      case None      => IO.pure(finalCtx)
-                    }
-      } yield result
+      finalIO
+        .flatMap { finalCtx =>
+          currentVersion match {
+            case Some(ver) =>
+              SbtRuntime.switchScalaVersion(finalCtx.state, ver).map(finalCtx.withState)
+            case None      => IO.pure(finalCtx)
+          }
+        }
+        .handleErrorWith { err =>
+          (currentVersion match {
+            case Some(ver) => SbtRuntime.switchScalaVersion(ctx.state, ver).void
+            case None      => IO.unit
+          }).attempt *> IO.raiseError(err)
+        }
     }
   }
 }
