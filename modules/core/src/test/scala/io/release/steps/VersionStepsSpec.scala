@@ -2,7 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import io.release.internal.{CoreReleasePlan, CoreVersionResolver, ExecutionFlags}
+import io.release.internal.{CoreReleasePlan, ExecutionFlags}
 import io.release.TestSupport
 import org.specs2.mutable.Specification
 
@@ -35,7 +35,7 @@ class VersionStepsSpec extends Specification {
       val result = VersionSteps.resolveVersionPlan(
         state,
         _ =>
-          CoreVersionResolver.ResolvedSettings(
+          VersionSteps.ResolvedSettings(
             versionFile = resolvedFile,
             readVersion = _ => IO.pure("1.2.3-SNAPSHOT"),
             writeVersion = (_, version) => IO.pure(s"resolved=$version"),
@@ -76,7 +76,7 @@ class VersionStepsSpec extends Specification {
           state,
           _ => {
             resolverRuns += 1
-            CoreVersionResolver.ResolvedSettings(
+            VersionSteps.ResolvedSettings(
               versionFile = fallbackFile,
               readVersion = _ => IO.pure("1.9.9-SNAPSHOT"),
               writeVersion = (_, version) => IO.pure(s"fallback=$version"),

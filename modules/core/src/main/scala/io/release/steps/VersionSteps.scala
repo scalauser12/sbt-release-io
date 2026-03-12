@@ -1,23 +1,72 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.internal.{CoreVersionResolver, SbtRuntime, VersionPlan}
+import io.release.internal.{CoreReleasePlan, SbtRuntime, VersionPlan}
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO, VcsOps}
 import _root_.io.release.ReleaseIO.{
   releaseIOCommitMessage,
   releaseIONextCommitMessage,
   releaseIONextVersion,
+  releaseIOReadVersion,
+  releaseIOUseGlobalVersion,
   releaseIOVcsSign,
   releaseIOVcsSignOff,
-  releaseIOVersion
+  releaseIOVersion,
+  releaseIOVersionFile,
+  releaseIOWriteVersion
 }
 import _root_.io.release.steps.StepHelpers.*
 import sbt.{internal => _, *}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 
+import java.io.File
+
 /** Version-related release steps: inquire, set, commit versions. */
 private[release] object VersionSteps {
+
+  private[steps] final case class ResolvedSettings(
+      versionFile: File,
+      readVersion: File => IO[String],
+      writeVersion: (File, String) => IO[String],
+      useGlobalVersion: Boolean
+  )
+
+  private[steps] def resolveCurrentSettings(state: State): ResolvedSettings =
+    ResolvedSettings(
+      versionFile = SbtRuntime.getSetting(state, releaseIOVersionFile),
+      readVersion = SbtRuntime.getSetting(state, releaseIOReadVersion),
+      writeVersion = SbtRuntime.getSetting(state, releaseIOWriteVersion),
+      useGlobalVersion = SbtRuntime.getSetting(state, releaseIOUseGlobalVersion)
+    )
+
+  private[steps] def sessionSettings(state: State): Seq[Setting[?]] = {
+    val settings = resolveCurrentSettings(state)
+
+    Seq(
+      releaseIOVersionFile      := settings.versionFile,
+      releaseIOReadVersion      := settings.readVersion,
+      releaseIOWriteVersion     := settings.writeVersion,
+      releaseIOUseGlobalVersion := settings.useGlobalVersion
+    )
+  }
+
+  private def resolve(
+      state: State,
+      resolveSettings: State => ResolvedSettings = resolveCurrentSettings
+  ): VersionPlan = {
+    val settings = resolveSettings(state)
+    val plan     = CoreReleasePlan.current(state)
+
+    VersionPlan(
+      versionFile = settings.versionFile,
+      readVersion = settings.readVersion,
+      writeVersion = settings.writeVersion,
+      releaseVersionOverride = plan.flatMap(_.releaseVersionOverride),
+      nextVersionOverride = plan.flatMap(_.nextVersionOverride),
+      useGlobalVersion = settings.useGlobalVersion
+    )
+  }
 
   private val versionPattern = """(?:ThisBuild\s*/\s*)?version\s*:=\s*"([^"]+)"""".r
 
@@ -141,7 +190,7 @@ private[release] object VersionSteps {
                                          resultCtx.state.put(ReleaseKeys.runtimeVersionOverride, releaseVer)
                                        val newState       = SbtRuntime.appendWithSession(
                                          stateWithAttr,
-                                         CoreVersionResolver.sessionSettings(resultCtx.state) ++ Seq(
+                                         VersionSteps.sessionSettings(resultCtx.state) ++ Seq(
                                            packageOptions += ManifestAttributes(
                                              "Vcs-Release-Hash" -> currentHash
                                            ),
@@ -212,7 +261,7 @@ private[release] object VersionSteps {
                            Seq(ThisBuild / version := ver, version := ver)
                          else Seq(version          := ver)
                        val allSettings     =
-                         CoreVersionResolver.sessionSettings(ctx.state) ++ versionSettings
+                         VersionSteps.sessionSettings(ctx.state) ++ versionSettings
                        val stateWithAttr   =
                          ctx.state.put(ReleaseKeys.runtimeVersionOverride, ver)
                        val newState        =
@@ -224,8 +273,7 @@ private[release] object VersionSteps {
 
   private[release] def resolveVersionPlan(
       state: State,
-      resolveSettings: State => CoreVersionResolver.ResolvedSettings =
-        CoreVersionResolver.resolveCurrentSettings
+      resolveSettings: State => ResolvedSettings = resolveCurrentSettings
   ): VersionPlan =
-    CoreVersionResolver.resolve(state, resolveSettings)
+    resolve(state, resolveSettings)
 }

@@ -1,7 +1,7 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.internal.{CoreTagResolver, CoreVersionResolver, SbtRuntime, TagPlan}
+import io.release.internal.{CoreTagResolver, SbtRuntime, TagPlan}
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.{internal => _, *}
 import _root_.io.release.steps.StepHelpers.*
@@ -65,7 +65,7 @@ private[release] object VcsSteps {
                     IO.blocking {
                       val newState = SbtRuntime.appendWithSession(
                         ctx.state,
-                        CoreVersionResolver.sessionSettings(ctx.state) ++
+                        VersionSteps.sessionSettings(ctx.state) ++
                           Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
                       )
                       ctx.copy(state = newState)
@@ -105,7 +105,7 @@ private[release] object VcsSteps {
                         )
                         val newState = SbtRuntime.appendWithSession(
                           ctx.state,
-                          CoreVersionResolver.sessionSettings(ctx.state) ++
+                          VersionSteps.sessionSettings(ctx.state) ++
                             Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
                         )
                         ctx.copy(state = newState)
@@ -120,7 +120,7 @@ private[release] object VcsSteps {
                         IO.blocking {
                           val newState = SbtRuntime.appendWithSession(
                             ctx.state,
-                            CoreVersionResolver.sessionSettings(ctx.state) ++
+                            VersionSteps.sessionSettings(ctx.state) ++
                               Seq(
                                 packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
                               )
