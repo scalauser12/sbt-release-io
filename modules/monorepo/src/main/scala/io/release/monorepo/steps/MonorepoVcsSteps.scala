@@ -115,7 +115,7 @@ private[monorepo] object MonorepoVcsSteps {
         else
           _root_.io.release.steps.StepHelpers
             .askYesNo(
-              s"Tag [$tagName] already exists for $label! Overwrite or abort (o/a)? [a] ",
+              s"Tag [$tagName] already exists for $label! Overwrite? (y/n) [n] ",
               defaultYes = false
             )
             .flatMap {
@@ -225,7 +225,7 @@ private[monorepo] object MonorepoVcsSteps {
       },
     execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        validatePushRemote(vcs) *> {
+        validatePushRemote(ctx, vcs) *> {
           val doPush: IO[MonorepoContext] = vcs.commandName match {
             case "git" =>
               val tags = ctx.currentProjects.flatMap(_.tagName).distinct
@@ -286,13 +286,18 @@ private[monorepo] object MonorepoVcsSteps {
       }
   )
 
-  private def validatePushRemote(vcs: Vcs): IO[Unit] =
+  private def validatePushRemote(ctx: MonorepoContext, vcs: Vcs): IO[Unit] =
     for {
       remote     <- vcs.trackingRemote
       remoteCode <- vcs.checkRemote(remote)
-      _          <- IO.raiseUnless(remoteCode == 0)(
-                      new IllegalStateException("Remote check failed. Aborting release.")
-                    )
+      _          <- if (remoteCode == 0) IO.unit
+                    else
+                      MonorepoStepHelpers.confirmContinue(
+                        ctx,
+                        prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                        defaultYes = false,
+                        abortMessage = "Aborting the release due to remote check failure."
+                      )
     } yield ()
 
 }

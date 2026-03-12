@@ -28,7 +28,7 @@ class MonorepoVcsStepsSpec extends Specification with CatsEffect {
       monorepoContextResource.use { ctx =>
         MonorepoVcsSteps.pushChanges.execute(ctx).attempt.map {
           case Left(err: IllegalStateException) =>
-            err.getMessage must contain("Remote check failed. Aborting release.")
+            err.getMessage must contain("Aborting the release due to remote check failure.")
           case other                            =>
             ko(s"Expected IllegalStateException but got $other")
         }
