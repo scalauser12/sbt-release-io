@@ -82,6 +82,7 @@ private[monorepo] object MonorepoVcsSteps {
   )
 
   private def createTag(
+      ctx: MonorepoContext,
       vcs: Vcs,
       tagName: String,
       comment: String,
@@ -89,12 +90,48 @@ private[monorepo] object MonorepoVcsSteps {
       label: String
   ): IO[Unit] =
     vcs.existsTag(tagName).flatMap {
+      case false => vcs.tag(tagName, comment, sign = sign)
       case true  =>
-        IO.raiseError(
-          new IllegalStateException(s"Tag [$tagName] already exists for $label. Aborting.")
-        )
-      case false =>
-        vcs.tag(tagName, comment, sign = sign)
+        val useDefaults =
+          _root_.io.release.steps.StepHelpers.useDefaults(ctx.state)
+        if (useDefaults)
+          IO.blocking(
+            ctx.state.log.warn(
+              s"[release-io-monorepo] Tag [$tagName] already exists for $label. " +
+                "Aborting (use-defaults mode)."
+            )
+          ) *> IO.raiseError(
+            new IllegalStateException(
+              s"Tag [$tagName] already exists for $label. Aborting."
+            )
+          )
+        else if (!ctx.interactive)
+          IO.raiseError(
+            new IllegalStateException(
+              s"Tag [$tagName] already exists for $label. " +
+                "Aborting release in non-interactive mode."
+            )
+          )
+        else
+          _root_.io.release.steps.StepHelpers
+            .askYesNo(
+              s"Tag [$tagName] already exists for $label! Overwrite or abort (o/a)? [a] ",
+              defaultYes = false
+            )
+            .flatMap {
+              case true  =>
+                IO.blocking(
+                  ctx.state.log.warn(
+                    s"[release-io-monorepo] Tag [$tagName] already exists. Overwriting."
+                  )
+                ) *> vcs.tag(tagName, comment, sign = sign, force = true)
+              case false =>
+                IO.raiseError(
+                  new IllegalStateException(
+                    s"Tag [$tagName] already exists for $label. Aborting."
+                  )
+                )
+            }
     }
 
   private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
@@ -109,6 +146,7 @@ private[monorepo] object MonorepoVcsSteps {
               IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
                 val tagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
+                  ctx,
                   vcs,
                   tagName,
                   s"Release ${project.name} $releaseVer",
@@ -140,7 +178,7 @@ private[monorepo] object MonorepoVcsSteps {
                 val tagName = settings.unifiedTagName(rel)
                 val summary =
                   versionSummary(ctx, { case (releaseVer, _) => releaseVer })
-                createTag(vcs, tagName, s"Release: $summary", settings.sign, "release") *>
+                createTag(ctx, vcs, tagName, s"Release: $summary", settings.sign, "release") *>
                   logInfo(ctx, s"Tagged release as $tagName").as(
                     ctx.currentProjects.foldLeft(ctx) { (c, p) =>
                       c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
@@ -174,53 +212,77 @@ private[monorepo] object MonorepoVcsSteps {
           // If tracking refs are missing (e.g. remote never fetched), treat as not behind.
           behind <- vcs.isBehindRemote.handleError(_ => false)
           _      <-
-            IO.raiseWhen(behind)(
-              new IllegalStateException(
-                "Upstream has unmerged commits. Merge first or remove pushChanges from process."
+            if (!behind) IO.unit
+            else
+              MonorepoStepHelpers.confirmContinue(
+                ctx,
+                prompt = "The upstream branch has unmerged commits. " +
+                  "A subsequent push may fail! Continue (y/n)? [n] ",
+                defaultYes = false,
+                abortMessage = "Merge the upstream commits and run release again."
               )
-            )
         } yield ()
       },
     execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        validatePushRemote(vcs) *> (vcs.commandName match {
-          case "git" =>
-            val tags = ctx.currentProjects.flatMap(_.tagName).distinct
-            for {
-              pushTarget <- resolveGitPushTarget(vcs)
-              _          <- logInfo(
-                              ctx,
-                              s"Pushing branch ${pushTarget.localBranch} " +
-                                s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
-                            )
-              _          <- runProcess(
-                              Process(
-                                Seq(
-                                  "git",
-                                  "push",
-                                  pushTarget.remote,
-                                  s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                                ),
-                                vcs.baseDir
-                              ),
-                              s"git push ${pushTarget.remote} ${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                            )
-              _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
-                              acc *>
-                                logInfo(ctx, s"Pushing tag $tag").void *>
-                                runProcess(
-                                  Process(
-                                    Seq("git", "push", pushTarget.remote, tag),
-                                    vcs.baseDir
+        validatePushRemote(vcs) *> {
+          val doPush: IO[MonorepoContext] = vcs.commandName match {
+            case "git" =>
+              val tags = ctx.currentProjects.flatMap(_.tagName).distinct
+              for {
+                pushTarget <- resolveGitPushTarget(vcs)
+                _          <- logInfo(
+                                ctx,
+                                s"Pushing branch ${pushTarget.localBranch} " +
+                                  s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
+                              )
+                _          <- runProcess(
+                                Process(
+                                  Seq(
+                                    "git",
+                                    "push",
+                                    pushTarget.remote,
+                                    s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
                                   ),
-                                  s"git push tag '$tag'"
-                                )
-                            }
-            } yield ctx
+                                  vcs.baseDir
+                                ),
+                                s"git push ${pushTarget.remote} " +
+                                  s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
+                              )
+                _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
+                                acc *>
+                                  logInfo(ctx, s"Pushing tag $tag").void *>
+                                  runProcess(
+                                    Process(
+                                      Seq("git", "push", pushTarget.remote, tag),
+                                      vcs.baseDir
+                                    ),
+                                    s"git push tag '$tag'"
+                                  )
+                              }
+              } yield ctx
 
-          case _ =>
-            vcs.pushChanges.as(ctx)
-        })
+            case _ =>
+              vcs.pushChanges.as(ctx)
+          }
+
+          if (!ctx.interactive) doPush
+          else {
+            val decisionIO =
+              if (_root_.io.release.steps.StepHelpers.useDefaults(ctx.state)) IO.pure(true)
+              else
+                _root_.io.release.steps.StepHelpers.askYesNo(
+                  prompt = "Push changes to the remote repository (y/n)? [y] ",
+                  defaultYes = true
+                )
+
+            decisionIO.flatMap {
+              case true  => doPush
+              case false =>
+                logWarn(ctx, "Remember to push the changes yourself!")
+            }
+          }
+        }
       }
   )
 

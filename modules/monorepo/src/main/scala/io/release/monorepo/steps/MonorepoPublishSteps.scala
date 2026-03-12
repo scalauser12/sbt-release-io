@@ -86,11 +86,22 @@ private[monorepo] object MonorepoPublishSteps {
             val depList = externalSnapshots
               .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
               .mkString("\n")
-            IO.raiseError[Unit](
-              new IllegalStateException(
-                s"Snapshot dependencies found in ${project.name}:\n$depList"
-              )
-            )
+            val msg     = s"Snapshot dependencies found in ${project.name}:\n$depList"
+
+            if (!ctx.interactive) {
+              IO.raiseError[Unit](new IllegalStateException(msg))
+            } else {
+              IO.blocking(
+                ctx.state.log.warn(s"[release-io-monorepo] $msg")
+              ) *>
+                MonorepoStepHelpers.confirmContinue(
+                  ctx,
+                  prompt = "Do you want to continue (y/n)? [n] ",
+                  defaultYes = false,
+                  abortMessage =
+                    s"Aborting release due to snapshot dependencies in ${project.name}."
+                )
+            }
           } else IO.unit
       } yield (),
     enableCrossBuild = true

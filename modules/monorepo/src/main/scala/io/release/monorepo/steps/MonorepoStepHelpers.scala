@@ -64,6 +64,31 @@ private[monorepo] object MonorepoStepHelpers {
   def logWarn(ctx: MonorepoContext, msg: String): IO[MonorepoContext] =
     IO.blocking(ctx.state.log.warn(s"[release-io-monorepo] $msg")).as(ctx)
 
+  /** Prompt user to continue, respecting interactive mode and useDefaults.
+    * Non-interactive: hard-fail with abortMessage.
+    * Interactive + useDefaults: use defaultYes.
+    * Interactive: prompt user.
+    */
+  def confirmContinue(
+      ctx: MonorepoContext,
+      prompt: String,
+      defaultYes: Boolean,
+      abortMessage: String
+  ): IO[Unit] = {
+    if (!ctx.interactive)
+      IO.raiseError(new IllegalStateException(abortMessage))
+    else {
+      val decisionIO =
+        if (_root_.io.release.steps.StepHelpers.useDefaults(ctx.state)) IO.pure(defaultYes)
+        else _root_.io.release.steps.StepHelpers.askYesNo(prompt, defaultYes = defaultYes)
+
+      decisionIO.flatMap { continue =>
+        if (continue) IO.unit
+        else IO.raiseError(new IllegalStateException(abortMessage))
+      }
+    }
+  }
+
   // ── Version summaries ─────────────────────────────────────────────────
 
   /** Comma-separated summary of project versions, e.g. "core 1.0.0, api 1.0.0". */

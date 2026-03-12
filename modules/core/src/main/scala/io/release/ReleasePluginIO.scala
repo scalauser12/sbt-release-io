@@ -241,8 +241,6 @@ trait ReleasePluginIOLike[T]
     import scala.util.control.NonFatal
 
     try {
-      val stepFns = releaseProcess(state)
-
       val useDefaults   = args.contains(WithDefaults)
       val skipTests     = args.contains(SkipTests)
       val crossFromArgs = args.contains(CrossBuild)
@@ -286,6 +284,7 @@ trait ReleasePluginIOLike[T]
         )
       )
       val plannedState = CoreReleasePlan.attach(cleanState, plan)
+      val stepFns      = releaseProcess(plannedState)
 
       val initialCtx = initialContext(
         plannedState,

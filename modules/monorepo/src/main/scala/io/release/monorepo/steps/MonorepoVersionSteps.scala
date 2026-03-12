@@ -66,14 +66,21 @@ private[monorepo] object MonorepoVersionSteps {
             .as(ctx.updateProject(project.ref)(_.copy(versions = Some((rel, next)))))
         case _                                                  =>
           resolve(ctx.state, project.ref).flatMap { versionInputs =>
-            if (versionInputs.useGlobalVersion) {
+            // In global-version mode with an interactive prompt (not use-defaults),
+            // reuse the first project's versions to avoid prompting N times.
+            // In non-interactive or use-defaults mode, evaluate each project's version
+            // function so that task-derived mismatches are caught by validate-versions.
+            val useDefaults =
+              _root_.io.release.steps.StepHelpers.useDefaults(ctx.state)
+            if (versionInputs.useGlobalVersion && ctx.interactive && !useDefaults) {
               ctx.currentProjects
                 .flatMap(_.versions)
                 .find { case (r, n) => r.nonEmpty && n.nonEmpty } match {
                 case Some(versions) =>
                   logInfo(
                     ctx,
-                    s"${project.name}: reusing global version ${versions._1} (next: ${versions._2})"
+                    s"${project.name}: reusing global version " +
+                      s"${versions._1} (next: ${versions._2})"
                   ).as(
                     ctx.updateProject(project.ref)(
                       _.copy(
