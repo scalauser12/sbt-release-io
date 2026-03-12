@@ -68,6 +68,7 @@ private[release] object VcsOps {
   ): IO[CleanCheckResult] =
     for {
       modified    <- vcs.modifiedFiles
+      staged      <- vcs.stagedFiles
       untracked   <- vcs.untrackedFiles
       currentHash <- vcs.currentHash
       _           <- IO.raiseWhen(modified.nonEmpty)(
@@ -77,6 +78,16 @@ private[release] object VcsOps {
                             |Modified files:
                             |
                             |${modified.map(" - " + _).mkString("\n")}
+                            |""".stripMargin
+                       )
+                     )
+      _           <- IO.raiseWhen(staged.nonEmpty)(
+                       new IllegalStateException(
+                         s"""Aborting release: staged uncommitted changes
+                            |
+                            |Staged files:
+                            |
+                            |${staged.map(" - " + _).mkString("\n")}
                             |""".stripMargin
                        )
                      )

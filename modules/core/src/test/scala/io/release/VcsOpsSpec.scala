@@ -55,6 +55,22 @@ class VcsOpsSpec extends Specification with CatsEffect {
       }
     }
 
+    "raise error listing staged files when staged-but-uncommitted changes exist" in {
+      gitRepoWithCommitResource.use { case (repo, vcs) =>
+        IO.blocking {
+          sbt.IO.write(new File(repo, "staged.txt"), "staged content")
+          TestSupport.runGit(repo, "add", "staged.txt")
+        } *>
+          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
+            case Left(e: RuntimeException) =>
+              (e.getMessage must contain("staged uncommitted changes")) and
+                (e.getMessage must contain("staged.txt"))
+            case other                     =>
+              ko(s"Expected RuntimeException but got $other")
+          }
+      }
+    }
+
     "raise error listing untracked files when untracked files exist" in {
       gitRepoWithCommitResource.use { case (repo, vcs) =>
         IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>

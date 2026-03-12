@@ -70,6 +70,9 @@ class Git(val baseDir: File) extends Vcs {
   def modifiedFiles: IO[Seq[String]] =
     IO.blocking(cmd("ls-files", "--modified", "--exclude-standard").lineStream.toList)
 
+  def stagedFiles: IO[Seq[String]] =
+    IO.blocking(cmd("diff", "--cached", "--name-only").lineStream.toList)
+
   def untrackedFiles: IO[Seq[String]] =
     IO.blocking(cmd("ls-files", "--other", "--exclude-standard").lineStream.toList)
 

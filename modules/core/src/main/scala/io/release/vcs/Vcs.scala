@@ -19,6 +19,7 @@ trait Vcs {
   def isBehindRemote: IO[Boolean]
   def existsTag(name: String): IO[Boolean]
   def modifiedFiles: IO[Seq[String]]
+  def stagedFiles: IO[Seq[String]]
   def untrackedFiles: IO[Seq[String]]
 
   /** Porcelain status output. Raises on non-zero exit code. */
