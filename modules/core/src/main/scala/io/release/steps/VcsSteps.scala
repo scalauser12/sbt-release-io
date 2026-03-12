@@ -1,9 +1,10 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.internal.{CoreTagResolver, SbtRuntime, TagPlan}
+import io.release.internal.{CoreReleasePlan, SbtRuntime, TagPlan}
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.{internal => _, *}
+import _root_.io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
 import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
@@ -45,10 +46,22 @@ private[release] object VcsSteps {
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
-        params <- IO.blocking(CoreTagResolver.resolve(ctx.state))
+        params <- IO.blocking(resolveTagPlan(ctx.state))
         result <- resolveTag(vcs, params, ctx.copy(state = params.state))
       } yield result
     }
+  }
+
+  private def resolveTagPlan(state: sbt.State): TagPlan = {
+    val (s1, tagName)    = SbtRuntime.runTask(state, releaseIOTagName)
+    val (s2, tagComment) = SbtRuntime.runTask(s1, releaseIOTagComment)
+    TagPlan(
+      state = s2,
+      tagName = tagName,
+      tagComment = tagComment,
+      sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
+      defaultAnswer = CoreReleasePlan.current(s2).flatMap(_.tagDefault)
+    )
   }
 
   private def resolveTag(
