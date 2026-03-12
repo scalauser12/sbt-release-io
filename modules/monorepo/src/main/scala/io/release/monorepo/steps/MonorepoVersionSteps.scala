@@ -3,13 +3,16 @@ package io.release.monorepo.steps
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import _root_.io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
+import _root_.io.release.ReleaseKeys
+import _root_.io.release.monorepo.MonorepoReleaseIO as MR
+import _root_.io.release.steps.StepHelpers
 import cats.effect.IO
+import io.release.internal.SbtRuntime
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.monorepo.internal.MonorepoReleasePlan
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.internal.SbtRuntime
-import _root_.io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
 import sbt.{internal => _, *}
 import sbt.Keys.*
 
@@ -40,16 +43,11 @@ private[monorepo] object MonorepoVersionSteps {
     IO.blocking {
       val runtime      = MonorepoRuntime.fromState(state)
       Seq(
-        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile      :=
-          runtime.extracted.get(
-            _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile
-          ),
-        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoReadVersion      :=
-          runtime.readVersion,
-        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoWriteVersion     :=
-          runtime.writeVersion,
-        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion :=
-          runtime.useGlobalVersion
+        MR.releaseIOMonorepoVersionFile      :=
+          runtime.extracted.get(MR.releaseIOMonorepoVersionFile),
+        MR.releaseIOMonorepoReadVersion      := runtime.readVersion,
+        MR.releaseIOMonorepoWriteVersion     := runtime.writeVersion,
+        MR.releaseIOMonorepoUseGlobalVersion := runtime.useGlobalVersion
       )
     }
 
@@ -77,7 +75,7 @@ private[monorepo] object MonorepoVersionSteps {
             // In non-interactive or use-defaults mode, evaluate each project's version
             // function so that task-derived mismatches are caught by validate-versions.
             val useDefaults =
-              _root_.io.release.steps.StepHelpers.useDefaults(ctx.state)
+              StepHelpers.useDefaults(ctx.state)
             if (versionInputs.useGlobalVersion && ctx.interactive && !useDefaults) {
               ctx.currentProjects
                 .flatMap(_.versions)
@@ -110,23 +108,14 @@ private[monorepo] object MonorepoVersionSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     for {
-      versionInputs                                        <- resolve(
-                                                                ctx.state,
-                                                                project.ref
-                                                              )
-      currentVer                                           <- versionInputs.readVersion(
-                                                                versionInputs.versionFile
-                                                              )
+      versionInputs                                        <- resolve(ctx.state, project.ref)
+      currentVer                                           <- versionInputs.readVersion(versionInputs.versionFile)
       data                                                 <- IO.blocking {
-                                                                val extracted   =
-                                                                  Project.extract(ctx.state)
-                                                                val releaseFn   =
-                                                                  extracted.get(project.ref / releaseIOVersion)
-                                                                val nextFn      =
-                                                                  extracted.get(project.ref / releaseIONextVersion)
+                                                                val extracted   = Project.extract(ctx.state)
+                                                                val releaseFn   = extracted.get(project.ref / releaseIOVersion)
+                                                                val nextFn      = extracted.get(project.ref / releaseIONextVersion)
                                                                 val useDefaults =
-                                                                  _root_.io.release.steps.StepHelpers
-                                                                    .useDefaults(ctx.state)
+                                                                  StepHelpers.useDefaults(ctx.state)
                                                                 (ctx.state, releaseFn(currentVer), nextFn, useDefaults)
                                                               }
       (updatedState, suggestedRelease, nextFn, useDefaults) = data
@@ -248,7 +237,7 @@ private[monorepo] object MonorepoVersionSteps {
                             if (versionInputs.useGlobalVersion) ThisBuild / version := ver
                             else project.ref / version                              := ver
                           val stateWithAttr =
-                            ctx.state.put(_root_.io.release.ReleaseKeys.runtimeVersionOverride, ver)
+                            ctx.state.put(ReleaseKeys.runtimeVersionOverride, ver)
                           val baseState     = SbtRuntime.appendWithSession(
                             stateWithAttr,
                             preserved ++ Seq(setting)

@@ -1,15 +1,19 @@
 package io.release.monorepo.steps
 
+import _root_.io.release.{ReleaseIO, VcsOps}
+import _root_.io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
 import _root_.io.release.monorepo.{
   MonorepoContext,
   MonorepoProjectFailure,
   MonorepoProjectFailures,
   MonorepoRuntime,
+  MonorepoVersionFiles,
   ProjectReleaseInfo
 }
+import _root_.io.release.steps.StepHelpers
 import _root_.io.release.steps.StepHelpers.{parseVersionInput, required}
+import _root_.io.release.vcs.Vcs
 import cats.effect.IO
-import _root_.io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
 import sbt.{internal => _, *}
 
 import scala.util.control.NonFatal
@@ -79,8 +83,8 @@ private[monorepo] object MonorepoStepHelpers {
       IO.raiseError(new IllegalStateException(abortMessage))
     else {
       val decisionIO =
-        if (_root_.io.release.steps.StepHelpers.useDefaults(ctx.state)) IO.pure(defaultYes)
-        else _root_.io.release.steps.StepHelpers.askYesNo(prompt, defaultYes = defaultYes)
+        if (StepHelpers.useDefaults(ctx.state)) IO.pure(defaultYes)
+        else StepHelpers.askYesNo(prompt, defaultYes = defaultYes)
 
       decisionIO.flatMap { continue =>
         if (continue) IO.unit
@@ -143,33 +147,33 @@ private[monorepo] object MonorepoStepHelpers {
   /** Resolve version file paths relative to VCS root for all non-failed projects. */
   private[steps] def resolveRelativePaths(
       ctx: MonorepoContext,
-      vcs: _root_.io.release.vcs.Vcs
+      vcs: Vcs
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
     loadRuntime(ctx).flatMap(resolveRelativePaths(ctx, vcs, _))
 
   private def resolveRelativePaths(
       ctx: MonorepoContext,
-      vcs: _root_.io.release.vcs.Vcs,
+      vcs: Vcs,
       runtime: MonorepoRuntime
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
     ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
       (acc, project) =>
         acc.flatMap { paths =>
           val versionFile = resolveVersionFile(runtime, project)
-          _root_.io.release.VcsOps
+          VcsOps
             .relativizeToBase(vcs, versionFile)
             .map(rel => paths :+ (project, rel))
         }
     }
 
   private[steps] def loadRuntime(ctx: MonorepoContext): IO[MonorepoRuntime] =
-    IO.blocking(_root_.io.release.monorepo.MonorepoRuntime.fromState(ctx.state))
+    IO.blocking(MonorepoRuntime.fromState(ctx.state))
 
   private[steps] def resolveVersionFile(
       runtime: MonorepoRuntime,
       project: ProjectReleaseInfo
   ): File =
-    _root_.io.release.monorepo.MonorepoVersionFiles.resolve(runtime, project.ref)
+    MonorepoVersionFiles.resolve(runtime, project.ref)
 
   private[steps] def resolveVersionFile(
       ctx: MonorepoContext,
@@ -181,14 +185,14 @@ private[monorepo] object MonorepoStepHelpers {
 
   /** Stage version files, then commit if there are changes. */
   private[steps] def commitIfChanged(
-      vcs: _root_.io.release.vcs.Vcs,
+      vcs: Vcs,
       msg: String,
       sign: Boolean,
       signOff: Boolean,
       ctx: MonorepoContext
   ): IO[MonorepoContext] =
     for {
-      trackedStatus <- _root_.io.release.VcsOps.trackedStatus(vcs)
+      trackedStatus <- VcsOps.trackedStatus(vcs)
       result        <- if (trackedStatus.nonEmpty)
                          vcs.commit(msg, sign, signOff) *>
                            logInfo(ctx, s"Committed: $msg")

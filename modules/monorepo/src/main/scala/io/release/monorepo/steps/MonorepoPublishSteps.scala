@@ -1,10 +1,11 @@
 package io.release.monorepo.steps
 
+import _root_.io.release.{CleanCompat, ReleaseIOCompat}
+import _root_.io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOSnapshotDependencies}
+import _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import _root_.io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOSnapshotDependencies}
-import _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import sbt.{internal => _, *}
 import sbt.Keys.*
 
@@ -99,7 +100,7 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-clean",
     execute = (ctx, project) =>
       IO.blocking {
-        val newState = _root_.io.release.CleanCompat.runProject(ctx.state, project.ref)
+        val newState = CleanCompat.runProject(ctx.state, project.ref)
         ctx.withState(newState)
       }
   )
@@ -111,7 +112,7 @@ private[monorepo] object MonorepoPublishSteps {
       if (ctx.skipTests)
         logInfo(ctx, s"Skipping tests for ${project.name}")
       else
-        runProjectTask(ctx, project.ref / Test / _root_.io.release.ReleaseIOCompat.testKey),
+        runProjectTask(ctx, project.ref / Test / ReleaseIOCompat.testKey),
     enableCrossBuild = true
   )
 

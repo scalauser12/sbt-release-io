@@ -1,5 +1,6 @@
 package io.release.monorepo.internal
 
+import _root_.io.release.monorepo.MonorepoVersionFiles
 import cats.effect.IO
 import io.release.monorepo.{DependencyGraph, MonorepoReleaseIO, MonorepoRuntime, ProjectReleaseInfo}
 import sbt.{internal => _, *}
@@ -26,7 +27,7 @@ private[monorepo] object MonorepoProjectResolver {
           ref = ref,
           name = ref.project,
           baseDir = baseDir,
-          versionFile = _root_.io.release.monorepo.MonorepoVersionFiles.resolve(runtime, ref)
+          versionFile = MonorepoVersionFiles.resolve(runtime, ref)
         )
       }
     }

@@ -73,6 +73,9 @@ private[release] object ExecutionEngine {
   def runActionPhase[C <: ReleaseCtx[C]](
       actions: Seq[C => IO[C]]
   )(startCtx: C): IO[ExecutionResult[C]] = {
+    // After each action, check whether sbt injected a FailureCommand into
+    // remainingCommands (e.g. from a failed task). If so, mark the context
+    // as failed so subsequent steps are skipped.
     val interleavedSteps = actions.flatMap { step =>
       Seq(
         (ctx: C) => if (ctx.failed) IO.pure(ctx) else step(ctx),

@@ -21,42 +21,41 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[SelectionResult] =
     for {
-      runtime         <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-      tagSettings     <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
-      liveOrdered     <- MonorepoProjectResolver.resolveOrdered(ctx.state)
-      ordered          = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
-      validated       <- IO.fromEither(
-                           validateResolvedProjects(ordered, plan, runtime.useGlobalVersion).left
-                             .map(new IllegalStateException(_))
-                         )
-      selectionResult <- plan.selectionMode match {
-                           case SelectionMode.ExplicitSelection =>
-                             IO.pure(
-                               (
-                                 ordered.filter(p => validated.selectedNames.contains(p.name)),
-                                 SelectionMode.ExplicitSelection
-                               )
-                             )
-                           case SelectionMode.AllChanged        =>
-                             IO.pure((ordered, SelectionMode.AllChanged))
-                           case SelectionMode.DetectChanges     =>
-                             detectSelectedProjects(ctx, ordered, runtime, tagSettings)
-                         }
-      selected         = selectionResult._1
-      effectiveMode    = selectionResult._2
-      constrained     <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
-                           ordered,
-                           selected,
-                           runtime.useGlobalVersion
-                         )
-      _               <- if (effectiveMode == SelectionMode.ExplicitSelection)
-                           validateUnusedOverrides(constrained, validated)
-                         else IO.unit
-      withVersions     = MonorepoProjectResolver.applyVersionOverrides(
-                           constrained,
-                           validated,
-                           runtime.useGlobalVersion
-                         )
+      runtime                  <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
+      tagSettings              <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
+      liveOrdered              <- MonorepoProjectResolver.resolveOrdered(ctx.state)
+      ordered                   = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
+      validated                <- IO.fromEither(
+                                    validateResolvedProjects(ordered, plan, runtime.useGlobalVersion).left
+                                      .map(new IllegalStateException(_))
+                                  )
+      selectionResult          <- plan.selectionMode match {
+                                    case SelectionMode.ExplicitSelection =>
+                                      IO.pure(
+                                        (
+                                          ordered.filter(p => validated.selectedNames.contains(p.name)),
+                                          SelectionMode.ExplicitSelection
+                                        )
+                                      )
+                                    case SelectionMode.AllChanged        =>
+                                      IO.pure((ordered, SelectionMode.AllChanged))
+                                    case SelectionMode.DetectChanges     =>
+                                      detectSelectedProjects(ctx, ordered, runtime, tagSettings)
+                                  }
+      (selected, effectiveMode) = selectionResult
+      constrained              <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
+                                    ordered,
+                                    selected,
+                                    runtime.useGlobalVersion
+                                  )
+      _                        <- if (effectiveMode == SelectionMode.ExplicitSelection)
+                                    validateUnusedOverrides(constrained, validated)
+                                  else IO.unit
+      withVersions              = MonorepoProjectResolver.applyVersionOverrides(
+                                    constrained,
+                                    validated,
+                                    runtime.useGlobalVersion
+                                  )
     } yield SelectionResult(
       projects = withVersions,
       selectionMode = effectiveMode,
