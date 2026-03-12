@@ -107,7 +107,7 @@ object ReleaseStepIO {
       name = s"command+remaining: $command",
       execute = ctx =>
         IO.blocking {
-          ctx.copy(state = CommandStepSupport.runCommandAndRemaining(ctx.state, command))
+          ctx.copy(state = SbtRuntime.runCommandAndRemaining(ctx.state, command))
         }
     )
 
