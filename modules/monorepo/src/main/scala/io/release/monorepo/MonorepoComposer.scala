@@ -1,6 +1,6 @@
 package io.release.monorepo
 
-import _root_.io.release.internal.{ExecutionEngine, FailureHandling, SbtRuntime}
+import _root_.io.release.internal.{ExecutionEngine, SbtRuntime}
 import cats.effect.IO
 import io.release.monorepo.steps.MonorepoStepHelpers
 import sbt.{internal => _, *}
@@ -22,10 +22,10 @@ private[monorepo] object MonorepoComposer {
           setupCtx <- runSequentialValidateThenExecute(
                         setupSteps,
                         crossBuild,
-                        FailureHandling.armOnFailure(initialCtx)
+                        ExecutionEngine.armOnFailure(initialCtx)
                       )
           finalCtx <- if (setupCtx.failed) {
-                        FailureHandling.ExecutionResult(setupCtx).ensureSucceeded(FailureMessage)
+                        ExecutionEngine.ExecutionResult(setupCtx).ensureSucceeded(FailureMessage)
                       } else {
                         runMainSegment(mainSteps, crossBuild, setupCtx)
                       }
@@ -36,9 +36,9 @@ private[monorepo] object MonorepoComposer {
           result   <- runSequentialValidateThenExecute(
                         steps,
                         crossBuild,
-                        FailureHandling.armOnFailure(initialCtx)
+                        ExecutionEngine.armOnFailure(initialCtx)
                       )
-          finalCtx <- FailureHandling.ExecutionResult(result).ensureSucceeded(FailureMessage)
+          finalCtx <- ExecutionEngine.ExecutionResult(result).ensureSucceeded(FailureMessage)
         } yield finalCtx
     }
 
@@ -74,7 +74,7 @@ private[monorepo] object MonorepoComposer {
 
     for {
       _        <- ExecutionEngine.runValidations(LogPrefix, validations, startCtx)
-      result   <- ExecutionEngine.runActions(actions, FailureHandling.armOnFailure(startCtx))
+      result   <- ExecutionEngine.runActions(actions, ExecutionEngine.armOnFailure(startCtx))
       finalCtx <- result.ensureSucceeded(FailureMessage)
     } yield finalCtx
   }
@@ -122,8 +122,8 @@ private[monorepo] object MonorepoComposer {
     val actions: Seq[MonorepoContext => IO[MonorepoContext]] =
       Seq((currentCtx: MonorepoContext) => executeStep(step, crossBuild, currentCtx))
 
-    FailureHandling
-      .runActionPhase(actions)(FailureHandling.armOnFailure(ctx))
+    ExecutionEngine
+      .runActionPhase(actions)(ExecutionEngine.armOnFailure(ctx))
       .map(_.context)
   }
 
@@ -133,7 +133,7 @@ private[monorepo] object MonorepoComposer {
       ctx: MonorepoContext
   ): IO[MonorepoContext] = step match {
     case global: MonorepoStepIO.Global =>
-      FailureHandling.withErrorRecovery[MonorepoContext](LogPrefix) { currentCtx =>
+      ExecutionEngine.withErrorRecovery[MonorepoContext](LogPrefix) { currentCtx =>
         IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${global.name}")) *>
           global.execute(currentCtx)
       }(ctx)

@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.{ExecutionEngine, FailureHandling, SbtRuntime}
+import io.release.internal.{ExecutionEngine, SbtRuntime}
 import sbt.{internal => _, *}
 import sbt.Keys.*
 
@@ -40,7 +40,7 @@ private[release] object ReleaseComposer {
       initialCtx = initialCtx
     )
 
-    val startCtx = FailureHandling.armOnFailure(initialCtx)
+    val startCtx = ExecutionEngine.armOnFailure(initialCtx)
 
     val wrappedActions = steps.map { step =>
       val baseAction = (ctx: ReleaseContext) =>
@@ -55,7 +55,7 @@ private[release] object ReleaseComposer {
 
       ExecutionEngine.ActionStep(
         step.name,
-        FailureHandling.withErrorRecovery(LogPrefix)(crossWrapped)
+        ExecutionEngine.withErrorRecovery(LogPrefix)(crossWrapped)
       )
     }
 
