@@ -21,40 +21,43 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[SelectionResult] =
     for {
-      runtime     <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-      tagSettings <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
-      liveOrdered <- MonorepoProjectResolver.resolveOrdered(ctx.state)
-      ordered      = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
-      validated   <- IO.fromEither(
-                       validateResolvedProjects(ordered, plan, runtime.useGlobalVersion).left
-                         .map(new IllegalStateException(_))
-                     )
-      selected    <- plan.selectionMode match {
-                       case SelectionMode.ExplicitSelection =>
-                         IO.pure(ordered.filter(p => validated.selectedNames.contains(p.name)))
-                       case SelectionMode.AllChanged        =>
-                         IO.pure(ordered)
-                       case SelectionMode.DetectChanges     =>
-                         detectSelectedProjects(
-                           ctx,
-                           ordered,
-                           runtime,
-                           tagSettings
+      runtime         <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
+      tagSettings     <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
+      liveOrdered     <- MonorepoProjectResolver.resolveOrdered(ctx.state)
+      ordered          = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
+      validated       <- IO.fromEither(
+                           validateResolvedProjects(ordered, plan, runtime.useGlobalVersion).left
+                             .map(new IllegalStateException(_))
                          )
-                     }
-      constrained <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
-                       ordered,
-                       selected,
-                       runtime.useGlobalVersion
-                     )
-      withVersions = MonorepoProjectResolver.applyVersionOverrides(
-                       constrained,
-                       validated,
-                       runtime.useGlobalVersion
-                     )
+      selectionResult <- plan.selectionMode match {
+                           case SelectionMode.ExplicitSelection =>
+                             IO.pure(
+                               (
+                                 ordered.filter(p => validated.selectedNames.contains(p.name)),
+                                 SelectionMode.ExplicitSelection
+                               )
+                             )
+                           case SelectionMode.AllChanged        =>
+                             IO.pure((ordered, SelectionMode.AllChanged))
+                           case SelectionMode.DetectChanges     =>
+                             detectSelectedProjects(ctx, ordered, runtime, tagSettings)
+                         }
+      selected         = selectionResult._1
+      effectiveMode    = selectionResult._2
+      constrained     <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
+                           ordered,
+                           selected,
+                           runtime.useGlobalVersion
+                         )
+      _               <- validateUnusedOverrides(constrained, validated)
+      withVersions     = MonorepoProjectResolver.applyVersionOverrides(
+                           constrained,
+                           validated,
+                           runtime.useGlobalVersion
+                         )
     } yield SelectionResult(
       projects = withVersions,
-      selectionMode = validated.selectionMode,
+      selectionMode = effectiveMode,
       tagStrategy = tagSettings.tagStrategy
     )
 
@@ -63,14 +66,14 @@ private[monorepo] object MonorepoSelectionResolver {
       orderedProjects: Seq[ProjectReleaseInfo],
       runtime: MonorepoRuntime,
       tagSettings: MonorepoTagResolver.ResolvedMonorepoTagSettings
-  ): IO[Seq[ProjectReleaseInfo]] = {
+  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] = {
     val detectChanges  = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges)
     val customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector)
 
     if (!detectChanges) {
-      IO.pure(orderedProjects)
+      IO.pure((orderedProjects, SelectionMode.AllChanged))
     } else {
-      customDetector match {
+      val detected = customDetector match {
         case Some(detector) =>
           detectWithCustomDetector(ctx, orderedProjects, detector)
         case None           =>
@@ -95,6 +98,7 @@ private[monorepo] object MonorepoSelectionResolver {
             )
           }
       }
+      detected.map((_, SelectionMode.DetectChanges))
     }
   }
 
@@ -161,6 +165,25 @@ private[monorepo] object MonorepoSelectionResolver {
     } yield plan
   }
 
+  private def validateUnusedOverrides(
+      selectedProjects: Seq[ProjectReleaseInfo],
+      plan: MonorepoReleasePlan
+  ): IO[Unit] = {
+    val overrideNames = plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet
+    if (overrideNames.isEmpty) IO.unit
+    else {
+      val selectedNames = selectedProjects.map(_.name).toSet
+      val unused        = overrideNames -- selectedNames
+      IO.raiseUnless(unused.isEmpty)(
+        new IllegalStateException(
+          s"Version overrides target projects not selected for release: " +
+            s"${unused.mkString(", ")}. " +
+            s"Selected: ${selectedNames.mkString(", ")}"
+        )
+      )
+    }
+  }
+
   private def detectWithCustomDetector(
       ctx: MonorepoContext,
       projects: Seq[ProjectReleaseInfo],
@@ -168,7 +191,7 @@ private[monorepo] object MonorepoSelectionResolver {
   ): IO[Seq[ProjectReleaseInfo]] =
     projects.foldLeft(IO.pure(Seq.empty[ProjectReleaseInfo])) { (acc, project) =>
       acc.flatMap { changed =>
-        detector(project.ref, project.baseDir, ctx.state)
+        IO.defer(detector(project.ref, project.baseDir, ctx.state))
           .map { isChanged => if (isChanged) changed :+ project else changed }
           .recoverWith { case NonFatal(err) =>
             IO.blocking(
