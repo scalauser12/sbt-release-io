@@ -63,15 +63,11 @@ private[monorepo] object MonorepoPublishSteps {
     execute = (ctx, _) => IO.pure(ctx),
     validate = (ctx, project) =>
       for {
-        externalSnapshots <- IO.blocking {
-                               val extracted = Project.extract(ctx.state)
-                               extracted
-                                 .runTask(
-                                   project.ref / releaseIOSnapshotDependencies,
-                                   ctx.state
-                                 )
-                                 ._2
-                             }
+        externalSnapshots <- evaluateProjectTask(
+                               ctx,
+                               project.ref / releaseIOSnapshotDependencies,
+                               s"Failed to resolve snapshot dependencies for ${project.name}"
+                             )
         _                 <-
           if (externalSnapshots.nonEmpty) {
             val depList = externalSnapshots
@@ -126,7 +122,11 @@ private[monorepo] object MonorepoPublishSteps {
       if (ctx.skipPublish)
         logInfo(ctx, s"Skipping publish for ${project.name}")
       else
-        runProjectTask(ctx, project.ref / releaseIOPublishArtifactsAction),
+        evaluatePublishSkip(ctx, project).flatMap { skipped =>
+          if (skipped)
+            logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)")
+          else runProjectTask(ctx, project.ref / releaseIOPublishArtifactsAction)
+        },
     validate = (ctx, project) =>
       if (ctx.skipPublish) IO.unit
       else
