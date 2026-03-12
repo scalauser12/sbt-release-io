@@ -19,13 +19,7 @@ private[release] object ExecutionEngine {
       run: C => IO[C]
   )
 
-  final case class ExecutionResult[C <: ReleaseCtx[C]](context: C) {
-    def ensureSucceeded(message: String): IO[C] =
-      if (context.failed)
-        IO.raiseError(new IllegalStateException(message, context.failureCause.orNull))
-      else
-        IO.pure(context)
-  }
+  final case class ExecutionResult[C <: ReleaseCtx[C]](context: C)
 
   def runValidations[C <: ReleaseCtx[C]](
       logPrefix: String,

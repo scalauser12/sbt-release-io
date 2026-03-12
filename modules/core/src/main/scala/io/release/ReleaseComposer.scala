@@ -60,10 +60,9 @@ private[release] object ReleaseComposer {
     }
 
     for {
-      _        <- validationPhase
-      result   <- ExecutionEngine.runActions(wrappedActions, startCtx)
-      finalCtx <- result.ensureSucceeded("Release process failed")
-    } yield finalCtx
+      _      <- validationPhase
+      result <- ExecutionEngine.runActions(wrappedActions, startCtx)
+    } yield result.context
   }
 
   /** Run a step function across all crossScalaVersions using proper project reload. */

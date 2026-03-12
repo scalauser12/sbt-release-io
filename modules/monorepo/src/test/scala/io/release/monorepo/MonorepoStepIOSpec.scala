@@ -116,15 +116,14 @@ class MonorepoStepIOSpec extends Specification with CatsEffect {
           execute = _ => IO.raiseError(new RuntimeException("global failure"))
         )
 
-        MonorepoStepIO.compose(Seq(step))(ctx).attempt.map {
-          case Left(e: RuntimeException) =>
-            e.getMessage must contain("Monorepo release process failed")
-          case other                     => ko(s"Expected RuntimeException but got $other")
+        MonorepoStepIO.compose(Seq(step))(ctx).map { result =>
+          (result.failed must beTrue) and
+            (result.failureCause must beSome)
         }
       }
     }
 
-    "preserve per-project failure causes in the final aggregate error" in {
+    "preserve per-project failure causes in the final context" in {
       contextResource.use { ctx =>
         val projects = Seq(dummyProject("core"), dummyProject("api"))
         val pCtx     = ctx.withProjects(projects)
@@ -136,19 +135,14 @@ class MonorepoStepIOSpec extends Specification with CatsEffect {
             else IO.pure(c)
         )
 
-        MonorepoStepIO.compose(Seq(failingStep))(pCtx).attempt.map {
-          case Left(e: IllegalStateException) =>
-            val aggregate = e.getCause.asInstanceOf[MonorepoProjectFailures]
-            (e.getMessage must contain("Monorepo release process failed")) and
-              (aggregate.failures.map(_.projectName) must contain("core")) and
-              (aggregate.failures
-                .find(_.projectName == "core")
-                .flatMap(_.cause)
-                .map(_.getMessage) must beSome(
-                "core failed"
-              ))
-          case other                          =>
-            ko(s"Expected IllegalStateException but got $other")
+        MonorepoStepIO.compose(Seq(failingStep))(pCtx).map { result =>
+          val aggregate = result.failureCause.get.asInstanceOf[MonorepoProjectFailures]
+          (result.failed must beTrue) and
+            (aggregate.failures.map(_.projectName) must contain("core")) and
+            (aggregate.failures
+              .find(_.projectName == "core")
+              .flatMap(_.cause)
+              .map(_.getMessage) must beSome("core failed"))
         }
       }
     }

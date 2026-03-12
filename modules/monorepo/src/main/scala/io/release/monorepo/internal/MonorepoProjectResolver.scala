@@ -1,7 +1,7 @@
 package io.release.monorepo.internal
 
 import cats.effect.IO
-import io.release.monorepo.{MonorepoReleaseIO, MonorepoRuntime, ProjectReleaseInfo}
+import io.release.monorepo.{DependencyGraph, MonorepoReleaseIO, MonorepoRuntime, ProjectReleaseInfo}
 import sbt.{internal => _, *}
 import sbt.Keys.baseDirectory
 
@@ -28,6 +28,13 @@ private[monorepo] object MonorepoProjectResolver {
           baseDir = baseDir,
           versionFile = _root_.io.release.monorepo.MonorepoVersionFiles.resolve(runtime, ref)
         )
+      }
+    }
+
+  def resolveOrdered(state: State): IO[Seq[ProjectReleaseInfo]] =
+    resolveAll(state).flatMap { projects =>
+      DependencyGraph.topologicalSort(projects.map(_.ref), state).map { orderedRefs =>
+        orderedRefs.flatMap(ref => projects.find(_.ref == ref))
       }
     }
 

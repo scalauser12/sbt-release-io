@@ -23,7 +23,7 @@ private[monorepo] object MonorepoSelectionResolver {
     for {
       runtime     <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
       tagSettings <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
-      liveOrdered <- MonorepoOrderResolver.resolve(ctx.state)
+      liveOrdered <- MonorepoProjectResolver.resolveOrdered(ctx.state)
       ordered      = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
       validated   <- IO.fromEither(
                        validateResolvedProjects(ordered, plan, runtime.useGlobalVersion).left
@@ -42,7 +42,7 @@ private[monorepo] object MonorepoSelectionResolver {
                            tagSettings
                          )
                      }
-      constrained <- MonorepoReleasePlanner.enforceGlobalVersionAllOrNothing(
+      constrained <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
                        ordered,
                        selected,
                        runtime.useGlobalVersion

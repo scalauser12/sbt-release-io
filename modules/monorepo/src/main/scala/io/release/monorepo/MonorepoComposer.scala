@@ -11,7 +11,6 @@ private[monorepo] object MonorepoComposer {
 
   private val LogPrefix                   = "[release-io-monorepo]"
   private[monorepo] val SelectionBoundary = "detect-or-select-projects"
-  private val FailureMessage              = "Monorepo release process failed"
 
   def compose(steps: Seq[MonorepoStepIO], crossBuild: Boolean = false)(
       initialCtx: MonorepoContext
@@ -24,22 +23,16 @@ private[monorepo] object MonorepoComposer {
                         crossBuild,
                         ExecutionEngine.armOnFailure(initialCtx)
                       )
-          finalCtx <- if (setupCtx.failed) {
-                        ExecutionEngine.ExecutionResult(setupCtx).ensureSucceeded(FailureMessage)
-                      } else {
-                        runMainSegment(mainSteps, crossBuild, setupCtx)
-                      }
+          finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
+                      else runMainSegment(mainSteps, crossBuild, setupCtx)
         } yield finalCtx
 
       case None =>
-        for {
-          result   <- runSequentialValidateThenExecute(
-                        steps,
-                        crossBuild,
-                        ExecutionEngine.armOnFailure(initialCtx)
-                      )
-          finalCtx <- ExecutionEngine.ExecutionResult(result).ensureSucceeded(FailureMessage)
-        } yield finalCtx
+        runSequentialValidateThenExecute(
+          steps,
+          crossBuild,
+          ExecutionEngine.armOnFailure(initialCtx)
+        )
     }
 
   private def splitAtBoundary(
@@ -73,10 +66,9 @@ private[monorepo] object MonorepoComposer {
     }
 
     for {
-      _        <- ExecutionEngine.runValidations(LogPrefix, validations, startCtx)
-      result   <- ExecutionEngine.runActions(actions, ExecutionEngine.armOnFailure(startCtx))
-      finalCtx <- result.ensureSucceeded(FailureMessage)
-    } yield finalCtx
+      _      <- ExecutionEngine.runValidations(LogPrefix, validations, startCtx)
+      result <- ExecutionEngine.runActions(actions, ExecutionEngine.armOnFailure(startCtx))
+    } yield result.context
   }
 
   private def runSequentialValidateThenExecute(

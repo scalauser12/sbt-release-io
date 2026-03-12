@@ -55,12 +55,11 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
 
           ReleaseStepIO
             .compose(Seq(failing, skipped), crossBuild = false)(ctx)
-            .attempt
             .flatMap { result =>
               observed.get.map { obs =>
-                (result must beLeft.like { case e: RuntimeException =>
-                  e.getMessage must contain("Release process failed")
-                }) and (obs must_== List("execute1"))
+                (result.failed must beTrue) and
+                  (result.failureCause must beSome) and
+                  (obs must_== List("execute1"))
               }
             }
         }
@@ -94,12 +93,11 @@ class ReleaseStepIOSpec extends Specification with CatsEffect {
 
           ReleaseStepIO
             .compose(Seq(injectFailure, skipped), crossBuild = false)(ctx)
-            .attempt
             .flatMap { result =>
               observed.get.map { obs =>
-                (result must beLeft.like { case e: RuntimeException =>
-                  e.getMessage must contain("Release process failed")
-                }) and (obs must_== List("execute1"))
+                (result.failed must beTrue) and
+                  (result.failureCause must beNone) and
+                  (obs must_== List("execute1"))
               }
             }
         }

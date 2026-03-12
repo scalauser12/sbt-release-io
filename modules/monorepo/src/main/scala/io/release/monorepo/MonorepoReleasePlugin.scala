@@ -13,11 +13,7 @@ import sbt.complete.Parser
 import _root_.io.release.ReleasePluginIO
 import _root_.io.release.internal.ExecutionFlags
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
-import _root_.io.release.monorepo.internal.{
-  MonorepoProjectResolver,
-  MonorepoReleasePlan,
-  MonorepoReleasePlanner
-}
+import _root_.io.release.monorepo.internal.{MonorepoProjectResolver, MonorepoReleasePlan}
 
 /** Base trait for resource-parameterized monorepo release plugins. Each release step
   * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the
@@ -177,10 +173,10 @@ trait MonorepoReleasePluginLike[T]
   private def plannerInputs(
       args: Seq[MonorepoArg],
       flags: ReleaseFlags
-  ): MonorepoReleasePlanner.Inputs = {
+  ): MonorepoReleasePlan.Inputs = {
     import MonorepoArg.*
 
-    MonorepoReleasePlanner.Inputs(
+    MonorepoReleasePlan.Inputs(
       flags = ExecutionFlags(
         useDefaults = flags.useDefaults,
         skipTests = flags.skipTests,
@@ -245,10 +241,10 @@ trait MonorepoReleasePluginLike[T]
         .remove(_root_.io.release.ReleaseKeys.versions)
         .remove(_root_.io.release.internal.InternalKeys.executionFlags)
         .remove(_root_.io.release.internal.InternalKeys.coreReleasePlan)
-        .remove(internal.MonorepoInternalKeys.globalVersionWritten)
+        .remove(internal.MonorepoReleasePlan.globalVersionWrittenKey)
 
       val program: IO[State] = for {
-        plannedEither <- MonorepoReleasePlanner.build(cleanState, plannerInputs(args, flags))
+        plannedEither <- MonorepoReleasePlan.build(cleanState, plannerInputs(args, flags))
         result        <- plannedEither match {
                            case Left(failedState) => IO.pure(failedState)
                            case Right(plan)       =>
@@ -274,12 +270,23 @@ trait MonorepoReleasePluginLike[T]
                                                  initialCtx
                                                )
                                              }
-                               _          <- IO.blocking(
-                                               finalCtx.state.log.info(
-                                                 "[release-io-monorepo] Monorepo release completed successfully!"
-                                               )
-                                             )
-                             } yield finalCtx.state
+                               result     <- if (finalCtx.failed) {
+                                               val cause = finalCtx.failureCause
+                                                 .map(e => Option(e.getMessage).getOrElse(e.toString))
+                                                 .getOrElse("unknown error")
+                                               IO.blocking(
+                                                 finalCtx.state.log.error(
+                                                   s"[release-io-monorepo] Release failed: $cause"
+                                                 )
+                                               ).as(finalCtx.state.fail)
+                                             } else {
+                                               IO.blocking(
+                                                 finalCtx.state.log.info(
+                                                   "[release-io-monorepo] Monorepo release completed successfully!"
+                                                 )
+                                               ).as(finalCtx.state)
+                                             }
+                             } yield result
                          }
       } yield result
 

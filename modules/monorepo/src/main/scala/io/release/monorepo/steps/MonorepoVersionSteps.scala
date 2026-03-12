@@ -6,8 +6,7 @@ import java.nio.file.Files
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.*
-import io.release.monorepo.internal.MonorepoVersionResolver
-import io.release.monorepo.internal.MonorepoInternalKeys
+import io.release.monorepo.internal.MonorepoReleasePlan
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.internal.SbtRuntime
 import _root_.io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
@@ -16,6 +15,43 @@ import sbt.Keys.*
 
 /** Version-related monorepo release steps: inquire, set, commit. */
 private[monorepo] object MonorepoVersionSteps {
+
+  // ── Inlined from MonorepoVersionResolver ──────────────────────────
+
+  private[steps] final case class ResolvedProjectVersion(
+      versionFile: File,
+      readVersion: File => IO[String],
+      writeVersion: (File, String) => IO[String],
+      useGlobalVersion: Boolean
+  )
+
+  private[steps] def resolve(state: State, ref: ProjectRef): IO[ResolvedProjectVersion] =
+    IO.blocking {
+      val runtime = MonorepoRuntime.fromState(state)
+      ResolvedProjectVersion(
+        versionFile = MonorepoVersionFiles.resolve(runtime, ref),
+        readVersion = runtime.readVersion,
+        writeVersion = runtime.writeVersion,
+        useGlobalVersion = runtime.useGlobalVersion
+      )
+    }
+
+  private[steps] def sessionSettings(state: State): IO[Seq[sbt.Setting[?]]] =
+    IO.blocking {
+      val runtime      = MonorepoRuntime.fromState(state)
+      Seq(
+        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile      :=
+          runtime.extracted.get(
+            _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoVersionFile
+          ),
+        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoReadVersion      :=
+          runtime.readVersion,
+        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoWriteVersion     :=
+          runtime.writeVersion,
+        _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion :=
+          runtime.useGlobalVersion
+      )
+    }
 
   /** Inquire release and next versions for each project.
     * If the project already has versions pre-populated (from command-line overrides),
@@ -29,7 +65,28 @@ private[monorepo] object MonorepoVersionSteps {
           logInfo(ctx, s"${project.name}: pre-set -> $rel (next: $next)")
             .as(ctx.updateProject(project.ref)(_.copy(versions = Some((rel, next)))))
         case _                                                  =>
-          inquireVersionsInteractive(ctx, project)
+          resolve(ctx.state, project.ref).flatMap { versionInputs =>
+            if (versionInputs.useGlobalVersion) {
+              ctx.currentProjects.flatMap(_.versions).headOption match {
+                case Some(versions) =>
+                  logInfo(
+                    ctx,
+                    s"${project.name}: reusing global version ${versions._1} (next: ${versions._2})"
+                  ).as(
+                    ctx.updateProject(project.ref)(
+                      _.copy(
+                        versionFile = versionInputs.versionFile,
+                        versions = Some(versions)
+                      )
+                    )
+                  )
+                case None           =>
+                  inquireVersionsInteractive(ctx, project)
+              }
+            } else {
+              inquireVersionsInteractive(ctx, project)
+            }
+          }
       }
   )
 
@@ -38,7 +95,7 @@ private[monorepo] object MonorepoVersionSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     for {
-      versionInputs                                        <- MonorepoVersionResolver.resolve(
+      versionInputs                                        <- resolve(
                                                                 ctx.state,
                                                                 project.ref
                                                               )
@@ -156,13 +213,13 @@ private[monorepo] object MonorepoVersionSteps {
       ver: String
   ): IO[MonorepoContext] =
     for {
-      versionInputs <- MonorepoVersionResolver.resolve(ctx.state, project.ref)
-      preserved     <- MonorepoVersionResolver.sessionSettings(ctx.state)
+      versionInputs <- resolve(ctx.state, project.ref)
+      preserved     <- sessionSettings(ctx.state)
       versionFile    = versionInputs.versionFile
       result        <-
         if (
           versionInputs.useGlobalVersion && ctx.state
-            .get(MonorepoInternalKeys.globalVersionWritten)
+            .get(MonorepoReleasePlan.globalVersionWrittenKey)
             .flatten
             .contains(ver)
         )
@@ -182,7 +239,7 @@ private[monorepo] object MonorepoVersionSteps {
                             preserved ++ Seq(setting)
                           )
                           if (versionInputs.useGlobalVersion)
-                            baseState.put(MonorepoInternalKeys.globalVersionWritten, Some(ver))
+                            baseState.put(MonorepoReleasePlan.globalVersionWrittenKey, Some(ver))
                           else baseState
                         }
             r        <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")

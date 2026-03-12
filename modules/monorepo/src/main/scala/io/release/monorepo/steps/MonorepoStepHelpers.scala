@@ -7,7 +7,6 @@ import _root_.io.release.monorepo.{
   MonorepoRuntime,
   ProjectReleaseInfo
 }
-import _root_.io.release.monorepo.internal.MonorepoVersionResolver
 import _root_.io.release.steps.StepHelpers.{parseVersionInput, required}
 import cats.effect.IO
 import _root_.io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
@@ -151,7 +150,7 @@ private[monorepo] object MonorepoStepHelpers {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[File] =
-    MonorepoVersionResolver.resolve(ctx.state, project.ref).map(_.versionFile)
+    MonorepoVersionSteps.resolve(ctx.state, project.ref).map(_.versionFile)
 
   // ── VCS commit ────────────────────────────────────────────────────────
 

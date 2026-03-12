@@ -4,7 +4,7 @@ import cats.effect.IO
 import io.release.monorepo.*
 import _root_.io.release.monorepo.MonorepoComposer
 import io.release.monorepo.internal.{
-  MonorepoOrderResolver,
+  MonorepoProjectResolver,
   MonorepoSelectionResolver,
   MonorepoTagResolver,
   SelectionMode
@@ -35,8 +35,8 @@ object MonorepoReleaseSteps {
   val resolveReleaseOrder: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "resolve-release-order",
     execute = ctx =>
-      MonorepoOrderResolver.resolve(ctx.state).flatMap { resolved =>
-        val sortedProjects = _root_.io.release.monorepo.internal.MonorepoProjectResolver
+      MonorepoProjectResolver.resolveOrdered(ctx.state).flatMap { resolved =>
+        val sortedProjects = MonorepoProjectResolver
           .mergeSnapshot(ctx.projects, resolved)
         val updated        = ctx.withProjects(sortedProjects)
         logInfo(updated, s"Release order: ${sortedProjects.map(_.name).mkString(" -> ")}")

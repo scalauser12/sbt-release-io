@@ -10,12 +10,12 @@ import java.net.URI
 
 import cats.effect.unsafe.implicits.global
 
-class MonorepoReleasePlannerSpec extends Specification {
+class MonorepoReleasePlanSpec extends Specification {
 
-  "MonorepoReleasePlanner.validateOverrideInputs" should {
+  "MonorepoReleasePlan.validateOverrideInputs" should {
 
     "reject duplicate per-project release-version overrides" in {
-      val result = MonorepoReleasePlanner.validateOverrideInputs(
+      val result = MonorepoReleasePlan.validateOverrideInputs(
         baseInputs.copy(releaseVersionPairs = Seq("core" -> "1.0.0", "core" -> "1.1.0"))
       )
 
@@ -25,7 +25,7 @@ class MonorepoReleasePlannerSpec extends Specification {
     }
 
     "reject explicit project selection combined with all-changed" in {
-      val result = MonorepoReleasePlanner.validateOverrideInputs(
+      val result = MonorepoReleasePlan.validateOverrideInputs(
         baseInputs.copy(allChanged = true, selectedNames = Seq("core"))
       )
 
@@ -35,7 +35,7 @@ class MonorepoReleasePlannerSpec extends Specification {
     }
 
     "derive the explicit selection mode from validated inputs" in {
-      val result = MonorepoReleasePlanner.validateOverrideInputs(
+      val result = MonorepoReleasePlan.validateOverrideInputs(
         baseInputs.copy(selectedNames = Seq("core"))
       )
 
@@ -45,7 +45,7 @@ class MonorepoReleasePlannerSpec extends Specification {
     }
 
     "allow global overrides at startup before runtime global-version validation" in {
-      val result = MonorepoReleasePlanner.validateOverrideInputs(
+      val result = MonorepoReleasePlan.validateOverrideInputs(
         baseInputs.copy(globalReleaseVersions = Seq("1.0.0"))
       )
 
@@ -55,11 +55,11 @@ class MonorepoReleasePlannerSpec extends Specification {
     }
   }
 
-  "MonorepoReleasePlanner.enforceGlobalVersionAllOrNothing" should {
+  "MonorepoReleasePlan.enforceGlobalVersionAllOrNothing" should {
 
     "fail when change detection keeps only a subset in global version mode" in {
       val result =
-        MonorepoReleasePlanner
+        MonorepoReleasePlan
           .enforceGlobalVersionAllOrNothing(
             allProjects = allProjects,
             changedProjects = allProjects.take(1),
@@ -74,7 +74,7 @@ class MonorepoReleasePlannerSpec extends Specification {
     }
 
     "allow unchanged selection rules outside global version mode" in {
-      MonorepoReleasePlanner
+      MonorepoReleasePlan
         .enforceGlobalVersionAllOrNothing(
           allProjects = allProjects,
           changedProjects = allProjects.take(1),
@@ -84,7 +84,7 @@ class MonorepoReleasePlannerSpec extends Specification {
     }
   }
 
-  private val baseInputs = MonorepoReleasePlanner.Inputs(
+  private val baseInputs = MonorepoReleasePlan.Inputs(
     flags = ExecutionFlags(
       useDefaults = false,
       skipTests = false,

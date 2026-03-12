@@ -100,12 +100,15 @@ case class MonorepoContext(
 
   private[monorepo] def releasePlan
       : Option[_root_.io.release.monorepo.internal.MonorepoReleasePlan] =
-    metadata(_root_.io.release.monorepo.internal.MonorepoInternalKeys.monorepoReleasePlan)
+    metadata(_root_.io.release.monorepo.internal.MonorepoReleasePlan.monorepoReleasePlanKey)
 
   private[monorepo] def withReleasePlan(
       plan: _root_.io.release.monorepo.internal.MonorepoReleasePlan
   ): MonorepoContext =
-    withMetadata(_root_.io.release.monorepo.internal.MonorepoInternalKeys.monorepoReleasePlan, plan)
+    withMetadata(
+      _root_.io.release.monorepo.internal.MonorepoReleasePlan.monorepoReleasePlanKey,
+      plan
+    )
 
   def fail: MonorepoContext                       = copy(failed = true)
   def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))

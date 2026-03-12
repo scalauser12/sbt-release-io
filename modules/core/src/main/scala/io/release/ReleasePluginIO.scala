@@ -305,8 +305,16 @@ trait ReleasePluginIOLike[T]
 
       // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
       val finalCtx = program.unsafeRunSync()
-      finalCtx.state.log.info("[release-io] Release completed successfully!")
-      finalCtx.state
+      if (finalCtx.failed) {
+        val cause = finalCtx.failureCause
+          .map(e => Option(e.getMessage).getOrElse(e.toString))
+          .getOrElse("unknown error")
+        finalCtx.state.log.error(s"[release-io] Release failed: $cause")
+        finalCtx.state.fail
+      } else {
+        finalCtx.state.log.info("[release-io] Release completed successfully!")
+        finalCtx.state
+      }
     } catch {
       case NonFatal(e) =>
         state.log.error(
