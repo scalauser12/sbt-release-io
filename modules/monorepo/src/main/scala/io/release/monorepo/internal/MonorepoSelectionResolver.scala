@@ -49,7 +49,9 @@ private[monorepo] object MonorepoSelectionResolver {
                            selected,
                            runtime.useGlobalVersion
                          )
-      _               <- validateUnusedOverrides(constrained, validated)
+      _               <- if (effectiveMode == SelectionMode.ExplicitSelection)
+                           validateUnusedOverrides(constrained, validated)
+                         else IO.unit
       withVersions     = MonorepoProjectResolver.applyVersionOverrides(
                            constrained,
                            validated,
