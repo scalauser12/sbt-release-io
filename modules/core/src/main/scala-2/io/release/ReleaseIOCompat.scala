@@ -9,13 +9,15 @@ object ReleaseIOCompat {
   def testKey: TaskKey[Unit] = sbt.Keys.test
 
   /** Snapshot dependency setting initializer.
+    * Only checks resolved library dependencies (managedClasspath), not inter-project
+    * dependencies (projectDependencies) — those are resolved internally by sbt from
+    * compiled classes and don't need a snapshot check.
     * In sbt 1, Attributed supports typed AttributeKey[ModuleID] via moduleID.key.
     */
   def snapshotDependenciesSetting: Setting[?] =
     ReleaseIO._releaseIOSnapshotDependencies := {
-      val projDeps = Keys.projectDependencies.value
-      val modules  =
+      val modules =
         (Runtime / Keys.managedClasspath).value.flatMap(_.get(Keys.moduleID.key))
-      (projDeps ++ modules).filter(m => m.isChanging || m.revision.endsWith("-SNAPSHOT"))
+      modules.filter(m => m.isChanging || m.revision.endsWith("-SNAPSHOT"))
     }
 }

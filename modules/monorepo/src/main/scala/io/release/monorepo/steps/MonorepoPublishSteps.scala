@@ -53,8 +53,9 @@ private[monorepo] object MonorepoPublishSteps {
     )
 
   /** Check for SNAPSHOT dependencies in each project.
-    * Inter-project dependencies within the release set are excluded — they will be
-    * released together and are expected to be SNAPSHOT before the release runs.
+    * Only checks resolved library dependencies — inter-project dependencies
+    * (via `.dependsOn()`) are resolved internally by sbt from compiled classes
+    * and are not included in `releaseIOSnapshotDependencies`.
     */
   val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "check-snapshot-dependencies",
@@ -63,23 +64,13 @@ private[monorepo] object MonorepoPublishSteps {
     validate = (ctx, project) =>
       for {
         externalSnapshots <- IO.blocking {
-                               val extracted    = Project.extract(ctx.state)
-                               val snapshotDeps = extracted
+                               val extracted = Project.extract(ctx.state)
+                               extracted
                                  .runTask(
                                    project.ref / releaseIOSnapshotDependencies,
                                    ctx.state
                                  )
                                  ._2
-                               // Filter out sibling projects that are part of this release
-                               val siblingIds   = ctx.currentProjects.flatMap { p =>
-                                 for {
-                                   org  <- (p.ref / organization).get(extracted.structure.data)
-                                   name <- (p.ref / Keys.name).get(extracted.structure.data)
-                                 } yield (org, name)
-                               }.toSet
-                               snapshotDeps.filterNot { dep =>
-                                 siblingIds.contains((dep.organization, dep.name))
-                               }
                              }
         _                 <-
           if (externalSnapshots.nonEmpty) {

@@ -1,6 +1,6 @@
 # sbt-release-io
 
-An sbt plugin wrapping sbt-release with cats-effect IO. Two modules:
+A cats-effect IO release plugin for sbt, inspired by sbt-release. Two modules:
 - **core** (`sbt-release-io`): main plugin in `modules/core/src/main/scala/io/release/`
 - **monorepo** (`sbt-release-io-monorepo`): monorepo extension in `modules/monorepo/src/main/scala/io/release/monorepo/`
 
