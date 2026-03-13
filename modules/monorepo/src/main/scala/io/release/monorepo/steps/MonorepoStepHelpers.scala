@@ -1,20 +1,13 @@
 package io.release.monorepo.steps
 
-import _root_.io.release.{ReleaseIO, VcsOps}
 import _root_.io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
-import _root_.io.release.monorepo.{
-  MonorepoContext,
-  MonorepoProjectFailure,
-  MonorepoProjectFailures,
-  MonorepoRuntime,
-  MonorepoVersionFiles,
-  ProjectReleaseInfo
-}
+import _root_.io.release.VcsOps
+import _root_.io.release.monorepo.*
 import _root_.io.release.steps.StepHelpers
 import _root_.io.release.steps.StepHelpers.{parseVersionInput, required}
 import _root_.io.release.vcs.Vcs
 import cats.effect.IO
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 import scala.util.control.NonFatal
 

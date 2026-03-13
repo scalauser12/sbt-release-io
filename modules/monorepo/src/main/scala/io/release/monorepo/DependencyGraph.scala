@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 /** Topological sort of sbt's inter-project dependency graph. */
 private[monorepo] object DependencyGraph {

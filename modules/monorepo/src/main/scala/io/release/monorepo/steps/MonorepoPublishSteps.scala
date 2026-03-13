@@ -1,13 +1,13 @@
 package io.release.monorepo.steps
 
-import _root_.io.release.{CleanCompat, ReleaseIOCompat}
 import _root_.io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOSnapshotDependencies}
 import _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
+import _root_.io.release.{CleanCompat, ReleaseIOCompat}
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import sbt.{internal => _, *}
 import sbt.Keys.*
+import sbt.{internal as _, *}
 
 import scala.util.control.NonFatal
 

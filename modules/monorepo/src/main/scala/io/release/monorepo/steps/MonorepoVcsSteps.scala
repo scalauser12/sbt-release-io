@@ -1,16 +1,13 @@
 package io.release.monorepo.steps
 
-import cats.effect.IO
 import _root_.io.release.VcsOps
+import _root_.io.release.vcs.Vcs
+import cats.effect.IO
 import io.release.monorepo.*
-import io.release.monorepo.MonorepoReleaseIO.*
 import io.release.monorepo.internal.MonorepoTagResolver
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
-import sbt.{internal => _, *}
-import sbt.Keys.*
-
-import _root_.io.release.vcs.Vcs
+import sbt.internal as _
 
 import scala.sys.process.Process
 

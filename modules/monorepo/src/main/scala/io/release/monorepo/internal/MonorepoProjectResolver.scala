@@ -1,10 +1,9 @@
 package io.release.monorepo.internal
 
-import _root_.io.release.monorepo.MonorepoVersionFiles
 import cats.effect.IO
-import io.release.monorepo.{DependencyGraph, MonorepoReleaseIO, MonorepoRuntime, ProjectReleaseInfo}
-import sbt.{internal => _, *}
+import _root_.io.release.monorepo.*
 import sbt.Keys.baseDirectory
+import sbt.{internal as _, *}
 
 /** Resolves monorepo project metadata from the current sbt state. */
 private[monorepo] object MonorepoProjectResolver {

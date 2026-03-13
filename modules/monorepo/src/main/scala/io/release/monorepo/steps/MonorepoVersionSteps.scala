@@ -1,20 +1,18 @@
 package io.release.monorepo.steps
 
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-
 import _root_.io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
 import _root_.io.release.ReleaseKeys
-import _root_.io.release.monorepo.MonorepoReleaseIO as MR
 import _root_.io.release.steps.StepHelpers
 import cats.effect.IO
 import io.release.internal.SbtRuntime
-import io.release.monorepo.*
-import io.release.monorepo.MonorepoReleaseIO.*
+import _root_.io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.monorepo.internal.MonorepoReleasePlan
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import sbt.{internal => _, *}
 import sbt.Keys.*
+import sbt.{internal as _, *}
+
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 /** Version-related monorepo release steps: inquire, set, commit. */
 private[monorepo] object MonorepoVersionSteps {

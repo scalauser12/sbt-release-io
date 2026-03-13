@@ -1,11 +1,11 @@
 package io.release.monorepo
 
+import _root_.io.release.ReleaseIO.releaseIOVersionFile
 import cats.effect.IO
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.steps.VersionSteps
-import _root_.io.release.ReleaseIO.releaseIOVersionFile
-import sbt.{internal => _, *}
 import sbt.Keys.*
+import sbt.{internal as _, *}
 
 /** Setting keys and factory methods for the monorepo release plugin.
   *

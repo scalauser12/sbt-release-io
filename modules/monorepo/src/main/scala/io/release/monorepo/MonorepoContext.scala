@@ -3,8 +3,8 @@ package io.release.monorepo
 import _root_.io.release.ReleaseCtx
 import _root_.io.release.monorepo.internal.MonorepoReleasePlan
 import _root_.io.release.vcs.Vcs
-import sbt.{internal => _, *}
 import sbt.internal.util.AttributeMap
+import sbt.{internal as _, *}
 
 /** Metadata for a single subproject participating in a monorepo release.
   *

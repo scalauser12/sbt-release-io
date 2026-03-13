@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import _root_.io.release.ReleaseIO.releaseIOVersionFile
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 /** Shared version-file resolution for monorepo release steps and project discovery.
   *

@@ -3,8 +3,8 @@ package io.release.monorepo
 import _root_.io.release.internal.{ExecutionEngine, SbtRuntime}
 import cats.effect.IO
 import io.release.monorepo.steps.MonorepoStepHelpers
-import sbt.{internal => _, *}
 import sbt.Keys.*
+import sbt.{internal as _, *}
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary. */
 private[monorepo] object MonorepoComposer {

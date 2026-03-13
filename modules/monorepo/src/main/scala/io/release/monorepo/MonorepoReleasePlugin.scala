@@ -1,19 +1,17 @@
 package io.release.monorepo
 
-import scala.language.implicitConversions
-import scala.util.control.NonFatal
-
+import _root_.io.release.ReleasePluginIO
+import _root_.io.release.internal.ExecutionFlags
+import _root_.io.release.monorepo.internal.{MonorepoProjectResolver, MonorepoReleasePlan}
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import sbt.{internal => _, *}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
+import sbt.{internal as _, *}
 
-import _root_.io.release.ReleasePluginIO
-import _root_.io.release.internal.ExecutionFlags
-import _root_.io.release.monorepo.MonorepoReleaseIO.*
-import _root_.io.release.monorepo.internal.{MonorepoProjectResolver, MonorepoReleasePlan}
+import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
 /** Base trait for resource-parameterized monorepo release plugins. Each release step
   * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the

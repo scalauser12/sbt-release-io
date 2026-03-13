@@ -2,7 +2,7 @@ package io.release.monorepo.internal
 
 import _root_.io.release.ReleaseIO.releaseIOVcsSign
 import io.release.monorepo.{MonorepoReleaseIO, MonorepoTagStrategy}
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 /** Resolves monorepo tagging inputs from the current sbt state. */
 private[monorepo] object MonorepoTagResolver {
