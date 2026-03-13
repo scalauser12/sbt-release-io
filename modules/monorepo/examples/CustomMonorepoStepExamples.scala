@@ -1,6 +1,7 @@
 package io.release.monorepo.examples
 
 import cats.effect.{IO, Resource}
+import _root_.io.release.ReleasePluginIO
 import io.release.monorepo.{
   MonorepoContext,
   MonorepoReleasePluginLike,
@@ -342,7 +343,7 @@ object DynamicMonorepoPlugin extends MonorepoReleasePluginLike[Unit] {
   override def trigger               = noTrigger
   override protected def commandName = "releaseDynamic"
 
-  override def requires: Plugins = _root_.io.release.ReleasePluginIO
+  override def requires: Plugins = ReleasePluginIO
 
   override def resource: Resource[IO, Unit] = Resource.unit
 

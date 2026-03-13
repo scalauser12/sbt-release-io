@@ -1,9 +1,10 @@
 package io.release.monorepo
 
 import _root_.io.release.ReleaseCtx
+import _root_.io.release.monorepo.internal.MonorepoReleasePlan
+import _root_.io.release.vcs.Vcs
 import sbt.{internal => _, *}
 import sbt.internal.util.AttributeMap
-import _root_.io.release.vcs.Vcs
 
 /** Metadata for a single subproject participating in a monorepo release.
   *
@@ -98,17 +99,11 @@ case class MonorepoContext(
   def withoutMetadata[A](key: AttributeKey[A]): MonorepoContext =
     copy(metadataBag = metadataBag.remove(key))
 
-  private[monorepo] def releasePlan
-      : Option[_root_.io.release.monorepo.internal.MonorepoReleasePlan] =
-    metadata(_root_.io.release.monorepo.internal.MonorepoReleasePlan.monorepoReleasePlanKey)
+  private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
+    metadata(MonorepoReleasePlan.monorepoReleasePlanKey)
 
-  private[monorepo] def withReleasePlan(
-      plan: _root_.io.release.monorepo.internal.MonorepoReleasePlan
-  ): MonorepoContext =
-    withMetadata(
-      _root_.io.release.monorepo.internal.MonorepoReleasePlan.monorepoReleasePlanKey,
-      plan
-    )
+  private[monorepo] def withReleasePlan(plan: MonorepoReleasePlan): MonorepoContext =
+    withMetadata(MonorepoReleasePlan.monorepoReleasePlanKey, plan)
 
   def fail: MonorepoContext                       = copy(failed = true)
   def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))

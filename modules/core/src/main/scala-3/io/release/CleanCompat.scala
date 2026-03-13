@@ -1,5 +1,6 @@
 package io.release
 
+import _root_.io.release.internal.SbtRuntime
 import sbt.{internal as _, *}
 
 /** Internal sbt-version compatibility shim shared across the core and monorepo modules.
@@ -12,8 +13,7 @@ import sbt.{internal as _, *}
 object CleanCompat:
 
   def runBuild(state: State, ref: ProjectRef): State =
-    _root_.io.release.internal.SbtRuntime
-      .runCommandAndRemaining(state, BasicCommandStrings.CleanFull)
+    SbtRuntime.runCommandAndRemaining(state, BasicCommandStrings.CleanFull)
 
   def runProject(state: State, ref: ProjectRef): State =
     val extracted = Project.extract(state)

@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.internal.InternalKeys
 import _root_.io.release.vcs.Vcs
+import _root_.io.release.version.Version
 import sbt.{EvaluateTask, Incomplete, Result}
 import sbt.internal.Aggregation.KeyValue
 
@@ -70,7 +71,7 @@ private[release] object StepHelpers {
     val input = Option(raw).map(_.trim).getOrElse("")
     if (input.isEmpty) IO.pure(default)
     else
-      IO.fromOption(_root_.io.release.version.Version(input).map(_.render))(
+      IO.fromOption(Version(input).map(_.render))(
         new IllegalArgumentException(s"Invalid version format: '$input'")
       )
   }

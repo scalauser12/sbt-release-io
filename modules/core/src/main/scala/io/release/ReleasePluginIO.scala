@@ -2,8 +2,10 @@ package io.release
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import io.release.internal.CoreReleasePlan
-import io.release.steps.ReleaseSteps
+import _root_.io.release.internal.{CoreReleasePlan, InternalKeys}
+import _root_.io.release.steps.ReleaseSteps
+import _root_.io.release.vcs.Vcs
+import _root_.io.release.version.Version
 import sbt.{internal => _, *}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
@@ -121,21 +123,20 @@ trait ReleasePluginIOLike[T]
     releaseIOTagComment             := s"Releasing ${releaseIORuntimeVersion.value}",
     releaseIOCommitMessage          := s"Setting version to ${releaseIORuntimeVersion.value}",
     releaseIONextCommitMessage      := s"Setting version to ${releaseIORuntimeVersion.value}",
-    releaseIOVersionBump            := _root_.io.release.version.Version.Bump.default,
+    releaseIOVersionBump            := Version.Bump.default,
     releaseIOVersion                := {
       val bump = releaseIOVersionBump.value
       ver =>
-        _root_.io.release.version
-          .Version(ver)
+        Version(ver)
           .map { v =>
             bump match {
-              case _root_.io.release.version.Version.Bump.Next =>
+              case Version.Bump.Next =>
                 if (v.isSnapshot) v.withoutSnapshot.render
                 else
                   throw new IllegalArgumentException(
                     s"[release-io] Expected snapshot version, got: $ver"
                   )
-              case _                                           => v.withoutQualifier.render
+              case _                 => v.withoutQualifier.render
             }
           }
           .getOrElse(
@@ -145,8 +146,7 @@ trait ReleasePluginIOLike[T]
     releaseIONextVersion            := {
       val bump = releaseIOVersionBump.value
       ver =>
-        _root_.io.release.version
-          .Version(ver)
+        Version(ver)
           .map(_.bump(bump).asSnapshot.render)
           .getOrElse(
             throw new IllegalArgumentException(s"[release-io] Cannot parse version: $ver")
@@ -216,7 +216,7 @@ trait ReleasePluginIOLike[T]
     val maybeVcs      = scala.util
       .Try {
         val base = Project.extract(state).get(sbt.Keys.thisProject).base
-        _root_.io.release.vcs.Vcs.detect(base).unsafeRunSync()
+        Vcs.detect(base).unsafeRunSync()
       }
       .toOption
       .flatten
@@ -266,8 +266,8 @@ trait ReleasePluginIOLike[T]
       val cleanState = state
         .remove(ReleaseKeys.runtimeVersionOverride)
         .remove(ReleaseKeys.versions)
-        .remove(_root_.io.release.internal.InternalKeys.executionFlags)
-        .remove(_root_.io.release.internal.InternalKeys.coreReleasePlan)
+        .remove(InternalKeys.executionFlags)
+        .remove(InternalKeys.coreReleasePlan)
 
       val plan         = CoreReleasePlan.build(
         CoreReleasePlan.Inputs(
