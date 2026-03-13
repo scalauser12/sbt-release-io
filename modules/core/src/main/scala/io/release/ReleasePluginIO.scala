@@ -1,11 +1,11 @@
 package io.release
 
-import _root_.io.release.internal.{CoreReleasePlan, InternalKeys}
-import _root_.io.release.steps.ReleaseSteps
-import _root_.io.release.vcs.Vcs
-import _root_.io.release.version.Version
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
+import io.release.internal.{CoreReleasePlan, InternalKeys}
+import io.release.steps.ReleaseSteps
+import io.release.vcs.Vcs
+import io.release.version.Version
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser

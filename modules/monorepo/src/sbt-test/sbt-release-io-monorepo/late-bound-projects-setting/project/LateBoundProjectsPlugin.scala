@@ -1,4 +1,4 @@
-import _root_.cats.effect.{IO, Resource}
+import cats.effect.{IO, Resource}
 import _root_.io.release.monorepo.*
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
 import sbt.*

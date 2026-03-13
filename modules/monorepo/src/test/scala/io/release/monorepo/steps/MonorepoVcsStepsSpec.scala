@@ -4,8 +4,8 @@ import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
+import io.release.vcs.Vcs
 import org.specs2.mutable.Specification
-import _root_.io.release.vcs.Vcs
 
 import java.io.File
 import java.nio.file.Files

@@ -1,7 +1,7 @@
 import sbt.*
 import sbt.Keys.*
 import _root_.io.release.*
-import _root_.cats.effect.{IO, Resource}
+import cats.effect.{IO, Resource}
 
 object ResourceStepWithCheckPlugin extends ReleasePluginIOLike[java.io.File] {
   override def trigger = noTrigger

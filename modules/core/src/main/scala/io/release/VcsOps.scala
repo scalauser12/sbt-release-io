@@ -1,7 +1,7 @@
 package io.release
 
-import _root_.io.release.vcs.Vcs
 import cats.effect.IO
+import io.release.vcs.Vcs
 import sbt.Keys.*
 import sbt.{internal as _, *}
 

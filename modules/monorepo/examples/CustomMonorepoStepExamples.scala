@@ -1,7 +1,7 @@
 package io.release.monorepo.examples
 
 import cats.effect.{IO, Resource}
-import _root_.io.release.ReleasePluginIO
+import io.release.ReleasePluginIO
 import io.release.monorepo.{
   MonorepoContext,
   MonorepoReleasePluginLike,

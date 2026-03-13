@@ -1,12 +1,12 @@
 package io.release.monorepo.steps
 
-import _root_.io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
-import _root_.io.release.VcsOps
-import _root_.io.release.monorepo.*
-import _root_.io.release.steps.StepHelpers
-import _root_.io.release.steps.StepHelpers.{parseVersionInput, required}
-import _root_.io.release.vcs.Vcs
 import cats.effect.IO
+import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
+import io.release.VcsOps
+import io.release.monorepo.*
+import io.release.steps.StepHelpers
+import io.release.steps.StepHelpers.{parseVersionInput, required}
+import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
 import scala.util.control.NonFatal

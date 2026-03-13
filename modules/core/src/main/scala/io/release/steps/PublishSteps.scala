@@ -1,13 +1,13 @@
 package io.release.steps
 
-import _root_.io.release.ReleaseIO.{
+import cats.effect.IO
+import io.release.ReleaseIO.{
   releaseIOPublishArtifactsAction,
   releaseIOPublishArtifactsChecks,
   releaseIOSnapshotDependencies
 }
-import _root_.io.release.steps.StepHelpers.*
-import cats.effect.IO
 import io.release.internal.SbtRuntime
+import io.release.steps.StepHelpers.*
 import io.release.{CleanCompat, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
 import sbt.{internal as _, *}

@@ -2,9 +2,9 @@ package io.release
 
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Ref, Resource}
+import io.release.internal.SbtCompat
 import org.specs2.mutable.Specification
 import sbt.AttributeKey
-import io.release.internal.SbtCompat
 
 import java.nio.file.Files
 

@@ -1,9 +1,9 @@
 package io.release.steps
 
-import _root_.io.release.ReleaseIO.*
-import _root_.io.release.steps.StepHelpers.*
 import cats.effect.IO
+import io.release.ReleaseIO.*
 import io.release.internal.{CoreReleasePlan, SbtRuntime, VersionPlan}
+import io.release.steps.StepHelpers.*
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes

@@ -1,10 +1,10 @@
 package io.release.steps
 
-import _root_.io.release.vcs.Vcs
-import _root_.io.release.version.Version
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.internal.InternalKeys
+import io.release.vcs.Vcs
+import io.release.version.Version
 import sbt.internal.Aggregation.KeyValue
 import sbt.{EvaluateTask, Incomplete, Result}
 

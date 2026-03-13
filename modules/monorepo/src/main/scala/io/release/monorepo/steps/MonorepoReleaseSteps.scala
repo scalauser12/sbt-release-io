@@ -1,7 +1,7 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import _root_.io.release.monorepo.*
+import io.release.monorepo.*
 import io.release.monorepo.internal.{
   MonorepoProjectResolver,
   MonorepoSelectionResolver,

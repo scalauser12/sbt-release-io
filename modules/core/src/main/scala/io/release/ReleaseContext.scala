@@ -1,6 +1,6 @@
 package io.release
 
-import _root_.io.release.vcs.Vcs
+import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}
 

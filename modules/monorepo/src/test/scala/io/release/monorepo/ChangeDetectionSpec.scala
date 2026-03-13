@@ -3,10 +3,10 @@ package io.release.monorepo
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
 import io.release.TestSupport
+import io.release.vcs.Vcs
 import org.specs2.mutable.Specification
 import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
 import sbt.{ProjectRef, State}
-import _root_.io.release.vcs.Vcs
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 import java.nio.file.Files

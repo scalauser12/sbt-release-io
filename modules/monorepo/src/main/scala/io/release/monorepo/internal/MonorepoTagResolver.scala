@@ -1,6 +1,6 @@
 package io.release.monorepo.internal
 
-import _root_.io.release.ReleaseIO.releaseIOVcsSign
+import io.release.ReleaseIO.releaseIOVcsSign
 import io.release.monorepo.{MonorepoReleaseIO, MonorepoTagStrategy}
 import sbt.{internal as _, *}
 

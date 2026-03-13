@@ -1,13 +1,13 @@
 package io.release.monorepo.steps
 
-import _root_.io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
-import _root_.io.release.ReleaseKeys
-import _root_.io.release.steps.StepHelpers
 import cats.effect.IO
+import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
+import io.release.ReleaseKeys
 import io.release.internal.SbtRuntime
-import _root_.io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.monorepo.internal.MonorepoReleasePlan
 import io.release.monorepo.steps.MonorepoStepHelpers.*
+import io.release.monorepo.{MonorepoReleaseIO as MR, *}
+import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.{internal as _, *}
 

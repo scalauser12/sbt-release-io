@@ -1,10 +1,10 @@
 package io.release.monorepo
 
-import _root_.io.release.ReleasePluginIO
-import _root_.io.release.internal.ExecutionFlags
-import _root_.io.release.monorepo.internal.{MonorepoProjectResolver, MonorepoReleasePlan}
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
+import io.release.ReleasePluginIO
+import io.release.internal.ExecutionFlags
+import io.release.monorepo.internal.{MonorepoProjectResolver, MonorepoReleasePlan}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser

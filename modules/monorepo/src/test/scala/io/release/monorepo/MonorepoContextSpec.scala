@@ -2,8 +2,7 @@ package io.release.monorepo
 
 import io.release.TestSupport
 import org.specs2.mutable.Specification
-import sbt.AttributeKey
-import sbt.State
+import sbt.{AttributeKey, State}
 
 import java.nio.file.Files
 

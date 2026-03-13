@@ -1,11 +1,11 @@
 package io.release.steps
 
-import _root_.io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
-import _root_.io.release.steps.StepHelpers.*
-import _root_.io.release.vcs.Vcs
 import cats.Monad
 import cats.effect.IO
+import io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
 import io.release.internal.{CoreReleasePlan, SbtRuntime, TagPlan}
+import io.release.steps.StepHelpers.*
+import io.release.vcs.Vcs
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes

@@ -2,8 +2,8 @@ package io.release.steps
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import io.release.internal.{CoreReleasePlan, ExecutionFlags}
 import io.release.TestSupport
+import io.release.internal.{CoreReleasePlan, ExecutionFlags}
 import org.specs2.mutable.Specification
 
 import java.io.File

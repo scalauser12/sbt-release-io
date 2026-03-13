@@ -1,7 +1,7 @@
 package io.release.monorepo
 
-import _root_.io.release.ReleaseIO.releaseIOVersionFile
 import cats.effect.IO
+import io.release.ReleaseIO.releaseIOVersionFile
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.steps.VersionSteps
 import sbt.Keys.*

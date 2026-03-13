@@ -1,6 +1,6 @@
 package io.release
 
-import _root_.io.release.internal.SbtRuntime
+import io.release.internal.SbtRuntime
 import sbt.{internal as _, *}
 
 /** Internal sbt-version compatibility shim shared across the core and monorepo modules.

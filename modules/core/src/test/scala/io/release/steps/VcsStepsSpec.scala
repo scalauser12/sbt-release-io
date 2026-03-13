@@ -2,9 +2,9 @@ package io.release.steps
 
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
+import io.release.vcs.Vcs
 import io.release.{ReleaseContext, TestSupport}
 import org.specs2.mutable.Specification
-import _root_.io.release.vcs.Vcs
 
 import java.io.File
 import java.nio.file.Files

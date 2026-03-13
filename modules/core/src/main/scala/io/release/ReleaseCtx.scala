@@ -1,6 +1,6 @@
 package io.release
 
-import _root_.io.release.vcs.Vcs
+import io.release.vcs.Vcs
 import sbt.State
 
 /** Common interface for immutable release contexts threaded through steps.

@@ -1,4 +1,4 @@
-import _root_.cats.effect.{IO, Resource}
+import cats.effect.{IO, Resource}
 import _root_.io.release.monorepo.*
 import _root_.io.release.monorepo.MonorepoReleaseIO.*
 import sbt.*
@@ -19,10 +19,10 @@ object LateBoundMonorepoVersionPlugin extends MonorepoReleasePluginLike[Unit] {
             val extracted    = Project.extract(ctx.state)
             val updatedState = extracted.appendWithSession(
               Seq(
-                releaseIOMonorepoVersionFile := { (ref: ProjectRef, state: State) =>
+                releaseIOMonorepoVersionFile  := { (ref: ProjectRef, state: State) =>
                   Project.extract(state).get(ref / sbt.Keys.baseDirectory) / "version.properties"
                 },
-                releaseIOMonorepoReadVersion := { file =>
+                releaseIOMonorepoReadVersion  := { file =>
                   IO.blocking(sbt.IO.read(file).trim)
                 },
                 releaseIOMonorepoWriteVersion := { (_, version) =>

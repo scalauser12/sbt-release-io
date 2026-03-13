@@ -1,8 +1,8 @@
 package io.release
 
+import io.release.version.Version
 import org.specs2.matcher.MatchResult
 import org.specs2.mutable.Specification
-import io.release.version.Version
 
 class VersionSpec extends Specification {
 

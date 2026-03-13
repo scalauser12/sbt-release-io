@@ -1,5 +1,6 @@
 package io.release.monorepo.internal
 
+import cats.effect.unsafe.implicits.global
 import io.release.internal.ExecutionFlags
 import io.release.monorepo.ProjectReleaseInfo
 import org.specs2.mutable.Specification
@@ -7,8 +8,6 @@ import sbt.ProjectRef
 
 import java.io.File
 import java.net.URI
-
-import cats.effect.unsafe.implicits.global
 
 class MonorepoReleasePlanSpec extends Specification {
 
