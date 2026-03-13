@@ -99,66 +99,79 @@ private[release] object VersionSteps {
       IO.pure(s"""$key := "$ver"\n""")
     }
 
-  val inquireVersions: ReleaseStepIO = ReleaseStepIO.io("inquire-versions") { ctx =>
-    final case class InquireData(
-        state: State,
-        currentVersion: String,
-        suggestedRelease: String,
-        nextVersionFn: String => String,
-        releaseVersionArg: Option[String],
-        nextVersionArg: Option[String],
-        useDefaults: Boolean
-    )
+  val inquireVersions: ReleaseStepIO = ReleaseStepIO(
+    name = "inquire-versions",
+    validate = ctx =>
+      IO.blocking {
+        val versionFile = resolveVersionPlan(ctx.state).versionFile
+        if (!versionFile.exists())
+          throw new IllegalStateException(
+            s"Version file not found: ${versionFile.getPath}. " +
+              """Create it with contents: version := "0.1.0-SNAPSHOT""""
+          )
+      },
+    execute = { ctx =>
+      final case class InquireData(
+          state: State,
+          currentVersion: String,
+          suggestedRelease: String,
+          nextVersionFn: String => String,
+          releaseVersionArg: Option[String],
+          nextVersionArg: Option[String],
+          useDefaults: Boolean
+      )
 
-    for {
-      versionPlan   <- IO.blocking(resolveVersionPlan(ctx.state))
-      currentVer    <- versionPlan.readVersion(versionPlan.versionFile)
-      data          <- IO.blocking {
-                         val releaseFn = SbtRuntime.getSetting(ctx.state, releaseIOVersion)
-                         val nextFn    = SbtRuntime.getSetting(ctx.state, releaseIONextVersion)
+      for {
+        versionPlan   <- IO.blocking(resolveVersionPlan(ctx.state))
+        currentVer    <- versionPlan.readVersion(versionPlan.versionFile)
+        data          <- IO.blocking {
+                           val releaseFn = SbtRuntime.getSetting(ctx.state, releaseIOVersion)
+                           val nextFn    = SbtRuntime.getSetting(ctx.state, releaseIONextVersion)
 
-                         InquireData(
-                           state = ctx.state,
-                           currentVersion = currentVer,
-                           suggestedRelease = releaseFn(currentVer),
-                           nextVersionFn = nextFn,
-                           releaseVersionArg = versionPlan.releaseVersionOverride,
-                           nextVersionArg = versionPlan.nextVersionOverride,
-                           useDefaults = useDefaults(ctx.state)
-                         )
-                       }
-      releaseVer    <-
-        data.releaseVersionArg match {
-          case Some(v)                                      => IO.pure(v)
-          case None if !ctx.interactive || data.useDefaults => IO.pure(data.suggestedRelease)
-          case None                                         =>
-            IO.blocking(data.state.log.info("Press enter to use the default value")) *>
+                           InquireData(
+                             state = ctx.state,
+                             currentVersion = currentVer,
+                             suggestedRelease = releaseFn(currentVer),
+                             nextVersionFn = nextFn,
+                             releaseVersionArg = versionPlan.releaseVersionOverride,
+                             nextVersionArg = versionPlan.nextVersionOverride,
+                             useDefaults = useDefaults(ctx.state)
+                           )
+                         }
+        releaseVer    <-
+          data.releaseVersionArg match {
+            case Some(v)                                      => IO.pure(v)
+            case None if !ctx.interactive || data.useDefaults => IO.pure(data.suggestedRelease)
+            case None                                         =>
+              IO.blocking(data.state.log.info("Press enter to use the default value")) *>
+                readVersionPrompt(
+                  prompt = s"Release version [${data.suggestedRelease}] : ",
+                  defaultVersion = data.suggestedRelease
+                )
+          }
+        suggestedNext <- IO(data.nextVersionFn(releaseVer))
+        nextVer       <-
+          data.nextVersionArg match {
+            case Some(v)                                      => IO.pure(v)
+            case None if !ctx.interactive || data.useDefaults => IO.pure(suggestedNext)
+            case None                                         =>
               readVersionPrompt(
-                prompt = s"Release version [${data.suggestedRelease}] : ",
-                defaultVersion = data.suggestedRelease
+                prompt = s"Next version [${suggestedNext}] : ",
+                defaultVersion = suggestedNext
               )
-        }
-      suggestedNext <- IO(data.nextVersionFn(releaseVer))
-      nextVer       <-
-        data.nextVersionArg match {
-          case Some(v)                                      => IO.pure(v)
-          case None if !ctx.interactive || data.useDefaults => IO.pure(suggestedNext)
-          case None                                         =>
-            readVersionPrompt(
-              prompt = s"Next version [${suggestedNext}] : ",
-              defaultVersion = suggestedNext
-            )
-        }
-      updated       <- IO.blocking {
-                         data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
-                         data.state.log.info(s"[release-io] Release version : $releaseVer")
-                         data.state.log.info(s"[release-io] Next version    : $nextVer")
+          }
+        updated       <- IO.blocking {
+                           data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
+                           data.state.log.info(s"[release-io] Release version : $releaseVer")
+                           data.state.log.info(s"[release-io] Next version    : $nextVer")
 
-                         val updatedState = data.state.put(ReleaseKeys.versions, (releaseVer, nextVer))
-                         ctx.copy(state = updatedState).withVersions(releaseVer, nextVer)
-                       }
-    } yield updated
-  }
+                           val updatedState =
+                             data.state.put(ReleaseKeys.versions, (releaseVer, nextVer))
+                           ctx.copy(state = updatedState).withVersions(releaseVer, nextVer)
+                         }
+      } yield updated
+    }
+  )
 
   val setReleaseVersion: ReleaseStepIO =
     ReleaseStepIO.io("set-release-version") { ctx =>

@@ -57,6 +57,16 @@ private[monorepo] object MonorepoVersionSteps {
     */
   val inquireVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "inquire-versions",
+    validate = (ctx, project) =>
+      resolve(ctx.state, project.ref).flatMap { versionInputs =>
+        IO.blocking {
+          if (!versionInputs.versionFile.exists())
+            throw new IllegalStateException(
+              s"Version file not found for ${project.name}: ${versionInputs.versionFile.getPath}. " +
+                """Create it with contents: version := "0.1.0-SNAPSHOT""""
+            )
+        }
+      },
     execute = (ctx, project) =>
       project.versions match {
         case Some((rel, next)) if rel.nonEmpty && next.nonEmpty =>
