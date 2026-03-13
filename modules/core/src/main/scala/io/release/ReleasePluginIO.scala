@@ -213,11 +213,18 @@ trait ReleasePluginIOLike[T]
       interactive: Boolean
   ): ReleaseContext = {
     val maybeVersions = state.get(ReleaseKeys.versions)
+    val maybeVcs      = scala.util
+      .Try {
+        val base = Project.extract(state).get(sbt.Keys.thisProject).base
+        _root_.io.release.vcs.Vcs.detect(base).unsafeRunSync()
+      }
+      .toOption
+      .flatten
 
     ReleaseContext(
       state = state,
       versions = maybeVersions,
-      vcs = None,
+      vcs = maybeVcs,
       skipTests = skipTests,
       skipPublish = skipPublish,
       interactive = interactive
