@@ -2,6 +2,7 @@ package io.release.monorepo.steps
 
 import _root_.io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOSnapshotDependencies}
 import _root_.io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
+import _root_.io.release.steps.StepHelpers
 import _root_.io.release.{CleanCompat, ReleaseIOCompat}
 import cats.effect.IO
 import io.release.monorepo.*
@@ -70,27 +71,13 @@ private[monorepo] object MonorepoPublishSteps {
                                s"Failed to resolve snapshot dependencies for ${project.name}"
                              )
         _                 <-
-          if (externalSnapshots.nonEmpty) {
-            val depList = externalSnapshots
-              .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
-              .mkString("\n")
-            val msg     = s"Snapshot dependencies found in ${project.name}:\n$depList"
-
-            if (!ctx.interactive) {
-              IO.raiseError[Unit](new IllegalStateException(msg))
-            } else {
-              IO.blocking(
-                ctx.state.log.warn(s"[release-io-monorepo] $msg")
-              ) *>
-                MonorepoStepHelpers.confirmContinue(
-                  ctx,
-                  prompt = "Do you want to continue (y/n)? [n] ",
-                  defaultYes = false,
-                  abortMessage =
-                    s"Aborting release due to snapshot dependencies in ${project.name}."
-                )
-            }
-          } else IO.unit
+          StepHelpers.handleSnapshotDependencies(
+            externalSnapshots,
+            ctx.state,
+            ctx.interactive,
+            "[release-io-monorepo]",
+            context = s" in ${project.name}"
+          )
       } yield (),
     enableCrossBuild = true
   )

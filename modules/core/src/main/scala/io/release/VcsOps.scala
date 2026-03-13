@@ -120,4 +120,66 @@ private[release] object VcsOps {
   /** Status of tracked files only (excludes untracked `?` lines). */
   def trackedStatus(vcs: Vcs): IO[String] =
     vcs.status.map(_.linesIterator.filterNot(_.startsWith("?")).mkString("\n"))
+
+  /** Validate that the tracking remote is reachable. Shared by core and monorepo push steps.
+    * @param log optional callback to log the remote name before checking
+    */
+  def validatePushRemote(
+      state: State,
+      interactive: Boolean,
+      vcs: Vcs,
+      log: Option[String => Unit] = None
+  ): IO[Unit] =
+    for {
+      remote         <- vcs.trackingRemote
+      _              <- log.fold(IO.unit)(f => IO.blocking(f(remote)))
+      remoteExitCode <- vcs.checkRemote(remote)
+      _              <-
+        if (remoteExitCode == 0) IO.unit
+        else
+          steps.StepHelpers.confirmContinue(
+            state,
+            interactive,
+            prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+            defaultYes = false,
+            abortMessage = "Aborting the release due to remote check failure."
+          )
+    } yield ()
+
+  /** Validate that a tracking branch exists and the local branch is not behind remote.
+    * Shared by core and monorepo push steps.
+    */
+  def validatePushReadiness(
+      state: State,
+      interactive: Boolean,
+      vcs: Vcs
+  ): IO[Unit] =
+    for {
+      hasUp  <- vcs.hasUpstream
+      _      <-
+        if (hasUp) IO.unit
+        else
+          vcs.currentBranch.flatMap { branch =>
+            IO.raiseError(
+              new IllegalStateException(
+                s"No tracking branch configured for '$branch'. " +
+                  "Set up a remote tracking branch or remove pushChanges from the release process."
+              )
+            )
+          }
+      // Best-effort check using local tracking refs (no fetch).
+      // If tracking refs are missing (e.g. remote never fetched), treat as not behind.
+      behind <- vcs.isBehindRemote.handleError(_ => false)
+      _      <-
+        if (!behind) IO.unit
+        else
+          steps.StepHelpers.confirmContinue(
+            state,
+            interactive,
+            prompt = "The upstream branch has unmerged commits. " +
+              "A subsequent push may fail! Continue (y/n)? [n] ",
+            defaultYes = false,
+            abortMessage = "Merge the upstream commits and run release again."
+          )
+    } yield ()
 }

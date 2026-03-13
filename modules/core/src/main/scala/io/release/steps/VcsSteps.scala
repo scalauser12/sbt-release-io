@@ -158,37 +158,16 @@ private[release] object VcsSteps {
     name = "push-changes",
     validate = ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-        for {
-          hasUp  <- vcs.hasUpstream
-          _      <-
-            if (hasUp) IO.unit
-            else
-              vcs.currentBranch.flatMap { branch =>
-                IO.raiseError(
-                  new IllegalStateException(
-                    s"[release-io] No tracking branch configured for branch '$branch'. " +
-                      "Set up a remote tracking branch or remove pushChanges from the release process."
-                  )
-                )
-              }
-          // Best-effort check using local tracking refs (no fetch).
-          // If tracking refs are missing (e.g. remote never fetched), treat as not behind.
-          behind <- vcs.isBehindRemote.handleError(_ => false)
-          _      <-
-            if (!behind) IO.unit
-            else
-              confirmContinue(
-                ctx,
-                prompt =
-                  "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
-                defaultYes = false,
-                abortMessage = "Merge the upstream commits and run release again."
-              )
-        } yield ()
+        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, vcs)
       },
     execute = ctx =>
       requireVcs(ctx) { vcs =>
-        validatePushRemote(ctx, vcs) *>
+        VcsOps.validatePushRemote(
+          ctx.state,
+          ctx.interactive,
+          vcs,
+          log = Some(r => ctx.state.log.info(s"[release-io] Checking remote [$r] ..."))
+        ) *>
           (if (!ctx.interactive)
              vcs.pushChanges.as(ctx)
            else {
@@ -212,21 +191,5 @@ private[release] object VcsSteps {
            })
       }
   )
-
-  private def validatePushRemote(ctx: ReleaseContext, vcs: Vcs): IO[Unit] =
-    for {
-      remote         <- vcs.trackingRemote
-      _              <- IO.blocking(ctx.state.log.info(s"[release-io] Checking remote [$remote] ..."))
-      remoteExitCode <- vcs.checkRemote(remote)
-      _              <-
-        if (remoteExitCode == 0) IO.unit
-        else
-          confirmContinue(
-            ctx,
-            prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-            defaultYes = false,
-            abortMessage = "Aborting the release due to remote check failure."
-          )
-    } yield ()
 
 }

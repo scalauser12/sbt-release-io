@@ -46,17 +46,19 @@ private[release] object StepHelpers {
         }
       }
 
+  /** Context-agnostic confirmation prompt. Shared by core and monorepo steps. */
   def confirmContinue(
-      ctx: ReleaseContext,
+      state: sbt.State,
+      interactive: Boolean,
       prompt: String,
       defaultYes: Boolean,
       abortMessage: String
   ): IO[Unit] = {
-    if (!ctx.interactive)
+    if (!interactive)
       IO.raiseError(new IllegalStateException(abortMessage))
     else {
       val decisionIO =
-        if (useDefaults(ctx.state)) IO.pure(defaultYes)
+        if (useDefaults(state)) IO.pure(defaultYes)
         else askYesNo(prompt, defaultYes = defaultYes)
 
       decisionIO.flatMap { continue =>
@@ -66,6 +68,14 @@ private[release] object StepHelpers {
     }
   }
 
+  def confirmContinue(
+      ctx: ReleaseContext,
+      prompt: String,
+      defaultYes: Boolean,
+      abortMessage: String
+  ): IO[Unit] =
+    confirmContinue(ctx.state, ctx.interactive, prompt, defaultYes, abortMessage)
+
   /** Parse raw version input: trim whitespace, return default if empty, validate otherwise. */
   def parseVersionInput(raw: String, default: String): IO[String] = {
     val input = Option(raw).map(_.trim).getOrElse("")
@@ -74,6 +84,35 @@ private[release] object StepHelpers {
       IO.fromOption(Version(input).map(_.render))(
         new IllegalArgumentException(s"Invalid version format: '$input'")
       )
+  }
+
+  /** Handle snapshot dependencies found during validation. Shared by core and monorepo. */
+  def handleSnapshotDependencies(
+      deps: Seq[sbt.ModuleID],
+      state: sbt.State,
+      interactive: Boolean,
+      logPrefix: String,
+      context: String = ""
+  ): IO[Unit] = {
+    if (deps.isEmpty) IO.unit
+    else {
+      val depList = deps
+        .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
+        .mkString("\n")
+      val msg     = s"Snapshot dependencies found$context:\n$depList"
+
+      if (!interactive)
+        IO.raiseError[Unit](new IllegalStateException(msg))
+      else
+        IO.blocking(state.log.warn(s"$logPrefix $msg")) *>
+          confirmContinue(
+            state,
+            interactive,
+            prompt = "Do you want to continue (y/n)? [n] ",
+            defaultYes = false,
+            abortMessage = s"Aborting release due to snapshot dependencies$context."
+          )
+    }
   }
 
   def aggregatedTaskValues[T](

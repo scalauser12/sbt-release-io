@@ -38,22 +38,12 @@ private[release] object PublishSteps {
                              )
                            )
                          case Right(deps) if deps.nonEmpty =>
-                           val depList = deps
-                             .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
-                             .mkString("\n")
-                           val msg     = s"Snapshot dependencies found:\n$depList"
-
-                           if (!ctx.interactive) {
-                             IO.raiseError[Unit](new IllegalStateException(msg))
-                           } else {
-                             IO.blocking(ctx.state.log.warn(msg)) *>
-                               confirmContinue(
-                                 ctx,
-                                 prompt = "Do you want to continue (y/n)? [n] ",
-                                 defaultYes = false,
-                                 abortMessage = "Aborting release due to snapshot dependencies."
-                               ).void
-                           }
+                           handleSnapshotDependencies(
+                             deps,
+                             ctx.state,
+                             ctx.interactive,
+                             "[release-io]"
+                           )
                          case Right(_)                     => IO.unit
                        }
       } yield result,

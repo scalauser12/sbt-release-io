@@ -228,34 +228,11 @@ private[monorepo] object MonorepoVcsSteps {
     name = "push-changes",
     validate = ctx =>
       ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
-        for {
-          hasUp  <- vcs.hasUpstream
-          branch <- vcs.currentBranch
-          _      <-
-            IO.raiseUnless(hasUp)(
-              new IllegalStateException(
-                s"No tracking branch configured for '$branch'. " +
-                  "Set up a remote tracking branch or remove pushChanges from the release process."
-              )
-            )
-          // Best-effort check using local tracking refs (no fetch).
-          // If tracking refs are missing (e.g. remote never fetched), treat as not behind.
-          behind <- vcs.isBehindRemote.handleError(_ => false)
-          _      <-
-            if (!behind) IO.unit
-            else
-              MonorepoStepHelpers.confirmContinue(
-                ctx,
-                prompt = "The upstream branch has unmerged commits. " +
-                  "A subsequent push may fail! Continue (y/n)? [n] ",
-                defaultYes = false,
-                abortMessage = "Merge the upstream commits and run release again."
-              )
-        } yield ()
+        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, vcs)
       },
     execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        validatePushRemote(ctx, vcs) *> {
+        VcsOps.validatePushRemote(ctx.state, ctx.interactive, vcs) *> {
           val doPush = vcs.commandName match {
             case "git" => gitPush(ctx, vcs)
             case _     => vcs.pushChanges.as(ctx)
@@ -280,19 +257,5 @@ private[monorepo] object MonorepoVcsSteps {
         }
       }
   )
-
-  private def validatePushRemote(ctx: MonorepoContext, vcs: Vcs): IO[Unit] =
-    for {
-      remote     <- vcs.trackingRemote
-      remoteCode <- vcs.checkRemote(remote)
-      _          <- if (remoteCode == 0) IO.unit
-                    else
-                      MonorepoStepHelpers.confirmContinue(
-                        ctx,
-                        prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                        defaultYes = false,
-                        abortMessage = "Aborting the release due to remote check failure."
-                      )
-    } yield ()
 
 }
