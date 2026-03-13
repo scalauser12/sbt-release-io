@@ -15,10 +15,9 @@ object ReleaseIOCompat:
     * dependencies (via `.dependsOn()`) are resolved internally by sbt and excluded.
     * In sbt 2, `Attributed` uses `StringAttributeKey` only, so we read `moduleIDStr`
     * and deserialize via `Classpaths.moduleIdJsonKeyFormat` (same approach as sbt-release).
-    * Wrapped in Def.uncached because sbt 2 requires JsonFormat for cached tasks.
     */
   def snapshotDependenciesSetting: Setting[?] =
-    ReleaseIO._releaseIOSnapshotDependencies := Def.uncached {
+    ReleaseIO._releaseIOSnapshotDependencies := {
       val modules = (Runtime / Keys.managedClasspath).value
         .flatMap(_.get(Keys.moduleIDStr))
         .map(sbt.Classpaths.moduleIdJsonKeyFormat.read)

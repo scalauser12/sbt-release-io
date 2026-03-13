@@ -14,10 +14,4 @@ private[release] object ReleaseKeys {
     */
   val versions: AttributeKey[(String, String)] =
     AttributeKey[(String, String)]("releaseIOVersions", "Release and next version pair")
-
-  val runtimeVersionOverride: AttributeKey[String] =
-    AttributeKey[String](
-      "releaseIORuntimeVersionOverride",
-      "Version set by setReleaseVersion/setNextVersion, read by tag/commit message tasks"
-    )
 }

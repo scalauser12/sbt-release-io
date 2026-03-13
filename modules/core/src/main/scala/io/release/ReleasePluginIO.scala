@@ -116,8 +116,8 @@ trait ReleasePluginIOLike[T]
     releaseIOVcsSignOff             := false,
     releaseIOIgnoreUntrackedFiles   := false,
     releaseIORuntimeVersion         := {
-      val st = sbt.Keys.state.value
-      st.get(ReleaseKeys.runtimeVersionOverride).getOrElse(Keys.version.value)
+      if (releaseIOUseGlobalVersion.value) (ThisBuild / Keys.version).value
+      else Keys.version.value
     },
     releaseIOTagName                := s"v${releaseIORuntimeVersion.value}",
     releaseIOTagComment             := s"Releasing ${releaseIORuntimeVersion.value}",
@@ -265,7 +265,6 @@ trait ReleasePluginIOLike[T]
         )
 
       val cleanState = state
-        .remove(ReleaseKeys.runtimeVersionOverride)
         .remove(ReleaseKeys.versions)
         .remove(InternalKeys.executionFlags)
         .remove(InternalKeys.coreReleasePlan)

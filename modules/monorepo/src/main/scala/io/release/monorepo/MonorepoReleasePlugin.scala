@@ -235,7 +235,6 @@ trait MonorepoReleasePluginLike[T]
       val flags     = parseFlags(args, extracted)
 
       val cleanState = state
-        .remove(_root_.io.release.ReleaseKeys.runtimeVersionOverride)
         .remove(_root_.io.release.ReleaseKeys.versions)
         .remove(_root_.io.release.internal.InternalKeys.executionFlags)
         .remove(_root_.io.release.internal.InternalKeys.coreReleasePlan)

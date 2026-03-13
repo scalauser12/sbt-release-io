@@ -65,35 +65,45 @@ trait ReleaseIO {
   /** The current version at evaluation time. Useful as a dependency for tag/commit message tasks
     * so they pick up the version set by `setReleaseVersion` via `appendWithSession`.
     */
+  @transient
   val releaseIORuntimeVersion: TaskKey[String] = ReleaseIO._releaseIORuntimeVersion
 
   /** Tag name for the release. Default: `s"v$$version"`. */
+  @transient
   val releaseIOTagName: TaskKey[String] = ReleaseIO._releaseIOTagName
 
   /** Tag comment. Default: `s"Releasing $$version"`. */
+  @transient
   val releaseIOTagComment: TaskKey[String] = ReleaseIO._releaseIOTagComment
 
   /** Commit message for the release version commit. */
+  @transient
   val releaseIOCommitMessage: TaskKey[String] = ReleaseIO._releaseIOCommitMessage
 
   /** Commit message for the next snapshot version commit. */
+  @transient
   val releaseIONextCommitMessage: TaskKey[String] = ReleaseIO._releaseIONextCommitMessage
 
   /** Function that computes the release version from the current version. */
-  val releaseIOVersion: SettingKey[String => String] = ReleaseIO._releaseIOVersion
+  @transient
+  val releaseIOVersion: TaskKey[String => String] = ReleaseIO._releaseIOVersion
 
   /** Function that computes the next development version from the release version. */
-  val releaseIONextVersion: SettingKey[String => String] = ReleaseIO._releaseIONextVersion
+  @transient
+  val releaseIONextVersion: TaskKey[String => String] = ReleaseIO._releaseIONextVersion
 
   /** Version bump strategy. */
-  val releaseIOVersionBump: SettingKey[_root_.io.release.version.Version.Bump] =
+  @transient
+  val releaseIOVersionBump: TaskKey[_root_.io.release.version.Version.Bump] =
     ReleaseIO._releaseIOVersionBump
 
   /** Task that resolves SNAPSHOT dependencies for validation. */
+  @transient
   val releaseIOSnapshotDependencies: TaskKey[Seq[ModuleID]] =
     ReleaseIO._releaseIOSnapshotDependencies
 
   /** Task that performs the actual publish action. Default: `publish`. */
+  @transient
   val releaseIOPublishArtifactsAction: TaskKey[Unit] = ReleaseIO._releaseIOPublishArtifactsAction
 
   /** When false, skips publishTo/skip validation in the publishArtifacts step.
@@ -211,52 +221,61 @@ object ReleaseIO extends ReleaseIO {
       "Whether untracked files are ignored during clean working dir check"
     )
 
+  @transient
   private[release] lazy val _releaseIORuntimeVersion: TaskKey[String] =
     TaskKey[String](
       "releaseIORuntimeVersion",
       "The current version at evaluation time (used by tag/commit message tasks)"
     )
 
+  @transient
   private[release] lazy val _releaseIOTagName: TaskKey[String] =
     TaskKey[String]("releaseIOTagName", "Tag name for the release")
 
+  @transient
   private[release] lazy val _releaseIOTagComment: TaskKey[String] =
     TaskKey[String]("releaseIOTagComment", "Tag comment for the release")
 
+  @transient
   private[release] lazy val _releaseIOCommitMessage: TaskKey[String] =
     TaskKey[String]("releaseIOCommitMessage", "Commit message for the release version commit")
 
+  @transient
   private[release] lazy val _releaseIONextCommitMessage: TaskKey[String] =
     TaskKey[String](
       "releaseIONextCommitMessage",
       "Commit message for the next snapshot version commit"
     )
 
-  private[release] lazy val _releaseIOVersion: SettingKey[String => String] =
-    SettingKey[String => String](
+  @transient
+  private[release] lazy val _releaseIOVersion: TaskKey[String => String] =
+    TaskKey[String => String](
       "releaseIOVersion",
       "Function that computes the release version from the current version"
     )
 
-  private[release] lazy val _releaseIONextVersion: SettingKey[String => String] =
-    SettingKey[String => String](
+  @transient
+  private[release] lazy val _releaseIONextVersion: TaskKey[String => String] =
+    TaskKey[String => String](
       "releaseIONextVersion",
       "Function that computes the next development version from the release version"
     )
 
-  private[release] lazy val _releaseIOVersionBump
-      : SettingKey[_root_.io.release.version.Version.Bump] =
-    SettingKey[_root_.io.release.version.Version.Bump](
+  @transient
+  private[release] lazy val _releaseIOVersionBump: TaskKey[_root_.io.release.version.Version.Bump] =
+    TaskKey[_root_.io.release.version.Version.Bump](
       "releaseIOVersionBump",
       "Version bump strategy"
     )
 
+  @transient
   private[release] lazy val _releaseIOSnapshotDependencies: TaskKey[Seq[ModuleID]] =
     TaskKey[Seq[ModuleID]](
       "releaseIOSnapshotDependencies",
       "Task that resolves SNAPSHOT dependencies for validation"
     )
 
+  @transient
   private[release] lazy val _releaseIOPublishArtifactsAction: TaskKey[Unit] =
     TaskKey[Unit](
       "releaseIOPublishArtifactsAction",

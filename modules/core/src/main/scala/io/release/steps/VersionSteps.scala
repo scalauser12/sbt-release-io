@@ -114,8 +114,8 @@ private[release] object VersionSteps {
         versionPlan   <- IO.blocking(resolveVersionPlan(ctx.state))
         currentVer    <- versionPlan.readVersion(versionPlan.versionFile)
         data          <- IO.blocking {
-                           val releaseFn = SbtRuntime.getSetting(ctx.state, releaseIOVersion)
-                           val nextFn    = SbtRuntime.getSetting(ctx.state, releaseIONextVersion)
+                           val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseIOVersion)
+                           val (_, nextFn)     = SbtRuntime.runTask(s1, releaseIONextVersion)
 
                            InquireData(
                              state = ctx.state,
@@ -185,19 +185,17 @@ private[release] object VersionSteps {
           commitResult            <- commitVersionNative(ctx, releaseIOCommitMessage, versionPlan.versionFile)
           (resultCtx, currentHash) = commitResult
           finalCtx                <- IO.blocking {
-                                       val versionSetting =
-                                         if (versionPlan.useGlobalVersion) ThisBuild / version := releaseVer
-                                         else version                                          := releaseVer
-                                       val stateWithAttr  =
-                                         resultCtx.state.put(ReleaseKeys.runtimeVersionOverride, releaseVer)
-                                       val newState       = SbtRuntime.appendWithSession(
-                                         stateWithAttr,
+                                       val versionSettings =
+                                         if (versionPlan.useGlobalVersion)
+                                           Seq(ThisBuild / version := releaseVer, version := releaseVer)
+                                         else Seq(version          := releaseVer)
+                                       val newState        = SbtRuntime.appendWithSession(
+                                         resultCtx.state,
                                          VersionSteps.sessionSettings(resultCtx.state) ++ Seq(
                                            packageOptions += ManifestAttributes(
                                              "Vcs-Release-Hash" -> currentHash
-                                           ),
-                                           versionSetting
-                                         )
+                                           )
+                                         ) ++ versionSettings
                                        )
                                        resultCtx.copy(state = newState)
                                      }
@@ -264,10 +262,8 @@ private[release] object VersionSteps {
                          else Seq(version          := ver)
                        val allSettings     =
                          VersionSteps.sessionSettings(ctx.state) ++ versionSettings
-                       val stateWithAttr   =
-                         ctx.state.put(ReleaseKeys.runtimeVersionOverride, ver)
                        val newState        =
-                         SbtRuntime.appendWithSession(stateWithAttr, allSettings)
+                         SbtRuntime.appendWithSession(ctx.state, allSettings)
                        ctx.copy(state = newState)
                      }
     } yield result

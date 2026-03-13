@@ -2,7 +2,6 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
-import io.release.ReleaseKeys
 import io.release.internal.SbtRuntime
 import io.release.monorepo.internal.MonorepoReleasePlan
 import io.release.monorepo.steps.MonorepoStepHelpers.*
@@ -119,10 +118,11 @@ private[monorepo] object MonorepoVersionSteps {
       versionInputs                          <- resolve(ctx.state, project.ref)
       currentVer                             <- versionInputs.readVersion(versionInputs.versionFile)
       data                                   <- IO.blocking {
-                                                  val extracted   = Project.extract(ctx.state)
-                                                  val releaseFn   = extracted.get(project.ref / releaseIOVersion)
-                                                  val nextFn      = extracted.get(project.ref / releaseIONextVersion)
-                                                  val useDefaults =
+                                                  val (s1, releaseFn) =
+                                                    SbtRuntime.runTask(ctx.state, project.ref / releaseIOVersion)
+                                                  val (_, nextFn)     =
+                                                    SbtRuntime.runTask(s1, project.ref / releaseIONextVersion)
+                                                  val useDefaults     =
                                                     StepHelpers.useDefaults(ctx.state)
                                                   (releaseFn(currentVer), nextFn, useDefaults)
                                                 }
@@ -241,13 +241,11 @@ private[monorepo] object MonorepoVersionSteps {
                           Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
                         }
             newState <- IO.blocking {
-                          val setting       =
+                          val setting   =
                             if (versionInputs.useGlobalVersion) ThisBuild / version := ver
                             else project.ref / version                              := ver
-                          val stateWithAttr =
-                            ctx.state.put(ReleaseKeys.runtimeVersionOverride, ver)
-                          val baseState     = SbtRuntime.appendWithSession(
-                            stateWithAttr,
+                          val baseState = SbtRuntime.appendWithSession(
+                            ctx.state,
                             preserved ++ Seq(setting)
                           )
                           if (versionInputs.useGlobalVersion)

@@ -3,8 +3,8 @@ import scala.sys.process.*
 name         := "custom-tag-test"
 scalaVersion := "2.12.18"
 
-// Custom tag name with prefix (version is evaluated at tag time)
-releaseIOTagName := s"release-${releaseIORuntimeVersion.value}"
+// Custom tag name with prefix (version is evaluated at tag time via reapply)
+releaseIOTagName := s"release-${version.value}"
 
 // Skip push and publish steps in tests
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>

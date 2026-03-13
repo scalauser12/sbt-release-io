@@ -7,12 +7,12 @@ A cats-effect IO release plugin for sbt, inspired by [sbt-release](https://githu
 ## Features
 
 - **IO-based release steps**: `execute` steps return `IO[ReleaseContext]`, and `validate` steps return `IO[Unit]`
-- **Full compatibility**: Native IO implementations for VCS commits, tagging, and version management; delegates to upstream sbt-release 1.4.0 for settings
+- **Standalone implementation**: Native IO implementations for VCS commits, tagging, and version management — no dependency on sbt-release
 - **Flexible step composition**: Create custom release steps using cats-effect IO
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
 - **Optional interactive mode**: Enable upstream-like prompts for versions, confirmation, and push
-- **Configurable**: Respects all upstream sbt-release settings (commit messages, signing, version bumping, etc.)
+- **Configurable**: Comprehensive settings for commit messages, signing, version bumping, etc.
 
 ## Installation
 
@@ -127,6 +127,19 @@ val validateBranch = ReleaseStepIO.io("validate-branch") { ctx =>
   }
 }
 
+// ReleaseContext public API:
+//   ctx.state                          — current sbt State
+//   ctx.releaseVersion                 — Option[String]
+//   ctx.nextVersion                    — Option[String]
+//   ctx.vcs                            — Option[Vcs]
+//   ctx.withState(s)                   — update sbt State
+//   ctx.withVersions(release, next)    — set version pair
+//   ctx.withVcs(v)                     — set VCS adapter
+//   ctx.withMetadata(key, value)       — store typed metadata
+//   ctx.metadata(key)                  — retrieve typed metadata
+//   ctx.withoutMetadata(key)           — remove a metadata entry
+//   ctx.fail / ctx.failWith(cause)     — mark context as failed
+
 // Compose custom steps with built-in ones
 releaseIOProcess := Seq(
   printBanner,
@@ -136,6 +149,35 @@ releaseIOProcess := Seq(
   // ... more steps
 )
 ```
+
+### Creating Steps from sbt Tasks and Commands
+
+Wrap existing sbt tasks, input tasks, or commands as release steps using the built-in factory methods:
+
+```scala
+import io.release.ReleasePluginIO.autoImport._
+
+releaseIOProcess := Seq(
+  ReleaseSteps.initializeVcs,
+  ReleaseSteps.checkCleanWorkingDir,
+  ReleaseSteps.inquireVersions,
+  // Run a TaskKey as a release step
+  stepTask(myCustomTask),
+  // Run a TaskKey with cross-building enabled
+  stepTask(myCustomTask, enableCrossBuild = true),
+  // Run an InputKey with arguments
+  stepInputTask(myInputTask, args = "arg1 arg2"),
+  // Run a TaskKey aggregated across subprojects
+  stepTaskAggregated(test),
+  // Run an sbt command string
+  stepCommand("publishLocal"),
+  // Run a command that enqueues sub-commands (e.g. +publish)
+  stepCommandAndRemaining("+publish"),
+  ReleaseSteps.pushChanges
+)
+```
+
+These are also available directly on `ReleaseStepIO` as `fromTask`, `fromInputTask`, `fromTaskAggregated`, `fromCommand`, `fromCommandAndRemaining`, and `pure` (for non-effectful context transformations).
 
 ### Custom Plugins
 
@@ -207,6 +249,32 @@ sbt "releaseWithClient with-defaults release-version 1.0.0 next-version 1.1.0-SN
 ```
 
 The command accepts the same arguments as `releaseIO` (`with-defaults`, `skip-tests`, `cross`, `release-version`, `next-version`, `default-tag-exists-answer`).
+
+#### Resource-aware step factory methods
+
+The `ReleaseIO` trait (mixed into all `ReleasePluginIOLike` subclasses) provides convenience factory methods for creating resource-aware steps:
+
+```scala
+// Simple resource step — execute only, no validation phase
+val notifySlack: HttpClient => ReleaseStepIO = resourceStep("notify-slack") { client => ctx =>
+  IO.blocking { client.post("/webhook", s"Released ${ctx.releaseVersion.getOrElse("")}"); ctx }
+}
+
+// Resource step with a validation phase
+val verifyToken: HttpClient => ReleaseStepIO =
+  resourceStepWithValidation("verify-token")(
+    execute = client => ctx => IO.blocking { client.post("/release", "..."); ctx }
+  )(
+    validate = client => ctx => IO.blocking { client.get("/health"); () }
+  )
+```
+
+Use these in `releaseProcess`:
+
+```scala
+override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
+  defaultsWith(state)(notifySlack, verifyToken)
+```
 
 #### Inserting steps at specific positions
 
@@ -413,23 +481,45 @@ releaseIOProcess := ReleaseSteps.defaults.flatMap {
 }
 ```
 
-### Settings
+### Settings Reference
 
 All release settings use the `releaseIO` prefix:
 
-```scala
-releaseIOVersionBump := _root_.io.release.version.Version.Bump.Minor
-releaseIOTagName := s"v${releaseIORuntimeVersion.value}"
-releaseIOTagComment := s"Releasing ${releaseIORuntimeVersion.value}"
-releaseIOCommitMessage := s"Setting version to ${releaseIORuntimeVersion.value}"
-releaseIONextCommitMessage := s"Setting version to ${releaseIORuntimeVersion.value}"
-releaseIOIgnoreUntrackedFiles := false
-releaseIOVcsSign := false
-releaseIOVcsSignOff := false
-releaseIOVersionFile := baseDirectory.value / "version.sbt"
-releaseIOUseGlobalVersion := true
-releaseIOPublishArtifactsAction := publish.value
-```
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `releaseIOProcess` | `SettingKey[Seq[ReleaseStepIO]]` | `ReleaseSteps.defaults` | Ordered sequence of release steps |
+| `releaseIOCrossBuild` | `SettingKey[Boolean]` | `false` | Cross-build steps per `crossScalaVersions` |
+| `releaseIOSkipPublish` | `SettingKey[Boolean]` | `false` | Skip the publish step entirely |
+| `releaseIOInteractive` | `SettingKey[Boolean]` | `false` | Enable interactive prompts |
+| `releaseIOVersionFile` | `SettingKey[File]` | `baseDirectory / "version.sbt"` | Path to the version file |
+| `releaseIOUseGlobalVersion` | `SettingKey[Boolean]` | `true` | Use `ThisBuild / version` format |
+| `releaseIOReadVersion` | `SettingKey[File => IO[String]]` | parses `version := "x.y.z"` | Read version from file |
+| `releaseIOWriteVersion` | `SettingKey[(File, String) => IO[String]]` | writes `version := "x.y.z"` | Produce version file contents |
+| `releaseIOVersionBump` | `TaskKey[Version.Bump]` | `Next` | Version bump strategy (see bump types below) |
+| `releaseIOVersion` | `TaskKey[String => String]` | strips qualifier/snapshot | Compute release version from current |
+| `releaseIONextVersion` | `TaskKey[String => String]` | bumps + appends `-SNAPSHOT` | Compute next dev version |
+| `releaseIOTagName` | `TaskKey[String]` | `s"v${version.value}"` | Git tag name |
+| `releaseIOTagComment` | `TaskKey[String]` | `s"Releasing ${version.value}"` | Git tag comment |
+| `releaseIOCommitMessage` | `TaskKey[String]` | `s"Setting version to ${version.value}"` | Release version commit message |
+| `releaseIONextCommitMessage` | `TaskKey[String]` | `s"Setting version to ${version.value}"` | Next version commit message |
+| `releaseIOVcsSign` | `SettingKey[Boolean]` | `false` | GPG-sign tags and commits |
+| `releaseIOVcsSignOff` | `SettingKey[Boolean]` | `false` | Add `Signed-off-by` to commits |
+| `releaseIOIgnoreUntrackedFiles` | `SettingKey[Boolean]` | `false` | Ignore untracked files in clean check |
+| `releaseIOPublishArtifactsAction` | `TaskKey[Unit]` | `publish` | Task that performs the publish |
+| `releaseIOPublishArtifactsChecks` | `SettingKey[Boolean]` | `true` | Validate `publishTo`/`skip` before publish |
+| `releaseIOSnapshotDependencies` | `TaskKey[Seq[ModuleID]]` | auto-resolved | SNAPSHOT deps for validation |
+| `releaseIORuntimeVersion` | `TaskKey[String]` | scope-aware `version` | Reads `ThisBuild / version` or `version` based on `releaseIOUseGlobalVersion` |
+
+#### Version Bump Types
+
+| Bump | Example | Description |
+|------|---------|-------------|
+| `Major` | 1.0.0 → 2.0.0 | Bump major version |
+| `Minor` | 1.0.0 → 1.1.0 | Bump minor version |
+| `Bugfix` | 1.0.0 → 1.0.1 | Bump bugfix/patch version |
+| `Nano` | 1.0.0.0 → 1.0.0.1 | Bump nano version |
+| `Next` | 1.0-RC1 → 1.0-RC2 | Increment next component including prerelease **(default)** |
+| `NextStable` | 1.0-RC1 → 1.0 | Increment next component, remove prerelease qualifier |
 
 ## Default Release Steps
 
@@ -483,7 +573,6 @@ See `src/sbt-test/README.md` for test documentation.
 
 - **sbt**: 1.12.3 and 2.0.0-RC9
 - **Scala**: 2.12.21 and 3.8.1
-- **sbt-release**: 1.4.0
 - **cats-effect**: 3.6.3
 
 ## Execution Model: sbt-release-io vs sbt-release
@@ -527,7 +616,7 @@ sbt-release-io builds a single `IO[ReleaseContext]` release program from all con
 | Error handling | `FailureCommand` sentinel in State | `IO.raiseError` + `handleErrorWith` |
 | Composability | `Function.chain` | Monadic (`for`/`flatMap`) |
 
-The plugin maintains full compatibility with upstream sbt-release settings.
+The plugin provides settings familiar to sbt-release users, but is a standalone implementation with no runtime dependency on sbt-release.
 
 ## Contributing
 
@@ -540,8 +629,8 @@ Contributions are welcome! Please ensure:
 
 ## License
 
-This project follows the same license as sbt-release.
+Apache License 2.0
 
 ## Acknowledgments
 
-Built on top of [sbt-release](https://github.com/sbt/sbt-release) by sbt organization.
+Inspired by [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization.
