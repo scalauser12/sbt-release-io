@@ -2,7 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.CrossBuildSupport
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 /** Thin wrappers over sbt state/extraction APIs used by built-in release code. */
 private[release] object SbtRuntime {

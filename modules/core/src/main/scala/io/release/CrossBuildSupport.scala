@@ -1,10 +1,9 @@
 package io.release
 
 import cats.effect.IO
-import sbt.{internal => _, *}
 import sbt.Def.ScopedKey
-import sbt.Keys.*
 import sbt.util.Show
+import sbt.{internal as _, *}
 
 /** Shared cross-build utilities used by both the core [[ReleaseComposer]] and the
   * monorepo `MonorepoComposer`. Switching Scala versions requires a full project-structure

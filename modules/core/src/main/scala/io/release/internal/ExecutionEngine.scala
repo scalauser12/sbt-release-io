@@ -2,6 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+
 import scala.util.control.NonFatal
 
 /** Shared two-phase execution and failure-detection helpers used by core and monorepo composers. */

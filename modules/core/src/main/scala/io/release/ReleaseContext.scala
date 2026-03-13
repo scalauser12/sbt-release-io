@@ -1,8 +1,8 @@
 package io.release
 
 import _root_.io.release.vcs.Vcs
-import sbt.{internal => _, *}
 import sbt.internal.util.AttributeMap
+import sbt.{internal as _, *}
 
 /** Immutable context threaded through each release step during validation and execution.
   *

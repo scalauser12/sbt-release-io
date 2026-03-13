@@ -1,7 +1,7 @@
 package io.release.internal
 
 import cats.effect.IO
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 /** Resolved versioning inputs for the core release flow. */
 private[release] final case class VersionPlan(

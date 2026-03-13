@@ -2,8 +2,8 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.{ExecutionEngine, SbtRuntime}
-import sbt.{internal => _, *}
 import sbt.Keys.*
+import sbt.{internal as _, *}
 
 /** Orchestrates the two-phase execution model for [[ReleaseStepIO]] sequences.
   *

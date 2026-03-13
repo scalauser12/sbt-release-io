@@ -2,8 +2,8 @@ package io.release
 
 import _root_.io.release.vcs.Vcs
 import cats.effect.IO
-import sbt.{internal => _, *}
 import sbt.Keys.*
+import sbt.{internal as _, *}
 
 /** Shared VCS operations used by both core and monorepo release steps.
   *

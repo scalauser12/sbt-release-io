@@ -1,11 +1,9 @@
 package io.release.internal
 
-import sbt.{internal => _, *}
-import sbt.Def.ScopedKey
-import sbt.EvaluateTask.{extractedTaskConfig, nodeView, runTask, withStreams}
 import sbt.internal.Aggregation.KeyValue
 import sbt.internal.{Act, Aggregation}
 import sbt.std.Transform.DummyTaskMap
+import sbt.{internal as _, *}
 
 private[release] object SbtCompat {
 

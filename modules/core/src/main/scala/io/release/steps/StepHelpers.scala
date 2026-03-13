@@ -1,12 +1,12 @@
 package io.release.steps
 
+import _root_.io.release.vcs.Vcs
+import _root_.io.release.version.Version
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.internal.InternalKeys
-import _root_.io.release.vcs.Vcs
-import _root_.io.release.version.Version
-import sbt.{EvaluateTask, Incomplete, Result}
 import sbt.internal.Aggregation.KeyValue
+import sbt.{EvaluateTask, Incomplete, Result}
 
 import scala.sys.process.*
 

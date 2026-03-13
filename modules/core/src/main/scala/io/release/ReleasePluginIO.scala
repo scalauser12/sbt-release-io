@@ -1,15 +1,15 @@
 package io.release
 
-import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Resource}
 import _root_.io.release.internal.{CoreReleasePlan, InternalKeys}
 import _root_.io.release.steps.ReleaseSteps
 import _root_.io.release.vcs.Vcs
 import _root_.io.release.version.Version
-import sbt.{internal => _, *}
+import cats.effect.unsafe.implicits.global
+import cats.effect.{IO, Resource}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
+import sbt.{internal as _, *}
 
 import scala.language.implicitConversions
 
@@ -236,6 +236,7 @@ trait ReleasePluginIOLike[T]
     */
   protected def doReleaseIO(state: State, args: Seq[ReleaseArg]): State = {
     import ReleaseArg.*
+
     import scala.util.control.NonFatal
 
     try {

@@ -1,16 +1,15 @@
 package io.release.steps
 
+import _root_.io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
+import _root_.io.release.steps.StepHelpers.*
+import _root_.io.release.vcs.Vcs
 import cats.Monad
 import cats.effect.IO
 import io.release.internal.{CoreReleasePlan, SbtRuntime, TagPlan}
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
-import sbt.{internal => _, *}
-import _root_.io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
-import _root_.io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
-
-import _root_.io.release.vcs.Vcs
+import sbt.internal as _
 
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {

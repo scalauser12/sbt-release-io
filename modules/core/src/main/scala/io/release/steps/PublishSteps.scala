@@ -1,16 +1,16 @@
 package io.release.steps
 
-import cats.effect.IO
-import io.release.internal.SbtRuntime
-import io.release.{CleanCompat, ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
 import _root_.io.release.ReleaseIO.{
   releaseIOPublishArtifactsAction,
   releaseIOPublishArtifactsChecks,
   releaseIOSnapshotDependencies
 }
 import _root_.io.release.steps.StepHelpers.*
-import sbt.{internal => _, *}
+import cats.effect.IO
+import io.release.internal.SbtRuntime
+import io.release.{CleanCompat, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
+import sbt.{internal as _, *}
 
 import scala.util.control.NonFatal
 

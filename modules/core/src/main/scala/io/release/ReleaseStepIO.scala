@@ -2,7 +2,7 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.SbtRuntime
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 /** A single release step with explicit validation and execution phases.
   *

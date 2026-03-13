@@ -1,24 +1,13 @@
 package io.release.steps
 
+import _root_.io.release.ReleaseIO.*
+import _root_.io.release.steps.StepHelpers.*
 import cats.effect.IO
 import io.release.internal.{CoreReleasePlan, SbtRuntime, VersionPlan}
 import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO, VcsOps}
-import _root_.io.release.ReleaseIO.{
-  releaseIOCommitMessage,
-  releaseIONextCommitMessage,
-  releaseIONextVersion,
-  releaseIOReadVersion,
-  releaseIOUseGlobalVersion,
-  releaseIOVcsSign,
-  releaseIOVcsSignOff,
-  releaseIOVersion,
-  releaseIOVersionFile,
-  releaseIOWriteVersion
-}
-import _root_.io.release.steps.StepHelpers.*
-import sbt.{internal => _, *}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
+import sbt.{internal as _, *}
 
 import java.io.File
 

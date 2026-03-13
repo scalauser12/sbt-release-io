@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.IO
-import sbt.{internal => _, *}
+import sbt.{internal as _, *}
 
 /** Shared setting keys and factory methods for release-io plugins.
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
