@@ -638,6 +638,7 @@ See `src/sbt-test/README.md` for test documentation.
 - **sbt**: 1.12.3 and 2.0.0-RC9
 - **Scala**: 2.12.21 and 3.8.1
 - **cats-effect**: 3.6.3
+- **VCS**: Git only (sbt-release also supports Mercurial and Subversion)
 
 ## Execution Model: sbt-release-io vs sbt-release
 
@@ -673,6 +674,7 @@ Both plugins share the same high-level structure: block the sbt command thread, 
 | Resource management | Manual | `Resource.use` with guaranteed cleanup |
 | Cross-build validation | Actions only | Both `validate` and `execute` phases |
 | Custom plugin resources | Not supported | `ReleasePluginIOLike[T]` |
+| VCS support | Git, Mercurial, Subversion | Git only |
 | Error handling | `FailureCommand` sentinel in State | `IO.raiseError` + `handleErrorWith` |
 | Composability | `Function.chain` | Monadic (`for`/`flatMap`) |
 
