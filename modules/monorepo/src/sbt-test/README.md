@@ -165,6 +165,11 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - `interactive=true` + `with-defaults` exercises the `useDefaults` tag collision path
 - Pre-existing tag causes abort with "use-defaults mode" message, not the non-interactive message
 
+### insert-step
+- `insertStepAfter` and `insertStepBefore` correctly position custom steps in the release process
+- Inserts a marker-writing step after `set-release-version` and before `tag-releases`
+- Verifies both custom steps executed by checking marker files
+
 ### invalid-override
 - Typo in project name (e.g., `croe` instead of `core`) causes parse error
 
@@ -247,6 +252,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### shared-paths-detection
 - A change in `build.sbt` (shared path) triggers release for all projects
 - No per-project file changes needed; shared path change alone is sufficient
+
+### shared-paths-custom
+- Custom `releaseIOMonorepoSharedPaths := Seq(".scalafmt.conf")` triggers release via custom shared path
+- Only the custom shared path triggers detection; default paths (`build.sbt`, `project/`) are not monitored
 
 ### shared-paths-disabled
 - `releaseIOMonorepoSharedPaths := Seq.empty` disables shared path detection

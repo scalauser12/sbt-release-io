@@ -10,7 +10,7 @@ Scala 2.12 with `-Xsource:3`. sbt 1.12.3. cats-effect 3.6.3. specs2 for tests.
 
 - `sbt compile` — compile both modules
 - `sbt test` — run unit tests (specs2) for both modules
-- `sbt scripted` — run all scripted integration tests (~107 tests: 39 core + 68 monorepo, takes ~8 min)
+- `sbt scripted` — run all scripted integration tests (~109 tests: 39 core + 70 monorepo, takes ~8 min)
 - `sbt core/scripted` — run core scripted tests only
 - `sbt monorepo/scripted` — run monorepo scripted tests only
 - `sbt 'core/scripted sbt-release-io/<test-name>'` — run a single core scripted test
