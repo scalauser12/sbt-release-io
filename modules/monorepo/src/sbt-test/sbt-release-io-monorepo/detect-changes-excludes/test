@@ -14,8 +14,9 @@ $ exec touch core/CHANGELOG.md
 $ exec git add core/CHANGELOG.md
 $ exec git commit -m "Update changelog"
 
-# Release should FAIL — the only change is an excluded file, so no projects detected
--> releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT
+# Release should FAIL — the only change is an excluded file, so no projects detected.
+# Note: no version overrides here — providing them would force-include core.
+-> releaseIOMonorepo with-defaults
 
 # Now add a real source change alongside the excluded file
 $ exec touch core/CHANGES.md
