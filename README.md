@@ -4,13 +4,13 @@
 [![sbt-release-io](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0?label=sbt-release-io)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
 [![sbt-release-io-monorepo](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0?label=sbt-release-io-monorepo)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
 
-A cats-effect IO release plugin for sbt, inspired by [sbt-release](https://github.com/sbt/sbt-release), with composable, resource-safe release automation.
+A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for sbt, with composable error handling and resource safety.
 
 ## Modules
 
 | Module | Artifact | Description |
 |--------|----------|-------------|
-| [core](modules/core/README.md) | `sbt-release-io` | IO-based release plugin for single-project builds. Drop-in replacement for sbt-release with `Resource` lifecycle, cross-build checks, and typed context threading. |
+| [core](modules/core/README.md) | `sbt-release-io` | IO-based release plugin for single-project builds. Independent codebase porting sbt-release onto cats-effect IO with `Resource` lifecycle, cross-build validation, and typed context threading. |
 | [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and tagging strategies. |
 
 ## Quick Start
@@ -67,8 +67,8 @@ sbt scalafmtSbtCheck     # verify sbt/build file formatting
 
 - **sbt**: 1.12.3 and 2.0.0-RC9
 - **Scala**: 2.12.21 and 3.8.1
-- **sbt-release**: 1.4.0
 - **cats-effect**: 3.6.3
+- **VCS**: Git only
 
 ## License
 
@@ -76,6 +76,6 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Acknowledgments
 
-Built on top of [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization.
+Ports [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization onto cats-effect IO.
 
 Developed with the assistance of [Claude Code](https://claude.ai/claude-code) by Anthropic.
