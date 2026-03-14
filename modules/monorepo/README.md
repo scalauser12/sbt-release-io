@@ -390,7 +390,7 @@ import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 val validateBranch = globalStep("validate-branch") { ctx =>
   ctx.vcs match {
     case Some(vcs) =>
-      IO.blocking(vcs.currentBranch).flatMap { branch =>
+      vcs.currentBranch.flatMap { branch =>
         if (branch == "main") IO.pure(ctx)
         else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
       }
