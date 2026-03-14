@@ -577,7 +577,7 @@ When using change detection, providing a CLI version override for a project forc
 sbt "releaseIOMonorepo with-defaults release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT"
 ```
 
-This releases `api` at version `1.0.0` regardless of whether change detection found changes in `api`.
+This releases `api` at version `1.0.0` regardless of whether change detection found changes in `api`. Note that force-included projects do not trigger downstream expansion — only projects detected as changed (by git diff or a custom detector) contribute to downstream expansion when `releaseIOMonorepoIncludeDownstream` is enabled.
 
 ### Custom change detector
 

@@ -57,7 +57,7 @@ object MonorepoReleaseSteps {
             case SelectionMode.AllChanged        =>
               s"Releasing all projects: ${selectedInfos.map(_.name).mkString(", ")}"
             case SelectionMode.DetectChanges     =>
-              s"Changed projects: ${selectedInfos.map(_.name).mkString(", ")}"
+              s"Releasing projects: ${selectedInfos.map(_.name).mkString(", ")}"
           }
 
           if (selectedInfos.isEmpty) {

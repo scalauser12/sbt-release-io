@@ -135,7 +135,8 @@ private[monorepo] object MonorepoSelectionResolver {
         allOrdered.filter(p => downstream.contains(p.ref) && !detectedRefs.contains(p.ref))
 
       if (newlyIncluded.isEmpty) IO.pure(detected)
-      else
+      else {
+        val selectedRefs = detectedRefs ++ newlyIncluded.map(_.ref).toSet
         newlyIncluded
           .foldLeft(IO.unit) { (acc, p) =>
             acc *> IO.blocking(
@@ -144,7 +145,8 @@ private[monorepo] object MonorepoSelectionResolver {
               )
             )
           }
-          .as(detected ++ newlyIncluded)
+          .as(allOrdered.filter(p => selectedRefs.contains(p.ref)))
+      }
     }
 
   private def validateResolvedProjects(
@@ -244,7 +246,8 @@ private[monorepo] object MonorepoSelectionResolver {
       allOrdered.filter(p => overrideNames.contains(p.name) && !detectedNames.contains(p.name))
 
     if (forceInclude.isEmpty) IO.pure(detected)
-    else
+    else {
+      val selectedRefs = detectedNames ++ forceInclude.map(_.name)
       forceInclude
         .foldLeft(IO.unit) { (acc, p) =>
           acc *> IO.blocking(
@@ -253,7 +256,8 @@ private[monorepo] object MonorepoSelectionResolver {
             )
           )
         }
-        .as(detected ++ forceInclude)
+        .as(allOrdered.filter(p => selectedRefs.contains(p.name)))
+    }
   }
 
   private def detectWithCustomDetector(
