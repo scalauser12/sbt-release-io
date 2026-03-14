@@ -27,16 +27,16 @@ Enable on your root project in `build.sbt`:
 
 ```scala
 lazy val core = (project in file("core"))
-  .settings(version := "0.2.0")
+  .dependsOn(api)
 
 lazy val api = (project in file("api"))
-  .dependsOn(core)
-  .settings(version := "0.2.0")
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
 ```
+
+Each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The version file path and format can be customized via `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoWriteVersion` — see [Version settings](#version-settings).
 
 ## Usage
 
@@ -129,41 +129,41 @@ current `State` when they run. Custom steps now use the public `validate`/`execu
 
 ### Core settings
 
-| Key | Type | Default | Description |
+| Setting | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoProjects` | `Seq[ProjectRef]` | `thisProject.value.aggregate` | Which subprojects participate in releases |
-| `releaseIOMonorepoProcess` | `Seq[MonorepoStepIO]` | `MonorepoReleaseSteps.defaults` | Ordered release steps |
-| `releaseIOMonorepoCrossBuild` | `Boolean` | `false` | Enable cross-building by default |
-| `releaseIOMonorepoSkipTests` | `Boolean` | `false` | Skip tests |
-| `releaseIOMonorepoSkipPublish` | `Boolean` | `false` | Skip publish |
-| `releaseIOMonorepoInteractive` | `Boolean` | `false` | Enable interactive version prompts |
+| `releaseIOMonorepoProjects` | `SettingKey[Seq[ProjectRef]]` | All transitively aggregated subprojects | Which subprojects participate in releases |
+| `releaseIOMonorepoProcess` | `SettingKey[Seq[MonorepoStepIO]]` | `MonorepoReleaseSteps.defaults` | Ordered release steps |
+| `releaseIOMonorepoCrossBuild` | `SettingKey[Boolean]` | `false` | Enable cross-building by default |
+| `releaseIOMonorepoSkipTests` | `SettingKey[Boolean]` | `false` | Skip tests |
+| `releaseIOMonorepoSkipPublish` | `SettingKey[Boolean]` | `false` | Skip publish |
+| `releaseIOMonorepoInteractive` | `SettingKey[Boolean]` | `false` | Enable interactive version prompts |
 
 ### Version settings
 
-| Key | Type | Default | Description |
+| Setting | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoVersionFile` | `MonorepoVersionFileResolver` | Scoped `releaseVersionFile` | Per-project version file resolver `(ProjectRef, State) => File` |
-| `releaseIOMonorepoReadVersion` | `File => IO[String]` | Regex parser (same as core) | Version file reader |
-| `releaseIOMonorepoWriteVersion` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Version file writer (default ignores `File` param) |
-| `releaseIOMonorepoUseGlobalVersion` | `Boolean` | `false` | Use root `version.sbt` instead of per-project files |
+| `releaseIOMonorepoVersionFile` | `SettingKey[MonorepoVersionFileResolver]` | Scoped `releaseIOVersionFile` | Per-project version file resolver `(ProjectRef, State) => File` |
+| `releaseIOMonorepoReadVersion` | `SettingKey[File => IO[String]]` | Regex parser (same as core) | Version file reader |
+| `releaseIOMonorepoWriteVersion` | `SettingKey[(File, String) => IO[String]]` | `version := "x.y.z"\n` | Version file writer (default ignores `File` param) |
+| `releaseIOMonorepoUseGlobalVersion` | `SettingKey[Boolean]` | `false` | Use root `version.sbt` instead of per-project files |
 
 ### Tagging settings
 
-| Key | Type | Default | Description |
+| Setting | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoTagStrategy` | `MonorepoTagStrategy` | `PerProject` | `PerProject` or `Unified` |
-| `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Per-project tag formatter |
-| `releaseIOMonorepoUnifiedTagName` | `String => String` | `ver => s"v$ver"` | Unified tag formatter |
+| `releaseIOMonorepoTagStrategy` | `SettingKey[MonorepoTagStrategy]` | `PerProject` | `PerProject` or `Unified` |
+| `releaseIOMonorepoTagName` | `SettingKey[(String, String) => String]` | `(name, ver) => s"$name/v$ver"` | Per-project tag formatter |
+| `releaseIOMonorepoUnifiedTagName` | `SettingKey[String => String]` | `ver => s"v$ver"` | Unified tag formatter |
 
 ### Change detection settings
 
-| Key | Type | Default | Description |
+| Setting | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoDetectChanges` | `Boolean` | `true` | Enable git-based change detection |
-| `releaseIOMonorepoIncludeDownstream` | `Boolean` | `false` | Include transitive downstream dependents of changed projects |
-| `releaseIOMonorepoChangeDetector` | `Option[(ProjectRef, File, State) => IO[Boolean]]` | `None` | Custom change detector |
-| `releaseIOMonorepoDetectChangesExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
-| `releaseIOMonorepoSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level paths checked for shared changes per project |
+| `releaseIOMonorepoDetectChanges` | `SettingKey[Boolean]` | `true` | Enable git-based change detection |
+| `releaseIOMonorepoIncludeDownstream` | `SettingKey[Boolean]` | `false` | Include transitive downstream dependents of changed projects |
+| `releaseIOMonorepoChangeDetector` | `SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]]` | `None` | Custom change detector |
+| `releaseIOMonorepoDetectChangesExcludes` | `SettingKey[Seq[File]]` | `Seq.empty` | Files to exclude from detection |
+| `releaseIOMonorepoSharedPaths` | `SettingKey[Seq[String]]` | `Seq("build.sbt", "project/")` | Root-level paths checked for shared changes per project |
 
 Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's own last release tag. If any shared file changed since that tag, the project is marked as changed. This ensures modifications to shared build definitions, compiler plugins, or dependency versions are never silently missed. In per-project tag mode, projects with different tags are evaluated independently — a project tagged after a shared change won't be marked changed, while one tagged before it will. Set to `Seq.empty` to disable.
 
@@ -177,368 +177,15 @@ releaseIOMonorepoSharedPaths := Seq.empty
 
 ### Example configuration
 
-> The explicit `import io.release.monorepo.MonorepoReleasePlugin.autoImport._` is optional — sbt auto-imports these keys from plugins on the classpath.
+> The explicit `import io.release.monorepo.MonorepoReleasePlugin.autoImport.*` is optional — sbt auto-imports these keys from plugins on the classpath.
 
 ```scala
-import io.release.monorepo.MonorepoReleasePlugin.autoImport._
+import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 
 releaseIOMonorepoSkipTests   := true
 releaseIOMonorepoCrossBuild  := true
 releaseIOMonorepoTagStrategy := MonorepoTagStrategy.Unified
 releaseIOMonorepoTagName     := { (name, ver) => s"release/$name/$ver" }
-```
-
-## Custom Steps
-
-### Factory methods
-
-```scala
-import cats.effect.IO
-import io.release.monorepo.MonorepoReleasePlugin.autoImport._
-
-// Global step — runs once
-val validateBranch = globalStep("validate-branch") { ctx =>
-  ctx.vcs match {
-    case Some(vcs) =>
-      IO.blocking(vcs.currentBranch).flatMap { branch =>
-        if (branch == "main") IO.pure(ctx)
-        else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
-      }
-    case None => IO.raiseError(new RuntimeException("VCS not initialized"))
-  }
-}
-
-// Per-project step — runs once per selected project
-val logProject = perProjectStep("log-project") { (ctx, project) =>
-  IO {
-    ctx.state.log.info(s"Releasing ${project.name}")
-    ctx
-  }
-}
-
-// Per-project step with cross-build support
-val crossTest = perProjectStep("cross-test", enableCrossBuild = true) { (ctx, project) =>
-  IO { /* runs once per crossScalaVersions entry */ ctx }
-}
-```
-
-### Customizing the release process
-
-```scala
-// Filter out steps
-releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(_.name == "push-changes")
-
-// Add a step at a specific position
-releaseIOMonorepoProcess := {
-  val steps = releaseIOMonorepoProcess.value
-  val idx = steps.indexWhere(_.name == "tag-releases")
-  val (before, after) = steps.splitAt(idx)
-  before ++ Seq(validateBranch) ++ after
-}
-
-// Replace the entire process
-import io.release.monorepo.steps.MonorepoReleaseSteps._
-
-releaseIOMonorepoProcess := Seq(
-  initializeVcs,
-  checkCleanWorkingDir,
-  resolveReleaseOrder,
-  detectOrSelectProjects,
-  checkSnapshotDependencies,
-  inquireVersions,
-  // runClean and runTests omitted
-  setReleaseVersions,
-  commitReleaseVersions,
-  tagReleases,
-  // publishArtifacts omitted — tag-only release
-  setNextVersions,
-  commitNextVersions,
-  pushChanges
-)
-```
-
-## Custom Plugins
-
-If your release process needs a shared resource (HTTP client, database connection, temporary directory), create a custom plugin that extends `MonorepoReleasePluginLike[T]`. The resource is acquired once before all steps run and released after they complete (or on failure).
-
-When using a custom plugin, you only need `enablePlugins(MyReleasePlugin)` — you do not need to enable `MonorepoReleasePlugin`. Keys like `releaseIOMonorepoProcess` are available automatically because sbt imports `autoImport` from all plugins on the classpath, regardless of whether they are enabled. Plugin enablement controls which settings are applied, not which keys are in scope.
-
-> **Do not add `object autoImport`** to custom plugins. When both `MonorepoReleasePlugin` and a custom plugin define `autoImport`, the build gets ambiguous references (e.g. `reference to releaseIOMonorepoProcess is ambiguous`).
-
-Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sbt discovers `AutoPlugin` classes during meta-build compilation.
-
-> **Important:** In `project/*.scala` files, `io.release` is shadowed by sbt's `sbt.io` package. Always use `_root_.io.release` and `_root_.cats.effect` imports.
-
-### Creating the plugin
-
-```scala
-// project/MyReleasePlugin.scala
-import sbt._
-import sbt.Keys._
-import _root_.io.release.monorepo._
-import _root_.io.release.monorepo.MonorepoReleaseIO._
-import _root_.cats.effect.{IO, Resource}
-
-object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
-  override def trigger = noTrigger
-  override protected def commandName: String = "myRelease"
-
-  override def resource: Resource[IO, HttpClient] =
-    Resource.make(IO(new HttpClient()))(c => IO(c.close()))
-
-  override protected def monorepoReleaseProcess(state: State) =
-    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) :+
-      resourceGlobalStep("notify-slack") { client => ctx =>
-        IO.blocking { client.post("/webhook", "Released!"); ctx }
-      }
-}
-```
-
-### Inserting at specific positions
-
-```scala
-// Insert after a named step
-override protected def monorepoReleaseProcess(state: State) =
-  insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), "tag-releases")(
-    Seq(resourceGlobalStep("post-tag-hook") { client => ctx =>
-      IO.blocking { client.post("/hooks/tagged", "done"); ctx }
-    })
-  )
-
-// Insert before a named step
-override protected def monorepoReleaseProcess(state: State) =
-  insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "publish-artifacts")(
-    Seq(resourcePerProjectStep("pre-publish-check") { client => (ctx, project) =>
-      IO.blocking { client.get(s"/ready/${project.name}"); ctx }
-    })
-  )
-```
-
-`insertAfter` and `insertBefore` match the exact `step.name` strings shown in
-the default-step table above, such as `"tag-releases"` or `"publish-artifacts"`.
-
-Custom steps inserted before built-in monorepo execute steps may update session settings in `State`, and
-later built-in execute steps will read those live settings when they run. This applies to built-in order
-resolution, project selection, version resolution, and tagging. Custom `PerProject` steps still use
-the current `MonorepoContext.projects` snapshot unless they explicitly replace it themselves, and
-built-in validation still runs against the setup-selected snapshot rather than threading later context changes backward.
-
-#### Custom step timing
-
-- The step list is frozen when the command starts.
-- Built-in **Global** execute steps such as `resolve-release-order` and `detect-or-select-projects`
-  read the current `State` when they run.
-- Built-in **validate** functions after `detect-or-select-projects` run against the selected snapshot.
-- Custom `PerProject` steps keep using `ctx.projects` until you replace that snapshot yourself.
-
-Example: rewrite the project set that built-in order/selection will use:
-
-```scala
-// project/MyReleasePlugin.scala
-import sbt.*
-import _root_.cats.effect.{IO, Resource}
-import _root_.io.release.monorepo.*
-import _root_.io.release.monorepo.MonorepoReleaseIO.*
-
-object MyReleasePlugin extends MonorepoReleasePluginLike[Unit] {
-  override def trigger               = noTrigger
-  override protected def commandName = "releaseLateBoundProjects"
-  override def resource: Resource[IO, Unit] = Resource.unit
-
-  private val selectOnlyCore =
-    MonorepoStepIO.Global(
-      name = "select-only-core",
-      execute = ctx =>
-        IO.blocking {
-          val extracted    = Project.extract(ctx.state)
-          val root         = extracted.get(baseDirectory)
-          val updatedState = extracted.appendWithSession(
-            Seq(
-              releaseIOMonorepoProjects := Seq(ProjectRef(root, "core"))
-            ),
-            ctx.state
-          )
-          ctx.withState(updatedState)
-        }
-    )
-
-  override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-    insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "resolve-release-order")(
-      Seq((_: Unit) => selectOnlyCore)
-    )
-}
-```
-
-Example: update `ctx.projects` explicitly for later custom `PerProject` steps:
-
-```scala
-// project/MyReleasePlugin.scala
-import sbt.*
-import _root_.cats.effect.{IO, Resource}
-import _root_.io.release.monorepo.*
-
-object MyReleasePlugin extends MonorepoReleasePluginLike[Unit] {
-  override def trigger               = noTrigger
-  override protected def commandName = "releaseFilteredProjects"
-  override def resource: Resource[IO, Unit] = Resource.unit
-
-  private val keepLibrariesOnly =
-    MonorepoStepIO.Global("keep-libraries-only") { ctx =>
-      IO.pure(ctx.withProjects(ctx.projects.filter(_.name.startsWith("lib-"))))
-    }
-
-  private val announce =
-    MonorepoStepIO.PerProject("announce") { (ctx, project) =>
-      IO.blocking {
-        ctx.state.log.info(s"Running custom logic for ${project.name}")
-        ctx
-      }
-    }
-
-  override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-    insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), "detect-or-select-projects")(
-      Seq(
-        (_: Unit) => keepLibrariesOnly,
-        (_: Unit) => announce
-      )
-    )
-}
-```
-
-Use the first pattern when you want later built-in monorepo steps to see new settings from
-`State`. Use the second pattern when you want later custom `PerProject` steps to iterate a
-different `ctx.projects` snapshot.
-
-> **Note:** Each helper inserts at a single position. To insert custom steps at multiple
-> non-adjacent positions, use the fully custom approach below.
-
-### Fully custom release process
-
-Override `monorepoReleaseProcess` directly to build the step sequence from scratch instead of
-appending to the defaults. Plain steps (from `MonorepoReleaseSteps`) and resource-aware steps
-can be mixed freely — an implicit conversion lifts plain steps into resource-ignoring functions.
-
-```scala
-// project/MyReleasePlugin.scala
-import sbt._
-import sbt.Keys._
-import _root_.io.release.monorepo._
-import _root_.io.release.monorepo.steps.MonorepoReleaseSteps
-import _root_.cats.effect.{IO, Resource}
-
-object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
-  override def trigger                    = noTrigger
-  override protected def commandName      = "myRelease"
-  override def resource: Resource[IO, HttpClient] =
-    Resource.make(IO(new HttpClient()))(c => IO(c.close()))
-
-  override protected def monorepoReleaseProcess(state: State): Seq[HttpClient => MonorepoStepIO] =
-    Seq(
-      // Plain steps — lifted automatically via the implicit conversion
-      MonorepoReleaseSteps.initializeVcs,
-      MonorepoReleaseSteps.checkCleanWorkingDir,
-      // 1st custom step — validate branch before anything else runs
-      resourceGlobalStep("validate-branch") { client => ctx =>
-        IO.blocking { client.get("/allowed-branches") }.flatMap { branches =>
-          if (branches.contains("main")) IO.pure(ctx)
-          else IO.raiseError(new RuntimeException("Release blocked"))
-        }
-      },
-      MonorepoReleaseSteps.resolveReleaseOrder,
-      MonorepoReleaseSteps.detectOrSelectProjects,
-      MonorepoReleaseSteps.inquireVersions,
-      MonorepoReleaseSteps.runTests,
-      MonorepoReleaseSteps.setReleaseVersions,
-      MonorepoReleaseSteps.commitReleaseVersions,
-      MonorepoReleaseSteps.tagReleases,
-      // 2nd custom step — notify after tagging
-      resourceGlobalStep("notify-slack") { client => ctx =>
-        IO.blocking { client.post("/webhook", s"Tagged!"); ctx }
-      },
-      MonorepoReleaseSteps.publishArtifacts,
-      // 3rd custom step — verify each project's published artifact
-      resourcePerProjectStep("verify-publish") { client => (ctx, project) =>
-        IO.blocking { client.get(s"/artifacts/${project.name}"); ctx }
-      },
-      MonorepoReleaseSteps.setNextVersions,
-      MonorepoReleaseSteps.commitNextVersions,
-      MonorepoReleaseSteps.pushChanges
-    )
-}
-```
-
-This bypasses the `releaseIOMonorepoProcess` setting entirely — the step list is hard-coded
-in the plugin. Use `liftSteps`, `insertAfter`, or `insertBefore` (shown above)
-if you want to keep the setting-based defaults and only add extra steps.
-
-### Resource-aware steps with validation
-
-```scala
-// Global step with a validation phase
-resourceGlobalStepWithValidation("validated-push") { client => ctx =>
-  IO.blocking { client.post("/push", "pushing"); ctx }
-} { client => ctx =>
-  IO.blocking { client.get("/can-push"); () }
-}
-
-// Per-project step with a validation phase
-resourcePerProjectStepWithValidation("validated-publish", enableCrossBuild = true) {
-  client => (ctx, project) =>
-    IO.blocking { client.post(s"/publish/${project.name}", "ok"); ctx }
-} { client => (ctx, project) =>
-    IO.blocking { client.get(s"/can-publish/${project.name}"); () }
-}
-```
-
-Validation runs before execute. It may fail the release, but it does not thread updated context
-through the phase. Custom validation should therefore avoid relying on mutated context as an output.
-
-### Action variants (side-effect-only steps)
-
-When a resource step performs a side effect without modifying the monorepo context,
-use the `Action` variants to avoid the `; ctx` / `.as(ctx)` boilerplate:
-
-```scala
-// Global action — execute returns IO[Unit]
-resourceGlobalStepAction("notify-slack") { client => ctx =>
-  IO.blocking { client.post("/webhook", "Released!") }
-}
-
-// Per-project action — execute returns IO[Unit]
-resourcePerProjectStepAction("log-project") { client => (ctx, project) =>
-  IO.blocking { client.post(s"/log/${project.name}", "released") }
-}
-
-// Global action with validation
-resourceGlobalStepActionWithValidation("validated-notify") { client => ctx =>
-  IO.blocking { client.post("/notify", "done") }
-} { client => ctx =>
-  IO.blocking { client.get("/can-notify"); () }
-}
-
-// Per-project action with validation
-resourcePerProjectStepActionWithValidation("validated-deploy") { client => (ctx, project) =>
-  IO.blocking { client.post(s"/deploy/${project.name}", "ok") }
-} { client => (ctx, project) =>
-  IO.blocking { client.get(s"/can-deploy/${project.name}"); () }
-}
-```
-
-These are equivalent to their non-action counterparts but the execute function does not
-need to return the context — it is passed through unchanged.
-
-### Enabling in build.sbt
-
-```scala
-lazy val root = (project in file("."))
-  .aggregate(core, api)
-  .enablePlugins(MyReleasePlugin)
-```
-
-Run with:
-
-```bash
-sbt "myRelease with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
 ## Change Detection
@@ -644,7 +291,7 @@ releaseIOMonorepoUnifiedTagName := { ver => s"release-v$ver" }
 
 When `releaseIOMonorepoUseGlobalVersion := true`:
 
-- All projects share the root `version.sbt` (the file defined by sbt-release's `releaseVersionFile`).
+- All projects share the root `version.sbt` (the file defined by `releaseIOVersionFile`).
 - Version file content uses `ThisBuild / version := "x.y.z"` instead of `version := "x.y.z"`.
 - Per-project version overrides are rejected at parse time; use global overrides instead (`release-version 1.0.0`).
 - Partial project selection is blocked (CLI validation returns an error if a subset is named).
@@ -661,6 +308,316 @@ When the `cross` flag is active (or `releaseIOMonorepoCrossBuild := true`), step
 Steps with cross-build enabled by default: `check-snapshot-dependencies`, `run-tests`, `publish-artifacts`.
 
 Each project uses its own `crossScalaVersions`. A project with `Seq("2.13.12", "2.12.18")` runs cross-built steps twice; a project with only `Seq("2.12.18")` runs once. Empty `crossScalaVersions` with cross-build enabled raises an error.
+
+## Custom Steps
+
+### Step context API
+
+Global steps receive a `MonorepoContext`; per-project steps receive both `MonorepoContext` and `ProjectReleaseInfo`.
+
+**`MonorepoContext`** — immutable context threaded through all steps:
+
+| Field / Method | Type | Description |
+|----------------|------|-------------|
+| `state` | `State` | Current sbt state |
+| `vcs` | `Option[Vcs]` | Git adapter, set by `initialize-vcs` |
+| `projects` | `Seq[ProjectReleaseInfo]` | Selected projects in topological order |
+| `currentProjects` | `Seq[ProjectReleaseInfo]` | Non-failed projects only |
+| `skipTests` / `skipPublish` / `interactive` | `Boolean` | Execution flags |
+| `tagStrategy` | `MonorepoTagStrategy` | `PerProject` or `Unified` |
+| `failed` | `Boolean` | Whether the release has failed |
+| `withState(s)` | `MonorepoContext` | Replace sbt state |
+| `withProjects(ps)` | `MonorepoContext` | Replace project list |
+| `updateProject(ref)(f)` | `MonorepoContext` | Transform a single project's info |
+| `metadata[A](key)` | `Option[A]` | Read typed inter-step metadata |
+| `withMetadata[A](key, value)` | `MonorepoContext` | Store typed inter-step metadata |
+
+**`ProjectReleaseInfo`** — per-project metadata available in `PerProject` steps:
+
+| Field / Method | Type | Description |
+|----------------|------|-------------|
+| `ref` | `ProjectRef` | sbt project reference |
+| `name` | `String` | Project name (matches `ref.project`) |
+| `baseDir` | `File` | Project root directory |
+| `versionFile` | `File` | Resolved version file path |
+| `versions` | `Option[(String, String)]` | `(releaseVersion, nextVersion)`, set by `inquire-versions` |
+| `releaseVersion` | `Option[String]` | Shorthand for `versions.map(_._1)` |
+| `nextVersion` | `Option[String]` | Shorthand for `versions.map(_._2)` |
+| `tagName` | `Option[String]` | Tag name, set by `tag-releases` |
+| `failed` | `Boolean` | Whether this project failed |
+
+### Factory methods
+
+**Plain steps** (for `build.sbt` or `project/*.scala`):
+
+| Method | Scope | Execute returns |
+|--------|-------|-----------------|
+| `globalStep(name)(execute)` | Global | `IO[MonorepoContext]` |
+| `perProjectStep(name, enableCrossBuild)(execute)` | PerProject | `IO[MonorepoContext]` |
+| `globalStepAction(name)(execute)` | Global | `IO[Unit]` |
+| `perProjectStepAction(name, enableCrossBuild)(execute)` | PerProject | `IO[Unit]` |
+
+**Process helpers** (for `build.sbt` or `project/*.scala`):
+
+| Method | Description |
+|--------|-------------|
+| `insertStepAfter(steps, name)(extra)` | Insert steps after the named step |
+| `insertStepBefore(steps, name)(extra)` | Insert steps before the named step |
+
+**Resource-aware steps** (for `project/*.scala` custom plugins):
+
+| Method | Scope | Execute returns |
+|--------|-------|-----------------|
+| `resourceGlobalStep(name)(f)` | Global | `IO[MonorepoContext]` |
+| `resourcePerProjectStep(name, enableCrossBuild)(f)` | PerProject | `IO[MonorepoContext]` |
+| `resourceGlobalStepWithValidation(name)(execute)(validate)` | Global | `IO[MonorepoContext]` |
+| `resourcePerProjectStepWithValidation(name, enableCrossBuild)(execute)(validate)` | PerProject | `IO[MonorepoContext]` |
+
+**Resource-aware action steps** (execute returns `IO[Unit]`, context passed through unchanged):
+
+| Method | Scope |
+|--------|-------|
+| `resourceGlobalStepAction(name)(f)` | Global |
+| `resourcePerProjectStepAction(name, enableCrossBuild)(f)` | PerProject |
+| `resourceGlobalStepActionWithValidation(name)(execute)(validate)` | Global |
+| `resourcePerProjectStepActionWithValidation(name, enableCrossBuild)(execute)(validate)` | PerProject |
+
+```scala
+import cats.effect.IO
+import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
+
+// Global step — runs once
+val validateBranch = globalStep("validate-branch") { ctx =>
+  ctx.vcs match {
+    case Some(vcs) =>
+      IO.blocking(vcs.currentBranch).flatMap { branch =>
+        if (branch == "main") IO.pure(ctx)
+        else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
+      }
+    case None => IO.raiseError(new RuntimeException("VCS not initialized"))
+  }
+}
+
+// Per-project step — runs once per selected project
+val logProject = perProjectStep("log-project") { (ctx, project) =>
+  IO {
+    ctx.state.log.info(s"Releasing ${project.name}")
+    ctx
+  }
+}
+
+// Per-project step with cross-build support
+val crossTest = perProjectStep("cross-test", enableCrossBuild = true) { (ctx, project) =>
+  IO { /* runs once per crossScalaVersions entry */ ctx }
+}
+```
+
+### Customizing the release process
+
+```scala
+// Filter out steps
+releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(_.name == "push-changes")
+
+// Add a step at a specific position
+releaseIOMonorepoProcess := insertStepBefore(releaseIOMonorepoProcess.value, "tag-releases")(
+  Seq(validateBranch)
+)
+
+// Replace the entire process (step vals from MonorepoReleaseSteps)
+import io.release.monorepo.steps.MonorepoReleaseSteps.*
+
+releaseIOMonorepoProcess := Seq(
+  initializeVcs, checkCleanWorkingDir, resolveReleaseOrder,
+  detectOrSelectProjects, checkSnapshotDependencies, inquireVersions,
+  // validateVersions, runClean, runTests, and publishArtifacts omitted — tag-only release
+  setReleaseVersions, commitReleaseVersions, tagReleases,
+  setNextVersions, commitNextVersions, pushChanges
+)
+```
+
+## Custom Plugins
+
+If your release process needs a shared resource (HTTP client, database connection, temporary directory), create a custom plugin that extends `MonorepoReleasePluginLike[T]`. The resource is acquired once before all steps run and released after they complete (or on failure).
+
+When using a custom plugin, you only need `enablePlugins(MyReleasePlugin)` — you do not need to enable `MonorepoReleasePlugin`. Keys like `releaseIOMonorepoProcess` are available automatically because sbt imports `autoImport` from all plugins on the classpath, regardless of whether they are enabled. Plugin enablement controls which settings are applied, not which keys are in scope.
+
+> **Do not add `object autoImport`** to custom plugins. When both `MonorepoReleasePlugin` and a custom plugin define `autoImport`, the build gets ambiguous references (e.g. `reference to releaseIOMonorepoProcess is ambiguous`).
+
+Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sbt discovers `AutoPlugin` classes during meta-build compilation.
+
+> **Important:** In `project/*.scala` files, `io.release` is shadowed by sbt's `sbt.io` package. Always use `_root_.io.release` and `_root_.cats.effect` imports.
+
+### Creating the plugin
+
+```scala
+// project/MyReleasePlugin.scala
+import sbt.*
+import _root_.io.release.monorepo.*
+import _root_.io.release.monorepo.MonorepoReleaseIO.*
+import _root_.cats.effect.{IO, Resource}
+
+object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
+  override def trigger = noTrigger
+  override protected def commandName: String = "myRelease"
+
+  override def resource: Resource[IO, HttpClient] =
+    Resource.make(IO(new HttpClient()))(c => IO(c.close()))
+
+  override protected def monorepoReleaseProcess(state: State) =
+    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) :+
+      resourceGlobalStepAction("notify-slack") { client => ctx =>
+        IO.blocking { client.post("/webhook", "Released!") }
+      }
+}
+```
+
+Use `resourceGlobalStep` instead when the step needs to modify the context.
+
+### Inserting at specific positions
+
+```scala
+// Insert after a named step
+override protected def monorepoReleaseProcess(state: State) =
+  insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), "tag-releases")(
+    Seq(resourceGlobalStepAction("post-tag-hook") { client => ctx =>
+      IO.blocking { client.post("/hooks/tagged", "done") }
+    })
+  )
+
+// Insert before a named step
+override protected def monorepoReleaseProcess(state: State) =
+  insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "publish-artifacts")(
+    Seq(resourcePerProjectStepAction("pre-publish-check") { client => (ctx, project) =>
+      IO.blocking { client.get(s"/ready/${project.name}") }
+    })
+  )
+```
+
+`insertAfter` and `insertBefore` match the exact `step.name` strings shown in
+the default-step table above, such as `"tag-releases"` or `"publish-artifacts"`.
+
+Custom steps inserted before built-in monorepo execute steps may update session settings in `State`, and
+later built-in execute steps will read those live settings when they run. This applies to built-in order
+resolution, project selection, version resolution, and tagging. Custom `PerProject` steps still use
+the current `MonorepoContext.projects` snapshot unless they explicitly replace it themselves, and
+built-in validation still runs against the setup-selected snapshot rather than threading later context changes backward.
+
+#### Custom step timing
+
+- The step list is frozen when the command starts.
+- Built-in **Global** execute steps such as `resolve-release-order` and `detect-or-select-projects`
+  read the current `State` when they run.
+- Built-in **validate** functions after `detect-or-select-projects` run against the selected snapshot.
+- Custom `PerProject` steps keep using `ctx.projects` until you replace that snapshot yourself.
+
+Example: rewrite the project set via `State` so built-in steps see the change:
+
+```scala
+// Inside a MonorepoReleasePluginLike[Unit] plugin
+private val selectOnlyCore = MonorepoStepIO.Global("select-only-core") { ctx =>
+  IO.blocking {
+    val extracted    = Project.extract(ctx.state)
+    val root         = extracted.get(baseDirectory)
+    val updatedState = extracted.appendWithSession(
+      Seq(releaseIOMonorepoProjects := Seq(ProjectRef(root, "core"))),
+      ctx.state
+    )
+    ctx.withState(updatedState)
+  }
+}
+
+override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
+  insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "resolve-release-order")(
+    Seq((_: Unit) => selectOnlyCore)
+  )
+```
+
+Example: update `ctx.projects` directly for later custom `PerProject` steps:
+
+```scala
+private val keepLibrariesOnly = MonorepoStepIO.Global("keep-libraries-only") { ctx =>
+  IO.pure(ctx.withProjects(ctx.projects.filter(_.name.startsWith("lib-"))))
+}
+
+override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
+  insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), "detect-or-select-projects")(
+    Seq((_: Unit) => keepLibrariesOnly)
+  )
+```
+
+Use the first pattern when later built-in steps should see new settings from `State`. Use the second pattern when later custom `PerProject` steps should iterate a different project set.
+
+> **Note:** Each helper inserts at a single position. To insert custom steps at multiple
+> non-adjacent positions, use the fully custom approach below.
+
+### Fully custom release process
+
+Override `monorepoReleaseProcess` directly to build the step sequence from scratch instead of
+appending to the defaults. Plain steps (from `MonorepoReleaseSteps`) and resource-aware steps
+can be mixed freely — an implicit conversion lifts plain steps into resource-ignoring functions.
+
+```scala
+// Inside a MonorepoReleasePluginLike[HttpClient] plugin
+override protected def monorepoReleaseProcess(state: State): Seq[HttpClient => MonorepoStepIO] =
+  Seq(
+    // Plain steps — lifted automatically via implicit conversion
+    MonorepoReleaseSteps.initializeVcs,
+    MonorepoReleaseSteps.checkCleanWorkingDir,
+    // Custom step interleaved with defaults
+    resourceGlobalStep("validate-branch") { client => ctx =>
+      IO.blocking { client.get("/allowed-branches") }.flatMap { branches =>
+        if (branches.contains("main")) IO.pure(ctx)
+        else IO.raiseError(new RuntimeException("Release blocked"))
+      }
+    },
+    MonorepoReleaseSteps.resolveReleaseOrder,
+    // ... remaining default steps ...
+    MonorepoReleaseSteps.tagReleases,
+    resourceGlobalStepAction("notify-slack") { client => ctx =>
+      IO.blocking { client.post("/webhook", s"Tagged!") }
+    },
+    MonorepoReleaseSteps.publishArtifacts,
+    // ... remaining default steps ...
+  )
+```
+
+This bypasses the `releaseIOMonorepoProcess` setting — the step list is hard-coded in the plugin. Use `liftSteps`, `insertAfter`, or `insertBefore` (shown above) to keep the setting-based defaults and only add extra steps.
+
+### Validation and action variants
+
+Steps with a validation phase run validation before execute. Validation may fail the release but does not thread context. Action variants return `IO[Unit]` instead of `IO[MonorepoContext]`, avoiding the `; ctx` boilerplate:
+
+```scala
+// Step with validation — execute returns IO[MonorepoContext]
+resourceGlobalStepWithValidation("validated-push") { client => ctx =>
+  IO.blocking { client.post("/push", "pushing"); ctx }
+} { client => ctx =>
+  IO.blocking { client.get("/can-push") }.void
+}
+
+// Action with validation — execute returns IO[Unit], context passed through
+resourceGlobalStepActionWithValidation("validated-notify") { client => ctx =>
+  IO.blocking { client.post("/notify", "done") }
+} { client => ctx =>
+  IO.blocking { client.get("/can-notify") }.void
+}
+```
+
+Per-project equivalents (`resourcePerProjectStepWithValidation`, `resourcePerProjectStepActionWithValidation`) follow the same pattern with an additional `(ctx, project)` parameter.
+
+### Enabling in build.sbt
+
+```scala
+lazy val root = (project in file("."))
+  .aggregate(core, api)
+  .enablePlugins(MyReleasePlugin)
+```
+
+Run with:
+
+```bash
+sbt "myRelease with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+```
 
 ## Execution Model
 
@@ -686,6 +643,25 @@ so the remaining projects in the same step can still complete.
    (both Global and PerProject) are skipped entirely.
 5. At the end of the release, the overall failure keeps a `MonorepoProjectFailures` cause so the per-project root exceptions remain available.
 
+Given three projects — `core`, `api`, and `web` — with the release steps
+`run-tests` → `set-release-version` → `publish-artifacts`:
+
+| Step | core | api | web |
+|------|------|-----|-----|
+| `run-tests` | passes | **fails** | passes |
+| `set-release-version` | skipped | skipped | skipped |
+| `publish-artifacts` | skipped | skipped | skipped |
+
+During `run-tests`, `api` throws an exception. The error is logged and `api` is marked failed, but `web` still runs and passes. After `run-tests` completes, the global context is marked failed because `api` failed. All later steps are skipped for every project.
+
+> **Note:** There is no dependency-aware cascade. If `web` depends on `api`, `web` is not automatically marked failed — it continues in the current step.
+
+A **Global** step failure immediately marks the context as failed and skips all subsequent steps.
+
+### Topological ordering
+
+Projects are sorted by inter-project dependencies using Kahn's algorithm. Dependencies are always released before dependents.
+
 ## Migrating Custom Steps
 
 If you are updating a custom plugin or build from an older release:
@@ -696,41 +672,12 @@ If you are updating a custom plugin or build from an older release:
 - rename `resourcePerProjectStepWithCheck` to `resourcePerProjectStepWithValidation`
 - replace `withAttr` / `attr` string keys with typed metadata via `withMetadata`, `metadata`, and `AttributeKey[A]`
 
-#### Example
-
-Given three projects — `core`, `api`, and `web` — with the release steps
-`run-tests` → `set-release-version` → `publish-artifacts`:
-
-| Step | core | api | web |
-|------|------|-----|-----|
-| `run-tests` | passes | **fails** | passes |
-| `set-release-version` | skipped | skipped | skipped |
-| `publish-artifacts` | skipped | skipped | skipped |
-
-- During `run-tests`, `api` throws an exception. The error is logged and `api` is marked
-  failed, but `web` still runs and passes.
-- After `run-tests` completes, the global context is marked failed because `api` failed.
-- `set-release-version` and all later steps are skipped for **every** project.
-
-> **Note:** There is no dependency-aware cascade. If `web` depends on `api`, `web` is not
-> automatically marked failed just because `api` failed — it simply continues in the current
-> step. In a later step (if the release hadn't been halted), `web` would likely fail on its
-> own due to a missing artifact from `api`.
-
-#### Global step failures
-
-A **Global** step failure immediately marks the context as failed and skips all subsequent steps.
-
-### Topological ordering
-
-Projects are sorted by inter-project dependencies using Kahn's algorithm. Dependencies are always released before dependents.
-
 ## Compatibility
 
 - **sbt**: 1.12.3 and 2.0.0-RC9
 - **Scala**: 2.12.21 and 3.8.1
-- **sbt-release**: 1.4.0
 - **cats-effect**: 3.6.3
+- **VCS**: Git only
 - **Requires**: `sbt-release-io` (core plugin)
 
 ## Testing
@@ -752,3 +699,22 @@ Run a specific scripted test:
 ```bash
 sbt "monorepo/scripted sbt-release-io-monorepo/simple-monorepo"
 ```
+
+See `src/sbt-test/README.md` for test documentation.
+
+## Contributing
+
+Contributions are welcome! Please ensure:
+
+1. All tests pass (`sbt monorepo/scripted`)
+2. Code compiles (`sbt compile`)
+3. No breaking changes to public API
+4. Add tests for new features
+
+## License
+
+Apache License 2.0
+
+## Acknowledgments
+
+Extends [sbt-release-io](../core/README.md) with monorepo support for per-project versioning, change detection, and failure isolation.

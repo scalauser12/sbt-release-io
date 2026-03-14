@@ -129,6 +129,70 @@ trait MonorepoReleaseIO {
   ): MonorepoStepIO.PerProject =
     MonorepoStepIO.PerProject(name, execute, enableCrossBuild = enableCrossBuild)
 
+  // ── Action factory methods (execute returns IO[Unit]) ──────────────
+
+  /** Create a global monorepo release step from a side-effecting IO action.
+    *
+    * Unlike [[globalStep]], the execute function returns `IO[Unit]` instead of
+    * `IO[MonorepoContext]`. The context is passed through unchanged.
+    */
+  def globalStepAction(name: String)(
+      execute: MonorepoContext => IO[Unit]
+  ): MonorepoStepIO.Global =
+    MonorepoStepIO.Global(name, ctx => execute(ctx).as(ctx))
+
+  /** Create a per-project monorepo release step from a side-effecting IO action.
+    *
+    * Unlike [[perProjectStep]], the execute function returns `IO[Unit]` instead of
+    * `IO[MonorepoContext]`. The context is passed through unchanged.
+    */
+  def perProjectStepAction(name: String, enableCrossBuild: Boolean = false)(
+      execute: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
+  ): MonorepoStepIO.PerProject =
+    MonorepoStepIO.PerProject(
+      name,
+      (ctx, proj) => execute(ctx, proj).as(ctx),
+      enableCrossBuild = enableCrossBuild
+    )
+
+  // ── Process manipulation helpers ──────────────────────────────────
+
+  /** Insert extra steps after the named step. Throws [[IllegalArgumentException]] if
+    * the step name is not found.
+    *
+    * Unlike the `protected` helpers in [[io.release.PluginLikeSupport]], these operate on
+    * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
+    */
+  def insertStepAfter(steps: Seq[MonorepoStepIO], afterStep: String)(
+      extra: Seq[MonorepoStepIO]
+  ): Seq[MonorepoStepIO] = {
+    val idx             = steps.indexWhere(_.name == afterStep)
+    if (idx < 0)
+      throw new IllegalArgumentException(
+        s"Step '$afterStep' not found. Available: ${steps.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = steps.splitAt(idx + 1)
+    before ++ extra ++ after
+  }
+
+  /** Insert extra steps before the named step. Throws [[IllegalArgumentException]] if
+    * the step name is not found.
+    *
+    * Unlike the `protected` helpers in [[io.release.PluginLikeSupport]], these operate on
+    * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
+    */
+  def insertStepBefore(steps: Seq[MonorepoStepIO], beforeStep: String)(
+      extra: Seq[MonorepoStepIO]
+  ): Seq[MonorepoStepIO] = {
+    val idx             = steps.indexWhere(_.name == beforeStep)
+    if (idx < 0)
+      throw new IllegalArgumentException(
+        s"Step '$beforeStep' not found. Available: ${steps.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = steps.splitAt(idx)
+    before ++ extra ++ after
+  }
+
   // ── Resource-aware factory methods ─────────────────────────────────
 
   /** Create a resource-aware global monorepo step.

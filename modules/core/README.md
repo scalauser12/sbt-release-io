@@ -22,6 +22,8 @@ Add to `project/plugins.sbt`:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.4.2")
 ```
 
+The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The version file path and format can be customized via `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOWriteVersion` — see [Custom Version Formats](#custom-version-formats).
+
 ## Usage
 
 ### Basic Release
