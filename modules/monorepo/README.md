@@ -492,6 +492,40 @@ resourcePerProjectStepWithValidation("validated-publish", enableCrossBuild = tru
 Validation runs before execute. It may fail the release, but it does not thread updated context
 through the phase. Custom validation should therefore avoid relying on mutated context as an output.
 
+### Action variants (side-effect-only steps)
+
+When a resource step performs a side effect without modifying the monorepo context,
+use the `Action` variants to avoid the `; ctx` / `.as(ctx)` boilerplate:
+
+```scala
+// Global action — execute returns IO[Unit]
+resourceGlobalStepAction("notify-slack") { client => ctx =>
+  IO.blocking { client.post("/webhook", "Released!") }
+}
+
+// Per-project action — execute returns IO[Unit]
+resourcePerProjectStepAction("log-project") { client => (ctx, project) =>
+  IO.blocking { client.post(s"/log/${project.name}", "released") }
+}
+
+// Global action with validation
+resourceGlobalStepActionWithValidation("validated-notify") { client => ctx =>
+  IO.blocking { client.post("/notify", "done") }
+} { client => ctx =>
+  IO.blocking { client.get("/can-notify"); () }
+}
+
+// Per-project action with validation
+resourcePerProjectStepActionWithValidation("validated-deploy") { client => (ctx, project) =>
+  IO.blocking { client.post(s"/deploy/${project.name}", "ok") }
+} { client => (ctx, project) =>
+  IO.blocking { client.get(s"/can-deploy/${project.name}"); () }
+}
+```
+
+These are equivalent to their non-action counterparts but the execute function does not
+need to return the context — it is passed through unchanged.
+
 ### Enabling in build.sbt
 
 ```scala

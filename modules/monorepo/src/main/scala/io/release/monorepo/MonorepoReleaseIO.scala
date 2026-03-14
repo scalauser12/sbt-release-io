@@ -163,6 +163,64 @@ trait MonorepoReleaseIO {
   ): T => MonorepoStepIO =
     (t: T) => MonorepoStepIO.PerProject(name, execute(t), validate(t), enableCrossBuild)
 
+  // ── Resource-aware action factory methods ───────────────────────────
+
+  /** Create a resource-aware global monorepo step from a side-effecting IO action.
+    *
+    * Unlike [[resourceGlobalStep]], the execute function returns `IO[Unit]` instead of
+    * `IO[MonorepoContext]`. The context is passed through unchanged.
+    */
+  def resourceGlobalStepAction[T](name: String)(
+      f: T => MonorepoContext => IO[Unit]
+  ): T => MonorepoStepIO =
+    (t: T) => MonorepoStepIO.Global(name, ctx => f(t)(ctx).as(ctx))
+
+  /** Create a resource-aware per-project monorepo step from a side-effecting IO action.
+    *
+    * Unlike [[resourcePerProjectStep]], the execute function returns `IO[Unit]` instead of
+    * `IO[MonorepoContext]`. The context is passed through unchanged.
+    */
+  def resourcePerProjectStepAction[T](name: String, enableCrossBuild: Boolean = false)(
+      f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
+  ): T => MonorepoStepIO =
+    (t: T) =>
+      MonorepoStepIO.PerProject(
+        name,
+        (ctx, proj) => f(t)(ctx, proj).as(ctx),
+        enableCrossBuild = enableCrossBuild
+      )
+
+  /** Create a resource-aware global monorepo step with a validation phase, where execute
+    * returns `IO[Unit]` instead of `IO[MonorepoContext]`. The context is passed through
+    * unchanged.
+    */
+  def resourceGlobalStepActionWithValidation[T](name: String)(
+      execute: T => MonorepoContext => IO[Unit]
+  )(
+      validate: T => MonorepoContext => IO[Unit]
+  ): T => MonorepoStepIO =
+    (t: T) => MonorepoStepIO.Global(name, ctx => execute(t)(ctx).as(ctx), validate(t))
+
+  /** Create a resource-aware per-project monorepo step with a validation phase,
+    * where execute returns `IO[Unit]` instead of `IO[MonorepoContext]`. The context
+    * is passed through unchanged.
+    */
+  def resourcePerProjectStepActionWithValidation[T](
+      name: String,
+      enableCrossBuild: Boolean = false
+  )(
+      execute: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
+  )(
+      validate: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
+  ): T => MonorepoStepIO =
+    (t: T) =>
+      MonorepoStepIO.PerProject(
+        name,
+        (ctx, proj) => execute(t)(ctx, proj).as(ctx),
+        validate(t),
+        enableCrossBuild
+      )
+
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(

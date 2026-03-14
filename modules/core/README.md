@@ -337,6 +337,32 @@ val verifyToken: HttpClient => ReleaseStepIO =
   )
 ```
 
+#### Action variants (side-effect-only steps)
+
+When a resource step performs a side effect without modifying the release context,
+use the `Action` variants to avoid the `; ctx` / `.as(ctx)` boilerplate:
+
+```scala
+// Action variant — execute returns IO[Unit], context is passed through automatically
+val notifyApi: HttpClient => ReleaseStepIO =
+  resourceStepAction("notify-api") { client => ctx =>
+    IO.blocking { client.post("/releases", ctx.releaseVersion.getOrElse("")) }
+  }
+
+// Action variant with validation — both execute and validate return IO[Unit]
+val verifyAndNotify: HttpClient => ReleaseStepIO =
+  resourceStepActionWithValidation("verify-and-notify")(
+    execute = client => ctx =>
+      IO.blocking { client.post("/release", ctx.releaseVersion.getOrElse("")) }
+  )(
+    validate = client => ctx =>
+      IO.blocking { client.get("/health") }
+  )
+```
+
+These are equivalent to their non-action counterparts but the execute function does not
+need to return the context — it is passed through unchanged.
+
 Use these in `releaseProcess`:
 
 ```scala
@@ -453,17 +479,17 @@ if you want to keep the setting-based defaults and only add extra steps.
 
 Since release steps run in `IO`, you can use any library from the Typelevel / FP ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
 
-**Constraint:** sbt plugins run on Scala 2.12, so you must use library versions published for 2.12.
+**Constraint:** sbt 1 plugins run on Scala 2.12 and sbt 2 plugins run on Scala 3, so you must use library versions published for the Scala version that matches your sbt version.
 
 Some libraries that work well in release steps:
 
-| Library | Use case | Version constraint |
-|---------|----------|--------------------|
-| `http4s-ember-client` | HTTP requests (upload artifacts, notify services) | 0.23.x only (1.x dropped 2.12) |
-| `fs2-io` | Streaming file I/O, process execution | 3.x |
-| `circe` | JSON encoding/decoding for API calls | 0.14.x |
-| `doobie` | JDBC database access (record release metadata) | 1.x |
-| `sttp` | Lightweight HTTP client with cats-effect backend | 3.x |
+| Library | Use case | sbt 1 (Scala 2.12) | sbt 2 (Scala 3) |
+|---------|----------|--------------------|-----------------|
+| `http4s-ember-client` | HTTP requests (upload artifacts, notify services) | 0.23.x (1.x dropped 2.12) | 0.23.x or 1.x |
+| `fs2-io` | Streaming file I/O, process execution | 3.x | 3.x |
+| `circe` | JSON encoding/decoding for API calls | 0.14.x | 0.14.x |
+| `doobie` | JDBC database access (record release metadata) | 1.x | 1.x |
+| `sttp` | Lightweight HTTP client with cats-effect backend | 3.x | 3.x or 4.x |
 
 Add the dependency in `project/plugins.sbt` alongside the plugin:
 

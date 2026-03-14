@@ -94,6 +94,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies that failing tests in aggregated sub-projects abort the release
 - Multi-project setup with one passing and one failing test
 
+### resource-step-action
+- Tests `resourceStepAction` and `resourceStepActionWithValidation` in a custom plugin
+- Verifies that action variants (`IO[Unit]` execute) pass context through correctly
+- Verifies both validate and execute phases run for the action-with-validation variant
+
 ### resource-step-with-check
 - Tests `resourceStepWithValidation` in a custom plugin
 - Verifies both validate and execute phases run for resource-aware steps

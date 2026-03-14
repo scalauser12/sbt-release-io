@@ -161,6 +161,37 @@ trait ReleaseIO {
   ): T => ReleaseStepIO =
     (t: T) => ReleaseStepIO(name, execute(t), validate(t), enableCrossBuild)
 
+  // ── Resource-aware action factory methods ───────────────────────────
+
+  /** Create a resource-aware release step from a side-effecting IO action.
+    *
+    * Unlike [[resourceStep]], the execute function returns `IO[Unit]` instead of
+    * `IO[ReleaseContext]`. The context is passed through unchanged. Use this for
+    * steps that perform side effects without modifying the release context.
+    *
+    * {{{
+    * val notifySlack: HttpClient => ReleaseStepIO =
+    *   resourceStepAction("notify-slack") { client => ctx =>
+    *     IO.blocking { client.post("/webhook", s"Released $${ctx.releaseVersion.getOrElse("")}") }
+    *   }
+    * }}}
+    */
+  def resourceStepAction[T](name: String, enableCrossBuild: Boolean = false)(
+      f: T => ReleaseContext => IO[Unit]
+  ): T => ReleaseStepIO =
+    (t: T) => ReleaseStepIO(name, ctx => f(t)(ctx).as(ctx), enableCrossBuild = enableCrossBuild)
+
+  /** Create a resource-aware release step with a validation phase, where execute
+    * returns `IO[Unit]` instead of `IO[ReleaseContext]`. The context is passed
+    * through unchanged.
+    */
+  def resourceStepActionWithValidation[T](name: String, enableCrossBuild: Boolean = false)(
+      execute: T => ReleaseContext => IO[Unit]
+  )(
+      validate: T => ReleaseContext => IO[Unit]
+  ): T => ReleaseStepIO =
+    (t: T) => ReleaseStepIO(name, ctx => execute(t)(ctx).as(ctx), validate(t), enableCrossBuild)
+
 }
 
 object ReleaseIO extends ReleaseIO {
