@@ -275,6 +275,7 @@ Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sb
 import sbt._
 import sbt.Keys._
 import _root_.io.release.monorepo._
+import _root_.io.release.monorepo.MonorepoReleaseIO._
 import _root_.cats.effect.{IO, Resource}
 
 object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
@@ -285,11 +286,10 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
     Resource.make(IO(new HttpClient()))(c => IO(c.close()))
 
   override protected def monorepoReleaseProcess(state: State) =
-    defaultsWith(state)(
+    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) :+
       resourceGlobalStep("notify-slack") { client => ctx =>
         IO.blocking { client.post("/webhook", "Released!"); ctx }
       }
-    )
 }
 ```
 
@@ -298,22 +298,22 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
 ```scala
 // Insert after a named step
 override protected def monorepoReleaseProcess(state: State) =
-  defaultsWithAfter(state, "tag-releases")(
-    resourceGlobalStep("post-tag-hook") { client => ctx =>
+  insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), "tag-releases")(
+    Seq(resourceGlobalStep("post-tag-hook") { client => ctx =>
       IO.blocking { client.post("/hooks/tagged", "done"); ctx }
-    }
+    })
   )
 
 // Insert before a named step
 override protected def monorepoReleaseProcess(state: State) =
-  defaultsWithBefore(state, "publish-artifacts")(
-    resourcePerProjectStep("pre-publish-check") { client => (ctx, project) =>
+  insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "publish-artifacts")(
+    Seq(resourcePerProjectStep("pre-publish-check") { client => (ctx, project) =>
       IO.blocking { client.get(s"/ready/${project.name}"); ctx }
-    }
+    })
   )
 ```
 
-`defaultsWithAfter` and `defaultsWithBefore` match the exact `step.name` strings shown in
+`insertAfter` and `insertBefore` match the exact `step.name` strings shown in
 the default-step table above, such as `"tag-releases"` or `"publish-artifacts"`.
 
 Custom steps inserted before built-in monorepo execute steps may update session settings in `State`, and
@@ -362,7 +362,9 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[Unit] {
     )
 
   override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-    defaultsWithBefore(state, "resolve-release-order")((_: Unit) => selectOnlyCore)
+    insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "resolve-release-order")(
+      Seq((_: Unit) => selectOnlyCore)
+    )
 }
 ```
 
@@ -393,9 +395,11 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[Unit] {
     }
 
   override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-    defaultsWithAfter(state, "detect-or-select-projects")(
-      (_: Unit) => keepLibrariesOnly,
-      (_: Unit) => announce
+    insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), "detect-or-select-projects")(
+      Seq(
+        (_: Unit) => keepLibrariesOnly,
+        (_: Unit) => announce
+      )
     )
 }
 ```
@@ -463,7 +467,7 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
 ```
 
 This bypasses the `releaseIOMonorepoProcess` setting entirely — the step list is hard-coded
-in the plugin. Use `defaultsWith`, `defaultsWithAfter`, or `defaultsWithBefore` (shown above)
+in the plugin. Use `liftSteps`, `insertAfter`, or `insertBefore` (shown above)
 if you want to keep the setting-based defaults and only add extra steps.
 
 ### Resource-aware steps with validation

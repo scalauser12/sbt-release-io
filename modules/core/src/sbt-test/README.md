@@ -43,11 +43,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies release side effects: default tag creation and next-version write
 
 ### defaults-with-after
-- Tests `defaultsWithAfter` inserts a custom step at the correct position
+- Tests `insertAfter` inserts a custom step at the correct position
 - Custom plugin inserts step after `check-clean-working-dir`
 
 ### defaults-with-before
-- Tests `defaultsWithBefore` inserts a custom step at the correct position
+- Tests `insertBefore` inserts a custom step at the correct position
 - Custom plugin inserts step before `tag-release`
 
 ### empty-commit

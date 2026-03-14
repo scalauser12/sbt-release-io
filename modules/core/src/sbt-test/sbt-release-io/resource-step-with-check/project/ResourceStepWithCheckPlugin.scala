@@ -16,7 +16,7 @@ object ResourceStepWithCheckPlugin extends ReleasePluginIOLike[java.io.File] {
   }
 
   override protected def releaseProcess(state: State): Seq[java.io.File => ReleaseStepIO] =
-    defaultsWith(state)(
+    liftSteps(Project.extract(state).get(releaseIOProcess)) :+ (
       resourceStepWithValidation("resource-with-check")((f: java.io.File) =>
         (ctx: ReleaseContext) =>
           IO {

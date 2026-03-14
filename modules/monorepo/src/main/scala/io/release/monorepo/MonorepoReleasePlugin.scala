@@ -55,32 +55,6 @@ trait MonorepoReleasePluginLike[T]
   protected def monorepoReleaseProcess(state: State): Seq[T => MonorepoStepIO] =
     liftSteps(Project.extract(state).get(releaseIOMonorepoProcess))
 
-  /** Read default steps from settings and append resource-aware steps at the end.
-    *
-    * {{{
-    * override protected def monorepoReleaseProcess(state: State) =
-    *   defaultsWith(state)(
-    *     (client: HttpClient) => MonorepoStepIO.Global("notify", ctx => IO { ... })
-    *   )
-    * }}}
-    */
-  protected def defaultsWith(state: State)(
-      extraSteps: (T => MonorepoStepIO)*
-  ): Seq[T => MonorepoStepIO] =
-    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) ++ extraSteps
-
-  /** Read default steps and insert resource-aware steps after a named step. */
-  protected def defaultsWithAfter(state: State, afterStep: String)(
-      extraSteps: (T => MonorepoStepIO)*
-  ): Seq[T => MonorepoStepIO] =
-    insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), afterStep)(extraSteps)
-
-  /** Read default steps and insert resource-aware steps before a named step. */
-  protected def defaultsWithBefore(state: State, beforeStep: String)(
-      extraSteps: (T => MonorepoStepIO)*
-  ): Seq[T => MonorepoStepIO] =
-    insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), beforeStep)(extraSteps)
-
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
     */

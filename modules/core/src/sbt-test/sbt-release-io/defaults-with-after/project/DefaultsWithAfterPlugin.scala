@@ -11,15 +11,17 @@ object DefaultsWithAfterPlugin extends ReleasePluginIOLike[Unit] {
   override def resource: Resource[IO, Unit] = Resource.unit
 
   override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
-    defaultsWithAfter(state, "check-clean-working-dir")((_: Unit) =>
-      ReleaseStepIO.io("inserted-after-check") { ctx =>
-        IO {
-          // Write to project root; target/ may not exist before runClean
-          val marker =
-            new java.io.File(System.getProperty("user.dir"), "inserted-after-check")
-          sbt.IO.write(marker, "inserted")
-          ctx
+    insertAfter(Project.extract(state).get(releaseIOProcess), "check-clean-working-dir")(
+      Seq((_: Unit) =>
+        ReleaseStepIO.io("inserted-after-check") { ctx =>
+          IO {
+            // Write to project root; target/ may not exist before runClean
+            val marker =
+              new java.io.File(System.getProperty("user.dir"), "inserted-after-check")
+            sbt.IO.write(marker, "inserted")
+            ctx
+          }
         }
-      }
+      )
     )
 }

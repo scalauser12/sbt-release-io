@@ -2,16 +2,16 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
 
-A cats-effect IO release plugin for sbt, inspired by [sbt-release](https://github.com/sbt/sbt-release), with composable error handling and resource safety.
+A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for sbt, with composable error handling and resource safety.
 
 ## Features
 
 - **IO-based release steps**: `execute` steps return `IO[ReleaseContext]`, and `validate` steps return `IO[Unit]`
-- **Standalone implementation**: Native IO implementations for VCS commits, tagging, and version management — no dependency on sbt-release
+- **Independent codebase**: Ports sbt-release's types, settings, and execution model onto cats-effect IO — no runtime dependency on sbt-release
 - **Flexible step composition**: Create custom release steps using cats-effect IO
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
-- **Optional interactive mode**: Enable upstream-like prompts for versions, confirmation, and push
+- **Optional interactive mode**: Enable sbt-release-compatible prompts for versions, confirmation, and push
 - **Configurable**: Comprehensive settings for commit messages, signing, version bumping, etc.
 
 ## Installation
@@ -55,27 +55,33 @@ sbt "releaseIO with-defaults skip-tests release-version 1.0.0"
 
 In `build.sbt`:
 
-> The explicit `import io.release.ReleasePluginIO.autoImport._` is optional — sbt auto-imports these keys from plugins on the classpath.
+> The explicit `import io.release.ReleasePluginIO.autoImport.*` is optional — sbt auto-imports these keys from plugins on the classpath.
 
 ```scala
-import io.release.ReleasePluginIO.autoImport._
+import cats.effect.IO
+import io.release.ReleasePluginIO.autoImport.*
 import io.release.steps.ReleaseSteps
 
 // Use default release steps (recommended)
 releaseIOProcess := ReleaseSteps.defaults
 
-// Or customize the release process
+// Or fully customize the release process (see "Custom Steps" below)
 releaseIOProcess := Seq(
   ReleaseSteps.initializeVcs,
+  validateBranch,             // custom step (defined below) — fail fast
   ReleaseSteps.checkCleanWorkingDir,
+  ReleaseSteps.checkSnapshotDependencies,
   ReleaseSteps.inquireVersions,
+  ReleaseSteps.runClean,
+  ReleaseSteps.runTests,
   ReleaseSteps.setReleaseVersion,
   ReleaseSteps.commitReleaseVersion,
   ReleaseSteps.tagRelease,
+  printBanner,                // custom step (defined below)
   ReleaseSteps.publishArtifacts,
   ReleaseSteps.setNextVersion,
-  ReleaseSteps.commitNextVersion,
-  ReleaseSteps.pushChanges
+  ReleaseSteps.commitNextVersion
+  // pushChanges omitted — CI pushes on success
 )
 
 // Enable cross-building by default
@@ -92,11 +98,71 @@ releaseIOReadVersion := { file =>
   IO.blocking(sbt.IO.read(file).trim)
 }
 
-// Custom version file writer (default produces `version := "x.y.z"\n`)
+// Custom version file writer (default produces `ThisBuild / version := "x.y.z"\n`)
 releaseIOWriteVersion := { (_, version) =>
   IO.pure(s"$version\n")
 }
 ```
+
+### Custom Version Formats
+
+The default reader and writer assume a `version.sbt` file containing `[ThisBuild /] version := "x.y.z"`. To use a different version file format — for example, in a non-Scala project or a polyglot monorepo — override three settings together:
+
+| Setting | Role |
+|---------|------|
+| `releaseIOVersionFile` | Path to the version file |
+| `releaseIOReadVersion` | `File => IO[String]` — extract the version string from the file |
+| `releaseIOWriteVersion` | `(File, String) => IO[String]` — return the **complete file contents** to write to disk |
+
+The writer receives the current file as its first argument, so it can read existing content and replace only the version line while preserving other fields.
+
+#### Example: Java `.properties` file
+
+Given a `version.properties` file:
+
+```
+app.name=my-app
+app.version=0.1.0-SNAPSHOT
+```
+
+Override the settings in `build.sbt`:
+
+```scala
+import cats.effect.IO
+
+releaseIOVersionFile := baseDirectory.value / "version.properties"
+
+// Parse app.version=x.y.z from the properties file
+releaseIOReadVersion := { (file: File) =>
+  IO.blocking(sbt.IO.read(file)).flatMap { contents =>
+    val pattern = """app\.version=(.+)""".r
+    pattern.findFirstMatchIn(contents) match {
+      case Some(m) => IO.pure(m.group(1).trim)
+      case None    => IO.raiseError(
+        new RuntimeException(s"Could not parse version from ${file.getName}")
+      )
+    }
+  }
+}
+
+// Replace only the app.version line, preserve everything else
+releaseIOWriteVersion := { (file: File, ver: String) =>
+  IO.blocking(sbt.IO.read(file)).map { contents =>
+    contents.linesIterator
+      .map {
+        case line if line.startsWith("app.version=") => s"app.version=$ver"
+        case line                                    => line
+      }
+      .mkString("\n") + "\n"
+  }
+}
+```
+
+The same pattern works for any text-based format:
+
+- **Plain text** — a file containing only the version string; the reader returns `IO.blocking(sbt.IO.read(file).trim)` and the writer returns `IO.pure(s"$ver\n")`
+- **JSON** — parse `{"version": "x.y.z"}` with a JSON library and produce updated JSON
+- **YAML** — match `version: x.y.z` with a regex or YAML parser
 
 ### Custom Release Steps
 
@@ -135,19 +201,11 @@ val validateBranch = ReleaseStepIO.io("validate-branch") { ctx =>
 //   ctx.withState(s)                   — update sbt State
 //   ctx.withVersions(release, next)    — set version pair
 //   ctx.withVcs(v)                     — set VCS adapter
-//   ctx.withMetadata(key, value)       — store typed metadata
-//   ctx.metadata(key)                  — retrieve typed metadata
-//   ctx.withoutMetadata(key)           — remove a metadata entry
+//   ctx.withMetadata(key, value)       — store typed metadata (key: AttributeKey[A])
+//   ctx.metadata(key)                  — retrieve typed metadata (key: AttributeKey[A])
+//   ctx.withoutMetadata(key)           — remove a metadata entry (key: AttributeKey[A])
 //   ctx.fail / ctx.failWith(cause)     — mark context as failed
 
-// Compose custom steps with built-in ones
-releaseIOProcess := Seq(
-  printBanner,
-  ReleaseSteps.initializeVcs,
-  validateBranch,
-  ReleaseSteps.checkCleanWorkingDir,
-  // ... more steps
-)
 ```
 
 ### Creating Steps from sbt Tasks and Commands
@@ -155,7 +213,7 @@ releaseIOProcess := Seq(
 Wrap existing sbt tasks, input tasks, or commands as release steps using the built-in factory methods:
 
 ```scala
-import io.release.ReleasePluginIO.autoImport._
+import io.release.ReleasePluginIO.autoImport.*
 
 releaseIOProcess := Seq(
   ReleaseSteps.initializeVcs,
@@ -193,9 +251,10 @@ Here is a plugin that manages an HTTP client for the release process:
 
 ```scala
 // project/MyReleasePlugin.scala
-import sbt._
-import sbt.Keys._
-import _root_.io.release._
+import sbt.*
+import sbt.Keys.*
+import _root_.io.release.*
+import _root_.io.release.ReleaseIO.*
 import _root_.cats.effect.{IO, Resource}
 
 object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
@@ -207,22 +266,23 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
 
   // Acquire the resource before steps run, release it after
   override def resource: Resource[IO, HttpClient] =
-    Resource.make(
-      IO { val c = new HttpClient("https://api.example.com"); c.connect(); c }
-    )(c =>
-      IO { c.close() }
-    )
+    Resource.make(IO.blocking {
+      val c = new HttpClient("https://api.example.com")
+      c.connect()
+      c
+    })(c => IO.blocking(c.close()))
 
-  // Append a resource-aware step after the defaults
+  // Resource-aware step using the built-in factory (see "Resource-aware step factory methods")
+  private val notifyApi = resourceStep[HttpClient]("notify-api") { client => ctx =>
+    IO.blocking {
+      client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}""")
+      ctx
+    }
+  }
+
+  // Append the step after the defaults
   override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-    defaultsWith(state)(
-      (client: HttpClient) => ReleaseStepIO.io("notify-api") { ctx =>
-        IO.blocking {
-          client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}""")
-          ctx
-        }
-      }
-    )
+    liftSteps(Project.extract(state).get(releaseIOProcess)) :+ notifyApi
 }
 ```
 
@@ -257,15 +317,23 @@ The `ReleaseIO` trait (mixed into all `ReleasePluginIOLike` subclasses) provides
 ```scala
 // Simple resource step — execute only, no validation phase
 val notifySlack: HttpClient => ReleaseStepIO = resourceStep("notify-slack") { client => ctx =>
-  IO.blocking { client.post("/webhook", s"Released ${ctx.releaseVersion.getOrElse("")}"); ctx }
+  IO.blocking {
+    client.post("/webhook", s"Released ${ctx.releaseVersion.getOrElse("")}")
+    ctx
+  }
 }
 
 // Resource step with a validation phase
 val verifyToken: HttpClient => ReleaseStepIO =
   resourceStepWithValidation("verify-token")(
-    execute = client => ctx => IO.blocking { client.post("/release", "..."); ctx }
+    execute = client => ctx =>
+      IO.blocking {
+        client.post("/release", "...")
+        ctx
+      }
   )(
-    validate = client => ctx => IO.blocking { client.get("/health"); () }
+    validate = client => ctx =>
+      IO.blocking(client.get("/health"))
   )
 ```
 
@@ -273,77 +341,29 @@ Use these in `releaseProcess`:
 
 ```scala
 override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-  defaultsWith(state)(notifySlack, verifyToken)
+  liftSteps(Project.extract(state).get(releaseIOProcess)) ++ Seq(notifySlack, verifyToken)
 ```
 
 #### Inserting steps at specific positions
 
-`defaultsWith` appends steps to the end of the process. To insert at a specific position, use `defaultsWithAfter` or `defaultsWithBefore`:
+`liftSteps` appends steps to the end of the process. To insert at a specific position, use `insertAfter` or `insertBefore`:
 
 ```scala
 override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-  defaultsWithAfter(state, "check-clean-working-dir")(
-    (client: HttpClient) => notifyStep(client)
+  insertAfter(Project.extract(state).get(releaseIOProcess), "check-clean-working-dir")(
+    Seq(notifySlack)
   )
 ```
 
-`defaultsWithAfter` and `defaultsWithBefore` match the exact `step.name` strings shown in
+`insertAfter` and `insertBefore` match the exact `step.name` strings shown in
 the default-step list below, such as `"check-clean-working-dir"` or `"publish-artifacts"`.
 
-These helpers read from the `releaseIOProcess` setting (including any `build.sbt` filtering), so your override builds on all configured steps.
+These methods read from the `releaseIOProcess` setting (including any `build.sbt` filtering), so your override builds on all configured steps.
 
 Custom steps inserted before a built-in execute step may update session settings in `State`, and
 the later built-in execute step will read those live settings when it runs. This applies to built-in
 steps such as version resolution and tagging. It does not change the two-phase model: built-in
 `validate` functions still run from the initial validation-phase state.
-
-#### Custom step timing
-
-- The step list is frozen when the command starts.
-- Built-in **execute** functions read the current `State` when they run.
-- Built-in **validate** functions still run from the initial validation-phase state.
-
-Example: rewrite version settings before the built-in `inquire-versions` step:
-
-```scala
-// project/MyReleasePlugin.scala
-import sbt.*
-import _root_.cats.effect.{IO, Resource}
-import _root_.io.release.*
-import _root_.io.release.ReleaseIO.releaseIOVersionFile
-
-object MyReleasePlugin extends ReleasePluginIOLike[Unit] {
-  override def trigger               = noTrigger
-  override protected def commandName = "releaseLateBoundVersion"
-  override def resource: Resource[IO, Unit] = Resource.unit
-
-  private val rewriteVersionSettings =
-    ReleaseStepIO.io("rewrite-version-settings") { ctx =>
-      IO.blocking {
-        val extracted    = Project.extract(ctx.state)
-        val updatedState = extracted.appendWithSession(
-          Seq(
-            releaseIOVersionFile := baseDirectory.value / "version.properties",
-            releaseIOReadVersion := { file =>
-              IO.blocking(sbt.IO.read(file).trim)
-            },
-            releaseIOWriteVersion := { (_, version) =>
-              IO.pure(version + "\n")
-            }
-          ),
-          ctx.state
-        )
-        ctx.withState(updatedState)
-      }
-    }
-
-  override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
-    defaultsWithBefore(state, "inquire-versions")((_: Unit) => rewriteVersionSettings)
-}
-```
-
-> **Note:** Each helper inserts at a single position. To insert custom steps at multiple
-> non-adjacent positions, use the fully custom approach below.
 
 #### Fully custom release process
 
@@ -353,30 +373,52 @@ can be mixed freely — an implicit conversion lifts plain steps into resource-i
 
 ```scala
 // project/MyReleasePlugin.scala
-import sbt._
-import sbt.Keys._
-import _root_.io.release._
+import sbt.*
+import sbt.Keys.*
+import _root_.io.release.*
 import _root_.io.release.steps.ReleaseSteps
 import _root_.cats.effect.{IO, Resource}
 
 object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
-  override def trigger                    = noTrigger
-  override protected def commandName      = "myRelease"
+  override def trigger               = noTrigger
+  override protected def commandName = "myRelease"
   override def resource: Resource[IO, HttpClient] =
-    Resource.make(IO(new HttpClient()))(c => IO(c.close()))
+    Resource.make(IO.blocking(new HttpClient()))(c => IO.blocking(c.close()))
+
+  // --- custom steps extracted for readability ---
+
+  private def validateBranch(client: HttpClient): ReleaseStepIO =
+    ReleaseStepIO.io("validate-branch") { ctx =>
+      IO.blocking { client.get("/allowed-branches") }.flatMap { branches =>
+        if (branches.contains("main")) IO.pure(ctx)
+        else IO.raiseError(new RuntimeException("Release blocked"))
+      }
+    }
+
+  private def notifySlack(client: HttpClient): ReleaseStepIO =
+    ReleaseStepIO.io("notify-slack") { ctx =>
+      IO.blocking {
+        client.post("/webhook", s"Tagged ${ctx.releaseVersion.getOrElse("")}")
+        ctx
+      }
+    }
+
+  private def verifyPublish(client: HttpClient): ReleaseStepIO =
+    ReleaseStepIO.io("verify-publish") { ctx =>
+      IO.blocking {
+        client.get(s"/artifacts/${ctx.releaseVersion.getOrElse("")}")
+        ctx
+      }
+    }
+
+  // --- release pipeline ---
 
   override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
     Seq(
       // Plain steps — lifted automatically via the implicit conversion
       ReleaseSteps.initializeVcs,
+      validateBranch,                   // fail fast before any mutations
       ReleaseSteps.checkCleanWorkingDir,
-      // 1st custom step — validate branch before anything else runs
-      (client: HttpClient) => ReleaseStepIO.io("validate-branch") { ctx =>
-        IO.blocking { client.get("/allowed-branches") }.flatMap { branches =>
-          if (branches.contains("main")) IO.pure(ctx)
-          else IO.raiseError(new RuntimeException("Release blocked"))
-        }
-      },
       ReleaseSteps.checkSnapshotDependencies,
       ReleaseSteps.inquireVersions,
       ReleaseSteps.runClean,
@@ -384,24 +426,18 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       ReleaseSteps.setReleaseVersion,
       ReleaseSteps.commitReleaseVersion,
       ReleaseSteps.tagRelease,
-      // 2nd custom step — notify after tagging
-      (client: HttpClient) => ReleaseStepIO.io("notify-slack") { ctx =>
-        IO.blocking { client.post("/webhook", s"Tagged!"); ctx }
-      },
+      notifySlack,                      // announce after tagging
       ReleaseSteps.publishArtifacts,
-      // 3rd custom step — verify the published artifact
-      (client: HttpClient) => ReleaseStepIO.io("verify-publish") { ctx =>
-        IO.blocking { client.get(s"/artifacts/${ctx.releaseVersion.getOrElse("")}"); ctx }
-      },
+      verifyPublish,                    // confirm artifact is available
       ReleaseSteps.setNextVersion,
-      ReleaseSteps.commitNextVersion,
-      ReleaseSteps.pushChanges
+      ReleaseSteps.commitNextVersion
+      // pushChanges omitted — CI pushes on success
     )
 }
 ```
 
 This bypasses the `releaseIOProcess` setting entirely — the step list is hard-coded
-in the plugin. Use `defaultsWith`, `defaultsWithAfter`, or `defaultsWithBefore` (shown above)
+in the plugin. Use `liftSteps`, `insertAfter`, or `insertBefore` (shown above)
 if you want to keep the setting-based defaults and only add extra steps.
 
 #### Key design points
@@ -409,7 +445,7 @@ if you want to keep the setting-based defaults and only add extra steps.
 | Concern | Approach |
 |---------|----------|
 | **Coexisting with default plugin** | Use `trigger = noTrigger` + `enablePlugins(...)` in `build.sbt`, and override `commandName` to avoid duplicate command registration |
-| **Adding resource steps** | Override `releaseProcess` using `defaultsWith` (append), `defaultsWithAfter`/`defaultsWithBefore` (positional insert) |
+| **Adding resource steps** | Override `releaseProcess` using `liftSteps` (append), `insertAfter`/`insertBefore` (positional insert) |
 | **Setting keys** | All `releaseIO*` setting keys are singletons — they work regardless of which plugin exports them |
 | **Do not add autoImport** | Do not define `object autoImport` in custom plugins — it causes ambiguous references with `ReleasePluginIO` (e.g. `reference to releaseIOProcess is ambiguous`) |
 
@@ -443,7 +479,7 @@ service after `publishArtifacts`:
 import cats.effect.IO
 import fs2.compression.Compression
 import fs2.io.file.{Files, Path}
-import io.release.{ReleaseContext, ReleaseStepIO}
+import io.release.ReleaseStepIO
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.{Method, Request, Uri}
 
@@ -460,7 +496,9 @@ val uploadArchive: ReleaseStepIO = ReleaseStepIO.io("upload-archive") { ctx =>
 
       EmberClientBuilder.default[IO].build.use { client =>
         client.expectOr[Unit](request) { response =>
-          IO.pure(new RuntimeException(s"Artifact upload failed: ${response.status}"))
+          response.as[String].map { errorBody =>
+            new RuntimeException(s"Artifact upload failed (${response.status}): $errorBody")
+          }
         }
       }.as(ctx)
 
@@ -494,7 +532,7 @@ All release settings use the `releaseIO` prefix:
 | `releaseIOVersionFile` | `SettingKey[File]` | `baseDirectory / "version.sbt"` | Path to the version file |
 | `releaseIOUseGlobalVersion` | `SettingKey[Boolean]` | `true` | Use `ThisBuild / version` format |
 | `releaseIOReadVersion` | `SettingKey[File => IO[String]]` | parses `version := "x.y.z"` | Read version from file |
-| `releaseIOWriteVersion` | `SettingKey[(File, String) => IO[String]]` | writes `version := "x.y.z"` | Produce version file contents |
+| `releaseIOWriteVersion` | `SettingKey[(File, String) => IO[String]]` | writes `ThisBuild / version := "x.y.z"` | Produce version file contents |
 | `releaseIOVersionBump` | `TaskKey[Version.Bump]` | `Next` | Version bump strategy (see bump types below) |
 | `releaseIOVersion` | `TaskKey[String => String]` | strips qualifier/snapshot | Compute release version from current |
 | `releaseIONextVersion` | `TaskKey[String => String]` | bumps + appends `-SNAPSHOT` | Compute next dev version |
@@ -525,7 +563,7 @@ All release settings use the `releaseIO` prefix:
 
 The default release process includes:
 
-1. **initialize-vcs** - Detect and initialize VCS (Git/Mercurial/Subversion)
+1. **initialize-vcs** - Detect and initialize VCS (Git)
 2. **check-clean-working-dir** - Verify no uncommitted changes
 3. **check-snapshot-dependencies** - Verify no snapshot dependencies
 4. **inquire-versions** - Determine release and next versions
@@ -539,7 +577,7 @@ The default release process includes:
 12. **commit-next-version** - Commit version change
 13. **push-changes** - Push commits and tags to remote
 
-These names are the stable built-in insertion points for `defaultsWithAfter` and `defaultsWithBefore`.
+These names are the stable built-in insertion points for `insertAfter` and `insertBefore`.
 Command-line flags and other run invariants are captured before execution starts, but built-in
 execute steps resolve operational settings such as version-file handling and tagging from the current
 `State` when they run. Custom steps now use the public `validate`/`execute` model directly.
@@ -577,46 +615,42 @@ See `src/sbt-test/README.md` for test documentation.
 
 ## Execution Model: sbt-release-io vs sbt-release
 
-The two plugins use fundamentally different execution models. Each has trade-offs.
+Both plugins share the same high-level structure: block the sbt command thread, run validation checks before actions, execute steps sequentially, and manually drain enqueued commands (e.g., from `+publish`). The key difference is the effect system — sbt-release uses plain `State => State` functions composed with `Function.chain`, while sbt-release-io wraps everything in cats-effect `IO` and runs it with `unsafeRunSync()`.
 
-### sbt-release (upstream)
+### Shared structure
 
-sbt-release chains `State => State` functions via `Function.chain`. Each step transforms the sbt state and returns it. The command handler returns immediately, and sbt's event loop processes any enqueued commands (e.g., `+publish` for cross-builds) between steps.
+- **Synchronous blocking**: Both plugins hold the sbt command thread for the entire release. sbt-release composes all steps via `Function.chain`; sbt-release-io runs a single `unsafeRunSync()`. Neither returns control to sbt's event loop between steps.
+- **Validation then execution**: sbt-release has `check`/`action` fields on `ReleaseStep`; sbt-release-io has `validate`/`execute` on `ReleaseStepIO`. Both run all checks before any actions.
+- **Manual command draining**: Both plugins use `@tailrec` loops to drain enqueued commands — sbt-release in `releaseStepCommandAndRemaining`, sbt-release-io in `fromCommandAndRemaining`.
 
-### sbt-release-io
-
-sbt-release-io builds a single `IO[ReleaseContext]` release program from all configured steps, then executes it with `unsafeRunSync()` on the sbt command thread. Validation runs first against the initial validation-phase context, then execute steps run sequentially on the current context and state. The entire release — validation, execution, cross-builds, and resource lifecycle — completes before control returns to sbt.
-
-### Advantages of the IO model
+### What IO adds
 
 - **Resource safety**: `Resource.use` guarantees cleanup (close connections, release locks) even on failure or interruption. sbt-release has no equivalent — cleanup requires manual `try/finally` in each step.
 - **Composability**: Steps compose with `for`/`flatMap` and standard cats-effect combinators. Custom steps can use `IO.blocking`, `IO.race`, `IO.timeout`, retry logic, etc. sbt-release steps are opaque `State => State` functions with no built-in combinators.
-- **Explicit validation boundary**: `validate` and `execute` are separate public phases. Validation is side-effect-aware but context-non-threading, which makes preflight behavior much clearer than a single overloaded step function.
+- **Typed validation boundary**: The IO model's validation phase returns `IO[Unit]` (side-effect-aware but context-non-threading), making it explicit that checks cannot alter the release context. sbt-release's `check` field is `State => State`, so checks could theoretically mutate state.
 - **Explicit blocking boundaries**: `IO.blocking` marks which operations shell out to git or run sbt tasks. The cats-effect runtime dispatches these to a blocking thread pool, keeping the compute pool free. sbt-release runs everything on the sbt command thread with no distinction.
 - **Typed context threading**: `ReleaseContext` carries VCS, versions, and typed metadata through the step chain with type safety. sbt-release uses untyped `State` attributes (`state.get(key)`) that can fail at runtime if a prior step didn't set the expected attribute.
 - **Cross-build validation**: Both `validate` and `execute` phases are cross-built when `enableCrossBuild = true`. sbt-release only cross-builds actions, not preflight validation — a SNAPSHOT dependency present only under a non-default Scala version can slip through.
 - **Custom plugins with resources**: `ReleasePluginIOLike[T]` lets you define a plugin parameterized by a resource type (HTTP client, temp directory, etc.) that is acquired once and shared across all steps.
 
-### Trade-offs
+### IO-specific costs
 
-- **Blocks the sbt command thread**: `unsafeRunSync()` holds the sbt command thread for the entire release. sbt can't process other commands or respond to UI events until the release finishes. In practice this is rarely a problem — releases are inherently sequential — but it differs from sbt-release's cooperative model.
-- **Command enqueuing requires manual draining**: sbt-release lets commands like `+publish` enqueue sub-commands that sbt's event loop processes naturally. sbt-release-io must manually drain enqueued commands inside `fromCommandAndRemaining` — a reimplementation of sbt's event loop within a blocking context.
 - **Cats-effect runtime overhead**: The global `IORuntime` creates compute and blocking thread pools that persist for the sbt session, even when no release is running.
-- **Signal handling**: While `unsafeRunSync` blocks, sbt's interrupt handling is delayed. `Resource` finalizers still run on JVM shutdown, but the response to Ctrl+C is less immediate than with sbt-release's cooperative model.
+- **Signal handling**: While `unsafeRunSync` blocks, sbt's interrupt handling is delayed. On graceful shutdown, cats-effect's runtime attempts to cancel running fibers and run `Resource` finalizers, but this is best-effort. sbt-release, blocking synchronously via `Function.chain`, responds to Ctrl+C more directly.
 
 ### Summary
 
 | Aspect | sbt-release | sbt-release-io |
 |--------|-------------|----------------|
-| Step type | `State => State` | `validate: ReleaseContext => IO[Unit]` plus `execute: ReleaseContext => IO[ReleaseContext]` |
-| Execution | Cooperative with sbt event loop | Single blocking `unsafeRunSync` with validate-then-execute |
+| Effect system | Plain `State => State` via `Function.chain` | `IO`-wrapped via `unsafeRunSync` |
+| Step type | `ReleaseStep(action, check)` | `ReleaseStepIO(validate, execute)` |
 | Resource management | Manual | `Resource.use` with guaranteed cleanup |
 | Cross-build validation | Actions only | Both `validate` and `execute` phases |
 | Custom plugin resources | Not supported | `ReleasePluginIOLike[T]` |
 | Error handling | `FailureCommand` sentinel in State | `IO.raiseError` + `handleErrorWith` |
 | Composability | `Function.chain` | Monadic (`for`/`flatMap`) |
 
-The plugin provides settings familiar to sbt-release users, but is a standalone implementation with no runtime dependency on sbt-release.
+The plugin ports sbt-release's types, settings, and execution model onto cats-effect IO, with no runtime dependency on sbt-release.
 
 ## Contributing
 
@@ -633,4 +667,4 @@ Apache License 2.0
 
 ## Acknowledgments
 
-Inspired by [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization.
+Ports [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization onto cats-effect IO.

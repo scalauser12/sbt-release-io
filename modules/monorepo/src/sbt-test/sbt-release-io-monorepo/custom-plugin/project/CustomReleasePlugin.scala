@@ -17,11 +17,10 @@ object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
     )
   }
 
-  // Override monorepoReleaseProcess to append a resource-aware step using defaultsWith
   override protected def monorepoReleaseProcess(
       state: State
   ): Seq[java.io.File => MonorepoStepIO] =
-    defaultsWith(state)((acquired: java.io.File) =>
+    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) :+ ((acquired: java.io.File) =>
       MonorepoStepIO.Global(
         name = "use-resource",
         execute = ctx =>

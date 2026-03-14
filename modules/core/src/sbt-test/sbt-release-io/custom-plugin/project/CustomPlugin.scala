@@ -18,9 +18,8 @@ object CustomPlugin extends ReleasePluginIOLike[java.io.File] {
     )
   }
 
-  // Override releaseProcess to append a resource-aware step using defaultsWith
   override protected def releaseProcess(state: State): Seq[java.io.File => ReleaseStepIO] =
-    defaultsWith(state)((acquired: java.io.File) =>
+    liftSteps(Project.extract(state).get(releaseIOProcess)) :+ ((acquired: java.io.File) =>
       ReleaseStepIO(
         name = "use-resource",
         execute = (ctx: ReleaseContext) =>

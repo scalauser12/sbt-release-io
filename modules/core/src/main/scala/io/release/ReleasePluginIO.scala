@@ -53,32 +53,6 @@ trait ReleasePluginIOLike[T]
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess))
 
-  /** Read default steps from settings and append resource-aware steps at the end.
-    *
-    * {{{
-    * override protected def releaseProcess(state: State) =
-    *   defaultsWith(state)(
-    *     (client: HttpClient) => notifySlack(client)
-    *   )
-    * }}}
-    */
-  protected def defaultsWith(state: State)(
-      extraSteps: (T => ReleaseStepIO)*
-  ): Seq[T => ReleaseStepIO] =
-    liftSteps(Project.extract(state).get(releaseIOProcess)) ++ extraSteps
-
-  /** Read default steps and insert resource-aware steps after a named step. */
-  protected def defaultsWithAfter(state: State, afterStep: String)(
-      extraSteps: (T => ReleaseStepIO)*
-  ): Seq[T => ReleaseStepIO] =
-    insertAfter(Project.extract(state).get(releaseIOProcess), afterStep)(extraSteps)
-
-  /** Read default steps and insert resource-aware steps before a named step. */
-  protected def defaultsWithBefore(state: State, beforeStep: String)(
-      extraSteps: (T => ReleaseStepIO)*
-  ): Seq[T => ReleaseStepIO] =
-    insertBefore(Project.extract(state).get(releaseIOProcess), beforeStep)(extraSteps)
-
   /** Whether cross-building is enabled (before command-line args are applied).
     * Defaults to reading from the `releaseIOCrossBuild` setting.
     */
