@@ -33,7 +33,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Uses `runtimeVersion` to create dynamic tag names
 
 ### custom-version-format
-- Tests `releaseVersionFile` (from sbt-release), `releaseIOReadVersion`, and `releaseIOWriteVersion` settings
+- Tests `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOWriteVersion` settings
 - Uses a `.properties` file format instead of default `version.sbt`
 - Verifies custom format preserved in both working directory and git tag commits
 
@@ -136,11 +136,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies tasks, input tasks, and commands all execute correctly as release steps
 
 ### untracked-files
-- Tests `releaseIgnoreUntrackedFiles := true`
+- Tests `releaseIOIgnoreUntrackedFiles := true`
 - Creates untracked files and verifies release succeeds when the setting is enabled
 
 ### untracked-files-fail
-- Tests default `releaseIgnoreUntrackedFiles` behavior (false)
+- Tests default `releaseIOIgnoreUntrackedFiles` behavior (false)
 - Verifies untracked files block the release before any commit, tag, or `version.sbt` mutation
 
 ### version-bump
@@ -149,7 +149,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 
 ### with-defaults
 - Tests release with and without the `with-defaults` flag
-- Verifies `releaseVersionBump` setting is honored across multiple scenarios
+- Verifies `releaseIOVersionBump` setting is honored across multiple scenarios
 
 ## Running Tests
 

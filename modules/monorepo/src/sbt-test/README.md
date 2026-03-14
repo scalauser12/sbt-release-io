@@ -108,8 +108,12 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 
 ### dirty-working-dir
 - Untracked files abort release in check phase
-- Tests `releaseIgnoreUntrackedFiles` behavior
+- Tests `releaseIOIgnoreUntrackedFiles` behavior
 - Verifies failure happens before any commit, tag, or version-file mutation
+
+### empty-commit-monorepo
+- `commitIfChanged` skips commit when version files already contain the release version
+- Pre-commits release versions so `set-release-versions` sees no diff; verifies no extra commit is created
 
 ### empty-override-value
 - Empty override values (e.g., `release-version core=`) are rejected as parse errors
@@ -157,32 +161,57 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - `releaseIOMonorepoInteractive := true` with `with-defaults`
 - Verifies interactive mode completes without blocking prompts
 
+### interactive-with-defaults-tag
+- `interactive=true` + `with-defaults` exercises the `useDefaults` tag collision path
+- Pre-existing tag causes abort with "use-defaults mode" message, not the non-interactive message
+
 ### invalid-override
 - Typo in project name (e.g., `croe` instead of `core`) causes parse error
 
+### late-bound-detect-settings
+- Late-bound change detection settings via a custom plugin (`LateBoundDetectPlugin`)
+- Verifies detect settings are resolved at release time, not at plugin load time
+
+### late-bound-projects-setting
+- Late-bound `releaseIOMonorepoProjects` via a custom plugin (`LateBoundProjectsPlugin`)
+- Verifies only the late-resolved subset of projects (core only) is released
+
+### late-bound-version-settings
+- Late-bound `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoWriteVersion` via a custom plugin
+- Uses `.properties` format resolved at release time; verifies the original `version.sbt` stays unchanged
+
 ### missing-publishto
 - Missing `publishTo` configuration causes check phase abort
+
+### missing-version-file
+- Missing `version.sbt` for a project fails in check phase with a clear error
+- Release aborted before any commits or tags
 
 ### nested-parent-exclusion
 - Changes only in a nested child directory (e.g. `services/api/`) do NOT falsely mark the parent (`services`) as changed
 - Tests the generalized child-directory exclusion for non-root parent projects in a 3-level hierarchy
 
 ### next-version-mismatch
-- Next version mismatch between projects
+- Per-project next-version overrides rejected in global-version mode
+- Similar to `global-version-mismatch` but specifically for `next-version` overrides
 
 ### next-version-only
 - Only next-version override provided for one project
 - Release version is computed; other projects get full computation
 
 ### per-project-failure
-- One project (core) fails with tag already existing
-- Failure at `run-tests` propagates globally before any version/tag steps run
+- One project (core) fails during `run-tests` with a custom task exception
+- Failure propagates globally before any version/tag steps run
 - Verifies commit count, tags, and project version files remain untouched after failure
 
 ### per-project-releaseversionfile
 - One project overrides upstream sbt-release `releaseVersionFile` without overriding `releaseIOMonorepoVersionFile`
 - Verifies the monorepo plugin reads, writes, commits, and tags the overridden file path correctly
 - Mixed formats are preserved: `core/version.properties` and `api/version.sbt`
+
+### publish-artifacts-checks-disabled
+- `releaseIOMonorepoPublishArtifactsChecks := false` bypasses `publishTo` validation
+- Release succeeds despite missing `publishTo` configuration
 
 ### publish-skip-bypass
 - `publish / skip := true` per-project setting bypasses publishTo check for that project only
@@ -195,6 +224,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - `publishTo` throws during publish preflight evaluation
 - Release fails with the wrapped project-scoped error message and preserves the original cause text
 
+### push-behind-remote
+- `pushChanges` validate fails when local branch is behind remote
+- Two-phase compose model ensures no version modifications occur when validate fails
+
 ### push-changes-tracking-remote
 - Push-changes uses tracking remote, not `remote.pushDefault`
 - Verifies branch and tags pushed to origin even when another remote is the default
@@ -206,6 +239,18 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### run-clean
 - Releases only the explicitly selected project in a two-project build
 - Verifies `run-clean` removes generated output for the released project but leaves the non-selected project's target output intact
+
+### selection-aware-validation
+- Unselected projects are not validated after explicit project selection
+- Selects only core (which has `publishTo`); api (missing `publishTo`) is skipped without error
+
+### shared-paths-detection
+- A change in `build.sbt` (shared path) triggers release for all projects
+- No per-project file changes needed; shared path change alone is sufficient
+
+### shared-paths-disabled
+- `releaseIOMonorepoSharedPaths := Seq.empty` disables shared path detection
+- Shared-path-only changes yield "No projects have changed" when detection is disabled
 
 ### root-project-change-detection
 - Root project (baseDir == repo root) uses sbt project ID for tags
@@ -237,6 +282,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Pre-existing per-project tag causes per-project failure with isolation
 - Other projects succeed but next-version step skipped globally
 
+### tag-exists-noninteractive
+- Per-project tag collision in non-interactive mode (no `with-defaults`)
+- Exercises the `!ctx.interactive` path in `createTag`; api succeeds via isolation
+
 ### transitive-aggregates
 - 3-level aggregate hierarchy: root -> services -> api
 - Default `releaseIOMonorepoProjects` transitively discovers nested aggregates
@@ -255,6 +304,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Pre-existing unified tag causes release failure
 - Verifies the pre-existing tag is preserved, release-version commit is allowed, and next-version writes are skipped
 
+### unified-tag-noninteractive
+- Unified tag collision in non-interactive mode (no `with-defaults`)
+- Exercises the `!ctx.interactive` path for unified tags
+
 ### unified-tag-version-mismatch
 - Different release versions with unified tag strategy
 - Fails because unified tags require matching versions across all projects
@@ -263,6 +316,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### unified-tags
 - Single unified tag (`v1.0.0`) for entire monorepo instead of per-project tags
 - Tag annotation mentions all released projects
+
+### vcs-signoff
+- `releaseIOVcsSignOff := true` propagates to `git commit -s`
+- Verifies release commits include the `Signed-off-by:` trailer
 
 ### version-file-change-detection
 - Version-only file changes are filtered out from change detection
