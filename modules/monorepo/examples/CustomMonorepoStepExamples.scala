@@ -15,7 +15,7 @@ import sbt.Keys.*
   *   - '''Global''' — runs once for the entire release (e.g., VCS checks, push)
   *   - '''PerProject''' — runs once per selected project in topological order
   *
-  * Recommended reading path:
+  * '''How to read this file (recommended path):'''
   *   1. Start with `minimalProcess` for an immediate working setup.
   *   2. Move to `firstCustomProcess` for the smallest meaningful customization.
   *   3. See `MyMonorepoRelease` for advanced resource-aware customization.
@@ -29,7 +29,9 @@ object CustomMonorepoStepExamples {
 
   /** Minimal working setup — just the default steps.
     *
-    * {{{ releaseIOMonorepoProcess := CustomMonorepoStepExamples.minimalProcess }}}
+    * {{{
+    * releaseIOMonorepoProcess := CustomMonorepoStepExamples.minimalProcess
+    * }}}
     *
     * Run with: `sbt "releaseIOMonorepo with-defaults"`
     */
@@ -37,7 +39,9 @@ object CustomMonorepoStepExamples {
 
   /** Insert a custom step after project selection, keeping the default flow.
     *
-    * {{{ releaseIOMonorepoProcess := CustomMonorepoStepExamples.firstCustomProcess }}}
+    * {{{
+    * releaseIOMonorepoProcess := CustomMonorepoStepExamples.firstCustomProcess
+    * }}}
     *
     * Run with: `sbt "releaseIOMonorepo with-defaults"`
     */
@@ -119,7 +123,9 @@ object CustomMonorepoStepExamples {
 
   /** A custom release process: summary banner, branch validation, changelogs, no push.
     *
-    * {{{ releaseIOMonorepoProcess := CustomMonorepoStepExamples.customProcess }}}
+    * {{{
+    * releaseIOMonorepoProcess := CustomMonorepoStepExamples.customProcess
+    * }}}
     *
     * Run with: `sbt "releaseIOMonorepo with-defaults"`
     */
@@ -258,7 +264,9 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
   * {{{
   * lazy val root = (project in file("."))
   *   .enablePlugins(DynamicMonorepoPlugin)
-  *   .aggregate(DynamicMonorepoPlugin.extraProjects.map(p => LocalProject(p.id) ): _* )
+  *   .aggregate(
+  *     DynamicMonorepoPlugin.extraProjects.map(p => LocalProject(p.id)): _*
+  *   )
   * }}}
   *
   * Run with: `sbt "releaseDynamic with-defaults"`
