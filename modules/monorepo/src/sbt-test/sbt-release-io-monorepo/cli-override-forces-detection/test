@@ -1,0 +1,23 @@
+# Test: version overrides force-include unchanged projects in change-detection mode
+
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate a previous release by creating tags for both projects
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
+
+# Modify ONLY core (api has no changes since its tag)
+$ exec touch core/CHANGES.md
+$ exec git add core/CHANGES.md
+$ exec git commit -m "Add changes file to core"
+
+# Release with overrides for BOTH projects.
+# api is unchanged but should be force-included because it has a version override.
+> releaseIOMonorepo with-defaults release-version core=1.0.0 release-version api=1.0.0 next-version core=1.1.0-SNAPSHOT next-version api=1.1.0-SNAPSHOT
+
+# Verify both were released
+> checkAll

@@ -91,6 +91,12 @@ trait MonorepoReleaseIO {
   val releaseIOMonorepoSharedPaths: SettingKey[Seq[String]] =
     _releaseIOMonorepoSharedPaths
 
+  /** When true and change detection is enabled, projects that transitively depend on
+    * detected-changed projects are automatically included in the release.
+    * Default: false.
+    */
+  val releaseIOMonorepoIncludeDownstream: SettingKey[Boolean] = _releaseIOMonorepoIncludeDownstream
+
   // ── Behavioral settings ───────────────────────────────────────────────
 
   /** Cross-build enabled. Default: false. */
@@ -231,6 +237,7 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoPublishArtifactsChecks := true,
     releaseIOMonorepoInteractive            := false,
     releaseIOMonorepoDetectChanges          := true,
+    releaseIOMonorepoIncludeDownstream      := false,
     releaseIOMonorepoChangeDetector         := None,
     releaseIOMonorepoDetectChangesExcludes  := Seq.empty,
     releaseIOMonorepoSharedPaths            := Seq("build.sbt", "project/"),
@@ -336,6 +343,12 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Boolean](
       "releaseIOMonorepoDetectChanges",
       "Whether to use git-based change detection"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoIncludeDownstream: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoIncludeDownstream",
+      "Include transitive downstream dependents of changed projects in the release"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoChangeDetector

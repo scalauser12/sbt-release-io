@@ -201,7 +201,7 @@ private[monorepo] object MonorepoComposer {
             ioCtx.flatMap { currentCtx =>
               if (currentCtx.failed) IO.pure(currentCtx)
               else
-                for {
+                (for {
                   _        <- IO.blocking(
                                 currentCtx.state.log.info(
                                   s"$LogPrefix Cross-building with Scala $version"
@@ -209,13 +209,12 @@ private[monorepo] object MonorepoComposer {
                               )
                   switched <- switchTo(version)(currentCtx)
                   result   <- action(switched)
-                } yield result
+                } yield result).handleErrorWith { err =>
+                  restoreEntry(currentCtx).attempt *> IO.raiseError(err)
+                }
             }
           }
           .flatMap(restoreEntry)
-          .handleErrorWith { err =>
-            restoreEntry(ctx).attempt *> IO.raiseError(err)
-          }
     }
   }
 }

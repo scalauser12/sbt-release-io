@@ -160,6 +160,7 @@ current `State` when they run. Custom steps now use the public `validate`/`execu
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `releaseIOMonorepoDetectChanges` | `Boolean` | `true` | Enable git-based change detection |
+| `releaseIOMonorepoIncludeDownstream` | `Boolean` | `false` | Include transitive downstream dependents of changed projects |
 | `releaseIOMonorepoChangeDetector` | `Option[(ProjectRef, File, State) => IO[Boolean]]` | `None` | Custom change detector |
 | `releaseIOMonorepoDetectChangesExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
 | `releaseIOMonorepoSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level paths checked for shared changes per project |
@@ -555,6 +556,28 @@ The plugin detects which projects have changed since their last release tag usin
 5. If any significant files remain, the project is changed.
 
 Any git command failure conservatively treats the project as changed.
+
+### Downstream dependents
+
+By default, only projects with direct file changes are released. If `core` changes and `api` depends on `core`, `api` is **not** released unless it also has file changes.
+
+Enable `releaseIOMonorepoIncludeDownstream` to automatically include all transitive downstream dependents of changed projects:
+
+```scala
+releaseIOMonorepoIncludeDownstream := true
+```
+
+With this setting, if `core` changes and `api` depends on `core` and `web` depends on `api`, all three are released. This works with both the built-in git-based detector and custom change detectors.
+
+### Version overrides force-include projects
+
+When using change detection, providing a CLI version override for a project forces it into the release set even if it has no detected changes. For example:
+
+```bash
+sbt "releaseIOMonorepo with-defaults release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT"
+```
+
+This releases `api` at version `1.0.0` regardless of whether change detection found changes in `api`.
 
 ### Custom change detector
 

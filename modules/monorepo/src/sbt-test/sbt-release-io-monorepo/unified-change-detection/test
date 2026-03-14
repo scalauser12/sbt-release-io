@@ -16,7 +16,8 @@ $ exec git commit -m "Add changes file to core"
 # Release with NO explicit project selection — relies on change detection.
 # With unified tags, detection should match v* pattern and find v0.1.0.
 # Only core has changes since v0.1.0, so only core should be released.
-> releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.2.1-SNAPSHOT release-version api=0.2.0 next-version api=0.2.1-SNAPSHOT
+# Note: no api overrides — providing them would force-include api in the release.
+> releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.2.1-SNAPSHOT
 
 # Verify unified tags, core next version, and api version unchanged
 > checkAll

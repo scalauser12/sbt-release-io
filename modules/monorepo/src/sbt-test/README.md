@@ -21,6 +21,28 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Tests default behavior without explicit project selection
 - Only detects and releases projects with changes since their last tag
 
+### change-detection-downstream
+- Tests `releaseIOMonorepoIncludeDownstream := true` with a three-project chain (core <- api <- web)
+- Only core has file changes; api and web are included as transitive downstream dependents
+- Verifies all three projects are released with correct versions and tags
+
+### cli-all-changed-with-selection
+- Cannot combine `all-changed` flag with explicit project selection
+- Rejects the combination at CLI parse time
+
+### cli-multiple-global-release-version
+- Rejects multiple global release-version values
+- Only one global release-version override is allowed
+
+### cli-override-forces-detection
+- Version overrides force-include unchanged projects in change-detection mode
+- Only core has changes but both core and api have version overrides
+- Verifies both projects are released
+
+### cli-unused-overrides
+- Version overrides for non-selected projects are rejected
+- Selects only core but provides overrides for both core and api
+
 ### cli-parse-errors
 - Validates CLI argument format and rejects duplicate per-project overrides
 - Rejects malformed arguments: missing values, invalid format, empty values, typos in project names

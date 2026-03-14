@@ -41,6 +41,14 @@ private[monorepo] object MonorepoSelectionResolver {
                                       IO.pure((ordered, SelectionMode.AllChanged))
                                     case SelectionMode.DetectChanges     =>
                                       detectSelectedProjects(ctx, ordered, runtime, tagSettings)
+                                        .flatMap { case (detected, mode) =>
+                                          forceIncludeOverridden(
+                                            ctx,
+                                            ordered,
+                                            detected,
+                                            validated
+                                          ).map(_ -> mode)
+                                        }
                                   }
       (selected, effectiveMode) = selectionResult
       constrained              <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
@@ -48,7 +56,10 @@ private[monorepo] object MonorepoSelectionResolver {
                                     selected,
                                     runtime.useGlobalVersion
                                   )
-      _                        <- if (effectiveMode == SelectionMode.ExplicitSelection)
+      _                        <- if (
+                                    effectiveMode == SelectionMode.ExplicitSelection ||
+                                    effectiveMode == SelectionMode.DetectChanges
+                                  )
                                     validateUnusedOverrides(constrained, validated)
                                   else IO.unit
       withVersions              = MonorepoProjectResolver.applyVersionOverrides(
@@ -68,8 +79,10 @@ private[monorepo] object MonorepoSelectionResolver {
       runtime: MonorepoRuntime,
       tagSettings: MonorepoTagResolver.ResolvedMonorepoTagSettings
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] = {
-    val detectChanges  = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges)
-    val customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector)
+    val detectChanges     = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges)
+    val includeDownstream =
+      runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream)
+    val customDetector    = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector)
 
     if (!detectChanges) {
       IO.pure((orderedProjects, SelectionMode.AllChanged))
@@ -99,9 +112,40 @@ private[monorepo] object MonorepoSelectionResolver {
             )
           }
       }
-      detected.map((_, SelectionMode.DetectChanges))
+
+      if (!includeDownstream) detected.map((_, SelectionMode.DetectChanges))
+      else
+        detected.flatMap { directlyChanged =>
+          expandToDownstream(ctx, orderedProjects, directlyChanged)
+            .map((_, SelectionMode.DetectChanges))
+        }
     }
   }
+
+  /** Expand a set of detected-changed projects to include all transitive downstream dependents. */
+  private def expandToDownstream(
+      ctx: MonorepoContext,
+      allOrdered: Seq[ProjectReleaseInfo],
+      detected: Seq[ProjectReleaseInfo]
+  ): IO[Seq[ProjectReleaseInfo]] =
+    DependencyGraph.dependedOnBy(allOrdered.map(_.ref), ctx.state).flatMap { reverseGraph =>
+      val detectedRefs  = detected.map(_.ref).toSet
+      val downstream    = DependencyGraph.transitiveDependents(detectedRefs, reverseGraph)
+      val newlyIncluded =
+        allOrdered.filter(p => downstream.contains(p.ref) && !detectedRefs.contains(p.ref))
+
+      if (newlyIncluded.isEmpty) IO.pure(detected)
+      else
+        newlyIncluded
+          .foldLeft(IO.unit) { (acc, p) =>
+            acc *> IO.blocking(
+              ctx.state.log.info(
+                s"[release-io-monorepo] Including ${p.name} (downstream dependent of changed project)"
+              )
+            )
+          }
+          .as(detected ++ newlyIncluded)
+    }
 
   private def validateResolvedProjects(
       allProjects: Seq[ProjectReleaseInfo],
@@ -183,6 +227,33 @@ private[monorepo] object MonorepoSelectionResolver {
         )
       )
     }
+  }
+
+  /** In detect-changes mode, force-include projects that have CLI version overrides
+    * but were not detected as changed. A version override signals user intent to release.
+    */
+  private def forceIncludeOverridden(
+      ctx: MonorepoContext,
+      allOrdered: Seq[ProjectReleaseInfo],
+      detected: Seq[ProjectReleaseInfo],
+      plan: MonorepoReleasePlan
+  ): IO[Seq[ProjectReleaseInfo]] = {
+    val overrideNames = plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet
+    val detectedNames = detected.map(_.name).toSet
+    val forceInclude  =
+      allOrdered.filter(p => overrideNames.contains(p.name) && !detectedNames.contains(p.name))
+
+    if (forceInclude.isEmpty) IO.pure(detected)
+    else
+      forceInclude
+        .foldLeft(IO.unit) { (acc, p) =>
+          acc *> IO.blocking(
+            ctx.state.log.info(
+              s"[release-io-monorepo] Including ${p.name} (unchanged but has version override)"
+            )
+          )
+        }
+        .as(detected ++ forceInclude)
   }
 
   private def detectWithCustomDetector(

@@ -28,25 +28,31 @@ private[monorepo] object MonorepoVersionSteps {
   private[steps] def resolve(state: State, ref: ProjectRef): IO[ResolvedProjectVersion] =
     IO.blocking {
       val runtime = MonorepoRuntime.fromState(state)
-      ResolvedProjectVersion(
-        versionFile = MonorepoVersionFiles.resolve(runtime, ref),
-        readVersion = runtime.readVersion,
-        writeVersion = runtime.writeVersion,
-        useGlobalVersion = runtime.useGlobalVersion
-      )
+      resolve(runtime, ref)
     }
+
+  private def resolve(runtime: MonorepoRuntime, ref: ProjectRef): ResolvedProjectVersion =
+    ResolvedProjectVersion(
+      versionFile = MonorepoVersionFiles.resolve(runtime, ref),
+      readVersion = runtime.readVersion,
+      writeVersion = runtime.writeVersion,
+      useGlobalVersion = runtime.useGlobalVersion
+    )
 
   private[steps] def sessionSettings(state: State): IO[Seq[sbt.Setting[?]]] =
     IO.blocking {
-      val runtime      = MonorepoRuntime.fromState(state)
-      Seq(
-        MR.releaseIOMonorepoVersionFile      :=
-          runtime.extracted.get(MR.releaseIOMonorepoVersionFile),
-        MR.releaseIOMonorepoReadVersion      := runtime.readVersion,
-        MR.releaseIOMonorepoWriteVersion     := runtime.writeVersion,
-        MR.releaseIOMonorepoUseGlobalVersion := runtime.useGlobalVersion
-      )
+      val runtime = MonorepoRuntime.fromState(state)
+      sessionSettings(runtime)
     }
+
+  private def sessionSettings(runtime: MonorepoRuntime): Seq[sbt.Setting[?]] =
+    Seq(
+      MR.releaseIOMonorepoVersionFile      :=
+        runtime.extracted.get(MR.releaseIOMonorepoVersionFile),
+      MR.releaseIOMonorepoReadVersion      := runtime.readVersion,
+      MR.releaseIOMonorepoWriteVersion     := runtime.writeVersion,
+      MR.releaseIOMonorepoUseGlobalVersion := runtime.useGlobalVersion
+    )
 
   /** Inquire release and next versions for each project.
     * If the project already has versions pre-populated (from command-line overrides),
@@ -223,10 +229,11 @@ private[monorepo] object MonorepoVersionSteps {
       ver: String
   ): IO[MonorepoContext] =
     for {
-      versionInputs <- resolve(ctx.state, project.ref)
-      preserved     <- sessionSettings(ctx.state)
-      versionFile    = versionInputs.versionFile
-      result        <-
+      runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
+      versionInputs = resolve(runtime, project.ref)
+      preserved     = sessionSettings(runtime)
+      versionFile   = versionInputs.versionFile
+      result       <-
         if (
           versionInputs.useGlobalVersion && ctx.state
             .get(MonorepoReleasePlan.globalVersionWrittenKey)
