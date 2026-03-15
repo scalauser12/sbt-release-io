@@ -75,11 +75,8 @@ These names are the stable built-in insertion points for `insertAfter` and `inse
 
 In `build.sbt`:
 
-> The explicit `import io.release.ReleasePluginIO.autoImport.`* is optional — sbt auto-imports these keys from plugins on the classpath.
-
 ```scala
 import cats.effect.IO
-import io.release.ReleasePluginIO.autoImport.*
 import io.release.steps.ReleaseSteps
 
 // Use default release steps (recommended)
@@ -228,8 +225,6 @@ val checkBranch = ReleaseStepIO.step("check-branch")
 Wrap existing sbt tasks, input tasks, or commands as release steps using the built-in factory methods:
 
 ```scala
-import io.release.ReleasePluginIO.autoImport.*
-
 releaseIOProcess := Seq(
   ReleaseSteps.initializeVcs,
   ReleaseSteps.checkCleanWorkingDir,

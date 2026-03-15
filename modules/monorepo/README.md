@@ -309,11 +309,7 @@ releaseIOMonorepoSharedPaths := Seq.empty
 
 ### Example configuration
 
-> The explicit `import io.release.monorepo.MonorepoReleasePlugin.autoImport.*` is optional — sbt auto-imports these keys from plugins on the classpath.
-
 ```scala
-import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
-
 releaseIOMonorepoSkipTests   := true
 releaseIOMonorepoCrossBuild  := true
 releaseIOMonorepoTagStrategy := MonorepoTagStrategy.Unified
@@ -465,7 +461,6 @@ Use these factory methods in `build.sbt` or `project/*.scala`:
 
 ```scala
 import cats.effect.IO
-import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 
 // Global step — runs once, logs a release summary
 val printSummary = globalStepAction("print-summary") { ctx =>
