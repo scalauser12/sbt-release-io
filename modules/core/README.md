@@ -274,13 +274,15 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       c
     })(c => IO.blocking(c.close()))
 
-  // Resource-aware step using the built-in factory (see "Resource-aware step factory methods")
-  private val notifyApi = resourceStep[HttpClient]("notify-api") { client => ctx =>
-    IO.blocking {
-      client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}""")
-      ctx
+  // Resource-aware step using the builder API (see "Resource-aware steps")
+  private val notifyApi = ReleaseStepIO
+    .resourceStep[HttpClient]("notify-api")
+    .execute { client => ctx =>
+      IO.blocking {
+        client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}""")
+        ctx
+      }
     }
-  }
 
   // Append the step after the defaults
   override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
@@ -312,58 +314,30 @@ sbt "releaseWithClient with-defaults release-version 1.0.0 next-version 1.1.0-SN
 
 The command accepts the same arguments as `releaseIO` (`with-defaults`, `skip-tests`, `cross`, `release-version`, `next-version`, `default-tag-exists-answer`).
 
-#### Resource-aware step factory methods
+#### Resource-aware steps (builder API)
 
-The `ReleaseIO` trait (mixed into all `ReleasePluginIOLike` subclasses) provides convenience factory methods for creating resource-aware steps:
-
-```scala
-// Simple resource step — execute only, no validation phase
-val notifySlack: HttpClient => ReleaseStepIO = resourceStep("notify-slack") { client => ctx =>
-  IO.blocking {
-    client.post("/webhook", s"Released ${ctx.releaseVersion.getOrElse("")}")
-    ctx
-  }
-}
-
-// Resource step with a validation phase
-val verifyToken: HttpClient => ReleaseStepIO =
-  resourceStepWithValidation("verify-token")(
-    execute = client => ctx =>
-      IO.blocking {
-        client.post("/release", "...")
-        ctx
-      }
-  )(
-    validate = client => ctx =>
-      IO.blocking(client.get("/health"))
-  )
-```
-
-#### Action variants (side-effect-only steps)
-
-When a resource step performs a side effect without modifying the release context,
-use the `Action` variants to avoid the `; ctx` / `.as(ctx)` boilerplate:
+Use the `ReleaseStepIO.resourceStep[T]` builder to create steps that receive an acquired resource:
 
 ```scala
-// Action variant — execute returns IO[Unit], context is passed through automatically
-val notifyApi: HttpClient => ReleaseStepIO =
-  resourceStepAction("notify-api") { client => ctx =>
-    IO.blocking { client.post("/releases", ctx.releaseVersion.getOrElse("")) }
+// Simple resource step
+val notifySlack: HttpClient => ReleaseStepIO = ReleaseStepIO
+  .resourceStep[HttpClient]("notify-slack")
+  .executeAction { client => ctx =>
+    IO.blocking {
+      client.post("/webhook", s"Released ${ctx.releaseVersion.getOrElse("")}")
+    }
   }
 
-// Action variant with validation — both execute and validate return IO[Unit]
-val verifyAndNotify: HttpClient => ReleaseStepIO =
-  resourceStepActionWithValidation("verify-and-notify")(
-    execute = client => ctx =>
-      IO.blocking { client.post("/release", ctx.releaseVersion.getOrElse("")) }
-  )(
-    validate = client => ctx =>
-      IO.blocking { client.get("/health") }
-  )
+// Resource step with validation
+val verifyToken: HttpClient => ReleaseStepIO = ReleaseStepIO
+  .resourceStep[HttpClient]("verify-token")
+  .withValidation(client => ctx => IO.blocking(client.get("/health")))
+  .execute { client => ctx =>
+    IO.blocking { client.post("/release", "..."); ctx }
+  }
 ```
 
-These are equivalent to their non-action counterparts but the execute function does not
-need to return the context — it is passed through unchanged.
+Builder methods: `.withValidation(...)`, `.withCrossBuild`, `.execute(...)` (returns `IO[ReleaseContext]`), `.executeAction(...)` (returns `IO[Unit]`, context passed through unchanged).
 
 Use these in `releaseProcess`:
 
@@ -617,6 +591,7 @@ If you are updating a custom plugin or build from an older release:
 - rename `step.check` to `step.validate`
 - rename `step.action` to `step.execute`
 - rename `resourceStepWithCheck` to `resourceStepWithValidation`
+- replace `resourceStep(...)`, `resourceStepAction(...)`, `resourceStepWithValidation(...)`, and `resourceStepActionWithValidation(...)` factory methods with `ReleaseStepIO.resourceStep[T](name)` builder API
 - replace string attributes with typed metadata via `ctx.withMetadata`, `ctx.metadata`, and `AttributeKey[A]`
 
 ## Testing
