@@ -1,5 +1,6 @@
 import cats.effect.{IO, Resource}
 import _root_.io.release.*
+import _root_.io.release.ReleaseIO.releaseIOVersionFile
 import sbt.*
 
 object LateBoundVersionPlugin extends ReleasePluginIOLike[Unit] {
@@ -19,11 +20,11 @@ object LateBoundVersionPlugin extends ReleasePluginIOLike[Unit] {
             val runtimeVersion = baseDir / "version.properties"
             val updatedState   = extracted.appendWithSession(
               Seq(
-                _root_.io.release.ReleaseIO.releaseIOVersionFile := runtimeVersion,
-                releaseIOReadVersion                             := { file =>
+                releaseIOVersionFile         := runtimeVersion,
+                releaseIOReadVersion         := { file =>
                   IO.blocking(sbt.IO.read(file).trim)
                 },
-                releaseIOVersionFileContents                     := { (_, version) =>
+                releaseIOVersionFileContents := { (_, version) =>
                   IO.pure(version + "\n")
                 }
               ),

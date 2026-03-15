@@ -6,7 +6,7 @@ import io.release.ReleaseIO.{
   releaseIOPublishArtifactsChecks,
   releaseIOSnapshotDependencies
 }
-import io.release.internal.SbtRuntime
+import io.release.internal.{SbtCompat, SbtRuntime}
 import io.release.steps.StepHelpers.*
 import io.release.{CleanCompat, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
@@ -26,7 +26,7 @@ private[release] object PublishSteps {
                          val extracted   = SbtRuntime.extracted(ctx.state)
                          val thisRef     = extracted.get(thisProjectRef)
                          val (_, result) =
-                           _root_.io.release.internal.SbtCompat
+                           SbtCompat
                              .runTaskAggregated(thisRef / releaseIOSnapshotDependencies, ctx.state)
                          aggregatedTaskValues(result)
                        }

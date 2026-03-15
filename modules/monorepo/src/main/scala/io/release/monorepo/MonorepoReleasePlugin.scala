@@ -2,8 +2,9 @@ package io.release.monorepo
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import io.release.ReleasePluginIO
-import io.release.internal.ExecutionFlags
+import io.release.{PluginLikeSupport, ReleaseKeys, ReleasePluginIO}
+import io.release.internal.{ExecutionFlags, InternalKeys}
+import io.release.monorepo.{MonorepoTagStrategy as MonorepoTagStrategy_}
 import io.release.monorepo.internal.{MonorepoProjectResolver, MonorepoReleasePlan}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
@@ -39,8 +40,8 @@ import scala.util.control.NonFatal
   */
 trait MonorepoReleasePluginLike[T]
     extends AutoPlugin
-    with _root_.io.release.monorepo.MonorepoReleaseIO
-    with _root_.io.release.PluginLikeSupport[MonorepoStepIO, T] {
+    with MonorepoReleaseIO
+    with PluginLikeSupport[MonorepoStepIO, T] {
 
   override def requires: Plugins = ReleasePluginIO
 
@@ -209,9 +210,9 @@ trait MonorepoReleasePluginLike[T]
       val flags     = parseFlags(args, extracted)
 
       val cleanState = state
-        .remove(_root_.io.release.ReleaseKeys.versions)
-        .remove(_root_.io.release.internal.InternalKeys.executionFlags)
-        .remove(_root_.io.release.internal.InternalKeys.coreReleasePlan)
+        .remove(ReleaseKeys.versions)
+        .remove(InternalKeys.executionFlags)
+        .remove(InternalKeys.coreReleasePlan)
         .remove(internal.MonorepoReleasePlan.globalVersionWrittenKey)
 
       val program: IO[State] = for {
@@ -221,7 +222,7 @@ trait MonorepoReleasePluginLike[T]
                            case Right(plan)       =>
                              val plannedState =
                                cleanState.put(
-                                 _root_.io.release.internal.InternalKeys.executionFlags,
+                                 InternalKeys.executionFlags,
                                  plan.flags
                                )
                              val stepFns      = monorepoReleaseProcess(plannedState)
@@ -291,6 +292,6 @@ object MonorepoReleasePlugin extends MonorepoReleasePluginLike[Unit] {
   override def resource: Resource[IO, Unit] = Resource.unit
 
   object autoImport extends MonorepoReleaseIO {
-    val MonorepoTagStrategy = _root_.io.release.monorepo.MonorepoTagStrategy
+    val MonorepoTagStrategy = MonorepoTagStrategy_
   }
 }

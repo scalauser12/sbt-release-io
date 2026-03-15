@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.version.Version
 import sbt.{internal as _, *}
 
 /** Shared setting keys and factory methods for release-io plugins.
@@ -94,7 +95,7 @@ trait ReleaseIO {
 
   /** Version bump strategy. */
   @transient
-  val releaseIOVersionBump: TaskKey[_root_.io.release.version.Version.Bump] =
+  val releaseIOVersionBump: TaskKey[Version.Bump] =
     ReleaseIO._releaseIOVersionBump
 
   /** Task that resolves SNAPSHOT dependencies for validation. */
@@ -240,8 +241,8 @@ object ReleaseIO extends ReleaseIO {
     )
 
   @transient
-  private[release] lazy val _releaseIOVersionBump: TaskKey[_root_.io.release.version.Version.Bump] =
-    TaskKey[_root_.io.release.version.Version.Bump](
+  private[release] lazy val _releaseIOVersionBump: TaskKey[Version.Bump] =
+    TaskKey[Version.Bump](
       "releaseIOVersionBump",
       "Version bump strategy"
     )

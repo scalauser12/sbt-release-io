@@ -157,10 +157,10 @@ trait MonorepoReleaseIO {
 
   // ── Process manipulation helpers ──────────────────────────────────
 
-  /** Insert extra steps after the named step. Throws [[IllegalArgumentException]] if
+  /** Insert extra steps after the named step. Throws `IllegalArgumentException` if
     * the step name is not found.
     *
-    * Unlike the `protected` helpers in [[io.release.PluginLikeSupport]], these operate on
+    * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
     * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
     */
   def insertStepAfter(steps: Seq[MonorepoStepIO], afterStep: String)(
@@ -175,10 +175,10 @@ trait MonorepoReleaseIO {
     before ++ extra ++ after
   }
 
-  /** Insert extra steps before the named step. Throws [[IllegalArgumentException]] if
+  /** Insert extra steps before the named step. Throws `IllegalArgumentException` if
     * the step name is not found.
     *
-    * Unlike the `protected` helpers in [[io.release.PluginLikeSupport]], these operate on
+    * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
     * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
     */
   def insertStepBefore(steps: Seq[MonorepoStepIO], beforeStep: String)(

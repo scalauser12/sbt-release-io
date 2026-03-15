@@ -1,5 +1,6 @@
 import cats.effect.{IO, Resource}
 import _root_.io.release.*
+import _root_.io.release.ReleaseIO.releaseIOTagName
 import sbt.*
 
 object LateBoundTagPlugin extends ReleasePluginIOLike[Unit] {
@@ -17,7 +18,7 @@ object LateBoundTagPlugin extends ReleasePluginIOLike[Unit] {
             val extracted    = Project.extract(ctx.state)
             val updatedState = extracted.appendWithSession(
               Seq(
-                _root_.io.release.ReleaseIO.releaseIOTagName := "late-bound-runtime-tag"
+                releaseIOTagName := "late-bound-runtime-tag"
               ),
               ctx.state
             )
