@@ -206,16 +206,20 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       MonorepoReleaseSteps.resolveReleaseOrder,
       MonorepoReleaseSteps.detectOrSelectProjects,
       // 1st resource step — validate allowed projects via API
-      resourceGlobalStep[HttpClient]("validate-projects") { client => ctx =>
-        IO.blocking {
-          val allowed = client.get("/allowed-projects").split(",").toSet
-          ctx.currentProjects.map(_.name).filterNot(allowed.contains)
-        }.flatMap { invalid =>
-          if (invalid.nonEmpty)
-            IO.raiseError(new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}"))
-          else IO.pure(ctx)
-        }
-      },
+      MonorepoStepIO
+        .globalResource[HttpClient]("validate-projects")
+        .execute { client => ctx =>
+          IO.blocking {
+            val allowed = client.get("/allowed-projects").split(",").toSet
+            ctx.currentProjects.map(_.name).filterNot(allowed.contains)
+          }.flatMap { invalid =>
+            if (invalid.nonEmpty)
+              IO.raiseError(
+                new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}")
+              )
+            else IO.pure(ctx)
+          }
+        },
       MonorepoReleaseSteps.checkSnapshotDependencies,
       MonorepoReleaseSteps.inquireVersions,
       MonorepoReleaseSteps.validateVersions,
@@ -225,26 +229,30 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       MonorepoReleaseSteps.commitReleaseVersions,
       MonorepoReleaseSteps.tagReleases,
       // 2nd resource step — notify Slack after tagging
-      resourceGlobalStepAction[HttpClient]("notify-slack") { client => ctx =>
-        IO.blocking {
-          val summary = ctx.currentProjects
-            .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
-            .mkString(", ")
-          client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
-        }
-      },
+      MonorepoStepIO
+        .globalResource[HttpClient]("notify-slack")
+        .executeAction { client => ctx =>
+          IO.blocking {
+            val summary = ctx.currentProjects
+              .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
+              .mkString(", ")
+            client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
+          }
+        },
       MonorepoReleaseSteps.publishArtifacts,
       // 3rd resource step — verify published artifacts per project
-      resourcePerProjectStepAction[HttpClient]("verify-publish") { client => (ctx, project) =>
-        project.versions match {
-          case Some((releaseVer, _)) =>
-            IO.blocking {
-              client.get(s"/artifacts/${project.name}/$releaseVer")
-              ()
-            }
-          case None                  => IO.unit
-        }
-      },
+      MonorepoStepIO
+        .perProjectResource[HttpClient]("verify-publish")
+        .executeAction { client => (ctx, project) =>
+          project.versions match {
+            case Some((releaseVer, _)) =>
+              IO.blocking {
+                client.get(s"/artifacts/${project.name}/$releaseVer")
+                ()
+              }
+            case None                  => IO.unit
+          }
+        },
       MonorepoReleaseSteps.setNextVersions,
       MonorepoReleaseSteps.commitNextVersions,
       MonorepoReleaseSteps.pushChanges

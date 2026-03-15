@@ -104,6 +104,55 @@ object ReleaseStepIO {
         }
     )
 
+  // ── Builder API ──────────────────────────────────────────────────────
+
+  /** Start building a release step. */
+  def step(name: String): StepBuilder = new StepBuilder(name, _ => IO.unit, false)
+
+  /** Start building a resource-aware release step. */
+  def resourceStep[T](name: String): ResourceStepBuilder[T] =
+    new ResourceStepBuilder[T](name, _ => _ => IO.unit, false)
+
+  /** Fluent builder for release steps. */
+  final class StepBuilder private[ReleaseStepIO] (
+      private val name: String,
+      private val validateFn: ReleaseContext => IO[Unit],
+      private val crossBuild: Boolean
+  ) {
+
+    def withValidation(f: ReleaseContext => IO[Unit]): StepBuilder =
+      new StepBuilder(name, f, crossBuild)
+
+    def withCrossBuild: StepBuilder =
+      new StepBuilder(name, validateFn, true)
+
+    def execute(f: ReleaseContext => IO[ReleaseContext]): ReleaseStepIO =
+      ReleaseStepIO(name, f, validateFn, crossBuild)
+
+    def executeAction(f: ReleaseContext => IO[Unit]): ReleaseStepIO =
+      ReleaseStepIO(name, ctx => f(ctx).as(ctx), validateFn, crossBuild)
+  }
+
+  /** Fluent builder for resource-aware release steps. */
+  final class ResourceStepBuilder[T] private[ReleaseStepIO] (
+      private val name: String,
+      private val validateFn: T => ReleaseContext => IO[Unit],
+      private val crossBuild: Boolean
+  ) {
+
+    def withValidation(f: T => ReleaseContext => IO[Unit]): ResourceStepBuilder[T] =
+      new ResourceStepBuilder[T](name, f, crossBuild)
+
+    def withCrossBuild: ResourceStepBuilder[T] =
+      new ResourceStepBuilder[T](name, validateFn, true)
+
+    def execute(f: T => ReleaseContext => IO[ReleaseContext]): T => ReleaseStepIO =
+      t => ReleaseStepIO(name, f(t), validateFn(t), crossBuild)
+
+    def executeAction(f: T => ReleaseContext => IO[Unit]): T => ReleaseStepIO =
+      t => ReleaseStepIO(name, ctx => f(t)(ctx).as(ctx), validateFn(t), crossBuild)
+  }
+
   /** Compose a sequence of steps into a two-phase IO program.
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.

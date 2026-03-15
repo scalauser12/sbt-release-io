@@ -288,22 +288,24 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       ReleaseSteps.checkCleanWorkingDir,
 
       // 1st resource step — validate branch via API (raises error or succeeds)
-      resourceStepAction[HttpClient]("validate-branch") { client => ctx =>
-        IO.blocking(client.get("/allowed-branches").split(",").toSet).flatMap { allowed =>
-          ctx.vcs match {
-            case Some(vcs) =>
-              vcs.currentBranch.flatMap { branch =>
-                if (!allowed.contains(branch))
-                  IO.raiseError(
-                    new RuntimeException(s"Branch '$branch' is not allowed for release")
-                  )
-                else IO.unit
-              }
-            case None      =>
-              IO.raiseError(new RuntimeException("VCS not initialized"))
+      ReleaseStepIO
+        .resourceStep[HttpClient]("validate-branch")
+        .executeAction { client => ctx =>
+          IO.blocking(client.get("/allowed-branches").split(",").toSet).flatMap { allowed =>
+            ctx.vcs match {
+              case Some(vcs) =>
+                vcs.currentBranch.flatMap { branch =>
+                  if (!allowed.contains(branch))
+                    IO.raiseError(
+                      new RuntimeException(s"Branch '$branch' is not allowed for release")
+                    )
+                  else IO.unit
+                }
+              case None      =>
+                IO.raiseError(new RuntimeException("VCS not initialized"))
+            }
           }
-        }
-      },
+        },
 
       ReleaseSteps.checkSnapshotDependencies,
       ReleaseSteps.inquireVersions,
@@ -314,23 +316,27 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       ReleaseSteps.tagRelease,
 
       // 2nd resource step — notify Slack after tagging (side-effect only, context unchanged)
-      resourceStepAction[HttpClient]("notify-slack") { client => ctx =>
-        IO.blocking {
-          val version = ctx.releaseVersion.getOrElse("unknown")
-          client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
-        }
-      },
+      ReleaseStepIO
+        .resourceStep[HttpClient]("notify-slack")
+        .executeAction { client => ctx =>
+          IO.blocking {
+            val version = ctx.releaseVersion.getOrElse("unknown")
+            client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+          }
+        },
 
       ReleaseSteps.publishArtifacts,
 
       // 3rd resource step — verify the published artifact (side-effect only, context unchanged)
-      resourceStepAction[HttpClient]("verify-publish") { client => ctx =>
-        IO.blocking {
-          val version = ctx.releaseVersion.getOrElse("unknown")
-          client.get(s"/artifacts/$version")
-          ()
-        }
-      },
+      ReleaseStepIO
+        .resourceStep[HttpClient]("verify-publish")
+        .executeAction { client => ctx =>
+          IO.blocking {
+            val version = ctx.releaseVersion.getOrElse("unknown")
+            client.get(s"/artifacts/$version")
+            ()
+          }
+        },
 
       ReleaseSteps.setNextVersion,
       ReleaseSteps.commitNextVersion,

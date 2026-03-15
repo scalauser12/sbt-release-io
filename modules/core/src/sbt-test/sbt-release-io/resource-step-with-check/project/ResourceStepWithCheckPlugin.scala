@@ -17,24 +17,27 @@ object ResourceStepWithCheckPlugin extends ReleasePluginIOLike[java.io.File] {
 
   override protected def releaseProcess(state: State): Seq[java.io.File => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess)) :+ (
-      resourceStepWithValidation("resource-with-check")((f: java.io.File) =>
-        (ctx: ReleaseContext) =>
-          IO {
-            sbt.IO.write(
-              new java.io.File(System.getProperty("user.dir"), "action-ran"),
-              "ran"
-            )
-            ctx
-          }
-      )((f: java.io.File) =>
-        (_: ReleaseContext) =>
-          IO {
-            assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
-            sbt.IO.write(
-              new java.io.File(System.getProperty("user.dir"), "check-ran"),
-              "ran"
-            )
-          }
-      )
+      ReleaseStepIO
+        .resourceStep[java.io.File]("resource-with-check")
+        .withValidation(f =>
+          _ =>
+            IO {
+              assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
+              sbt.IO.write(
+                new java.io.File(System.getProperty("user.dir"), "check-ran"),
+                "ran"
+              )
+            }
+        )
+        .execute(f =>
+          ctx =>
+            IO {
+              sbt.IO.write(
+                new java.io.File(System.getProperty("user.dir"), "action-ran"),
+                "ran"
+              )
+              ctx
+            }
+        )
     )
 }

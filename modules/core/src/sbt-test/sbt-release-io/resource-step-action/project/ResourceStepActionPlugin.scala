@@ -17,35 +17,40 @@ object ResourceStepActionPlugin extends ReleasePluginIOLike[java.io.File] {
 
   override protected def releaseProcess(state: State): Seq[java.io.File => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess)) ++ Seq(
-      // Test resourceStepAction (execute returns IO[Unit])
-      resourceStepAction("action-step")((f: java.io.File) =>
-        (ctx: ReleaseContext) =>
-          IO {
-            assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
-            sbt.IO.write(
-              new java.io.File(System.getProperty("user.dir"), "action-ran"),
-              "ran"
-            )
-          }
-      ),
-      // Test resourceStepActionWithValidation (both return IO[Unit])
-      resourceStepActionWithValidation("action-with-validation")((f: java.io.File) =>
-        (ctx: ReleaseContext) =>
-          IO {
-            sbt.IO.write(
-              new java.io.File(System.getProperty("user.dir"), "action-validated-ran"),
-              "ran"
-            )
-          }
-      )((f: java.io.File) =>
-        (_: ReleaseContext) =>
-          IO {
-            assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
-            sbt.IO.write(
-              new java.io.File(System.getProperty("user.dir"), "validation-ran"),
-              "ran"
-            )
-          }
-      )
+      // Test builder executeAction (execute returns IO[Unit])
+      ReleaseStepIO
+        .resourceStep[java.io.File]("action-step")
+        .executeAction(f =>
+          ctx =>
+            IO {
+              assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
+              sbt.IO.write(
+                new java.io.File(System.getProperty("user.dir"), "action-ran"),
+                "ran"
+              )
+            }
+        ),
+      // Test builder withValidation + executeAction
+      ReleaseStepIO
+        .resourceStep[java.io.File]("action-with-validation")
+        .withValidation(f =>
+          _ =>
+            IO {
+              assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
+              sbt.IO.write(
+                new java.io.File(System.getProperty("user.dir"), "validation-ran"),
+                "ran"
+              )
+            }
+        )
+        .executeAction(f =>
+          ctx =>
+            IO {
+              sbt.IO.write(
+                new java.io.File(System.getProperty("user.dir"), "action-validated-ran"),
+                "ran"
+              )
+            }
+        )
     )
 }
