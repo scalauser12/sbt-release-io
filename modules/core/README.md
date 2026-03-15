@@ -26,8 +26,6 @@ The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0
 
 ## Usage
 
-### Basic Release
-
 Run the release process:
 
 ```bash
@@ -53,7 +51,27 @@ sbt "releaseIO release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 sbt "releaseIO with-defaults skip-tests release-version 1.0.0"
 ```
 
-### Configuration
+## Default Release Steps
+
+The default release process includes:
+
+1. **initialize-vcs** - Detect and initialize VCS (Git)
+2. **check-clean-working-dir** - Verify no uncommitted changes
+3. **check-snapshot-dependencies** - Verify no snapshot dependencies
+4. **inquire-versions** - Determine release and next versions
+5. **run-clean** - Clean project build outputs (`clean` on sbt 1, build-wide `cleanFull` on sbt 2)
+6. **run-tests** - Run tests (unless `skip-tests`)
+7. **set-release-version** - Update version.sbt to release version
+8. **commit-release-version** - Commit version change
+9. **tag-release** - Create Git tag
+10. **publish-artifacts** - Publish to repository
+11. **set-next-version** - Update version.sbt to next snapshot
+12. **commit-next-version** - Commit version change
+13. **push-changes** - Push commits and tags to remote
+
+These names are the stable built-in insertion points for `insertAfter` and `insertBefore`.
+
+## Configuration
 
 In `build.sbt`:
 
@@ -106,7 +124,7 @@ releaseIOVersionFileContents := { (_, version) =>
 }
 ```
 
-### Custom Version Formats
+## Custom Version Formats
 
 The default reader and writer assume a `version.sbt` file containing `[ThisBuild /] version := "x.y.z"`. To use a different version file format — for example, in a non-Scala project or a polyglot monorepo — override three settings together:
 
@@ -118,7 +136,7 @@ The default reader and writer assume a `version.sbt` file containing `[ThisBuild
 
 The writer receives the current file as its first argument, so it can read existing content and replace only the version line while preserving other fields.
 
-#### Example: Java `.properties` file
+### Example: Java `.properties` file
 
 Given a `version.properties` file:
 
@@ -166,7 +184,7 @@ The same pattern works for any text-based format:
 - **JSON** — parse `{"version": "x.y.z"}` with a JSON library and produce updated JSON
 - **YAML** — match `version: x.y.z` with a regex or YAML parser
 
-### Custom Release Steps
+## Custom Steps
 
 Create custom release steps using the IO-based API:
 
@@ -247,11 +265,11 @@ releaseIOProcess := Seq(
 
 These are also available directly on `ReleaseStepIO` as `fromTask`, `fromInputTask`, `fromTaskAggregated`, `fromCommand`, `fromCommandAndRemaining`, and `pure` (for non-effectful context transformations).
 
-### Custom Plugins
+## Custom Plugins
 
 If your release process needs a shared resource — an HTTP client, a database connection, a temporary directory — you can create a custom plugin that extends `ReleasePluginIOLike[T]`. The resource is acquired once before all steps run and released after they complete (or on failure), following the cats-effect `Resource` pattern.
 
-#### Creating the plugin
+### Creating the plugin
 
 Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sbt discovers `AutoPlugin` classes during meta-build compilation.
 
@@ -298,7 +316,7 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
 }
 ```
 
-#### Configuring in build.sbt
+### Configuring in build.sbt
 
 Enable the plugin and configure the release process as usual:
 
@@ -322,7 +340,7 @@ sbt "releaseWithClient with-defaults release-version 1.0.0 next-version 1.1.0-SN
 
 The command accepts the same arguments as `releaseIO` (`with-defaults`, `skip-tests`, `cross`, `release-version`, `next-version`, `default-tag-exists-answer`).
 
-#### Resource-aware steps (builder API)
+### Resource-aware steps (builder API)
 
 Use the `ReleaseStepIO.resourceStep[T]` builder to create steps that receive an acquired resource:
 
@@ -354,7 +372,7 @@ override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseSt
   liftSteps(Project.extract(state).get(releaseIOProcess)) ++ Seq(notifySlack, verifyToken)
 ```
 
-#### Inserting steps at specific positions
+### Inserting steps at specific positions
 
 `liftSteps` appends steps to the end of the process. To insert at a specific position, use `insertAfter` or `insertBefore`:
 
@@ -375,7 +393,7 @@ the later built-in execute step will read those live settings when it runs. This
 steps such as version resolution and tagging. It does not change the two-phase model: built-in
 `validate` functions still run from the initial validation-phase state.
 
-#### Fully custom release process
+### Fully custom release process
 
 Override `releaseProcess` directly to build the step sequence from scratch instead of
 appending to the defaults. Plain steps (from `ReleaseSteps`) and resource-aware steps
@@ -450,7 +468,7 @@ This bypasses the `releaseIOProcess` setting entirely — the step list is hard-
 in the plugin. Use `liftSteps`, `insertAfter`, or `insertBefore` (shown above)
 if you want to keep the setting-based defaults and only add extra steps.
 
-#### Key design points
+### Key design points
 
 | Concern | Approach |
 |---------|----------|
@@ -459,7 +477,7 @@ if you want to keep the setting-based defaults and only add extra steps.
 | **Setting keys** | All `releaseIO*` setting keys are singletons — they work regardless of which plugin exports them |
 | **Do not add autoImport** | Do not define `object autoImport` in custom plugins — it causes ambiguous references with `ReleasePluginIO` (e.g. `reference to releaseIOProcess is ambiguous`) |
 
-### Using Typelevel Libraries in Release Steps
+## Using Typelevel Libraries in Release Steps
 
 Since release steps run in `IO`, you can use any library from the Typelevel / FP ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
 
@@ -529,7 +547,7 @@ releaseIOProcess := ReleaseSteps.defaults.flatMap {
 }
 ```
 
-### Settings Reference
+## Settings Reference
 
 All release settings use the `releaseIO` prefix:
 
@@ -558,7 +576,7 @@ All release settings use the `releaseIO` prefix:
 | `releaseIOSnapshotDependencies` | `Seq[ModuleID]` | auto-resolved | SNAPSHOT deps for validation |
 | `releaseIORuntimeVersion` | `String` | scope-aware `version` | Reads `ThisBuild / version` or `version` based on `releaseIOUseGlobalVersion` |
 
-#### Version Bump Types
+### Version Bump Types
 
 | Bump | Example | Description |
 |------|---------|-------------|
@@ -568,26 +586,6 @@ All release settings use the `releaseIO` prefix:
 | `Nano` | 1.0.0.0 → 1.0.0.1 | Bump nano version |
 | `Next` | 1.0-RC1 → 1.0-RC2 | Increment next component including prerelease **(default)** |
 | `NextStable` | 1.0-RC1 → 1.0 | Increment next component, remove prerelease qualifier |
-
-## Default Release Steps
-
-The default release process includes:
-
-1. **initialize-vcs** - Detect and initialize VCS (Git)
-2. **check-clean-working-dir** - Verify no uncommitted changes
-3. **check-snapshot-dependencies** - Verify no snapshot dependencies
-4. **inquire-versions** - Determine release and next versions
-5. **run-clean** - Clean project build outputs (`clean` on sbt 1, build-wide `cleanFull` on sbt 2)
-6. **run-tests** - Run tests (unless `skip-tests`)
-7. **set-release-version** - Update version.sbt to release version
-8. **commit-release-version** - Commit version change
-9. **tag-release** - Create Git tag
-10. **publish-artifacts** - Publish to repository
-11. **set-next-version** - Update version.sbt to next snapshot
-12. **commit-next-version** - Commit version change
-13. **push-changes** - Push commits and tags to remote
-
-These names are the stable built-in insertion points for `insertAfter` and `insertBefore`.
 
 ## Recovery and Rollback
 
