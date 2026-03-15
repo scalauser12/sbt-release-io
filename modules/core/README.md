@@ -195,20 +195,28 @@ val validateBranch = ReleaseStepIO.io("validate-branch") { ctx =>
   }
 }
 
-// ReleaseContext public API:
-//   ctx.state                          — current sbt State
-//   ctx.releaseVersion                 — Option[String]
-//   ctx.nextVersion                    — Option[String]
-//   ctx.vcs                            — Option[Vcs]
-//   ctx.withState(s)                   — update sbt State
-//   ctx.withVersions(release, next)    — set version pair
-//   ctx.withVcs(v)                     — set VCS adapter
-//   ctx.withMetadata(key, value)       — store typed metadata (key: AttributeKey[A])
-//   ctx.metadata(key)                  — retrieve typed metadata (key: AttributeKey[A])
-//   ctx.withoutMetadata(key)           — remove a metadata entry (key: AttributeKey[A])
-//   ctx.fail / ctx.failWith(cause)     — mark context as failed
-
 ```
+
+**`ReleaseContext`** — immutable context threaded through all steps:
+
+| Field / Method | Type | Description |
+|----------------|------|-------------|
+| `state` | `State` | Current sbt state |
+| `versions` | `Option[(String, String)]` | `(releaseVersion, nextVersion)`, set by `inquire-versions` |
+| `releaseVersion` | `Option[String]` | Shorthand for `versions.map(_._1)` |
+| `nextVersion` | `Option[String]` | Shorthand for `versions.map(_._2)` |
+| `vcs` | `Option[Vcs]` | Git adapter, set by `initialize-vcs` |
+| `skipTests` / `skipPublish` / `interactive` | `Boolean` | Execution flags |
+| `failed` | `Boolean` | Whether the release has failed |
+| `failureCause` | `Option[Throwable]` | Throwable captured on failure |
+| `withState(s)` | `ReleaseContext` | Replace sbt state |
+| `withVersions(release, next)` | `ReleaseContext` | Set version pair |
+| `withVcs(v)` | `ReleaseContext` | Set or replace VCS adapter |
+| `metadata[A](key)` | `Option[A]` | Read typed inter-step metadata |
+| `withMetadata[A](key, value)` | `ReleaseContext` | Store typed inter-step metadata |
+| `withoutMetadata[A](key)` | `ReleaseContext` | Remove a metadata entry |
+| `fail` | `ReleaseContext` | Mark release as failed |
+| `failWith(cause)` | `ReleaseContext` | Mark release as failed with a cause |
 
 ### Creating Steps from sbt Tasks and Commands
 
