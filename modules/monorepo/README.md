@@ -98,6 +98,127 @@ sbt "releaseIOMonorepo cross with-defaults"
 sbt "releaseIOMonorepo skip-tests with-defaults"
 ```
 
+## First Release Walkthrough
+
+This walkthrough sets up a two-project monorepo from scratch and runs the first release. It mirrors the `simple-monorepo` scripted test.
+
+### Directory structure
+
+```
+my-monorepo/
+├── build.sbt
+├── project/
+│   └── plugins.sbt
+├── core/
+│   └── version.sbt
+└── api/
+    └── version.sbt
+```
+
+### 1. Add the plugin
+
+`project/plugins.sbt`:
+
+```scala
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.4.2")
+```
+
+### 2. Configure the build
+
+`build.sbt`:
+
+```scala
+lazy val core = (project in file("core"))
+  .settings(name := "core", scalaVersion := "2.12.18")
+
+lazy val api = (project in file("api"))
+  .dependsOn(core)
+  .settings(name := "api", scalaVersion := "2.12.18")
+
+lazy val root = (project in file("."))
+  .aggregate(core, api)
+  .enablePlugins(MonorepoReleasePlugin)
+  .settings(
+    // Filter out push and publish during initial setup — re-enable when ready
+    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
+      step.name == "push-changes" || step.name == "publish-artifacts"
+    }
+  )
+```
+
+### 3. Create version files
+
+`core/version.sbt` and `api/version.sbt`:
+
+```scala
+version := "0.1.0-SNAPSHOT"
+```
+
+### 4. Initialise git and make the first commit
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+```
+
+### 5. Run the first release
+
+```bash
+sbt "releaseIOMonorepo with-defaults"
+```
+
+**What the plugin does:**
+
+1. `initialize-vcs` — detects the git repository.
+2. `check-clean-working-dir` — verifies no uncommitted changes.
+3. `resolve-release-order` — sorts projects: `core` first, then `api` (because `api` depends on `core`).
+4. `detect-or-select-projects` — finds no prior release tags, so **both projects are treated as changed** (first release).
+5. `inquire-versions` — computes release version `0.1.0` and next version `0.2.0-SNAPSHOT` for each project.
+6. `set-release-version` — writes `version := "0.1.0"` to each `version.sbt`.
+7. `commit-release-versions` — creates a single commit staging all version files.
+8. `tag-releases` — creates `core/v0.1.0` and `api/v0.1.0`.
+9. `set-next-version` — writes `version := "0.2.0-SNAPSHOT"` to each `version.sbt`.
+10. `commit-next-versions` — creates a single commit staging all version files.
+11. `push-changes` — filtered out in this walkthrough; re-enable once confident.
+
+After the release:
+
+```bash
+git log --oneline     # 3 commits: Initial, release versions, next versions
+git tag               # core/v0.1.0  api/v0.1.0
+cat core/version.sbt  # version := "0.2.0-SNAPSHOT"
+```
+
+> **Note:** The first release triggers all projects as changed because change detection looks for a prior release tag and finds none. On subsequent runs, only projects with file changes since their last tag are released. To force all projects regardless, use the `all-changed` flag.
+
+## Dry Run
+
+Filter out the steps that push commits and publish artifacts to rehearse the release process without side effects.
+
+```scala
+// build.sbt — temporary dry-run configuration
+releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
+  step.name == "push-changes" || step.name == "publish-artifacts"
+}
+```
+
+Then run normally:
+
+```bash
+sbt "releaseIOMonorepo with-defaults"
+```
+
+The release creates version commits and tags locally without touching the remote or any artifact repository. Inspect the result:
+
+```bash
+git log --oneline
+git tag
+cat core/version.sbt
+```
+
+To undo the dry run, see [Recovery and Rollback](#recovery-and-rollback).
+
 ## Default Release Steps
 
 | # | Step | Type | Description |
@@ -126,6 +247,12 @@ execute steps resolve project order, project selection, version-file handling, a
 current `State` when they run. Custom steps now use the public `validate`/`execute` model directly.
 
 ## Configuration
+
+Settings prefixed `releaseIO` (no `Monorepo`) come from the **core plugin** (`sbt-release-io`) and are
+available whenever that plugin is on the classpath. Settings prefixed `releaseIOMonorepo` come from
+**this plugin**. Several monorepo settings shadow their core counterpart with a different default — for
+example `releaseIOMonorepoVersionFile` resolves per-project files, while `releaseIOVersionFile` is a
+single root-project file. Always configure the `releaseIOMonorepo*` variant when using the monorepo plugin.
 
 ### Core settings
 
@@ -412,6 +539,59 @@ val crossTest = perProjectStep("cross-test", enableCrossBuild = true) { (ctx, pr
 }
 ```
 
+### Sharing data between steps
+
+Use `ctx.updateProject(ref)(_.copy(...))` to update a single project's metadata from within a step.
+This is the per-project complement to `ctx.withMetadata` / `ctx.metadata`, which store global (non-project-scoped) values.
+
+```scala
+// Global step: after inquire-versions has run, log every project's planned release version
+val logPlannedVersions = globalStepAction("log-planned-versions") { ctx =>
+  IO {
+    ctx.currentProjects.foreach { p =>
+      p.releaseVersion match {
+        case Some(v) => ctx.state.log.info(s"[release] ${p.name} → $v")
+        case None    => ctx.state.log.warn(s"[release] ${p.name} — no release version set yet")
+      }
+    }
+  }
+}
+
+// Global step: forcibly pin the release version for one project
+val pinCoreVersion = globalStep("pin-core-version") { ctx =>
+  IO.pure(
+    ctx.projects.find(_.name == "core").fold(ctx) { core =>
+      ctx.updateProject(core.ref)(
+        _.copy(versions = Some(("2.0.0", "2.1.0-SNAPSHOT")))
+      )
+    }
+  )
+}
+
+// Global step: bulk-transform all projects using foldLeft
+val transformAll = globalStep("transform-all") { ctx =>
+  IO.pure(
+    ctx.currentProjects.foldLeft(ctx) { (c, p) =>
+      c.updateProject(p.ref)(_.copy(/* your transformation here */))
+    }
+  )
+}
+```
+
+For global (non-project-scoped) data shared across steps, use typed metadata:
+
+```scala
+private val myKey = AttributeKey[String]("myKey")
+
+val writeStep = globalStep("write-metadata") { ctx =>
+  IO.pure(ctx.withMetadata(myKey, "hello"))
+}
+
+val readStep = globalStepAction("read-metadata") { ctx =>
+  IO(ctx.state.log.info(ctx.metadata[String](myKey).getOrElse("(not set)")))
+}
+```
+
 ### Customizing the release process
 
 ```scala
@@ -619,6 +799,64 @@ Run with:
 sbt "myRelease with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
+## Common Pitfalls
+
+### `import sbt.*` shadows the `io` package in `project/*.scala`
+
+In `project/*.scala` files, `import sbt.*` brings in `sbt.io`, shadowing the top-level `io` package.
+Custom plugin imports like `import io.release.monorepo.*` fail with:
+
+```
+[error] not found: value io
+[error]   import io.release.monorepo.*
+```
+
+**Fix:** prefix `io.release` and `cats.effect` with `_root_`:
+
+```scala
+// project/MyReleasePlugin.scala
+import sbt.*
+import _root_.io.release.monorepo.*
+import _root_.io.release.monorepo.MonorepoReleaseIO.*
+import _root_.cats.effect.{IO, Resource}
+```
+
+This only applies in `project/*.scala`. In `build.sbt`, unqualified `io.release` imports work correctly.
+
+### Duplicate `autoImport` causes ambiguous reference errors
+
+If a custom plugin defines `object autoImport`, sbt sees two plugins exporting the same keys and
+any reference to `releaseIOMonorepoProcess` (or any other shared key) fails with:
+
+```
+[error] reference to releaseIOMonorepoProcess is ambiguous
+```
+
+**Fix:** do not define `object autoImport` in custom plugins that extend `MonorepoReleasePluginLike`.
+The keys exported by `MonorepoReleasePlugin.autoImport` are already in scope everywhere.
+
+### Custom plugin not found at build time
+
+Plugins that extend `MonorepoReleasePluginLike[T]` must be in `project/*.scala`. sbt only discovers
+`AutoPlugin` subclasses during meta-build compilation. A plugin class placed in `build.sbt` will not
+be found.
+
+### First release shows no projects changed
+
+On a brand-new repo with no prior release tags, change detection marks all projects as changed — this
+is expected. If tags exist but under a different scheme, some projects may appear unchanged. Use
+`all-changed` to bypass detection and release everything:
+
+```bash
+sbt "releaseIOMonorepo all-changed with-defaults"
+```
+
+Or disable change detection permanently:
+
+```scala
+releaseIOMonorepoDetectChanges := false
+```
+
 ## Execution Model
 
 ### Validate / Execute Model
@@ -661,6 +899,62 @@ A **Global** step failure immediately marks the context as failed and skips all 
 ### Topological ordering
 
 Projects are sorted by inter-project dependencies using Kahn's algorithm. Dependencies are always released before dependents.
+
+## Recovery and Rollback
+
+### What each release phase modifies
+
+| Step | Modifies |
+|------|----------|
+| `set-release-version` | Per-project `version.sbt` files (working tree) |
+| `commit-release-versions` | Local git history — one commit |
+| `tag-releases` | Local git tags |
+| `publish-artifacts` | Remote artifact repository |
+| `set-next-version` | Per-project `version.sbt` files (working tree) |
+| `commit-next-versions` | Local git history — one commit |
+| `push-changes` | Remote git branch and tags |
+
+### Checking current state
+
+```bash
+git log --oneline -5   # see what commits the release made
+git tag                # see what tags were created
+cat core/version.sbt   # inspect a version file
+```
+
+### Rollback: push has not happened
+
+```bash
+# Delete tags created by tag-releases
+git tag -d core/v0.1.0
+git tag -d api/v0.1.0
+
+# Undo commits (2 = commit-release-versions + commit-next-versions)
+git reset --hard HEAD~2
+```
+
+If the release failed before `commit-next-versions` (only one commit was made):
+
+```bash
+git tag -d core/v0.1.0
+git tag -d api/v0.1.0
+git reset --hard HEAD~1
+```
+
+### Rollback: push has already happened
+
+```bash
+# Delete remote tags
+git push origin :refs/tags/core/v0.1.0
+git push origin :refs/tags/api/v0.1.0
+
+# Safe revert (keeps history)
+git revert HEAD     # revert commit-next-versions
+git revert HEAD~1   # revert commit-release-versions
+git push origin main
+```
+
+> **Note:** Published artifacts cannot be retracted from most repositories. Publish a corrected patch release instead.
 
 ## Migrating Custom Steps
 
