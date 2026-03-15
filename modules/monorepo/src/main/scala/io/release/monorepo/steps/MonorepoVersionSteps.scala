@@ -21,7 +21,7 @@ private[monorepo] object MonorepoVersionSteps {
   private[steps] final case class ResolvedProjectVersion(
       versionFile: File,
       readVersion: File => IO[String],
-      writeVersion: (File, String) => IO[String],
+      versionFileContents: (File, String) => IO[String],
       useGlobalVersion: Boolean
   )
 
@@ -35,7 +35,7 @@ private[monorepo] object MonorepoVersionSteps {
     ResolvedProjectVersion(
       versionFile = MonorepoVersionFiles.resolve(runtime, ref),
       readVersion = runtime.readVersion,
-      writeVersion = runtime.writeVersion,
+      versionFileContents = runtime.versionFileContents,
       useGlobalVersion = runtime.useGlobalVersion
     )
 
@@ -47,11 +47,11 @@ private[monorepo] object MonorepoVersionSteps {
 
   private def sessionSettings(runtime: MonorepoRuntime): Seq[sbt.Setting[?]] =
     Seq(
-      MR.releaseIOMonorepoVersionFile      :=
+      MR.releaseIOMonorepoVersionFile         :=
         runtime.extracted.get(MR.releaseIOMonorepoVersionFile),
-      MR.releaseIOMonorepoReadVersion      := runtime.readVersion,
-      MR.releaseIOMonorepoWriteVersion     := runtime.writeVersion,
-      MR.releaseIOMonorepoUseGlobalVersion := runtime.useGlobalVersion
+      MR.releaseIOMonorepoReadVersion         := runtime.readVersion,
+      MR.releaseIOMonorepoVersionFileContents := runtime.versionFileContents,
+      MR.releaseIOMonorepoUseGlobalVersion    := runtime.useGlobalVersion
     )
 
   /** Inquire release and next versions for each project.
@@ -243,7 +243,7 @@ private[monorepo] object MonorepoVersionSteps {
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
         else
           for {
-            contents <- versionInputs.writeVersion(versionFile, ver)
+            contents <- versionInputs.versionFileContents(versionFile, ver)
             _        <- IO.blocking {
                           Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
                         }

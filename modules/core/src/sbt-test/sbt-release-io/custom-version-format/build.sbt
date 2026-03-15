@@ -23,7 +23,7 @@ releaseIOReadVersion := { (f: File) =>
 }
 
 // Custom writer: read existing file, replace only the app.version line, preserve everything else
-releaseIOWriteVersion := { (f: File, ver: String) =>
+releaseIOVersionFileContents := { (f: File, ver: String) =>
   _root_.cats.effect.IO.blocking(sbt.IO.read(f)).map { contents =>
     contents.linesIterator
       .map {

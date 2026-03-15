@@ -17,7 +17,7 @@ private[release] object VersionSteps {
   private[steps] final case class ResolvedSettings(
       versionFile: File,
       readVersion: File => IO[String],
-      writeVersion: (File, String) => IO[String],
+      versionFileContents: (File, String) => IO[String],
       useGlobalVersion: Boolean
   )
 
@@ -25,7 +25,7 @@ private[release] object VersionSteps {
     ResolvedSettings(
       versionFile = SbtRuntime.getSetting(state, releaseIOVersionFile),
       readVersion = SbtRuntime.getSetting(state, releaseIOReadVersion),
-      writeVersion = SbtRuntime.getSetting(state, releaseIOWriteVersion),
+      versionFileContents = SbtRuntime.getSetting(state, releaseIOVersionFileContents),
       useGlobalVersion = SbtRuntime.getSetting(state, releaseIOUseGlobalVersion)
     )
 
@@ -33,10 +33,10 @@ private[release] object VersionSteps {
     val settings = resolveCurrentSettings(state)
 
     Seq(
-      releaseIOVersionFile      := settings.versionFile,
-      releaseIOReadVersion      := settings.readVersion,
-      releaseIOWriteVersion     := settings.writeVersion,
-      releaseIOUseGlobalVersion := settings.useGlobalVersion
+      releaseIOVersionFile         := settings.versionFile,
+      releaseIOReadVersion         := settings.readVersion,
+      releaseIOVersionFileContents := settings.versionFileContents,
+      releaseIOUseGlobalVersion    := settings.useGlobalVersion
     )
   }
 
@@ -50,7 +50,7 @@ private[release] object VersionSteps {
     VersionPlan(
       versionFile = settings.versionFile,
       readVersion = settings.readVersion,
-      writeVersion = settings.writeVersion,
+      versionFileContents = settings.versionFileContents,
       releaseVersionOverride = plan.flatMap(_.releaseVersionOverride),
       nextVersionOverride = plan.flatMap(_.nextVersionOverride),
       useGlobalVersion = settings.useGlobalVersion
@@ -247,7 +247,7 @@ private[release] object VersionSteps {
   private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = {
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx.state))
-      contents    <- versionPlan.writeVersion(versionPlan.versionFile, ver)
+      contents    <- versionPlan.versionFileContents(versionPlan.versionFile, ver)
       _           <- IO.blocking {
                        java.nio.file.Files
                          .write(versionPlan.versionFile.toPath, contents.getBytes("UTF-8"))

@@ -50,7 +50,7 @@ lazy val root = (project in file("."))
     },
 
     // Custom writer: read existing file, replace only the app.version line, preserve everything else
-    releaseIOMonorepoWriteVersion := { (f: File, ver: String) =>
+    releaseIOMonorepoVersionFileContents := { (f: File, ver: String) =>
       _root_.cats.effect.IO.blocking(sbt.IO.read(f)).map { contents =>
         contents.linesIterator
           .map {

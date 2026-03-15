@@ -7,7 +7,7 @@ import sbt.{internal as _, *}
 private[release] final case class VersionPlan(
     versionFile: File,
     readVersion: File => IO[String],
-    writeVersion: (File, String) => IO[String],
+    versionFileContents: (File, String) => IO[String],
     releaseVersionOverride: Option[String],
     nextVersionOverride: Option[String],
     useGlobalVersion: Boolean

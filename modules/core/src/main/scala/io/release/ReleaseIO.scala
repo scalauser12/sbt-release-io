@@ -42,8 +42,8 @@ trait ReleaseIO {
     * Receives `(versionFile, newVersion)` and returns `IO[newFileContents]`.
     * The file parameter allows reading existing content for partial updates.
     */
-  val releaseIOWriteVersion: SettingKey[(File, String) => IO[String]] =
-    ReleaseIO._releaseIOWriteVersion
+  val releaseIOVersionFileContents: SettingKey[(File, String) => IO[String]] =
+    ReleaseIO._releaseIOVersionFileContents
 
   // ── Forked sbt-release keys ─────────────────────────────────────────────
 
@@ -223,9 +223,10 @@ object ReleaseIO extends ReleaseIO {
       "Function to read the current version from the version file"
     )
 
-  private[release] lazy val _releaseIOWriteVersion: SettingKey[(File, String) => IO[String]] =
+  private[release] lazy val _releaseIOVersionFileContents
+      : SettingKey[(File, String) => IO[String]] =
     SettingKey[(File, String) => IO[String]](
-      "releaseIOWriteVersion",
+      "releaseIOVersionFileContents",
       "Function that produces version file contents: (file, version) => IO[contents]"
     )
 

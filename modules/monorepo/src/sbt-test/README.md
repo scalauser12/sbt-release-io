@@ -90,7 +90,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Verifies tag annotation mentions all released projects
 
 ### custom-version-format
-- Tests `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoWriteVersion`
+- Tests `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoVersionFileContents`
 - Uses `.properties` files instead of default `version.sbt` format
 - Uses the state-aware `releaseIOMonorepoVersionFile` resolver signature
 - Verifies custom format preserved in working directory, git tags, and that `app.name=` lines are not clobbered
@@ -127,7 +127,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - All projects share a single global `version.sbt` with `ThisBuild / version`
 
 ### global-version-custom-write
-- Custom `releaseIOMonorepoReadVersion` and `releaseIOMonorepoWriteVersion` with `releaseIOMonorepoUseGlobalVersion := true`
+- Custom `releaseIOMonorepoReadVersion` and `releaseIOMonorepoVersionFileContents` with `releaseIOMonorepoUseGlobalVersion := true`
 - Uses `.properties` file format with a shared root-level version file
 - Verifies properties format preserved (`app.name=` not clobbered) and correct versions in tags
 
@@ -182,7 +182,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Verifies only the late-resolved subset of projects (core only) is released
 
 ### late-bound-version-settings
-- Late-bound `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoWriteVersion` via a custom plugin
+- Late-bound `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoVersionFileContents` via a custom plugin
 - Uses `.properties` format resolved at release time; verifies the original `version.sbt` stays unchanged
 
 ### missing-publishto

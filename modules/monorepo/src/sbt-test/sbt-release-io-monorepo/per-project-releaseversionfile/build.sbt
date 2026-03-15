@@ -57,7 +57,7 @@ lazy val root = (project in file("."))
       }
     },
 
-    releaseIOMonorepoWriteVersion := { (f: File, ver: String) =>
+    releaseIOMonorepoVersionFileContents := { (f: File, ver: String) =>
       if (f.getName == "version.properties")
         _root_.cats.effect.IO.blocking(sbt.IO.read(f)).map { contents =>
           contents.linesIterator

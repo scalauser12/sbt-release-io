@@ -20,13 +20,13 @@ object LateBoundMonorepoVersionPlugin extends MonorepoReleasePluginLike[Unit] {
               val extracted    = Project.extract(ctx.state)
               val updatedState = extracted.appendWithSession(
                 Seq(
-                  releaseIOMonorepoVersionFile  := { (ref: ProjectRef, state: State) =>
+                  releaseIOMonorepoVersionFile         := { (ref: ProjectRef, state: State) =>
                     Project.extract(state).get(ref / sbt.Keys.baseDirectory) / "version.properties"
                   },
-                  releaseIOMonorepoReadVersion  := { file =>
+                  releaseIOMonorepoReadVersion         := { file =>
                     IO.blocking(sbt.IO.read(file).trim)
                   },
-                  releaseIOMonorepoWriteVersion := { (_, version) =>
+                  releaseIOMonorepoVersionFileContents := { (_, version) =>
                     IO.pure(version + "\n")
                   }
                 ),

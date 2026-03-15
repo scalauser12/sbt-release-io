@@ -78,6 +78,7 @@ trait MonorepoReleasePluginLike[T]
     case class NextVersion(project: String, version: String)    extends MonorepoArg
     case class GlobalReleaseVersion(version: String)            extends MonorepoArg
     case class GlobalNextVersion(version: String)               extends MonorepoArg
+    case class VersionFile(path: String)                        extends MonorepoArg
   }
 
   // ── Parser ──────────────────────────────────────────────────────────
@@ -108,12 +109,14 @@ trait MonorepoReleasePluginLike[T]
       GlobalReleaseVersion.apply
     )
     val nextVer                          = versionParser("next-version", NextVersion.apply, GlobalNextVersion.apply)
+    val versionFile: Parser[MonorepoArg] =
+      (token("version-file") ~> Space ~> token(NotSpace, "<path>")).map(VersionFile.apply)
     val projectName: Parser[MonorepoArg] =
       token(NotSpace, "<project>").map(SelectProject(_))
 
     // projectName must be last — it's the catch-all
     val arg =
-      withDefaults | skipTests | crossBuild | allChanged | releaseVer | nextVer | projectName
+      withDefaults | skipTests | crossBuild | allChanged | releaseVer | nextVer | versionFile | projectName
     (Space ~> arg).*
   }
 
@@ -201,10 +204,43 @@ trait MonorepoReleasePluginLike[T]
     if (flags.skipPublish) state.log.info("[release-io-monorepo] Publish will be skipped")
   }
 
+  // ── Version file expansion ──────────────────────────────────────────
+
+  private def expandVersionFileArgs(args: Seq[MonorepoArg]): Seq[MonorepoArg] =
+    args.collectFirst { case MonorepoArg.VersionFile(path) => path } match {
+      case None       => args
+      case Some(path) =>
+        val f                  = new java.io.File(path)
+        if (!f.exists())
+          throw new sbt.MessageOnlyException(
+            s"[release-io-monorepo] version-file not found: $path"
+          )
+        val props              = new java.util.Properties()
+        val in                 = new java.io.FileInputStream(f)
+        try props.load(in)
+        finally in.close()
+        import scala.collection.JavaConverters._
+        val cliReleaseProjects = args.collect { case MonorepoArg.ReleaseVersion(p, _) => p }.toSet
+        val cliNextProjects    = args.collect { case MonorepoArg.NextVersion(p, _) => p }.toSet
+        val fileArgs           = props.stringPropertyNames().asScala.toSeq.flatMap { key =>
+          val v = props.getProperty(key)
+          if (key.endsWith(".next")) {
+            val proj = key.stripSuffix(".next")
+            if (cliNextProjects.contains(proj)) Seq.empty
+            else Seq(MonorepoArg.NextVersion(proj, v))
+          } else {
+            if (cliReleaseProjects.contains(key)) Seq.empty
+            else Seq(MonorepoArg.ReleaseVersion(key, v))
+          }
+        }
+        args.filterNot(_.isInstanceOf[MonorepoArg.VersionFile]) ++ fileArgs
+    }
+
   // ── Release execution ───────────────────────────────────────────────
 
-  protected def doMonorepoRelease(state: State, args: Seq[MonorepoArg]): State =
+  protected def doMonorepoRelease(state: State, rawArgs: Seq[MonorepoArg]): State =
     try {
+      val args      = expandVersionFileArgs(rawArgs)
       val extracted = Project.extract(state)
       val flags     = parseFlags(args, extracted)
 

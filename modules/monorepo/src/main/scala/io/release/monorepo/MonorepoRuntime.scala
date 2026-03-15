@@ -9,7 +9,7 @@ private[monorepo] final case class MonorepoRuntime(
     extracted: Extracted,
     useGlobalVersion: Boolean,
     readVersion: File => IO[String],
-    writeVersion: (File, String) => IO[String]
+    versionFileContents: (File, String) => IO[String]
 )
 
 private[monorepo] object MonorepoRuntime {
@@ -23,6 +23,6 @@ private[monorepo] object MonorepoRuntime {
       extracted = extracted,
       useGlobalVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion),
       readVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoReadVersion),
-      writeVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoWriteVersion)
+      versionFileContents = extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersionFileContents)
     )
 }

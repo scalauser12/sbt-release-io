@@ -57,6 +57,100 @@ class MonorepoStepDefSpec extends Specification {
     }
   }
 
+  "MonorepoStepIO builder API" should {
+
+    "MonorepoStepIO.global creates a Global step via execute" in {
+      val step = MonorepoStepIO
+        .global("my-global")
+        .execute(ctx => IO.pure(ctx))
+
+      (step.name must_== "my-global") and
+        (step must beAnInstanceOf[MonorepoStepIO.Global])
+    }
+
+    "MonorepoStepIO.perProject creates a PerProject step via execute" in {
+      val step = MonorepoStepIO
+        .perProject("my-pp")
+        .execute((ctx, _) => IO.pure(ctx))
+
+      (step.name must_== "my-pp") and
+        (step must beAnInstanceOf[MonorepoStepIO.PerProject])
+    }
+
+    "withCrossBuild sets enableCrossBuild" in {
+      val step = MonorepoStepIO
+        .perProject("cross-pp")
+        .withCrossBuild
+        .execute((ctx, _) => IO.pure(ctx))
+
+      step.asInstanceOf[MonorepoStepIO.PerProject].enableCrossBuild must beTrue
+    }
+
+    "withValidation wires validation function on Global" in {
+      val step = MonorepoStepIO
+        .global("validated")
+        .withValidation(_ => IO.unit)
+        .execute(ctx => IO.pure(ctx))
+
+      step must beAnInstanceOf[MonorepoStepIO.Global]
+    }
+
+    "withValidation wires validation function on PerProject" in {
+      val step = MonorepoStepIO
+        .perProject("validated-pp")
+        .withValidation((_, _) => IO.unit)
+        .execute((ctx, _) => IO.pure(ctx))
+
+      step must beAnInstanceOf[MonorepoStepIO.PerProject]
+    }
+
+    "executeAction wraps IO[Unit] correctly for Global" in {
+      val step = MonorepoStepIO
+        .global("action-global")
+        .executeAction(_ => IO.unit)
+
+      step must beAnInstanceOf[MonorepoStepIO.Global]
+    }
+
+    "executeAction wraps IO[Unit] correctly for PerProject" in {
+      val step = MonorepoStepIO
+        .perProject("action-pp")
+        .executeAction((_, _) => IO.unit)
+
+      step must beAnInstanceOf[MonorepoStepIO.PerProject]
+    }
+
+    "withSelectionBoundary sets the flag" in {
+      val step = MonorepoStepIO
+        .global("boundary")
+        .withSelectionBoundary
+        .execute(ctx => IO.pure(ctx))
+
+      step.asInstanceOf[MonorepoStepIO.Global].isSelectionBoundary must beTrue
+    }
+
+    "globalResource produces T => MonorepoStepIO" in {
+      val stepFn: String => MonorepoStepIO = MonorepoStepIO
+        .globalResource[String]("res-global")
+        .execute(_ => ctx => IO.pure(ctx))
+
+      val step = stepFn("test")
+      (step.name must_== "res-global") and
+        (step must beAnInstanceOf[MonorepoStepIO.Global])
+    }
+
+    "perProjectResource produces T => MonorepoStepIO with crossBuild" in {
+      val stepFn: String => MonorepoStepIO = MonorepoStepIO
+        .perProjectResource[String]("res-pp")
+        .withCrossBuild
+        .execute(_ => (ctx, _) => IO.pure(ctx))
+
+      val step = stepFn("test")
+      (step.name must_== "res-pp") and
+        (step.asInstanceOf[MonorepoStepIO.PerProject].enableCrossBuild must beTrue)
+    }
+  }
+
   "MonorepoReleaseIO insert helpers" should {
 
     val io = new MonorepoReleaseIO {}

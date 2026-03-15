@@ -38,7 +38,7 @@ class VersionStepsSpec extends Specification {
           VersionSteps.ResolvedSettings(
             versionFile = resolvedFile,
             readVersion = _ => IO.pure("1.2.3-SNAPSHOT"),
-            writeVersion = (_, version) => IO.pure(s"resolved=$version"),
+            versionFileContents = (_, version) => IO.pure(s"resolved=$version"),
             useGlobalVersion = true
           )
       )
@@ -48,7 +48,7 @@ class VersionStepsSpec extends Specification {
         (result.nextVersionOverride must beSome("1.2.4-SNAPSHOT")) and
         (result.useGlobalVersion must beTrue) and
         (result.readVersion(resolvedFile).unsafeRunSync() must_== "1.2.3-SNAPSHOT") and
-        (result.writeVersion(resolvedFile, "1.2.3").unsafeRunSync() must_== "resolved=1.2.3")
+        (result.versionFileContents(resolvedFile, "1.2.3").unsafeRunSync() must_== "resolved=1.2.3")
     }
 
     "delegate live resolution to CoreVersionResolver and read overrides from plan" in
@@ -79,7 +79,7 @@ class VersionStepsSpec extends Specification {
             VersionSteps.ResolvedSettings(
               versionFile = fallbackFile,
               readVersion = _ => IO.pure("1.9.9-SNAPSHOT"),
-              writeVersion = (_, version) => IO.pure(s"fallback=$version"),
+              versionFileContents = (_, version) => IO.pure(s"fallback=$version"),
               useGlobalVersion = false
             )
           }
@@ -91,7 +91,9 @@ class VersionStepsSpec extends Specification {
           (result.nextVersionOverride must beSome("2.0.1-SNAPSHOT")) and
           (result.useGlobalVersion must beFalse) and
           (result.readVersion(fallbackFile).unsafeRunSync() must_== "1.9.9-SNAPSHOT") and
-          (result.writeVersion(fallbackFile, "2.0.0").unsafeRunSync() must_== "fallback=2.0.0")
+          (result
+            .versionFileContents(fallbackFile, "2.0.0")
+            .unsafeRunSync() must_== "fallback=2.0.0")
       }
   }
 

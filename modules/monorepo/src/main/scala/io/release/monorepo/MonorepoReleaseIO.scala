@@ -47,8 +47,8 @@ trait MonorepoReleaseIO {
     * The default implementation ignores the `File` parameter; custom implementations
     * may read the existing file to perform partial updates.
     */
-  val releaseIOMonorepoWriteVersion: SettingKey[(File, String) => IO[String]] =
-    _releaseIOMonorepoWriteVersion
+  val releaseIOMonorepoVersionFileContents: SettingKey[(File, String) => IO[String]] =
+    _releaseIOMonorepoVersionFileContents
 
   /** Use global (root) version.sbt instead of per-project version files. Default: false. */
   val releaseIOMonorepoUseGlobalVersion: SettingKey[Boolean] = _releaseIOMonorepoUseGlobalVersion
@@ -312,7 +312,7 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoReadVersion            := VersionSteps.defaultReadVersion,
     // releaseIOMonorepoUseGlobalVersion is captured at build load time.
     // Custom implementations may read from State at call time if dynamic behavior is needed.
-    releaseIOMonorepoWriteVersion           := {
+    releaseIOMonorepoVersionFileContents    := {
       val useGlobal = releaseIOMonorepoUseGlobalVersion.value
       (_, ver) => {
         val key = if (useGlobal) "ThisBuild / version" else "version"
@@ -372,10 +372,10 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       "Function to read version from a version file"
     )
 
-  private[monorepo] lazy val _releaseIOMonorepoWriteVersion
+  private[monorepo] lazy val _releaseIOMonorepoVersionFileContents
       : SettingKey[(File, String) => IO[String]] =
     SettingKey[(File, String) => IO[String]](
-      "releaseIOMonorepoWriteVersion",
+      "releaseIOMonorepoVersionFileContents",
       "Function that produces version file contents"
     )
 

@@ -23,7 +23,7 @@ object LateBoundVersionPlugin extends ReleasePluginIOLike[Unit] {
                 releaseIOReadVersion                             := { file =>
                   IO.blocking(sbt.IO.read(file).trim)
                 },
-                releaseIOWriteVersion                            := { (_, version) =>
+                releaseIOVersionFileContents                     := { (_, version) =>
                   IO.pure(version + "\n")
                 }
               ),

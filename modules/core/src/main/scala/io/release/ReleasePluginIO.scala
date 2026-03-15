@@ -81,7 +81,7 @@ trait ReleasePluginIOLike[T]
     releaseIOSkipPublish            := false,
     releaseIOInteractive            := false,
     releaseIOReadVersion            := ReleaseSteps.defaultReadVersion,
-    releaseIOWriteVersion           := ReleaseSteps.defaultWriteVersion(
+    releaseIOVersionFileContents    := ReleaseSteps.defaultWriteVersion(
       releaseIOUseGlobalVersion.value
     ),
     releaseIOVersionFile            := baseDirectory.value / "version.sbt",

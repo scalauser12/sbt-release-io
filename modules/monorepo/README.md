@@ -36,7 +36,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-Each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The version file path and format can be customized via `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoWriteVersion` — see [Version settings](#version-settings).
+Each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The version file path and format can be customized via `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoVersionFileContents` — see [Version settings](#version-settings).
 
 ## Usage
 
@@ -97,6 +97,33 @@ sbt "releaseIOMonorepo cross with-defaults"
 # Skip tests
 sbt "releaseIOMonorepo skip-tests with-defaults"
 ```
+
+### Version override file
+
+For CI pipelines with many projects, supply version overrides from a `.properties` file instead of
+repeating them on the command line:
+
+```bash
+sbt "releaseIOMonorepo with-defaults version-file versions.properties"
+```
+
+`versions.properties` format (standard Java `.properties` syntax):
+
+```properties
+# Release version for each project
+core=1.0.0
+api=1.0.0
+# Next (snapshot) version — append .next to the project name
+core.next=1.1.0-SNAPSHOT
+api.next=1.1.0-SNAPSHOT
+```
+
+Inline `release-version` and `next-version` CLI args can be combined with `version-file`; inline
+args take precedence over file entries when both specify the same project. If the file is not
+found, the release fails immediately.
+
+> **Note:** `version-file` supports per-project overrides only. For global version mode use
+> the `release-version`/`next-version` CLI args directly.
 
 ## First Release Walkthrough
 
@@ -271,7 +298,7 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 |-----|------|---------|-------------|
 | `releaseIOMonorepoVersionFile` | `SettingKey[MonorepoVersionFileResolver]` | Scoped `releaseIOVersionFile` | Per-project version file resolver `(ProjectRef, State) => File` |
 | `releaseIOMonorepoReadVersion` | `SettingKey[File => IO[String]]` | Regex parser (same as core) | Version file reader |
-| `releaseIOMonorepoWriteVersion` | `SettingKey[(File, String) => IO[String]]` | `version := "x.y.z"\n` | Version file writer (default ignores `File` param) |
+| `releaseIOMonorepoVersionFileContents` | `SettingKey[(File, String) => IO[String]]` | `version := "x.y.z"\n` | Returns the file **content** to write (not a write side-effect). The `File` arg is available for path-based custom formats; the default ignores it. To change how version files are formatted, return a different string. |
 | `releaseIOMonorepoUseGlobalVersion` | `SettingKey[Boolean]` | `false` | Use root `version.sbt` instead of per-project files |
 
 ### Tagging settings
@@ -509,6 +536,9 @@ Global steps receive a `MonorepoContext`; per-project steps receive both `Monore
 | `resourceGlobalStepActionWithValidation(name)(execute)(validate)` | Global |
 | `resourcePerProjectStepActionWithValidation(name, enableCrossBuild)(execute)(validate)` | PerProject |
 
+> `enableCrossBuild` is a named parameter that defaults to `false` — pass it by name to keep call
+> sites self-documenting: `perProjectStep("name", enableCrossBuild = true) { ... }`.
+
 ```scala
 import cats.effect.IO
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
@@ -538,6 +568,60 @@ val crossTest = perProjectStep("cross-test", enableCrossBuild = true) { (ctx, pr
   IO { /* runs once per crossScalaVersions entry */ ctx }
 }
 ```
+
+### Builder API
+
+For more complex steps — especially those with validation or cross-build — use the fluent builder API on `MonorepoStepIO`:
+
+```scala
+import cats.effect.IO
+import io.release.monorepo.MonorepoStepIO
+
+// Global step with validation
+val checkBranch = MonorepoStepIO
+  .global("check-branch")
+  .withValidation(ctx => IO(require(/* ... */)))
+  .execute(ctx => IO.pure(ctx))
+
+// Per-project step with cross-build
+val crossPublish = MonorepoStepIO
+  .perProject("cross-publish")
+  .withCrossBuild
+  .execute((ctx, project) => IO.pure(ctx))
+
+// Action step (IO[Unit] — context passed through unchanged)
+val logStep = MonorepoStepIO
+  .global("log")
+  .executeAction(ctx => IO(println("releasing...")))
+
+// Selection boundary (marks the step for project selection filtering)
+val boundary = MonorepoStepIO
+  .global("boundary")
+  .withSelectionBoundary
+  .execute(ctx => IO.pure(ctx))
+```
+
+**Resource-aware builders** produce `T => MonorepoStepIO` for use in custom plugins:
+
+```scala
+val myStep: HttpClient => MonorepoStepIO = MonorepoStepIO
+  .globalResource[HttpClient]("notify")
+  .execute(client => ctx => client.post(/* ... */).as(ctx))
+
+val perProjStep: HttpClient => MonorepoStepIO = MonorepoStepIO
+  .perProjectResource[HttpClient]("upload")
+  .withCrossBuild
+  .execute(client => (ctx, project) => client.upload(/* ... */).as(ctx))
+```
+
+| Entry point | Builder | Terminal methods |
+|-------------|---------|-----------------|
+| `MonorepoStepIO.global(name)` | `GlobalBuilder` | `.execute(ctx => IO[ctx])`, `.executeAction(ctx => IO[Unit])` |
+| `MonorepoStepIO.perProject(name)` | `PerProjectBuilder` | `.execute((ctx, proj) => IO[ctx])`, `.executeAction((ctx, proj) => IO[Unit])` |
+| `MonorepoStepIO.globalResource[T](name)` | `ResourceGlobalBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
+| `MonorepoStepIO.perProjectResource[T](name)` | `ResourcePerProjectBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
+
+Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only), `.withSelectionBoundary` (global only).
 
 ### Sharing data between steps
 

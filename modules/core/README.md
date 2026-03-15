@@ -22,7 +22,7 @@ Add to `project/plugins.sbt`:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.4.2")
 ```
 
-The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The version file path and format can be customized via `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOWriteVersion` — see [Custom Version Formats](#custom-version-formats).
+The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The version file path and format can be customized via `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOVersionFileContents` — see [Custom Version Formats](#custom-version-formats).
 
 ## Usage
 
@@ -101,7 +101,7 @@ releaseIOReadVersion := { file =>
 }
 
 // Custom version file writer (default produces `ThisBuild / version := "x.y.z"\n`)
-releaseIOWriteVersion := { (_, version) =>
+releaseIOVersionFileContents := { (_, version) =>
   IO.pure(s"$version\n")
 }
 ```
@@ -114,7 +114,7 @@ The default reader and writer assume a `version.sbt` file containing `[ThisBuild
 |---------|------|
 | `releaseIOVersionFile` | Path to the version file |
 | `releaseIOReadVersion` | `File => IO[String]` — extract the version string from the file |
-| `releaseIOWriteVersion` | `(File, String) => IO[String]` — return the **complete file contents** to write to disk |
+| `releaseIOVersionFileContents` | `(File, String) => IO[String]` — return the **complete file contents** to write to disk |
 
 The writer receives the current file as its first argument, so it can read existing content and replace only the version line while preserving other fields.
 
@@ -148,7 +148,7 @@ releaseIOReadVersion := { (file: File) =>
 }
 
 // Replace only the app.version line, preserve everything else
-releaseIOWriteVersion := { (file: File, ver: String) =>
+releaseIOVersionFileContents := { (file: File, ver: String) =>
   IO.blocking(sbt.IO.read(file)).map { contents =>
     contents.linesIterator
       .map {
@@ -560,7 +560,7 @@ All release settings use the `releaseIO` prefix:
 | `releaseIOVersionFile` | `SettingKey[File]` | `baseDirectory / "version.sbt"` | Path to the version file |
 | `releaseIOUseGlobalVersion` | `SettingKey[Boolean]` | `true` | Use `ThisBuild / version` format |
 | `releaseIOReadVersion` | `SettingKey[File => IO[String]]` | parses `version := "x.y.z"` | Read version from file |
-| `releaseIOWriteVersion` | `SettingKey[(File, String) => IO[String]]` | writes `ThisBuild / version := "x.y.z"` | Produce version file contents |
+| `releaseIOVersionFileContents` | `SettingKey[(File, String) => IO[String]]` | writes `ThisBuild / version := "x.y.z"` | Produce version file contents |
 | `releaseIOVersionBump` | `TaskKey[Version.Bump]` | `Next` | Version bump strategy (see bump types below) |
 | `releaseIOVersion` | `TaskKey[String => String]` | strips qualifier/snapshot | Compute release version from current |
 | `releaseIONextVersion` | `TaskKey[String => String]` | bumps + appends `-SNAPSHOT` | Compute next dev version |
