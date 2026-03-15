@@ -127,6 +127,17 @@ class ReleaseStepIOBuilderSpec extends Specification {
       step.validate(ctx).unsafeRunSync()
       (step.enableCrossBuild must beTrue) and (validationRan must beTrue)
     }
+    "validateOnly creates a validation-only step with no-op execute" in withContext { ctx =>
+      var validationRan = false
+      val step          = ReleaseStepIO
+        .step("build-step")
+        .withValidation(_ => IO { validationRan = true })
+        .validateOnly
+
+      val result = step.execute(ctx).unsafeRunSync()
+      step.validate(ctx).unsafeRunSync()
+      (result must_== ctx) and (validationRan must beTrue)
+    }
   }
 
   "ReleaseStepIO.resourceStep" should {
@@ -232,6 +243,19 @@ class ReleaseStepIOBuilderSpec extends Specification {
         .execute(_ => c => IO.pure(c))
 
       stepFn("x").validate(ctx).unsafeRunSync() must_== (())
+    }
+
+    "validateOnly creates a validation-only step with no-op execute" in withContext { ctx =>
+      var capturedResource                = Option.empty[String]
+      val stepFn: String => ReleaseStepIO = ReleaseStepIO
+        .resourceStep[String]("res-build")
+        .withValidation(t => _ => IO { capturedResource = Some(t) })
+        .validateOnly
+
+      val step   = stepFn("my-res")
+      val result = step.execute(ctx).unsafeRunSync()
+      step.validate(ctx).unsafeRunSync()
+      (result must_== ctx) and (capturedResource must beSome("my-res"))
     }
   }
 }

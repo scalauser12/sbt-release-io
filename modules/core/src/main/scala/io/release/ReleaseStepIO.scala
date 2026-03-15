@@ -131,6 +131,9 @@ object ReleaseStepIO {
 
     def executeAction(f: ReleaseContext => IO[Unit]): ReleaseStepIO =
       ReleaseStepIO(name, ctx => f(ctx).as(ctx), validateFn, crossBuild)
+
+    def validateOnly: ReleaseStepIO =
+      ReleaseStepIO(name, ctx => IO.pure(ctx), validateFn, crossBuild)
   }
 
   /** Fluent builder for resource-aware release steps. */
@@ -151,6 +154,9 @@ object ReleaseStepIO {
 
     def executeAction(f: T => ReleaseContext => IO[Unit]): T => ReleaseStepIO =
       t => ReleaseStepIO(name, ctx => f(t)(ctx).as(ctx), validateFn(t), crossBuild)
+
+    def validateOnly: T => ReleaseStepIO =
+      t => ReleaseStepIO(name, ctx => IO.pure(ctx), validateFn(t), crossBuild)
   }
 
   /** Compose a sequence of steps into a two-phase IO program.

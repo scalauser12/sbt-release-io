@@ -73,6 +73,9 @@ object MonorepoStepIO {
 
     def executeAction(f: MonorepoContext => IO[Unit]): Global =
       Global(name, ctx => f(ctx).as(ctx), validateFn, selectionBoundary)
+
+    def validateOnly: Global =
+      Global(name, ctx => IO.pure(ctx), validateFn, selectionBoundary)
   }
 
   /** Fluent builder for per-project steps. */
@@ -99,6 +102,9 @@ object MonorepoStepIO {
         f: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): PerProject =
       PerProject(name, (ctx, proj) => f(ctx, proj).as(ctx), validateFn, crossBuild)
+
+    def validateOnly: PerProject =
+      PerProject(name, (ctx, _) => IO.pure(ctx), validateFn, crossBuild)
   }
 
   /** Fluent builder for resource-aware global steps. */
@@ -119,6 +125,9 @@ object MonorepoStepIO {
 
     def executeAction(f: T => MonorepoContext => IO[Unit]): T => MonorepoStepIO =
       t => Global(name, ctx => f(t)(ctx).as(ctx), validateFn(t), selectionBoundary)
+
+    def validateOnly: T => MonorepoStepIO =
+      t => Global(name, ctx => IO.pure(ctx), validateFn(t), selectionBoundary)
   }
 
   /** Fluent builder for resource-aware per-project steps. */
@@ -145,6 +154,9 @@ object MonorepoStepIO {
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): T => MonorepoStepIO =
       t => PerProject(name, (ctx, proj) => f(t)(ctx, proj).as(ctx), validateFn(t), crossBuild)
+
+    def validateOnly: T => MonorepoStepIO =
+      t => PerProject(name, (ctx, _) => IO.pure(ctx), validateFn(t), crossBuild)
   }
 
   /** Compose a sequence of monorepo steps into a two-phase IO program.

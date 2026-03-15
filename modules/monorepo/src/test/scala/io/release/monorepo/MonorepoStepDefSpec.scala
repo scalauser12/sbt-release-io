@@ -149,6 +149,26 @@ class MonorepoStepDefSpec extends Specification {
       (step.name must_== "res-pp") and
         (step.asInstanceOf[MonorepoStepIO.PerProject].enableCrossBuild must beTrue)
     }
+
+    "validateOnly creates a Global step with no-op execute" in {
+      val step = MonorepoStepIO
+        .global("build-global")
+        .withValidation(_ => IO.unit)
+        .validateOnly
+
+      (step.name must_== "build-global") and
+        (step must beAnInstanceOf[MonorepoStepIO.Global])
+    }
+
+    "validateOnly creates a PerProject step with no-op execute" in {
+      val step = MonorepoStepIO
+        .perProject("build-pp")
+        .withValidation((_, _) => IO.unit)
+        .validateOnly
+
+      (step.name must_== "build-pp") and
+        (step must beAnInstanceOf[MonorepoStepIO.PerProject])
+    }
   }
 
   "MonorepoReleaseIO insert helpers" should {

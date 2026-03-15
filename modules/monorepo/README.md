@@ -140,9 +140,9 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     // Filter out push and publish during initial setup — re-enable when ready
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
+    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(step =>
       step.name == "push-changes" || step.name == "publish-artifacts"
-    }
+    )
   )
 ```
 
@@ -361,9 +361,9 @@ This releases `api` at version `1.0.0` regardless of whether change detection fo
 ### Custom change detector
 
 ```scala
-releaseIOMonorepoChangeDetector := Some { (ref: ProjectRef, baseDir: File, state: State) =>
+releaseIOMonorepoChangeDetector := Some((ref: ProjectRef, baseDir: File, state: State) =>
   IO.pure(ref.project == "core") // only release "core"
-}
+)
 ```
 
 On detector error, the project is conservatively treated as changed.
@@ -467,30 +467,19 @@ Use these factory methods in `build.sbt` or `project/*.scala`:
 import cats.effect.IO
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 
-// Global step — runs once
-val validateBranch = globalStep("validate-branch") { ctx =>
-  ctx.vcs match {
-    case Some(vcs) =>
-      vcs.currentBranch.flatMap { branch =>
-        if (branch == "main") IO.pure(ctx)
-        else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
-      }
-    case None => IO.raiseError(new RuntimeException("VCS not initialized"))
+// Global step — runs once, logs a release summary
+val printSummary = globalStepAction("print-summary") { ctx =>
+  IO.blocking {
+    val names = ctx.currentProjects.map(_.name).mkString(", ")
+    ctx.state.log.info(s"[release] Releasing projects: $names")
   }
 }
 
 // Per-project step — runs once per selected project
-val logProject = perProjectStep("log-project") { (ctx, project) =>
-  IO {
-    ctx.state.log.info(s"Releasing ${project.name}")
-    ctx
-  }
-}
+val logProject = perProjectStepAction("log-project")((ctx, project) =>
+  IO.blocking(ctx.state.log.info(s"[release] Releasing ${project.name}"))
+)
 
-// Per-project step with cross-build support
-val crossTest = perProjectStep("cross-test", enableCrossBuild = true) { (ctx, project) =>
-  IO { /* runs once per crossScalaVersions entry */ ctx }
-}
 ```
 
 ### Step context API
@@ -575,32 +564,45 @@ For steps with validation, cross-build, or resource access, use the fluent build
 import cats.effect.IO
 import io.release.monorepo.MonorepoStepIO
 
-// Global step with validation
+// Global validation-only step — fails the release if not on main
 val checkBranch = MonorepoStepIO
   .global("check-branch")
-  .withValidation(ctx => IO(require(/* ... */)))
-  .execute(ctx => IO.pure(ctx))
+  .withValidation(ctx =>
+    ctx.vcs match {
+      case Some(vcs) =>
+        vcs.currentBranch.flatMap(branch =>
+          if (branch == "main") IO.unit
+          else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
+        )
+      case None => IO.raiseError(new RuntimeException("VCS not initialized"))
+    }
+  )
+  .validateOnly
 
-// Per-project step with cross-build
-val crossPublish = MonorepoStepIO
-  .perProject("cross-publish")
-  .withCrossBuild
-  .execute((ctx, project) => IO.pure(ctx))
+// Per-project step with validation
+val checkReadme = MonorepoStepIO
+  .perProject("check-readme")
+  .withValidation { (ctx, project) =>
+    val readme = project.baseDir / "README.md"
+    if (!readme.exists()) IO.raiseError(new RuntimeException(s"${project.name} missing README.md"))
+    else IO.unit
+  }
+  .validateOnly
 
 // Action step (IO[Unit] — context passed through unchanged)
 val logStep = MonorepoStepIO
   .global("log")
-  .executeAction(ctx => IO(println("releasing...")))
+  .executeAction(ctx => IO.blocking(ctx.state.log.info("[release] starting...")))
 ```
 
 | Entry point | Builder | Terminal methods |
 |-------------|---------|-----------------|
-| `MonorepoStepIO.global(name)` | `GlobalBuilder` | `.execute(ctx => IO[ctx])`, `.executeAction(ctx => IO[Unit])` |
-| `MonorepoStepIO.perProject(name)` | `PerProjectBuilder` | `.execute((ctx, proj) => IO[ctx])`, `.executeAction((ctx, proj) => IO[Unit])` |
+| `MonorepoStepIO.global(name)` | `GlobalBuilder` | `.execute(...)`, `.executeAction(...)`, `.validateOnly` |
+| `MonorepoStepIO.perProject(name)` | `PerProjectBuilder` | `.execute(...)`, `.executeAction(...)`, `.validateOnly` |
 | `MonorepoStepIO.globalResource[T](name)` | `ResourceGlobalBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
 | `MonorepoStepIO.perProjectResource[T](name)` | `ResourcePerProjectBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
 
-Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only), `.withSelectionBoundary` (global only). Resource-aware builders (`globalResource`, `perProjectResource`) are covered in [Custom plugins](#custom-plugins).
+Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only), `.withSelectionBoundary` (global only). Every builder chain ends with one of three terminal methods: `.execute(f)` runs `f` and returns the modified context, `.executeAction(f)` runs `f` for side effects and passes context through unchanged, `.validateOnly` creates a validation-only step with no execute logic. Resource-aware builders (`globalResource`, `perProjectResource`) are covered in [Custom plugins](#custom-plugins).
 
 > **Selection boundaries**: A global step marked with `.withSelectionBoundary` splits the release into a setup segment and a main segment. Steps before the boundary run validate-then-execute sequentially; steps after it run all validations first, then all executions. The built-in `detect-or-select-projects` is the default boundary. Custom steps rarely need this.
 
@@ -657,9 +659,9 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
     liftSteps(Project.extract(state).get(releaseIOMonorepoProcess)) :+
       MonorepoStepIO
         .globalResource[HttpClient]("notify-slack")
-        .executeAction { client => ctx =>
-          IO.blocking { client.post("/webhook", "Released!") }
-        }
+        .executeAction(client => ctx =>
+          IO.blocking(client.post("/webhook", "Released!"))
+        )
 }
 ```
 
@@ -680,22 +682,19 @@ sbt "myRelease with-defaults release-version core=1.0.0 next-version core=1.1.0-
 Resource-aware steps use `MonorepoStepIO.globalResource[T]` and `MonorepoStepIO.perProjectResource[T]`. They produce `T => MonorepoStepIO` functions that receive the acquired resource:
 
 ```scala
-// Side-effect only — context passed through unchanged
-val notifySlack: HttpClient => MonorepoStepIO = MonorepoStepIO
-  .globalResource[HttpClient]("notify-slack")
-  .executeAction { client => ctx =>
-    IO.blocking { client.post("/webhook", s"Released ${ctx.currentProjects.map(_.name).mkString(", ")}") }
-  }
+private val metadataKey = AttributeKey[String]("release-metadata")
 
-// Modifies the context — use .execute instead of .executeAction
+// Resource step that modifies the context — use .execute
 val fetchMetadata: HttpClient => MonorepoStepIO = MonorepoStepIO
   .globalResource[HttpClient]("fetch-metadata")
-  .execute { client => ctx =>
-    IO.blocking { client.get("/release-metadata") }.map { metadata =>
+  .execute(client => ctx =>
+    IO.blocking(client.get("/release-metadata")).map(metadata =>
       ctx.withMetadata(metadataKey, metadata)
-    }
-  }
+    )
+  )
 ```
+
+The plugin example above already shows `.executeAction` for side-effect-only steps.
 
 Use `insertAfter` / `insertBefore` (shown in [Customizing the release process](#customizing-the-release-process)) to insert resource-aware steps at specific positions. Override `monorepoReleaseProcess` directly to build the step sequence from scratch — plain steps from `MonorepoReleaseSteps` and resource-aware steps can be mixed freely via implicit conversion.
 
@@ -718,7 +717,7 @@ Example: rewrite the project set via `State` so built-in steps see the change:
 // Inside a MonorepoReleasePluginLike[Unit] plugin
 private val selectOnlyCore = MonorepoStepIO
   .global("select-only-core")
-  .execute { ctx =>
+  .execute(ctx =>
     IO.blocking {
       val extracted    = Project.extract(ctx.state)
       val root         = extracted.get(baseDirectory)
@@ -728,7 +727,7 @@ private val selectOnlyCore = MonorepoStepIO
       )
       ctx.withState(updatedState)
     }
-  }
+  )
 
 override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
   insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "resolve-release-order")(
