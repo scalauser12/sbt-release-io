@@ -114,7 +114,7 @@ The default reader and writer assume a `version.sbt` file containing `[ThisBuild
 |---------|------|
 | `releaseIOVersionFile` | Path to the version file |
 | `releaseIOReadVersion` | `File => IO[String]` — extract the version string from the file |
-| `releaseIOVersionFileContents` | `(File, String) => IO[String]` — return the **complete file contents** to write to disk |
+| `releaseIOVersionFileContents` | `(File, String) => IO[String]` — returns the version file content to write to disk |
 
 The writer receives the current file as its first argument, so it can read existing content and replace only the version line while preserving other fields.
 
@@ -186,7 +186,7 @@ val printBanner = ReleaseStepIO.io("print-banner") { ctx =>
 val validateBranch = ReleaseStepIO.io("validate-branch") { ctx =>
   ctx.vcs match {
     case Some(vcs) =>
-      IO.blocking(vcs.currentBranch).flatMap { branch =>
+      vcs.currentBranch.flatMap { branch =>
         if (branch == "main") IO.pure(ctx)
         else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
       }
@@ -331,7 +331,7 @@ val notifySlack: HttpClient => ReleaseStepIO = ReleaseStepIO
 // Resource step with validation
 val verifyToken: HttpClient => ReleaseStepIO = ReleaseStepIO
   .resourceStep[HttpClient]("verify-token")
-  .withValidation(client => ctx => IO.blocking(client.get("/health")))
+  .withValidation(client => ctx => IO.blocking(client.get("/health")).void)
   .execute { client => ctx =>
     IO.blocking { client.post("/release", "..."); ctx }
   }
@@ -527,28 +527,28 @@ All release settings use the `releaseIO` prefix:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `releaseIOProcess` | `SettingKey[Seq[ReleaseStepIO]]` | `ReleaseSteps.defaults` | Ordered sequence of release steps |
-| `releaseIOCrossBuild` | `SettingKey[Boolean]` | `false` | Cross-build steps per `crossScalaVersions` |
-| `releaseIOSkipPublish` | `SettingKey[Boolean]` | `false` | Skip the publish step entirely |
-| `releaseIOInteractive` | `SettingKey[Boolean]` | `false` | Enable interactive prompts |
-| `releaseIOVersionFile` | `SettingKey[File]` | `baseDirectory / "version.sbt"` | Path to the version file |
-| `releaseIOUseGlobalVersion` | `SettingKey[Boolean]` | `true` | Use `ThisBuild / version` format |
-| `releaseIOReadVersion` | `SettingKey[File => IO[String]]` | parses `version := "x.y.z"` | Read version from file |
-| `releaseIOVersionFileContents` | `SettingKey[(File, String) => IO[String]]` | writes `ThisBuild / version := "x.y.z"` | Produce version file contents |
-| `releaseIOVersionBump` | `TaskKey[Version.Bump]` | `Next` | Version bump strategy (see bump types below) |
-| `releaseIOVersion` | `TaskKey[String => String]` | strips qualifier/snapshot | Compute release version from current |
-| `releaseIONextVersion` | `TaskKey[String => String]` | bumps + appends `-SNAPSHOT` | Compute next dev version |
-| `releaseIOTagName` | `TaskKey[String]` | `s"v${version.value}"` | Git tag name |
-| `releaseIOTagComment` | `TaskKey[String]` | `s"Releasing ${version.value}"` | Git tag comment |
-| `releaseIOCommitMessage` | `TaskKey[String]` | `s"Setting version to ${version.value}"` | Release version commit message |
-| `releaseIONextCommitMessage` | `TaskKey[String]` | `s"Setting version to ${version.value}"` | Next version commit message |
-| `releaseIOVcsSign` | `SettingKey[Boolean]` | `false` | GPG-sign tags and commits |
-| `releaseIOVcsSignOff` | `SettingKey[Boolean]` | `false` | Add `Signed-off-by` to commits |
-| `releaseIOIgnoreUntrackedFiles` | `SettingKey[Boolean]` | `false` | Ignore untracked files in clean check |
-| `releaseIOPublishArtifactsAction` | `TaskKey[Unit]` | `publish` | Task that performs the publish |
-| `releaseIOPublishArtifactsChecks` | `SettingKey[Boolean]` | `true` | Validate `publishTo`/`skip` before publish |
-| `releaseIOSnapshotDependencies` | `TaskKey[Seq[ModuleID]]` | auto-resolved | SNAPSHOT deps for validation |
-| `releaseIORuntimeVersion` | `TaskKey[String]` | scope-aware `version` | Reads `ThisBuild / version` or `version` based on `releaseIOUseGlobalVersion` |
+| `releaseIOProcess` | `Seq[ReleaseStepIO]` | `ReleaseSteps.defaults` | Ordered sequence of release steps |
+| `releaseIOCrossBuild` | `Boolean` | `false` | Cross-build steps per `crossScalaVersions` |
+| `releaseIOSkipPublish` | `Boolean` | `false` | Skip the publish step entirely |
+| `releaseIOInteractive` | `Boolean` | `false` | Enable interactive prompts |
+| `releaseIOVersionFile` | `File` | `baseDirectory / "version.sbt"` | Path to the version file |
+| `releaseIOUseGlobalVersion` | `Boolean` | `true` | Use `ThisBuild / version` format |
+| `releaseIOReadVersion` | `File => IO[String]` | parses `version := "x.y.z"` | Read version from file |
+| `releaseIOVersionFileContents` | `(File, String) => IO[String]` | writes `ThisBuild / version := "x.y.z"` | Produce version file contents |
+| `releaseIOVersionBump` | `Version.Bump` | `Next` | Version bump strategy (see bump types below) |
+| `releaseIOVersion` | `String => String` | strips qualifier/snapshot | Compute release version from current |
+| `releaseIONextVersion` | `String => String` | bumps + appends `-SNAPSHOT` | Compute next dev version |
+| `releaseIOTagName` | `String` | `s"v${version.value}"` | Git tag name |
+| `releaseIOTagComment` | `String` | `s"Releasing ${version.value}"` | Git tag comment |
+| `releaseIOCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Release version commit message |
+| `releaseIONextCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Next version commit message |
+| `releaseIOVcsSign` | `Boolean` | `false` | GPG-sign tags and commits |
+| `releaseIOVcsSignOff` | `Boolean` | `false` | Add `Signed-off-by` to commits |
+| `releaseIOIgnoreUntrackedFiles` | `Boolean` | `false` | Ignore untracked files in clean check |
+| `releaseIOPublishArtifactsAction` | `Unit` | `publish` | Task that performs the publish |
+| `releaseIOPublishArtifactsChecks` | `Boolean` | `true` | Validate `publishTo`/`skip` before publish |
+| `releaseIOSnapshotDependencies` | `Seq[ModuleID]` | auto-resolved | SNAPSHOT deps for validation |
+| `releaseIORuntimeVersion` | `String` | scope-aware `version` | Reads `ThisBuild / version` or `version` based on `releaseIOUseGlobalVersion` |
 
 #### Version Bump Types
 
@@ -580,9 +580,6 @@ The default release process includes:
 13. **push-changes** - Push commits and tags to remote
 
 These names are the stable built-in insertion points for `insertAfter` and `insertBefore`.
-Command-line flags and other run invariants are captured before execution starts, but built-in
-execute steps resolve operational settings such as version-file handling and tagging from the current
-`State` when they run. Custom steps now use the public `validate`/`execute` model directly.
 
 ## Recovery and Rollback
 
@@ -643,8 +640,7 @@ If you are updating a custom plugin or build from an older release:
 
 - rename `step.check` to `step.validate`
 - rename `step.action` to `step.execute`
-- rename `resourceStepWithCheck` to `resourceStepWithValidation`
-- replace `resourceStep(...)`, `resourceStepAction(...)`, `resourceStepWithValidation(...)`, and `resourceStepActionWithValidation(...)` factory methods with `ReleaseStepIO.resourceStep[T](name)` builder API
+- replace `resourceStep(...)`, `resourceStepAction(...)`, `resourceStepWithCheck(...)`, `resourceStepWithValidation(...)`, and `resourceStepActionWithValidation(...)` factory methods with `ReleaseStepIO.resourceStep[T](name)` builder API
 - replace string attributes with typed metadata via `ctx.withMetadata`, `ctx.metadata`, and `AttributeKey[A]`
 
 ## Testing

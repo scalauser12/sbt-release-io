@@ -36,7 +36,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-Each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The version file path and format can be customized via `releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and `releaseIOMonorepoVersionFileContents` — see [Version settings](#version-settings).
+Each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The file path and format can be customized — see [Version settings](#version-settings).
 
 ## Usage
 
@@ -168,19 +168,7 @@ git commit -m "Initial commit"
 sbt "releaseIOMonorepo with-defaults"
 ```
 
-**What the plugin does:**
-
-1. `initialize-vcs` — detects the git repository.
-2. `check-clean-working-dir` — verifies no uncommitted changes.
-3. `resolve-release-order` — sorts projects: `core` first, then `api` (because `api` depends on `core`).
-4. `detect-or-select-projects` — finds no prior release tags, so **both projects are treated as changed** (first release).
-5. `inquire-versions` — computes release version `0.1.0` and next version `0.2.0-SNAPSHOT` for each project.
-6. `set-release-version` — writes `version := "0.1.0"` to each `version.sbt`.
-7. `commit-release-versions` — creates a single commit staging all version files.
-8. `tag-releases` — creates `core/v0.1.0` and `api/v0.1.0`.
-9. `set-next-version` — writes `version := "0.2.0-SNAPSHOT"` to each `version.sbt`.
-10. `commit-next-versions` — creates a single commit staging all version files.
-11. `push-changes` — filtered out in this walkthrough; re-enable once confident.
+The plugin runs the [default release steps](#default-release-steps) in order — sorting projects by dependency, computing versions, writing version files, committing, and tagging. Push is filtered out in this walkthrough; re-enable once confident.
 
 After the release:
 
@@ -215,19 +203,15 @@ cat core/version.sbt  # version := "0.2.0-SNAPSHOT"
 | 15 | `commit-next-versions` | Global | Single commit staging all version files |
 | 16 | `push-changes` | Global | Push branch + tags to tracking remote |
 
-**Global** steps run once. **PerProject** steps run once per selected project in topological order.
-Built-in task-backed per-project steps are project-scoped: child projects run only when they are themselves selected or discovered.
-Command-line flags and CLI override syntax are validated before execution begins, but built-in
-execute steps resolve project order, project selection, version-file handling, and tag settings from the
-current `State` when they run. Custom steps now use the public `validate`/`execute` model directly.
+**Global** steps run once. **PerProject** steps run once per selected project in topological order. Only selected projects participate — child projects that weren't selected or discovered by change detection are skipped.
 
 ## Execution Model
 
 ### Validate / Execute Model
 
-1. **Setup segment**: Steps up to and including the first `detect-or-select-projects` run as `validate` then `execute` sequentially. This is the boundary where built-in order and selection can be reshaped from live `State`.
+1. **Setup segment**: Steps up to and including `detect-or-select-projects` run validate-then-execute sequentially. Custom steps inserted here can modify project ordering and selection before the main phase begins.
 2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup.
-3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Built-in execute steps resolve project order, selection, version-file settings, and tag settings from the current `State` when they run. Between every step, sbt's `FailureCommand` sentinel is inspected for task-level failures.
+3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Task-level failures are detected between steps.
 
 ### Per-project failure isolation
 
@@ -281,21 +265,17 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | `releaseIOMonorepoCrossBuild` | `Boolean` | `false` | Enable cross-building by default |
 | `releaseIOMonorepoSkipTests` | `Boolean` | `false` | Skip tests |
 | `releaseIOMonorepoSkipPublish` | `Boolean` | `false` | Skip publish |
-| `releaseIOMonorepoInteractive` | `Boolean` | `false` | Enable interactive version prompts |
+| `releaseIOMonorepoInteractive` | `Boolean` | `false` | When true, `inquire-versions` prompts interactively. `with-defaults` overrides to false; CLI version overrides bypass prompts for those projects. |
 | `releaseIOMonorepoPublishArtifactsChecks` | `Boolean` | `true` | When false, skips the check that each project has `publishTo` configured or `publish / skip := true` |
-
-> **`releaseIOMonorepoInteractive`**: When true, the `inquire-versions` step prompts the user for release and next versions. The `with-defaults` CLI flag overrides this to false. CLI version overrides (`release-version`, `next-version`) bypass prompts for those projects regardless.
 
 ### Version settings
 
 | Setting | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoVersionFile` | `MonorepoVersionFileResolver` | Scoped `releaseIOVersionFile` | Per-project version file resolver `(ProjectRef, State) => File` |
+| `releaseIOMonorepoVersionFile` | `MonorepoVersionFileResolver` | Scoped `releaseIOVersionFile` | Per-project version file resolver `(ProjectRef, State) => File`. Called during version inquiry and write steps. Default reads each project's scoped `releaseIOVersionFile` (typically `<projectDir>/version.sbt`). |
 | `releaseIOMonorepoReadVersion` | `File => IO[String]` | Regex parser (same as core) | Version file reader |
-| `releaseIOMonorepoVersionFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Returns the version file content to write to disk. The `File` arg is the current version file, available for custom implementations that need to read existing content before writing (e.g., partial updates); the default ignores it. |
+| `releaseIOMonorepoVersionFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Returns the version file content to write to disk. The `File` arg is the current version file, available for reading existing content before writing (e.g., partial updates); the default ignores it. |
 | `releaseIOMonorepoUseGlobalVersion` | `Boolean` | `false` | Use root `version.sbt` instead of per-project files |
-
-The `releaseIOMonorepoVersionFile` resolver is called during version inquiry and version write steps. The default reads from each project's scoped `releaseIOVersionFile` setting (typically `<projectDir>/version.sbt`). The `State` parameter allows inspecting build state for dynamic resolution — for example, reading a per-project setting to choose between `version.sbt` and `version.properties`.
 
 ### Tagging settings
 
@@ -315,7 +295,9 @@ The `releaseIOMonorepoVersionFile` resolver is called during version inquiry and
 | `releaseIOMonorepoDetectChangesExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
 | `releaseIOMonorepoSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level paths checked for shared changes per project |
 
-Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's own last release tag. If any shared file changed since that tag, that project is marked as changed. This ensures modifications to shared build definitions, compiler plugins, or dependency versions are never silently missed. In per-project tag mode, projects with different tags are evaluated independently — a project tagged after a shared change won't be marked changed, while one tagged before it will. Set to `Seq.empty` to disable.
+Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's last release tag. If any shared file changed since that tag, the project is marked as changed. This catches modifications to shared build definitions, compiler plugins, or dependency versions.
+
+In per-project tag mode, each project is evaluated against its own tag independently. Set to `Seq.empty` to disable.
 
 ```scala
 // Add extra shared paths (e.g. a shared source directory and formatting config)
@@ -374,7 +356,7 @@ When using change detection, providing a CLI version override for a project forc
 sbt "releaseIOMonorepo with-defaults release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT"
 ```
 
-This releases `api` at version `1.0.0` regardless of whether change detection found changes in `api`. Note that force-included projects do not trigger downstream expansion — only projects detected as changed (by git diff or a custom detector) contribute to downstream expansion when `releaseIOMonorepoIncludeDownstream` is enabled.
+This releases `api` at version `1.0.0` regardless of whether change detection found changes in `api`. Force-included projects do not trigger downstream expansion — only projects detected as changed contribute to `releaseIOMonorepoIncludeDownstream` expansion.
 
 ### Custom change detector
 
@@ -402,6 +384,10 @@ releaseIOMonorepoDetectChangesExcludes := Seq(
 This setting is read from the **root project** scope, so use `(subproject / baseDirectory).value`
 to reference subproject directories. Per-project version files are always excluded automatically.
 This setting only applies to the built-in detector and is ignored when `releaseIOMonorepoChangeDetector` is set.
+
+### First release shows no projects changed
+
+On a brand-new repo with no prior release tags, change detection marks all projects as changed — this is expected. If tags exist but under a different scheme, some projects may appear unchanged. Use `all-changed` to bypass detection, or disable it permanently with `releaseIOMonorepoDetectChanges := false`.
 
 ## Tagging Strategies
 
@@ -461,50 +447,11 @@ Each project uses its own `crossScalaVersions`. A project with `Seq("2.13.12", "
 
 ## Custom Steps
 
-### Step context API
-
-Global steps receive a `MonorepoContext`; per-project steps receive both `MonorepoContext` and `ProjectReleaseInfo`.
-
-**`MonorepoContext`** — immutable context threaded through all steps:
-
-| Field / Method | Type | Description |
-|----------------|------|-------------|
-| `state` | `State` | Current sbt state |
-| `vcs` | `Option[Vcs]` | Git adapter, set by `initialize-vcs` |
-| `projects` | `Seq[ProjectReleaseInfo]` | Selected projects in topological order |
-| `currentProjects` | `Seq[ProjectReleaseInfo]` | Non-failed projects only |
-| `skipTests` / `skipPublish` / `interactive` | `Boolean` | Execution flags |
-| `tagStrategy` | `MonorepoTagStrategy` | `PerProject` or `Unified` |
-| `failed` | `Boolean` | Whether the release has failed |
-| `failureCause` | `Option[Throwable]` | Throwable captured on failure |
-| `withState(s)` | `MonorepoContext` | Replace sbt state |
-| `withVcs(v)` | `MonorepoContext` | Set or replace VCS adapter |
-| `withProjects(ps)` | `MonorepoContext` | Replace project list |
-| `updateProject(ref)(f)` | `MonorepoContext` | Transform a single project's info |
-| `metadata[A](key)` | `Option[A]` | Read typed inter-step metadata |
-| `withMetadata[A](key, value)` | `MonorepoContext` | Store typed inter-step metadata |
-| `withoutMetadata[A](key)` | `MonorepoContext` | Remove a metadata entry |
-| `fail` | `MonorepoContext` | Mark release as failed |
-| `failWith(cause)` | `MonorepoContext` | Mark release as failed with a cause |
-
-**`ProjectReleaseInfo`** — per-project metadata available in `PerProject` steps:
-
-| Field / Method | Type | Description |
-|----------------|------|-------------|
-| `ref` | `ProjectRef` | sbt project reference |
-| `name` | `String` | Project name (matches `ref.project`) |
-| `baseDir` | `File` | Project root directory |
-| `versionFile` | `File` | Resolved version file path |
-| `versions` | `Option[(String, String)]` | `(releaseVersion, nextVersion)`, set by `inquire-versions` |
-| `releaseVersion` | `Option[String]` | Shorthand for `versions.map(_._1)` |
-| `nextVersion` | `Option[String]` | Shorthand for `versions.map(_._2)` |
-| `tagName` | `Option[String]` | Tag name, set by `tag-releases` |
-| `failed` | `Boolean` | Whether this project failed |
-| `failureCause` | `Option[Throwable]` | Throwable captured when this project's step fails |
+You can define your own `MonorepoStepIO` steps and add them to the release process alongside the built-in ones. Steps are either **Global** (run once) or **PerProject** (run once per selected project in topological order). Each step receives an immutable context (`MonorepoContext`) that it can read and transform.
 
 ### Plain steps
 
-**Factory methods** (for `build.sbt` or `project/*.scala`):
+Use these factory methods in `build.sbt` or `project/*.scala`:
 
 | Method | Scope | Execute returns |
 |--------|-------|-----------------|
@@ -546,6 +493,80 @@ val crossTest = perProjectStep("cross-test", enableCrossBuild = true) { (ctx, pr
 }
 ```
 
+### Step context API
+
+Every step receives a `MonorepoContext`. Per-project steps also receive a `ProjectReleaseInfo` for the current project.
+
+**`MonorepoContext`** — immutable context threaded through all steps:
+
+| Field / Method | Type | Description |
+|----------------|------|-------------|
+| `state` | `State` | Current sbt state |
+| `vcs` | `Option[Vcs]` | Git adapter, set by `initialize-vcs` |
+| `projects` | `Seq[ProjectReleaseInfo]` | Selected projects in topological order |
+| `currentProjects` | `Seq[ProjectReleaseInfo]` | Non-failed projects only |
+| `skipTests` / `skipPublish` / `interactive` | `Boolean` | Execution flags |
+| `tagStrategy` | `MonorepoTagStrategy` | `PerProject` or `Unified` |
+| `failed` | `Boolean` | Whether the release has failed |
+| `failureCause` | `Option[Throwable]` | Throwable captured on failure |
+| `withState(s)` | `MonorepoContext` | Replace sbt state |
+| `withVcs(v)` | `MonorepoContext` | Set or replace VCS adapter |
+| `withProjects(ps)` | `MonorepoContext` | Replace project list |
+| `updateProject(ref)(f)` | `MonorepoContext` | Transform a single project's info |
+| `metadata[A](key)` | `Option[A]` | Read typed inter-step metadata |
+| `withMetadata[A](key, value)` | `MonorepoContext` | Store typed inter-step metadata |
+| `withoutMetadata[A](key)` | `MonorepoContext` | Remove a metadata entry |
+| `fail` | `MonorepoContext` | Mark release as failed |
+| `failWith(cause)` | `MonorepoContext` | Mark release as failed with a cause |
+
+**`ProjectReleaseInfo`** — per-project metadata available in `PerProject` steps:
+
+| Field / Method | Type | Description |
+|----------------|------|-------------|
+| `ref` | `ProjectRef` | sbt project reference |
+| `name` | `String` | Project name (matches `ref.project`) |
+| `baseDir` | `File` | Project root directory |
+| `versionFile` | `File` | Resolved version file path |
+| `versions` | `Option[(String, String)]` | `(releaseVersion, nextVersion)`, set by `inquire-versions` |
+| `releaseVersion` | `Option[String]` | Shorthand for `versions.map(_._1)` |
+| `nextVersion` | `Option[String]` | Shorthand for `versions.map(_._2)` |
+| `tagName` | `Option[String]` | Tag name, set by `tag-releases` |
+| `failed` | `Boolean` | Whether this project failed |
+| `failureCause` | `Option[Throwable]` | Throwable captured when this project's step fails |
+
+### Sharing data between steps
+
+Use `ctx.updateProject(ref)(_.copy(...))` to update a single project's metadata from within a step.
+This is the per-project complement to `ctx.withMetadata` / `ctx.metadata`, which store global (non-project-scoped) values.
+
+```scala
+// Global step: after inquire-versions has run, log every project's planned release version
+val logPlannedVersions = globalStepAction("log-planned-versions") { ctx =>
+  IO {
+    ctx.currentProjects.foreach { p =>
+      p.releaseVersion match {
+        case Some(v) => ctx.state.log.info(s"[release] ${p.name} → $v")
+        case None    => ctx.state.log.warn(s"[release] ${p.name} — no release version set yet")
+      }
+    }
+  }
+}
+```
+
+For global (non-project-scoped) data shared across steps, use typed metadata:
+
+```scala
+private val myKey = AttributeKey[String]("myKey")
+
+val writeStep = globalStep("write-metadata") { ctx =>
+  IO.pure(ctx.withMetadata(myKey, "hello"))
+}
+
+val readStep = globalStepAction("read-metadata") { ctx =>
+  IO(ctx.state.log.info(ctx.metadata[String](myKey).getOrElse("(not set)")))
+}
+```
+
 ### Builder API
 
 For steps with validation, cross-build, or resource access, use the fluent builder API on `MonorepoStepIO`:
@@ -581,53 +602,11 @@ val logStep = MonorepoStepIO
 
 Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only), `.withSelectionBoundary` (global only). Resource-aware builders (`globalResource`, `perProjectResource`) are covered in [Custom plugins](#custom-plugins).
 
-> **Selection boundaries**: A global step marked with `.withSelectionBoundary` splits the release into a **setup segment** and a **main segment**. Steps up to and including the boundary run validate-then-execute sequentially — this is where project ordering and selection are established from live `State`. Steps after the boundary run all validations first against the selected snapshot, then all executions. The built-in `detect-or-select-projects` step is the default boundary. Custom steps rarely need this flag.
-
-### Sharing data between steps
-
-Use `ctx.updateProject(ref)(_.copy(...))` to update a single project's metadata from within a step.
-This is the per-project complement to `ctx.withMetadata` / `ctx.metadata`, which store global (non-project-scoped) values.
-
-```scala
-// Global step: after inquire-versions has run, log every project's planned release version
-val logPlannedVersions = globalStepAction("log-planned-versions") { ctx =>
-  IO {
-    ctx.currentProjects.foreach { p =>
-      p.releaseVersion match {
-        case Some(v) => ctx.state.log.info(s"[release] ${p.name} → $v")
-        case None    => ctx.state.log.warn(s"[release] ${p.name} — no release version set yet")
-      }
-    }
-  }
-}
-
-// Global step: forcibly pin the release version for one project
-val pinCoreVersion = globalStep("pin-core-version") { ctx =>
-  IO.pure(
-    ctx.projects.find(_.name == "core").fold(ctx) { core =>
-      ctx.updateProject(core.ref)(
-        _.copy(versions = Some(("2.0.0", "2.1.0-SNAPSHOT")))
-      )
-    }
-  )
-}
-```
-
-For global (non-project-scoped) data shared across steps, use typed metadata:
-
-```scala
-private val myKey = AttributeKey[String]("myKey")
-
-val writeStep = globalStep("write-metadata") { ctx =>
-  IO.pure(ctx.withMetadata(myKey, "hello"))
-}
-
-val readStep = globalStepAction("read-metadata") { ctx =>
-  IO(ctx.state.log.info(ctx.metadata[String](myKey).getOrElse("(not set)")))
-}
-```
+> **Selection boundaries**: A global step marked with `.withSelectionBoundary` splits the release into a setup segment and a main segment. Steps before the boundary run validate-then-execute sequentially; steps after it run all validations first, then all executions. The built-in `detect-or-select-projects` is the default boundary. Custom steps rarely need this.
 
 ### Customizing the release process
+
+Filter, insert, or replace steps in `build.sbt`. Use `insertStepBefore` / `insertStepAfter` to add steps at specific positions by name (matching the `step.name` strings in the [default steps table](#default-release-steps)).
 
 ```scala
 // Filter out steps
@@ -649,8 +628,6 @@ releaseIOMonorepoProcess := Seq(
   setNextVersions, commitNextVersions, pushChanges
 )
 ```
-
-`insertStepAfter` and `insertStepBefore` match the exact `step.name` strings shown in the default-step table.
 
 ### Custom plugins
 
@@ -718,20 +695,14 @@ val fetchMetadata: HttpClient => MonorepoStepIO = MonorepoStepIO
       ctx.withMetadata(metadataKey, metadata)
     }
   }
-
-// Per-project with cross-build and validation
-val uploadArtifact: HttpClient => MonorepoStepIO = MonorepoStepIO
-  .perProjectResource[HttpClient]("upload-artifact")
-  .withCrossBuild
-  .withValidation { client => (ctx, project) =>
-    IO.blocking { client.get(s"/can-upload/${project.name}") }.void
-  }
-  .executeAction { client => (ctx, project) =>
-    IO.blocking { client.post(s"/upload/${project.name}", project.releaseVersion.getOrElse("")) }
-  }
 ```
 
 Use `insertAfter` / `insertBefore` (shown in [Customizing the release process](#customizing-the-release-process)) to insert resource-aware steps at specific positions. Override `monorepoReleaseProcess` directly to build the step sequence from scratch — plain steps from `MonorepoReleaseSteps` and resource-aware steps can be mixed freely via implicit conversion.
+
+> **Common pitfalls** with custom plugins:
+> - `import sbt.*` shadows `io.release` — use `_root_` imports
+> - Do not define `object autoImport` — it causes ambiguous references
+> - Plugins must live in `project/*.scala`, not `build.sbt`
 
 ### Step timing
 
@@ -765,80 +736,7 @@ override protected def monorepoReleaseProcess(state: State): Seq[Unit => Monorep
   )
 ```
 
-Example: update `ctx.projects` directly for later custom `PerProject` steps:
-
-```scala
-private val keepLibrariesOnly = MonorepoStepIO
-  .global("keep-libraries-only")
-  .execute { ctx =>
-    IO.pure(ctx.withProjects(ctx.projects.filter(_.name.startsWith("lib-"))))
-  }
-
-override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-  insertAfter(Project.extract(state).get(releaseIOMonorepoProcess), "detect-or-select-projects")(
-    Seq((_: Unit) => keepLibrariesOnly)
-  )
-```
-
-Use the first pattern when later built-in steps should see new settings from `State`. Use the second pattern when later custom `PerProject` steps should iterate a different project set.
-
-## Common Pitfalls
-
-### `import sbt.*` shadows the `io` package in `project/*.scala`
-
-In `project/*.scala` files, `import sbt.*` brings in `sbt.io`, shadowing the top-level `io` package.
-Custom plugin imports like `import io.release.monorepo.*` fail with:
-
-```
-[error] not found: value io
-[error]   import io.release.monorepo.*
-```
-
-**Fix:** prefix `io.release` and `cats.effect` with `_root_`:
-
-```scala
-// project/MyReleasePlugin.scala
-import sbt.*
-import _root_.io.release.monorepo.*
-import _root_.io.release.monorepo.MonorepoReleaseIO.*
-import _root_.cats.effect.{IO, Resource}
-```
-
-This only applies in `project/*.scala`. In `build.sbt`, unqualified `io.release` imports work correctly.
-
-### Duplicate `autoImport` causes ambiguous reference errors
-
-If a custom plugin defines `object autoImport`, sbt sees two plugins exporting the same keys and
-any reference to `releaseIOMonorepoProcess` (or any other shared key) fails with:
-
-```
-[error] reference to releaseIOMonorepoProcess is ambiguous
-```
-
-**Fix:** do not define `object autoImport` in custom plugins that extend `MonorepoReleasePluginLike`.
-The keys exported by `MonorepoReleasePlugin.autoImport` are already in scope everywhere.
-
-### Custom plugin not found at build time
-
-Plugins that extend `MonorepoReleasePluginLike[T]` must be in `project/*.scala`. sbt only discovers
-`AutoPlugin` subclasses during meta-build compilation. A plugin class placed in `build.sbt` will not
-be found.
-
-### First release shows no projects changed
-
-On a brand-new repo with no prior release tags, change detection marks all projects as changed — this
-is expected. If tags exist but under a different scheme, some projects may appear unchanged. Use
-`all-changed` to bypass detection and release everything:
-
-```bash
-sbt "releaseIOMonorepo all-changed with-defaults"
-```
-
-Or disable change detection permanently:
-
-```scala
-releaseIOMonorepoDetectChanges := false
-```
+To filter the project set for later custom `PerProject` steps without touching `State`, use `ctx.withProjects(...)` instead.
 
 ## Recovery and Rollback
 
@@ -869,16 +767,8 @@ cat core/version.sbt   # inspect a version file
 git tag -d core/v0.1.0
 git tag -d api/v0.1.0
 
-# Undo commits (2 = commit-release-versions + commit-next-versions)
+# Undo commits (2 = commit-release-versions + commit-next-versions; use HEAD~1 if only one was made)
 git reset --hard HEAD~2
-```
-
-If the release failed before `commit-next-versions` (only one commit was made):
-
-```bash
-git tag -d core/v0.1.0
-git tag -d api/v0.1.0
-git reset --hard HEAD~1
 ```
 
 ### Rollback: push has already happened
