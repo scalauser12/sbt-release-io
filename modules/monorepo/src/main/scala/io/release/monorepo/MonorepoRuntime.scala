@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import sbt.*
+import sbt.{internal as _, *}
 
 /** Frequently reused monorepo settings resolved from a single sbt state snapshot. */
 private[monorepo] final case class MonorepoRuntime(
@@ -9,7 +9,7 @@ private[monorepo] final case class MonorepoRuntime(
     extracted: Extracted,
     useGlobalVersion: Boolean,
     readVersion: File => IO[String],
-    writeVersion: (File, String) => IO[String]
+    versionFileContents: (File, String) => IO[String]
 )
 
 private[monorepo] object MonorepoRuntime {
@@ -23,6 +23,6 @@ private[monorepo] object MonorepoRuntime {
       extracted = extracted,
       useGlobalVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion),
       readVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoReadVersion),
-      writeVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoWriteVersion)
+      versionFileContents = extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersionFileContents)
     )
 }

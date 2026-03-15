@@ -1,6 +1,6 @@
 # sbt-release-io
 
-An sbt plugin wrapping sbt-release with cats-effect IO. Two modules:
+A cats-effect IO port of sbt-release for sbt. Two modules:
 - **core** (`sbt-release-io`): main plugin in `modules/core/src/main/scala/io/release/`
 - **monorepo** (`sbt-release-io-monorepo`): monorepo extension in `modules/monorepo/src/main/scala/io/release/monorepo/`
 
@@ -10,18 +10,41 @@ Scala 2.12 with `-Xsource:3`. sbt 1.12.3. cats-effect 3.6.3. specs2 for tests.
 
 - `sbt compile` — compile both modules
 - `sbt test` — run unit tests (specs2) for both modules
-- `sbt scripted` — run all scripted integration tests (~28 tests, takes ~3 min)
+- `sbt scripted` — run all scripted integration tests (~109 tests: 39 core + 70 monorepo, takes ~8 min)
+- `sbt core/scripted` — run core scripted tests only
+- `sbt monorepo/scripted` — run monorepo scripted tests only
+- `sbt 'core/scripted sbt-release-io/<test-name>'` — run a single core scripted test
+- `sbt 'monorepo/scripted sbt-release-io-monorepo/<test-name>'` — run a single monorepo scripted test
 - `sbt core/test` — run core unit tests only
 - `sbt monorepo/test` — run monorepo unit tests only
-- `sbt scalafmtAll` — format Scala source files
-- `sbt scalafmtSbt` — format `.sbt` and build definition files
-- `sbt scalafmtCheckAll` — verify Scala source formatting
-- `sbt scalafmtSbtCheck` — verify `.sbt` and build definition formatting
+- `sbt scalafmtAll` — format all source files
+
+### sbt 2 Testing
+
+The Metals-generated `metals.sbt` files (`project/metals.sbt`, `project/project/metals.sbt`,
+`project/project/project/metals.sbt`) add the sbt-bloop plugin which is incompatible with sbt 2.
+Move them out of the way before running sbt 2 commands. Use a `trap` to guarantee restoration
+even if the tests fail or are interrupted:
+
+```sh
+# Move metals.sbt files aside and set up automatic restoration
+metals_files="project/metals.sbt project/project/metals.sbt project/project/project/metals.sbt"
+for f in $metals_files; do [ -f "$f" ] && mv "$f" "$f.bak"; done
+trap 'for f in $metals_files; do [ -f "$f.bak" ] && mv "$f.bak" "$f"; done' EXIT
+
+# Run tests with sbt 2
+sbt -Dsbt.version=2.0.0-RC9 test              # unit tests
+sbt -Dsbt.version=2.0.0-RC9 core/scripted      # core scripted tests
+sbt -Dsbt.version=2.0.0-RC9 monorepo/scripted  # monorepo scripted tests
+```
+
+The sbt 2 version is defined in `build.sbt` (`Sbt2Version`) and `.github/workflows/ci.yml`
+(`SBT2_VERSION`). Update both when bumping.
 
 ## Coding Conventions
 
 - Scala 2.12 with `-Xsource:3` — `import foo.{*, given}` and `[?]` wildcards are valid
-- Formatting: scalafmt 3.10.7 with `runner.dialect = scala212source3`, `project.layout = StandardConvention`, `lang:scala-3 = scala3`, and `.sbt = sbt1`
+- Formatting: scalafmt 3.10.7, `runner.dialect = scala212source3`, maxColumn = 100, `align.preset = most`
 - Use cats-effect `IO` for all effectful operations; wrap blocking calls in `IO.blocking`
 - Error handling: use `scala.util.control.NonFatal` in catch blocks, never bare `RuntimeException`
 - Use `handleErrorWith` for per-project error isolation in monorepo steps

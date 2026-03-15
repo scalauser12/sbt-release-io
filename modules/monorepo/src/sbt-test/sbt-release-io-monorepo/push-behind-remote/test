@@ -1,0 +1,31 @@
+# Test: pushChanges validate fails when local is behind remote (non-interactive hard-fail)
+# The two-phase compose model runs ALL validates before actions,
+# so NO version modifications occur when validate fails.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+
+# Set up bare remote
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git push -u origin main
+
+# Create a commit on the remote (making local behind)
+$ exec git clone remotes/origin.git temp-clone
+$ exec git -C temp-clone config user.email "other@example.com"
+$ exec git -C temp-clone config user.name "Other"
+$ exec git -C temp-clone commit --allow-empty -m "Remote advance"
+$ exec git -C temp-clone push origin main
+
+# Update local tracking refs so isBehindRemote detects the divergence
+$ exec git fetch origin
+
+# Release should fail at push-changes validate (behind remote, non-interactive aborts)
+-> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Verify no version modifications occurred (validate phase failed before any actions)
+> checkNoVersionChange

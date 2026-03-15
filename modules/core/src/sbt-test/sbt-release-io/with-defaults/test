@@ -19,8 +19,8 @@ $ exec git tag -d v1.0.0-RC1
 $ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 > reload
 
-# with-defaults also works and honors releaseVersionBump
-> set releaseVersionBump := sbtrelease.Version.Bump.NextStable
+# with-defaults also works and honors releaseIOVersionBump
+> set releaseIOVersionBump := _root_.io.release.version.Version.Bump.NextStable
 > releaseIO with-defaults
 > checkContentsOfVersionSbt 1.0.1-SNAPSHOT
 

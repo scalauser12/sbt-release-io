@@ -1,7 +1,8 @@
 package io.release
 
 import cats.effect.IO
-import sbt.*
+import io.release.version.Version
+import sbt.{internal as _, *}
 
 /** Shared setting keys and factory methods for release-io plugins.
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
@@ -42,8 +43,75 @@ trait ReleaseIO {
     * Receives `(versionFile, newVersion)` and returns `IO[newFileContents]`.
     * The file parameter allows reading existing content for partial updates.
     */
-  val releaseIOWriteVersion: SettingKey[(File, String) => IO[String]] =
-    ReleaseIO._releaseIOWriteVersion
+  val releaseIOVersionFileContents: SettingKey[(File, String) => IO[String]] =
+    ReleaseIO._releaseIOVersionFileContents
+
+  // ── Forked sbt-release keys ─────────────────────────────────────────────
+
+  /** Path to the version file (e.g. `version.sbt`). */
+  val releaseIOVersionFile: SettingKey[File] = ReleaseIO._releaseIOVersionFile
+
+  /** When `true`, the version file uses `ThisBuild / version` instead of `version`. */
+  val releaseIOUseGlobalVersion: SettingKey[Boolean] = ReleaseIO._releaseIOUseGlobalVersion
+
+  /** When `true`, VCS tags and commits are GPG-signed. */
+  val releaseIOVcsSign: SettingKey[Boolean] = ReleaseIO._releaseIOVcsSign
+
+  /** When `true`, VCS commits include a `Signed-off-by` line. */
+  val releaseIOVcsSignOff: SettingKey[Boolean] = ReleaseIO._releaseIOVcsSignOff
+
+  /** When `true`, untracked files do not cause the clean-working-dir check to fail. */
+  val releaseIOIgnoreUntrackedFiles: SettingKey[Boolean] = ReleaseIO._releaseIOIgnoreUntrackedFiles
+
+  /** The current version at evaluation time. Useful as a dependency for tag/commit message tasks
+    * so they pick up the version set by `setReleaseVersion` via `appendWithSession`.
+    */
+  @transient
+  val releaseIORuntimeVersion: TaskKey[String] = ReleaseIO._releaseIORuntimeVersion
+
+  /** Tag name for the release. Default: `s"v$$version"`. */
+  @transient
+  val releaseIOTagName: TaskKey[String] = ReleaseIO._releaseIOTagName
+
+  /** Tag comment. Default: `s"Releasing $$version"`. */
+  @transient
+  val releaseIOTagComment: TaskKey[String] = ReleaseIO._releaseIOTagComment
+
+  /** Commit message for the release version commit. */
+  @transient
+  val releaseIOCommitMessage: TaskKey[String] = ReleaseIO._releaseIOCommitMessage
+
+  /** Commit message for the next snapshot version commit. */
+  @transient
+  val releaseIONextCommitMessage: TaskKey[String] = ReleaseIO._releaseIONextCommitMessage
+
+  /** Function that computes the release version from the current version. */
+  @transient
+  val releaseIOVersion: TaskKey[String => String] = ReleaseIO._releaseIOVersion
+
+  /** Function that computes the next development version from the release version. */
+  @transient
+  val releaseIONextVersion: TaskKey[String => String] = ReleaseIO._releaseIONextVersion
+
+  /** Version bump strategy. */
+  @transient
+  val releaseIOVersionBump: TaskKey[Version.Bump] =
+    ReleaseIO._releaseIOVersionBump
+
+  /** Task that resolves SNAPSHOT dependencies for validation. */
+  @transient
+  val releaseIOSnapshotDependencies: TaskKey[Seq[ModuleID]] =
+    ReleaseIO._releaseIOSnapshotDependencies
+
+  /** Task that performs the actual publish action. Default: `publish`. */
+  @transient
+  val releaseIOPublishArtifactsAction: TaskKey[Unit] = ReleaseIO._releaseIOPublishArtifactsAction
+
+  /** When false, skips publishTo/skip validation in the publishArtifacts step.
+    * Useful when overriding `releaseIOPublishArtifactsAction` with a custom publish task.
+    */
+  val releaseIOPublishArtifactsChecks: SettingKey[Boolean] =
+    ReleaseIO._releaseIOPublishArtifactsChecks
 
   // ── Factory methods ───────────────────────────────────────────────────────
 
@@ -70,29 +138,6 @@ trait ReleaseIO {
   /** Create a release step that runs a command and drains remaining enqueued commands. */
   def stepCommandAndRemaining(command: String): ReleaseStepIO =
     ReleaseStepIO.fromCommandAndRemaining(command)
-
-  // ── Resource-aware factory methods ─────────────────────────────────
-
-  /** Create a resource-aware release step from a named IO action.
-    *
-    * {{{
-    * val notifySlack: HttpClient => ReleaseStepIO = resourceStep("notify-slack") { client => ctx =>
-    *   IO { client.post("/slack", s"Released $${ctx.versions}"); ctx }
-    * }
-    * }}}
-    */
-  def resourceStep[T](name: String, enableCrossBuild: Boolean = false)(
-      f: T => ReleaseContext => IO[ReleaseContext]
-  ): T => ReleaseStepIO =
-    (t: T) => ReleaseStepIO(name, f(t), enableCrossBuild = enableCrossBuild)
-
-  /** Create a resource-aware release step with a check phase. */
-  def resourceStepWithCheck[T](name: String, enableCrossBuild: Boolean = false)(
-      action: T => ReleaseContext => IO[ReleaseContext]
-  )(
-      check: T => ReleaseContext => IO[ReleaseContext]
-  ): T => ReleaseStepIO =
-    (t: T) => ReleaseStepIO(name, action(t), check(t), enableCrossBuild)
 
 }
 
@@ -125,9 +170,100 @@ object ReleaseIO extends ReleaseIO {
       "Function to read the current version from the version file"
     )
 
-  private[release] lazy val _releaseIOWriteVersion: SettingKey[(File, String) => IO[String]] =
+  private[release] lazy val _releaseIOVersionFileContents
+      : SettingKey[(File, String) => IO[String]] =
     SettingKey[(File, String) => IO[String]](
-      "releaseIOWriteVersion",
+      "releaseIOVersionFileContents",
       "Function that produces version file contents: (file, version) => IO[contents]"
+    )
+
+  // ── Forked sbt-release keys ──────────────────────────────────────────────
+
+  private[release] lazy val _releaseIOVersionFile: SettingKey[File] =
+    SettingKey[File]("releaseIOVersionFile", "Path to the version file")
+
+  private[release] lazy val _releaseIOUseGlobalVersion: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOUseGlobalVersion",
+      "Whether the version file uses ThisBuild / version"
+    )
+
+  private[release] lazy val _releaseIOVcsSign: SettingKey[Boolean] =
+    SettingKey[Boolean]("releaseIOVcsSign", "Whether VCS tags and commits are GPG-signed")
+
+  private[release] lazy val _releaseIOVcsSignOff: SettingKey[Boolean] =
+    SettingKey[Boolean]("releaseIOVcsSignOff", "Whether VCS commits include a Signed-off-by line")
+
+  private[release] lazy val _releaseIOIgnoreUntrackedFiles: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOIgnoreUntrackedFiles",
+      "Whether untracked files are ignored during clean working dir check"
+    )
+
+  @transient
+  private[release] lazy val _releaseIORuntimeVersion: TaskKey[String] =
+    TaskKey[String](
+      "releaseIORuntimeVersion",
+      "The current version at evaluation time (used by tag/commit message tasks)"
+    )
+
+  @transient
+  private[release] lazy val _releaseIOTagName: TaskKey[String] =
+    TaskKey[String]("releaseIOTagName", "Tag name for the release")
+
+  @transient
+  private[release] lazy val _releaseIOTagComment: TaskKey[String] =
+    TaskKey[String]("releaseIOTagComment", "Tag comment for the release")
+
+  @transient
+  private[release] lazy val _releaseIOCommitMessage: TaskKey[String] =
+    TaskKey[String]("releaseIOCommitMessage", "Commit message for the release version commit")
+
+  @transient
+  private[release] lazy val _releaseIONextCommitMessage: TaskKey[String] =
+    TaskKey[String](
+      "releaseIONextCommitMessage",
+      "Commit message for the next snapshot version commit"
+    )
+
+  @transient
+  private[release] lazy val _releaseIOVersion: TaskKey[String => String] =
+    TaskKey[String => String](
+      "releaseIOVersion",
+      "Function that computes the release version from the current version"
+    )
+
+  @transient
+  private[release] lazy val _releaseIONextVersion: TaskKey[String => String] =
+    TaskKey[String => String](
+      "releaseIONextVersion",
+      "Function that computes the next development version from the release version"
+    )
+
+  @transient
+  private[release] lazy val _releaseIOVersionBump: TaskKey[Version.Bump] =
+    TaskKey[Version.Bump](
+      "releaseIOVersionBump",
+      "Version bump strategy"
+    )
+
+  @transient
+  private[release] lazy val _releaseIOSnapshotDependencies: TaskKey[Seq[ModuleID]] =
+    TaskKey[Seq[ModuleID]](
+      "releaseIOSnapshotDependencies",
+      "Task that resolves SNAPSHOT dependencies for validation"
+    )
+
+  @transient
+  private[release] lazy val _releaseIOPublishArtifactsAction: TaskKey[Unit] =
+    TaskKey[Unit](
+      "releaseIOPublishArtifactsAction",
+      "Task that performs the actual publish action"
+    )
+
+  private[release] lazy val _releaseIOPublishArtifactsChecks: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPublishArtifactsChecks",
+      "Whether to run publishTo validation checks for the publish step"
     )
 }

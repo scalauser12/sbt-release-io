@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name := "untracked-files-test"
 
@@ -9,7 +9,7 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
   step.name == "push-changes" || step.name == "publish-artifacts"
 }
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 // Custom verification task (following upstream sbt-release pattern)
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")

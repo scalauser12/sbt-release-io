@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import sbt.IO
 import _root_.io.release.ReleaseStepIO
 
@@ -15,7 +15,7 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test
 
 val writeCrossMarker = ReleaseStepIO(
   name = "write-cross-marker",
-  action = ctx =>
+  execute = ctx =>
     _root_.cats.effect.IO {
       val extracted = Project.extract(ctx.state)
       val markerDir = extracted.get(baseDirectory) / "marker"
@@ -35,7 +35,7 @@ releaseIOProcess := releaseIOProcess.value
     else Seq(step)
   }
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")
 checkGitTag := {

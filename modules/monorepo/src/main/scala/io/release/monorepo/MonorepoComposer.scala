@@ -1,140 +1,138 @@
 package io.release.monorepo
 
-import _root_.io.release.{ComposerSupport, CrossBuildSupport}
 import cats.effect.IO
+import io.release.internal.{ExecutionEngine, SbtRuntime}
 import io.release.monorepo.steps.MonorepoStepHelpers
-import sbt.*
 import sbt.Keys.*
-import sbtrelease.Compat
+import sbt.{internal as _, *}
 
-import scala.util.control.NonFatal
-
-/** Orchestrates the two-phase execution model for [[MonorepoStepIO]] sequences,
-  * including cross-build support, per-project failure isolation, and sbt failure detection.
-  *
-  * Mirrors the core `ReleaseComposer` design but adds:
-  *  - '''Per-project iteration''' — [[MonorepoStepIO.PerProject]] steps iterate projects in
-  *    topological order with error isolation: a project failure marks that project failed
-  *    without aborting the current step's remaining projects. After the step completes,
-  *    if any project failed, all subsequent steps are skipped.
-  *  - '''Cross-build''' — steps with `enableCrossBuild` run once per `crossScalaVersions`,
-  *    switching the Scala version via project structure reload between iterations.
-  *
-  * Called by [[MonorepoStepIO.compose]], which is the public entry point.
-  *
-  * @see [[MonorepoStepIO]] for the step data model
-  * @see [[MonorepoReleasePluginLike.doMonorepoRelease]] for the top-level command handler
-  */
+/** Orchestrates monorepo validation and execution with a selection-aware setup boundary. */
 private[monorepo] object MonorepoComposer {
 
-  private val LogPrefix = "[release-io-monorepo]"
+  private val LogPrefix                   = "[release-io-monorepo]"
+  private[monorepo] val SelectionBoundary = "detect-or-select-projects"
 
-  /** Compose a sequence of monorepo steps into a two-phase IO program.
-    *
-    * '''Phase 1 -- Checks:''' Each step's check runs against the initial context
-    * (with `onFailure` armed for `FailureCommand` detection). Check state mutations
-    * are intentionally discarded, except for failure detection via `FailureCommand`.
-    * External side effects performed by checks are not rolled back, so custom checks
-    * should be side-effect free and safe to run more than once. Any check failure
-    * short-circuits the entire release before any actions execute.
-    *
-    * '''Phase 2 -- Actions:''' Each step's action runs in sequence, threading
-    * [[MonorepoContext]] through. Between every step, sbt's `FailureCommand` sentinel
-    * is inspected to detect task-level failures that did not raise exceptions.
-    *
-    *  - '''Global''' steps run once and convert exceptions to `ctx.fail`.
-    *  - '''PerProject''' steps iterate projects in topological order, with per-project
-    *    error isolation: a project failure marks that project as failed without aborting
-    *    the current step's remaining projects. After the step completes, if any project
-    *    failed, the global context is marked failed and all subsequent steps are skipped
-    *    entirely (both Global and PerProject).
-    *
-    * @param steps      ordered release steps to compose
-    * @param crossBuild when true, steps with `enableCrossBuild` run once per `crossScalaVersions`
-    * @param initialCtx the starting monorepo context
-    * @return the final context, or a failed IO if the release failed
-    */
   def compose(steps: Seq[MonorepoStepIO], crossBuild: Boolean = false)(
       initialCtx: MonorepoContext
-  ): IO[MonorepoContext] = {
-    val startCtx = ComposerSupport.armOnFailure(initialCtx)
+  ): IO[MonorepoContext] =
+    splitAtBoundary(steps) match {
+      case Some((setupSteps, mainSteps)) =>
+        for {
+          setupCtx <- runSequentialValidateThenExecute(
+                        setupSteps,
+                        crossBuild,
+                        ExecutionEngine.armOnFailure(initialCtx)
+                      )
+          finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
+                      else runMainSegment(mainSteps, crossBuild, setupCtx)
+        } yield finalCtx
 
-    val wrappedActions: Seq[MonorepoContext => IO[MonorepoContext]] = steps.map {
-      step => (ctx: MonorepoContext) => executeStepAction(step, crossBuild, ctx)
+      case None =>
+        runSequentialValidateThenExecute(
+          steps,
+          crossBuild,
+          ExecutionEngine.armOnFailure(initialCtx)
+        )
+    }
+
+  private def splitAtBoundary(
+      steps: Seq[MonorepoStepIO]
+  ): Option[(Seq[MonorepoStepIO], Seq[MonorepoStepIO])] = {
+    val boundaryIndex = steps.indexWhere {
+      case g: MonorepoStepIO.Global => g.isSelectionBoundary
+      case _                        => false
+    }
+    if (boundaryIndex < 0) None
+    else Some(steps.splitAt(boundaryIndex + 1))
+  }
+
+  private def runMainSegment(
+      steps: Seq[MonorepoStepIO],
+      crossBuild: Boolean,
+      startCtx: MonorepoContext
+  ): IO[MonorepoContext] = {
+    val validations: Seq[ExecutionEngine.ValidationStep[MonorepoContext]] = steps.map { step =>
+      ExecutionEngine.ValidationStep(
+        step.name,
+        buildValidation(step, crossBuild)
+      )
+    }
+
+    val actions: Seq[ExecutionEngine.ActionStep[MonorepoContext]] = steps.map { step =>
+      ExecutionEngine.ActionStep(
+        step.name,
+        (currentCtx: MonorepoContext) => executeStep(step, crossBuild, currentCtx)
+      )
     }
 
     for {
-      _        <- runCheckPhase(steps, crossBuild, initialCtx)
-      finalCtx <- ComposerSupport.runActionPhase(wrappedActions)(startCtx)
-      result   <-
-        if (finalCtx.failed)
-          IO.raiseError(
-            new IllegalStateException(
-              "Monorepo release process failed",
-              finalCtx.failureCause.orNull
-            )
-          )
-        else
-          IO.pure(finalCtx)
-    } yield result
+      _      <- ExecutionEngine.runValidations(LogPrefix, validations, startCtx)
+      result <- ExecutionEngine.runActions(actions, ExecutionEngine.armOnFailure(startCtx))
+    } yield result.context
   }
 
-  // ── Check phase ──────────────────────────────────────────────────────
-
-  /** Phase 1: run all checks against the initial context with `onFailure` armed.
-    * Non-failure state mutations from checks are intentionally discarded.
-    * Any check failure (exception or `FailureCommand`) aborts the release before actions execute.
-    *
-    * Checks run against the full project set before `detectOrSelectProjects` filters by change
-    * detection. Per-project checks (e.g. snapshot dependencies) therefore run for all projects;
-    * a failure in any project aborts the release before any actions run.
-    */
-  private def runCheckPhase(
+  private def runSequentialValidateThenExecute(
       steps: Seq[MonorepoStepIO],
       crossBuild: Boolean,
-      initialCtx: MonorepoContext
-  ): IO[Unit] = {
-    val armedCtx = ComposerSupport.armOnFailure(initialCtx)
-    steps.foldLeft(IO.unit) { (acc, step) =>
-      acc *> {
-        val checkIO = step match {
-          case global: MonorepoStepIO.Global         =>
-            global.check(armedCtx)
-          case perProject: MonorepoStepIO.PerProject =>
-            val wrappedCheck =
-              wrapWithCrossBuild(perProject.check, perProject.enableCrossBuild, crossBuild)
-            armedCtx.currentProjects.foldLeft(IO.pure(armedCtx)) { (innerAcc, project) =>
-              innerAcc.flatMap(c => wrappedCheck(c, project))
-            }
+      startCtx: MonorepoContext
+  ): IO[MonorepoContext] =
+    steps.foldLeft(IO.pure(startCtx)) { (ioCtx, step) =>
+      ioCtx.flatMap { currentCtx =>
+        if (currentCtx.failed) IO.pure(currentCtx)
+        else {
+          val validate = buildValidation(step, crossBuild)
+          for {
+            _       <- validate(currentCtx)
+            nextCtx <- runSingleStepAction(step, crossBuild, currentCtx)
+          } yield nextCtx
         }
-        checkIO.flatMap(checkForFailure).void
       }
     }
+
+  private def buildValidation(
+      step: MonorepoStepIO,
+      crossBuild: Boolean
+  ): MonorepoContext => IO[Unit] =
+    step match {
+      case global: MonorepoStepIO.Global         =>
+        global.validate
+      case perProject: MonorepoStepIO.PerProject =>
+        val wrappedValidation =
+          wrapValidationWithCrossBuild(perProject.validate, perProject.enableCrossBuild, crossBuild)
+
+        ctx =>
+          ctx.currentProjects.foldLeft(IO.unit) { (acc, project) =>
+            acc *> wrappedValidation(ctx, project)
+          }
+    }
+
+  private def runSingleStepAction(
+      step: MonorepoStepIO,
+      crossBuild: Boolean,
+      ctx: MonorepoContext
+  ): IO[MonorepoContext] = {
+    val actions: Seq[MonorepoContext => IO[MonorepoContext]] =
+      Seq((currentCtx: MonorepoContext) => executeStep(step, crossBuild, currentCtx))
+
+    ExecutionEngine
+      .runActionPhase(actions)(ExecutionEngine.armOnFailure(ctx))
+      .map(_.context)
   }
 
-  private def checkForFailure(ctx: MonorepoContext): IO[MonorepoContext] = {
-    val failureCommand = Compat.FailureCommand
-    if (ctx.state.remainingCommands.headOption.contains(failureCommand))
-      IO.raiseError(new IllegalStateException("Check phase failed: sbt task failure detected"))
-    else
-      IO.pure(ctx)
-  }
-
-  // ── Action dispatch ─────────────────────────────────────────────────
-
-  /** Execute a single step's action, dispatching between Global and PerProject. */
-  private def executeStepAction(
+  private def executeStep(
       step: MonorepoStepIO,
       crossBuild: Boolean,
       ctx: MonorepoContext
   ): IO[MonorepoContext] = step match {
     case global: MonorepoStepIO.Global =>
-      (IO.blocking(ctx.state.log.info(s"$LogPrefix ${global.name}")) *>
-        global.action(ctx)).handleErrorWith(handleStepError(ctx, global.name))
+      ExecutionEngine.withErrorRecovery[MonorepoContext](LogPrefix) { currentCtx =>
+        IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${global.name}")) *>
+          global.execute(currentCtx)
+      }(ctx)
 
     case perProject: MonorepoStepIO.PerProject =>
       val wrappedAction =
-        wrapWithCrossBuild(perProject.action, perProject.enableCrossBuild, crossBuild)
+        wrapActionWithCrossBuild(perProject.execute, perProject.enableCrossBuild, crossBuild)
       executePerProjectAction(ctx, perProject.name, wrappedAction)
   }
 
@@ -152,9 +150,17 @@ private[monorepo] object MonorepoComposer {
       )
       .map(MonorepoStepHelpers.propagateFailures)
 
-  // ── Cross-build support ──────────────────────────────────────────────
+  private def wrapValidationWithCrossBuild(
+      fn: (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
+      enableCrossBuild: Boolean,
+      crossBuild: Boolean
+  ): (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+    if (enableCrossBuild && crossBuild)
+      (ctx, project) =>
+        runCrossBuild(project, innerCtx => fn(innerCtx, project).as(innerCtx))(ctx).void
+    else fn
 
-  private def wrapWithCrossBuild(
+  private def wrapActionWithCrossBuild(
       fn: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
       enableCrossBuild: Boolean,
       crossBuild: Boolean
@@ -167,15 +173,13 @@ private[monorepo] object MonorepoComposer {
       project: ProjectReleaseInfo,
       action: MonorepoContext => IO[MonorepoContext]
   )(ctx: MonorepoContext): IO[MonorepoContext] = IO.defer {
-    val extracted     = Project.extract(ctx.state)
+    val extracted     = SbtRuntime.extracted(ctx.state)
     val crossVersions =
       (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
     val entryVersion  = (extracted.currentRef / scalaVersion).get(extracted.structure.data)
 
     def switchTo(version: String)(currentCtx: MonorepoContext): IO[MonorepoContext] =
-      CrossBuildSupport
-        .switchScalaVersion(currentCtx.state, version)
-        .map(currentCtx.withState)
+      SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
 
     def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
       entryVersion match {
@@ -192,40 +196,25 @@ private[monorepo] object MonorepoComposer {
           )
         )
       case versions =>
-        val finalIO = versions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-          for {
-            currentCtx <- ioCtx
-            result     <-
+        versions
+          .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+            ioCtx.flatMap { currentCtx =>
               if (currentCtx.failed) IO.pure(currentCtx)
               else
-                for {
+                (for {
                   _        <- IO.blocking(
                                 currentCtx.state.log.info(
                                   s"$LogPrefix Cross-building with Scala $version"
                                 )
                               )
                   switched <- switchTo(version)(currentCtx)
-                  r        <- action(switched)
-                } yield r
-          } yield result
-        }
-
-        finalIO.flatMap(restoreEntry)
+                  result   <- action(switched)
+                } yield result).handleErrorWith { err =>
+                  restoreEntry(currentCtx).attempt *> IO.raiseError(err)
+                }
+            }
+          }
+          .flatMap(restoreEntry)
     }
   }
-
-  // ── Error handling ───────────────────────────────────────────────────
-
-  private def handleStepError(ctx: MonorepoContext, stepName: String)(
-      err: Throwable
-  ): IO[MonorepoContext] =
-    err match {
-      case NonFatal(_) =>
-        IO.blocking(
-          ctx.state.log.error(
-            s"$LogPrefix Error in $stepName: ${Option(err.getMessage).getOrElse(err.toString)}"
-          )
-        ) *> IO.pure(ctx.failWith(err))
-      case fatal       => IO.raiseError(fatal)
-    }
 }

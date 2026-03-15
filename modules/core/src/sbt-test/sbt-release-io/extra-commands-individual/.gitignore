@@ -1,7 +1,0 @@
-target/
-project/target/
-project/project/
-*.class
-*.log
-test-remote.git/
-global/

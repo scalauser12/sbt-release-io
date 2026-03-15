@@ -2,13 +2,11 @@ package io.release
 
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
+import io.release.vcs.Vcs
 import org.specs2.mutable.Specification
-import sbtrelease.Vcs
 
 import java.io.File
 import java.nio.file.Files
-import scala.sys.process.Process
-
 class VcsOpsSpec extends Specification with CatsEffect {
 
   "VcsOps.detectVcsFromBase" should {
@@ -57,6 +55,22 @@ class VcsOpsSpec extends Specification with CatsEffect {
       }
     }
 
+    "raise error listing staged files when staged-but-uncommitted changes exist" in {
+      gitRepoWithCommitResource.use { case (repo, vcs) =>
+        IO.blocking {
+          sbt.IO.write(new File(repo, "staged.txt"), "staged content")
+          TestSupport.runGit(repo, "add", "staged.txt")
+        } *>
+          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
+            case Left(e: RuntimeException) =>
+              (e.getMessage must contain("staged uncommitted changes")) and
+                (e.getMessage must contain("staged.txt"))
+            case other                     =>
+              ko(s"Expected RuntimeException but got $other")
+          }
+      }
+    }
+
     "raise error listing untracked files when untracked files exist" in {
       gitRepoWithCommitResource.use { case (repo, vcs) =>
         IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
@@ -90,7 +104,7 @@ class VcsOpsSpec extends Specification with CatsEffect {
   private val gitRepoResource: Resource[IO, File] =
     tempDirResource.evalMap { dir =>
       IO.blocking {
-        initGitRepo(dir)
+        TestSupport.initGitRepo(dir)
         dir
       }
     }
@@ -99,23 +113,18 @@ class VcsOpsSpec extends Specification with CatsEffect {
     gitRepoResource.evalMap { repo =>
       IO.blocking {
         sbt.IO.write(new File(repo, "file.txt"), "initial")
-        runGit(repo, "add", ".")
-        runGit(repo, "commit", "-m", "Initial commit")
-        val vcs = Vcs
-          .detect(repo)
-          .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-        (repo, vcs)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        repo
+      }.flatMap { r =>
+        Vcs.detect(r).flatMap {
+          case Some(vcs) => IO.pure((r, vcs))
+          case None      =>
+            IO.raiseError(
+              new RuntimeException(s"Failed to detect VCS in ${r.getAbsolutePath}")
+            )
+        }
       }
     }
-
-  private def initGitRepo(repo: File): Unit = {
-    runGit(repo, "init")
-    runGit(repo, "config", "user.email", "test@example.com")
-    runGit(repo, "config", "user.name", "Test User")
-    ()
-  }
-
-  private def runGit(repo: File, args: String*): String =
-    Process(Seq("git") ++ args, repo).!!
 
 }

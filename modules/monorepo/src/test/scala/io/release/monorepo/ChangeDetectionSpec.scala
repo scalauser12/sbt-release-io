@@ -3,15 +3,13 @@ package io.release.monorepo
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
 import io.release.TestSupport
+import io.release.vcs.Vcs
 import org.specs2.mutable.Specification
 import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
 import sbt.{ProjectRef, State}
-import sbtrelease.Vcs
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 import java.nio.file.Files
-import scala.sys.process.Process
-
 class ChangeDetectionSpec extends Specification with CatsEffect {
 
   "ChangeDetection.detectChangedProjects" should {
@@ -22,19 +20,17 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
           sbt.IO.createDirectory(new File(repo, "core"))
           sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
 
-          initGitRepo(repo)
-          runGit(repo, "add", ".")
-          runGit(repo, "commit", "-m", "Initial commit")
-          runGit(repo, "tag", "core-v0.1.0")
+          TestSupport.initGitRepo(repo)
+          TestSupport.runGit(repo, "add", ".")
+          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+          TestSupport.runGit(repo, "tag", "core-v0.1.0")
 
-          val vcs = Vcs
-            .detect(repo)
-            .getOrElse(
-              sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}")
-            )
-
-          sbt.IO.move(new File(repo, ".git"), new File(repo, ".git-broken"))
-          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+          repo
+        }.flatMap { _ =>
+          detectVcs(repo).flatMap { vcs =>
+            IO.blocking(sbt.IO.move(new File(repo, ".git"), new File(repo, ".git-broken")))
+              .as((vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
+          }
         }.flatMap { case (vcs: Vcs, env: TestEnv) =>
           val project = ProjectReleaseInfo(
             ref = ProjectRef(repo.toURI, "core"),
@@ -64,17 +60,14 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
               """version := "0.1.0-SNAPSHOT"""" + "\n"
             )
 
-            initGitRepo(repo)
-            runGit(repo, "add", ".")
-            runGit(repo, "commit", "-m", "Initial commit")
-            runGit(repo, "tag", "core-v0.1.0")
+            TestSupport.initGitRepo(repo)
+            TestSupport.runGit(repo, "add", ".")
+            TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+            TestSupport.runGit(repo, "tag", "core-v0.1.0")
 
-            val vcs = Vcs
-              .detect(repo)
-              .getOrElse(
-                sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}")
-              )
-            (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+            repo
+          }.flatMap { _ =>
+            detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
           }.flatMap { case (vcs: Vcs, env: TestEnv) =>
             val project = ProjectReleaseInfo(
               ref = ProjectRef(repo.toURI, "core"),
@@ -102,20 +95,19 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
           sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
 
-          initGitRepo(repo)
-          runGit(repo, "add", ".")
-          runGit(repo, "commit", "-m", "Initial commit")
-          runGit(repo, "tag", "core-v0.1.0")
+          TestSupport.initGitRepo(repo)
+          TestSupport.runGit(repo, "add", ".")
+          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+          TestSupport.runGit(repo, "tag", "core-v0.1.0")
 
           // Modify only the root build.sbt after tagging
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
-          runGit(repo, "add", "build.sbt")
-          runGit(repo, "commit", "-m", "Update root build.sbt")
+          TestSupport.runGit(repo, "add", "build.sbt")
+          TestSupport.runGit(repo, "commit", "-m", "Update root build.sbt")
 
-          val vcs = Vcs
-            .detect(repo)
-            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+          repo
+        }.flatMap { _ =>
+          detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
         }.flatMap { case (vcs: Vcs, env: TestEnv) =>
           val project = ProjectReleaseInfo(
             ref = ProjectRef(repo.toURI, "core"),
@@ -143,15 +135,14 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
           sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
 
-          initGitRepo(repo)
-          runGit(repo, "add", ".")
-          runGit(repo, "commit", "-m", "Initial commit")
-          runGit(repo, "tag", "core-v0.1.0")
+          TestSupport.initGitRepo(repo)
+          TestSupport.runGit(repo, "add", ".")
+          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+          TestSupport.runGit(repo, "tag", "core-v0.1.0")
 
-          val vcs = Vcs
-            .detect(repo)
-            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+          repo
+        }.flatMap { _ =>
+          detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
         }.flatMap { case (vcs: Vcs, env: TestEnv) =>
           val project = ProjectReleaseInfo(
             ref = ProjectRef(repo.toURI, "core"),
@@ -180,25 +171,24 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
           sbt.IO.write(new File(repo, "api/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
 
-          initGitRepo(repo)
-          runGit(repo, "add", ".")
-          runGit(repo, "commit", "-m", "Initial commit")
+          TestSupport.initGitRepo(repo)
+          TestSupport.runGit(repo, "add", ".")
+          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
 
           // Tag core first
-          runGit(repo, "tag", "core-v0.1.0")
+          TestSupport.runGit(repo, "tag", "core-v0.1.0")
 
           // Modify build.sbt after core's tag
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
-          runGit(repo, "add", "build.sbt")
-          runGit(repo, "commit", "-m", "Update root build.sbt")
+          TestSupport.runGit(repo, "add", "build.sbt")
+          TestSupport.runGit(repo, "commit", "-m", "Update root build.sbt")
 
           // Tag api after the build.sbt change
-          runGit(repo, "tag", "api-v0.1.0")
+          TestSupport.runGit(repo, "tag", "api-v0.1.0")
 
-          val vcs = Vcs
-            .detect(repo)
-            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+          repo
+        }.flatMap { _ =>
+          detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
         }.flatMap { case (vcs: Vcs, env: TestEnv) =>
           val core = ProjectReleaseInfo(
             ref = ProjectRef(repo.toURI, "core"),
@@ -231,20 +221,19 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
           sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
 
-          initGitRepo(repo)
-          runGit(repo, "add", ".")
-          runGit(repo, "commit", "-m", "Initial commit")
-          runGit(repo, "tag", "core-v0.1.0")
+          TestSupport.initGitRepo(repo)
+          TestSupport.runGit(repo, "add", ".")
+          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+          TestSupport.runGit(repo, "tag", "core-v0.1.0")
 
           // Modify root build.sbt
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
-          runGit(repo, "add", "build.sbt")
-          runGit(repo, "commit", "-m", "Update root build.sbt")
+          TestSupport.runGit(repo, "add", "build.sbt")
+          TestSupport.runGit(repo, "commit", "-m", "Update root build.sbt")
 
-          val vcs = Vcs
-            .detect(repo)
-            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+          repo
+        }.flatMap { _ =>
+          detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
         }.flatMap { case (vcs: Vcs, env: TestEnv) =>
           val project = ProjectReleaseInfo(
             ref = ProjectRef(repo.toURI, "core"),
@@ -271,20 +260,19 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
           sbt.IO.write(new File(repo, "api/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
 
-          initGitRepo(repo)
-          runGit(repo, "add", ".")
-          runGit(repo, "commit", "-m", "Initial commit")
-          runGit(repo, "tag", "v0.1.0")
+          TestSupport.initGitRepo(repo)
+          TestSupport.runGit(repo, "add", ".")
+          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+          TestSupport.runGit(repo, "tag", "v0.1.0")
 
           // Modify build.sbt after the unified tag
           sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
-          runGit(repo, "add", "build.sbt")
-          runGit(repo, "commit", "-m", "Update root build.sbt")
+          TestSupport.runGit(repo, "add", "build.sbt")
+          TestSupport.runGit(repo, "commit", "-m", "Update root build.sbt")
 
-          val vcs = Vcs
-            .detect(repo)
-            .getOrElse(sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+          repo
+        }.flatMap { _ =>
+          detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
         }.flatMap { case (vcs: Vcs, env: TestEnv) =>
           val core = ProjectReleaseInfo(
             ref = ProjectRef(repo.toURI, "core"),
@@ -321,17 +309,14 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
         IO.blocking {
           sbt.IO.write(new File(repo, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
 
-          initGitRepo(repo)
-          runGit(repo, "add", ".")
-          runGit(repo, "commit", "-m", "Initial commit")
-          runGit(repo, "tag", "root-v0.1.0")
+          TestSupport.initGitRepo(repo)
+          TestSupport.runGit(repo, "add", ".")
+          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+          TestSupport.runGit(repo, "tag", "root-v0.1.0")
 
-          val vcs = Vcs
-            .detect(repo)
-            .getOrElse(
-              sys.error(s"Failed to detect VCS in ${repo.getAbsolutePath}")
-            )
-          (vcs, testEnv(repo, new File(repo, "sbt-test.log")))
+          repo
+        }.flatMap { _ =>
+          detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
         }.flatMap { case (vcs: Vcs, env: TestEnv) =>
           val project = ProjectReleaseInfo(
             ref = ProjectRef(repo.toURI, "root"),
@@ -374,6 +359,13 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
       sharedPaths = sharedPaths
     )
 
+  private def detectVcs(repo: File): IO[Vcs] =
+    Vcs.detect(repo).flatMap {
+      case Some(vcs) => IO.pure(vcs)
+      case None      =>
+        IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+    }
+
   private val tempDirResource: Resource[IO, File] =
     Resource.make(IO.blocking(Files.createTempDirectory("change-detection-spec").toFile))(dir =>
       IO.blocking(TestSupport.deleteRecursively(dir))
@@ -383,16 +375,6 @@ class ChangeDetectionSpec extends Specification with CatsEffect {
     Resource.make(IO.blocking(Files.createTempDirectory("change-detection-outside").toFile))(dir =>
       IO.blocking(TestSupport.deleteRecursively(dir))
     )
-
-  private def initGitRepo(repo: File): Unit = {
-    runGit(repo, "init")
-    runGit(repo, "config", "user.email", "test@example.com")
-    runGit(repo, "config", "user.name", "Test User")
-    ()
-  }
-
-  private def runGit(repo: File, args: String*): String =
-    Process(Seq("git") ++ args, repo).!!
 
   private final class TestEnv(
       val state: State,

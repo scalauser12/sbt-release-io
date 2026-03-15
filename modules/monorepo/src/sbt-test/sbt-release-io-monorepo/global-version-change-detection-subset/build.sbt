@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
@@ -29,7 +29,7 @@ lazy val root = (project in file("."))
       step.name == "run-tests"
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkFailureArtifacts := {
       val tags        = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

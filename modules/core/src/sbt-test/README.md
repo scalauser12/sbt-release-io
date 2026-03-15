@@ -14,7 +14,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ## Available Tests
 
 ### check-phase
-- Verifies that check-phase failures prevent action execution
+- Verifies that validation-phase failures prevent step execution
 
 ### command-line-version-numbers
 - Specifies release and next versions via `release-version` / `next-version` args
@@ -33,7 +33,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Uses `runtimeVersion` to create dynamic tag names
 
 ### custom-version-format
-- Tests `releaseVersionFile` (from sbt-release), `releaseIOReadVersion`, and `releaseIOWriteVersion` settings
+- Tests `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOVersionFileContents` settings
 - Uses a `.properties` file format instead of default `version.sbt`
 - Verifies custom format preserved in both working directory and git tag commits
 
@@ -43,11 +43,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies release side effects: default tag creation and next-version write
 
 ### defaults-with-after
-- Tests `defaultsWithAfter` inserts a custom step at the correct position
+- Tests `insertAfter` inserts a custom step at the correct position
 - Custom plugin inserts step after `check-clean-working-dir`
 
 ### defaults-with-before
-- Tests `defaultsWithBefore` inserts a custom step at the correct position
+- Tests `insertBefore` inserts a custom step at the correct position
 - Custom plugin inserts step before `tag-release`
 
 ### empty-commit
@@ -61,15 +61,6 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 ### exit-code
 - Verifies exit codes from `releaseIO` (0 for success, 1 for failure)
 - Tests both `fromCommand` and `fromCommandAndRemaining` step factories
-
-### extra-commands
-- Verifies upstream-style helper commands are registered
-- Covers `release-vcs-checks`, version inquire/set/commit, and tagging commands
-- Ensures command chaining works via state attributes between commands
-
-### extra-commands-individual
-- Runs each standalone release command in isolation
-- Verifies state flows correctly between commands (inquire → set → commit → tag → etc.)
 
 ### fail-test
 - Verifies that failing tests abort the release before later steps execute
@@ -103,9 +94,14 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies that failing tests in aggregated sub-projects abort the release
 - Multi-project setup with one passing and one failing test
 
+### resource-step-action
+- Tests `ReleaseStepIO.resourceStep[T]` builder with `executeAction` and `withValidation` in a custom plugin
+- Verifies that action variants (`IO[Unit]` execute) pass context through correctly
+- Verifies both validate and execute phases run for the action-with-validation variant
+
 ### resource-step-with-check
-- Tests `resourceStepWithCheck` in a custom plugin
-- Verifies both check and action phases run for resource-aware steps
+- Tests `ReleaseStepIO.resourceStep[T]` builder with `withValidation` and `execute` in a custom plugin
+- Verifies both validate and execute phases run for resource-aware steps
 
 ### simple
 - Tests the basic release workflow end-to-end
@@ -140,11 +136,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies tasks, input tasks, and commands all execute correctly as release steps
 
 ### untracked-files
-- Tests `releaseIgnoreUntrackedFiles := true`
+- Tests `releaseIOIgnoreUntrackedFiles := true`
 - Creates untracked files and verifies release succeeds when the setting is enabled
 
 ### untracked-files-fail
-- Tests default `releaseIgnoreUntrackedFiles` behavior (false)
+- Tests default `releaseIOIgnoreUntrackedFiles` behavior (false)
 - Verifies untracked files block the release before any commit, tag, or `version.sbt` mutation
 
 ### version-bump
@@ -153,7 +149,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 
 ### with-defaults
 - Tests release with and without the `with-defaults` flag
-- Verifies `releaseVersionBump` setting is honored across multiple scenarios
+- Verifies `releaseIOVersionBump` setting is honored across multiple scenarios
 
 ## Running Tests
 

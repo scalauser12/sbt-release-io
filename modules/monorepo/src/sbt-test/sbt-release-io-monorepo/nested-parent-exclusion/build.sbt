@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 // 3-level hierarchy: root -> services -> api
 // When only services/api/ changes, services should NOT be detected as changed.
@@ -32,7 +32,7 @@ lazy val root = (project in file("."))
       step.name == "run-tests"
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

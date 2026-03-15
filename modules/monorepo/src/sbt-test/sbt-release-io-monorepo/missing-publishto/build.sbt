@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
@@ -18,7 +18,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
     checkNoCommits              := {
       val count = "git log --oneline".!!.trim.split("\n").length
       // Only the initial commit should exist — check phase aborts before any actions

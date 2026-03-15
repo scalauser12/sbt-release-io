@@ -1,15 +1,13 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import _root_.io.release.VcsOps
+import io.release.VcsOps
 import io.release.monorepo.*
-import io.release.monorepo.MonorepoReleaseIO.*
+import io.release.monorepo.internal.MonorepoTagResolver
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.steps.StepHelpers.{required, runProcess}
-import sbt.*
-import sbt.Keys.*
-import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.Vcs
+import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
+import io.release.vcs.Vcs
+import sbt.internal as _
 
 import scala.sys.process.Process
 
@@ -24,94 +22,129 @@ private[monorepo] object MonorepoVcsSteps {
 
   private def resolveGitPushTarget(vcs: Vcs): IO[GitPushTarget] =
     for {
-      resolved <- IO.blocking {
-                    val localBranch = vcs.currentBranch
-                    val remote      = vcs.trackingRemote
-                    val upstreamRef =
-                      Process(
-                        Seq(
-                          "git",
-                          "rev-parse",
-                          "--abbrev-ref",
-                          "--symbolic-full-name",
-                          "@{upstream}"
-                        ),
-                        vcs.baseDir
-                      ).!!.trim
-
-                    val remotePrefix = s"$remote/"
-                    if (!upstreamRef.startsWith(remotePrefix))
-                      Left(
-                        s"Upstream '$upstreamRef' for branch '$localBranch' does not match tracking remote '$remote'."
-                      )
-                    else {
-                      val upstreamBranch = upstreamRef.stripPrefix(remotePrefix)
-                      if (upstreamBranch.isEmpty)
-                        Left(
-                          s"Unable to resolve upstream branch from '$upstreamRef' for tracking remote '$remote'."
-                        )
-                      else
-                        Right(
-                          GitPushTarget(
-                            remote = remote,
-                            localBranch = localBranch,
-                            upstreamBranch = upstreamBranch
-                          )
-                        )
-                    }
-                  }
-      target   <- IO.fromEither(resolved.left.map(new IllegalStateException(_)))
-    } yield target
+      localBranch   <- vcs.currentBranch
+      remote        <- vcs.trackingRemote
+      upstreamRef   <- IO.blocking(
+                         Process(
+                           Seq(
+                             "git",
+                             "rev-parse",
+                             "--abbrev-ref",
+                             "--symbolic-full-name",
+                             "@{upstream}"
+                           ),
+                           vcs.baseDir
+                         ).!!.trim
+                       )
+      remotePrefix   = s"$remote/"
+      _             <-
+        IO.raiseUnless(upstreamRef.startsWith(remotePrefix))(
+          new IllegalStateException(
+            s"Upstream '$upstreamRef' for branch '$localBranch' does not match tracking remote '$remote'."
+          )
+        )
+      upstreamBranch = upstreamRef.stripPrefix(remotePrefix)
+      _             <-
+        IO.raiseWhen(upstreamBranch.isEmpty)(
+          new IllegalStateException(
+            s"Unable to resolve upstream branch from '$upstreamRef' for tracking remote '$remote'."
+          )
+        )
+    } yield GitPushTarget(
+      remote = remote,
+      localBranch = localBranch,
+      upstreamBranch = upstreamBranch
+    )
 
   val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "initialize-vcs",
-    action = ctx => VcsOps.detectAndInit(ctx)
+    execute = ctx => VcsOps.detectAndInit(ctx)
   )
 
   val checkCleanWorkingDir: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "check-clean-working-dir",
-    action = ctx => IO.pure(ctx),
-    check = ctx =>
+    execute = ctx => IO.pure(ctx),
+    validate = ctx =>
       VcsOps.checkCleanWorkingDir(ctx.state).flatMap { result =>
-        logInfo(ctx, s"Starting release off commit: ${result.currentHash}")
+        IO.blocking(
+          ctx.state.log
+            .info(s"[release-io-monorepo] Starting release off commit: ${result.currentHash}")
+        )
       }
   )
 
   private def createTag(
+      ctx: MonorepoContext,
       vcs: Vcs,
       tagName: String,
       comment: String,
       sign: Boolean,
       label: String
   ): IO[Unit] =
-    IO.blocking(vcs.existsTag(tagName)).flatMap {
+    vcs.existsTag(tagName).flatMap {
+      case false => vcs.tag(tagName, comment, sign = sign)
       case true  =>
-        IO.raiseError(
-          new IllegalStateException(s"Tag [$tagName] already exists for $label. Aborting.")
-        )
-      case false =>
-        runProcess(vcs.tag(tagName, comment, sign = sign), s"vcs tag '$tagName'")
+        if (useDefaults(ctx.state))
+          IO.blocking(
+            ctx.state.log.warn(
+              s"[release-io-monorepo] Tag [$tagName] already exists for $label. " +
+                "Aborting (use-defaults mode)."
+            )
+          ) *> IO.raiseError(
+            new IllegalStateException(
+              s"Tag [$tagName] already exists for $label. Aborting."
+            )
+          )
+        else if (!ctx.interactive)
+          IO.blocking(
+            ctx.state.log.warn(
+              s"[release-io-monorepo] Tag [$tagName] already exists for $label. " +
+                "Aborting (non-interactive mode)."
+            )
+          ) *> IO.raiseError(
+            new IllegalStateException(
+              s"Tag [$tagName] already exists for $label. " +
+                "Aborting release in non-interactive mode."
+            )
+          )
+        else
+          askYesNo(
+            s"Tag [$tagName] already exists for $label! Overwrite? (y/n) [n] ",
+            defaultYes = false
+          )
+            .flatMap {
+              case true  =>
+                IO.blocking(
+                  ctx.state.log.warn(
+                    s"[release-io-monorepo] Tag [$tagName] already exists. Overwriting."
+                  )
+                ) *> vcs.tag(tagName, comment, sign = sign, force = true)
+              case false =>
+                IO.raiseError(
+                  new IllegalStateException(
+                    s"Tag [$tagName] already exists for $label. Aborting."
+                  )
+                )
+            }
     }
 
   private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
     MonorepoStepIO.PerProject(
       name = "tag-release",
-      action = (ctx, project) =>
+      execute = (ctx, project) =>
         required(ctx.vcs, "VCS not initialized") { vcs =>
           required(project.versions, s"Versions not set for ${project.name}") {
             case (releaseVer, _) =>
-              IO.blocking {
-                val extracted = Project.extract(ctx.state)
-                (
-                  extracted.get(releaseIOMonorepoTagName)(project.name, releaseVer),
-                  extracted.get(releaseVcsSign)
-                )
-              }.flatMap { case (tagName, sign) =>
+              // Resolved per-project: tag name/comment depend on releaseIORuntimeVersion
+              // which varies by project.
+              IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
+                val tagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
+                  ctx,
                   vcs,
                   tagName,
                   s"Release ${project.name} $releaseVer",
-                  sign,
+                  settings.sign,
                   project.name
                 ) *>
                   logInfo(ctx, s"Tagged ${project.name} as $tagName")
@@ -123,7 +156,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   private[monorepo] val tagReleasesUnified: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-release",
-    action = ctx =>
+    execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
         validateVersionConsistency(
           ctx.currentProjects,
@@ -135,16 +168,11 @@ private[monorepo] object MonorepoVcsSteps {
             case None           =>
               IO.raiseError(new IllegalStateException("No release versions set for any project"))
             case Some((rel, _)) =>
-              IO.blocking {
-                val extracted = Project.extract(ctx.state)
-                (
-                  extracted.get(releaseIOMonorepoUnifiedTagName)(rel),
-                  extracted.get(releaseVcsSign)
-                )
-              }.flatMap { case (tagName, sign) =>
+              IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
+                val tagName = settings.unifiedTagName(rel)
                 val summary =
                   versionSummary(ctx, { case (releaseVer, _) => releaseVer })
-                createTag(vcs, tagName, s"Release: $summary", sign, "release") *>
+                createTag(ctx, vcs, tagName, s"Release: $summary", settings.sign, "release") *>
                   logInfo(ctx, s"Tagged release as $tagName").as(
                     ctx.currentProjects.foldLeft(ctx) { (c, p) =>
                       c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
@@ -156,85 +184,77 @@ private[monorepo] object MonorepoVcsSteps {
       }
   )
 
+  private def gitPush(ctx: MonorepoContext, vcs: Vcs): IO[MonorepoContext] = {
+    val tags = ctx.currentProjects.flatMap(_.tagName).distinct
+    for {
+      pushTarget <- resolveGitPushTarget(vcs)
+      _          <- logInfo(
+                      ctx,
+                      s"Pushing branch ${pushTarget.localBranch} " +
+                        s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
+                    )
+      _          <- runProcess(
+                      Process(
+                        Seq(
+                          "git",
+                          "push",
+                          pushTarget.remote,
+                          s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
+                        ),
+                        vcs.baseDir
+                      ),
+                      s"git push ${pushTarget.remote} " +
+                        s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
+                    )
+      _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
+                      acc *>
+                        logInfo(ctx, s"Pushing tag $tag").void *>
+                        runProcess(
+                          Process(
+                            Seq("git", "push", pushTarget.remote, tag),
+                            vcs.baseDir
+                          ),
+                          s"git push tag '$tag'"
+                        )
+                    }
+    } yield ctx
+  }
+
   /** Push branch and tags to the remote. Tag pushing is implemented only for git.
     * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
     * users should verify their VCS behavior.
     */
   val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "push-changes",
-    check = ctx =>
-      VcsOps.detectVcs(ctx.state).flatMap { vcs =>
-        for {
-          hasUpAndBranch <- IO.blocking((vcs.hasUpstream, vcs.currentBranch))
-          (hasUp, branch) = hasUpAndBranch
-          _              <-
-            IO.raiseUnless(hasUp)(
-              new IllegalStateException(
-                s"No tracking branch configured for '$branch'. " +
-                  "Set up a remote tracking branch or remove pushChanges from the release process."
-              )
-            )
-          remote         <- IO.blocking(vcs.trackingRemote)
-          remoteCode     <- IO.blocking(vcs.checkRemote(remote).!)
-          _              <- IO.raiseUnless(remoteCode == 0)(
-                              new IllegalStateException("Remote check failed. Aborting release.")
-                            )
-          behind         <- IO.blocking(vcs.isBehindRemote)
-          _              <-
-            IO.raiseWhen(behind)(
-              new IllegalStateException(
-                "Upstream has unmerged commits. Merge first or remove pushChanges from process."
-              )
-            )
-        } yield ctx
+    validate = ctx =>
+      ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
+        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, vcs)
       },
-    action = ctx =>
+    execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        for {
-          hasUp  <- IO.blocking(vcs.hasUpstream)
-          result <-
-            if (!hasUp)
-              logWarn(ctx, "No upstream branch, changes were NOT pushed.")
-            else
-              vcs.commandName match {
-                case "git" =>
-                  val tags = ctx.currentProjects.flatMap(_.tagName).distinct
-                  for {
-                    pushTarget <- resolveGitPushTarget(vcs)
-                    _          <- logInfo(
-                                    ctx,
-                                    s"Pushing branch ${pushTarget.localBranch} " +
-                                      s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
-                                  )
-                    _          <- runProcess(
-                                    Process(
-                                      Seq(
-                                        "git",
-                                        "push",
-                                        pushTarget.remote,
-                                        s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                                      ),
-                                      vcs.baseDir
-                                    ),
-                                    s"git push ${pushTarget.remote} ${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                                  )
-                    _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
-                                    acc *>
-                                      logInfo(ctx, s"Pushing tag $tag").void *>
-                                      runProcess(
-                                        Process(
-                                          Seq("git", "push", pushTarget.remote, tag),
-                                          vcs.baseDir
-                                        ),
-                                        s"git push tag '$tag'"
-                                      )
-                                  }
-                  } yield ctx
+        VcsOps.validatePushRemote(ctx.state, ctx.interactive, vcs) *> {
+          val doPush = vcs.commandName match {
+            case "git" => gitPush(ctx, vcs)
+            case _     => vcs.pushChanges.as(ctx)
+          }
 
-                case _ =>
-                  runProcess(vcs.pushChanges, "vcs push").as(ctx)
-              }
-        } yield result
+          if (!ctx.interactive) doPush
+          else {
+            val decisionIO =
+              if (useDefaults(ctx.state)) IO.pure(true)
+              else
+                askYesNo(
+                  prompt = "Push changes to the remote repository (y/n)? [y] ",
+                  defaultYes = true
+                )
+
+            decisionIO.flatMap {
+              case true  => doPush
+              case false =>
+                logWarn(ctx, "Remember to push the changes yourself!")
+            }
+          }
+        }
       }
   )
 

@@ -1,6 +1,6 @@
 package io.release
 
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Keys.clean
 
 /** Internal sbt-version compatibility shim shared across the core and monorepo modules.
@@ -13,8 +13,5 @@ object CleanCompat {
     extracted.runAggregated(ref / (Global / clean), state)
   }
 
-  def runProject(state: State, ref: ProjectRef): State = {
-    val extracted = Project.extract(state)
-    extracted.runAggregated(ref / (Global / clean), state)
-  }
+  def runProject(state: State, ref: ProjectRef): State = runBuild(state, ref)
 }

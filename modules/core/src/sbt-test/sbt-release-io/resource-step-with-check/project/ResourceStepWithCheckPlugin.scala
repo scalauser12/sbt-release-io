@@ -1,7 +1,7 @@
-import sbt._
-import sbt.Keys._
-import _root_.io.release._
-import _root_.cats.effect.{IO, Resource}
+import sbt.*
+import sbt.Keys.*
+import _root_.io.release.*
+import cats.effect.{IO, Resource}
 
 object ResourceStepWithCheckPlugin extends ReleasePluginIOLike[java.io.File] {
   override def trigger = noTrigger
@@ -16,26 +16,28 @@ object ResourceStepWithCheckPlugin extends ReleasePluginIOLike[java.io.File] {
   }
 
   override protected def releaseProcess(state: State): Seq[java.io.File => ReleaseStepIO] =
-    defaultsWith(state)(
-      resourceStepWithCheck("resource-with-check")((f: java.io.File) =>
-        (ctx: ReleaseContext) =>
-          IO {
-            sbt.IO.write(
-              new java.io.File(System.getProperty("user.dir"), "action-ran"),
-              "ran"
-            )
-            ctx
-          }
-      )((f: java.io.File) =>
-        (ctx: ReleaseContext) =>
-          IO {
-            assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
-            sbt.IO.write(
-              new java.io.File(System.getProperty("user.dir"), "check-ran"),
-              "ran"
-            )
-            ctx
-          }
-      )
+    liftSteps(Project.extract(state).get(releaseIOProcess)) :+ (
+      ReleaseStepIO
+        .resourceStep[java.io.File]("resource-with-check")
+        .withValidation(f =>
+          _ =>
+            IO {
+              assert(f.exists(), s"Resource should exist: ${f.getAbsolutePath}")
+              sbt.IO.write(
+                new java.io.File(System.getProperty("user.dir"), "check-ran"),
+                "ran"
+              )
+            }
+        )
+        .execute(f =>
+          ctx =>
+            IO {
+              sbt.IO.write(
+                new java.io.File(System.getProperty("user.dir"), "action-ran"),
+                "ran"
+              )
+              ctx
+            }
+        )
     )
 }

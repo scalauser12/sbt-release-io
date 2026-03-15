@@ -1,8 +1,8 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import sbt.*
-import sbtrelease.Vcs
+import io.release.vcs.Vcs
+import sbt.{internal as _, *}
 
 import scala.util.{Failure, Success, Try}
 
@@ -37,6 +37,10 @@ private[monorepo] object ChangeDetection {
   private def errorMessage(err: Throwable): String =
     Option(err.getMessage).filter(_.trim.nonEmpty).getOrElse(err.toString)
 
+  /** Look up the last tag matching a pattern via `git describe` / `git tag`.
+    * '''Performs blocking I/O''' (git subprocess calls) — must only be called
+    * from within `IO.blocking`.
+    */
   private def lookupLastTag(vcs: Vcs, tagPattern: String): TagLookupResult = {
     import TagLookupResult.*
 
@@ -200,6 +204,8 @@ private[monorepo] object ChangeDetection {
 
   /** Check whether any shared (root-level) paths have changed since the given tag.
     * Results are cached per tag by the caller to avoid redundant git calls.
+    * '''Performs blocking I/O''' (git subprocess calls) — must only be called
+    * from within `IO.blocking`.
     */
   private def checkSharedPaths(
       vcs: Vcs,

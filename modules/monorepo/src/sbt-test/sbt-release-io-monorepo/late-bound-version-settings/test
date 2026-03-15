@@ -1,0 +1,10 @@
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt core/version.sbt core/version.properties project/plugins.sbt project/LateBoundMonorepoVersionPlugin.scala
+$ exec git commit -m "Initial commit"
+
+> releaseLateBoundMonorepoVersion with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+$ exists late-bound-version-settings-ran
+> checkLateBoundVersionFile

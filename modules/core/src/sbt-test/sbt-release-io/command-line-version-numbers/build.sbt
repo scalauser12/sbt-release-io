@@ -6,7 +6,7 @@ scalaVersion := "2.12.18"
 
 publishTo := Some(Resolver.file("file", new File(".")))
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 val writeCompileMarker = taskKey[Unit]("Write a marker proving the release test step ran")
 writeCompileMarker := {
@@ -32,7 +32,7 @@ releaseIOProcess := Seq(
 val checkContentsOfVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")
 checkContentsOfVersionSbt := {
-  import sbt.complete.DefaultParsers._
+  import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<version>").parsed.mkString(" ")
   val contents = IO.read(file("version.sbt"))
   assert(

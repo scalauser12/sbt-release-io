@@ -5,6 +5,7 @@ import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
 import xsbti.*
 
 import java.io.File
+import scala.sys.process.Process
 
 /** Shared test fixtures for constructing minimal sbt `State` and `AppConfiguration`
   * instances. Used by both core and monorepo test suites.
@@ -110,4 +111,14 @@ object TestSupport {
       override def provider(): AppProvider    = appProvider0
     }
   }
+
+  def initGitRepo(repo: File): Unit = {
+    runGit(repo, "init")
+    runGit(repo, "config", "user.email", "test@example.com")
+    runGit(repo, "config", "user.name", "Test User")
+    ()
+  }
+
+  def runGit(repo: File, args: String*): String =
+    Process(Seq("git") ++ args, repo).!!
 }

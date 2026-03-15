@@ -1,0 +1,17 @@
+# Test: interactive=true + with-defaults exercises the useDefaults tag collision path
+# In createTag, useDefaults is checked BEFORE !ctx.interactive, producing
+# "Aborting (use-defaults mode)" instead of "Aborting release in non-interactive mode"
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Pre-create tag that will conflict
+$ exec git tag core/v1.0.0
+
+# Release with interactive=true AND with-defaults — exercises useDefaults path
+-> releaseIOMonorepo core api with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT
+
+# Verify tag preserved, next-version skipped
+> checkFailure

@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import sbt.IO
 import _root_.io.release.steps.ReleaseSteps
 
@@ -9,7 +9,7 @@ scalaVersion := "2.12.18"
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {
-  import sbt.complete.DefaultParsers._
+  import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<count>").parsed.head.toInt
   val actual   = "git log --oneline".!!.trim.linesIterator.length
   assert(actual == expected, s"Expected $expected commits but found $actual")

@@ -1,13 +1,13 @@
 package io.release
 
+import io.release.vcs.Vcs
 import sbt.State
-import sbtrelease.Vcs
 
 /** Common interface for immutable release contexts threaded through steps.
   *
   * Both [[ReleaseContext]] (single-project) and the monorepo `MonorepoContext`
-  * implement this trait, enabling shared utilities like [[VcsOps]] and
-  * [[ComposerSupport]] to operate polymorphically on either context type.
+  * implement this trait, enabling shared utilities like [[VcsOps]]
+  * to operate polymorphically on either context type.
   *
   * @tparam Self the concrete context type (F-bounded polymorphism)
   */

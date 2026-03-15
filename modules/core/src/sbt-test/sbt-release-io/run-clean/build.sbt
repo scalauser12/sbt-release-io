@@ -29,4 +29,4 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
 }
 
 // Target files created by scripted should not block the release pre-checks.
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true

@@ -1,0 +1,13 @@
+# Test: releaseIOVcsSignOff := true propagates to git commit -s
+# Verifies that release commits include the "Signed-off-by:" trailer
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Run release with sign-off enabled
+> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Verify release commits have Signed-off-by trailer
+> checkSignOff

@@ -11,7 +11,7 @@ $ touch untracked.txt
 # Verify untracked file exists
 $ exists untracked.txt
 
-# Release should succeed despite untracked file (because releaseIgnoreUntrackedFiles := true)
+# Release should succeed despite untracked file (because releaseIOIgnoreUntrackedFiles := true)
 > releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 
 # Verify release completed - check a tag was created (using custom task like upstream)

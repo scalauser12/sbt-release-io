@@ -1,10 +1,9 @@
 package io.release
 
 import cats.effect.IO
-import sbt.*
 import sbt.Def.ScopedKey
-import sbt.Keys.*
 import sbt.util.Show
+import sbt.{internal as _, *}
 
 /** Shared cross-build utilities used by both the core [[ReleaseComposer]] and the
   * monorepo `MonorepoComposer`. Switching Scala versions requires a full project-structure
@@ -36,7 +35,7 @@ private[release] object CrossBuildSupport {
     }
 
   /** Check if a setting should be excluded during cross-build (scalaVersion, scalaHome). */
-  private[release] def crossExclude(s: Setting[?]): Boolean =
+  private def crossExclude(s: Setting[?]): Boolean =
     s.key match {
       case ScopedKey(Scope(_, Zero, Zero, _), key)
           if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>
