@@ -315,7 +315,7 @@ The `releaseIOMonorepoVersionFile` resolver is called during version inquiry and
 | `releaseIOMonorepoDetectChangesExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
 | `releaseIOMonorepoSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level paths checked for shared changes per project |
 
-Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's own last release tag. If any shared file changed since that tag, the project is marked as changed. This ensures modifications to shared build definitions, compiler plugins, or dependency versions are never silently missed. In per-project tag mode, projects with different tags are evaluated independently — a project tagged after a shared change won't be marked changed, while one tagged before it will. Set to `Seq.empty` to disable.
+Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's own last release tag. If any shared file changed since that tag, that project is marked as changed. This ensures modifications to shared build definitions, compiler plugins, or dependency versions are never silently missed. In per-project tag mode, projects with different tags are evaluated independently — a project tagged after a shared change won't be marked changed, while one tagged before it will. Set to `Seq.empty` to disable.
 
 ```scala
 // Add extra shared paths (e.g. a shared source directory and formatting config)
@@ -572,19 +572,6 @@ val logStep = MonorepoStepIO
   .executeAction(ctx => IO(println("releasing...")))
 ```
 
-**Resource-aware builders** produce `T => MonorepoStepIO` for use in [custom plugins](#custom-plugins):
-
-```scala
-val myStep: HttpClient => MonorepoStepIO = MonorepoStepIO
-  .globalResource[HttpClient]("notify")
-  .execute(client => ctx => client.post(/* ... */).as(ctx))
-
-val perProjStep: HttpClient => MonorepoStepIO = MonorepoStepIO
-  .perProjectResource[HttpClient]("upload")
-  .withCrossBuild
-  .execute(client => (ctx, project) => client.upload(/* ... */).as(ctx))
-```
-
 | Entry point | Builder | Terminal methods |
 |-------------|---------|-----------------|
 | `MonorepoStepIO.global(name)` | `GlobalBuilder` | `.execute(ctx => IO[ctx])`, `.executeAction(ctx => IO[Unit])` |
@@ -592,7 +579,7 @@ val perProjStep: HttpClient => MonorepoStepIO = MonorepoStepIO
 | `MonorepoStepIO.globalResource[T](name)` | `ResourceGlobalBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
 | `MonorepoStepIO.perProjectResource[T](name)` | `ResourcePerProjectBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
 
-Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only), `.withSelectionBoundary` (global only).
+Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only), `.withSelectionBoundary` (global only). Resource-aware builders (`globalResource`, `perProjectResource`) are covered in [Custom plugins](#custom-plugins).
 
 > **Selection boundaries**: A global step marked with `.withSelectionBoundary` splits the release into a **setup segment** and a **main segment**. Steps up to and including the boundary run validate-then-execute sequentially — this is where project ordering and selection are established from live `State`. Steps after the boundary run all validations first against the selected snapshot, then all executions. The built-in `detect-or-select-projects` step is the default boundary. Custom steps rarely need this flag.
 
@@ -711,7 +698,40 @@ lazy val root = (project in file("."))
 sbt "myRelease with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
-Use `.execute` instead of `.executeAction` when the step needs to modify the context. Use `insertAfter` / `insertBefore` (shown in [Customizing the release process](#customizing-the-release-process)) to insert resource-aware steps at specific positions. Override `monorepoReleaseProcess` directly to build the step sequence from scratch — plain steps from `MonorepoReleaseSteps` and resource-aware steps can be mixed freely via implicit conversion.
+#### Resource-aware builder API
+
+Resource-aware steps use `MonorepoStepIO.globalResource[T]` and `MonorepoStepIO.perProjectResource[T]`. They produce `T => MonorepoStepIO` functions that receive the acquired resource:
+
+```scala
+// Side-effect only — context passed through unchanged
+val notifySlack: HttpClient => MonorepoStepIO = MonorepoStepIO
+  .globalResource[HttpClient]("notify-slack")
+  .executeAction { client => ctx =>
+    IO.blocking { client.post("/webhook", s"Released ${ctx.currentProjects.map(_.name).mkString(", ")}") }
+  }
+
+// Modifies the context — use .execute instead of .executeAction
+val fetchMetadata: HttpClient => MonorepoStepIO = MonorepoStepIO
+  .globalResource[HttpClient]("fetch-metadata")
+  .execute { client => ctx =>
+    IO.blocking { client.get("/release-metadata") }.map { metadata =>
+      ctx.withMetadata(metadataKey, metadata)
+    }
+  }
+
+// Per-project with cross-build and validation
+val uploadArtifact: HttpClient => MonorepoStepIO = MonorepoStepIO
+  .perProjectResource[HttpClient]("upload-artifact")
+  .withCrossBuild
+  .withValidation { client => (ctx, project) =>
+    IO.blocking { client.get(s"/can-upload/${project.name}") }.void
+  }
+  .executeAction { client => (ctx, project) =>
+    IO.blocking { client.post(s"/upload/${project.name}", project.releaseVersion.getOrElse("")) }
+  }
+```
+
+Use `insertAfter` / `insertBefore` (shown in [Customizing the release process](#customizing-the-release-process)) to insert resource-aware steps at specific positions. Override `monorepoReleaseProcess` directly to build the step sequence from scratch — plain steps from `MonorepoReleaseSteps` and resource-aware steps can be mixed freely via implicit conversion.
 
 ### Step timing
 
