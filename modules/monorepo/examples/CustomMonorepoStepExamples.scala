@@ -1,7 +1,6 @@
 package io.release.monorepo.examples
 
 import cats.effect.{IO, Resource}
-import io.release.ReleasePluginIO
 import io.release.monorepo.{MonorepoReleasePluginLike, MonorepoStepIO}
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.monorepo.MonorepoReleaseIO.*
@@ -253,58 +252,4 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       MonorepoReleaseSteps.commitNextVersions,
       MonorepoReleaseSteps.pushChanges
     )
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// Dynamic project discovery example (copy to project/*.scala)
-// ══════════════════════════════════════════════════════════════════════
-
-/** A monorepo release plugin that dynamically discovers subprojects by scanning
-  * the `modules/` directory for subdirectories containing a `version.sbt` file.
-  *
-  * Copy to `project/DynamicMonorepoPlugin.scala` so sbt can discover it. Use `_root_` imports
-  * in that file (e.g. `_root_.io.release...`) because `import sbt.*` shadows the `io` package.
-  *
-  * {{{
-  * lazy val root = (project in file("."))
-  *   .enablePlugins(DynamicMonorepoPlugin)
-  *   .aggregate(
-  *     DynamicMonorepoPlugin.extraProjects.map(p => LocalProject(p.id)): _*
-  *   )
-  * }}}
-  *
-  * Run with: `sbt "releaseDynamic with-defaults"`
-  */
-object DynamicMonorepoPlugin extends MonorepoReleasePluginLike[Unit] {
-
-  // Example value: align this with your build's Scala version.
-  private val ScalaVersion = "2.13.16"
-
-  override def trigger               = noTrigger
-  override protected def commandName = "releaseDynamic"
-
-  override def requires: Plugins = ReleasePluginIO
-
-  override def resource: Resource[IO, Unit] = Resource.unit
-
-  override lazy val extraProjects: Seq[Project] = {
-    val modulesDir = file("modules")
-    val dirs       =
-      if (modulesDir.exists && modulesDir.isDirectory)
-        Option(modulesDir.listFiles)
-          .getOrElse(Array.empty[File])
-          .filter(_.isDirectory)
-          .filter(dir => (dir / "version.sbt").exists)
-          .sorted
-          .toSeq
-      else Seq.empty
-
-    dirs.map { dir =>
-      Project(dir.getName, dir)
-        .settings(
-          name         := dir.getName,
-          scalaVersion := ScalaVersion
-        )
-    }
-  }
 }
