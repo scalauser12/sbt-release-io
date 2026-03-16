@@ -313,7 +313,7 @@ releaseIOMonorepoSharedPaths := Seq.empty
 releaseIOMonorepoSkipTests   := true
 releaseIOMonorepoCrossBuild  := true
 releaseIOMonorepoTagStrategy := MonorepoTagStrategy.Unified
-releaseIOMonorepoTagName     := { (name, ver) => s"release/$name/$ver" }
+releaseIOMonorepoTagName     := ((name, ver) => s"release/$name/$ver")
 ```
 
 ## Change Detection
@@ -399,7 +399,7 @@ api/v0.5.0
 Customize the format:
 
 ```scala
-releaseIOMonorepoTagName := { (name, ver) => s"release/$name/$ver" }
+releaseIOMonorepoTagName := ((name, ver) => s"release/$name/$ver")
 ```
 
 ### Unified
@@ -416,7 +416,7 @@ Requires all projects to have the same release version. The tag annotation lists
 
 ```scala
 releaseIOMonorepoTagStrategy    := MonorepoTagStrategy.Unified
-releaseIOMonorepoUnifiedTagName := { ver => s"release-v$ver" }
+releaseIOMonorepoUnifiedTagName := (ver => s"release-v$ver")
 ```
 
 ## Global Version Mode
@@ -463,12 +463,12 @@ Use these factory methods in `build.sbt` or `project/*.scala`:
 import cats.effect.IO
 
 // Global step — runs once, logs a release summary
-val printSummary = globalStepAction("print-summary") { ctx =>
+val printSummary = globalStepAction("print-summary")(ctx =>
   IO.blocking {
     val names = ctx.currentProjects.map(_.name).mkString(", ")
     ctx.state.log.info(s"[release] Releasing projects: $names")
   }
-}
+)
 
 // Per-project step — runs once per selected project
 val logProject = perProjectStepAction("log-project")((ctx, project) =>
@@ -525,16 +525,16 @@ This is the per-project complement to `ctx.withMetadata` / `ctx.metadata`, which
 
 ```scala
 // Global step: after inquire-versions has run, log every project's planned release version
-val logPlannedVersions = globalStepAction("log-planned-versions") { ctx =>
+val logPlannedVersions = globalStepAction("log-planned-versions")(ctx =>
   IO {
-    ctx.currentProjects.foreach { p =>
+    ctx.currentProjects.foreach(p =>
       p.releaseVersion match {
         case Some(v) => ctx.state.log.info(s"[release] ${p.name} → $v")
         case None    => ctx.state.log.warn(s"[release] ${p.name} — no release version set yet")
       }
-    }
+    )
   }
-}
+)
 ```
 
 For global (non-project-scoped) data shared across steps, use typed metadata:
@@ -542,13 +542,13 @@ For global (non-project-scoped) data shared across steps, use typed metadata:
 ```scala
 private val myKey = AttributeKey[String]("myKey")
 
-val writeStep = globalStep("write-metadata") { ctx =>
+val writeStep = globalStep("write-metadata")(ctx =>
   IO.pure(ctx.withMetadata(myKey, "hello"))
-}
+)
 
-val readStep = globalStepAction("read-metadata") { ctx =>
+val readStep = globalStepAction("read-metadata")(ctx =>
   IO(ctx.state.log.info(ctx.metadata[String](myKey).getOrElse("(not set)")))
-}
+)
 ```
 
 ### Builder API
