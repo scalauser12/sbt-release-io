@@ -1,12 +1,14 @@
 package io.release.monorepo.steps
 
-import _root_.io.release.monorepo.{MonorepoContext, MonorepoRuntime, ProjectReleaseInfo}
-import _root_.io.release.steps.StepHelpers.{required, runProcess}
 import cats.effect.IO
-import sbt.*
-import sbtrelease.ReleasePlugin.autoImport.*
+import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
+import io.release.VcsOps
+import io.release.monorepo.*
+import io.release.steps.StepHelpers
+import io.release.steps.StepHelpers.{parseVersionInput, required}
+import io.release.vcs.Vcs
+import sbt.{internal as _, *}
 
-import scala.sys.process.*
 import scala.util.control.NonFatal
 
 /** Shared helpers used across monorepo release step objects. */
@@ -14,7 +16,13 @@ private[monorepo] object MonorepoStepHelpers {
 
   /** If any project is marked failed, propagate failure to the global context. */
   def propagateFailures(ctx: MonorepoContext): MonorepoContext =
-    if (ctx.projects.exists(_.failed)) ctx.fail else ctx
+    if (ctx.projects.exists(_.failed)) {
+      val failures = ctx.projects.collect {
+        case project if project.failed =>
+          MonorepoProjectFailure(project.name, project.failureCause)
+      }
+      ctx.failWith(new MonorepoProjectFailures(failures))
+    } else ctx
 
   /** Run a per-project action across all non-failed projects, with error isolation.
     * Each project failure is logged and marks the project as failed without aborting others.
@@ -36,7 +44,9 @@ private[monorepo] object MonorepoStepHelpers {
                     s"[release-io-monorepo] ${latestProj.name}: ${Option(err.getMessage).getOrElse(err.toString)}"
                   )
                 ) *> IO.pure(
-                  currentCtx.updateProject(latestProj.ref)(_.copy(failed = true))
+                  currentCtx.updateProject(latestProj.ref)(
+                    _.copy(failed = true, failureCause = Some(err))
+                  )
                 )
               case fatal         => IO.raiseError(fatal)
             }
@@ -50,6 +60,15 @@ private[monorepo] object MonorepoStepHelpers {
 
   def logWarn(ctx: MonorepoContext, msg: String): IO[MonorepoContext] =
     IO.blocking(ctx.state.log.warn(s"[release-io-monorepo] $msg")).as(ctx)
+
+  /** Prompt user to continue — delegates to the shared implementation in [[StepHelpers]]. */
+  def confirmContinue(
+      ctx: MonorepoContext,
+      prompt: String,
+      defaultYes: Boolean,
+      abortMessage: String
+  ): IO[Unit] =
+    StepHelpers.confirmContinue(ctx.state, ctx.interactive, prompt, defaultYes, abortMessage)
 
   // ── Version summaries ─────────────────────────────────────────────────
 
@@ -76,14 +95,8 @@ private[monorepo] object MonorepoStepHelpers {
     case None    =>
       if (!interactive || useDefaults) IO.pure(suggested)
       else
-        IO.print(s"$label [$suggested] : ") *> IO.readLine.flatMap { raw =>
-          val input = Option(raw).map(_.trim).getOrElse("")
-          if (input.isEmpty) IO.pure(suggested)
-          else
-            IO.fromOption(sbtrelease.Version(input).map(_.unapply))(
-              new IllegalArgumentException(s"Invalid version format: '$input'")
-            )
-        }
+        IO.print(s"$label [$suggested] : ") *>
+          IO.readLine.flatMap(parseVersionInput(_, suggested))
   }
 
   // ── Version consistency ───────────────────────────────────────────────
@@ -111,79 +124,57 @@ private[monorepo] object MonorepoStepHelpers {
   /** Resolve version file paths relative to VCS root for all non-failed projects. */
   private[steps] def resolveRelativePaths(
       ctx: MonorepoContext,
-      vcs: sbtrelease.Vcs
+      vcs: Vcs
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
     loadRuntime(ctx).flatMap(resolveRelativePaths(ctx, vcs, _))
 
   private def resolveRelativePaths(
       ctx: MonorepoContext,
-      vcs: sbtrelease.Vcs,
+      vcs: Vcs,
       runtime: MonorepoRuntime
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
-    IO.blocking(vcs.baseDir.getCanonicalFile).flatMap { base =>
-      ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
-        (acc, project) =>
-          acc.flatMap { paths =>
-            val versionFile = resolveVersionFile(runtime, project)
-            IO.blocking(versionFile.getCanonicalFile).flatMap { canonicalFile =>
-              IO.fromOption(sbt.IO.relativize(base, canonicalFile))(
-                new IllegalStateException(
-                  s"Version file [${canonicalFile.getPath}] is outside VCS root [$base]"
-                )
-              ).map(rel => paths :+ (project, rel))
-            }
-          }
-      }
+    ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
+      (acc, project) =>
+        acc.flatMap { paths =>
+          val versionFile = resolveVersionFile(runtime, project)
+          VcsOps
+            .relativizeToBase(vcs, versionFile)
+            .map(rel => paths :+ (project, rel))
+        }
     }
 
   private[steps] def loadRuntime(ctx: MonorepoContext): IO[MonorepoRuntime] =
-    IO.blocking(_root_.io.release.monorepo.MonorepoRuntime.fromState(ctx.state))
+    IO.blocking(MonorepoRuntime.fromState(ctx.state))
 
   private[steps] def resolveVersionFile(
       runtime: MonorepoRuntime,
       project: ProjectReleaseInfo
   ): File =
-    _root_.io.release.monorepo.MonorepoVersionFiles.resolve(runtime, project.ref)
+    MonorepoVersionFiles.resolve(runtime, project.ref)
 
   private[steps] def resolveVersionFile(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[File] =
-    loadRuntime(ctx).map(resolveVersionFile(_, project))
+    MonorepoVersionSteps.resolve(ctx.state, project.ref).map(_.versionFile)
 
   // ── VCS commit ────────────────────────────────────────────────────────
 
   /** Stage version files, then commit if there are changes. */
   private[steps] def commitIfChanged(
-      vcs: sbtrelease.Vcs,
+      vcs: Vcs,
       msg: String,
       sign: Boolean,
       signOff: Boolean,
       ctx: MonorepoContext
   ): IO[MonorepoContext] =
     for {
-      statusResult <- IO.blocking {
-                        val sb   = new StringBuilder
-                        val code =
-                          vcs.status.!(ProcessLogger(line => sb.append(line).append('\n'), _ => ()))
-                        if (code != 0) Left(s"vcs status failed with exit code $code")
-                        else
-                          Right(
-                            sb.toString.trim.linesIterator
-                              .filterNot(_.startsWith("?"))
-                              .mkString("\n")
-                          )
-                      }
-      result       <- statusResult match {
-                        case Left(errMsg)  =>
-                          IO.raiseError[MonorepoContext](new IllegalStateException(errMsg))
-                        case Right(status) =>
-                          if (status.nonEmpty)
-                            runProcess(vcs.commit(msg, sign, signOff), "vcs commit") *>
-                              logInfo(ctx, s"Committed: $msg")
-                          else
-                            IO.pure(ctx)
-                      }
+      trackedStatus <- VcsOps.trackedStatus(vcs)
+      result        <- if (trackedStatus.nonEmpty)
+                         vcs.commit(msg, sign, signOff) *>
+                           logInfo(ctx, s"Committed: $msg")
+                       else
+                         IO.pure(ctx)
     } yield result
 
   /** Stage and commit version files for all non-failed projects. */
@@ -198,8 +189,8 @@ private[monorepo] object MonorepoStepHelpers {
         paths          <- resolveRelativePaths(ctx, vcs, runtime)
         settings       <- IO.blocking {
                             (
-                              runtime.extracted.get(releaseVcsSign),
-                              runtime.extracted.get(releaseVcsSignOff)
+                              runtime.extracted.get(releaseIOVcsSign),
+                              runtime.extracted.get(releaseIOVcsSignOff)
                             )
                           }
         (sign, signOff) = settings
@@ -216,7 +207,7 @@ private[monorepo] object MonorepoStepHelpers {
 
           consistencyCheck *>
             paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
-              acc *> runProcess(vcs.add(relativePath), s"vcs add '$relativePath'")
+              acc *> vcs.add(relativePath)
             } *> {
               val summary = versionSummary(ctx, selector)
               commitIfChanged(vcs, s"$msgPrefix: $summary", sign, signOff, ctx)

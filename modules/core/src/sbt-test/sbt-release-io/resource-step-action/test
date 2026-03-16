@@ -1,0 +1,24 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt project/ResourceStepActionPlugin.scala
+$ exec git commit -m "Initial commit"
+
+# Run release - custom plugin uses resourceStepAction factories
+> releaseResourceAction with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify resource lifecycle
+$ exists resource-acquired
+$ exists resource-released
+
+# Verify resourceStepAction ran
+$ exists action-ran
+
+# Verify resourceStepActionWithValidation ran both phases
+$ exists validation-ran
+$ exists action-validated-ran
+
+# Verify release completed
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt
+> checkGitTag

@@ -1,0 +1,12 @@
+target/
+project/target/
+project/project/
+*.class
+*.log
+test-remote.git/
+global/
+resource-acquired
+resource-released
+action-ran
+validation-ran
+action-validated-ran

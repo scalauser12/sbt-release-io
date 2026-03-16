@@ -29,4 +29,4 @@ releaseIOProcess := Seq(
   createFile
 )
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true

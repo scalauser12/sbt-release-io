@@ -1,19 +1,17 @@
-import scala.sys.process._
-import sbtrelease.ReleasePlugin.autoImport._
-
+import scala.sys.process.*
 lazy val core = (project in file("core"))
   .settings(
-    name           := "core",
-    scalaVersion   := "2.12.18",
-    releaseVersion := { ver => "2.0.0" }
+    name             := "core",
+    scalaVersion     := "2.12.18",
+    releaseIOVersion := { ver => "2.0.0" }
   )
 
 lazy val api = (project in file("api"))
   .dependsOn(core)
   .settings(
-    name           := "api",
-    scalaVersion   := "2.12.18",
-    releaseVersion := { ver => "3.0.0" }
+    name             := "api",
+    scalaVersion     := "2.12.18",
+    releaseIOVersion := { ver => "3.0.0" }
   )
 
 val checkNoMutation = taskKey[Unit]("Verify version.sbt was not mutated")
@@ -28,7 +26,7 @@ lazy val root = (project in file("."))
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIgnoreUntrackedFiles       := true,
+    releaseIOIgnoreUntrackedFiles     := true,
 
     checkNoMutation := {
       val contents = IO.read(file("version.sbt"))

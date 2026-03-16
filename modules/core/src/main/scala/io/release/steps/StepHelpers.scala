@@ -1,15 +1,20 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseKeys}
-import sbt.{EvaluateTask, Incomplete, Result}
-import sbtrelease.Vcs
+import io.release.ReleaseContext
+import io.release.internal.InternalKeys
+import io.release.vcs.Vcs
+import io.release.version.Version
 import sbt.internal.Aggregation.KeyValue
+import sbt.{EvaluateTask, Incomplete, Result}
 
 import scala.sys.process.*
 
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
+
+  def useDefaults(state: sbt.State): Boolean =
+    state.get(InternalKeys.executionFlags).exists(_.useDefaults)
 
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
     opt.fold(IO.raiseError[B](new IllegalStateException(error)))(f)
@@ -41,24 +46,72 @@ private[release] object StepHelpers {
         }
       }
 
+  /** Context-agnostic confirmation prompt. Shared by core and monorepo steps. */
   def confirmContinue(
-      ctx: ReleaseContext,
+      state: sbt.State,
+      interactive: Boolean,
       prompt: String,
       defaultYes: Boolean,
       abortMessage: String
   ): IO[Unit] = {
-    val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
-    if (!ctx.interactive)
+    if (!interactive)
       IO.raiseError(new IllegalStateException(abortMessage))
     else {
       val decisionIO =
-        if (useDefaults) IO.pure(defaultYes)
+        if (useDefaults(state)) IO.pure(defaultYes)
         else askYesNo(prompt, defaultYes = defaultYes)
 
       decisionIO.flatMap { continue =>
         if (continue) IO.unit
         else IO.raiseError(new IllegalStateException(abortMessage))
       }
+    }
+  }
+
+  def confirmContinue(
+      ctx: ReleaseContext,
+      prompt: String,
+      defaultYes: Boolean,
+      abortMessage: String
+  ): IO[Unit] =
+    confirmContinue(ctx.state, ctx.interactive, prompt, defaultYes, abortMessage)
+
+  /** Parse raw version input: trim whitespace, return default if empty, validate otherwise. */
+  def parseVersionInput(raw: String, default: String): IO[String] = {
+    val input = Option(raw).map(_.trim).getOrElse("")
+    if (input.isEmpty) IO.pure(default)
+    else
+      IO.fromOption(Version(input).map(_.render))(
+        new IllegalArgumentException(s"Invalid version format: '$input'")
+      )
+  }
+
+  /** Handle snapshot dependencies found during validation. Shared by core and monorepo. */
+  def handleSnapshotDependencies(
+      deps: Seq[sbt.ModuleID],
+      state: sbt.State,
+      interactive: Boolean,
+      logPrefix: String,
+      context: String = ""
+  ): IO[Unit] = {
+    if (deps.isEmpty) IO.unit
+    else {
+      val depList = deps
+        .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
+        .mkString("\n")
+      val msg     = s"Snapshot dependencies found$context:\n$depList"
+
+      if (!interactive)
+        IO.raiseError[Unit](new IllegalStateException(msg))
+      else
+        IO.blocking(state.log.warn(s"$logPrefix $msg")) *>
+          confirmContinue(
+            state,
+            interactive,
+            prompt = "Do you want to continue (y/n)? [n] ",
+            defaultYes = false,
+            abortMessage = s"Aborting release due to snapshot dependencies$context."
+          )
     }
   }
 

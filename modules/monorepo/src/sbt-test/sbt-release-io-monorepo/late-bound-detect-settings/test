@@ -1,0 +1,10 @@
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt core/version.sbt api/version.sbt project/plugins.sbt project/LateBoundDetectPlugin.scala
+$ exec git commit -m "Initial commit"
+
+> releaseLateBoundDetect with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=2.0.0 next-version api=2.1.0-SNAPSHOT
+
+$ exists late-bound-detect-settings-ran
+> checkLateBoundSelection

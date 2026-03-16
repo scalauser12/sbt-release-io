@@ -1,9 +1,9 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name         := "version-bump-test"
 scalaVersion := "2.12.18"
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 // Skip push and publish in tests
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
@@ -12,7 +12,7 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
 
 val checkVersionSbt = inputKey[Unit]("Assert version.sbt contains a specific version string")
 checkVersionSbt := {
-  import sbt.complete.DefaultParsers._
+  import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<version>").parsed.mkString(" ")
   val contents = IO.read(file("version.sbt"))
   assert(

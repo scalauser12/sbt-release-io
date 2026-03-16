@@ -1,4 +1,4 @@
-# Test: untracked files abort release when releaseIgnoreUntrackedFiles=false
+# Test: untracked files abort release when releaseIOIgnoreUntrackedFiles=false
 $ exec git init
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"

@@ -1,8 +1,8 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name                        := "custom-plugin-test"
 scalaVersion                := "2.12.18"
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 enablePlugins(CustomPlugin)
 
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>

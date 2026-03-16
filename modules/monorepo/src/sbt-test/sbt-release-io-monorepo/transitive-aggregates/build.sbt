@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 // 3-level hierarchy: root -> services -> api
 // Default releaseIOMonorepoProjects should discover api transitively.
@@ -12,7 +12,7 @@ lazy val api = (project in file("services/api"))
     Test / testOptions            += Tests.Setup(() =>
       System.setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
     ),
-    releasePublishArtifactsAction := {
+    releaseIOPublishArtifactsAction := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
       IO.append(marker, "api\n")
@@ -31,7 +31,7 @@ lazy val services = (project in file("services"))
     Test / testOptions            += Tests.Setup(() =>
       System.setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
     ),
-    releasePublishArtifactsAction := {
+    releaseIOPublishArtifactsAction := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
       IO.append(marker, "services\n")
@@ -52,7 +52,7 @@ lazy val root = (project in file("."))
 
     releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(_.name == "push-changes"),
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

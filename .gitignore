@@ -11,6 +11,7 @@ project/metals.sbt
 .cursor/
 .codex/
 .mcp.json
+AGENTS.md
 *.class
 *.log
 .DS_Store

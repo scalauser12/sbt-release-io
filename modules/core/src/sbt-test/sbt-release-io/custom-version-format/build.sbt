@@ -1,10 +1,10 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name         := "custom-version-format-test"
 scalaVersion := "2.12.18"
 
-// Point releaseVersionFile to a properties file instead of the default version.sbt
-releaseVersionFile := baseDirectory.value / "version.properties"
+// Point releaseIOVersionFile to a properties file instead of the default version.sbt
+releaseIOVersionFile := baseDirectory.value / "version.properties"
 
 // Custom reader: parse app.version=x.y.z from properties file
 releaseIOReadVersion := { (f: File) =>
@@ -23,7 +23,7 @@ releaseIOReadVersion := { (f: File) =>
 }
 
 // Custom writer: read existing file, replace only the app.version line, preserve everything else
-releaseIOWriteVersion := { (f: File, ver: String) =>
+releaseIOVersionFileContents := { (f: File, ver: String) =>
   _root_.cats.effect.IO.blocking(sbt.IO.read(f)).map { contents =>
     contents.linesIterator
       .map {
@@ -34,7 +34,7 @@ releaseIOWriteVersion := { (f: File, ver: String) =>
   }
 }
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
   step.name == "push-changes" || step.name == "publish-artifacts"

@@ -1,11 +1,14 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
+import io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOSnapshotDependencies}
 import io.release.monorepo.*
+import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import sbt.*
+import io.release.steps.StepHelpers
+import io.release.{CleanCompat, ReleaseIOCompat}
 import sbt.Keys.*
-import sbtrelease.ReleasePlugin.autoImport.*
+import sbt.{internal as _, *}
 
 import scala.util.control.NonFatal
 
@@ -26,12 +29,9 @@ private[monorepo] object MonorepoPublishSteps {
   ): IO[A] =
     IO.blocking {
       val extracted = Project.extract(ctx.state)
-
-      try extracted.runTask(key, ctx.state)._2
-      catch {
-        case NonFatal(cause) =>
-          throw new IllegalStateException(failureMessage, cause)
-      }
+      extracted.runTask(key, ctx.state)._2
+    }.handleErrorWith { case NonFatal(cause) =>
+      IO.raiseError(new IllegalStateException(failureMessage, cause))
     }
 
   private def evaluatePublishSkip(
@@ -54,38 +54,40 @@ private[monorepo] object MonorepoPublishSteps {
       s"Failed to evaluate publishTo for ${project.name}"
     )
 
-  /** Check for SNAPSHOT dependencies in each project. */
+  /** Check for SNAPSHOT dependencies in each project.
+    * Only checks resolved library dependencies — inter-project dependencies
+    * (via `.dependsOn()`) are resolved internally by sbt from compiled classes
+    * and are not included in `releaseIOSnapshotDependencies`.
+    */
   val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "check-snapshot-dependencies",
     // Snapshot checking is purely a pre-flight check; there is no release-time action.
-    action = (ctx, _) => IO.pure(ctx),
-    check = (ctx, project) =>
+    execute = (ctx, _) => IO.pure(ctx),
+    validate = (ctx, project) =>
       for {
-        checkResult <- IO.blocking {
-                         val extracted = Project.extract(ctx.state)
-                         extracted.runTask(project.ref / releaseSnapshotDependencies, ctx.state)._2
-                       }
-        result      <-
-          if (checkResult.nonEmpty) {
-            val depList = checkResult
-              .map(dep => s"  ${dep.organization}:${dep.name}:${dep.revision}")
-              .mkString("\n")
-            IO.raiseError[MonorepoContext](
-              new IllegalStateException(
-                s"Snapshot dependencies found in ${project.name}:\n$depList"
-              )
-            )
-          } else IO.pure(ctx)
-      } yield result,
+        externalSnapshots <- evaluateProjectTask(
+                               ctx,
+                               project.ref / releaseIOSnapshotDependencies,
+                               s"Failed to resolve snapshot dependencies for ${project.name}"
+                             )
+        _                 <-
+          StepHelpers.handleSnapshotDependencies(
+            externalSnapshots,
+            ctx.state,
+            ctx.interactive,
+            "[release-io-monorepo]",
+            context = s" in ${project.name}"
+          )
+      } yield (),
     enableCrossBuild = true
   )
 
   /** Run clean for each project. */
   val runClean: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "run-clean",
-    action = (ctx, project) =>
+    execute = (ctx, project) =>
       IO.blocking {
-        val newState = _root_.io.release.CleanCompat.runProject(ctx.state, project.ref)
+        val newState = CleanCompat.runProject(ctx.state, project.ref)
         ctx.withState(newState)
       }
   )
@@ -93,40 +95,50 @@ private[monorepo] object MonorepoPublishSteps {
   /** Run tests for each project. */
   val runTests: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "run-tests",
-    action = (ctx, project) =>
+    execute = (ctx, project) =>
       if (ctx.skipTests)
         logInfo(ctx, s"Skipping tests for ${project.name}")
       else
-        runProjectTask(ctx, project.ref / Test / _root_.io.release.ReleaseIOCompat.testKey),
+        runProjectTask(ctx, project.ref / Test / ReleaseIOCompat.testKey),
     enableCrossBuild = true
   )
 
   /** Publish artifacts for each project. */
   val publishArtifacts: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
     name = "publish-artifacts",
-    action = (ctx, project) =>
+    execute = (ctx, project) =>
       if (ctx.skipPublish)
         logInfo(ctx, s"Skipping publish for ${project.name}")
       else
-        runProjectTask(ctx, project.ref / releasePublishArtifactsAction),
-    check = (ctx, project) =>
-      if (ctx.skipPublish) IO.pure(ctx)
+        evaluatePublishSkip(ctx, project).flatMap { skipped =>
+          if (skipped)
+            logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)")
+          else runProjectTask(ctx, project.ref / releaseIOPublishArtifactsAction)
+        },
+    validate = (ctx, project) =>
+      if (ctx.skipPublish) IO.unit
       else
-        for {
-          publishSkipped <- evaluatePublishSkip(ctx, project)
-          publishTarget  <-
-            if (publishSkipped) IO.pure(Option.empty[Resolver])
-            else evaluatePublishTarget(ctx, project)
-          result         <-
-            if (!publishSkipped && publishTarget.isEmpty)
-              IO.raiseError[MonorepoContext](
-                new IllegalStateException(
-                  s"publishTo not configured for: ${project.ref.project}. " +
-                    "Set publishTo or add `publish / skip := true`."
-                )
-              )
-            else IO.pure(ctx)
-        } yield result,
+        IO.blocking(
+          Project.extract(ctx.state).get(releaseIOMonorepoPublishArtifactsChecks)
+        ).flatMap {
+          case false => IO.unit
+          case true  =>
+            for {
+              publishSkipped <- evaluatePublishSkip(ctx, project)
+              publishTarget  <-
+                if (publishSkipped) IO.pure(Option.empty[Resolver])
+                else evaluatePublishTarget(ctx, project)
+              result         <-
+                if (!publishSkipped && publishTarget.isEmpty)
+                  IO.raiseError[Unit](
+                    new IllegalStateException(
+                      s"publishTo not configured for: ${project.ref.project}. " +
+                        "Set publishTo or add `publish / skip := true`."
+                    )
+                  )
+                else IO.unit
+            } yield result
+        },
     enableCrossBuild = true
   )
 }

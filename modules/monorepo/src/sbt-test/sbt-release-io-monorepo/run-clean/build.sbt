@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 val seedStaleFile          = taskKey[Unit]("Create a stale file under the active target")
 val assertStaleFileExists  = taskKey[Unit]("Assert the stale file exists under the active target")
@@ -48,7 +48,7 @@ lazy val root = (project in file("."))
       step.name == "push-changes" || step.name == "publish-artifacts"
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkReleaseSelection := {
       val coreContents = IO.read(file("core/version.sbt"))

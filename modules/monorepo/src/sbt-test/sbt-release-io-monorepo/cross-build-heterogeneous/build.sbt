@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoStepIO
 
 val Scala213 = "2.13.12"
@@ -24,7 +24,7 @@ lazy val api = (project in file("api"))
 val checkAll = taskKey[Unit]("Run all verification checks")
 val crossBuildMarkerStep = MonorepoStepIO.PerProject(
   name = "write-cross-markers",
-  action = (ctx, project) =>
+  execute = (ctx, project) =>
     _root_.cats.effect.IO.blocking {
       val extracted      = sbt.Project.extract(ctx.state)
       val (newState, sv) = extracted.runTask(project.ref / markerScalaVersion, ctx.state)
@@ -43,7 +43,7 @@ lazy val root = (project in file("."))
     name := "cross-build-heterogeneous-test",
 
     releaseIOMonorepoProcess := {
-      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps._
+      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.*
 
       Seq(
         initializeVcs,
@@ -59,7 +59,7 @@ lazy val root = (project in file("."))
       )
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkAll := {
       // core has crossScalaVersions := Seq(2.13, 2.12) → action runs twice, once per version

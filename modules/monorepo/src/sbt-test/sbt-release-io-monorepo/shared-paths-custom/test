@@ -1,0 +1,21 @@
+# Test: custom shared path (.scalafmt.conf) triggers release for all projects
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate previous releases
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
+
+# Modify ONLY .scalafmt.conf (custom shared path) — no per-project changes
+$ exec /bin/sh -c 'echo "# custom shared path change" >> .scalafmt.conf'
+$ exec git add .scalafmt.conf
+$ exec git commit -m "Modify custom shared path"
+
+# Release — both projects should be detected as changed via custom shared path
+> releaseIOMonorepo with-defaults release-version core=0.2.0 release-version api=0.2.0 next-version core=0.3.0-SNAPSHOT next-version api=0.3.0-SNAPSHOT
+
+# Verify both projects were released
+> checkAll

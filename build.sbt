@@ -58,8 +58,8 @@ lazy val core = (project in file("modules/core"))
   .settings(
     commonSettings,
     name        := "sbt-release-io",
-    description := "An sbt plugin wrapping sbt-release with cats-effect IO",
-    addSbtPlugin("com.github.sbt" % "sbt-release" % "1.4.0")
+    description := "A cats-effect IO release plugin for sbt, inspired by sbt-release",
+    Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
 lazy val monorepo = (project in file("modules/monorepo"))
@@ -68,7 +68,8 @@ lazy val monorepo = (project in file("modules/monorepo"))
   .settings(
     commonSettings,
     name        := "sbt-release-io-monorepo",
-    description := "Monorepo extension for sbt-release-io"
+    description := "Monorepo extension for sbt-release-io",
+    Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
 lazy val root = (project in file("."))

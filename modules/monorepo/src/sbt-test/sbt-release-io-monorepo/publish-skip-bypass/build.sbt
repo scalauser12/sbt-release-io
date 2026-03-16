@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
@@ -21,7 +21,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
     checkGitTags                := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(tags.length == 1, s"Expected 1 tag but found ${tags.length}: ${tags.mkString(", ")}")

@@ -1,14 +1,15 @@
 package io.release.steps
 
+import cats.Monad
 import cats.effect.IO
+import io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
+import io.release.internal.{CoreReleasePlan, SbtRuntime, TagPlan}
 import io.release.steps.StepHelpers.*
-import _root_.io.release.VcsOps
-import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO}
-import sbt.*
+import io.release.vcs.Vcs
+import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
-import sbtrelease.ReleasePlugin.autoImport.*
-import sbtrelease.Vcs
+import sbt.internal as _
 
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
@@ -19,231 +20,176 @@ private[release] object VcsSteps {
 
   val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
     name = "check-clean-working-dir",
-    action = ctx => IO.pure(ctx),
-    check = checkCleanWorkingDirInternal(_, logStartHash = true)
+    execute = ctx => IO.pure(ctx),
+    validate = validateCleanWorkingDir(_, logStartHash = true)
   )
 
-  def checkCleanWorkingDirInternal(
+  def validateCleanWorkingDir(
       ctx: ReleaseContext,
       logStartHash: Boolean
-  ): IO[ReleaseContext] =
-    VcsOps.checkCleanWorkingDir(ctx.state).flatMap { result =>
+  ): IO[Unit] = {
+    val checkIO = ctx.vcs match {
+      case Some(vcs) => VcsOps.checkCleanWorkingDir(ctx.state, vcs)
+      case None      => VcsOps.checkCleanWorkingDir(ctx.state)
+    }
+    checkIO.flatMap { result =>
       IO.blocking {
         if (logStartHash)
           ctx.state.log.info(
             s"[release-io] Starting release process off commit: ${result.currentHash}"
           )
-        ctx.withVcs(result.vcs)
+        ()
       }
     }
+  }
 
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
-        setup               <- IO.blocking {
-                                 val extracted        = Project.extract(ctx.state)
-                                 val (s1, tagName)    = extracted.runTask(releaseTagName, ctx.state)
-                                 val (s2, tagComment) = extracted.runTask(releaseTagComment, s1)
-                                 val sign             = extracted.get(releaseVcsSign)
-                                 val defaultAnswer    = s2.get(ReleaseKeys.tagDefault).flatten
-                                 val useDefaults      =
-                                   s2.get(ReleaseKeys.useDefaults).getOrElse(false)
-                                 TagParams(tagName, tagComment, sign, defaultAnswer, useDefaults) ->
-                                   ctx.copy(state = s2)
-                               }
-        (params, updatedCtx) = setup
-        result              <- resolveTag(vcs, params, updatedCtx)
+        params <- IO.blocking(resolveTagPlan(ctx.state))
+        result <- resolveTag(vcs, params, ctx.copy(state = params.state))
       } yield result
     }
   }
 
+  private def resolveTagPlan(state: sbt.State): TagPlan = {
+    val (s1, tagName)    = SbtRuntime.runTask(state, releaseIOTagName)
+    val (s2, tagComment) = SbtRuntime.runTask(s1, releaseIOTagComment)
+    TagPlan(
+      state = s2,
+      tagName = tagName,
+      tagComment = tagComment,
+      sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
+      defaultAnswer = CoreReleasePlan.current(s2).flatMap(_.tagDefault)
+    )
+  }
+
   private def resolveTag(
       vcs: Vcs,
-      params: TagParams,
+      params: TagPlan,
       ctx: ReleaseContext
-  ): IO[ReleaseContext] = {
-    val TagParams(tagName, tagComment, sign, defaultAnswer, useDefaults) = params
-    for {
-      exists <- IO.blocking(vcs.existsTag(tagName))
-      result <- if (!exists)
-                  runProcess(vcs.tag(tagName, tagComment, sign = sign), s"vcs tag '$tagName'") *>
-                    IO.blocking {
-                      val newState = Project
-                        .extract(ctx.state)
-                        .appendWithSession(
-                          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)),
-                          ctx.state
-                        )
-                      ctx.copy(state = newState)
-                    }
-                else {
-                  val effectiveAnswer: IO[String] = defaultAnswer match {
-                    case Some(ans)                => IO.pure(ans)
-                    case None if useDefaults      =>
-                      IO.blocking(
-                        ctx.state.log.warn(
-                          s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
-                        )
-                      ).as("a")
-                    case None if !ctx.interactive =>
-                      IO.raiseError(
-                        new IllegalStateException(
-                          s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
-                        )
-                      )
-                    case None                     =>
-                      IO.print(
-                        s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-                      ) *>
-                        IO.readLine
-                  }
-                  effectiveAnswer.flatMap {
-                    case "a" | "A" | "" =>
-                      IO.raiseError(
-                        new IllegalStateException(
-                          s"Tag [$tagName] already exists. Aborting release!"
-                        )
-                      )
-                    case "k" | "K"      =>
+  ): IO[ReleaseContext] =
+    Monad[IO].tailRecM(params) { currentParams =>
+      val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = currentParams
+      val useDefaults                                          = StepHelpers.useDefaults(currentParams.state)
+      for {
+        exists <- vcs.existsTag(tagName)
+        result <- if (!exists)
+                    (vcs.tag(tagName, tagComment, sign) *>
                       IO.blocking {
-                        ctx.state.log
-                          .warn(
+                        val newState = SbtRuntime.appendWithSession(
+                          ctx.state,
+                          VersionSteps.sessionSettings(ctx.state) ++
+                            Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+                        )
+                        ctx.copy(state = newState)
+                      }).map(Right(_))
+                  else {
+                    val effectiveAnswer: IO[String] = defaultAnswer match {
+                      case Some(ans)                => IO.pure(ans)
+                      case None if useDefaults      =>
+                        IO.blocking(
+                          ctx.state.log.warn(
+                            s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
+                          )
+                        ).as("a")
+                      case None if !ctx.interactive =>
+                        IO.raiseError(
+                          new IllegalStateException(
+                            s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
+                          )
+                        )
+                      case None                     =>
+                        IO.print(
+                          s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
+                        ) *> IO.readLine
+                    }
+
+                    effectiveAnswer.flatMap {
+                      case "a" | "A" | "" =>
+                        IO.raiseError(
+                          new IllegalStateException(
+                            s"Tag [$tagName] already exists. Aborting release!"
+                          )
+                        )
+                      case "k" | "K"      =>
+                        IO.blocking {
+                          ctx.state.log.warn(
                             s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
                           )
-                        val newState = Project
-                          .extract(ctx.state)
-                          .appendWithSession(
-                            Seq(
-                              packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                            ),
-                            ctx.state
-                          )
-                        ctx.copy(state = newState)
-                      }
-                    case "o" | "O"      =>
-                      IO.blocking(
-                        ctx.state.log
-                          .warn(s"[release-io] Tag [$tagName] already exists. Overwriting.")
-                      ) *>
-                        runProcess(
-                          vcs.tag(tagName, tagComment, sign = sign),
-                          s"vcs tag '$tagName'"
-                        ) *>
-                        IO.blocking {
-                          val newState = Project
-                            .extract(ctx.state)
-                            .appendWithSession(
+                          val newState = SbtRuntime.appendWithSession(
+                            ctx.state,
+                            VersionSteps.sessionSettings(ctx.state) ++
                               Seq(
                                 packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                              ),
-                              ctx.state
-                            )
-                          ctx.copy(state = newState)
+                              )
+                          )
+                          Right(ctx.copy(state = newState))
                         }
-                    case newTagName     =>
-                      IO.blocking(
-                        ctx.state.log
-                          .info(s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName].")
-                      ) *>
-                        resolveTag(
-                          vcs,
-                          params
-                            .copy(tagName = newTagName, defaultAnswer = None, useDefaults = false),
-                          ctx
-                        )
+                      case "o" | "O"      =>
+                        IO.blocking(
+                          ctx.state.log.warn(
+                            s"[release-io] Tag [$tagName] already exists. Overwriting."
+                          )
+                        ) *>
+                          vcs.tag(tagName, tagComment, sign, force = true) *>
+                          IO.blocking {
+                            val newState = SbtRuntime.appendWithSession(
+                              ctx.state,
+                              VersionSteps.sessionSettings(ctx.state) ++
+                                Seq(
+                                  packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
+                                )
+                            )
+                            Right(ctx.copy(state = newState))
+                          }
+                      case newTagName     =>
+                        IO.blocking(
+                          ctx.state.log.info(
+                            s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName]."
+                          )
+                        ).as(Left(currentParams.copy(tagName = newTagName, defaultAnswer = None)))
+                    }
                   }
-                }
-    } yield result
-  }
+      } yield result
+    }
 
   val pushChanges: ReleaseStepIO = ReleaseStepIO(
     name = "push-changes",
-    check = ctx =>
-      requireVcs(ctx) { vcs =>
-        for {
-          hasUp          <- IO.blocking(vcs.hasUpstream)
-          _              <-
-            if (hasUp) IO.unit
-            else
-              IO.raiseError(
-                new IllegalStateException(
-                  s"[release-io] No tracking branch configured for branch '${vcs.currentBranch}'. " +
-                    "Set up a remote tracking branch or remove pushChanges from the release process."
-                )
-              )
-          remoteExitCode <- IO.blocking {
-                              ctx.state.log.info(
-                                s"[release-io] Checking remote [${vcs.trackingRemote}] ..."
-                              )
-                              vcs.checkRemote(vcs.trackingRemote).!
-                            }
-          _              <-
-            if (remoteExitCode == 0) IO.unit
-            else
-              confirmContinue(
-                ctx,
-                prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                defaultYes = false,
-                abortMessage = "Aborting the release due to remote check failure."
-              )
-          behindRemote   <- IO.blocking(vcs.isBehindRemote)
-          _              <-
-            if (!behindRemote) IO.unit
-            else
-              confirmContinue(
-                ctx,
-                prompt =
-                  "The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n] ",
-                defaultYes = false,
-                abortMessage = "Merge the upstream commits and run release again."
-              )
-        } yield ctx
+    validate = ctx =>
+      required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
+        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, vcs)
       },
-    action = ctx =>
+    execute = ctx =>
       requireVcs(ctx) { vcs =>
-        for {
-          hasUp  <- IO.blocking(vcs.hasUpstream)
-          result <- if (!hasUp)
-                      for {
-                        branch <- IO.blocking(vcs.currentBranch)
-                        r      <-
-                          IO.blocking(
-                            ctx.state.log.info(
-                              s"[release-io] Changes were NOT pushed, because no upstream branch is configured for branch '$branch'."
-                            )
-                          ).as(ctx)
-                      } yield r
-                    else if (!ctx.interactive)
-                      runProcess(vcs.pushChanges, "vcs push").as(ctx)
-                    else {
-                      val useDefaults = ctx.state.get(ReleaseKeys.useDefaults).getOrElse(false)
-                      val decisionIO  =
-                        if (useDefaults) IO.pure(true)
-                        else
-                          askYesNo(
-                            prompt = "Push changes to the remote repository (y/n)? [y] ",
-                            defaultYes = true
-                          )
+        VcsOps.validatePushRemote(
+          ctx.state,
+          ctx.interactive,
+          vcs,
+          log = Some(r => ctx.state.log.info(s"[release-io] Checking remote [$r] ..."))
+        ) *>
+          (if (!ctx.interactive)
+             vcs.pushChanges.as(ctx)
+           else {
+             val decisionIO =
+               if (useDefaults(ctx.state)) IO.pure(true)
+               else
+                 askYesNo(
+                   prompt = "Push changes to the remote repository (y/n)? [y] ",
+                   defaultYes = true
+                 )
 
-                      decisionIO.flatMap {
-                        case true  => runProcess(vcs.pushChanges, "vcs push").as(ctx)
-                        case false =>
-                          IO.blocking(
-                            ctx.state.log.warn(
-                              "[release-io] Remember to push the changes yourself!"
-                            )
-                          ).as(ctx)
-                      }
-                    }
-        } yield result
+             decisionIO.flatMap {
+               case true  => vcs.pushChanges.as(ctx)
+               case false =>
+                 IO.blocking(
+                   ctx.state.log.warn(
+                     "[release-io] Remember to push the changes yourself!"
+                   )
+                 ).as(ctx)
+             }
+           })
       }
   )
 
-  private final case class TagParams(
-      tagName: String,
-      tagComment: String,
-      sign: Boolean,
-      defaultAnswer: Option[String],
-      useDefaults: Boolean
-  )
 }

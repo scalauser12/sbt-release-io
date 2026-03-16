@@ -5,7 +5,7 @@ scalaVersion := "2.12.18"
 // Only releaseIOSkipPublish is set — this should skip the entire publish step.
 releaseIOSkipPublish := true
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 // Keep publish-artifacts in the process to prove it gets skipped via the setting.
 // Only filter out push-changes (no remote in tests).

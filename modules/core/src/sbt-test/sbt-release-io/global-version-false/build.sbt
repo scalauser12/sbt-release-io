@@ -3,8 +3,8 @@ import sbt.IO
 name         := "global-version-false-test"
 scalaVersion := "2.12.18"
 
-releaseUseGlobalVersion     := false
-releaseIgnoreUntrackedFiles := true
+releaseIOUseGlobalVersion     := false
+releaseIOIgnoreUntrackedFiles := true
 
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
   step.name == "push-changes" || step.name == "publish-artifacts"
@@ -13,7 +13,7 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
 val checkVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")
 checkVersionSbt := {
-  import sbt.complete.DefaultParsers._
+  import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<version>").parsed.mkString(" ")
   val contents = IO.read(file("version.sbt"))
   assert(

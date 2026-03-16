@@ -1,6 +1,6 @@
 package io.release
 
-import sbt.*
+import sbt.{internal => _, *}
 import sbt.Def.ScopedKey
 import sbt.internal.BuildStructure
 

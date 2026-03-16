@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 val checkPushTargets = taskKey[Unit]("Verify branch and tags are pushed only to tracking remote")
 
@@ -21,7 +21,7 @@ lazy val root = (project in file("."))
       step.name == "run-tests"
     },
 
-    releaseIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles := true,
 
     checkPushTargets := {
       val branch    = "git rev-parse --abbrev-ref HEAD".!!.trim

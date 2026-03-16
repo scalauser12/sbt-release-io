@@ -1,0 +1,23 @@
+# Test: releaseIOMonorepoSharedPaths := Seq.empty disables shared path detection
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate previous releases
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
+
+# Modify ONLY root build.sbt -- with shared paths disabled, this should NOT trigger releases
+$ exec /bin/sh -c 'echo "// shared path change" >> build.sbt'
+$ exec git add build.sbt
+$ exec git commit -m "Modify shared build.sbt"
+
+# Release with change detection (no explicit selection, no all-changed).
+# With shared paths disabled and no per-project changes, no projects should be detected.
+# This should fail with "No projects have changed."
+-> releaseIOMonorepo with-defaults
+
+# Verify no new tags and versions unchanged
+> checkAll

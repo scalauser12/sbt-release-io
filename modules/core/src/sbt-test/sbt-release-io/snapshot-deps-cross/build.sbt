@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import sbt.IO
 
 val Scala213 = "2.13.12"
@@ -19,7 +19,7 @@ libraryDependencies ++= {
     Nil
 }
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 // Skip publish and push steps
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>
@@ -28,7 +28,7 @@ releaseIOProcess := releaseIOProcess.value.filterNot { step =>
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {
-  import sbt.complete.DefaultParsers._
+  import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<count>").parsed.head.toInt
   val actual   = "git log --oneline".!!.trim.linesIterator.length
   assert(actual == expected, s"Expected $expected commits but found $actual")

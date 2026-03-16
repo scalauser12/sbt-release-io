@@ -1,31 +1,34 @@
 package io.release
 
-import sbt.State
-import sbtrelease.Vcs
+import io.release.vcs.Vcs
+import sbt.internal.util.AttributeMap
+import sbt.{internal as _, *}
 
-/** Immutable context threaded through each release step during both the check and action phases.
+/** Immutable context threaded through each release step during validation and execution.
   *
   * Created by [[ReleasePluginIOLike.initialContext]] at the start of the release command,
   * then passed through [[ReleaseStepIO.compose]] which threads it sequentially through
-  * every step. Steps return a new `ReleaseContext` with updated state, versions, or flags.
+  * every execute step. Steps return a new `ReleaseContext` with updated state, versions, or flags.
   *
-  * @param state       the current `sbt.State`, updated between steps
-  * @param versions    `(releaseVersion, nextVersion)` pair, set by `inquireVersions`
-  * @param vcs         VCS adapter (git), set by `initializeVcs`
-  * @param skipTests   when true, test steps are skipped
-  * @param skipPublish when true, publish steps are skipped
-  * @param interactive when true, steps may prompt for user input
-  * @param attributes  arbitrary key-value store for inter-step communication
-  * @param failed      set to true by the composer on step failure; subsequent steps are skipped
+  * @param state        the current `sbt.State`, updated between execute steps
+  * @param versions     `(releaseVersion, nextVersion)` pair, set by `inquireVersions`
+  * @param vcs          VCS adapter (git), set by `initializeVcs`
+  * @param skipTests    when true, test steps are skipped
+  * @param skipPublish  when true, publish steps are skipped
+  * @param interactive  when true, steps may prompt for user input
+  * @param metadataBag  typed inter-step metadata
+  * @param failed       set to true by the composer on step failure; subsequent steps are skipped
   */
 case class ReleaseContext(
     state: State,
-    versions: Option[(String, String)] = None, // (releaseVersion, nextVersion)
+    // (releaseVersion, nextVersion) — also mirrored on State via ReleaseKeys.versions
+    // so that sbt settings can read it; see ReleaseKeys.versions Scaladoc.
+    versions: Option[(String, String)] = None,
     vcs: Option[Vcs] = None,
     skipTests: Boolean = false,
     skipPublish: Boolean = false,
     interactive: Boolean = false,
-    attributes: Map[String, String] = Map.empty,
+    metadataBag: AttributeMap = AttributeMap.empty,
     failed: Boolean = false,
     failureCause: Option[Throwable] = None
 ) extends ReleaseCtx[ReleaseContext] {
@@ -38,10 +41,14 @@ case class ReleaseContext(
   def withVcs(v: Vcs): ReleaseContext =
     copy(vcs = Some(v))
 
-  def attr(key: String): Option[String] = attributes.get(key)
+  def metadata[A](key: AttributeKey[A]): Option[A] =
+    metadataBag.get(key)
 
-  def withAttr(key: String, value: String): ReleaseContext =
-    copy(attributes = attributes + (key -> value))
+  def withMetadata[A](key: AttributeKey[A], value: A): ReleaseContext =
+    copy(metadataBag = metadataBag.put(key, value))
+
+  def withoutMetadata[A](key: AttributeKey[A]): ReleaseContext =
+    copy(metadataBag = metadataBag.remove(key))
 
   def releaseVersion: Option[String] = versions.map(_._1)
   def nextVersion: Option[String]    = versions.map(_._2)

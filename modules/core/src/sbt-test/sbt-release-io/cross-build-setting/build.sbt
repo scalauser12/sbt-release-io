@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 import sbt.IO
 import _root_.io.release.ReleaseStepIO
 
@@ -16,7 +16,7 @@ releaseIOCrossBuild := true
 
 val writeCrossMarker = ReleaseStepIO(
   name = "write-cross-marker",
-  action = ctx =>
+  execute = ctx =>
     _root_.cats.effect.IO {
       val extracted = Project.extract(ctx.state)
       val markerDir = extracted.get(baseDirectory) / "marker"
@@ -37,7 +37,7 @@ releaseIOProcess := releaseIOProcess.value
     else Seq(step)
   }
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 val checkCrossBuildInvocations =
   taskKey[Unit]("Verify cross-build ran exactly once per configured Scala version")

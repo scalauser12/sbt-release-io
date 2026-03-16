@@ -1,4 +1,4 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
@@ -18,7 +18,7 @@ lazy val root = (project in file("."))
       step.name == "run-clean" || step.name == "run-tests"
     },
     // Key: set to false so untracked files trigger the error
-    releaseIgnoreUntrackedFiles := false,
+    releaseIOIgnoreUntrackedFiles := false,
     checkFailureArtifacts       := {
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
       assert(commitCount == 1, s"Expected only the initial commit after failure, found $commitCount")

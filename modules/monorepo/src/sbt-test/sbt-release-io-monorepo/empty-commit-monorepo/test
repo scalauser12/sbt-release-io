@@ -1,0 +1,20 @@
+# Test: commitIfChanged skips commit when tracked status is empty (monorepo)
+# Pre-commit the release version so set-release-version writes the same content,
+# causing commit-release-versions to see no changes and skip the commit.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Manually write release versions and commit — so set-release-version finds no diff
+$ exec sh -c 'echo "version := \"1.0.0\"" > core/version.sbt'
+$ exec sh -c 'echo "version := \"1.0.0\"" > api/version.sbt'
+$ exec git add core/version.sbt api/version.sbt
+$ exec git commit -m "Manual pre-commit of release versions"
+
+# Run release — commit-release-versions should be a no-op (empty status)
+> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
+
+# Verify: 3 commits (no release-version commit), tags created, next SNAPSHOT written
+> checkGitState

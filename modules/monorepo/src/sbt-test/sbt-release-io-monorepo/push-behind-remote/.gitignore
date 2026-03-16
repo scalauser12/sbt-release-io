@@ -1,0 +1,6 @@
+target/
+project/target/
+project/project/
+global/
+remotes/
+temp-clone/

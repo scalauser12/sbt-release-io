@@ -1,10 +1,10 @@
-import sbt._
+import sbt.*
 
 name := "step-command-and-remaining-test"
 
 scalaVersion := "2.12.18"
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 val writeCompileMarker = taskKey[Unit]("Write a marker after compile drains from the command queue")
 writeCompileMarker := {

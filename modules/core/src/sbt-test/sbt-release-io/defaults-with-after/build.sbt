@@ -1,10 +1,10 @@
-import scala.sys.process._
+import scala.sys.process.*
 
 name := "defaults-with-after-test"
 
 scalaVersion := "2.12.18"
 
-releaseIgnoreUntrackedFiles := true
+releaseIOIgnoreUntrackedFiles := true
 
 enablePlugins(DefaultsWithAfterPlugin)
 

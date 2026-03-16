@@ -1,11 +1,11 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.ReleaseIO.releaseIOVersionFile
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.steps.VersionSteps
-import sbt.*
 import sbt.Keys.*
-import sbtrelease.ReleasePlugin.autoImport.releaseVersionFile
+import sbt.{internal as _, *}
 
 /** Setting keys and factory methods for the monorepo release plugin.
   *
@@ -17,7 +17,7 @@ trait MonorepoReleaseIO {
 
   // ── Core settings ─────────────────────────────────────────────────────
 
-  /** Which subprojects participate in monorepo releases. Default: all aggregated projects. */
+  /** Which subprojects participate in monorepo releases. Default: all transitively aggregated projects. */
   val releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] = _releaseIOMonorepoProjects
 
   /** The ordered sequence of monorepo release steps.
@@ -36,7 +36,7 @@ trait MonorepoReleaseIO {
     */
   type MonorepoVersionFileResolver = MonorepoReleaseIO.MonorepoVersionFileResolver
 
-  /** Per-project version file resolver. Default: scoped sbt-release `releaseVersionFile`. */
+  /** Per-project version file resolver. Default: scoped `releaseIOVersionFile`. */
   val releaseIOMonorepoVersionFile: SettingKey[MonorepoVersionFileResolver] =
     _releaseIOMonorepoVersionFile
 
@@ -47,8 +47,8 @@ trait MonorepoReleaseIO {
     * The default implementation ignores the `File` parameter; custom implementations
     * may read the existing file to perform partial updates.
     */
-  val releaseIOMonorepoWriteVersion: SettingKey[(File, String) => IO[String]] =
-    _releaseIOMonorepoWriteVersion
+  val releaseIOMonorepoVersionFileContents: SettingKey[(File, String) => IO[String]] =
+    _releaseIOMonorepoVersionFileContents
 
   /** Use global (root) version.sbt instead of per-project version files. Default: false. */
   val releaseIOMonorepoUseGlobalVersion: SettingKey[Boolean] = _releaseIOMonorepoUseGlobalVersion
@@ -91,6 +91,12 @@ trait MonorepoReleaseIO {
   val releaseIOMonorepoSharedPaths: SettingKey[Seq[String]] =
     _releaseIOMonorepoSharedPaths
 
+  /** When true and change detection is enabled, projects that transitively depend on
+    * detected-changed projects are automatically included in the release.
+    * Default: false.
+    */
+  val releaseIOMonorepoIncludeDownstream: SettingKey[Boolean] = _releaseIOMonorepoIncludeDownstream
+
   // ── Behavioral settings ───────────────────────────────────────────────
 
   /** Cross-build enabled. Default: false. */
@@ -105,93 +111,123 @@ trait MonorepoReleaseIO {
   /** Interactive mode. Default: false. */
   val releaseIOMonorepoInteractive: SettingKey[Boolean] = _releaseIOMonorepoInteractive
 
+  /** When false, skips publishTo/skip validation in the monorepo publishArtifacts step. */
+  val releaseIOMonorepoPublishArtifactsChecks: SettingKey[Boolean] =
+    _releaseIOMonorepoPublishArtifactsChecks
+
   // ── Factory methods ──────────────────────────────────────────────────
 
   /** Create a global monorepo release step from a context-transforming IO action. */
   def globalStep(name: String)(
-      action: MonorepoContext => IO[MonorepoContext]
+      execute: MonorepoContext => IO[MonorepoContext]
   ): MonorepoStepIO.Global =
-    MonorepoStepIO.Global(name, action)
+    MonorepoStepIO.Global(name, execute)
 
   /** Create a per-project monorepo release step from a project-level IO action. */
   def perProjectStep(name: String, enableCrossBuild: Boolean = false)(
-      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+      execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
   ): MonorepoStepIO.PerProject =
-    MonorepoStepIO.PerProject(name, action, enableCrossBuild = enableCrossBuild)
+    MonorepoStepIO.PerProject(name, execute, enableCrossBuild = enableCrossBuild)
 
-  // ── Resource-aware factory methods ─────────────────────────────────
+  // ── Action factory methods (execute returns IO[Unit]) ──────────────
 
-  /** Create a resource-aware global monorepo step.
-    * Global steps have no `enableCrossBuild` parameter — they always run once,
-    * not per Scala version. Use [[resourcePerProjectStep]] for cross-build support.
+  /** Create a global monorepo release step from a side-effecting IO action.
     *
-    * {{{
-    * val notifySlack: HttpClient => MonorepoStepIO =
-    *   resourceGlobalStep("notify-slack") { client => ctx =>
-    *     IO { client.post("/slack", "Released!"); ctx }
-    *   }
-    * }}}
+    * Unlike [[globalStep]], the execute function returns `IO[Unit]` instead of
+    * `IO[MonorepoContext]`. The context is passed through unchanged.
     */
-  def resourceGlobalStep[T](name: String)(
-      f: T => MonorepoContext => IO[MonorepoContext]
-  ): T => MonorepoStepIO =
-    (t: T) => MonorepoStepIO.Global(name, f(t))
+  def globalStepAction(name: String)(
+      execute: MonorepoContext => IO[Unit]
+  ): MonorepoStepIO.Global =
+    MonorepoStepIO.Global(name, ctx => execute(ctx).as(ctx))
 
-  /** Create a resource-aware per-project monorepo step. */
-  def resourcePerProjectStep[T](name: String, enableCrossBuild: Boolean = false)(
-      f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  ): T => MonorepoStepIO =
-    (t: T) => MonorepoStepIO.PerProject(name, f(t), enableCrossBuild = enableCrossBuild)
+  /** Create a per-project monorepo release step from a side-effecting IO action.
+    *
+    * Unlike [[perProjectStep]], the execute function returns `IO[Unit]` instead of
+    * `IO[MonorepoContext]`. The context is passed through unchanged.
+    */
+  def perProjectStepAction(name: String, enableCrossBuild: Boolean = false)(
+      execute: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
+  ): MonorepoStepIO.PerProject =
+    MonorepoStepIO.PerProject(
+      name,
+      (ctx, proj) => execute(ctx, proj).as(ctx),
+      enableCrossBuild = enableCrossBuild
+    )
 
-  /** Create a resource-aware global monorepo step with a check phase. */
-  def resourceGlobalStepWithCheck[T](name: String)(
-      action: T => MonorepoContext => IO[MonorepoContext]
-  )(
-      check: T => MonorepoContext => IO[MonorepoContext]
-  ): T => MonorepoStepIO =
-    (t: T) => MonorepoStepIO.Global(name, action(t), check(t))
+  // ── Process manipulation helpers ──────────────────────────────────
 
-  /** Create a resource-aware per-project monorepo step with a check phase. */
-  def resourcePerProjectStepWithCheck[T](name: String, enableCrossBuild: Boolean = false)(
-      action: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  )(
-      check: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  ): T => MonorepoStepIO =
-    (t: T) => MonorepoStepIO.PerProject(name, action(t), check(t), enableCrossBuild)
+  /** Insert extra steps after the named step. Throws `IllegalArgumentException` if
+    * the step name is not found.
+    *
+    * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
+    * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
+    */
+  def insertStepAfter(steps: Seq[MonorepoStepIO], afterStep: String)(
+      extra: Seq[MonorepoStepIO]
+  ): Seq[MonorepoStepIO] = {
+    val idx             = steps.indexWhere(_.name == afterStep)
+    if (idx < 0)
+      throw new IllegalArgumentException(
+        s"Step '$afterStep' not found. Available: ${steps.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = steps.splitAt(idx + 1)
+    before ++ extra ++ after
+  }
+
+  /** Insert extra steps before the named step. Throws `IllegalArgumentException` if
+    * the step name is not found.
+    *
+    * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
+    * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
+    */
+  def insertStepBefore(steps: Seq[MonorepoStepIO], beforeStep: String)(
+      extra: Seq[MonorepoStepIO]
+  ): Seq[MonorepoStepIO] = {
+    val idx             = steps.indexWhere(_.name == beforeStep)
+    if (idx < 0)
+      throw new IllegalArgumentException(
+        s"Step '$beforeStep' not found. Available: ${steps.map(_.name).mkString(", ")}"
+      )
+    val (before, after) = steps.splitAt(idx)
+    before ++ extra ++ after
+  }
 
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
-    releaseIOMonorepoProcess               := MonorepoReleaseSteps.defaults,
-    releaseIOMonorepoCrossBuild            := false,
-    releaseIOMonorepoSkipTests             := false,
-    releaseIOMonorepoSkipPublish           := false,
-    releaseIOMonorepoInteractive           := false,
-    releaseIOMonorepoDetectChanges         := true,
-    releaseIOMonorepoChangeDetector        := None,
-    releaseIOMonorepoDetectChangesExcludes := Seq.empty,
-    releaseIOMonorepoSharedPaths           := Seq("build.sbt", "project/"),
-    releaseIOMonorepoUseGlobalVersion      := false,
-    releaseIOMonorepoTagStrategy           := MonorepoTagStrategy.PerProject,
-    releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name/v$ver"),
-    releaseIOMonorepoUnifiedTagName        := ((ver: String) => s"v$ver"),
-    releaseIOMonorepoReadVersion           := VersionSteps.defaultReadVersion,
+    releaseIOMonorepoProcess                := MonorepoReleaseSteps.defaults,
+    releaseIOMonorepoCrossBuild             := false,
+    releaseIOMonorepoSkipTests              := false,
+    releaseIOMonorepoSkipPublish            := false,
+    releaseIOMonorepoPublishArtifactsChecks := true,
+    releaseIOMonorepoInteractive            := false,
+    releaseIOMonorepoDetectChanges          := true,
+    releaseIOMonorepoIncludeDownstream      := false,
+    releaseIOMonorepoChangeDetector         := None,
+    releaseIOMonorepoDetectChangesExcludes  := Seq.empty,
+    releaseIOMonorepoSharedPaths            := Seq("build.sbt", "project/"),
+    releaseIOMonorepoUseGlobalVersion       := false,
+    releaseIOMonorepoTagStrategy            := MonorepoTagStrategy.PerProject,
+    releaseIOMonorepoTagName                := ((name: String, ver: String) => s"$name/v$ver"),
+    releaseIOMonorepoUnifiedTagName         := ((ver: String) => s"v$ver"),
+    releaseIOMonorepoReadVersion            := VersionSteps.defaultReadVersion,
     // releaseIOMonorepoUseGlobalVersion is captured at build load time.
     // Custom implementations may read from State at call time if dynamic behavior is needed.
-    releaseIOMonorepoWriteVersion          := {
+    releaseIOMonorepoVersionFileContents    := {
       val useGlobal = releaseIOMonorepoUseGlobalVersion.value
       (_, ver) => {
         val key = if (useGlobal) "ThisBuild / version" else "version"
         IO.pure(s"""$key := "$ver"\n""")
       }
     },
-    // The default per-project resolver mirrors each project's scoped sbt-release
-    // releaseVersionFile setting. Global-version mode still bypasses this resolver
-    // and uses the shared root releaseVersionFile instead.
-    releaseIOMonorepoVersionFile           := { (ref: ProjectRef, state: State) =>
-      Project.extract(state).get(ref / releaseVersionFile)
+    // The default per-project resolver mirrors each project's scoped
+    // releaseIOVersionFile setting. Global-version mode still bypasses this resolver
+    // and uses the shared root releaseIOVersionFile instead.
+    releaseIOMonorepoVersionFile            := { (ref: ProjectRef, state: State) =>
+      Project.extract(state).get(ref / releaseIOVersionFile)
     },
-    releaseIOMonorepoProjects              := {
+    releaseIOMonorepoProjects               := {
       val build      = loadedBuild.value
       val root       = thisProjectRef.value
       val projectMap = build.allProjectRefs.map { case (ref, proj) => ref -> proj.aggregate }.toMap
@@ -238,10 +274,10 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       "Function to read version from a version file"
     )
 
-  private[monorepo] lazy val _releaseIOMonorepoWriteVersion
+  private[monorepo] lazy val _releaseIOMonorepoVersionFileContents
       : SettingKey[(File, String) => IO[String]] =
     SettingKey[(File, String) => IO[String]](
-      "releaseIOMonorepoWriteVersion",
+      "releaseIOMonorepoVersionFileContents",
       "Function that produces version file contents"
     )
 
@@ -273,6 +309,12 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Boolean](
       "releaseIOMonorepoDetectChanges",
       "Whether to use git-based change detection"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoIncludeDownstream: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoIncludeDownstream",
+      "Include transitive downstream dependents of changed projects in the release"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoChangeDetector
@@ -316,5 +358,11 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Boolean](
       "releaseIOMonorepoInteractive",
       "Whether to enable interactive prompts during monorepo release"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoPublishArtifactsChecks: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoPublishArtifactsChecks",
+      "Whether to run publishTo validation checks for the monorepo publish step"
     )
 }

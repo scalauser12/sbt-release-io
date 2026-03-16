@@ -1,16 +1,17 @@
 # sbt-release-io
 
-[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
 [![sbt-release-io](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0?label=sbt-release-io)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
 [![sbt-release-io-monorepo](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0?label=sbt-release-io-monorepo)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
+[![CI](https://github.com/scalauser12/sbt-release-io/actions/workflows/ci.yml/badge.svg)](https://github.com/scalauser12/sbt-release-io/actions/workflows/ci.yml)
+[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
 
-An sbt plugin suite that wraps [sbt-release](https://github.com/sbt/sbt-release) with cats-effect IO for composable, resource-safe release automation.
+A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for sbt, with composable error handling and resource safety.
 
 ## Modules
 
 | Module | Artifact | Description |
 |--------|----------|-------------|
-| [core](modules/core/README.md) | `sbt-release-io` | IO-based release plugin for single-project builds. Drop-in replacement for sbt-release with `Resource` lifecycle, cross-build checks, and typed context threading. |
+| [core](modules/core/README.md) | `sbt-release-io` | IO-based release plugin for single-project builds. Independent codebase porting sbt-release onto cats-effect IO with `Resource` lifecycle, cross-build validation, and typed context threading. |
 | [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and tagging strategies. |
 
 ## Quick Start
@@ -22,6 +23,8 @@ In `project/plugins.sbt`:
 ```scala
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.4.2")
 ```
+
+No `enablePlugins` needed — the core plugin activates automatically.
 
 ```bash
 sbt "releaseIO with-defaults"
@@ -43,6 +46,8 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
+Each subproject needs a `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
+
 ```bash
 sbt "releaseIOMonorepo with-defaults"
 ```
@@ -52,7 +57,7 @@ sbt "releaseIOMonorepo with-defaults"
 ```bash
 sbt compile              # compile both modules
 sbt test                 # run unit tests (specs2)
-sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2 / Scala 3
+sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2 / Scala 3 (version defined as Sbt2Version in build.sbt)
 sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2 / Scala 3
 sbt scripted             # run all scripted integration tests
 sbt core/test            # core unit tests only
@@ -66,9 +71,9 @@ sbt scalafmtSbtCheck     # verify sbt/build file formatting
 ## Compatibility
 
 - **sbt**: 1.12.3 and 2.0.0-RC9
-- **Scala**: 2.12.21 and 3.8.1
-- **sbt-release**: 1.4.0
+- **Scala**: 2.12 (sbt 1) / Scala 3 (sbt 2) — plugin compile targets, not constraints on your project's Scala version
 - **cats-effect**: 3.6.3
+- **VCS**: Git only
 
 ## License
 
@@ -76,6 +81,6 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Acknowledgments
 
-Built on top of [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization.
+Ports [sbt-release](https://github.com/sbt/sbt-release) by the sbt organization onto cats-effect IO.
 
 Developed with the assistance of [Claude Code](https://claude.ai/claude-code) by Anthropic.

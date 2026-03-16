@@ -1,0 +1,25 @@
+# Test: downstream dependents are included when releaseIOMonorepoIncludeDownstream is true
+# Setup: core <- api <- web (transitive dependency chain)
+# Only core has file changes, but all three should be released.
+
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Simulate previous release tags for all projects
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
+$ exec git tag web/v0.1.0
+
+# Modify ONLY core (api and web have no direct file changes)
+$ exec touch core/CHANGES.md
+$ exec git add core/CHANGES.md
+$ exec git commit -m "Add changes file to core"
+
+# Release — all three should be included because api depends on core, web depends on api
+> releaseIOMonorepo with-defaults
+
+# Verify all three were released
+> checkAll

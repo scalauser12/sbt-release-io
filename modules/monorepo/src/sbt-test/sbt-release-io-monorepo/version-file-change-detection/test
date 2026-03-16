@@ -17,4 +17,5 @@ $ exec git commit -m "Setting next version: core 0.2.0-SNAPSHOT"
 
 # Release should FAIL because only version files changed — no real changes detected.
 # The -> prefix expects the command to fail.
--> releaseIOMonorepo with-defaults release-version core=0.2.0 next-version core=0.3.0-SNAPSHOT
+# Note: no version overrides here — providing them would force-include core.
+-> releaseIOMonorepo with-defaults
