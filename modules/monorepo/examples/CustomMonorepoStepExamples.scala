@@ -52,16 +52,15 @@ object CustomMonorepoStepExamples {
 
   // --- Global step: print a release summary ---
 
-  val printSummary: MonorepoStepIO = globalStepAction("print-summary") { ctx =>
-    val projectList = ctx.currentProjects.map(_.name).mkString(", ")
-    IO.println(s"[monorepo] Releasing projects: $projectList")
-  }
+  val printSummary: MonorepoStepIO = globalStepAction("print-summary")(ctx =>
+    IO.println(s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}")
+  )
 
   // --- Global step: validate branch name ---
 
   val validateBranch: MonorepoStepIO = MonorepoStepIO.Global(
     name = "validate-branch",
-    execute = { ctx =>
+    execute = ctx =>
       ctx.vcs match {
         case Some(vcs) =>
           for {
@@ -77,28 +76,26 @@ object CustomMonorepoStepExamples {
         case None      =>
           IO.raiseError(new RuntimeException("VCS not initialized"))
       }
-    }
   )
 
   // --- Per-project step: check for a required file ---
 
   val checkReadmeExists: MonorepoStepIO =
-    perProjectStep("check-readme") { (ctx, project) =>
-      val readme = new java.io.File(project.baseDir, "README.md")
-      if (!readme.exists())
+    perProjectStep("check-readme")((ctx, project) =>
+      if (!(new java.io.File(project.baseDir, "README.md")).exists())
         IO.raiseError(
           new RuntimeException(
             s"Project '${project.name}' is missing README.md at ${project.baseDir}"
           )
         )
       else IO.pure(ctx)
-    }
+    )
 
   // --- Per-project step: generate a changelog per project ---
   // Intentionally simple demo logic: append-only and not fully idempotent.
 
   val generateChangelog: MonorepoStepIO =
-    perProjectStepAction("generate-changelog") { (ctx, project) =>
+    perProjectStepAction("generate-changelog")((ctx, project) =>
       project.versions match {
         case Some((releaseVer, _)) =>
           IO.blocking {
@@ -111,13 +108,12 @@ object CustomMonorepoStepExamples {
         case None                  =>
           IO.println(s"[monorepo] Skipping changelog for ${project.name} — no versions set")
       }
-    }
+    )
 
   // --- Global step: store a custom attribute ---
 
-  val markReleaseDone: MonorepoStepIO = globalStep("mark-done") { ctx =>
-    IO.pure(ctx.withMetadata(releaseCompletedKey, true))
-  }
+  val markReleaseDone: MonorepoStepIO =
+    globalStep("mark-done")(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
 
   // --- Composing a custom release process ---
 
@@ -208,18 +204,19 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       // 1st resource step — validate allowed projects via API
       MonorepoStepIO
         .globalResource[HttpClient]("validate-projects")
-        .execute { client => ctx =>
-          IO.blocking {
-            val allowed = client.get("/allowed-projects").split(",").toSet
-            ctx.currentProjects.map(_.name).filterNot(allowed.contains)
-          }.flatMap { invalid =>
-            if (invalid.nonEmpty)
-              IO.raiseError(
-                new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}")
-              )
-            else IO.pure(ctx)
-          }
-        },
+        .execute(client =>
+          ctx =>
+            IO.blocking {
+              val allowed = client.get("/allowed-projects").split(",").toSet
+              ctx.currentProjects.map(_.name).filterNot(allowed.contains)
+            }.flatMap(invalid =>
+              if (invalid.nonEmpty)
+                IO.raiseError(
+                  new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}")
+                )
+              else IO.pure(ctx)
+            )
+        ),
       MonorepoReleaseSteps.checkSnapshotDependencies,
       MonorepoReleaseSteps.inquireVersions,
       MonorepoReleaseSteps.validateVersions,
@@ -231,28 +228,27 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       // 2nd resource step — notify Slack after tagging
       MonorepoStepIO
         .globalResource[HttpClient]("notify-slack")
-        .executeAction { client => ctx =>
-          IO.blocking {
-            val summary = ctx.currentProjects
-              .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
-              .mkString(", ")
-            client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
-          }
-        },
+        .executeAction(client =>
+          ctx =>
+            IO.blocking {
+              val summary = ctx.currentProjects
+                .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
+                .mkString(", ")
+              client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
+            }
+        ),
       MonorepoReleaseSteps.publishArtifacts,
       // 3rd resource step — verify published artifacts per project
       MonorepoStepIO
         .perProjectResource[HttpClient]("verify-publish")
-        .executeAction { client => (ctx, project) =>
-          project.versions match {
-            case Some((releaseVer, _)) =>
-              IO.blocking {
-                client.get(s"/artifacts/${project.name}/$releaseVer")
-                ()
-              }
-            case None                  => IO.unit
-          }
-        },
+        .executeAction(client =>
+          (ctx, project) =>
+            project.versions match {
+              case Some((releaseVer, _)) =>
+                IO.blocking(client.get(s"/artifacts/${project.name}/$releaseVer")).void
+              case None                  => IO.unit
+            }
+        ),
       MonorepoReleaseSteps.setNextVersions,
       MonorepoReleaseSteps.commitNextVersions,
       MonorepoReleaseSteps.pushChanges

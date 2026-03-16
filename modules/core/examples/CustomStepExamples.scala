@@ -42,22 +42,21 @@ object CustomStepExamples {
   // ── Individual step examples ─────────────────────────────────────────
 
   /** Custom step using `ReleaseStepIO.io` with pure console output. */
-  val printBanner: ReleaseStepIO = ReleaseStepIO.io("print-banner") { ctx =>
+  val printBanner: ReleaseStepIO = ReleaseStepIO.io("print-banner")(ctx =>
     IO.println("=" * 60) *>
       IO.println("  RELEASE IN PROGRESS") *>
       IO.println("=" * 60).as(ctx)
-  }
+  )
 
   /** Custom step using `ReleaseStepIO.pure` for a side-effect-free context transformation. */
-  val markReleaseDone: ReleaseStepIO = ReleaseStepIO.pure("mark-done") { ctx =>
-    ctx.withMetadata(releaseCompletedKey, true)
-  }
+  val markReleaseDone: ReleaseStepIO =
+    ReleaseStepIO.pure("mark-done")(ctx => ctx.withMetadata(releaseCompletedKey, true))
 
   /** Custom step using `ReleaseStepIO.io` with VCS access and error handling via `IO.raiseError`. */
-  val validateBranch: ReleaseStepIO = ReleaseStepIO.io("validate-branch") { ctx =>
+  val validateBranch: ReleaseStepIO = ReleaseStepIO.io("validate-branch")(ctx =>
     ctx.vcs match {
       case Some(vcs) =>
-        vcs.currentBranch.flatMap { branch =>
+        vcs.currentBranch.flatMap(branch =>
           if (branch == "main" || branch == "master")
             IO.pure(ctx)
           else
@@ -66,16 +65,16 @@ object CustomStepExamples {
                 s"Releases must be done from main/master, but current branch is '$branch'"
               )
             )
-        }
+        )
       case None      =>
         IO.raiseError(new RuntimeException("VCS not initialized"))
     }
-  }
+  )
 
   /** Error recovery: use `.handleErrorWith` with `NonFatal` to log a warning and continue
     * instead of aborting the release. Useful for non-critical steps like notifications.
     */
-  val optionalNotify: ReleaseStepIO = ReleaseStepIO.io("optional-notify") { ctx =>
+  val optionalNotify: ReleaseStepIO = ReleaseStepIO.io("optional-notify")(ctx =>
     IO.blocking {
       // Replace with real notification logic (e.g., Slack webhook, email)
       val version = ctx.releaseVersion.getOrElse("unknown")
@@ -90,29 +89,29 @@ object CustomStepExamples {
           ).as(ctx)
         case fatal         => IO.raiseError(fatal)
       }
-  }
+  )
 
   /** Custom step using `IO.blocking` for shell execution.
     * Demo helper only: avoid passing untrusted shell strings in production.
     */
   def runShellCommand(name: String, command: String): ReleaseStepIO =
-    ReleaseStepIO.io(s"shell-$name") { ctx =>
+    ReleaseStepIO.io(s"shell-$name")(ctx =>
       IO.blocking {
         import scala.sys.process._
         command.!
-      }.flatMap { exitCode =>
+      }.flatMap(exitCode =>
         if (exitCode != 0)
           IO.raiseError(
             new RuntimeException(s"Command '$command' failed with exit code $exitCode")
           )
         else IO.pure(ctx)
-      }
-    }
+      )
+    )
 
   /** Custom step accessing `ctx.versions` and `Project.extract(ctx.state)` for sbt settings.
     * Intentionally simple demo logic: append-only and not fully idempotent.
     */
-  val generateChangelog: ReleaseStepIO = ReleaseStepIO.io("generate-changelog") { ctx =>
+  val generateChangelog: ReleaseStepIO = ReleaseStepIO.io("generate-changelog")(ctx =>
     ctx.versions match {
       case Some((releaseVer, _)) =>
         IO.blocking {
@@ -129,12 +128,12 @@ object CustomStepExamples {
       case None                  =>
         IO.raiseError(new RuntimeException("Versions not set"))
     }
-  }
+  )
 
   /** State modification: use `ctx.withState` to modify sbt state mid-release.
     * Here we add a manifest attribute to packaged jars with the release version.
     */
-  val addReleaseManifestEntry: ReleaseStepIO = ReleaseStepIO.io("add-manifest-entry") { ctx =>
+  val addReleaseManifestEntry: ReleaseStepIO = ReleaseStepIO.io("add-manifest-entry")(ctx =>
     IO.blocking {
       val version   = ctx.releaseVersion.getOrElse("unknown")
       val extracted = Project.extract(ctx.state)
@@ -147,7 +146,7 @@ object CustomStepExamples {
       )
       ctx.withState(newState)
     }
-  }
+  )
 
   /** Cross-build step: construct `ReleaseStepIO(...)` directly with `enableCrossBuild = true`
     * so the step runs once per `crossScalaVersions` when cross-building is active.
@@ -220,10 +219,10 @@ object CustomStepExamples {
       condition: ReleaseContext => Boolean,
       step: ReleaseStepIO
   ): ReleaseStepIO =
-    ReleaseStepIO.io(s"conditional-$name") { ctx =>
+    ReleaseStepIO.io(s"conditional-$name")(ctx =>
       if (condition(ctx)) step.execute(ctx)
       else IO.println(s"[release-io] Skipping $name (condition not met)").as(ctx)
-    }
+    )
 
 }
 
@@ -290,22 +289,24 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       // 1st resource step — validate branch via API (raises error or succeeds)
       ReleaseStepIO
         .resourceStep[HttpClient]("validate-branch")
-        .executeAction { client => ctx =>
-          IO.blocking(client.get("/allowed-branches").split(",").toSet).flatMap { allowed =>
-            ctx.vcs match {
-              case Some(vcs) =>
-                vcs.currentBranch.flatMap { branch =>
-                  if (!allowed.contains(branch))
-                    IO.raiseError(
-                      new RuntimeException(s"Branch '$branch' is not allowed for release")
+        .executeAction(client =>
+          ctx =>
+            IO.blocking(client.get("/allowed-branches").split(",").toSet)
+              .flatMap(allowed =>
+                ctx.vcs match {
+                  case Some(vcs) =>
+                    vcs.currentBranch.flatMap(branch =>
+                      if (!allowed.contains(branch))
+                        IO.raiseError(
+                          new RuntimeException(s"Branch '$branch' is not allowed for release")
+                        )
+                      else IO.unit
                     )
-                  else IO.unit
+                  case None      =>
+                    IO.raiseError(new RuntimeException("VCS not initialized"))
                 }
-              case None      =>
-                IO.raiseError(new RuntimeException("VCS not initialized"))
-            }
-          }
-        },
+              )
+        ),
 
       ReleaseSteps.checkSnapshotDependencies,
       ReleaseSteps.inquireVersions,
@@ -318,25 +319,26 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       // 2nd resource step — notify Slack after tagging (side-effect only, context unchanged)
       ReleaseStepIO
         .resourceStep[HttpClient]("notify-slack")
-        .executeAction { client => ctx =>
-          IO.blocking {
-            val version = ctx.releaseVersion.getOrElse("unknown")
-            client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
-          }
-        },
+        .executeAction(client =>
+          ctx =>
+            IO.blocking {
+              val version = ctx.releaseVersion.getOrElse("unknown")
+              client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+            }
+        ),
 
       ReleaseSteps.publishArtifacts,
 
       // 3rd resource step — verify the published artifact (side-effect only, context unchanged)
       ReleaseStepIO
         .resourceStep[HttpClient]("verify-publish")
-        .executeAction { client => ctx =>
-          IO.blocking {
-            val version = ctx.releaseVersion.getOrElse("unknown")
-            client.get(s"/artifacts/$version")
-            ()
-          }
-        },
+        .executeAction(client =>
+          ctx =>
+            IO.blocking {
+              val version = ctx.releaseVersion.getOrElse("unknown")
+              client.get(s"/artifacts/$version")
+            }.void
+        ),
 
       ReleaseSteps.setNextVersion,
       ReleaseSteps.commitNextVersion,
