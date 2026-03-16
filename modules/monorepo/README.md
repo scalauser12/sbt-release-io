@@ -274,7 +274,7 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 |-----|------|---------|-------------|
 | `releaseIOMonorepoVersionFile` | `MonorepoVersionFileResolver` | Scoped `releaseIOVersionFile` | Per-project version file resolver `(ProjectRef, State) => File`. Called during version inquiry and write steps. Default reads each project's scoped `releaseIOVersionFile` (typically `<projectDir>/version.sbt`). |
 | `releaseIOMonorepoReadVersion` | `File => IO[String]` | Regex parser (same as core) | Version file reader |
-| `releaseIOMonorepoVersionFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Returns the version file content to write to disk. The `File` arg is the current version file, available for reading existing content before writing (e.g., partial updates); the default ignores it. |
+| `releaseIOMonorepoVersionFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Returns the new version file content as a string. The plugin writes this string to disk. The `File` arg is the current version file, available for reading existing content (e.g., to preserve other fields during partial updates); the default ignores it. |
 | `releaseIOMonorepoUseGlobalVersion` | `Boolean` | `false` | Use root `version.sbt` instead of per-project files |
 
 ### Tagging settings
@@ -457,7 +457,7 @@ Use these factory methods in `build.sbt` or `project/*.scala`:
 | `perProjectStepAction(name, enableCrossBuild)(execute)` | PerProject | `IO[Unit]` |
 
 > `enableCrossBuild` is a named parameter that defaults to `false` — pass it by name to keep call
-> sites self-documenting: `perProjectStep("name", enableCrossBuild = true) { ... }`.
+> sites self-documenting: `perProjectStep("name", enableCrossBuild = true)(...)`.
 
 ```scala
 import cats.effect.IO
@@ -520,7 +520,7 @@ Every step receives a `MonorepoContext`. Per-project steps also receive a `Proje
 
 ### Sharing data between steps
 
-Use `ctx.updateProject(ref)(_.copy(...))` to update a single project's metadata from within a step.
+Use `ctx.updateProject(ref)(_.copy(...))` to update a single project's fields from within a step — for example, `ctx.updateProject(project.ref)(_.copy(tagName = Some("custom-tag")))`.
 This is the per-project complement to `ctx.withMetadata` / `ctx.metadata`, which store global (non-project-scoped) values.
 
 ```scala
@@ -709,7 +709,7 @@ Use `insertAfter` / `insertBefore` (shown in [Customizing the release process](#
 Example: rewrite the project set via `State` so built-in steps see the change:
 
 ```scala
-// Inside a MonorepoReleasePluginLike[Unit] plugin
+// Inside a MonorepoReleasePluginLike[Unit] plugin (use Unit when no shared resource is needed)
 private val selectOnlyCore = MonorepoStepIO
   .global("select-only-core")
   .execute(ctx =>
