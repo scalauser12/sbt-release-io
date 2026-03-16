@@ -553,7 +553,7 @@ val readStep = globalStepAction("read-metadata") { ctx =>
 
 ### Builder API
 
-For steps with validation, cross-build, or resource access, use the fluent builder API on `MonorepoStepIO`:
+For steps with validation or cross-build, use the fluent builder API on `MonorepoStepIO`:
 
 ```scala
 import cats.effect.IO
