@@ -50,7 +50,8 @@ private[monorepo] object MonorepoProjectResolver {
           project.copy(
             versions = existing.versions,
             tagName = existing.tagName,
-            failed = existing.failed
+            failed = existing.failed,
+            failureCause = existing.failureCause
           )
         case None           => project
       }

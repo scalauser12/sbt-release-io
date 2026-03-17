@@ -7,8 +7,6 @@ import io.release.monorepo.internal.MonorepoTagResolver
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
 import io.release.vcs.Vcs
-import sbt.internal as _
-
 import scala.sys.process.Process
 
 /** VCS-related monorepo release steps. */
