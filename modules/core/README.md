@@ -1,6 +1,6 @@
 # sbt-release-io
 
-[Maven Central](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
 
 A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for sbt, with composable error handling and resource safety.
 
