@@ -143,7 +143,7 @@ private[monorepo] object MonorepoVcsSteps {
                   ctx,
                   vcs,
                   tagName,
-                  s"Release ${project.name} $releaseVer",
+                  settings.tagComment(project.name, releaseVer),
                   settings.sign,
                   project.name
                 ) *>
@@ -172,7 +172,14 @@ private[monorepo] object MonorepoVcsSteps {
                 val tagName = settings.unifiedTagName(rel)
                 val summary =
                   versionSummary(ctx, { case (releaseVer, _) => releaseVer })
-                createTag(ctx, vcs, tagName, s"Release: $summary", settings.sign, "release") *>
+                createTag(
+                  ctx,
+                  vcs,
+                  tagName,
+                  settings.unifiedTagComment(summary),
+                  settings.sign,
+                  "release"
+                ) *>
                   logInfo(ctx, s"Tagged release as $tagName").as(
                     ctx.currentProjects.foldLeft(ctx) { (c, p) =>
                       c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))

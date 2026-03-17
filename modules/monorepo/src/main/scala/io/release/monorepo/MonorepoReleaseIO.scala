@@ -65,6 +65,14 @@ trait MonorepoReleaseIO {
   val releaseIOMonorepoUnifiedTagName: SettingKey[String => String] =
     _releaseIOMonorepoUnifiedTagName
 
+  /** Tag comment formatter for per-project tags. (projectName, version) => comment. */
+  val releaseIOMonorepoTagComment: SettingKey[(String, String) => String] =
+    _releaseIOMonorepoTagComment
+
+  /** Tag comment formatter for unified tags. versionSummary => comment. */
+  val releaseIOMonorepoUnifiedTagComment: SettingKey[String => String] =
+    _releaseIOMonorepoUnifiedTagComment
+
   // ── Change detection settings ─────────────────────────────────────────
 
   /** Whether to use git-based change detection. Default: true. */
@@ -114,6 +122,19 @@ trait MonorepoReleaseIO {
   /** When false, skips publishTo/skip validation in the monorepo publishArtifacts step. */
   val releaseIOMonorepoPublishArtifactsChecks: SettingKey[Boolean] =
     _releaseIOMonorepoPublishArtifactsChecks
+
+  // ── Commit message settings ──────────────────────────────────────────
+
+  /** Commit message formatter for release version commits. Receives the version summary
+    * (e.g. "core 1.0.0, api 2.0.0") and returns the full commit message.
+    */
+  val releaseIOMonorepoCommitMessage: SettingKey[String => String] = _releaseIOMonorepoCommitMessage
+
+  /** Commit message formatter for next version commits. Receives the version summary
+    * (e.g. "core 1.0.1-SNAPSHOT, api 2.0.1-SNAPSHOT") and returns the full commit message.
+    */
+  val releaseIOMonorepoNextCommitMessage: SettingKey[String => String] =
+    _releaseIOMonorepoNextCommitMessage
 
   // ── Factory methods ──────────────────────────────────────────────────
 
@@ -202,6 +223,8 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoSkipPublish            := false,
     releaseIOMonorepoPublishArtifactsChecks := true,
     releaseIOMonorepoInteractive            := false,
+    releaseIOMonorepoCommitMessage          := ((summary: String) => s"Setting release versions: $summary"),
+    releaseIOMonorepoNextCommitMessage      := ((summary: String) => s"Setting next versions: $summary"),
     releaseIOMonorepoDetectChanges          := true,
     releaseIOMonorepoIncludeDownstream      := false,
     releaseIOMonorepoChangeDetector         := None,
@@ -211,6 +234,8 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoTagStrategy            := MonorepoTagStrategy.PerProject,
     releaseIOMonorepoTagName                := ((name: String, ver: String) => s"$name/v$ver"),
     releaseIOMonorepoUnifiedTagName         := ((ver: String) => s"v$ver"),
+    releaseIOMonorepoTagComment             := ((name: String, ver: String) => s"Release $name $ver"),
+    releaseIOMonorepoUnifiedTagComment      := ((summary: String) => s"Release: $summary"),
     releaseIOMonorepoReadVersion            := VersionSteps.defaultReadVersion,
     // releaseIOMonorepoUseGlobalVersion is captured at build load time.
     // Custom implementations may read from State at call time if dynamic behavior is needed.
@@ -305,6 +330,18 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       "Tag name formatter for unified tags: version => tag"
     )
 
+  private[monorepo] lazy val _releaseIOMonorepoTagComment: SettingKey[(String, String) => String] =
+    SettingKey[(String, String) => String](
+      "releaseIOMonorepoTagComment",
+      "Tag comment formatter for per-project tags: (name, version) => comment"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoUnifiedTagComment: SettingKey[String => String] =
+    SettingKey[String => String](
+      "releaseIOMonorepoUnifiedTagComment",
+      "Tag comment formatter for unified tags: versionSummary => comment"
+    )
+
   private[monorepo] lazy val _releaseIOMonorepoDetectChanges: SettingKey[Boolean] =
     SettingKey[Boolean](
       "releaseIOMonorepoDetectChanges",
@@ -364,5 +401,17 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Boolean](
       "releaseIOMonorepoPublishArtifactsChecks",
       "Whether to run publishTo validation checks for the monorepo publish step"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoCommitMessage: SettingKey[String => String] =
+    SettingKey[String => String](
+      "releaseIOMonorepoCommitMessage",
+      "Commit message formatter for release version commits: versionSummary => message"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoNextCommitMessage: SettingKey[String => String] =
+    SettingKey[String => String](
+      "releaseIOMonorepoNextCommitMessage",
+      "Commit message formatter for next version commits: versionSummary => message"
     )
 }

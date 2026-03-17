@@ -267,6 +267,8 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | `releaseIOMonorepoSkipPublish` | `Boolean` | `false` | Skip publish |
 | `releaseIOMonorepoInteractive` | `Boolean` | `false` | When true, `inquire-versions` prompts interactively. `with-defaults` overrides to false; CLI version overrides bypass prompts for those projects. |
 | `releaseIOMonorepoPublishArtifactsChecks` | `Boolean` | `true` | When false, skips the check that each project has `publishTo` configured or `publish / skip := true` |
+| `releaseIOMonorepoCommitMessage` | `String => String` | `summary => s"Setting release versions: $summary"` | Commit message formatter for release version commits. Receives the version summary (e.g. "core 1.0.0, api 2.0.0"). |
+| `releaseIOMonorepoNextCommitMessage` | `String => String` | `summary => s"Setting next versions: $summary"` | Commit message formatter for next version commits. Receives the version summary. |
 
 ### Version settings
 
@@ -284,6 +286,8 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | `releaseIOMonorepoTagStrategy` | `MonorepoTagStrategy` | `PerProject` | `PerProject` or `Unified` |
 | `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Per-project tag formatter |
 | `releaseIOMonorepoUnifiedTagName` | `String => String` | `ver => s"v$ver"` | Unified tag formatter |
+| `releaseIOMonorepoTagComment` | `(String, String) => String` | `(name, ver) => s"Release $name $ver"` | Per-project tag comment formatter |
+| `releaseIOMonorepoUnifiedTagComment` | `String => String` | `summary => s"Release: $summary"` | Unified tag comment formatter |
 
 ### Change detection settings
 

@@ -11,6 +11,8 @@ private[monorepo] object MonorepoTagResolver {
       tagStrategy: MonorepoTagStrategy,
       perProjectTagName: (String, String) => String,
       unifiedTagName: String => String,
+      tagComment: (String, String) => String,
+      unifiedTagComment: String => String,
       sign: Boolean
   )
 
@@ -20,6 +22,8 @@ private[monorepo] object MonorepoTagResolver {
       tagStrategy = extracted.get(MonorepoReleaseIO.releaseIOMonorepoTagStrategy),
       perProjectTagName = extracted.get(MonorepoReleaseIO.releaseIOMonorepoTagName),
       unifiedTagName = extracted.get(MonorepoReleaseIO.releaseIOMonorepoUnifiedTagName),
+      tagComment = extracted.get(MonorepoReleaseIO.releaseIOMonorepoTagComment),
+      unifiedTagComment = extracted.get(MonorepoReleaseIO.releaseIOMonorepoUnifiedTagComment),
       sign = extracted.get(releaseIOVcsSign)
     )
   }

@@ -211,14 +211,15 @@ private[monorepo] object MonorepoVersionSteps {
   /** Single commit for all release version files. */
   val commitReleaseVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-release-versions",
-    execute =
-      ctx => commitVersions(ctx, "Setting release versions", { case (releaseVer, _) => releaseVer })
+    execute = ctx =>
+      commitVersions(ctx, MR.releaseIOMonorepoCommitMessage, { case (releaseVer, _) => releaseVer })
   )
 
   /** Single commit for all next version files. */
   val commitNextVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-next-versions",
-    execute = ctx => commitVersions(ctx, "Setting next versions", { case (_, nextVer) => nextVer })
+    execute = ctx =>
+      commitVersions(ctx, MR.releaseIOMonorepoNextCommitMessage, { case (_, nextVer) => nextVer })
   )
 
   // --- private helpers ---

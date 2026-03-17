@@ -180,21 +180,22 @@ private[monorepo] object MonorepoStepHelpers {
   /** Stage and commit version files for all non-failed projects. */
   def commitVersions(
       ctx: MonorepoContext,
-      msgPrefix: String,
+      msgFormatterKey: SettingKey[String => String],
       selector: ((String, String)) => String
   ): IO[MonorepoContext] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       for {
-        runtime        <- loadRuntime(ctx)
-        paths          <- resolveRelativePaths(ctx, vcs, runtime)
-        settings       <- IO.blocking {
-                            (
-                              runtime.extracted.get(releaseIOVcsSign),
-                              runtime.extracted.get(releaseIOVcsSignOff)
-                            )
-                          }
-        (sign, signOff) = settings
-        result         <- {
+        runtime                      <- loadRuntime(ctx)
+        paths                        <- resolveRelativePaths(ctx, vcs, runtime)
+        settings                     <- IO.blocking {
+                                          (
+                                            runtime.extracted.get(releaseIOVcsSign),
+                                            runtime.extracted.get(releaseIOVcsSignOff),
+                                            runtime.extracted.get(msgFormatterKey)
+                                          )
+                                        }
+        (sign, signOff, msgFormatter) = settings
+        result                       <- {
           // In global-version mode, all projects must agree before committing.
           val consistencyCheck =
             if (runtime.useGlobalVersion)
@@ -210,7 +211,7 @@ private[monorepo] object MonorepoStepHelpers {
               acc *> vcs.add(relativePath)
             } *> {
               val summary = versionSummary(ctx, selector)
-              commitIfChanged(vcs, s"$msgPrefix: $summary", sign, signOff, ctx)
+              commitIfChanged(vcs, msgFormatter(summary), sign, signOff, ctx)
             }
         }
       } yield result
