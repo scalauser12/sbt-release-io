@@ -202,34 +202,26 @@ private[monorepo] object MonorepoComposer {
         case None      => IO.pure(currentCtx)
       }
 
-    crossVersions.toList match {
-      case Nil      =>
-        IO.raiseError(
-          new IllegalStateException(
-            s"Project '${project.name}' has empty crossScalaVersions while cross-build is enabled. " +
-              "Set at least one Scala version in crossScalaVersions or disable cross-build for this step/build."
-          )
-        )
-      case versions =>
-        versions
-          .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-            ioCtx.flatMap { currentCtx =>
-              if (currentCtx.failed) IO.pure(currentCtx)
-              else
-                (for {
-                  _        <- IO.blocking(
-                                currentCtx.state.log.info(
-                                  s"$LogPrefix Cross-building with Scala $version"
-                                )
+    if (crossVersions.length <= 1) action(ctx)
+    else
+      crossVersions.toList
+        .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+          ioCtx.flatMap { currentCtx =>
+            if (currentCtx.failed) IO.pure(currentCtx)
+            else
+              (for {
+                _        <- IO.blocking(
+                              currentCtx.state.log.info(
+                                s"$LogPrefix Cross-building with Scala $version"
                               )
-                  switched <- switchTo(version)(currentCtx)
-                  result   <- action(switched)
-                } yield result).handleErrorWith { err =>
-                  restoreEntry(currentCtx).attempt *> IO.raiseError(err)
-                }
-            }
+                            )
+                switched <- switchTo(version)(currentCtx)
+                result   <- action(switched)
+              } yield result).handleErrorWith { err =>
+                restoreEntry(currentCtx).attempt *> IO.raiseError(err)
+              }
           }
-          .flatMap(restoreEntry)
-    }
+        }
+        .flatMap(restoreEntry)
   }
 }
