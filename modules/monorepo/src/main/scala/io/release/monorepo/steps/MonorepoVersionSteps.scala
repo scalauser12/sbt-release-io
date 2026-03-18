@@ -4,7 +4,6 @@ import cats.effect.IO
 import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
 import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.monorepo.steps.MonorepoVersionHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
 import sbt.Keys.*
@@ -205,6 +204,7 @@ private[monorepo] object MonorepoVersionSteps {
             .contains(ver)
         )
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
+            .as(ctx)
         else
           for {
             contents <- versionInputs.versionFileContents(versionFile, ver)
@@ -223,8 +223,8 @@ private[monorepo] object MonorepoVersionSteps {
             withMeta  = if (versionInputs.useGlobalVersion)
                           updated.withMetadata(globalVersionWrittenKey, ver)
                         else updated
-            r        <-
+            _        <-
               logInfo(withMeta, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
-          } yield r
+          } yield withMeta
     } yield result
 }

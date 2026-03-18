@@ -1,7 +1,6 @@
 package io.release.monorepo
 
 import io.release.ReleaseCtx
-import io.release.monorepo.internal.MonorepoReleasePlan
 import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}

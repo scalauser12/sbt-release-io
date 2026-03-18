@@ -1,4 +1,4 @@
-package io.release.monorepo.internal
+package io.release.monorepo
 
 import io.release.internal.ExecutionFlags
 import io.release.monorepo.ProjectReleaseInfo

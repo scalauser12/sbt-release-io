@@ -414,4 +414,28 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       "releaseIOMonorepoNextCommitMessage",
       "Commit message formatter for next version commits: versionSummary => message"
     )
+
+  // ── Tag settings snapshot ──────────────────────────────────────────
+
+  /** Snapshot of all tag-related settings resolved from sbt state. */
+  private[monorepo] final case class ResolvedMonorepoTagSettings(
+      tagStrategy: MonorepoTagStrategy,
+      perProjectTagName: (String, String) => String,
+      unifiedTagName: String => String,
+      tagComment: (String, String) => String,
+      unifiedTagComment: String => String,
+      sign: Boolean
+  )
+
+  private[monorepo] def resolveTagSettings(state: State): ResolvedMonorepoTagSettings = {
+    val extracted = Project.extract(state)
+    ResolvedMonorepoTagSettings(
+      tagStrategy = extracted.get(releaseIOMonorepoTagStrategy),
+      perProjectTagName = extracted.get(releaseIOMonorepoTagName),
+      unifiedTagName = extracted.get(releaseIOMonorepoUnifiedTagName),
+      tagComment = extracted.get(releaseIOMonorepoTagComment),
+      unifiedTagComment = extracted.get(releaseIOMonorepoUnifiedTagComment),
+      sign = extracted.get(_root_.io.release.ReleaseIO.releaseIOVcsSign)
+    )
+  }
 }

@@ -1,4 +1,4 @@
-package io.release.monorepo.internal
+package io.release.monorepo
 
 import cats.effect.IO
 import io.release.monorepo.*

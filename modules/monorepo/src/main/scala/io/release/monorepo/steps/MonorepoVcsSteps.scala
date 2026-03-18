@@ -3,9 +3,7 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.VcsOps
 import io.release.monorepo.*
-import io.release.monorepo.internal.MonorepoTagResolver
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.monorepo.steps.MonorepoVersionHelpers.{validateVersionConsistency, versionSummary}
 import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
 import io.release.vcs.Vcs
 import scala.sys.process.Process
@@ -136,7 +134,7 @@ private[monorepo] object MonorepoVcsSteps {
             case (releaseVer, _) =>
               // Resolved per-project: tag name/comment depend on releaseIORuntimeVersion
               // which varies by project.
-              IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
+              IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
                 val tagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
                   ctx,
@@ -167,7 +165,7 @@ private[monorepo] object MonorepoVcsSteps {
             case None           =>
               IO.raiseError(new IllegalStateException("No release versions set for any project"))
             case Some((rel, _)) =>
-              IO.blocking(MonorepoTagResolver.resolve(ctx.state)).flatMap { settings =>
+              IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
                 val tagName = settings.unifiedTagName(rel)
                 val summary =
                   versionSummary(ctx, { case (releaseVer, _) => releaseVer })
@@ -214,7 +212,7 @@ private[monorepo] object MonorepoVcsSteps {
                     )
       _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
                       acc *>
-                        logInfo(ctx, s"Pushing tag $tag").void *>
+                        logInfo(ctx, s"Pushing tag $tag") *>
                         runProcess(
                           Process(
                             Seq("git", "push", pushTarget.remote, tag),
@@ -257,7 +255,7 @@ private[monorepo] object MonorepoVcsSteps {
             decisionIO.flatMap {
               case true  => doPush
               case false =>
-                logWarn(ctx, "Remember to push the changes yourself!")
+                logWarn(ctx, "Remember to push the changes yourself!").as(ctx)
             }
           }
         }

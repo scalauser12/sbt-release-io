@@ -97,7 +97,7 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-tests",
     execute = (ctx, project) =>
       if (ctx.skipTests)
-        logInfo(ctx, s"Skipping tests for ${project.name}")
+        logInfo(ctx, s"Skipping tests for ${project.name}").as(ctx)
       else
         runProjectTask(ctx, project.ref / Test / ReleaseIOCompat.testKey),
     enableCrossBuild = true
@@ -108,11 +108,11 @@ private[monorepo] object MonorepoPublishSteps {
     name = "publish-artifacts",
     execute = (ctx, project) =>
       if (ctx.skipPublish)
-        logInfo(ctx, s"Skipping publish for ${project.name}")
+        logInfo(ctx, s"Skipping publish for ${project.name}").as(ctx)
       else
         evaluatePublishSkip(ctx, project).flatMap { skipped =>
           if (skipped)
-            logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)")
+            logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
           else runProjectTask(ctx, project.ref / releaseIOPublishArtifactsAction)
         },
     validate = (ctx, project) =>

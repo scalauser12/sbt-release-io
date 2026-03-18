@@ -1,4 +1,4 @@
-package io.release.monorepo.internal
+package io.release.monorepo
 
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIOVersionFile
@@ -22,7 +22,7 @@ private[monorepo] object MonorepoSelectionResolver {
   ): IO[SelectionResult] =
     for {
       runtime                  <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-      tagSettings              <- IO.blocking(MonorepoTagResolver.resolve(ctx.state))
+      tagSettings              <- IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state))
       liveOrdered              <- MonorepoProjectResolver.resolveOrdered(ctx.state)
       ordered                   = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
       validated                <- IO.fromEither(
@@ -88,7 +88,7 @@ private[monorepo] object MonorepoSelectionResolver {
       ctx: MonorepoContext,
       ordered: Seq[ProjectReleaseInfo],
       runtime: MonorepoRuntime,
-      tagSettings: MonorepoTagResolver.ResolvedMonorepoTagSettings,
+      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
       validated: MonorepoReleasePlan
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
     detectSelectedProjects(ctx, ordered, runtime, tagSettings)
@@ -102,7 +102,7 @@ private[monorepo] object MonorepoSelectionResolver {
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
       runtime: MonorepoRuntime,
-      tagSettings: MonorepoTagResolver.ResolvedMonorepoTagSettings
+      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] = {
     val detectChanges     = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges)
     val includeDownstream =
