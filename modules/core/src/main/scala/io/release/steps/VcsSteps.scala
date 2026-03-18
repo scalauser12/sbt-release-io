@@ -47,7 +47,7 @@ private[release] object VcsSteps {
     requireVcs(ctx) { vcs =>
       for {
         params <- IO.blocking(resolveTagPlan(ctx.state))
-        result <- resolveTag(vcs, params, ctx.copy(state = params.state))
+        result <- resolveTag(vcs, params, ctx.withState(params.state))
       } yield result
     }
   }

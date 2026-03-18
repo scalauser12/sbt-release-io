@@ -3,7 +3,7 @@ package io.release
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import io.release.internal.{CoreReleasePlan, InternalKeys}
-import io.release.steps.ReleaseSteps
+import io.release.steps.{ReleaseSteps, StepHelpers}
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt.Keys.*
@@ -267,7 +267,7 @@ trait ReleasePluginIOLike[T]
       val finalCtx = program.unsafeRunSync()
       if (finalCtx.failed) {
         val cause = finalCtx.failureCause
-          .map(e => Option(e.getMessage).getOrElse(e.toString))
+          .map(e => StepHelpers.errorMessage(e))
           .getOrElse("unknown error")
         finalCtx.state.log.error(s"[release-io] Release failed: $cause")
         finalCtx.state.fail
@@ -278,7 +278,7 @@ trait ReleasePluginIOLike[T]
     } catch {
       case NonFatal(e) =>
         state.log.error(
-          s"[release-io] Release failed: ${Option(e.getMessage).getOrElse(e.toString)}"
+          s"[release-io] Release failed: ${StepHelpers.errorMessage(e)}"
         )
         state.fail
     }

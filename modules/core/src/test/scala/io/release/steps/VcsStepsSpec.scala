@@ -2,7 +2,6 @@ package io.release.steps
 
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
-import io.release.vcs.Vcs
 import io.release.{ReleaseContext, TestSupport}
 import org.specs2.mutable.Specification
 
@@ -42,7 +41,7 @@ class VcsStepsSpec extends Specification with CatsEffect {
 
   private val releaseContextResource: Resource[IO, ReleaseContext] =
     tempDirResource.evalMap { repo =>
-      initRepoWithBrokenRemote(repo).map { vcs =>
+      TestSupport.initRepoWithBrokenRemote(repo).map { vcs =>
         ReleaseContext(
           state = TestSupport.dummyState(repo),
           vcs = Some(vcs),
@@ -50,31 +49,5 @@ class VcsStepsSpec extends Specification with CatsEffect {
         )
       }
     }
-
-  private def initRepoWithBrokenRemote(repo: File): IO[Vcs] = {
-    IO.blocking {
-      TestSupport.initGitRepo(repo)
-      sbt.IO.write(new File(repo, "file.txt"), "initial")
-      TestSupport.runGit(repo, "add", ".")
-      TestSupport.runGit(repo, "commit", "-m", "Initial commit")
-      TestSupport.runGit(repo, "branch", "-M", "main")
-      TestSupport.runGit(
-        repo,
-        "remote",
-        "add",
-        "origin",
-        new File(repo, "missing-remote.git").getAbsolutePath
-      )
-      TestSupport.runGit(repo, "config", "branch.main.remote", "origin")
-      TestSupport.runGit(repo, "config", "branch.main.merge", "refs/heads/main")
-      repo
-    }.flatMap { r =>
-      Vcs.detect(r).flatMap {
-        case Some(vcs) => IO.pure(vcs)
-        case None      =>
-          IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${r.getAbsolutePath}"))
-      }
-    }
-  }
 
 }

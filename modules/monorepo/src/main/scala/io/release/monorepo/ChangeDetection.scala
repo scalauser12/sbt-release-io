@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.steps.StepHelpers.errorMessage
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
@@ -33,9 +34,6 @@ private[monorepo] object ChangeDetection {
     */
   private def gitRelativize(base: File, file: File): Option[String] =
     sbt.IO.relativize(base.getCanonicalFile, file.getCanonicalFile).map(_.replace('\\', '/'))
-
-  private def errorMessage(err: Throwable): String =
-    Option(err.getMessage).filter(_.trim.nonEmpty).getOrElse(err.toString)
 
   /** Look up the last tag matching a pattern via `git describe` / `git tag`.
     * '''Performs blocking I/O''' (git subprocess calls) — must only be called

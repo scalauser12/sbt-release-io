@@ -13,6 +13,9 @@ import scala.sys.process.*
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
 
+  def errorMessage(err: Throwable): String =
+    Option(err.getMessage).getOrElse(err.toString)
+
   def useDefaults(state: sbt.State): Boolean =
     state.get(InternalKeys.executionFlags).exists(_.useDefaults)
 

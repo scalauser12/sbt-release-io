@@ -134,7 +134,7 @@ private[release] object PublishSteps {
       case NonFatal(e) =>
         state.log.warn(
           s"[release-io] Failed to evaluate publish / skip for ${ref.project}: " +
-            s"${Option(e.getMessage).getOrElse(e.toString)}. Assuming skip = false."
+            s"${errorMessage(e)}. Assuming skip = false."
         )
         false
     }
@@ -149,7 +149,7 @@ private[release] object PublishSteps {
       case NonFatal(e) =>
         state.log.warn(
           s"[release-io] Failed to evaluate publishTo for ${ref.project}: " +
-            s"${Option(e.getMessage).getOrElse(e.toString)}. Assuming publishTo is missing."
+            s"${errorMessage(e)}. Assuming publishTo is missing."
         )
         true
     }

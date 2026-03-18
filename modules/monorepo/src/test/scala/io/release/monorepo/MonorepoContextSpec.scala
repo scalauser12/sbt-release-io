@@ -78,12 +78,7 @@ class MonorepoContextSpec extends Specification {
   }
 
   private def dummyProject(name: String): ProjectReleaseInfo =
-    ProjectReleaseInfo(
-      ref = sbt.ProjectRef(new java.net.URI("file:///tmp/test"), name),
-      name = name,
-      baseDir = new java.io.File(s"/tmp/test/$name"),
-      versionFile = new java.io.File(s"/tmp/test/$name/version.sbt")
-    )
+    MonorepoTestSupport.dummyProject(name)
 
   private def withState[A](f: State => A): A = {
     val dir = Files.createTempDirectory("monorepo-ctx-spec").toFile

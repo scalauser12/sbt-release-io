@@ -4,6 +4,7 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import io.release.{PluginLikeSupport, ReleaseKeys, ReleasePluginIO}
 import io.release.internal.{ExecutionFlags, InternalKeys}
+import io.release.steps.StepHelpers
 import io.release.monorepo.{MonorepoTagStrategy as MonorepoTagStrategy_}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
@@ -235,7 +236,7 @@ trait MonorepoReleasePluginLike[T]
                                              }
                                result     <- if (finalCtx.failed) {
                                                val cause = finalCtx.failureCause
-                                                 .map(e => Option(e.getMessage).getOrElse(e.toString))
+                                                 .map(e => StepHelpers.errorMessage(e))
                                                  .getOrElse("unknown error")
                                                IO.blocking(
                                                  finalCtx.state.log.error(
@@ -258,7 +259,7 @@ trait MonorepoReleasePluginLike[T]
     } catch {
       case NonFatal(e) =>
         state.log.error(
-          s"[release-io-monorepo] Release failed: ${Option(e.getMessage).getOrElse(e.toString)}"
+          s"[release-io-monorepo] Release failed: ${StepHelpers.errorMessage(e)}"
         )
         state.fail
     }

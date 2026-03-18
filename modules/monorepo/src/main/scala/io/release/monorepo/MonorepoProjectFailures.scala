@@ -1,5 +1,7 @@
 package io.release.monorepo
 
+import io.release.steps.StepHelpers.errorMessage
+
 final case class MonorepoProjectFailure(
     projectName: String,
     cause: Option[Throwable]
@@ -21,7 +23,7 @@ object MonorepoProjectFailures {
     val rendered = failures.map { failure =>
       failure.cause match {
         case Some(err) =>
-          s"${failure.projectName}: ${Option(err.getMessage).getOrElse(err.toString)}"
+          s"${failure.projectName}: ${errorMessage(err)}"
         case None      => s"${failure.projectName}: failed"
       }
     }

@@ -2,6 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.steps.StepHelpers
 
 import scala.util.control.NonFatal
 
@@ -64,7 +65,7 @@ private[release] object ExecutionEngine {
       f(ctx).handleErrorWith { case NonFatal(err) =>
         IO.blocking(
           ctx.state.log.error(
-            s"$logPrefix Error: ${Option(err.getMessage).getOrElse(err.toString)}"
+            s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
           )
         ) *> IO.pure(ctx.failWith(err))
       }

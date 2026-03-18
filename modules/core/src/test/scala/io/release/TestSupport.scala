@@ -1,5 +1,7 @@
 package io.release
 
+import cats.effect.IO
+import io.release.vcs.Vcs
 import sbt.State
 import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
 import xsbti.*
@@ -121,4 +123,23 @@ object TestSupport {
 
   def runGit(repo: File, args: String*): String =
     Process(Seq("git") ++ args, repo).!!
+
+  def initRepoWithBrokenRemote(repo: File): IO[Vcs] =
+    IO.blocking {
+      initGitRepo(repo)
+      sbt.IO.write(new File(repo, "file.txt"), "initial")
+      runGit(repo, "add", ".")
+      runGit(repo, "commit", "-m", "Initial commit")
+      runGit(repo, "branch", "-M", "main")
+      runGit(repo, "remote", "add", "origin", new File(repo, "missing-remote.git").getAbsolutePath)
+      runGit(repo, "config", "branch.main.remote", "origin")
+      runGit(repo, "config", "branch.main.merge", "refs/heads/main")
+      repo
+    }.flatMap { r =>
+      Vcs.detect(r).flatMap {
+        case Some(vcs) => IO.pure(vcs)
+        case None      =>
+          IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${r.getAbsolutePath}"))
+      }
+    }
 }

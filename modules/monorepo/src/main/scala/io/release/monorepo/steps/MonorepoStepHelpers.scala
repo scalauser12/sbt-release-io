@@ -4,7 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
 import io.release.VcsOps
 import io.release.monorepo.*
-import io.release.steps.StepHelpers.{parseVersionInput, required}
+import io.release.steps.StepHelpers.{errorMessage, parseVersionInput, required}
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
@@ -41,7 +41,7 @@ private[monorepo] object MonorepoStepHelpers {
             action(currentCtx, latestProj).handleErrorWith { case NonFatal(err) =>
               IO.blocking(
                 currentCtx.state.log.error(
-                  s"[release-io-monorepo] ${latestProj.name}: ${Option(err.getMessage).getOrElse(err.toString)}"
+                  s"[release-io-monorepo] ${latestProj.name}: ${errorMessage(err)}"
                 )
               ) *> IO.pure(
                 currentCtx.updateProject(latestProj.ref)(

@@ -57,10 +57,5 @@ class MonorepoProjectResolverSpec extends Specification {
   }
 
   private def project(name: String): ProjectReleaseInfo =
-    ProjectReleaseInfo(
-      ref = ProjectRef(new URI("file:///tmp/test"), name),
-      name = name,
-      baseDir = new File(s"/tmp/test/$name"),
-      versionFile = new File(s"/tmp/test/$name/version.sbt")
-    )
+    MonorepoTestSupport.dummyProject(name)
 }

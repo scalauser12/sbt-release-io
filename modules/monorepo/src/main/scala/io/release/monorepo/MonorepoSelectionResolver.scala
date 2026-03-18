@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.syntax.all.*
+import io.release.steps.StepHelpers.errorMessage
 import io.release.ReleaseIO.releaseIOVersionFile
 import io.release.monorepo.*
 import sbt.State
@@ -271,7 +272,7 @@ private[monorepo] object MonorepoSelectionResolver {
             IO.blocking(
               ctx.state.log.warn(
                 s"[release-io-monorepo] Change detection failed for ${project.name}: " +
-                  s"${Option(err.getMessage).getOrElse(err.toString)}. " +
+                  s"${errorMessage(err)}. " +
                   "Conservatively treating as changed."
               )
             ).as(changed :+ project)
