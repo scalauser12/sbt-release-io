@@ -211,7 +211,7 @@ cat core/version.sbt  # version := "0.2.0-SNAPSHOT"
 
 ### Validate / Execute Model
 
-1. **Setup segment**: Steps up to and including `detect-or-select-projects` run validate-then-execute sequentially. Custom steps inserted here can modify project ordering and selection before the main phase begins.
+1. **Setup segment**: Steps up to and including `detect-or-select-projects` run validate-then-execute sequentially. Custom steps inserted here can read state or perform checks before project selection is finalized.
 2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup.
 3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Task-level failures are detected between steps.
 
@@ -603,9 +603,9 @@ val logStep = MonorepoStepIO
 | `MonorepoStepIO.globalResource[T](name)` | `ResourceGlobalBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
 | `MonorepoStepIO.perProjectResource[T](name)` | `ResourcePerProjectBuilder[T]` | Same terminals, returns `T => MonorepoStepIO` |
 
-Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only), `.withSelectionBoundary` (global only). Every builder chain ends with one of three terminal methods: `.execute(f)` runs `f` and returns the modified context, `.executeAction(f)` runs `f` for side effects and passes context through unchanged, `.validateOnly` creates a validation-only step with no execute logic. Resource-aware builders (`globalResource`, `perProjectResource`) are covered in [Custom plugins](#custom-plugins).
+Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only). Every builder chain ends with one of three terminal methods: `.execute(f)` runs `f` and returns the modified context, `.executeAction(f)` runs `f` for side effects and passes context through unchanged, `.validateOnly` creates a validation-only step with no execute logic. Resource-aware builders (`globalResource`, `perProjectResource`) are covered in [Custom plugins](#custom-plugins).
 
-> **Selection boundaries**: A global step marked with `.withSelectionBoundary` splits the release into a setup segment and a main segment. Steps before the boundary run validate-then-execute sequentially; steps after it run all validations first, then all executions. The built-in `detect-or-select-projects` is the default boundary. Custom steps rarely need this.
+> **Selection boundary**: The built-in `detect-or-select-projects` step splits the release into a setup segment and a main segment. Steps before the boundary run validate-then-execute sequentially; steps after it run all validations first, then all executions.
 
 ### Customizing the release process
 
