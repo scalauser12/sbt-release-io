@@ -155,6 +155,7 @@ private[monorepo] object ChangeDetection {
   ): Option[ProjectTagLookup] =
     tagStrategy match {
       case MonorepoTagStrategy.Unified =>
+        // "*" is used as a glob wildcard for git tag lookup — tag formatters must preserve it literally.
         val pattern = unifiedTagNameFn("*")
         Some(ProjectTagLookup(pattern, lookupLastTag(vcs, pattern)))
       case _                           => None
@@ -165,6 +166,7 @@ private[monorepo] object ChangeDetection {
       project: ProjectReleaseInfo
   ): ProjectTagLookup =
     inputs.unifiedLookup.getOrElse {
+      // "*" is used as a glob wildcard for git tag lookup — tag formatters must preserve it literally.
       val pattern = inputs.tagNameFn(project.name, "*")
       ProjectTagLookup(pattern, lookupLastTag(inputs.vcs, pattern))
     }
@@ -179,7 +181,14 @@ private[monorepo] object ChangeDetection {
         cache.get(tag) match {
           case Some(changed) => cache -> changed
           case None          =>
-            val changed = checkSharedPaths(inputs.vcs, tag, inputs.state, inputs.sharedPaths)
+            val changed =
+              checkSharedPaths(
+                inputs.vcs,
+                tag,
+                inputs.state,
+                inputs.sharedPaths,
+                inputs.globalExcludes
+              )
             cache.updated(tag, changed) -> changed
         }
       case _                                                            => cache -> false
@@ -209,7 +218,8 @@ private[monorepo] object ChangeDetection {
       vcs: Vcs,
       tag: String,
       state: State,
-      sharedPaths: Seq[String]
+      sharedPaths: Seq[String],
+      excludes: Set[String]
   ): Boolean = {
     import scala.sys.process.*
 
@@ -219,14 +229,16 @@ private[monorepo] object ChangeDetection {
         vcs.baseDir
       ).!!.linesIterator.filter(_.nonEmpty).toList
     ) match {
-      case Success(files) if files.nonEmpty =>
-        state.log.info(
-          s"[release-io-monorepo] Shared path change(s) detected since $tag: " +
-            s"${files.mkString(", ")}. Marking affected projects as changed"
-        )
-        true
-      case Success(_)                       => false
-      case Failure(err)                     =>
+      case Success(rawFiles) =>
+        val files = rawFiles.filterNot(f => excludes.exists(e => f == e || f.startsWith(e + "/")))
+        if (files.nonEmpty) {
+          state.log.info(
+            s"[release-io-monorepo] Shared path change(s) detected since $tag: " +
+              s"${files.mkString(", ")}. Marking affected projects as changed"
+          )
+          true
+        } else false
+      case Failure(err)      =>
         state.log.warn(
           s"[release-io-monorepo] Failed to check shared paths: ${errorMessage(err)}. " +
             "Conservatively treating as changed"

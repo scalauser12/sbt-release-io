@@ -58,10 +58,16 @@ trait MonorepoReleaseIO {
   /** Tagging strategy: PerProject or Unified. Default: PerProject. */
   val releaseIOMonorepoTagStrategy: SettingKey[MonorepoTagStrategy] = _releaseIOMonorepoTagStrategy
 
-  /** Tag name formatter for per-project tags. (projectName, version) => tagName. */
+  /** Tag name formatter for per-project tags. (projectName, version) => tagName.
+    * Must preserve `*` literally — change detection passes `"*"` as the version
+    * to generate glob patterns for `git tag --list`.
+    */
   val releaseIOMonorepoTagName: SettingKey[(String, String) => String] = _releaseIOMonorepoTagName
 
-  /** Tag name formatter for unified tags. version => tagName. */
+  /** Tag name formatter for unified tags. version => tagName.
+    * Must preserve `*` literally — change detection passes `"*"` as the version
+    * to generate glob patterns for `git tag --list`.
+    */
   val releaseIOMonorepoUnifiedTagName: SettingKey[String => String] =
     _releaseIOMonorepoUnifiedTagName
 

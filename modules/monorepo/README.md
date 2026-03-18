@@ -286,8 +286,8 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | Setting | Type | Default | Description |
 |-----|------|---------|-------------|
 | `releaseIOMonorepoTagStrategy` | `MonorepoTagStrategy` | `PerProject` | `PerProject` or `Unified` |
-| `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Per-project tag formatter |
-| `releaseIOMonorepoUnifiedTagName` | `String => String` | `ver => s"v$ver"` | Unified tag formatter |
+| `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Per-project tag formatter. Must preserve `*` literally (used as a glob wildcard for change detection) |
+| `releaseIOMonorepoUnifiedTagName` | `String => String` | `ver => s"v$ver"` | Unified tag formatter. Must preserve `*` literally (used as a glob wildcard for change detection) |
 | `releaseIOMonorepoTagComment` | `(String, String) => String` | `(name, ver) => s"Release $name $ver"` | Per-project tag comment formatter |
 | `releaseIOMonorepoUnifiedTagComment` | `String => String` | `summary => s"Release: $summary"` | Unified tag comment formatter |
 
