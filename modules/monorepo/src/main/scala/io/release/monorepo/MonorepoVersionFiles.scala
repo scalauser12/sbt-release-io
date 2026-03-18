@@ -2,7 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIOVersionFile
-import io.release.monorepo.{MonorepoReleaseIO as MR}
+import io.release.monorepo.MonorepoReleaseIO as MR
 import sbt.{internal as _, *}
 
 /** Shared version-file resolution for monorepo release steps and project discovery.

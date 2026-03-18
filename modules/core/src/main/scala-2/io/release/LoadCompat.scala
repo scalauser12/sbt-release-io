@@ -1,17 +1,9 @@
 package io.release
 
-import sbt.{internal => _, *}
 import sbt.Def.ScopedKey
 import sbt.Keys.{resolvedScoped, streams}
-import sbt.internal.{
-  BuildStreams,
-  BuildStructure,
-  BuildUtil,
-  Index,
-  KeyIndex,
-  LoadedBuildUnit,
-  StructureIndex
-}
+import sbt.internal.*
+import sbt.{internal as _, *}
 
 /** Compatibility layer for sbt.Load which was made private in sbt 1.0.
   * Inlines the `finalTransforms` and `structureIndex` methods that were previously

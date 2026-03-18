@@ -2,7 +2,6 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.internal.ExecutionFlags
-import io.release.monorepo.ProjectReleaseInfo
 import sbt.{AttributeKey, State}
 
 /** How project selection is determined for a monorepo release. */

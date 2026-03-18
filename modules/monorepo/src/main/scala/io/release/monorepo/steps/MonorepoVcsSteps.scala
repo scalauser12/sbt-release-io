@@ -6,6 +6,7 @@ import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
 import io.release.vcs.Vcs
+
 import scala.sys.process.Process
 
 /** VCS-related monorepo release steps. */

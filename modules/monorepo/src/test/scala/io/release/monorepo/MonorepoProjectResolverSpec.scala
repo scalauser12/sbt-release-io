@@ -1,7 +1,6 @@
 package io.release.monorepo
 
 import io.release.internal.ExecutionFlags
-import io.release.monorepo.ProjectReleaseInfo
 import org.specs2.mutable.Specification
 import sbt.ProjectRef
 

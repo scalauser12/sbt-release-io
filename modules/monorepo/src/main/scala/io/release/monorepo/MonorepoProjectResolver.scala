@@ -1,7 +1,6 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.monorepo.*
 import sbt.Keys.baseDirectory
 import sbt.{internal as _, *}
 

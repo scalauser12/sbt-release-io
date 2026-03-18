@@ -2,9 +2,8 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.steps.StepHelpers.errorMessage
 import io.release.ReleaseIO.releaseIOVersionFile
-import io.release.monorepo.*
+import io.release.steps.StepHelpers.errorMessage
 import sbt.State
 
 import scala.util.control.NonFatal

@@ -2,7 +2,6 @@ package io.release.monorepo
 
 import cats.effect.unsafe.implicits.global
 import io.release.internal.ExecutionFlags
-import io.release.monorepo.ProjectReleaseInfo
 import org.specs2.mutable.Specification
 import sbt.ProjectRef
 

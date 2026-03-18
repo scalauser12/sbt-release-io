@@ -2,10 +2,10 @@ package io.release.monorepo
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import io.release.{PluginLikeSupport, ReleaseKeys, ReleasePluginIO}
 import io.release.internal.{ExecutionFlags, InternalKeys}
+import io.release.monorepo.MonorepoTagStrategy as MonorepoTagStrategy_
 import io.release.steps.StepHelpers
-import io.release.monorepo.{MonorepoTagStrategy as MonorepoTagStrategy_}
+import io.release.{PluginLikeSupport, ReleaseKeys, ReleasePluginIO}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
