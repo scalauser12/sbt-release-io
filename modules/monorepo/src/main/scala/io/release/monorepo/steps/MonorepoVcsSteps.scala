@@ -5,6 +5,7 @@ import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoTagResolver
 import io.release.monorepo.steps.MonorepoStepHelpers.*
+import io.release.monorepo.steps.MonorepoVersionHelpers.{validateVersionConsistency, versionSummary}
 import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
 import io.release.vcs.Vcs
 import scala.sys.process.Process

@@ -20,7 +20,12 @@ sealed trait MonorepoStepIO {
 
 object MonorepoStepIO {
 
-  /** A step that runs once globally (e.g., check clean working dir, push changes). */
+  /** A step that runs once globally (e.g., check clean working dir, push changes).
+    *
+    * @param isSelectionBoundary Internal flag — marks this step as the boundary between
+    *   setup (sequential validate-then-execute) and main (batch validation then execution)
+    *   phases. Only the built-in `detect-or-select-projects` step should set this.
+    */
   case class Global(
       name: String,
       execute: MonorepoContext => IO[MonorepoContext],
@@ -65,7 +70,7 @@ object MonorepoStepIO {
     def withValidation(f: MonorepoContext => IO[Unit]): GlobalBuilder =
       new GlobalBuilder(name, f, selectionBoundary)
 
-    def withSelectionBoundary: GlobalBuilder =
+    private[monorepo] def withSelectionBoundary: GlobalBuilder =
       new GlobalBuilder(name, validateFn, true)
 
     def execute(f: MonorepoContext => IO[MonorepoContext]): Global =
@@ -117,7 +122,7 @@ object MonorepoStepIO {
     def withValidation(f: T => MonorepoContext => IO[Unit]): ResourceGlobalBuilder[T] =
       new ResourceGlobalBuilder[T](name, f, selectionBoundary)
 
-    def withSelectionBoundary: ResourceGlobalBuilder[T] =
+    private[monorepo] def withSelectionBoundary: ResourceGlobalBuilder[T] =
       new ResourceGlobalBuilder[T](name, validateFn, true)
 
     def execute(f: T => MonorepoContext => IO[MonorepoContext]): T => MonorepoStepIO =

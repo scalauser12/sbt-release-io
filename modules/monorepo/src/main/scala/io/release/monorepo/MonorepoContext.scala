@@ -55,6 +55,27 @@ object MonorepoTagStrategy {
   * and tag settings from the current `State` when they run; custom steps continue
   * to receive and update the threaded snapshot context.
   *
+  * ==State vectors==
+  *
+  * Three pieces carry mutable state through the release:
+  *
+  *  - '''`state: State`''' — sbt's native state, threaded because sbt commands are
+  *    `State => State`. Updated for session settings (version reloads), sbt task
+  *    evaluation, and VCS state.
+  *  - '''Context fields''' (`projects`, `vcs`, `tagStrategy`, etc.) — typed, immutable
+  *    fields for release-specific data. These are the primary API for step authors.
+  *  - '''`metadataBag: AttributeMap`''' — extensible typed key-value store for inter-step
+  *    data that doesn't warrant a dedicated field. Steps should prefer context fields
+  *    for commonly-needed data and `metadataBag` for step-specific data.
+  *
+  * ==Failure model==
+  *
+  * Per-project failure lives on [[ProjectReleaseInfo.failed]] — a failing project is
+  * marked failed without aborting the current step's remaining projects. Global failure
+  * lives on [[MonorepoContext.failed]] — set by the composer via
+  * [[MonorepoProjectFailures]] when per-project failures are propagated, causing
+  * subsequent steps to be skipped entirely.
+  *
   * @param state       the current `sbt.State`, updated between steps
   * @param vcs         VCS adapter (git), set by `initializeVcs`
   * @param projects    current snapshot of the participating subprojects
@@ -99,6 +120,11 @@ case class MonorepoContext(
   def withoutMetadata[A](key: AttributeKey[A]): MonorepoContext =
     copy(metadataBag = metadataBag.remove(key))
 
+  /** The monorepo release plan, stored in `metadataBag` to avoid adding a field to the
+    * public case class constructor. Access is `private[monorepo]` so user steps cannot
+    * read or modify the plan. Only `detectOrSelectProjects` reads it;
+    * only [[MonorepoReleasePluginLike.buildContext]] writes it.
+    */
   private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
     metadata(MonorepoReleasePlan.monorepoReleasePlanKey)
 

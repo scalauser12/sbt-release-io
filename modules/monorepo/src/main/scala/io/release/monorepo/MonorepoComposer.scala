@@ -150,6 +150,21 @@ private[monorepo] object MonorepoComposer {
       )
       .map(MonorepoStepHelpers.propagateFailures)
 
+  // ── Cross-build wrapping ──────────────────────────────────────────────
+  //
+  // Cross-build is the composer's responsibility: it controls how per-project steps
+  // are orchestrated across Scala versions. The flow:
+  //
+  //  1. `wrapValidationWithCrossBuild` / `wrapActionWithCrossBuild` conditionally
+  //     wrap per-project functions so they execute once per crossScalaVersions entry.
+  //  2. Wrapping is applied only when both the step's `enableCrossBuild` flag and
+  //     the global `crossBuild` flag (from `MonorepoReleasePluginLike`) are true.
+  //  3. `runCrossBuild` is the shared engine: it reads `crossScalaVersions` from
+  //     the project settings, switches the Scala version before each iteration,
+  //     and restores the entry version afterward (even on error).
+  //
+  // This keeps cross-build orchestration in one place, transparent to step authors.
+
   private def wrapValidationWithCrossBuild(
       fn: (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
       enableCrossBuild: Boolean,

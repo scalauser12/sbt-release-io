@@ -31,24 +31,17 @@ private[monorepo] object MonorepoSelectionResolver {
                                   )
       selectionResult          <- plan.selectionMode match {
                                     case SelectionMode.ExplicitSelection =>
-                                      IO.pure(
-                                        (
-                                          ordered.filter(p => validated.selectedNames.contains(p.name)),
-                                          SelectionMode.ExplicitSelection
-                                        )
-                                      )
+                                      resolveExplicit(ordered, validated)
                                     case SelectionMode.AllChanged        =>
-                                      IO.pure((ordered, SelectionMode.AllChanged))
+                                      resolveAllChanged(ordered)
                                     case SelectionMode.DetectChanges     =>
-                                      detectSelectedProjects(ctx, ordered, runtime, tagSettings)
-                                        .flatMap { case (detected, mode) =>
-                                          forceIncludeOverridden(
-                                            ctx,
-                                            ordered,
-                                            detected,
-                                            validated
-                                          ).map(_ -> mode)
-                                        }
+                                      resolveDetectChanges(
+                                        ctx,
+                                        ordered,
+                                        runtime,
+                                        tagSettings,
+                                        validated
+                                      )
                                   }
       (selected, effectiveMode) = selectionResult
       constrained              <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
@@ -72,6 +65,38 @@ private[monorepo] object MonorepoSelectionResolver {
       selectionMode = effectiveMode,
       tagStrategy = tagSettings.tagStrategy
     )
+
+  // ── Selection mode handlers ───────────────────────────────────────────
+
+  private def resolveExplicit(
+      ordered: Seq[ProjectReleaseInfo],
+      validated: MonorepoReleasePlan
+  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
+    IO.pure(
+      (
+        ordered.filter(p => validated.selectedNames.contains(p.name)),
+        SelectionMode.ExplicitSelection
+      )
+    )
+
+  private def resolveAllChanged(
+      ordered: Seq[ProjectReleaseInfo]
+  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
+    IO.pure((ordered, SelectionMode.AllChanged))
+
+  private def resolveDetectChanges(
+      ctx: MonorepoContext,
+      ordered: Seq[ProjectReleaseInfo],
+      runtime: MonorepoRuntime,
+      tagSettings: MonorepoTagResolver.ResolvedMonorepoTagSettings,
+      validated: MonorepoReleasePlan
+  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
+    detectSelectedProjects(ctx, ordered, runtime, tagSettings)
+      .flatMap { case (detected, mode) =>
+        forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
+      }
+
+  // ── Detection helpers ───────────────────────────────────────────────
 
   private def detectSelectedProjects(
       ctx: MonorepoContext,
