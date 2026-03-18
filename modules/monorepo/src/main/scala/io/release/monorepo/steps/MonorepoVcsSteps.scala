@@ -82,30 +82,19 @@ private[monorepo] object MonorepoVcsSteps {
     vcs.existsTag(tagName).flatMap {
       case false => vcs.tag(tagName, comment, sign = sign)
       case true  =>
-        if (useDefaults(ctx.state))
+        if (useDefaults(ctx.state) || !ctx.interactive) {
+          val mode = if (useDefaults(ctx.state)) "use-defaults mode" else "non-interactive mode"
           IO.blocking(
             ctx.state.log.warn(
               s"[release-io-monorepo] Tag [$tagName] already exists for $label. " +
-                "Aborting (use-defaults mode)."
+                s"Aborting ($mode)."
             )
           ) *> IO.raiseError(
             new IllegalStateException(
-              s"Tag [$tagName] already exists for $label. Aborting."
+              s"Tag [$tagName] already exists for $label. Aborting in $mode."
             )
           )
-        else if (!ctx.interactive)
-          IO.blocking(
-            ctx.state.log.warn(
-              s"[release-io-monorepo] Tag [$tagName] already exists for $label. " +
-                "Aborting (non-interactive mode)."
-            )
-          ) *> IO.raiseError(
-            new IllegalStateException(
-              s"Tag [$tagName] already exists for $label. " +
-                "Aborting release in non-interactive mode."
-            )
-          )
-        else
+        } else
           askYesNo(
             s"Tag [$tagName] already exists for $label! Overwrite? (y/n) [n] ",
             defaultYes = false

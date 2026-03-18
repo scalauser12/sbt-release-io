@@ -1,6 +1,7 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
+import cats.syntax.traverse.*
 import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
 import io.release.VcsOps
 import io.release.monorepo.*
@@ -129,14 +130,9 @@ private[monorepo] object MonorepoStepHelpers {
       vcs: Vcs,
       runtime: MonorepoRuntime
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
-    ctx.currentProjects.foldLeft(IO.pure(Seq.empty[(ProjectReleaseInfo, String)])) {
-      (acc, project) =>
-        acc.flatMap { paths =>
-          val versionFile = resolveVersionFile(runtime, project)
-          VcsOps
-            .relativizeToBase(vcs, versionFile)
-            .map(rel => paths :+ (project, rel))
-        }
+    ctx.currentProjects.toList.traverse { project =>
+      val versionFile = resolveVersionFile(runtime, project)
+      VcsOps.relativizeToBase(vcs, versionFile).map(rel => (project, rel))
     }
 
   private[steps] def loadRuntime(ctx: MonorepoContext): IO[MonorepoRuntime] =

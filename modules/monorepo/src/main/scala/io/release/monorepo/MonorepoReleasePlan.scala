@@ -43,47 +43,19 @@ private[monorepo] object MonorepoReleasePlan {
       globalNextVersions: Seq[String]
   )
 
-  final case class ValidatedInputs(
-      flags: ExecutionFlags,
-      allChanged: Boolean,
-      selectedNames: Seq[String],
-      releaseVersionOverrides: Map[String, String],
-      nextVersionOverrides: Map[String, String],
-      globalReleaseVersion: Option[String],
-      globalNextVersion: Option[String]
-  ) {
-    def selectionMode: SelectionMode =
-      if (selectedNames.nonEmpty) SelectionMode.ExplicitSelection
-      else if (allChanged) SelectionMode.AllChanged
-      else SelectionMode.DetectChanges
-  }
-
   // ── Build & validate ──────────────────────────────────────────────
 
   def build(state: State, inputs: Inputs): IO[Either[State, MonorepoReleasePlan]] =
     validateOverrideInputs(inputs) match {
-      case Left(message)    =>
+      case Left(message) =>
         IO.blocking {
           state.log.error(s"[release-io-monorepo] $message")
           Left(state.fail)
         }
-      case Right(validated) =>
-        IO.pure(
-          Right(
-            MonorepoReleasePlan(
-              flags = validated.flags,
-              selectionMode = validated.selectionMode,
-              selectedNames = validated.selectedNames,
-              releaseVersionOverrides = validated.releaseVersionOverrides,
-              nextVersionOverrides = validated.nextVersionOverrides,
-              globalReleaseVersion = validated.globalReleaseVersion,
-              globalNextVersion = validated.globalNextVersion
-            )
-          )
-        )
+      case Right(plan)   => IO.pure(Right(plan))
     }
 
-  def validateOverrideInputs(inputs: Inputs): Either[String, ValidatedInputs] = {
+  def validateOverrideInputs(inputs: Inputs): Either[String, MonorepoReleasePlan] = {
     val releaseVersionPairs     = inputs.releaseVersionPairs
     val nextVersionPairs        = inputs.nextVersionPairs
     val releaseVersionOverrides = releaseVersionPairs.toMap
@@ -141,15 +113,22 @@ private[monorepo] object MonorepoReleasePlan {
              "Cannot combine 'all-changed' with explicit project selection. " +
                "Either use 'all-changed' alone or specify projects explicitly."
            )
-    } yield ValidatedInputs(
-      flags = inputs.flags,
-      allChanged = inputs.allChanged,
-      selectedNames = inputs.selectedNames,
-      releaseVersionOverrides = releaseVersionOverrides,
-      nextVersionOverrides = nextVersionOverrides,
-      globalReleaseVersion = globalReleaseVersion,
-      globalNextVersion = globalNextVersion
-    )
+    } yield {
+      val selectionMode =
+        if (inputs.selectedNames.nonEmpty) SelectionMode.ExplicitSelection
+        else if (inputs.allChanged) SelectionMode.AllChanged
+        else SelectionMode.DetectChanges
+
+      MonorepoReleasePlan(
+        flags = inputs.flags,
+        selectionMode = selectionMode,
+        selectedNames = inputs.selectedNames,
+        releaseVersionOverrides = releaseVersionOverrides,
+        nextVersionOverrides = nextVersionOverrides,
+        globalReleaseVersion = globalReleaseVersion,
+        globalNextVersion = globalNextVersion
+      )
+    }
   }
 
   def enforceGlobalVersionAllOrNothing(

@@ -263,19 +263,15 @@ private[monorepo] object MonorepoSelectionResolver {
       projects: Seq[ProjectReleaseInfo],
       detector: (sbt.ProjectRef, java.io.File, State) => IO[Boolean]
   ): IO[Seq[ProjectReleaseInfo]] =
-    projects.foldLeft(IO.pure(Seq.empty[ProjectReleaseInfo])) { (acc, project) =>
-      acc.flatMap { changed =>
-        IO.defer(detector(project.ref, project.baseDir, ctx.state))
-          .map { isChanged => if (isChanged) changed :+ project else changed }
-          .recoverWith { case NonFatal(err) =>
-            IO.blocking(
-              ctx.state.log.warn(
-                s"[release-io-monorepo] Change detection failed for ${project.name}: " +
-                  s"${errorMessage(err)}. " +
-                  "Conservatively treating as changed."
-              )
-            ).as(changed :+ project)
-          }
-      }
+    projects.toList.filterA { project =>
+      IO.defer(detector(project.ref, project.baseDir, ctx.state))
+        .recoverWith { case NonFatal(err) =>
+          IO.blocking(
+            ctx.state.log.warn(
+              s"[release-io-monorepo] Change detection failed for ${project.name}: " +
+                s"${errorMessage(err)}. Conservatively treating as changed."
+            )
+          ).as(true)
+        }
     }
 }
