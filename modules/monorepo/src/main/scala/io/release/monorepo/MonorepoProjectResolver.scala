@@ -33,8 +33,9 @@ private[monorepo] object MonorepoProjectResolver {
 
   def resolveOrdered(state: State): IO[Seq[ProjectReleaseInfo]] =
     resolveAll(state).flatMap { projects =>
+      val byRef = projects.map(p => p.ref -> p).toMap
       DependencyGraph.topologicalSort(projects.map(_.ref), state).map { orderedRefs =>
-        orderedRefs.flatMap(ref => projects.find(_.ref == ref))
+        orderedRefs.flatMap(byRef.get)
       }
     }
 
@@ -64,7 +65,6 @@ private[monorepo] object MonorepoProjectResolver {
       useGlobalVersion: Boolean
   ): Seq[ProjectReleaseInfo] =
     projects.map { project =>
-      val currentVersions = project.versions.getOrElse("" -> "")
       val releaseOverride =
         if (useGlobalVersion) plan.globalReleaseVersion
         else plan.releaseVersionOverrides.get(project.name)
@@ -72,13 +72,12 @@ private[monorepo] object MonorepoProjectResolver {
         if (useGlobalVersion) plan.globalNextVersion
         else plan.nextVersionOverrides.get(project.name)
 
-      val release = releaseOverride.getOrElse(currentVersions._1)
-      val next    = nextOverride.getOrElse(currentVersions._2)
-
-      val updatedVersions =
-        if (release.nonEmpty || next.nonEmpty) Some((release, next))
-        else project.versions
-
-      project.copy(versions = updatedVersions)
+      if (releaseOverride.isEmpty && nextOverride.isEmpty) project
+      else {
+        val (currentRelease, currentNext) = project.versions.getOrElse(("", ""))
+        val release                       = releaseOverride.getOrElse(currentRelease)
+        val next                          = nextOverride.getOrElse(currentNext)
+        project.copy(versions = Some((release, next)))
+      }
     }
 }

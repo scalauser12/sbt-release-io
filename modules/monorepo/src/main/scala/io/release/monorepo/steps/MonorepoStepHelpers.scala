@@ -4,7 +4,6 @@ import cats.effect.IO
 import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
 import io.release.VcsOps
 import io.release.monorepo.*
-import io.release.steps.StepHelpers
 import io.release.steps.StepHelpers.{parseVersionInput, required}
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
@@ -60,15 +59,6 @@ private[monorepo] object MonorepoStepHelpers {
 
   def logWarn(ctx: MonorepoContext, msg: String): IO[Unit] =
     IO.blocking(ctx.state.log.warn(s"[release-io-monorepo] $msg"))
-
-  /** Prompt user to continue — delegates to the shared implementation in [[StepHelpers]]. */
-  def confirmContinue(
-      ctx: MonorepoContext,
-      prompt: String,
-      defaultYes: Boolean,
-      abortMessage: String
-  ): IO[Unit] =
-    StepHelpers.confirmContinue(ctx.state, ctx.interactive, prompt, defaultYes, abortMessage)
 
   // ── Version summaries ─────────────────────────────────────────────────
 

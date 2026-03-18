@@ -30,7 +30,7 @@ private[monorepo] object MonorepoPublishSteps {
     IO.blocking {
       val extracted = Project.extract(ctx.state)
       extracted.runTask(key, ctx.state)._2
-    }.handleErrorWith { case NonFatal(cause) =>
+    }.recoverWith { case NonFatal(cause) =>
       IO.raiseError(new IllegalStateException(failureMessage, cause))
     }
 

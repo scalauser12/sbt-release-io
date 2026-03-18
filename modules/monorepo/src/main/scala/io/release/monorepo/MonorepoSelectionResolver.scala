@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import cats.syntax.all.*
 import io.release.ReleaseIO.releaseIOVersionFile
 import io.release.monorepo.*
 import sbt.State
@@ -31,9 +32,14 @@ private[monorepo] object MonorepoSelectionResolver {
                                   )
       selectionResult          <- plan.selectionMode match {
                                     case SelectionMode.ExplicitSelection =>
-                                      resolveExplicit(ordered, validated)
+                                      IO.pure(
+                                        (
+                                          ordered.filter(p => validated.selectedNames.contains(p.name)),
+                                          SelectionMode.ExplicitSelection
+                                        )
+                                      )
                                     case SelectionMode.AllChanged        =>
-                                      resolveAllChanged(ordered)
+                                      IO.pure((ordered, SelectionMode.AllChanged))
                                     case SelectionMode.DetectChanges     =>
                                       resolveDetectChanges(
                                         ctx,
@@ -66,23 +72,7 @@ private[monorepo] object MonorepoSelectionResolver {
       tagStrategy = tagSettings.tagStrategy
     )
 
-  // ── Selection mode handlers ───────────────────────────────────────────
-
-  private def resolveExplicit(
-      ordered: Seq[ProjectReleaseInfo],
-      validated: MonorepoReleasePlan
-  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
-    IO.pure(
-      (
-        ordered.filter(p => validated.selectedNames.contains(p.name)),
-        SelectionMode.ExplicitSelection
-      )
-    )
-
-  private def resolveAllChanged(
-      ordered: Seq[ProjectReleaseInfo]
-  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
-    IO.pure((ordered, SelectionMode.AllChanged))
+  // ── Detection helpers ───────────────────────────────────────────────
 
   private def resolveDetectChanges(
       ctx: MonorepoContext,
@@ -95,8 +85,6 @@ private[monorepo] object MonorepoSelectionResolver {
       .flatMap { case (detected, mode) =>
         forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
       }
-
-  // ── Detection helpers ───────────────────────────────────────────────
 
   private def detectSelectedProjects(
       ctx: MonorepoContext,
@@ -162,14 +150,14 @@ private[monorepo] object MonorepoSelectionResolver {
       if (newlyIncluded.isEmpty) IO.pure(detected)
       else {
         val selectedRefs = detectedRefs ++ newlyIncluded.map(_.ref).toSet
-        newlyIncluded
-          .foldLeft(IO.unit) { (acc, p) =>
-            acc *> IO.blocking(
+        newlyIncluded.toList
+          .traverse_(p =>
+            IO.blocking(
               ctx.state.log.info(
                 s"[release-io-monorepo] Including ${p.name} (downstream dependent of changed project)"
               )
             )
-          }
+          )
           .as(allOrdered.filter(p => selectedRefs.contains(p.ref)))
       }
     }
@@ -183,15 +171,6 @@ private[monorepo] object MonorepoSelectionResolver {
     val invalidOverrides  =
       (plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet) -- validNames
     val invalidSelections = plan.selectedNames.filterNot(validNames.contains)
-    val selectedProjects  =
-      if (plan.selectedNames.nonEmpty)
-        allProjects.filter(p => plan.selectedNames.contains(p.name))
-      else allProjects
-    val unusedOverrides   =
-      if (plan.selectedNames.nonEmpty)
-        (plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet) --
-          selectedProjects.map(_.name).toSet
-      else Set.empty[String]
 
     def failWhen(condition: Boolean, msg: => String): Either[String, Unit] =
       if (condition) Left(msg) else Right(())
@@ -227,12 +206,6 @@ private[monorepo] object MonorepoSelectionResolver {
              "Global version mode is active — all projects share a single version. " +
                "Per-project version overrides (release-version project=version) are not supported. " +
                "Use global overrides (release-version <version>) or remove per-project overrides."
-           )
-      _ <- failWhen(
-             unusedOverrides.nonEmpty,
-             s"Version overrides target non-selected projects: " +
-               s"${unusedOverrides.mkString(", ")}. " +
-               s"Selected: ${selectedProjects.map(_.name).mkString(", ")}"
            )
     } yield plan
   }
@@ -272,16 +245,16 @@ private[monorepo] object MonorepoSelectionResolver {
 
     if (forceInclude.isEmpty) IO.pure(detected)
     else {
-      val selectedRefs = detectedNames ++ forceInclude.map(_.name)
-      forceInclude
-        .foldLeft(IO.unit) { (acc, p) =>
-          acc *> IO.blocking(
+      val selectedNames = detectedNames ++ forceInclude.map(_.name)
+      forceInclude.toList
+        .traverse_(p =>
+          IO.blocking(
             ctx.state.log.info(
               s"[release-io-monorepo] Including ${p.name} (unchanged but has version override)"
             )
           )
-        }
-        .as(allOrdered.filter(p => selectedRefs.contains(p.name)))
+        )
+        .as(allOrdered.filter(p => selectedNames.contains(p.name)))
     }
   }
 

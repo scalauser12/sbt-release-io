@@ -10,7 +10,6 @@ import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 /** Base trait for resource-parameterized monorepo release plugins. Each release step
