@@ -4,7 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseIO.*
 import io.release.internal.{CoreReleasePlan, SbtRuntime, VersionPlan}
 import io.release.steps.StepHelpers.*
-import io.release.{ReleaseContext, ReleaseKeys, ReleaseStepIO, VcsOps}
+import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
@@ -195,7 +195,7 @@ private[release] object VersionSteps {
                                            )
                                          ) ++ versionSettings
                                        )
-                                       resultCtx.copy(state = newState)
+                                       resultCtx.withState(newState)
                                      }
         } yield finalCtx
       }
@@ -233,7 +233,7 @@ private[release] object VersionSteps {
                           (commitState, msg) = commitData
                           _                 <- vcs.commit(msg, sign, signOff)
                           hash              <- vcs.currentHash
-                        } yield (ctx.copy(state = commitState), hash)
+                        } yield (ctx.withState(commitState), hash)
                       } else {
                         vcs.currentHash.map(hash => (ctx, hash))
                       }
@@ -262,7 +262,7 @@ private[release] object VersionSteps {
                          VersionSteps.sessionSettings(ctx.state) ++ versionSettings
                        val newState        =
                          SbtRuntime.appendWithSession(ctx.state, allSettings)
-                       ctx.copy(state = newState)
+                       ctx.withState(newState)
                      }
     } yield result
   }

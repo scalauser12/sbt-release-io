@@ -1,7 +1,7 @@
 package io.release.steps
 
-import cats.Monad
 import cats.effect.IO
+import cats.syntax.flatMap.*
 import io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
 import io.release.internal.{CoreReleasePlan, SbtRuntime, TagPlan}
 import io.release.steps.StepHelpers.*
@@ -64,26 +64,28 @@ private[release] object VcsSteps {
     )
   }
 
+  private def applyTagToState(ctx: ReleaseContext, tagName: String): ReleaseContext =
+    ctx.withState(
+      SbtRuntime.appendWithSession(
+        ctx.state,
+        VersionSteps.sessionSettings(ctx.state) ++
+          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+      )
+    )
+
   private def resolveTag(
       vcs: Vcs,
       params: TagPlan,
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
-    Monad[IO].tailRecM(params) { currentParams =>
+    params.tailRecM[IO, ReleaseContext] { currentParams =>
       val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = currentParams
       val useDefaults                                          = StepHelpers.useDefaults(currentParams.state)
       for {
         exists <- vcs.existsTag(tagName)
         result <- if (!exists)
                     (vcs.tag(tagName, tagComment, sign) *>
-                      IO.blocking {
-                        val newState = SbtRuntime.appendWithSession(
-                          ctx.state,
-                          VersionSteps.sessionSettings(ctx.state) ++
-                            Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
-                        )
-                        ctx.copy(state = newState)
-                      }).map(Right(_))
+                      IO.blocking(applyTagToState(ctx, tagName))).map(Right(_))
                   else {
                     val effectiveAnswer: IO[String] = defaultAnswer match {
                       case Some(ans)                => IO.pure(ans)
@@ -117,14 +119,7 @@ private[release] object VcsSteps {
                           ctx.state.log.warn(
                             s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
                           )
-                          val newState = SbtRuntime.appendWithSession(
-                            ctx.state,
-                            VersionSteps.sessionSettings(ctx.state) ++
-                              Seq(
-                                packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                              )
-                          )
-                          Right(ctx.copy(state = newState))
+                          Right(applyTagToState(ctx, tagName))
                         }
                       case "o" | "O"      =>
                         IO.blocking(
@@ -133,16 +128,7 @@ private[release] object VcsSteps {
                           )
                         ) *>
                           vcs.tag(tagName, tagComment, sign, force = true) *>
-                          IO.blocking {
-                            val newState = SbtRuntime.appendWithSession(
-                              ctx.state,
-                              VersionSteps.sessionSettings(ctx.state) ++
-                                Seq(
-                                  packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName)
-                                )
-                            )
-                            Right(ctx.copy(state = newState))
-                          }
+                          IO.blocking(Right(applyTagToState(ctx, tagName)))
                       case newTagName     =>
                         IO.blocking(
                           ctx.state.log.info(

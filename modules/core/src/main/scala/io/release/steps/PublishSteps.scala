@@ -65,7 +65,7 @@ private[release] object PublishSteps {
             val newState =
               extracted
                 .runAggregated(extracted.currentRef / releaseIOPublishArtifactsAction, ctx.state)
-            ctx.copy(state = newState)
+            ctx.withState(newState)
           }
         }
       },
@@ -107,7 +107,7 @@ private[release] object PublishSteps {
           val extracted = SbtRuntime.extracted(ctx.state)
           val ref       = extracted.get(thisProjectRef)
           val newState  = extracted.runAggregated(ref / Test / ReleaseIOCompat.testKey, ctx.state)
-          ctx.copy(state = newState)
+          ctx.withState(newState)
         }
       },
     enableCrossBuild = true
@@ -120,7 +120,7 @@ private[release] object PublishSteps {
         val extracted = SbtRuntime.extracted(ctx.state)
         val ref       = extracted.get(thisProjectRef)
         val newState  = CleanCompat.runBuild(ctx.state, ref)
-        ctx.copy(state = newState)
+        ctx.withState(newState)
       }
   )
 

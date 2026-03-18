@@ -61,14 +61,12 @@ private[release] object ExecutionEngine {
       f: C => IO[C]
   ): C => IO[C] =
     (ctx: C) =>
-      f(ctx).handleErrorWith {
-        case NonFatal(err) =>
-          IO.blocking(
-            ctx.state.log.error(
-              s"$logPrefix Error: ${Option(err.getMessage).getOrElse(err.toString)}"
-            )
-          ) *> IO.pure(ctx.failWith(err))
-        case fatal         => IO.raiseError(fatal)
+      f(ctx).handleErrorWith { case NonFatal(err) =>
+        IO.blocking(
+          ctx.state.log.error(
+            s"$logPrefix Error: ${Option(err.getMessage).getOrElse(err.toString)}"
+          )
+        ) *> IO.pure(ctx.failWith(err))
       }
 
   def runActionPhase[C <: ReleaseCtx[C]](

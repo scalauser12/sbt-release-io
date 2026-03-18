@@ -42,7 +42,7 @@ object ReleaseStepIO {
       execute = ctx =>
         IO.blocking {
           val (newState, _) = SbtRuntime.runTask(ctx.state, key)
-          ctx.copy(state = newState)
+          ctx.withState(newState)
         },
       enableCrossBuild = enableCrossBuild
     )
@@ -60,7 +60,7 @@ object ReleaseStepIO {
       execute = ctx =>
         IO.blocking {
           val (newState, _) = SbtRuntime.runInputTask(ctx.state, key, args)
-          ctx.copy(state = newState)
+          ctx.withState(newState)
         },
       enableCrossBuild = enableCrossBuild
     )
@@ -76,7 +76,7 @@ object ReleaseStepIO {
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
           val newState  = extracted.runAggregated(extracted.currentRef / key, ctx.state)
-          ctx.copy(state = newState)
+          ctx.withState(newState)
         },
       enableCrossBuild = enableCrossBuild
     )
@@ -87,7 +87,7 @@ object ReleaseStepIO {
       name = s"command: $command",
       execute = ctx =>
         IO.blocking {
-          ctx.copy(state = SbtRuntime.processCommand(ctx.state, command))
+          ctx.withState(SbtRuntime.processCommand(ctx.state, command))
         }
     )
 
@@ -100,7 +100,7 @@ object ReleaseStepIO {
       name = s"command+remaining: $command",
       execute = ctx =>
         IO.blocking {
-          ctx.copy(state = SbtRuntime.runCommandAndRemaining(ctx.state, command))
+          ctx.withState(SbtRuntime.runCommandAndRemaining(ctx.state, command))
         }
     )
 
