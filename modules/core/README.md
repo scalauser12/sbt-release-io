@@ -11,6 +11,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 - **Flexible step composition**: Create custom release steps using cats-effect IO
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
+- **Resource-safe custom plugins**: Acquire shared resources (HTTP clients, temp dirs, etc.) once for the entire release with guaranteed cleanup via `Resource[IO, T]`
 - **Optional interactive mode**: Enable sbt-release-compatible prompts for versions, confirmation, and push
 - **Configurable**: Comprehensive settings for commit messages, signing, version bumping, etc.
 
