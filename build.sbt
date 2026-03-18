@@ -58,7 +58,7 @@ lazy val core = (project in file("modules/core"))
   .settings(
     commonSettings,
     name        := "sbt-release-io",
-    description := "A cats-effect IO release plugin for sbt, inspired by sbt-release",
+    description := "A cats-effect IO port of sbt-release for sbt",
     Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
