@@ -38,7 +38,7 @@ lazy val root = (project in file("."))
 
 Each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The file path and format can be customized — see [Version settings](#version-settings).
 
-For a working example, see [scala-monorepo-demo](https://github.com/scalauser12/scala-monorepo-demo).
+For working examples, see [scala-monorepo-demo](https://github.com/scalauser12/scala-monorepo-demo) and [files-monorepo-demo](https://github.com/scalauser12/files-monorepo-demo).
 
 ## Usage
 
