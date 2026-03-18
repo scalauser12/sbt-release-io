@@ -3,7 +3,6 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
 import io.release.internal.SbtRuntime
-import io.release.monorepo.internal.MonorepoReleasePlan
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
@@ -15,6 +14,8 @@ import java.nio.file.Files
 
 /** Version-related monorepo release steps: inquire, set, commit. */
 private[monorepo] object MonorepoVersionSteps {
+
+  private val globalVersionWrittenKey = AttributeKey[String]("globalVersionWritten")
 
   // ── Inlined from MonorepoVersionResolver ──────────────────────────
 
@@ -236,9 +237,8 @@ private[monorepo] object MonorepoVersionSteps {
       versionFile   = versionInputs.versionFile
       result       <-
         if (
-          versionInputs.useGlobalVersion && ctx.state
-            .get(MonorepoReleasePlan.globalVersionWrittenKey)
-            .flatten
+          versionInputs.useGlobalVersion && ctx
+            .metadata(globalVersionWrittenKey)
             .contains(ver)
         )
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
@@ -249,23 +249,19 @@ private[monorepo] object MonorepoVersionSteps {
                           Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
                         }
             newState <- IO.blocking {
-                          val setting   =
+                          val setting =
                             if (versionInputs.useGlobalVersion) ThisBuild / version := ver
                             else project.ref / version                              := ver
-                          val baseState = SbtRuntime.appendWithSession(
-                            ctx.state,
-                            preserved ++ Seq(setting)
-                          )
-                          if (versionInputs.useGlobalVersion)
-                            baseState.put(MonorepoReleasePlan.globalVersionWrittenKey, Some(ver))
-                          else baseState
+                          SbtRuntime.appendWithSession(ctx.state, preserved ++ Seq(setting))
                         }
-            r        <- logInfo(ctx, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
-                          .as(
-                            ctx
-                              .withState(newState)
-                              .updateProject(project.ref)(_.copy(versionFile = versionFile))
-                          )
+            updated   = ctx
+                          .withState(newState)
+                          .updateProject(project.ref)(_.copy(versionFile = versionFile))
+            withMeta  = if (versionInputs.useGlobalVersion)
+                          updated.withMetadata(globalVersionWrittenKey, ver)
+                        else updated
+            r        <-
+              logInfo(withMeta, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
           } yield r
     } yield result
 }

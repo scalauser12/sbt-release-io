@@ -32,9 +32,6 @@ private[monorepo] object MonorepoReleasePlan {
   val monorepoReleasePlanKey: AttributeKey[MonorepoReleasePlan] =
     AttributeKey[MonorepoReleasePlan]("releaseIOInternalMonorepoPlan")
 
-  val globalVersionWrittenKey: AttributeKey[Option[String]] =
-    AttributeKey[Option[String]]("releaseIOInternalGlobalVersionWritten")
-
   // ── Planning types ─────────────────────────────────────────────────
 
   final case class Inputs(

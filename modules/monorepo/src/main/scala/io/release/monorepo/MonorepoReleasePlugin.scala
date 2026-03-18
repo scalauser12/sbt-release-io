@@ -173,21 +173,15 @@ trait MonorepoReleasePluginLike[T]
       flags: ReleaseFlags,
       plan: MonorepoReleasePlan
   ): IO[MonorepoContext] =
-    IO.blocking(MonorepoRuntime.fromState(state)).flatMap { runtime =>
-      MonorepoProjectResolver.resolveAll(state).map { projects =>
-        MonorepoContext(
-          state = state,
-          projects = MonorepoProjectResolver.applyVersionOverrides(
-            projects,
-            plan,
-            runtime.useGlobalVersion
-          ),
-          skipTests = plan.flags.skipTests,
-          skipPublish = plan.flags.skipPublish,
-          interactive = plan.flags.interactive,
-          tagStrategy = flags.tagStrategy
-        ).withReleasePlan(plan)
-      }
+    MonorepoProjectResolver.resolveAll(state).map { projects =>
+      MonorepoContext(
+        state = state,
+        projects = projects,
+        skipTests = plan.flags.skipTests,
+        skipPublish = plan.flags.skipPublish,
+        interactive = plan.flags.interactive,
+        tagStrategy = flags.tagStrategy
+      ).withReleasePlan(plan)
     }
 
   private def logReleaseStart(
@@ -213,7 +207,6 @@ trait MonorepoReleasePluginLike[T]
         .remove(ReleaseKeys.versions)
         .remove(InternalKeys.executionFlags)
         .remove(InternalKeys.coreReleasePlan)
-        .remove(internal.MonorepoReleasePlan.globalVersionWrittenKey)
 
       val program: IO[State] = for {
         plannedEither <- MonorepoReleasePlan.build(cleanState, plannerInputs(args, flags))
