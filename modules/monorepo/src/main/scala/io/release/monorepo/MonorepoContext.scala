@@ -110,9 +110,6 @@ case class MonorepoContext(
 
   def withProjects(ps: Seq[ProjectReleaseInfo]): MonorepoContext = copy(projects = ps)
 
-  def metadata[A](key: AttributeKey[A]): Option[A] =
-    metadataBag.get(key)
-
   def withMetadata[A](key: AttributeKey[A], value: A): MonorepoContext =
     copy(metadataBag = metadataBag.put(key, value))
 

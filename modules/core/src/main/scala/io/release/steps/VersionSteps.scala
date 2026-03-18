@@ -154,9 +154,7 @@ private[release] object VersionSteps {
                            data.state.log.info(s"[release-io] Release version : $releaseVer")
                            data.state.log.info(s"[release-io] Next version    : $nextVer")
 
-                           val updatedState =
-                             data.state.put(ReleaseKeys.versions, (releaseVer, nextVer))
-                           ctx.copy(state = updatedState).withVersions(releaseVer, nextVer)
+                           ctx.withVersions(releaseVer, nextVer)
                          }
       } yield updated
     }

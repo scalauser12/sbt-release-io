@@ -185,24 +185,20 @@ trait ReleasePluginIOLike[T]
       skipTests: Boolean,
       skipPublish: Boolean,
       interactive: Boolean
-  ): ReleaseContext = {
+  ): IO[ReleaseContext] = {
     val maybeVersions = state.get(ReleaseKeys.versions)
-    val maybeVcs      = scala.util
-      .Try {
-        val base = Project.extract(state).get(sbt.Keys.thisProject).base
-        Vcs.detect(base).unsafeRunSync()
-      }
-      .toOption
-      .flatten
+    val base          = Project.extract(state).get(sbt.Keys.thisProject).base
 
-    ReleaseContext(
-      state = state,
-      versions = maybeVersions,
-      vcs = maybeVcs,
-      skipTests = skipTests,
-      skipPublish = skipPublish,
-      interactive = interactive
-    )
+    Vcs.detect(base).handleError(_ => None).map { maybeVcs =>
+      ReleaseContext(
+        state = state,
+        versions = maybeVersions,
+        vcs = maybeVcs,
+        skipTests = skipTests,
+        skipPublish = skipPublish,
+        interactive = interactive
+      )
+    }
   }
 
   /** Execute the release process: parse arguments, acquire the resource, run all steps.
@@ -258,20 +254,15 @@ trait ReleasePluginIOLike[T]
       val plannedState = CoreReleasePlan.attach(cleanState, plan)
       val stepFns      = releaseProcess(plannedState)
 
-      val initialCtx = initialContext(
-        plannedState,
-        skipTests = skipTests,
-        skipPublish = skipPublish,
-        interactive = interactive
-      )
-
       plannedState.log.info("[release-io] Starting release process...")
       plannedState.log.info(s"[release-io] ${stepFns.length} steps to execute")
       if (crossEnabled) plannedState.log.info("[release-io] Cross-build enabled")
 
       val program = resource.use { t =>
         val steps = stepFns.map(_(t))
-        ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
+        initialContext(plannedState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
+          ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
+        }
       }
 
       // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.

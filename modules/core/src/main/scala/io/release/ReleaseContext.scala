@@ -35,14 +35,17 @@ case class ReleaseContext(
 
   def withState(s: State): ReleaseContext = copy(state = s)
 
+  /** Set the release and next version pair, updating both the context field
+    * and the sbt State attribute so that sbt tasks can read the versions.
+    */
   def withVersions(release: String, next: String): ReleaseContext =
-    copy(versions = Some((release, next)))
+    copy(
+      versions = Some((release, next)),
+      state = state.put(ReleaseKeys.versions, (release, next))
+    )
 
   def withVcs(v: Vcs): ReleaseContext =
     copy(vcs = Some(v))
-
-  def metadata[A](key: AttributeKey[A]): Option[A] =
-    metadataBag.get(key)
 
   def withMetadata[A](key: AttributeKey[A], value: A): ReleaseContext =
     copy(metadataBag = metadataBag.put(key, value))

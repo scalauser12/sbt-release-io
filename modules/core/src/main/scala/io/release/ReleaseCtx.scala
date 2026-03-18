@@ -1,7 +1,7 @@
 package io.release
 
 import io.release.vcs.Vcs
-import sbt.State
+import sbt.{AttributeKey, AttributeMap, State}
 
 /** Common interface for immutable release contexts threaded through steps.
   *
@@ -20,4 +20,11 @@ private[release] trait ReleaseCtx[Self] {
   def withVcs(v: Vcs): Self
   def fail: Self
   def failWith(cause: Throwable): Self
+
+  // ── Metadata ──────────────────────────────────────────────────────────
+
+  def metadataBag: AttributeMap
+  def metadata[A](key: AttributeKey[A]): Option[A] = metadataBag.get(key)
+  def withMetadata[A](key: AttributeKey[A], value: A): Self
+  def withoutMetadata[A](key: AttributeKey[A]): Self
 }
