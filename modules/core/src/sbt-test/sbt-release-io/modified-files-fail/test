@@ -1,0 +1,14 @@
+# Test: Modified tracked files block release (check-clean-working-dir)
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Create a tracked file and modify it to make the working dir dirty
+> makeDirty
+
+# Release should fail because working directory is dirty
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+> checkNoGitTags
+> checkVersionUnchanged

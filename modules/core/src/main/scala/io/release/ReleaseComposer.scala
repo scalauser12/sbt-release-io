@@ -73,9 +73,28 @@ private[release] object ReleaseComposer {
     val crossVersions  = extracted.get(crossScalaVersions)
     val currentVersion = (extracted.currentRef / scalaVersion).get(extracted.structure.data)
 
-    if (crossVersions.length <= 1) {
-      action(ctx)
-    } else {
+    if (crossVersions.isEmpty)
+      IO.raiseError(
+        new IllegalStateException(
+          s"$LogPrefix Cross-build enabled but crossScalaVersions is empty"
+        )
+      )
+    else if (crossVersions.length == 1)
+      for {
+        _        <- IO.blocking(
+                      ctx.state.log.info(
+                        s"$LogPrefix Cross-building with Scala ${crossVersions.head}"
+                      )
+                    )
+        switched <- SbtRuntime.switchScalaVersion(ctx.state, crossVersions.head).map(ctx.withState)
+        result   <- action(switched)
+        restored <- currentVersion match {
+                      case Some(ver) =>
+                        SbtRuntime.switchScalaVersion(result.state, ver).map(result.withState)
+                      case None      => IO.pure(result)
+                    }
+      } yield restored
+    else {
       val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
         for {
           currentCtx <- ioCtx

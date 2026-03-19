@@ -148,8 +148,9 @@ class Git(val baseDir: File) extends Vcs {
       upstream        <- IO.blocking(
                            cmd("config", s"branch.$branch.merge").!!.trim.stripPrefix("refs/heads/")
                          )
-      _               <- runCmd("push", remote, s"$branch:$upstream")("git push")
-      _               <- runCmd("push", "--tags", remote)("git push --tags")
+      _               <- runCmd("push", "--follow-tags", remote, s"$branch:$upstream")(
+                           "git push --follow-tags"
+                         )
     } yield ()
 }
 

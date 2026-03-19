@@ -70,9 +70,18 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Tests `releaseUseGlobalVersion := false`
 - Verifies `version.sbt` uses `version :=` instead of `ThisBuild / version :=`
 
+### invalid-version-input
+- Verifies that invalid CLI version strings (e.g. `banana`) are rejected by `parseVersionInput`
+- Tests both invalid `release-version` and invalid `next-version`
+- Verifies no commits, tags, or version file changes occur on failure
+
 ### interactive-with-defaults
 - Enables `releaseIOInteractive := true`
 - Verifies `with-defaults` runs in interactive mode without blocking prompts
+
+### modified-files-fail
+- Verifies that unstaged modified tracked files block the release (check-clean-working-dir)
+- Verifies no commits, tags, or version file changes occur on failure
 
 ### publish-multi-project
 - Multi-project build with mixed publish configurations
@@ -143,8 +152,13 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Tests default `releaseIOIgnoreUntrackedFiles` behavior (false)
 - Verifies untracked files block the release before any commit, tag, or `version.sbt` mutation
 
+### vcs-signoff
+- Tests `releaseIOVcsSignOff := true`
+- Verifies release commits include the `Signed-off-by:` trailer
+- Verifies the initial (non-release) commit does not have the trailer
+
 ### version-bump
-- Tests different version bump strategies: Next, NextStable, Bugfix, Minor
+- Tests different version bump strategies: Next, NextStable, Bugfix, Minor, Major
 - Verifies qualifier stripping and snapshot suffix behavior for each
 
 ### with-defaults

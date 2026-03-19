@@ -61,3 +61,18 @@ $ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 # Reset to release version commit and verify (qualifier stripped -> 1.0.0)
 $ exec git reset --hard HEAD~1
 $ exec grep -q '"1.0.0"' version.sbt
+
+# Reset to initial commit
+$ exec git reset --hard HEAD~1
+$ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
+> reload
+
+# SCENARIO 5: Major bump strategy
+# Expected release: 1.0.0 (qualifier stripped by Major), next: 2.0.0-SNAPSHOT
+> set releaseIOVersionBump := _root_.io.release.version.Version.Bump.Major
+> releaseIO with-defaults default-tag-exists-answer o
+> checkVersionSbt 2.0.0-SNAPSHOT
+
+# Reset to release version commit and verify (qualifier stripped -> 1.0.0)
+$ exec git reset --hard HEAD~1
+$ exec grep -q '"1.0.0"' version.sbt

@@ -114,7 +114,7 @@ case class Version(major: Int, subversions: Seq[Int], qualifier: Option[String])
 
   def withoutSnapshot: Version = copy(qualifier = qualifier.flatMap { q =>
     val stripped = """-SNAPSHOT""".r.replaceFirstIn(q, "")
-    if (stripped == q) None
+    if (stripped == q) Some(q)
     else Option(stripped).filter(_.nonEmpty)
   })
 
