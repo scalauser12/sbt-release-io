@@ -7,7 +7,9 @@ project/metals.sbt
 .idea/
 .bsp/
 .agents/
-.claude/
+.claude/*
+!.claude/CLAUDE.md
+!.claude/settings.json
 .cursor/
 .codex/
 .mcp.json
