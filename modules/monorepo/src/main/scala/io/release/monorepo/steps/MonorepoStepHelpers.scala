@@ -198,7 +198,7 @@ private[monorepo] object MonorepoStepHelpers {
             else IO.unit
 
           consistencyCheck *>
-            paths.foldLeft(IO.unit) { case (acc, (_, relativePath)) =>
+            paths.map(_._2).distinct.foldLeft(IO.unit) { (acc, relativePath) =>
               acc *> vcs.add(relativePath)
             } *> {
               val summary = versionSummary(ctx, selector)
