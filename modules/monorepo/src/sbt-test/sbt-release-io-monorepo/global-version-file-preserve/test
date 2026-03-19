@@ -1,0 +1,12 @@
+# Test: global-version mode preserves custom releaseIOVersionFile across reloads (Fix 3)
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release using global overrides — both version writes target the custom VERSION file
+> releaseIOMonorepo core api with-defaults release-version 2.0.0 next-version 2.1.0-SNAPSHOT
+
+# Verify the custom VERSION file was used for both writes (release + next)
+> checkAll

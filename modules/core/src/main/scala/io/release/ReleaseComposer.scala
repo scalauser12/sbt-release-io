@@ -71,7 +71,10 @@ private[release] object ReleaseComposer {
   )(ctx: ReleaseContext): IO[ReleaseContext] = IO.defer {
     val extracted      = SbtRuntime.extracted(ctx.state)
     val crossVersions  = extracted.get(crossScalaVersions)
-    val currentVersion = (extracted.currentRef / scalaVersion).get(extracted.structure.data)
+    val currentVersion =
+      (extracted.currentRef / scalaVersion)
+        .get(extracted.structure.data)
+        .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
 
     if (crossVersions.isEmpty)
       IO.raiseError(

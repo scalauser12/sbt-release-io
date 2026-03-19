@@ -51,14 +51,18 @@ private[monorepo] object MonorepoVersionFiles {
   // ── Session settings preservation ────────────────────────────────────
 
   /** Settings to preserve across sbt state reloads during version writes. */
-  def sessionSettings(runtime: MonorepoRuntime): Seq[sbt.Setting[?]] =
-    Seq(
+  def sessionSettings(runtime: MonorepoRuntime): Seq[sbt.Setting[?]] = {
+    val base = Seq(
       MR.releaseIOMonorepoVersionFile         :=
         runtime.extracted.get(MR.releaseIOMonorepoVersionFile),
       MR.releaseIOMonorepoReadVersion         := runtime.readVersion,
       MR.releaseIOMonorepoVersionFileContents := runtime.versionFileContents,
       MR.releaseIOMonorepoUseGlobalVersion    := runtime.useGlobalVersion
     )
+    if (runtime.useGlobalVersion)
+      base :+ (releaseIOVersionFile := runtime.extracted.get(releaseIOVersionFile))
+    else base
+  }
 
   def sessionSettings(state: State): IO[Seq[sbt.Setting[?]]] =
     IO.blocking {

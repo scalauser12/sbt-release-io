@@ -81,10 +81,21 @@ private[monorepo] object MonorepoSelectionResolver {
       tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
       validated: MonorepoReleasePlan
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
-    detectSelectedProjects(ctx, ordered, runtime, tagSettings)
-      .flatMap { case (detected, mode) =>
-        forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
-      }
+    if (
+      runtime.useGlobalVersion &&
+      (validated.globalReleaseVersion.nonEmpty || validated.globalNextVersion.nonEmpty)
+    )
+      IO.blocking(
+        ctx.state.log.info(
+          "[release-io-monorepo] Global version override provided — " +
+            "selecting all projects for release"
+        )
+      ).as((ordered, SelectionMode.DetectChanges))
+    else
+      detectSelectedProjects(ctx, ordered, runtime, tagSettings)
+        .flatMap { case (detected, mode) =>
+          forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
+        }
 
   private def detectSelectedProjects(
       ctx: MonorepoContext,
