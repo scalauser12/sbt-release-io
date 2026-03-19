@@ -80,7 +80,7 @@ private[release] object ReleaseComposer {
         )
       )
     else if (crossVersions.length == 1)
-      for {
+      (for {
         _        <- IO.blocking(
                       ctx.state.log.info(
                         s"$LogPrefix Cross-building with Scala ${crossVersions.head}"
@@ -93,7 +93,12 @@ private[release] object ReleaseComposer {
                         SbtRuntime.switchScalaVersion(result.state, ver).map(result.withState)
                       case None      => IO.pure(result)
                     }
-      } yield restored
+      } yield restored).handleErrorWith { err =>
+        (currentVersion match {
+          case Some(ver) => SbtRuntime.switchScalaVersion(ctx.state, ver).void
+          case None      => IO.unit
+        }).attempt *> IO.raiseError(err)
+      }
     else {
       val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
         for {
