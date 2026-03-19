@@ -30,7 +30,7 @@ private[release] trait PluginLikeSupport[StepType, T] {
     idx
   }
 
-  /** Read defaults, insert extra steps after the named step. */
+  /** Read defaults, insert extra steps after the first occurrence of the named step. */
   protected def insertAfter(defaults: Seq[StepType], afterStep: String)(
       extraSteps: Seq[T => StepType]
   ): Seq[T => StepType] = {
@@ -38,7 +38,7 @@ private[release] trait PluginLikeSupport[StepType, T] {
     liftSteps(before) ++ extraSteps ++ liftSteps(after)
   }
 
-  /** Read defaults, insert extra steps before the named step. */
+  /** Read defaults, insert extra steps before the first occurrence of the named step. */
   protected def insertBefore(defaults: Seq[StepType], beforeStep: String)(
       extraSteps: Seq[T => StepType]
   ): Seq[T => StepType] = {

@@ -168,7 +168,8 @@ private[release] object VcsOps {
             )
           }
       // Best-effort check using local tracking refs (no fetch).
-      // If tracking refs are missing (e.g. remote never fetched), treat as not behind.
+      // On any error (missing refs, corrupted repo, etc.), conservatively treat as not behind
+      // and let the actual push surface the real failure.
       behind <- vcs.isBehindRemote.handleError(_ => false)
       _      <-
         if (!behind) IO.unit
