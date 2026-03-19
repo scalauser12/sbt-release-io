@@ -43,6 +43,9 @@ private[release] object VcsSteps {
     }
   }
 
+  // No validation phase: the tag name depends on releaseIOTagName, which is resolved from the
+  // release version set by inquireVersions.execute. At validation time, that version is not yet
+  // available, so tag-exists checks can only run during execution.
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
@@ -140,6 +143,8 @@ private[release] object VcsSteps {
       } yield result
     }
 
+  // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
+  // deferred to execute to avoid blocking the validation phase on a network call.
   val pushChanges: ReleaseStepIO = ReleaseStepIO(
     name = "push-changes",
     validate = ctx =>

@@ -111,25 +111,25 @@ private[release] object VersionSteps {
       )
 
       for {
-        versionPlan   <- IO.blocking(resolveVersionPlan(ctx.state))
-        currentVer    <- versionPlan.readVersion(versionPlan.versionFile)
-        data          <- IO.blocking {
-                           val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseIOVersion)
-                           val (_, nextFn)     = SbtRuntime.runTask(s1, releaseIONextVersion)
+        versionPlan <- IO.blocking(resolveVersionPlan(ctx.state))
+        currentVer  <- versionPlan.readVersion(versionPlan.versionFile)
+        data        <- IO.blocking {
+                         val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseIOVersion)
+                         val (_, nextFn)     = SbtRuntime.runTask(s1, releaseIONextVersion)
 
-                           InquireData(
-                             state = ctx.state,
-                             currentVersion = currentVer,
-                             suggestedRelease = releaseFn(currentVer),
-                             nextVersionFn = nextFn,
-                             releaseVersionArg = versionPlan.releaseVersionOverride,
-                             nextVersionArg = versionPlan.nextVersionOverride,
-                             useDefaults = useDefaults(ctx.state)
-                           )
-                         }
-        releaseVer    <-
+                         InquireData(
+                           state = ctx.state,
+                           currentVersion = currentVer,
+                           suggestedRelease = releaseFn(currentVer),
+                           nextVersionFn = nextFn,
+                           releaseVersionArg = versionPlan.releaseVersionOverride,
+                           nextVersionArg = versionPlan.nextVersionOverride,
+                           useDefaults = useDefaults(ctx.state)
+                         )
+                       }
+        releaseVer  <-
           data.releaseVersionArg match {
-            case Some(v)                                      => IO.pure(v)
+            case Some(v)                                      => parseVersionInput(v, v)
             case None if !ctx.interactive || data.useDefaults => IO.pure(data.suggestedRelease)
             case None                                         =>
               IO.blocking(data.state.log.info("Press enter to use the default value")) *>
@@ -138,24 +138,26 @@ private[release] object VersionSteps {
                   defaultVersion = data.suggestedRelease
                 )
           }
-        suggestedNext <- IO(data.nextVersionFn(releaseVer))
-        nextVer       <-
+        nextVer     <-
           data.nextVersionArg match {
-            case Some(v)                                      => IO.pure(v)
-            case None if !ctx.interactive || data.useDefaults => IO.pure(suggestedNext)
-            case None                                         =>
-              readVersionPrompt(
-                prompt = s"Next version [${suggestedNext}] : ",
-                defaultVersion = suggestedNext
-              )
+            case Some(v) => parseVersionInput(v, v)
+            case None    =>
+              IO(data.nextVersionFn(releaseVer)).flatMap { suggestedNext =>
+                if (!ctx.interactive || data.useDefaults) IO.pure(suggestedNext)
+                else
+                  readVersionPrompt(
+                    prompt = s"Next version [$suggestedNext] : ",
+                    defaultVersion = suggestedNext
+                  )
+              }
           }
-        updated       <- IO.blocking {
-                           data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
-                           data.state.log.info(s"[release-io] Release version : $releaseVer")
-                           data.state.log.info(s"[release-io] Next version    : $nextVer")
+        updated     <- IO.blocking {
+                         data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
+                         data.state.log.info(s"[release-io] Release version : $releaseVer")
+                         data.state.log.info(s"[release-io] Next version    : $nextVer")
 
-                           ctx.withVersions(releaseVer, nextVer)
-                         }
+                         ctx.withVersions(releaseVer, nextVer)
+                       }
       } yield updated
     }
   )

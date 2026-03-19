@@ -43,7 +43,8 @@ trait MonorepoReleaseIO {
   /** Per-project version reader. Default: same regex as core `defaultReadVersion`. */
   val releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] = _releaseIOMonorepoReadVersion
 
-  /** Per-project version writer. Default: produces `version := "x.y.z"\n`.
+  /** Per-project version writer. Default: produces `version := "x.y.z"\n`,
+    * or `ThisBuild / version := "x.y.z"\n` when `releaseIOMonorepoUseGlobalVersion` is true.
     * The default implementation ignores the `File` parameter; custom implementations
     * may read the existing file to perform partial updates.
     */
@@ -184,8 +185,8 @@ trait MonorepoReleaseIO {
 
   // ── Process manipulation helpers ──────────────────────────────────
 
-  /** Insert extra steps after the named step. Throws `IllegalArgumentException` if
-    * the step name is not found.
+  /** Insert extra steps after the first occurrence of the named step.
+    * Throws `IllegalArgumentException` if the step name is not found.
     *
     * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
     * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
@@ -202,8 +203,8 @@ trait MonorepoReleaseIO {
     before ++ extra ++ after
   }
 
-  /** Insert extra steps before the named step. Throws `IllegalArgumentException` if
-    * the step name is not found.
+  /** Insert extra steps before the first occurrence of the named step.
+    * Throws `IllegalArgumentException` if the step name is not found.
     *
     * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
     * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
@@ -243,8 +244,8 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoTagComment             := ((name: String, ver: String) => s"Release $name $ver"),
     releaseIOMonorepoUnifiedTagComment      := ((summary: String) => s"Release: $summary"),
     releaseIOMonorepoReadVersion            := VersionSteps.defaultReadVersion,
-    // releaseIOMonorepoUseGlobalVersion is captured at build load time.
-    // Custom implementations may read from State at call time if dynamic behavior is needed.
+    // releaseIOMonorepoUseGlobalVersion is captured at setting-evaluation time via .value.
+    // The writer emits `ThisBuild / version` in global mode, `version` otherwise.
     releaseIOMonorepoVersionFileContents    := {
       val useGlobal = releaseIOMonorepoUseGlobalVersion.value
       (_, ver) => {

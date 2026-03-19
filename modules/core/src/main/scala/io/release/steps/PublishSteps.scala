@@ -58,15 +58,10 @@ private[release] object PublishSteps {
       } else {
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
-          if (checkPublishSkip(extracted, extracted.currentRef, ctx.state)) {
-            ctx.state.log.info("[release-io] Skipping publish (publish / skip := true)")
-            ctx
-          } else {
-            val newState =
-              extracted
-                .runAggregated(extracted.currentRef / releaseIOPublishArtifactsAction, ctx.state)
-            ctx.withState(newState)
-          }
+          val newState  =
+            extracted
+              .runAggregated(extracted.currentRef / releaseIOPublishArtifactsAction, ctx.state)
+          ctx.withState(newState)
         }
       },
     validate = ctx =>

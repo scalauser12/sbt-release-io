@@ -1,0 +1,14 @@
+# Test: root publish/skip := true does not suppress child publishing
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify child publish ran
+> checkPublished
+
+# Verify release completed
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt

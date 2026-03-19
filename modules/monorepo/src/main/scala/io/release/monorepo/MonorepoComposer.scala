@@ -202,7 +202,23 @@ private[monorepo] object MonorepoComposer {
         case None      => IO.pure(currentCtx)
       }
 
-    if (crossVersions.length <= 1) action(ctx)
+    if (crossVersions.isEmpty)
+      IO.raiseError(
+        new IllegalStateException(
+          s"$LogPrefix Cross-build enabled but ${project.name} has empty crossScalaVersions"
+        )
+      )
+    else if (crossVersions.length == 1)
+      for {
+        _        <- IO.blocking(
+                      ctx.state.log.info(
+                        s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
+                      )
+                    )
+        switched <- switchTo(crossVersions.head)(ctx)
+        result   <- action(switched)
+        restored <- restoreEntry(result)
+      } yield restored
     else
       crossVersions.toList
         .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
