@@ -29,7 +29,7 @@ private[monorepo] object DependencyGraph {
       .groupBy(_._1)
       .map { case (k, v) => k -> v.map(_._2).toSet }
 
-    IO.pure(reverseGraph.withDefaultValue(Set.empty))
+    IO.pure(reverseGraph)
   }
 
   /** Compute all transitive dependents of the given root projects. */

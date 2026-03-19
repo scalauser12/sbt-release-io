@@ -292,7 +292,7 @@ private[monorepo] object ChangeDetection {
               Process(
                 Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
                 vcs.baseDir
-              ).!!.linesIterator.toList
+              ).!!.linesIterator.filter(_.nonEmpty).toList
             ) match {
               case Failure(_)            =>
                 state.log.warn(
