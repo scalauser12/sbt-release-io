@@ -6,6 +6,7 @@ import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
+import io.release.steps.StepHelpers.parseVersionInput
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -96,21 +97,29 @@ private[monorepo] object MonorepoVersionSteps {
                                                   (releaseFn(currentVer), nextFn, useDefaults)
                                                 }
       (suggestedRelease, nextFn, useDefaults) = data
-      releaseVer                             <- promptOrDefault(
-                                                  project.releaseVersion,
-                                                  suggestedRelease,
-                                                  s"Release version for ${project.name}",
-                                                  ctx.interactive,
-                                                  useDefaults
-                                                )
-      suggestedNext                           = nextFn(releaseVer)
-      nextVer                                <- promptOrDefault(
-                                                  project.nextVersion,
-                                                  suggestedNext,
-                                                  s"Next version for ${project.name}",
-                                                  ctx.interactive,
-                                                  useDefaults
-                                                )
+      releaseVer                             <- project.releaseVersion match {
+                                                  case Some(v) => parseVersionInput(v, v)
+                                                  case None    =>
+                                                    promptOrDefault(
+                                                      None,
+                                                      suggestedRelease,
+                                                      s"Release version for ${project.name}",
+                                                      ctx.interactive,
+                                                      useDefaults
+                                                    )
+                                                }
+      nextVer                                <- project.nextVersion match {
+                                                  case Some(v) => parseVersionInput(v, v)
+                                                  case None    =>
+                                                    val suggestedNext = nextFn(releaseVer)
+                                                    promptOrDefault(
+                                                      None,
+                                                      suggestedNext,
+                                                      s"Next version for ${project.name}",
+                                                      ctx.interactive,
+                                                      useDefaults
+                                                    )
+                                                }
       result                                 <- logInfo(
                                                   ctx,
                                                   s"${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
