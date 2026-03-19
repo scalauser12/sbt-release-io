@@ -97,7 +97,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                   (releaseFn(currentVer), nextFn, useDefaults)
                                                 }
       (suggestedRelease, nextFn, useDefaults) = data
-      releaseVer                             <- project.releaseVersion match {
+      releaseVer                             <- project.releaseVersion.filter(_.nonEmpty) match {
                                                   case Some(v) => parseVersionInput(v, v)
                                                   case None    =>
                                                     promptOrDefault(
@@ -108,7 +108,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                       useDefaults
                                                     )
                                                 }
-      nextVer                                <- project.nextVersion match {
+      nextVer                                <- project.nextVersion.filter(_.nonEmpty) match {
                                                   case Some(v) => parseVersionInput(v, v)
                                                   case None    =>
                                                     val suggestedNext = nextFn(releaseVer)
