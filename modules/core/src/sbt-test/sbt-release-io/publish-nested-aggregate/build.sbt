@@ -34,6 +34,7 @@ lazy val root = (project in file("."))
   )
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
+checkGitCommitCount / aggregate := false
 checkGitCommitCount := {
   import sbt.complete.DefaultParsers.*
   val expected = spaceDelimited("<count>").parsed.head.toInt
@@ -42,14 +43,16 @@ checkGitCommitCount := {
 }
 
 val checkNoGitTags = taskKey[Unit]("Check that no git tags were created")
+checkNoGitTags / aggregate := false
 checkNoGitTags := {
   val tags = "git tag".!!.linesIterator.map(_.trim).filter(_.nonEmpty).toList
   assert(tags.isEmpty, s"Expected no git tags but found: ${tags.mkString(", ")}")
 }
 
 val checkVersionUnchanged = taskKey[Unit]("Check that version.sbt remains unchanged")
+checkVersionUnchanged / aggregate := false
 checkVersionUnchanged := {
-  val contents = IO.read(baseDirectory.value / "version.sbt").trim
+  val contents = IO.read(file("version.sbt")).trim
   val expected = """ThisBuild / version := "0.1.0-SNAPSHOT""""
   assert(contents == expected, s"Expected version.sbt to remain '$expected' but got: $contents")
 }
