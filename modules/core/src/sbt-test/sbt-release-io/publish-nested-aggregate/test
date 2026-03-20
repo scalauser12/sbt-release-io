@@ -1,0 +1,12 @@
+# Test: publishArtifacts preflight catches missing publishTo on nested (transitive) aggregates
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt libA libB
+$ exec git commit -m "Initial commit"
+
+# Release should fail: libB (transitive aggregate via libA) has no publishTo
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+> checkGitCommitCount 1
+> checkNoGitTags
+> checkVersionUnchanged

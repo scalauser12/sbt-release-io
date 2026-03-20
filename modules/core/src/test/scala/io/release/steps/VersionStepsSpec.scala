@@ -97,6 +97,64 @@ class VersionStepsSpec extends Specification {
       }
   }
 
+  "VersionSteps.defaultReadVersion" should {
+
+    "parse a standard version line" in withTempDir { dir =>
+      val f = writeVersionFile(dir, """ThisBuild / version := "1.2.3-SNAPSHOT"""")
+      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "1.2.3-SNAPSHOT"
+    }
+
+    "skip single-line // comments" in withTempDir { dir =>
+      val f = writeVersionFile(
+        dir,
+        """// version := "9.9.9"
+          |version := "0.1.0"
+          |""".stripMargin
+      )
+      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0"
+    }
+
+    "skip versions inside multiline block comments" in withTempDir { dir =>
+      val f = writeVersionFile(
+        dir,
+        """/*
+          |ThisBuild / version := "9.9.9"
+          |*/
+          |ThisBuild / version := "0.1.0-SNAPSHOT"
+          |""".stripMargin
+      )
+      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0-SNAPSHOT"
+    }
+
+    "skip single-line block comments" in withTempDir { dir =>
+      val f = writeVersionFile(
+        dir,
+        """/* version := "9.9.9" */
+          |version := "0.1.0"
+          |""".stripMargin
+      )
+      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0"
+    }
+
+    "skip block comments with *-prefixed lines" in withTempDir { dir =>
+      val f = writeVersionFile(
+        dir,
+        """/*
+          | * version := "9.9.9"
+          | */
+          |version := "0.1.0"
+          |""".stripMargin
+      )
+      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0"
+    }
+  }
+
+  private def writeVersionFile(dir: File, content: String): File = {
+    val f = new File(dir, "version.sbt")
+    sbt.IO.write(f, content)
+    f
+  }
+
   private def withTempDir[A](f: File => A): A = {
     val dir = Files.createTempDirectory("version-steps-spec").toFile
     try f(dir)

@@ -68,10 +68,15 @@ private[release] object VersionSteps {
       result   <- IO.fromOption {
                     contents.linesIterator
                       .map(_.trim)
-                      .filterNot(l => l.startsWith("//") || l.startsWith("/*") || l.startsWith("*"))
-                      .collectFirst(
-                        Function.unlift(versionPattern.findFirstMatchIn(_).map(_.group(1)))
-                      )
+                      .foldLeft((false, Option.empty[String])) { case ((inBlock, found), line) =>
+                        if (found.nonEmpty) (inBlock, found)
+                        else if (inBlock) (!inBlock || !line.contains("*/"), None)
+                        else if (line.startsWith("/*")) (!line.contains("*/"), None)
+                        else if (line.startsWith("//")) (false, None)
+                        else
+                          (false, versionPattern.findFirstMatchIn(line).map(_.group(1)))
+                      }
+                      ._2
                   }(
                     new IllegalStateException(
                       s"Could not parse version from ${file.getName}. " +
