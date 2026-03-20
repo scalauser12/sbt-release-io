@@ -303,10 +303,7 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### tag-exists-error
 - Pre-existing per-project tag causes per-project failure with isolation
 - Other projects succeed but next-version step skipped globally
-
-### tag-exists-noninteractive
-- Per-project tag collision in non-interactive mode (no `with-defaults`)
-- Exercises the `!ctx.interactive` path in `createTag`; api succeeds via isolation
+- Scripted `test` runs two scenarios: with `with-defaults` and without (non-interactive default), resetting git between them; covers both `useDefaults` and `!ctx.interactive` paths in `createTag`
 
 ### transitive-aggregates
 - 3-level aggregate hierarchy: root -> services -> api

@@ -1,15 +1,22 @@
-# Test: pre-existing tag causes per-project failure and release abort
+# Per-project tag collision: pre-existing core tag causes failure; api may still tag (isolation).
+
+# --- Scenario A: with-defaults (useDefaults path in createTag) ---
 $ exec git init
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"
 $ exec git add .
 $ exec git commit -m "Initial commit"
 
-# Create a tag that will conflict with the release
 $ exec git tag core/v1.0.0
 
-# Release should fail because core/v1.0.0 tag already exists
 -> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
 
-# Verify: pre-existing core tag preserved, api tag created (isolation), next-version skipped
+> checkAll
+
+# --- Scenario B: non-interactive default (no with-defaults; !ctx.interactive in createTag) ---
+$ exec sh -c 'git reset --hard "$(git rev-list --max-parents=0 HEAD)"'
+$ exec sh -c 'git tag -d api/v1.0.0 2>/dev/null || true'
+
+-> releaseIOMonorepo core api release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
+
 > checkAll

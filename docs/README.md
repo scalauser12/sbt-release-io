@@ -9,10 +9,6 @@
 | [**Core (single-project)**](core/README.md) | `sbt-release-io` — release steps, version files, custom steps and plugins |
 | [**Monorepo**](monorepo/README.md) | `sbt-release-io-monorepo` — per-project versioning, change detection, tagging |
 
-## Architecture notes
-
-- [Step logic duplication audit (core vs monorepo)](architecture/step-logic-duplication-audit.md)
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

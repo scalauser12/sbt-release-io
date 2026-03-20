@@ -19,7 +19,7 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                        := "tag-exists-error-test",
+    name                        := "tag-exists-per-project-collision-test",
     releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
