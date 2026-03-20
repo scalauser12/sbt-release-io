@@ -16,7 +16,7 @@ lazy val top = (project in file("top"))
   .dependsOn(left, right)
   .settings(name := "top", scalaVersion := "2.12.18")
 
-val checkAll = taskKey[Unit]("Run all verification checks")
+val checkAll        = taskKey[Unit]("Run all verification checks")
 val recordOrderStep = MonorepoStepIO.PerProject(
   name = "record-order",
   execute = (ctx, project) =>
@@ -32,8 +32,8 @@ lazy val root = (project in file("."))
   .aggregate(base, left, right, top)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                        := "diamond-dependency-test",
-    releaseIOMonorepoProcess    := {
+    name                          := "diamond-dependency-test",
+    releaseIOMonorepoProcess      := {
       val defaultSteps = releaseIOMonorepoProcess.value
       val filtered     = defaultSteps.filterNot { step =>
         step.name == "push-changes" || step.name == "publish-artifacts" ||
@@ -48,7 +48,7 @@ lazy val root = (project in file("."))
       }
     },
     releaseIOIgnoreUntrackedFiles := true,
-    checkAll                    := {
+    checkAll                      := {
       // Check execution order
       val marker = baseDirectory.value / "order.txt"
       assert(marker.exists, s"order.txt marker file does not exist at ${marker.getAbsolutePath}")

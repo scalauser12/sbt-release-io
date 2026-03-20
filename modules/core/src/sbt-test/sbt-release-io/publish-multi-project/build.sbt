@@ -1,11 +1,11 @@
 lazy val root = (project in file("."))
   .aggregate(libA, libB)
   .settings(
-    name                        := "publish-multi-project-test",
-    scalaVersion                := "2.12.18",
-    publishTo                   := Some(Resolver.file("file", new File("."))),
+    name                          := "publish-multi-project-test",
+    scalaVersion                  := "2.12.18",
+    publishTo                     := Some(Resolver.file("file", new File("."))),
     releaseIOIgnoreUntrackedFiles := true,
-    releaseIOProcess            := releaseIOProcess.value.filterNot(_.name == "push-changes")
+    releaseIOProcess              := releaseIOProcess.value.filterNot(_.name == "push-changes")
   )
 
 // Sub-project with publishTo configured

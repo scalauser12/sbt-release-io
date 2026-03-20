@@ -1,6 +1,5 @@
 package io.release.monorepo
 
-import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import io.release.internal.{ExecutionFlags, InternalKeys, ReleaseCommandRunner, ReleaseLogPrefixes}
 import io.release.monorepo.MonorepoTagStrategy as MonorepoTagStrategy_

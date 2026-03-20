@@ -2,8 +2,9 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future, TimeoutException, blocking}
 import scala.sys.process.*
 
-val checkNoReleaseChanges = taskKey[Unit]("Verify no release commit or tag was created")
-val expectPublishSkipEvalFailure = taskKey[Unit]("Run release and assert publish / skip evaluation failure")
+val checkNoReleaseChanges        = taskKey[Unit]("Verify no release commit or tag was created")
+val expectPublishSkipEvalFailure =
+  taskKey[Unit]("Run release and assert publish / skip evaluation failure")
 
 val NestedSbtTimeout = 5.minutes
 
@@ -11,12 +12,12 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
   import scala.concurrent.ExecutionContext.Implicits.global
 
   val outputBuffer = new StringBuilder
-  val logger = ProcessLogger(
+  val logger       = ProcessLogger(
     line => outputBuffer.append(line).append(System.lineSeparator()),
     line => outputBuffer.append(line).append(System.lineSeparator())
   )
 
-  val process = Process(command, workingDir).run(logger)
+  val process        = Process(command, workingDir).run(logger)
   val exitCodeFuture = Future(blocking(process.exitValue()))
 
   try {
@@ -30,9 +31,10 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
       try Await.result(exitCodeFuture, 10.seconds)
       catch { case _: TimeoutException => () }
 
-      val timeoutMessage = s"Nested sbt process timed out after ${NestedSbtTimeout.toMinutes} minutes"
+      val timeoutMessage =
+        s"Nested sbt process timed out after ${NestedSbtTimeout.toMinutes} minutes"
       outputBuffer.append(timeoutMessage).append(System.lineSeparator())
-      val output = outputBuffer.result()
+      val output         = outputBuffer.result()
       IO.write(outputFile, output)
       sys.error(timeoutMessage)
   }
@@ -48,19 +50,22 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                     := "publish-skip-eval-error-test",
-    releaseIOMonorepoProcess := {
-      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.{detectOrSelectProjects, publishArtifacts}
+    name                          := "publish-skip-eval-error-test",
+    releaseIOMonorepoProcess      := {
+      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.{
+        detectOrSelectProjects,
+        publishArtifacts
+      }
 
       Seq(detectOrSelectProjects, publishArtifacts)
     },
     releaseIOIgnoreUntrackedFiles := true,
-    expectPublishSkipEvalFailure := {
-      val sbtVersionProp    = sbtVersion.value
-      val pluginVersionProp =
+    expectPublishSkipEvalFailure  := {
+      val sbtVersionProp     = sbtVersion.value
+      val pluginVersionProp  =
         sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))
-      val sbtScript         = sys.props.getOrElse("sbt.script", "sbt")
-      val outputFile        = file("out.log")
+      val sbtScript          = sys.props.getOrElse("sbt.script", "sbt")
+      val outputFile         = file("out.log")
       val (exitCode, output) = runNestedSbt(
         Seq(
           sbtScript,
@@ -86,7 +91,7 @@ lazy val root = (project in file("."))
         "Expected original publish / skip error message"
       )
     },
-    checkNoReleaseChanges      := {
+    checkNoReleaseChanges         := {
       val commits = "git log --oneline".!!.trim.linesIterator.toList
       assert(commits.length == 1, s"Expected 1 commit (initial only) but found ${commits.length}")
 

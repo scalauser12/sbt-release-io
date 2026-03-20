@@ -61,7 +61,7 @@ lazy val root = (project in file("."))
         !file("version.sbt").exists(),
         "version.sbt should not exist — release should use the custom VERSION file"
       )
-      val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
+      val tags     = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
         tags.toList == List("api/v2.0.0", "core/v2.0.0"),

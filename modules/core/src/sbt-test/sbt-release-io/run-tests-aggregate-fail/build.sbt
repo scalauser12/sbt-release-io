@@ -7,13 +7,15 @@ lazy val root = (project in file("."))
   .settings(
     name                                   := "run-tests-aggregate-fail-test",
     scalaVersion                           := "2.12.18",
-    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test
+    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    testFrameworks += new TestFramework("munit.Framework")
   )
 lazy val sub  = (project in file("sub"))
   .settings(
     name                                   := "run-tests-aggregate-fail-sub",
     scalaVersion                           := "2.12.18",
-    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test
+    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    testFrameworks += new TestFramework("munit.Framework")
   )
 
 val createFile = ReleaseStepIO.io("create-file") { ctx =>

@@ -28,7 +28,8 @@ class PublishValidationSpec extends FunSuite {
   }
 
   test("publishTargetError - some when not skipped and publishTo empty") {
-    val err = PublishValidation.publishTargetError(labels)(publishSkipped = false, publishToEmpty = true)
+    val err =
+      PublishValidation.publishTargetError(labels)(publishSkipped = false, publishToEmpty = true)
     assert(err.isDefined)
     assertEquals(err.get, PublishValidation.message(labels))
   }

@@ -22,8 +22,8 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name := "selection-aware-validation-test",
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
+    name                          := "selection-aware-validation-test",
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "run-clean" || step.name == "run-tests"
     },
     releaseIOIgnoreUntrackedFiles := true,

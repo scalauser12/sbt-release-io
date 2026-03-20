@@ -157,16 +157,17 @@ private[release] object VcsSteps {
           ctx.state,
           ctx.interactive,
           vcs,
-          remoteCheckLog = Some(r =>
-            ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ...")
-          )
+          remoteCheckLog =
+            Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))
         )(
           doPush = vcs.pushChanges.as(ctx),
-          onDeclinePush = IO.blocking(
-            ctx.state.log.warn(
-              s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+          onDeclinePush = IO
+            .blocking(
+              ctx.state.log.warn(
+                s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+              )
             )
-          ).as(ctx)
+            .as(ctx)
         )
       }
   )

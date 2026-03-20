@@ -44,12 +44,12 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                        := "skip-tests-test",
-    releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value
+    name                          := "skip-tests-test",
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value
       .map(step => if (step.name == "run-tests") runReleaseTests else step)
       .filterNot(step => step.name == "push-changes" || step.name == "publish-artifacts"),
     releaseIOIgnoreUntrackedFiles := true,
-    checkTestsSkipped           := {
+    checkTestsSkipped             := {
       val coreMarker = file("core/marker/tests-ran")
       val apiMarker  = file("api/marker/tests-ran")
       assert(
@@ -61,7 +61,7 @@ lazy val root = (project in file("."))
         s"api tests should have been skipped but marker exists at $apiMarker"
       )
     },
-    checkGitTags                := {
+    checkGitTags                  := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(

@@ -61,7 +61,7 @@ If you are updating a custom plugin or build from an older release:
 
 - **sbt**: 1.12.3 and 2.0.0-RC9
 - **Scala**: 2.12.21 and 3.8.1
-- **cats-effect**: 3.6.3
+- **cats-effect**: 3.7.0
 - **VCS**: Git only
 - **Requires**: `sbt-release-io` (core plugin)
 

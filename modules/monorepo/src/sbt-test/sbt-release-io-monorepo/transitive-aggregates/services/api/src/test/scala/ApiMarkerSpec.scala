@@ -2,9 +2,9 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption
 
-import org.scalatest.funsuite.AnyFunSuite
+import munit.FunSuite
 
-class ApiMarkerSpec extends AnyFunSuite {
+class ApiMarkerSpec extends FunSuite {
   test("record api test execution") {
     val marker = java.nio.file.Paths.get(sys.props("marker.path"))
     Files.createDirectories(marker.getParent)

@@ -2,7 +2,12 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOPublishArtifactsChecks}
-import io.release.internal.{PublishValidation, ReleaseLogPrefixes, SbtRuntime, SnapshotDependencyTasks}
+import io.release.internal.{
+  PublishValidation,
+  ReleaseLogPrefixes,
+  SbtRuntime,
+  SnapshotDependencyTasks
+}
 import io.release.steps.StepHelpers.*
 import io.release.{CleanCompat, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
@@ -18,7 +23,7 @@ private[release] object PublishSteps {
     execute = ctx => IO.pure(ctx),
     validate = ctx =>
       SnapshotDependencyTasks.aggregatedSnapshotDependencies(ctx.state).flatMap {
-        case Left(err) =>
+        case Left(err)                    =>
           IO.raiseError[Unit](new IllegalStateException(err))
         case Right(deps) if deps.nonEmpty =>
           handleSnapshotDependencies(
@@ -27,7 +32,7 @@ private[release] object PublishSteps {
             ctx.interactive,
             ReleaseLogPrefixes.Core
           )
-        case Right(_) => IO.unit
+        case Right(_)                     => IO.unit
       },
     enableCrossBuild = true
   )
@@ -61,12 +66,12 @@ private[release] object PublishSteps {
                              .filter(r => checkPublishToMissing(extracted, r, ctx.state))
                          }
               result  <- {
-                           val names = missing.map(_.project)
-                           PublishValidation.requirePublishTarget(names.mkString(", "))(
-                             publishSkipped = false,
-                             publishToEmpty = missing.nonEmpty
-                           )
-                         }
+                val names = missing.map(_.project)
+                PublishValidation.requirePublishTarget(names.mkString(", "))(
+                  publishSkipped = false,
+                  publishToEmpty = missing.nonEmpty
+                )
+              }
             } yield result
         },
     enableCrossBuild = true

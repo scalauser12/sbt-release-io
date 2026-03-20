@@ -13,18 +13,18 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(CustomReleasePlugin)
   .settings(
-    name                        := "custom-plugin-test",
-    releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
+    name                          := "custom-plugin-test",
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
     releaseIOIgnoreUntrackedFiles := true,
-    checkTag                    := {
+    checkTag                      := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(tags.length == 1, s"Expected 1 tag but found ${tags.length}: ${tags.mkString(", ")}")
       assert(tags.head == "core/v1.0.0", s"Expected tag core/v1.0.0 but got ${tags.head}")
     },
-    checkCoreVersion            := {
+    checkCoreVersion              := {
       val contents = IO.read(file("core/version.sbt"))
       assert(
         contents.contains("1.1.0-SNAPSHOT"),

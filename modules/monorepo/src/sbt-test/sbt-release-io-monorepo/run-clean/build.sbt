@@ -8,12 +8,12 @@ val checkReleaseSelection  = taskKey[Unit]("Verify only the selected project was
 def staleFile(base: File): File = base / "stale.txt"
 
 lazy val staleFileTasks = Seq(
-  seedStaleFile := {
+  seedStaleFile          := {
     val file = staleFile(target.value)
     IO.createDirectory(file.getParentFile)
     IO.write(file, "stale")
   },
-  assertStaleFileExists := {
+  assertStaleFileExists  := {
     val file = staleFile(target.value)
     assert(file.exists, s"Expected stale file to exist at ${file.getAbsolutePath}")
   },

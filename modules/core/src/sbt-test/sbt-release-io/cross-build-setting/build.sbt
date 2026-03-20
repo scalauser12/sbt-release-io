@@ -46,10 +46,16 @@ checkCrossBuildInvocations := {
   val built213     = markerDir / s"built-$Scala213"
   val built212     = markerDir / s"built-$Scala212"
   val invocationsF = markerDir / "invocations.txt"
-  assert(built213.exists(), s"Expected cross-build marker for $Scala213 at ${built213.getAbsolutePath}")
-  assert(built212.exists(), s"Expected cross-build marker for $Scala212 at ${built212.getAbsolutePath}")
+  assert(
+    built213.exists(),
+    s"Expected cross-build marker for $Scala213 at ${built213.getAbsolutePath}"
+  )
+  assert(
+    built212.exists(),
+    s"Expected cross-build marker for $Scala212 at ${built212.getAbsolutePath}"
+  )
   assert(invocationsF.exists(), s"Expected invocation log at ${invocationsF.getAbsolutePath}")
-  val invocations = IO.readLines(invocationsF).filter(_.nonEmpty)
+  val invocations  = IO.readLines(invocationsF).filter(_.nonEmpty)
   assert(
     invocations.length == 2,
     s"Expected exactly 2 cross-build invocations but found ${invocations.length}: $invocations"
@@ -67,7 +73,8 @@ checkGitTag := {
   assert(tags.head == "v0.1.0", s"Expected git tag v0.1.0 but found ${tags.head}")
 }
 
-val checkNextVersion = taskKey[Unit]("Check that version.sbt was updated to the next snapshot version")
+val checkNextVersion =
+  taskKey[Unit]("Check that version.sbt was updated to the next snapshot version")
 checkNextVersion := {
   val contents = IO.read(baseDirectory.value / "version.sbt")
   assert(

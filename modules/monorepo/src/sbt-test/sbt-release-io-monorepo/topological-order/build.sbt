@@ -21,7 +21,7 @@ lazy val api = (project in file("api"))
     scalaVersion := "2.12.18"
   )
 
-val checkAll = taskKey[Unit]("Run all verification checks")
+val checkAll        = taskKey[Unit]("Run all verification checks")
 val recordOrderStep = MonorepoStepIO.PerProject(
   name = "record-order",
   execute = (ctx, project) =>

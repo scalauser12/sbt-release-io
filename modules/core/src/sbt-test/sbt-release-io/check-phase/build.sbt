@@ -2,8 +2,8 @@ import sbt.IO
 import _root_.io.release.{ReleaseContext, ReleaseStepIO}
 import _root_.io.release.steps.ReleaseSteps
 
-name                        := "check-phase-test"
-scalaVersion                := "2.12.18"
+name                          := "check-phase-test"
+scalaVersion                  := "2.12.18"
 releaseIOIgnoreUntrackedFiles := true
 
 // Step whose validation always fails; execute creates a marker file to prove it ran

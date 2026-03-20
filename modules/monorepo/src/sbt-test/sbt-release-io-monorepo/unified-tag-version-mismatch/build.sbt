@@ -17,13 +17,13 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                         := "unified-tag-version-mismatch-test",
-    releaseIOMonorepoTagStrategy := MonorepoTagStrategy.Unified,
-    releaseIOMonorepoProcess     := releaseIOMonorepoProcess.value.filterNot { step =>
+    name                          := "unified-tag-version-mismatch-test",
+    releaseIOMonorepoTagStrategy  := MonorepoTagStrategy.Unified,
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts"
     },
-    releaseIOIgnoreUntrackedFiles  := true,
-    checkFailureArtifacts        := {
+    releaseIOIgnoreUntrackedFiles := true,
+    checkFailureArtifacts         := {
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
       assert(
         commitCount == 2,
@@ -31,7 +31,10 @@ lazy val root = (project in file("."))
       )
 
       val tags = "git tag".!!.trim.linesIterator.filter(_.nonEmpty).toList
-      assert(tags.isEmpty, s"Expected no tags after unified tag version mismatch, found: ${tags.mkString(", ")}")
+      assert(
+        tags.isEmpty,
+        s"Expected no tags after unified tag version mismatch, found: ${tags.mkString(", ")}"
+      )
 
       val coreContents = IO.read(file("core/version.sbt"))
       assert(
@@ -56,4 +59,6 @@ lazy val root = (project in file("."))
   )
 
 val checkFailureArtifacts =
-  taskKey[Unit]("Verify unified tag version mismatch fails after release-version commit but before any tag or next-version writes")
+  taskKey[Unit](
+    "Verify unified tag version mismatch fails after release-version commit but before any tag or next-version writes"
+  )

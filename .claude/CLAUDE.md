@@ -6,7 +6,7 @@ Scala/sbt plugin porting sbt-release to cats-effect IO. Two modules: **core** (s
 
 ```bash
 sbt compile                # compile all modules
-sbt test                   # run all unit tests (specs2)
+sbt test                   # run all unit tests (MUnit)
 sbt core/test              # core unit tests only
 sbt monorepo/test          # monorepo unit tests only
 sbt scripted               # run all scripted integration tests
@@ -34,7 +34,7 @@ sbt scalafmtSbtCheck       # check sbt/build file formatting
 
 - Scala 2.12 (sbt 1) and Scala 3 (sbt 2) cross-build
 - Max line length: 100 columns (enforced by scalafmt 3.10.7)
-- Tests use specs2-core with cats-effect-testing-specs2
+- Tests use MUnit with munit-cats-effect for IO
 - Scripted tests live under `src/sbt-test/` in each module
 - Core sources: `modules/core/src/main/scala/io/release/`
 - Monorepo sources: `modules/monorepo/src/main/scala/io/release/monorepo/`

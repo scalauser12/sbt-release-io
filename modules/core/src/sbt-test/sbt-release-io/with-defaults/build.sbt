@@ -1,7 +1,7 @@
 import sbt.IO
 
-name                        := "with-defaults-test"
-scalaVersion                := "2.12.18"
+name                          := "with-defaults-test"
+scalaVersion                  := "2.12.18"
 releaseIOIgnoreUntrackedFiles := true
 
 // Skip push and publish in scripted tests

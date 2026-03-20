@@ -19,16 +19,16 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                        := "custom-tag-name-test",
+    name                          := "custom-tag-name-test",
     // Custom tag name format: "release/<project>/<version>"
-    releaseIOMonorepoTagName    := { (name: String, ver: String) =>
+    releaseIOMonorepoTagName      := { (name: String, ver: String) =>
       s"release/$name/$ver"
     },
-    releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts"
     },
     releaseIOIgnoreUntrackedFiles := true,
-    checkAll                    := {
+    checkAll                      := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(

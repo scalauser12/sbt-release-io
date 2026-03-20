@@ -60,7 +60,7 @@ sbt "releaseIOMonorepo with-defaults"
 
 ```bash
 sbt compile              # compile both modules
-sbt test                 # run unit tests (specs2)
+sbt test                 # run unit tests (MUnit)
 sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2 / Scala 3 (version defined as Sbt2Version in build.sbt)
 sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2 / Scala 3
 sbt scripted             # run all scripted integration tests
@@ -76,7 +76,7 @@ sbt scalafmtSbtCheck     # verify sbt/build file formatting
 
 - **sbt**: 1.12.3 and 2.0.0-RC9
 - **Scala**: 2.12 (sbt 1) / Scala 3 (sbt 2) — plugin compile targets, not constraints on your project's Scala version
-- **cats-effect**: 3.6.3
+- **cats-effect**: 3.7.0
 - **VCS**: Git only
 
 ## License

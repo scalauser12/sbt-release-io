@@ -1,8 +1,8 @@
 import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoStepIO
 
-val Scala213 = "2.13.12"
-val Scala212 = "2.12.18"
+val Scala213           = "2.13.12"
+val Scala212           = "2.12.18"
 val markerScalaVersion = taskKey[String]("Current scalaVersion used by the marker step")
 
 lazy val core = (project in file("core"))
@@ -21,7 +21,7 @@ lazy val api = (project in file("api"))
     markerScalaVersion := scalaVersion.value
   )
 
-val checkAll = taskKey[Unit]("Run all verification checks")
+val checkAll             = taskKey[Unit]("Run all verification checks")
 val crossBuildMarkerStep = MonorepoStepIO.PerProject(
   name = "write-cross-markers",
   execute = (ctx, project) =>

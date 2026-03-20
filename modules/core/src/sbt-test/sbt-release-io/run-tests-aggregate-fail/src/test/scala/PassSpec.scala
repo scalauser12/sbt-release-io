@@ -1,7 +1,7 @@
-import org.scalatest.flatspec.AnyFlatSpec
+import munit.FunSuite
 
-class PassSpec extends AnyFlatSpec {
-  "This test" should "pass" in {
+class PassSpec extends FunSuite {
+  test("pass") {
     assert(true)
   }
 }

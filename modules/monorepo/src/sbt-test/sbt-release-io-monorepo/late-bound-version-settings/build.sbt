@@ -10,18 +10,21 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(LateBoundMonorepoVersionPlugin)
   .settings(
-    name                          := "late-bound-version-settings",
+    name                           := "late-bound-version-settings",
     releaseIOMonorepoDetectChanges := false,
-    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
+    releaseIOMonorepoProcess       := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIOIgnoreUntrackedFiles   := true,
-    checkLateBoundVersionFile     := {
+    releaseIOIgnoreUntrackedFiles  := true,
+    checkLateBoundVersionFile      := {
       val runtimeVersion = IO.read(file("core/version.properties")).trim
       val scopedVersion  = IO.read(file("core/version.sbt")).trim
 
-      assert(runtimeVersion == "1.1.0-SNAPSHOT", s"Unexpected core/version.properties: $runtimeVersion")
+      assert(
+        runtimeVersion == "1.1.0-SNAPSHOT",
+        s"Unexpected core/version.properties: $runtimeVersion"
+      )
       assert(
         scopedVersion.contains("""version := "0.2.0-SNAPSHOT""""),
         s"core/version.sbt should stay unchanged, but was: $scopedVersion"

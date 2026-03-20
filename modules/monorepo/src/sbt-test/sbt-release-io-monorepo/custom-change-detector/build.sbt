@@ -28,7 +28,7 @@ lazy val root = (project in file("."))
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIOIgnoreUntrackedFiles     := true,
+    releaseIOIgnoreUntrackedFiles   := true,
     checkAll                        := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       // Only core should be tagged (api was not detected as changed)

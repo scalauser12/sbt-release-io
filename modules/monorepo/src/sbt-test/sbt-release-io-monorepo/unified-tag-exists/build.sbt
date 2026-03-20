@@ -17,19 +17,25 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                         := "unified-tag-exists-test",
-    releaseIOMonorepoTagStrategy := MonorepoTagStrategy.Unified,
-    releaseIOMonorepoProcess     := releaseIOMonorepoProcess.value.filterNot { step =>
+    name                          := "unified-tag-exists-test",
+    releaseIOMonorepoTagStrategy  := MonorepoTagStrategy.Unified,
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
-    releaseIOIgnoreUntrackedFiles  := true,
-    checkFailureArtifacts        := {
+    releaseIOIgnoreUntrackedFiles := true,
+    checkFailureArtifacts         := {
       val tags = "git tag".!!.trim.linesIterator.filter(_.nonEmpty).toList.sorted
-      assert(tags == List("v1.0.0"), s"Expected only the pre-existing unified tag v1.0.0 but got: ${tags.mkString(", ")}")
+      assert(
+        tags == List("v1.0.0"),
+        s"Expected only the pre-existing unified tag v1.0.0 but got: ${tags.mkString(", ")}"
+      )
 
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
-      assert(commitCount == 2, s"Expected initial commit plus release-version commit after unified tag conflict, found $commitCount")
+      assert(
+        commitCount == 2,
+        s"Expected initial commit plus release-version commit after unified tag conflict, found $commitCount"
+      )
 
       val coreContents = IO.read(file("core/version.sbt"))
       assert(
@@ -54,4 +60,6 @@ lazy val root = (project in file("."))
   )
 
 val checkFailureArtifacts =
-  taskKey[Unit]("Verify unified tag conflict preserves only the pre-existing tag and skips next versions")
+  taskKey[Unit](
+    "Verify unified tag conflict preserves only the pre-existing tag and skips next versions"
+  )

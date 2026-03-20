@@ -3,8 +3,8 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import cats.syntax.traverse.*
 import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
-import io.release.internal.ReleaseLogPrefixes
 import io.release.VcsOps
+import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.*
 import io.release.steps.StepHelpers.{errorMessage, parseVersionInput, required}
 import io.release.vcs.Vcs

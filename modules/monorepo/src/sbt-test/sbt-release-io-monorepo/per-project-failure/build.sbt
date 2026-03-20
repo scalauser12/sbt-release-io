@@ -18,8 +18,9 @@ lazy val api = (project in file("api"))
     releaseTestTask := ()
   )
 
-val checkFailureArtifacts = taskKey[Unit]("Verify run-tests failure stops all later release mutations")
-val runReleaseTests = MonorepoStepIO.PerProject(
+val checkFailureArtifacts =
+  taskKey[Unit]("Verify run-tests failure stops all later release mutations")
+val runReleaseTests       = MonorepoStepIO.PerProject(
   name = "run-tests",
   execute = (ctx, project) =>
     if (ctx.skipTests)
@@ -36,15 +37,18 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                        := "per-project-failure-test",
+    name                          := "per-project-failure-test",
     // Keep run-tests in the process to trigger failure. Filter push/publish.
-    releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value
       .map(step => if (step.name == "run-tests") runReleaseTests else step)
       .filterNot(step => step.name == "push-changes" || step.name == "publish-artifacts"),
     releaseIOIgnoreUntrackedFiles := true,
-    checkFailureArtifacts       := {
+    checkFailureArtifacts         := {
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
-      assert(commitCount == 1, s"Expected only the initial commit after failure, found $commitCount")
+      assert(
+        commitCount == 1,
+        s"Expected only the initial commit after failure, found $commitCount"
+      )
 
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(tags.isEmpty, s"Expected no tags after failure but found: ${tags.mkString(", ")}")

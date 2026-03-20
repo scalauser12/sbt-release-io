@@ -19,13 +19,13 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(LateBoundDetectPlugin)
   .settings(
-    name                        := "late-bound-detect-settings",
-    releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
+    name                          := "late-bound-detect-settings",
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "publish-artifacts" ||
       step.name == "run-clean" || step.name == "run-tests"
     },
     releaseIOIgnoreUntrackedFiles := true,
-    checkLateBoundSelection     := {
+    checkLateBoundSelection       := {
       val tags        = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toSet
       val coreVersion = IO.read(file("core/version.sbt"))
       val apiVersion  = IO.read(file("api/version.sbt"))

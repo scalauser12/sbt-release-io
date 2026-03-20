@@ -67,7 +67,9 @@ private[monorepo] object MonorepoVcsSteps {
       VcsOps.checkCleanWorkingDir(ctx.state).flatMap { result =>
         IO.blocking(
           ctx.state.log
-            .info(s"${ReleaseLogPrefixes.Monorepo} Starting release off commit: ${result.currentHash}")
+            .info(
+              s"${ReleaseLogPrefixes.Monorepo} Starting release off commit: ${result.currentHash}"
+            )
         )
       }
   )

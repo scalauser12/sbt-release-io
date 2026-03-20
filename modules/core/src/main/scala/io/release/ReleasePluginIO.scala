@@ -1,6 +1,5 @@
 package io.release
 
-import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
 import io.release.internal.{CoreReleasePlan, InternalKeys, ReleaseCommandRunner, ReleaseLogPrefixes}
 import io.release.steps.{ReleaseSteps, StepHelpers}
@@ -253,23 +252,29 @@ trait ReleasePluginIOLike[T]
     plannedState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")
     if (crossEnabled) plannedState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
 
-    val program = resource.use { t =>
-      val steps = stepFns.map(_(t))
-      initialContext(plannedState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
-        ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
+    val program = resource
+      .use { t =>
+        val steps = stepFns.map(_(t))
+        initialContext(plannedState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
+          ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
+        }
       }
-    }.flatMap { finalCtx =>
-      if (finalCtx.failed) {
-        val cause = finalCtx.failureCause
-          .map(e => StepHelpers.errorMessage(e))
-          .getOrElse("unknown error")
-        IO.blocking(finalCtx.state.log.error(s"${ReleaseLogPrefixes.Core} Release failed: $cause")) *>
-          IO.pure(finalCtx.state.fail)
-      } else {
-        IO.blocking(finalCtx.state.log.info(s"${ReleaseLogPrefixes.Core} Release completed successfully!")) *>
-          IO.pure(finalCtx.state)
+      .flatMap { finalCtx =>
+        if (finalCtx.failed) {
+          val cause = finalCtx.failureCause
+            .map(e => StepHelpers.errorMessage(e))
+            .getOrElse("unknown error")
+          IO.blocking(
+            finalCtx.state.log.error(s"${ReleaseLogPrefixes.Core} Release failed: $cause")
+          ) *>
+            IO.pure(finalCtx.state.fail)
+        } else {
+          IO.blocking(
+            finalCtx.state.log.info(s"${ReleaseLogPrefixes.Core} Release completed successfully!")
+          ) *>
+            IO.pure(finalCtx.state)
+        }
       }
-    }
 
     // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program)

@@ -35,7 +35,7 @@ lazy val root = (project in file("."))
         contents.contains("2.1.0-SNAPSHOT"),
         s"Expected ThisBuild version 2.1.0-SNAPSHOT in version.sbt but got: $contents"
       )
-      val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
+      val tags     = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 4, s"Expected 4 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
         tags.toList == List("api/v1.0.0", "api/v2.0.0", "core/v1.0.0", "core/v2.0.0"),

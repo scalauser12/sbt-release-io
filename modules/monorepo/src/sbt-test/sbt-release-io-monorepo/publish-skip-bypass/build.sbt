@@ -16,18 +16,18 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                        := "publish-skip-bypass-test",
+    name                          := "publish-skip-bypass-test",
     // Keep publish-artifacts in process (only filter push-changes)
-    releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot { step =>
+    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
       step.name == "push-changes" || step.name == "run-clean" || step.name == "run-tests"
     },
     releaseIOIgnoreUntrackedFiles := true,
-    checkGitTags                := {
+    checkGitTags                  := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(tags.length == 1, s"Expected 1 tag but found ${tags.length}: ${tags.mkString(", ")}")
       assert(tags.head == "core/v0.1.0", s"Expected tag core/v0.1.0 but got ${tags.head}")
     },
-    checkCoreVersion            := {
+    checkCoreVersion              := {
       val contents = IO.read(file("core/version.sbt"))
       assert(
         contents.contains("0.2.0-SNAPSHOT"),

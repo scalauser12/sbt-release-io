@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
-name                        := "custom-plugin-test"
-scalaVersion                := "2.12.18"
+name                          := "custom-plugin-test"
+scalaVersion                  := "2.12.18"
 releaseIOIgnoreUntrackedFiles := true
 enablePlugins(CustomPlugin)
 
@@ -16,7 +16,8 @@ checkGitTag := {
   assert(tags.head == "v0.1.0", s"Expected git tag v0.1.0 but found ${tags.head}")
 }
 
-val checkNextVersion = taskKey[Unit]("Check that version.sbt was updated to the next snapshot version")
+val checkNextVersion =
+  taskKey[Unit]("Check that version.sbt was updated to the next snapshot version")
 checkNextVersion := {
   val contents = IO.read(file("version.sbt"))
   assert(

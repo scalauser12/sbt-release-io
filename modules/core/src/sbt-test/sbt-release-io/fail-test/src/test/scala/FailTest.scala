@@ -1,7 +1,7 @@
-import org.scalatest.flatspec.AnyFlatSpec
+import munit.FunSuite
 
-class FailTest extends AnyFlatSpec {
-  "This test" should "fail" in {
-    assert(false, "This test is designed to fail")
+class FailTest extends FunSuite {
+  test("fail") {
+    fail("This test is designed to fail")
   }
 }

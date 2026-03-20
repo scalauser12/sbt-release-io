@@ -4,7 +4,7 @@ name         := "interactive-with-defaults-test"
 scalaVersion := "2.12.18"
 
 releaseIOIgnoreUntrackedFiles := true
-releaseIOInteractive        := true
+releaseIOInteractive          := true
 
 // Skip push/publish in scripted environment.
 releaseIOProcess := releaseIOProcess.value.filterNot { step =>

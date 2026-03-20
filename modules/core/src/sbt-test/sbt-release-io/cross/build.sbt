@@ -11,7 +11,8 @@ scalaVersion := Scala213
 
 crossScalaVersions := Seq(Scala213, Scala212)
 
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test
+libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
+testFrameworks += new TestFramework("munit.Framework")
 
 val writeCrossMarker = ReleaseStepIO(
   name = "write-cross-marker",

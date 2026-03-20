@@ -157,8 +157,12 @@ private[release] object VersionSteps {
               }
           }
         updated     <- IO.blocking {
-                         data.state.log.info(s"${ReleaseLogPrefixes.Core} Current version : ${data.currentVersion}")
-                         data.state.log.info(s"${ReleaseLogPrefixes.Core} Release version : $releaseVer")
+                         data.state.log.info(
+                           s"${ReleaseLogPrefixes.Core} Current version : ${data.currentVersion}"
+                         )
+                         data.state.log.info(
+                           s"${ReleaseLogPrefixes.Core} Release version : $releaseVer"
+                         )
                          data.state.log.info(s"${ReleaseLogPrefixes.Core} Next version    : $nextVer")
 
                          ctx.withVersions(releaseVer, nextVer)

@@ -84,7 +84,7 @@ See `modules/core/src/sbt-test/README.md` for test documentation.
 
 - **sbt**: 1.12.3 and 2.0.0-RC9
 - **Scala**: 2.12.21 and 3.8.1
-- **cats-effect**: 3.6.3
+- **cats-effect**: 3.7.0
 - **VCS**: Git only (sbt-release also supports Mercurial and Subversion)
 
 ## Execution model: sbt-release-io vs sbt-release

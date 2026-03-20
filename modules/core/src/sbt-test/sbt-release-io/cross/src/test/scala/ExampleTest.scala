@@ -1,5 +1,7 @@
-class ExampleTest extends org.scalatest.funsuite.AnyFunSuite {
+import munit.FunSuite
+
+class ExampleTest extends FunSuite {
   test("hello returns greeting") {
-    assert(Example.hello == "Hello, World!")
+    assertEquals(Example.hello, "Hello, World!")
   }
 }
