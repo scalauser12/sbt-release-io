@@ -1,7 +1,8 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOSnapshotDependencies}
+import io.release.ReleaseIO.releaseIOPublishArtifactsAction
+import io.release.internal.{PublishValidation, ReleaseLogPrefixes, SnapshotDependencyTasks}
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
@@ -65,17 +66,17 @@ private[monorepo] object MonorepoPublishSteps {
     execute = (ctx, _) => IO.pure(ctx),
     validate = (ctx, project) =>
       for {
-        externalSnapshots <- evaluateProjectTask(
-                               ctx,
-                               project.ref / releaseIOSnapshotDependencies,
-                               s"Failed to resolve snapshot dependencies for ${project.name}"
+        externalSnapshots <- SnapshotDependencyTasks.projectSnapshotDependencies(
+                               ctx.state,
+                               project.ref,
+                               project.name
                              )
         _                 <-
           StepHelpers.handleSnapshotDependencies(
             externalSnapshots,
             ctx.state,
             ctx.interactive,
-            "[release-io-monorepo]",
+            ReleaseLogPrefixes.Monorepo,
             context = s" in ${project.name}"
           )
       } yield (),
@@ -128,15 +129,10 @@ private[monorepo] object MonorepoPublishSteps {
               publishTarget  <-
                 if (publishSkipped) IO.pure(Option.empty[Resolver])
                 else evaluatePublishTarget(ctx, project)
-              result         <-
-                if (!publishSkipped && publishTarget.isEmpty)
-                  IO.raiseError[Unit](
-                    new IllegalStateException(
-                      s"publishTo not configured for: ${project.ref.project}. " +
-                        "Set publishTo or add `publish / skip := true`."
-                    )
-                  )
-                else IO.unit
+              result         <- PublishValidation.requirePublishTarget(project.ref.project)(
+                                  publishSkipped,
+                                  publishTarget.isEmpty
+                                )
             } yield result
         },
     enableCrossBuild = true

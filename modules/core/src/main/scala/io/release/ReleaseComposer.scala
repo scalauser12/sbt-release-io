@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.{ExecutionEngine, SbtRuntime}
+import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -18,7 +18,7 @@ import sbt.{internal as _, *}
   */
 private[release] object ReleaseComposer {
 
-  private val LogPrefix = "[release-io]"
+  private val LogPrefix = ReleaseLogPrefixes.Core
 
   /** Compose a sequence of steps into a two-phase IO program.
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are

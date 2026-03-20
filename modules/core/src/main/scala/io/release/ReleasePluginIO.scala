@@ -2,7 +2,7 @@ package io.release
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import io.release.internal.{CoreReleasePlan, InternalKeys}
+import io.release.internal.{CoreReleasePlan, InternalKeys, ReleaseCommandRunner, ReleaseLogPrefixes}
 import io.release.steps.{ReleaseSteps, StepHelpers}
 import io.release.vcs.Vcs
 import io.release.version.Version
@@ -106,13 +106,13 @@ trait ReleasePluginIOLike[T]
                 if (v.isSnapshot) v.withoutSnapshot.render
                 else
                   throw new IllegalArgumentException(
-                    s"[release-io] Expected snapshot version, got: $ver"
+                    s"Expected snapshot version, got: $ver"
                   )
               case _                 => v.withoutQualifier.render
             }
           }
           .getOrElse(
-            throw new IllegalArgumentException(s"[release-io] Cannot parse version: $ver")
+            throw new IllegalArgumentException(s"Cannot parse version: $ver")
           )
     },
     releaseIONextVersion            := {
@@ -121,7 +121,7 @@ trait ReleasePluginIOLike[T]
         Version(ver)
           .map(_.bump(bump).asSnapshot.render)
           .getOrElse(
-            throw new IllegalArgumentException(s"[release-io] Cannot parse version: $ver")
+            throw new IllegalArgumentException(s"Cannot parse version: $ver")
           )
     },
     ReleaseIOCompat.snapshotDependenciesSetting,
@@ -205,83 +205,74 @@ trait ReleasePluginIOLike[T]
   protected def doReleaseIO(state: State, args: Seq[ReleaseArg]): State = {
     import ReleaseArg.*
 
-    import scala.util.control.NonFatal
+    val useDefaults   = args.contains(WithDefaults)
+    val skipTests     = args.contains(SkipTests)
+    val crossFromArgs = args.contains(CrossBuild)
+    val crossEnabled  = crossBuildEnabled(state) || crossFromArgs
+    val skipPublish   = skipPublishEnabled(state)
+    val interactive   = interactiveEnabled(state)
 
-    try {
-      val useDefaults   = args.contains(WithDefaults)
-      val skipTests     = args.contains(SkipTests)
-      val crossFromArgs = args.contains(CrossBuild)
-      val crossEnabled  = crossBuildEnabled(state) || crossFromArgs
-      val skipPublish   = skipPublishEnabled(state)
-      val interactive   = interactiveEnabled(state)
+    val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
+    val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
+    val tagDefaultArg     = args.collectFirst { case TagDefault(v) => v }
 
-      val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
-      val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
-      val tagDefaultArg     = args.collectFirst { case TagDefault(v) => v }
-
-      if (args.count(_.isInstanceOf[ReleaseVersion]) > 1)
-        state.log.warn(
-          s"[release-io] Multiple release-version args provided; using '${releaseVersionArg.getOrElse("<unknown>")}'"
-        )
-      if (args.count(_.isInstanceOf[NextVersion]) > 1)
-        state.log.warn(
-          s"[release-io] Multiple next-version args provided; using '${nextVersionArg.getOrElse("<unknown>")}'"
-        )
-      if (args.count(_.isInstanceOf[TagDefault]) > 1)
-        state.log.warn(
-          s"[release-io] Multiple default-tag-exists-answer args provided; using '${tagDefaultArg.getOrElse("<unknown>")}'"
-        )
-
-      val cleanState = state
-        .remove(ReleaseKeys.versions)
-        .remove(InternalKeys.executionFlags)
-        .remove(InternalKeys.coreReleasePlan)
-
-      val plan         = CoreReleasePlan.build(
-        CoreReleasePlan.Inputs(
-          useDefaults = useDefaults,
-          skipTests = skipTests,
-          skipPublish = skipPublish,
-          interactive = interactive,
-          crossBuild = crossEnabled,
-          releaseVersionOverride = releaseVersionArg,
-          nextVersionOverride = nextVersionArg,
-          tagDefault = tagDefaultArg
-        )
+    if (args.count(_.isInstanceOf[ReleaseVersion]) > 1)
+      state.log.warn(
+        s"${ReleaseLogPrefixes.Core} Multiple release-version args provided; using '${releaseVersionArg.getOrElse("<unknown>")}'"
       )
-      val plannedState = CoreReleasePlan.attach(cleanState, plan)
-      val stepFns      = releaseProcess(plannedState)
+    if (args.count(_.isInstanceOf[NextVersion]) > 1)
+      state.log.warn(
+        s"${ReleaseLogPrefixes.Core} Multiple next-version args provided; using '${nextVersionArg.getOrElse("<unknown>")}'"
+      )
+    if (args.count(_.isInstanceOf[TagDefault]) > 1)
+      state.log.warn(
+        s"${ReleaseLogPrefixes.Core} Multiple default-tag-exists-answer args provided; using '${tagDefaultArg.getOrElse("<unknown>")}'"
+      )
 
-      plannedState.log.info("[release-io] Starting release process...")
-      plannedState.log.info(s"[release-io] ${stepFns.length} steps to execute")
-      if (crossEnabled) plannedState.log.info("[release-io] Cross-build enabled")
+    val cleanState = state
+      .remove(ReleaseKeys.versions)
+      .remove(InternalKeys.executionFlags)
+      .remove(InternalKeys.coreReleasePlan)
 
-      val program = resource.use { t =>
-        val steps = stepFns.map(_(t))
-        initialContext(plannedState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
-          ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
-        }
+    val plan         = CoreReleasePlan.build(
+      CoreReleasePlan.Inputs(
+        useDefaults = useDefaults,
+        skipTests = skipTests,
+        skipPublish = skipPublish,
+        interactive = interactive,
+        crossBuild = crossEnabled,
+        releaseVersionOverride = releaseVersionArg,
+        nextVersionOverride = nextVersionArg,
+        tagDefault = tagDefaultArg
+      )
+    )
+    val plannedState = CoreReleasePlan.attach(cleanState, plan)
+    val stepFns      = releaseProcess(plannedState)
+
+    plannedState.log.info(s"${ReleaseLogPrefixes.Core} Starting release process...")
+    plannedState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")
+    if (crossEnabled) plannedState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
+
+    val program = resource.use { t =>
+      val steps = stepFns.map(_(t))
+      initialContext(plannedState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
+        ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
       }
-
-      // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
-      val finalCtx = program.unsafeRunSync()
+    }.flatMap { finalCtx =>
       if (finalCtx.failed) {
         val cause = finalCtx.failureCause
           .map(e => StepHelpers.errorMessage(e))
           .getOrElse("unknown error")
-        finalCtx.state.log.error(s"[release-io] Release failed: $cause")
-        finalCtx.state.fail
+        IO.blocking(finalCtx.state.log.error(s"${ReleaseLogPrefixes.Core} Release failed: $cause")) *>
+          IO.pure(finalCtx.state.fail)
       } else {
-        finalCtx.state.log.info("[release-io] Release completed successfully!")
-        finalCtx.state
+        IO.blocking(finalCtx.state.log.info(s"${ReleaseLogPrefixes.Core} Release completed successfully!")) *>
+          IO.pure(finalCtx.state)
       }
-    } catch {
-      case NonFatal(e) =>
-        state.log.error(
-          s"[release-io] Release failed: ${StepHelpers.errorMessage(e)}"
-        )
-        state.fail
     }
+
+    // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
+    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program)
   }
 }
 

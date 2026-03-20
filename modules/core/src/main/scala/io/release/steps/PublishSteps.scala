@@ -1,12 +1,8 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.{
-  releaseIOPublishArtifactsAction,
-  releaseIOPublishArtifactsChecks,
-  releaseIOSnapshotDependencies
-}
-import io.release.internal.{SbtCompat, SbtRuntime}
+import io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOPublishArtifactsChecks}
+import io.release.internal.{PublishValidation, ReleaseLogPrefixes, SbtRuntime, SnapshotDependencyTasks}
 import io.release.steps.StepHelpers.*
 import io.release.{CleanCompat, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
@@ -21,32 +17,18 @@ private[release] object PublishSteps {
     name = "check-snapshot-dependencies",
     execute = ctx => IO.pure(ctx),
     validate = ctx =>
-      for {
-        checkResult <- IO.blocking {
-                         val extracted   = SbtRuntime.extracted(ctx.state)
-                         val thisRef     = extracted.get(thisProjectRef)
-                         val (_, result) =
-                           SbtCompat
-                             .runTaskAggregated(thisRef / releaseIOSnapshotDependencies, ctx.state)
-                         aggregatedTaskValues(result)
-                       }
-        result      <- checkResult match {
-                         case Left(cause)                  =>
-                           IO.raiseError[Unit](
-                             new IllegalStateException(
-                               "Error checking for snapshot dependencies: " + cause
-                             )
-                           )
-                         case Right(deps) if deps.nonEmpty =>
-                           handleSnapshotDependencies(
-                             deps,
-                             ctx.state,
-                             ctx.interactive,
-                             "[release-io]"
-                           )
-                         case Right(_)                     => IO.unit
-                       }
-      } yield result,
+      SnapshotDependencyTasks.aggregatedSnapshotDependencies(ctx.state).flatMap {
+        case Left(err) =>
+          IO.raiseError[Unit](new IllegalStateException(err))
+        case Right(deps) if deps.nonEmpty =>
+          handleSnapshotDependencies(
+            deps,
+            ctx.state,
+            ctx.interactive,
+            ReleaseLogPrefixes.Core
+          )
+        case Right(_) => IO.unit
+      },
     enableCrossBuild = true
   )
 
@@ -54,7 +36,7 @@ private[release] object PublishSteps {
     name = "publish-artifacts",
     execute = ctx =>
       if (ctx.skipPublish) {
-        IO.blocking(ctx.state.log.info("[release-io] Skipping publish")).as(ctx)
+        IO.blocking(ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Skipping publish")).as(ctx)
       } else {
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
@@ -78,15 +60,13 @@ private[release] object PublishSteps {
                              .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
                              .filter(r => checkPublishToMissing(extracted, r, ctx.state))
                          }
-              result  <- if (missing.nonEmpty) {
+              result  <- {
                            val names = missing.map(_.project)
-                           IO.raiseError[Unit](
-                             new IllegalStateException(
-                               s"publishTo not configured for: ${names.mkString(", ")}. " +
-                                 "Set publishTo or add `publish / skip := true`."
-                             )
+                           PublishValidation.requirePublishTarget(names.mkString(", "))(
+                             publishSkipped = false,
+                             publishToEmpty = missing.nonEmpty
                            )
-                         } else IO.unit
+                         }
             } yield result
         },
     enableCrossBuild = true
@@ -96,7 +76,7 @@ private[release] object PublishSteps {
     name = "run-tests",
     execute = ctx =>
       if (ctx.skipTests) {
-        IO.blocking(ctx.state.log.info("[release-io] Skipping tests")).as(ctx)
+        IO.blocking(ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Skipping tests")).as(ctx)
       } else {
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
@@ -143,7 +123,7 @@ private[release] object PublishSteps {
     catch {
       case NonFatal(e) =>
         state.log.warn(
-          s"[release-io] Failed to evaluate publish / skip for ${ref.project}: " +
+          s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for ${ref.project}: " +
             s"${errorMessage(e)}. Assuming skip = false."
         )
         false
@@ -158,7 +138,7 @@ private[release] object PublishSteps {
     catch {
       case NonFatal(e) =>
         state.log.warn(
-          s"[release-io] Failed to evaluate publishTo for ${ref.project}: " +
+          s"${ReleaseLogPrefixes.Core} Failed to evaluate publishTo for ${ref.project}: " +
             s"${errorMessage(e)}. Assuming publishTo is missing."
         )
         true

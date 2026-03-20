@@ -183,4 +183,27 @@ private[release] object VcsOps {
             abortMessage = "Merge the upstream commits and run release again."
           )
     } yield ()
+
+  /** After [[validatePushRemote]], optionally prompt before pushing (interactive mode). */
+  def interactivePushAfterRemote[T](
+      state: State,
+      interactive: Boolean,
+      vcs: Vcs,
+      remoteCheckLog: Option[String => Unit]
+  )(doPush: IO[T], onDeclinePush: IO[T]): IO[T] =
+    validatePushRemote(state, interactive, vcs, remoteCheckLog) *>
+      (if (!interactive) doPush
+       else {
+         val decisionIO =
+           if (steps.StepHelpers.useDefaults(state)) IO.pure(true)
+           else
+             steps.StepHelpers.askYesNo(
+               prompt = "Push changes to the remote repository (y/n)? [y] ",
+               defaultYes = true
+             )
+         decisionIO.flatMap {
+           case true  => doPush
+           case false => onDeclinePush
+         }
+       })
 }

@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseIO.releaseIOVersionFile
+import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers.errorMessage
 import sbt.State
 
@@ -87,7 +88,7 @@ private[monorepo] object MonorepoSelectionResolver {
     )
       IO.blocking(
         ctx.state.log.info(
-          "[release-io-monorepo] Global version override provided — " +
+          s"${ReleaseLogPrefixes.Monorepo} Global version override provided — " +
             "selecting all projects for release"
         )
       ).as((ordered, SelectionMode.DetectChanges))
@@ -165,7 +166,7 @@ private[monorepo] object MonorepoSelectionResolver {
           .traverse_(p =>
             IO.blocking(
               ctx.state.log.info(
-                s"[release-io-monorepo] Including ${p.name} (downstream dependent of changed project)"
+                s"${ReleaseLogPrefixes.Monorepo} Including ${p.name} (downstream dependent of changed project)"
               )
             )
           )
@@ -261,7 +262,7 @@ private[monorepo] object MonorepoSelectionResolver {
         .traverse_(p =>
           IO.blocking(
             ctx.state.log.info(
-              s"[release-io-monorepo] Including ${p.name} (unchanged but has version override)"
+              s"${ReleaseLogPrefixes.Monorepo} Including ${p.name} (unchanged but has version override)"
             )
           )
         )
@@ -279,7 +280,7 @@ private[monorepo] object MonorepoSelectionResolver {
         .recoverWith { case NonFatal(err) =>
           IO.blocking(
             ctx.state.log.warn(
-              s"[release-io-monorepo] Change detection failed for ${project.name}: " +
+              s"${ReleaseLogPrefixes.Monorepo} Change detection failed for ${project.name}: " +
                 s"${errorMessage(err)}. Conservatively treating as changed."
             )
           ).as(true)

@@ -2,6 +2,7 @@ package io.release.examples
 
 import cats.effect.{IO, Resource}
 import io.release.{ReleaseContext, ReleasePluginIOLike, ReleaseStepIO}
+import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.ReleaseSteps
 import sbt.*
 import sbt.Keys.thisProject
@@ -78,13 +79,13 @@ object CustomStepExamples {
     IO.blocking {
       // Replace with real notification logic (e.g., Slack webhook, email)
       val version = ctx.releaseVersion.getOrElse("unknown")
-      ctx.state.log.info(s"[release-io] Notifying release of $version...")
+      ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Notifying release of $version...")
     }.as(ctx)
       .handleErrorWith {
         case NonFatal(err) =>
           IO.blocking(
             ctx.state.log.warn(
-              s"[release-io] Notification failed: ${err.getMessage}, continuing..."
+              s"${ReleaseLogPrefixes.Core} Notification failed: ${err.getMessage}, continuing..."
             )
           ).as(ctx)
         case fatal         => IO.raiseError(fatal)
@@ -124,7 +125,7 @@ object CustomStepExamples {
             else "# Changelog\n"
           java.nio.file.Files.write(file.toPath, (existing + entry).getBytes("UTF-8"))
         } *>
-          IO.println(s"[release-io] Updated CHANGELOG.md for $releaseVer").as(ctx)
+          IO.println(s"${ReleaseLogPrefixes.Core} Updated CHANGELOG.md for $releaseVer").as(ctx)
       case None                  =>
         IO.raiseError(new RuntimeException("Versions not set"))
     }
@@ -159,7 +160,7 @@ object CustomStepExamples {
     execute = ctx =>
       IO.blocking {
         val scalaVer = Project.extract(ctx.state).get(Keys.scalaVersion)
-        ctx.state.log.info(s"[release-io] Running tests for Scala $scalaVer")
+        ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Running tests for Scala $scalaVer")
         ctx
       },
     enableCrossBuild = true
@@ -221,7 +222,7 @@ object CustomStepExamples {
   ): ReleaseStepIO =
     ReleaseStepIO.io(s"conditional-$name")(ctx =>
       if (condition(ctx)) step.execute(ctx)
-      else IO.println(s"[release-io] Skipping $name (condition not met)").as(ctx)
+      else IO.println(s"${ReleaseLogPrefixes.Core} Skipping $name (condition not met)").as(ctx)
     )
 
 }

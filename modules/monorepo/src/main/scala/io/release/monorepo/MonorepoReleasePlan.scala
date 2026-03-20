@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.internal.ExecutionFlags
+import io.release.internal.{ExecutionFlags, ReleaseLogPrefixes}
 import sbt.{AttributeKey, State}
 
 /** How project selection is determined for a monorepo release. */
@@ -49,7 +49,7 @@ private[monorepo] object MonorepoReleasePlan {
     validateOverrideInputs(inputs) match {
       case Left(message) =>
         IO.blocking {
-          state.log.error(s"[release-io-monorepo] $message")
+          state.log.error(s"${ReleaseLogPrefixes.Monorepo} $message")
           Left(state.fail)
         }
       case Right(plan)   => IO.pure(Right(plan))

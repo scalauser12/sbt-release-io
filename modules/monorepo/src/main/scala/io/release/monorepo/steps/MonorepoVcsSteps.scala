@@ -2,6 +2,7 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.VcsOps
+import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
@@ -66,7 +67,7 @@ private[monorepo] object MonorepoVcsSteps {
       VcsOps.checkCleanWorkingDir(ctx.state).flatMap { result =>
         IO.blocking(
           ctx.state.log
-            .info(s"[release-io-monorepo] Starting release off commit: ${result.currentHash}")
+            .info(s"${ReleaseLogPrefixes.Monorepo} Starting release off commit: ${result.currentHash}")
         )
       }
   )
@@ -86,7 +87,7 @@ private[monorepo] object MonorepoVcsSteps {
           val mode = if (useDefaults(ctx.state)) "use-defaults mode" else "non-interactive mode"
           IO.blocking(
             ctx.state.log.warn(
-              s"[release-io-monorepo] Tag [$tagName] already exists for $label. " +
+              s"${ReleaseLogPrefixes.Monorepo} Tag [$tagName] already exists for $label. " +
                 s"Aborting ($mode)."
             )
           ) *> IO.raiseError(
@@ -103,7 +104,7 @@ private[monorepo] object MonorepoVcsSteps {
               case true  =>
                 IO.blocking(
                   ctx.state.log.warn(
-                    s"[release-io-monorepo] Tag [$tagName] already exists. Overwriting."
+                    s"${ReleaseLogPrefixes.Monorepo} Tag [$tagName] already exists. Overwriting."
                   )
                 ) *> vcs.tag(tagName, comment, sign = sign, force = true)
               case false =>
@@ -226,29 +227,21 @@ private[monorepo] object MonorepoVcsSteps {
       },
     execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
-        VcsOps.validatePushRemote(ctx.state, ctx.interactive, vcs) *> {
-          val doPush = vcs.commandName match {
-            case "git" => gitPush(ctx, vcs)
-            case _     => vcs.pushChanges.as(ctx)
-          }
-
-          if (!ctx.interactive) doPush
-          else {
-            val decisionIO =
-              if (useDefaults(ctx.state)) IO.pure(true)
-              else
-                askYesNo(
-                  prompt = "Push changes to the remote repository (y/n)? [y] ",
-                  defaultYes = true
-                )
-
-            decisionIO.flatMap {
-              case true  => doPush
-              case false =>
-                logWarn(ctx, "Remember to push the changes yourself!").as(ctx)
-            }
-          }
+        val doPush = vcs.commandName match {
+          case "git" => gitPush(ctx, vcs)
+          case _     => vcs.pushChanges.as(ctx)
         }
+        VcsOps.interactivePushAfterRemote(
+          ctx.state,
+          ctx.interactive,
+          vcs,
+          remoteCheckLog = Some(r =>
+            ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] ...")
+          )
+        )(
+          doPush = doPush,
+          onDeclinePush = logWarn(ctx, "Remember to push the changes yourself!").as(ctx)
+        )
       }
   )
 

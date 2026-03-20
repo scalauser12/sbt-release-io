@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.internal.{ExecutionEngine, SbtRuntime}
+import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
 import io.release.monorepo.steps.MonorepoStepHelpers
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -9,7 +9,7 @@ import sbt.{internal as _, *}
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary. */
 private[monorepo] object MonorepoComposer {
 
-  private val LogPrefix                   = "[release-io-monorepo]"
+  private val LogPrefix                   = ReleaseLogPrefixes.Monorepo
   private[monorepo] val SelectionBoundary = "detect-or-select-projects"
 
   def compose(steps: Seq[MonorepoStepIO], crossBuild: Boolean = false)(

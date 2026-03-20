@@ -1,6 +1,7 @@
 package io.release
 
-import cats.effect.{IO, Resource}
+import cats.effect.{IO, Ref, Resource}
+import io.release.internal.{ExecutionFlags, InternalKeys}
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 
@@ -88,6 +89,65 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("interactivePushAfterRemote - non-interactive runs doPush") {
+    tempDirResource.use { dir =>
+      for {
+        pushed  <- Ref[IO].of(false)
+        declined <- Ref[IO].of(false)
+        vcs      = new PushStubVcs(dir)
+        state    = TestSupport.dummyState(dir)
+        _        <- VcsOps.interactivePushAfterRemote(
+                      state,
+                      interactive = false,
+                      vcs,
+                      remoteCheckLog = None
+                    )(
+                      doPush = pushed.set(true),
+                      onDeclinePush = declined.set(true)
+                    )
+        didPush <- pushed.get
+        didDecline <- declined.get
+      } yield {
+        assertEquals(didPush, true)
+        assertEquals(didDecline, false)
+      }
+    }
+  }
+
+  test("interactivePushAfterRemote - interactive with useDefaults runs doPush") {
+    tempDirResource.use { dir =>
+      val state = TestSupport.dummyState(dir).put(
+        InternalKeys.executionFlags,
+        ExecutionFlags(
+          useDefaults = true,
+          skipTests = false,
+          skipPublish = false,
+          interactive = true,
+          crossBuild = false
+        )
+      )
+      for {
+        pushed   <- Ref[IO].of(false)
+        declined <- Ref[IO].of(false)
+        vcs       = new PushStubVcs(dir)
+        _         <- VcsOps.interactivePushAfterRemote(
+                       state,
+                       interactive = true,
+                       vcs,
+                       remoteCheckLog = None
+                     )(
+                       doPush = pushed.set(true),
+                       onDeclinePush = declined.set(true)
+                     )
+        didPush <- pushed.get
+        didDecline <- declined.get
+      } yield {
+        assertEquals(didPush, true)
+        assertEquals(didDecline, false)
+      }
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────
 
   private val tempDirResource: Resource[IO, File] =
@@ -120,4 +180,30 @@ class VcsOpsSpec extends CatsEffectSuite {
         }
       }
     }
+}
+
+/** Minimal [[Vcs]] for [[VcsOps.interactivePushAfterRemote]] success path (remote check passes). */
+private final class PushStubVcs(override val baseDir: File) extends Vcs {
+  override def commandName: String = "git"
+
+  override def currentHash: IO[String]           = IO.pure("abc")
+  override def currentBranch: IO[String]        = IO.pure("main")
+  override def trackingRemote: IO[String]       = IO.pure("origin")
+  override def hasUpstream: IO[Boolean]         = IO.pure(true)
+  override def isBehindRemote: IO[Boolean]      = IO.pure(false)
+  override def existsTag(name: String): IO[Boolean] = IO.pure(false)
+  override def modifiedFiles: IO[Seq[String]]     = IO.pure(Nil)
+  override def stagedFiles: IO[Seq[String]]        = IO.pure(Nil)
+  override def untrackedFiles: IO[Seq[String]]   = IO.pure(Nil)
+  override def status: IO[String]                = IO.pure("")
+  override def checkRemote(remote: String): IO[Int] = IO.pure(0)
+
+  override def add(files: String*): IO[Unit] = IO.unit
+
+  override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit] = IO.unit
+
+  override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
+    IO.unit
+
+  override def pushChanges: IO[Unit] = IO.unit
 }

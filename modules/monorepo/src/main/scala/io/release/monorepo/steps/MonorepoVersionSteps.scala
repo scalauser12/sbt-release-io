@@ -2,7 +2,7 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
-import io.release.internal.SbtRuntime
+import io.release.internal.{ReleaseLogPrefixes, SbtRuntime}
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
@@ -150,7 +150,7 @@ private[monorepo] object MonorepoVersionSteps {
           ) *> IO
             .blocking(
               ctx.state.log.info(
-                "[release-io-monorepo] Version consistency validated for global version mode"
+                s"${ReleaseLogPrefixes.Monorepo} Version consistency validated for global version mode"
               )
             )
             .as(ctx)

@@ -3,7 +3,7 @@ package io.release.steps
 import cats.effect.IO
 import cats.syntax.flatMap.*
 import io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
-import io.release.internal.{CoreReleasePlan, SbtRuntime, TagPlan}
+import io.release.internal.{CoreReleasePlan, ReleaseLogPrefixes, SbtRuntime, TagPlan}
 import io.release.steps.StepHelpers.*
 import io.release.vcs.Vcs
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
@@ -36,7 +36,7 @@ private[release] object VcsSteps {
       IO.blocking {
         if (logStartHash)
           ctx.state.log.info(
-            s"[release-io] Starting release process off commit: ${result.currentHash}"
+            s"${ReleaseLogPrefixes.Core} Starting release process off commit: ${result.currentHash}"
           )
         ()
       }
@@ -95,7 +95,7 @@ private[release] object VcsSteps {
                       case None if useDefaults      =>
                         IO.blocking(
                           ctx.state.log.warn(
-                            s"[release-io] Tag [$tagName] already exists. Aborting (use-defaults mode)."
+                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Aborting (use-defaults mode)."
                           )
                         ).as("a")
                       case None if !ctx.interactive =>
@@ -120,14 +120,14 @@ private[release] object VcsSteps {
                       case "k" | "K"      =>
                         IO.blocking {
                           ctx.state.log.warn(
-                            s"[release-io] Tag [$tagName] already exists. Keeping existing tag."
+                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Keeping existing tag."
                           )
                           Right(applyTagToState(ctx, tagName))
                         }
                       case "o" | "O"      =>
                         IO.blocking(
                           ctx.state.log.warn(
-                            s"[release-io] Tag [$tagName] already exists. Overwriting."
+                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Overwriting."
                           )
                         ) *>
                           vcs.tag(tagName, tagComment, sign, force = true) *>
@@ -135,7 +135,7 @@ private[release] object VcsSteps {
                       case newTagName     =>
                         IO.blocking(
                           ctx.state.log.info(
-                            s"[release-io] Tag [$tagName] exists. Trying tag [$newTagName]."
+                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] exists. Trying tag [$newTagName]."
                           )
                         ).as(Left(currentParams.copy(tagName = newTagName, defaultAnswer = None)))
                     }
@@ -153,33 +153,21 @@ private[release] object VcsSteps {
       },
     execute = ctx =>
       requireVcs(ctx) { vcs =>
-        VcsOps.validatePushRemote(
+        VcsOps.interactivePushAfterRemote(
           ctx.state,
           ctx.interactive,
           vcs,
-          log = Some(r => ctx.state.log.info(s"[release-io] Checking remote [$r] ..."))
-        ) *>
-          (if (!ctx.interactive)
-             vcs.pushChanges.as(ctx)
-           else {
-             val decisionIO =
-               if (useDefaults(ctx.state)) IO.pure(true)
-               else
-                 askYesNo(
-                   prompt = "Push changes to the remote repository (y/n)? [y] ",
-                   defaultYes = true
-                 )
-
-             decisionIO.flatMap {
-               case true  => vcs.pushChanges.as(ctx)
-               case false =>
-                 IO.blocking(
-                   ctx.state.log.warn(
-                     "[release-io] Remember to push the changes yourself!"
-                   )
-                 ).as(ctx)
-             }
-           })
+          remoteCheckLog = Some(r =>
+            ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ...")
+          )
+        )(
+          doPush = vcs.pushChanges.as(ctx),
+          onDeclinePush = IO.blocking(
+            ctx.state.log.warn(
+              s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+            )
+          ).as(ctx)
+        )
       }
   )
 

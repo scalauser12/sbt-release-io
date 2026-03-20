@@ -2,7 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseIO.*
-import io.release.internal.{CoreReleasePlan, SbtRuntime, VersionPlan}
+import io.release.internal.{CoreReleasePlan, ReleaseLogPrefixes, SbtRuntime, VersionPlan}
 import io.release.steps.StepHelpers.*
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
@@ -157,9 +157,9 @@ private[release] object VersionSteps {
               }
           }
         updated     <- IO.blocking {
-                         data.state.log.info(s"[release-io] Current version : ${data.currentVersion}")
-                         data.state.log.info(s"[release-io] Release version : $releaseVer")
-                         data.state.log.info(s"[release-io] Next version    : $nextVer")
+                         data.state.log.info(s"${ReleaseLogPrefixes.Core} Current version : ${data.currentVersion}")
+                         data.state.log.info(s"${ReleaseLogPrefixes.Core} Release version : $releaseVer")
+                         data.state.log.info(s"${ReleaseLogPrefixes.Core} Next version    : $nextVer")
 
                          ctx.withVersions(releaseVer, nextVer)
                        }
@@ -257,7 +257,7 @@ private[release] object VersionSteps {
                        java.nio.file.Files
                          .write(versionPlan.versionFile.toPath, contents.getBytes("UTF-8"))
                        ctx.state.log.info(
-                         s"[release-io] Wrote version $ver to ${versionPlan.versionFile.getName}"
+                         s"${ReleaseLogPrefixes.Core} Wrote version $ver to ${versionPlan.versionFile.getName}"
                        )
                      }
       result      <- IO.blocking {

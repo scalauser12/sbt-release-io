@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.ReleaseLogPrefixes
 import sbt.Def.ScopedKey
 import sbt.util.Show
 import sbt.{internal as _, *}
@@ -22,7 +23,7 @@ private[release] object CrossBuildSupport {
       import extracted.*
       implicit val showKey: Show[ScopedKey[?]] = extracted.showKey
 
-      state.log.info(s"[release-io] Setting scala version to $version")
+      state.log.info(s"${ReleaseLogPrefixes.Core} Setting scala version to $version")
 
       val add = Seq(
         GlobalScope / Keys.scalaVersion := version,

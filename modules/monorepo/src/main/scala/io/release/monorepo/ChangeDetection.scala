@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers.errorMessage
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
@@ -233,14 +234,14 @@ private[monorepo] object ChangeDetection {
         val files = rawFiles.filterNot(f => excludes.exists(e => f == e || f.startsWith(e + "/")))
         if (files.nonEmpty) {
           state.log.info(
-            s"[release-io-monorepo] Shared path change(s) detected since $tag: " +
+            s"${ReleaseLogPrefixes.Monorepo} Shared path change(s) detected since $tag: " +
               s"${files.mkString(", ")}. Marking affected projects as changed"
           )
           true
         } else false
       case Failure(err)      =>
         state.log.warn(
-          s"[release-io-monorepo] Failed to check shared paths: ${errorMessage(err)}. " +
+          s"${ReleaseLogPrefixes.Monorepo} Failed to check shared paths: ${errorMessage(err)}. " +
             "Conservatively treating as changed"
         )
         true
@@ -267,13 +268,13 @@ private[monorepo] object ChangeDetection {
     tagLookup match {
       case NoMatchingTag =>
         state.log.info(
-          s"[release-io-monorepo] No previous tag matching '$tagPattern' for ${project.name}, marking as changed"
+          s"${ReleaseLogPrefixes.Monorepo} No previous tag matching '$tagPattern' for ${project.name}, marking as changed"
         )
         true
 
       case LookupFailed(details) =>
         state.log.warn(
-          s"[release-io-monorepo] git describe failed for ${project.name} (pattern '$tagPattern'): " +
+          s"${ReleaseLogPrefixes.Monorepo} git describe failed for ${project.name} (pattern '$tagPattern'): " +
             s"$details. Conservatively treating as changed"
         )
         true
@@ -282,7 +283,7 @@ private[monorepo] object ChangeDetection {
         resolveDiffScope(vcs, project) match {
           case Left(details) =>
             state.log.warn(
-              s"[release-io-monorepo] Cannot diff ${project.name}: $details. " +
+              s"${ReleaseLogPrefixes.Monorepo} Cannot diff ${project.name}: $details. " +
                 "Conservatively treating as changed"
             )
             true
@@ -296,7 +297,7 @@ private[monorepo] object ChangeDetection {
             ) match {
               case Failure(_)            =>
                 state.log.warn(
-                  s"[release-io-monorepo] git diff failed for ${project.name}, conservatively treating as changed"
+                  s"${ReleaseLogPrefixes.Monorepo} git diff failed for ${project.name}, conservatively treating as changed"
                 )
                 true
               case Success(changedFiles) =>
@@ -311,17 +312,17 @@ private[monorepo] object ChangeDetection {
                     if (excludedCount > 0) s" ($excludedCount version/excluded file(s) filtered)"
                     else ""
                   state.log.info(
-                    s"[release-io-monorepo] ${project.name} has ${significantFiles.length} changed file(s) since $tag$note"
+                    s"${ReleaseLogPrefixes.Monorepo} ${project.name} has ${significantFiles.length} changed file(s) since $tag$note"
                   )
                   true
                 } else {
                   if (changedFiles.nonEmpty)
                     state.log.info(
-                      s"[release-io-monorepo] ${project.name} has only version/excluded file changes since $tag, treating as unchanged"
+                      s"${ReleaseLogPrefixes.Monorepo} ${project.name} has only version/excluded file changes since $tag, treating as unchanged"
                     )
                   else
                     state.log.info(
-                      s"[release-io-monorepo] ${project.name} unchanged since $tag"
+                      s"${ReleaseLogPrefixes.Monorepo} ${project.name} unchanged since $tag"
                     )
                   false
                 }

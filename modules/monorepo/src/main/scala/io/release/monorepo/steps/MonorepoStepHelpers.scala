@@ -3,6 +3,7 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import cats.syntax.traverse.*
 import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
+import io.release.internal.ReleaseLogPrefixes
 import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.steps.StepHelpers.{errorMessage, parseVersionInput, required}
@@ -42,7 +43,7 @@ private[monorepo] object MonorepoStepHelpers {
             action(currentCtx, latestProj).handleErrorWith { case NonFatal(err) =>
               IO.blocking(
                 currentCtx.state.log.error(
-                  s"[release-io-monorepo] ${latestProj.name}: ${errorMessage(err)}"
+                  s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
                 )
               ) *> IO.pure(
                 currentCtx.updateProject(latestProj.ref)(
@@ -56,10 +57,10 @@ private[monorepo] object MonorepoStepHelpers {
   // ── Logging ───────────────────────────────────────────────────────────
 
   def logInfo(ctx: MonorepoContext, msg: String): IO[Unit] =
-    IO.blocking(ctx.state.log.info(s"[release-io-monorepo] $msg"))
+    IO.blocking(ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} $msg"))
 
   def logWarn(ctx: MonorepoContext, msg: String): IO[Unit] =
-    IO.blocking(ctx.state.log.warn(s"[release-io-monorepo] $msg"))
+    IO.blocking(ctx.state.log.warn(s"${ReleaseLogPrefixes.Monorepo} $msg"))
 
   // ── Version summaries ─────────────────────────────────────────────────
 
