@@ -60,6 +60,11 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - Tests `releaseIOMonorepoCrossBuild := true` setting (not the `cross` CLI flag)
 - Verifies cross-building activates via build setting with heterogeneous Scala versions
 
+### cross-build-restore
+- Verifies scalaVersion is restored after cross-building when set only at ThisBuild scope
+- Core cross-builds with 2.13 and 2.12; a post-cross-build step asserts session returns to 2.13
+- Api sees restored version, not the leaked last cross version
+
 ### custom-change-detector
 - Custom change detection function selects only specific projects
 - Returns true only for core, skipping api
@@ -122,6 +127,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 - First release with no prior tags
 - Change detection marks all projects as changed, releasing them all
 
+### global-override-detect-changes
+- Global version override forces all projects in detect-changes mode
+- Tags exist for both projects with no file changes; global override bypasses empty detection
+
 ### global-version
 - `releaseIOMonorepoUseGlobalVersion := true`
 - All projects share a single global `version.sbt` with `ThisBuild / version`
@@ -134,6 +143,10 @@ Each test is located in `sbt-release-io-monorepo/<test-name>/` and contains:
 ### global-version-change-detection-subset
 - Change detection finds only a subset of projects changed in global mode
 - Fails because global mode enforces all-or-nothing
+
+### global-version-file-preserve
+- Custom `releaseIOVersionFile` (VERSION file) survives sbt state reloads in global-version mode
+- Verifies version writes target the custom file, not the default version.sbt
 
 ### global-version-format
 - Verifies global version file uses `ThisBuild / version` format

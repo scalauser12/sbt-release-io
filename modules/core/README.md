@@ -20,7 +20,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.2")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.3")
 ```
 
 The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom Version Formats](#custom-version-formats).
@@ -484,7 +484,7 @@ Some libraries that work well in release steps:
 Add the dependency in `project/plugins.sbt` alongside the plugin:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.2")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.3")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 

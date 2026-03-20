@@ -87,6 +87,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Multi-project build with mixed publish configurations
 - Root and libA have `publishTo`, libB uses `publish / skip := true` (no `publishTo` needed)
 
+### publish-nested-aggregate
+- Validates `publishArtifacts` preflight catches missing `publishTo` on transitive (nested) aggregates
+- Root -> libA -> libB where libB lacks publishTo; release should fail at validation
+
 ### publish-skip
 - Tests that `publish / skip := true` bypasses the `publishTo` check
 - Release succeeds without `publishTo` configured

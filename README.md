@@ -21,7 +21,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.2")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.3")
 ```
 
 No `enablePlugins` needed — the core plugin activates automatically.
@@ -35,7 +35,7 @@ sbt "releaseIO with-defaults"
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.5.2")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.5.3")
 ```
 
 In `build.sbt`:
