@@ -1,6 +1,7 @@
 package io.release.internal
 
 import cats.effect.IO
+import cats.syntax.all.*
 import io.release.ReleaseCtx
 import io.release.steps.StepHelpers
 
@@ -28,9 +29,7 @@ private[release] object ExecutionEngine {
       validations: Seq[ValidationStep[C]],
       initialCtx: C
   ): IO[Unit] =
-    validations.foldLeft(IO.unit) { (acc, step) =>
-      acc *> runValidationStep(logPrefix, step, initialCtx)
-    }
+    validations.toList.traverse_(step => runValidationStep(logPrefix, step, initialCtx))
 
   def runActions[C <: ReleaseCtx[C]](
       actions: Seq[ActionStep[C]],

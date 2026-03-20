@@ -1,7 +1,7 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import cats.syntax.traverse.*
+import cats.syntax.all.*
 import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
@@ -199,9 +199,8 @@ private[monorepo] object MonorepoStepHelpers {
             else IO.unit
 
           consistencyCheck *>
-            paths.map(_._2).distinct.foldLeft(IO.unit) { (acc, relativePath) =>
-              acc *> vcs.add(relativePath)
-            } *> {
+            paths.map(_._2).distinct.toList.traverse_(vcs.add(_)) *>
+            {
               val summary = versionSummary(ctx, selector)
               commitIfChanged(ctx, vcs, msgFormatter(summary), sign, signOff)
             }

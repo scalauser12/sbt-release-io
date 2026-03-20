@@ -1,6 +1,7 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
+import cats.syntax.all.*
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.*
@@ -203,9 +204,8 @@ private[monorepo] object MonorepoVcsSteps {
                       s"git push ${pushTarget.remote} " +
                         s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
                     )
-      _          <- tags.foldLeft(IO.unit) { (acc, tag) =>
-                      acc *>
-                        logInfo(ctx, s"Pushing tag $tag") *>
+      _          <- tags.toList.traverse_ { tag =>
+                      logInfo(ctx, s"Pushing tag $tag") *>
                         runProcess(
                           Process(
                             Seq("git", "push", pushTarget.remote, tag),

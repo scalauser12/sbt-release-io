@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import cats.syntax.all.*
 import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
 import io.release.monorepo.steps.MonorepoStepHelpers
 import sbt.Keys.*
@@ -101,9 +102,7 @@ private[monorepo] object MonorepoComposer {
           wrapValidationWithCrossBuild(perProject.validate, perProject.enableCrossBuild, crossBuild)
 
         ctx =>
-          ctx.currentProjects.foldLeft(IO.unit) { (acc, project) =>
-            acc *> wrappedValidation(ctx, project)
-          }
+          ctx.currentProjects.toList.traverse_(project => wrappedValidation(ctx, project))
     }
 
   private def runSingleStepAction(
