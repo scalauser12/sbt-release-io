@@ -1,80 +1,83 @@
 package io.release.monorepo
 
 import io.release.TestSupport
-import org.specs2.mutable.Specification
+import munit.FunSuite
 import sbt.{AttributeKey, State}
 
 import java.nio.file.Files
 
-class MonorepoContextSpec extends Specification {
+class MonorepoContextSpec extends FunSuite {
 
-  "MonorepoContext" should {
-
-    "update a specific project" in withState { state =>
+  test("MonorepoContext - update a specific project") {
+    withState { state =>
       val projects = Seq(dummyProject("core"), dummyProject("api"))
       val ctx      = MonorepoContext(state = state, projects = projects)
       val updated  =
-        ctx.updateProject(projects(0).ref)(_.copy(versions = Some(("1.0.0", "1.1.0-SNAPSHOT"))))
+        ctx.updateProject(projects(0).ref)(
+          _.copy(versions = Some(("1.0.0", "1.1.0-SNAPSHOT")))
+        )
 
-      (updated.projects(0).versions must beSome(("1.0.0", "1.1.0-SNAPSHOT"))) and
-        (updated.projects(1).versions must beNone)
+      assertEquals(updated.projects(0).versions, Some(("1.0.0", "1.1.0-SNAPSHOT")))
+      assertEquals(updated.projects(1).versions, None)
     }
+  }
 
-    "filter out failed projects in currentProjects" in withState { state =>
+  test("MonorepoContext - filter out failed projects in currentProjects") {
+    withState { state =>
       val projects = Seq(
         dummyProject("core").copy(failed = true),
         dummyProject("api")
       )
       val ctx      = MonorepoContext(state = state, projects = projects)
 
-      ctx.currentProjects.map(_.name) must_== Seq("api")
+      assertEquals(ctx.currentProjects.map(_.name), Seq("api"))
     }
+  }
 
-    "manage typed metadata" in withState { state =>
+  test("MonorepoContext - manage typed metadata") {
+    withState { state =>
       val ctx     = MonorepoContext(state = state)
       val key1    = AttributeKey[String]("key1")
       val key2    = AttributeKey[Int]("key2")
       val updated = ctx.withMetadata(key1, "val1").withMetadata(key2, 2)
       val removed = updated.withoutMetadata(key1)
 
-      (updated.metadata(key1) must beSome("val1")) and
-        (updated.metadata(key2) must beSome(2)) and
-        (removed.metadata(key1) must beNone) and
-        (removed.metadata(key2) must beSome(2))
+      assertEquals(updated.metadata(key1), Some("val1"))
+      assertEquals(updated.metadata(key2), Some(2))
+      assertEquals(removed.metadata(key1), None)
+      assertEquals(removed.metadata(key2), Some(2))
     }
+  }
 
-    "mark as failed" in withState { state =>
+  test("MonorepoContext - mark as failed") {
+    withState { state =>
       val ctx = MonorepoContext(state = state)
-      (ctx.failed must_== false) and
-        (ctx.fail.failed must_== true)
+      assertEquals(ctx.failed, false)
+      assertEquals(ctx.fail.failed, true)
     }
+  }
 
-    "replace projects via withProjects" in withState { state =>
+  test("MonorepoContext - replace projects via withProjects") {
+    withState { state =>
       val ctx     = MonorepoContext(state = state, projects = Seq(dummyProject("old")))
       val updated = ctx.withProjects(Seq(dummyProject("new1"), dummyProject("new2")))
 
-      updated.projects.map(_.name) must_== Seq("new1", "new2")
+      assertEquals(updated.projects.map(_.name), Seq("new1", "new2"))
     }
   }
 
-  "ProjectReleaseInfo" should {
-
-    "have sensible defaults" in {
-      val proj = dummyProject("test")
-      (proj.versions must beNone) and
-        (proj.tagName must beNone) and
-        (proj.failed must_== false) and
-        (proj.failureCause must beNone)
-    }
+  test("ProjectReleaseInfo - have sensible defaults") {
+    val proj = dummyProject("test")
+    assertEquals(proj.versions, None)
+    assertEquals(proj.tagName, None)
+    assertEquals(proj.failed, false)
+    assertEquals(proj.failureCause, None)
   }
 
-  "MonorepoTagStrategy" should {
-
-    "have PerProject and Unified variants" in {
-      val pp: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
-      val u: MonorepoTagStrategy  = MonorepoTagStrategy.Unified
-      pp must not(equalTo(u))
-    }
+  test("MonorepoTagStrategy - have PerProject and Unified variants") {
+    val pp: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
+    val u: MonorepoTagStrategy  = MonorepoTagStrategy.Unified
+    assertNotEquals(pp, u)
   }
 
   private def dummyProject(name: String): ProjectReleaseInfo =

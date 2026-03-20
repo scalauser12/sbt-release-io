@@ -1,18 +1,17 @@
 package io.release
 
 import io.release.steps.StepHelpers
-import org.specs2.mutable.Specification
+import munit.FunSuite
 
-class StepHelpersSpec extends Specification {
+class StepHelpersSpec extends FunSuite {
 
-  "StepHelpers.aggregatedTaskValues" should {
-    "flatten aggregated successful task results" in {
-      val result =
-        ResultTestCompat.aggregatedSuccess(Seq(Seq("core", "api"), Seq("monorepo")))
+  test("StepHelpers.aggregatedTaskValues - flatten aggregated successful task results") {
+    val result =
+      ResultTestCompat.aggregatedSuccess(Seq(Seq("core", "api"), Seq("monorepo")))
 
-      StepHelpers.aggregatedTaskValues(result) must beRight(
-        Seq("core", "api", "monorepo")
-      )
-    }
+    assertEquals(
+      StepHelpers.aggregatedTaskValues(result),
+      Right(Seq("core", "api", "monorepo"))
+    )
   }
 }

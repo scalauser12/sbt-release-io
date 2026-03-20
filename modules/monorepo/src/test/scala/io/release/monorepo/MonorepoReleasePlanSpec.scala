@@ -2,84 +2,88 @@ package io.release.monorepo
 
 import cats.effect.unsafe.implicits.global
 import io.release.internal.ExecutionFlags
-import org.specs2.mutable.Specification
+import munit.FunSuite
 import sbt.ProjectRef
 
 import java.io.File
 import java.net.URI
 
-class MonorepoReleasePlanSpec extends Specification {
+class MonorepoReleasePlanSpec extends FunSuite {
 
-  "MonorepoReleasePlan.validateOverrideInputs" should {
+  test("validateOverrideInputs - reject duplicate per-project release-version overrides") {
+    val result = MonorepoReleasePlan.validateOverrideInputs(
+      baseInputs.copy(releaseVersionPairs = Seq("core" -> "1.0.0", "core" -> "1.1.0"))
+    )
 
-    "reject duplicate per-project release-version overrides" in {
-      val result = MonorepoReleasePlan.validateOverrideInputs(
-        baseInputs.copy(releaseVersionPairs = Seq("core" -> "1.0.0", "core" -> "1.1.0"))
+    assert(result.isLeft)
+    assert(result.left.exists(_.contains("Duplicate per-project release-version overrides")))
+  }
+
+  test("validateOverrideInputs - reject explicit project selection combined with all-changed") {
+    val result = MonorepoReleasePlan.validateOverrideInputs(
+      baseInputs.copy(allChanged = true, selectedNames = Seq("core"))
+    )
+
+    assert(result.isLeft)
+    assert(
+      result.left.exists(
+        _.contains("Cannot combine 'all-changed' with explicit project selection")
       )
+    )
+  }
 
-      result must beLeft.like { case message =>
-        message must contain("Duplicate per-project release-version overrides")
-      }
-    }
+  test("validateOverrideInputs - derive the explicit selection mode from validated inputs") {
+    val result = MonorepoReleasePlan.validateOverrideInputs(
+      baseInputs.copy(selectedNames = Seq("core"))
+    )
 
-    "reject explicit project selection combined with all-changed" in {
-      val result = MonorepoReleasePlan.validateOverrideInputs(
-        baseInputs.copy(allChanged = true, selectedNames = Seq("core"))
-      )
-
-      result must beLeft.like { case message =>
-        message must contain("Cannot combine 'all-changed' with explicit project selection")
-      }
-    }
-
-    "derive the explicit selection mode from validated inputs" in {
-      val result = MonorepoReleasePlan.validateOverrideInputs(
-        baseInputs.copy(selectedNames = Seq("core"))
-      )
-
-      result must beRight.like { case validated =>
-        validated.selectionMode must_== SelectionMode.ExplicitSelection
-      }
-    }
-
-    "allow global overrides at startup before runtime global-version validation" in {
-      val result = MonorepoReleasePlan.validateOverrideInputs(
-        baseInputs.copy(globalReleaseVersions = Seq("1.0.0"))
-      )
-
-      result must beRight.like { case validated =>
-        validated.globalReleaseVersion must beSome("1.0.0")
-      }
+    assert(result.isRight)
+    result.foreach { validated =>
+      assertEquals(validated.selectionMode, SelectionMode.ExplicitSelection)
     }
   }
 
-  "MonorepoReleasePlan.enforceGlobalVersionAllOrNothing" should {
+  test("validateOverrideInputs - allow global overrides at startup") {
+    val result = MonorepoReleasePlan.validateOverrideInputs(
+      baseInputs.copy(globalReleaseVersions = Seq("1.0.0"))
+    )
 
-    "fail when change detection keeps only a subset in global version mode" in {
-      val result =
-        MonorepoReleasePlan
-          .enforceGlobalVersionAllOrNothing(
-            allProjects = allProjects,
-            changedProjects = allProjects.take(1),
-            useGlobalVersion = true
-          )
-          .attempt
-          .unsafeRunSync()
-
-      result must beLeft.like { case err: IllegalStateException =>
-        err.getMessage must contain("Global version mode is active")
-      }
+    assert(result.isRight)
+    result.foreach { validated =>
+      assertEquals(validated.globalReleaseVersion, Some("1.0.0"))
     }
+  }
 
-    "allow unchanged selection rules outside global version mode" in {
+  test("enforceGlobalVersionAllOrNothing - fail when subset in global version mode") {
+    val result =
       MonorepoReleasePlan
         .enforceGlobalVersionAllOrNothing(
           allProjects = allProjects,
           changedProjects = allProjects.take(1),
-          useGlobalVersion = false
+          useGlobalVersion = true
         )
-        .unsafeRunSync() must_== allProjects.take(1)
+        .attempt
+        .unsafeRunSync()
+
+    assert(result.isLeft)
+    result.left.foreach {
+      case err: IllegalStateException =>
+        assert(err.getMessage.contains("Global version mode is active"))
+      case other                      =>
+        fail(s"Expected IllegalStateException but got $other")
     }
+  }
+
+  test("enforceGlobalVersionAllOrNothing - allow unchanged selection outside global mode") {
+    val result = MonorepoReleasePlan
+      .enforceGlobalVersionAllOrNothing(
+        allProjects = allProjects,
+        changedProjects = allProjects.take(1),
+        useGlobalVersion = false
+      )
+      .unsafeRunSync()
+
+    assertEquals(result, allProjects.take(1))
   }
 
   private val baseInputs = MonorepoReleasePlan.Inputs(

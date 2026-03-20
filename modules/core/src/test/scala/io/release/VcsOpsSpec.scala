@@ -1,96 +1,90 @@
 package io.release
 
-import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
 import io.release.vcs.Vcs
-import org.specs2.mutable.Specification
+import munit.CatsEffectSuite
 
 import java.io.File
 import java.nio.file.Files
-class VcsOpsSpec extends Specification with CatsEffect {
 
-  "VcsOps.detectVcsFromBase" should {
+class VcsOpsSpec extends CatsEffectSuite {
 
-    "succeed for an initialized Git repo" in {
-      gitRepoResource.use { repo =>
-        VcsOps.detectVcsFromBase(repo).map { vcs =>
-          vcs.commandName must_== "git"
-        }
-      }
-    }
-
-    "raise RuntimeException for a non-Git directory" in {
-      tempDirResource.use { dir =>
-        VcsOps.detectVcsFromBase(dir).attempt.map {
-          case Left(e: RuntimeException) =>
-            e.getMessage must contain("No VCS detected at")
-          case other                     =>
-            ko(s"Expected RuntimeException but got $other")
-        }
+  test("detectVcsFromBase - succeed for an initialized Git repo") {
+    gitRepoResource.use { repo =>
+      VcsOps.detectVcsFromBase(repo).map { vcs =>
+        assertEquals(vcs.commandName, "git")
       }
     }
   }
 
-  "VcsOps.checkCleanFromVcs" should {
+  test("detectVcsFromBase - raise RuntimeException for a non-Git directory") {
+    tempDirResource.use { dir =>
+      VcsOps.detectVcsFromBase(dir).attempt.map {
+        case Left(e: RuntimeException) =>
+          assert(e.getMessage.contains("No VCS detected at"))
+        case other                     =>
+          fail(s"Expected RuntimeException but got $other")
+      }
+    }
+  }
 
-    "succeed on a clean repo and return the current hash" in {
-      gitRepoWithCommitResource.use { case (repo, vcs) =>
-        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).map { result =>
-          (result.currentHash must not(beEmpty[String]))
-            .and(result.vcs.commandName must_== "git")
+  test("checkCleanFromVcs - succeed on a clean repo and return the current hash") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).map { result =>
+        assert(result.currentHash.nonEmpty)
+        assertEquals(result.vcs.commandName, "git")
+      }
+    }
+  }
+
+  test("checkCleanFromVcs - raise error listing modified files when a tracked file is modified") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
+        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
+          case Left(e: RuntimeException) =>
+            assert(e.getMessage.contains("unstaged modified files"))
+            assert(e.getMessage.contains("file.txt"))
+          case other                     =>
+            fail(s"Expected RuntimeException but got $other")
         }
-      }
     }
+  }
 
-    "raise error listing modified files when a tracked file is modified" in {
-      gitRepoWithCommitResource.use { case (repo, vcs) =>
-        IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
-          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-            case Left(e: RuntimeException) =>
-              (e.getMessage must contain("unstaged modified files")) and
-                (e.getMessage must contain("file.txt"))
-            case other                     =>
-              ko(s"Expected RuntimeException but got $other")
-          }
-      }
+  test("checkCleanFromVcs - raise error listing staged files when staged-but-uncommitted") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      IO.blocking {
+        sbt.IO.write(new File(repo, "staged.txt"), "staged content")
+        TestSupport.runGit(repo, "add", "staged.txt")
+      } *>
+        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
+          case Left(e: RuntimeException) =>
+            assert(e.getMessage.contains("staged uncommitted changes"))
+            assert(e.getMessage.contains("staged.txt"))
+          case other                     =>
+            fail(s"Expected RuntimeException but got $other")
+        }
     }
+  }
 
-    "raise error listing staged files when staged-but-uncommitted changes exist" in {
-      gitRepoWithCommitResource.use { case (repo, vcs) =>
-        IO.blocking {
-          sbt.IO.write(new File(repo, "staged.txt"), "staged content")
-          TestSupport.runGit(repo, "add", "staged.txt")
-        } *>
-          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-            case Left(e: RuntimeException) =>
-              (e.getMessage must contain("staged uncommitted changes")) and
-                (e.getMessage must contain("staged.txt"))
-            case other                     =>
-              ko(s"Expected RuntimeException but got $other")
-          }
-      }
+  test("checkCleanFromVcs - raise error listing untracked files when untracked files exist") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
+        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
+          case Left(e: RuntimeException) =>
+            assert(e.getMessage.contains("untracked files"))
+            assert(e.getMessage.contains("untracked.txt"))
+          case other                     =>
+            fail(s"Expected RuntimeException but got $other")
+        }
     }
+  }
 
-    "raise error listing untracked files when untracked files exist" in {
-      gitRepoWithCommitResource.use { case (repo, vcs) =>
-        IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
-          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-            case Left(e: RuntimeException) =>
-              (e.getMessage must contain("untracked files")) and
-                (e.getMessage must contain("untracked.txt"))
-            case other                     =>
-              ko(s"Expected RuntimeException but got $other")
-          }
-      }
-    }
-
-    "succeed with untracked files when ignoreUntracked is true" in {
-      gitRepoWithCommitResource.use { case (repo, vcs) =>
-        IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
-          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = true).map { result =>
-            result.currentHash must not(beEmpty[String])
-          }
-      }
+  test("checkCleanFromVcs - succeed with untracked files when ignoreUntracked is true") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
+        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = true).map { result =>
+          assert(result.currentHash.nonEmpty)
+        }
     }
   }
 
@@ -126,5 +120,4 @@ class VcsOpsSpec extends Specification with CatsEffect {
         }
       }
     }
-
 }

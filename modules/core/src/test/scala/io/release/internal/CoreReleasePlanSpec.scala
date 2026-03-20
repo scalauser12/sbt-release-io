@@ -1,57 +1,57 @@
 package io.release.internal
 
-import org.specs2.mutable.Specification
+import munit.FunSuite
 
-class CoreReleasePlanSpec extends Specification {
+class CoreReleasePlanSpec extends FunSuite {
 
-  "CoreReleasePlan.build" should {
+  test("CoreReleasePlan.build - carry only stable flags and CLI overrides into the plan") {
+    val inputs = CoreReleasePlan.Inputs(
+      useDefaults = true,
+      skipTests = true,
+      skipPublish = false,
+      interactive = true,
+      crossBuild = true,
+      releaseVersionOverride = Some("1.2.3"),
+      nextVersionOverride = Some("1.2.4-SNAPSHOT"),
+      tagDefault = Some("k")
+    )
 
-    "carry only stable flags and CLI overrides into the plan" in {
-      val inputs = CoreReleasePlan.Inputs(
-        useDefaults = true,
-        skipTests = true,
-        skipPublish = false,
-        interactive = true,
-        crossBuild = true,
-        releaseVersionOverride = Some("1.2.3"),
-        nextVersionOverride = Some("1.2.4-SNAPSHOT"),
-        tagDefault = Some("k")
-      )
+    val plan = CoreReleasePlan.build(inputs)
 
-      val plan = CoreReleasePlan.build(inputs)
-
-      (plan.flags must_== ExecutionFlags(
+    assertEquals(
+      plan.flags,
+      ExecutionFlags(
         useDefaults = true,
         skipTests = true,
         skipPublish = false,
         interactive = true,
         crossBuild = true
-      )) and
-        (plan.releaseVersionOverride must beSome("1.2.3")) and
-        (plan.nextVersionOverride must beSome("1.2.4-SNAPSHOT")) and
-        (plan.tagDefault must beSome("k"))
-    }
-
-    "leave optional overrides empty when they are not provided" in {
-      val plan = CoreReleasePlan.build(
-        CoreReleasePlan.Inputs(
-          useDefaults = false,
-          skipTests = false,
-          skipPublish = true,
-          interactive = false,
-          crossBuild = false,
-          releaseVersionOverride = None,
-          nextVersionOverride = None,
-          tagDefault = None
-        )
       )
+    )
+    assertEquals(plan.releaseVersionOverride, Some("1.2.3"))
+    assertEquals(plan.nextVersionOverride, Some("1.2.4-SNAPSHOT"))
+    assertEquals(plan.tagDefault, Some("k"))
+  }
 
-      (plan.releaseVersionOverride must beNone) and
-        (plan.nextVersionOverride must beNone) and
-        (plan.flags.interactive must beFalse) and
-        (plan.flags.useDefaults must beFalse) and
-        (plan.flags.skipPublish must beTrue) and
-        (plan.tagDefault must beNone)
-    }
+  test("CoreReleasePlan.build - leave optional overrides empty when they are not provided") {
+    val plan = CoreReleasePlan.build(
+      CoreReleasePlan.Inputs(
+        useDefaults = false,
+        skipTests = false,
+        skipPublish = true,
+        interactive = false,
+        crossBuild = false,
+        releaseVersionOverride = None,
+        nextVersionOverride = None,
+        tagDefault = None
+      )
+    )
+
+    assertEquals(plan.releaseVersionOverride, None)
+    assertEquals(plan.nextVersionOverride, None)
+    assert(!plan.flags.interactive)
+    assert(!plan.flags.useDefaults)
+    assert(plan.flags.skipPublish)
+    assertEquals(plan.tagDefault, None)
   }
 }

@@ -35,9 +35,9 @@ lazy val commonSettings = Seq(
     )
   ),
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-effect"                % "3.6.3",
-    "org.specs2"    %% "specs2-core"                % "4.23.0" % Test,
-    "org.typelevel" %% "cats-effect-testing-specs2" % "1.7.0"  % Test
+    "org.typelevel" %% "cats-effect"       % "3.6.3",
+    "org.scalameta" %% "munit"             % "1.1.1" % Test,
+    "org.typelevel" %% "munit-cats-effect" % "2.1.0" % Test
   ),
   scalacOptions ++= Seq(
     "-deprecation",
@@ -50,7 +50,8 @@ lazy val commonSettings = Seq(
       sys.props.get("sbt.version").map(v => s"-Dsbt.version=$v").toSeq
   },
   scriptedBufferLog             := true,
-  scriptedParallelInstances     := 4
+  scriptedParallelInstances     := 4,
+  testFrameworks += new TestFramework("munit.Framework")
 )
 
 lazy val core = (project in file("modules/core"))

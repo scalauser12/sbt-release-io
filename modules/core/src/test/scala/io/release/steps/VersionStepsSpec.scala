@@ -4,16 +4,15 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import io.release.TestSupport
 import io.release.internal.{CoreReleasePlan, ExecutionFlags}
-import org.specs2.mutable.Specification
+import munit.FunSuite
 
 import java.io.File
 import java.nio.file.Files
 
-class VersionStepsSpec extends Specification {
+class VersionStepsSpec extends FunSuite {
 
-  "VersionSteps.resolveVersionPlan" should {
-
-    "use live version settings even when a startup plan is attached" in withTempDir { dir =>
+  test("resolveVersionPlan - use live version settings even when a startup plan is attached") {
+    withTempDir { dir =>
       val resolvedFile = new File(dir, "resolved-version.sbt")
       val state        =
         CoreReleasePlan.attach(
@@ -43,78 +42,88 @@ class VersionStepsSpec extends Specification {
           )
       )
 
-      (result.versionFile must_== resolvedFile) and
-        (result.releaseVersionOverride must beSome("1.2.3")) and
-        (result.nextVersionOverride must beSome("1.2.4-SNAPSHOT")) and
-        (result.useGlobalVersion must beTrue) and
-        (result.readVersion(resolvedFile).unsafeRunSync() must_== "1.2.3-SNAPSHOT") and
-        (result.versionFileContents(resolvedFile, "1.2.3").unsafeRunSync() must_== "resolved=1.2.3")
+      assertEquals(result.versionFile, resolvedFile)
+      assertEquals(result.releaseVersionOverride, Some("1.2.3"))
+      assertEquals(result.nextVersionOverride, Some("1.2.4-SNAPSHOT"))
+      assert(result.useGlobalVersion)
+      assertEquals(result.readVersion(resolvedFile).unsafeRunSync(), "1.2.3-SNAPSHOT")
+      assertEquals(
+        result.versionFileContents(resolvedFile, "1.2.3").unsafeRunSync(),
+        "resolved=1.2.3"
+      )
     }
-
-    "delegate live resolution to CoreVersionResolver and read overrides from plan" in
-      withTempDir { dir =>
-        val fallbackFile = new File(dir, "fallback-version.sbt")
-        var resolverRuns = 0
-        val state        =
-          CoreReleasePlan.attach(
-            TestSupport.dummyState(dir),
-            CoreReleasePlan(
-              flags = ExecutionFlags(
-                useDefaults = false,
-                skipTests = false,
-                skipPublish = false,
-                interactive = false,
-                crossBuild = false
-              ),
-              releaseVersionOverride = Some("2.0.0"),
-              nextVersionOverride = Some("2.0.1-SNAPSHOT"),
-              tagDefault = None
-            )
-          )
-
-        val result = VersionSteps.resolveVersionPlan(
-          state,
-          _ => {
-            resolverRuns += 1
-            VersionSteps.ResolvedSettings(
-              versionFile = fallbackFile,
-              readVersion = _ => IO.pure("1.9.9-SNAPSHOT"),
-              versionFileContents = (_, version) => IO.pure(s"fallback=$version"),
-              useGlobalVersion = false
-            )
-          }
-        )
-
-        (resolverRuns must_== 1) and
-          (result.versionFile must_== fallbackFile) and
-          (result.releaseVersionOverride must beSome("2.0.0")) and
-          (result.nextVersionOverride must beSome("2.0.1-SNAPSHOT")) and
-          (result.useGlobalVersion must beFalse) and
-          (result.readVersion(fallbackFile).unsafeRunSync() must_== "1.9.9-SNAPSHOT") and
-          (result
-            .versionFileContents(fallbackFile, "2.0.0")
-            .unsafeRunSync() must_== "fallback=2.0.0")
-      }
   }
 
-  "VersionSteps.defaultReadVersion" should {
+  test(
+    "resolveVersionPlan - delegate live resolution to CoreVersionResolver and read overrides"
+  ) {
+    withTempDir { dir =>
+      val fallbackFile = new File(dir, "fallback-version.sbt")
+      var resolverRuns = 0
+      val state        =
+        CoreReleasePlan.attach(
+          TestSupport.dummyState(dir),
+          CoreReleasePlan(
+            flags = ExecutionFlags(
+              useDefaults = false,
+              skipTests = false,
+              skipPublish = false,
+              interactive = false,
+              crossBuild = false
+            ),
+            releaseVersionOverride = Some("2.0.0"),
+            nextVersionOverride = Some("2.0.1-SNAPSHOT"),
+            tagDefault = None
+          )
+        )
 
-    "parse a standard version line" in withTempDir { dir =>
-      val f = writeVersionFile(dir, """ThisBuild / version := "1.2.3-SNAPSHOT"""")
-      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "1.2.3-SNAPSHOT"
+      val result = VersionSteps.resolveVersionPlan(
+        state,
+        _ => {
+          resolverRuns += 1
+          VersionSteps.ResolvedSettings(
+            versionFile = fallbackFile,
+            readVersion = _ => IO.pure("1.9.9-SNAPSHOT"),
+            versionFileContents = (_, version) => IO.pure(s"fallback=$version"),
+            useGlobalVersion = false
+          )
+        }
+      )
+
+      assertEquals(resolverRuns, 1)
+      assertEquals(result.versionFile, fallbackFile)
+      assertEquals(result.releaseVersionOverride, Some("2.0.0"))
+      assertEquals(result.nextVersionOverride, Some("2.0.1-SNAPSHOT"))
+      assert(!result.useGlobalVersion)
+      assertEquals(result.readVersion(fallbackFile).unsafeRunSync(), "1.9.9-SNAPSHOT")
+      assertEquals(
+        result.versionFileContents(fallbackFile, "2.0.0").unsafeRunSync(),
+        "fallback=2.0.0"
+      )
     }
+  }
 
-    "skip single-line // comments" in withTempDir { dir =>
+  test("defaultReadVersion - parse a standard version line") {
+    withTempDir { dir =>
+      val f = writeVersionFile(dir, """ThisBuild / version := "1.2.3-SNAPSHOT"""")
+      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "1.2.3-SNAPSHOT")
+    }
+  }
+
+  test("defaultReadVersion - skip single-line // comments") {
+    withTempDir { dir =>
       val f = writeVersionFile(
         dir,
         """// version := "9.9.9"
           |version := "0.1.0"
           |""".stripMargin
       )
-      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0"
+      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "0.1.0")
     }
+  }
 
-    "skip versions inside multiline block comments" in withTempDir { dir =>
+  test("defaultReadVersion - skip versions inside multiline block comments") {
+    withTempDir { dir =>
       val f = writeVersionFile(
         dir,
         """/*
@@ -123,20 +132,27 @@ class VersionStepsSpec extends Specification {
           |ThisBuild / version := "0.1.0-SNAPSHOT"
           |""".stripMargin
       )
-      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0-SNAPSHOT"
+      assertEquals(
+        VersionSteps.defaultReadVersion(f).unsafeRunSync(),
+        "0.1.0-SNAPSHOT"
+      )
     }
+  }
 
-    "skip single-line block comments" in withTempDir { dir =>
+  test("defaultReadVersion - skip single-line block comments") {
+    withTempDir { dir =>
       val f = writeVersionFile(
         dir,
         """/* version := "9.9.9" */
           |version := "0.1.0"
           |""".stripMargin
       )
-      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0"
+      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "0.1.0")
     }
+  }
 
-    "skip block comments with *-prefixed lines" in withTempDir { dir =>
+  test("defaultReadVersion - skip block comments with *-prefixed lines") {
+    withTempDir { dir =>
       val f = writeVersionFile(
         dir,
         """/*
@@ -145,7 +161,7 @@ class VersionStepsSpec extends Specification {
           |version := "0.1.0"
           |""".stripMargin
       )
-      VersionSteps.defaultReadVersion(f).unsafeRunSync() must_== "0.1.0"
+      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "0.1.0")
     }
   }
 

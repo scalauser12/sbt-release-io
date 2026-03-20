@@ -1,35 +1,29 @@
 package io.release.steps
 
-import cats.effect.testing.specs2.CatsEffect
 import cats.effect.{IO, Resource}
 import io.release.{ReleaseContext, TestSupport}
-import org.specs2.mutable.Specification
+import munit.CatsEffectSuite
 
 import java.io.File
 import java.nio.file.Files
-class VcsStepsSpec extends Specification with CatsEffect {
 
-  "VcsSteps.pushChanges.validate" should {
+class VcsStepsSpec extends CatsEffectSuite {
 
-    "allow validation to pass with a broken tracking remote when upstream is configured" in {
-      releaseContextResource.use { ctx =>
-        VcsSteps.pushChanges.validate(ctx).map { result =>
-          result must beEqualTo(())
-        }
+  test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
+    releaseContextResource.use { ctx =>
+      VcsSteps.pushChanges.validate(ctx).map { result =>
+        assertEquals(result, ())
       }
     }
   }
 
-  "VcsSteps.pushChanges.execute" should {
-
-    "fail during remote preflight in non-interactive mode before pushing" in {
-      releaseContextResource.use { ctx =>
-        VcsSteps.pushChanges.execute(ctx).attempt.map {
-          case Left(err: IllegalStateException) =>
-            err.getMessage must contain("Aborting the release due to remote check failure.")
-          case other                            =>
-            ko(s"Expected IllegalStateException but got $other")
-        }
+  test("pushChanges.execute - fail during remote preflight in non-interactive mode") {
+    releaseContextResource.use { ctx =>
+      VcsSteps.pushChanges.execute(ctx).attempt.map {
+        case Left(err: IllegalStateException) =>
+          assert(err.getMessage.contains("Aborting the release due to remote check failure."))
+        case other                            =>
+          fail(s"Expected IllegalStateException but got $other")
       }
     }
   }
@@ -49,5 +43,4 @@ class VcsStepsSpec extends Specification with CatsEffect {
         )
       }
     }
-
 }
