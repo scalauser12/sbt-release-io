@@ -96,13 +96,15 @@ private[release] object VersionSteps {
   val inquireVersions: ReleaseStepIO = ReleaseStepIO(
     name = "inquire-versions",
     validate = ctx =>
-      IO.blocking {
-        val versionFile = resolveVersionPlan(ctx.state).versionFile
+      IO.blocking(resolveVersionPlan(ctx.state).versionFile).flatMap { versionFile =>
         if (!versionFile.exists())
-          throw new IllegalStateException(
-            s"Version file not found: ${versionFile.getPath}. " +
-              """Create it with contents: version := "0.1.0-SNAPSHOT""""
+          IO.raiseError(
+            new IllegalStateException(
+              s"Version file not found: ${versionFile.getPath}. " +
+                """Create it with contents: version := "0.1.0-SNAPSHOT""""
+            )
           )
+        else IO.unit
       },
     execute = { ctx =>
       final case class InquireData(

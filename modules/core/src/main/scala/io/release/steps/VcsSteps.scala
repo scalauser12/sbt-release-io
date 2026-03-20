@@ -9,7 +9,7 @@ import io.release.vcs.Vcs
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
-import sbt.internal as _
+import sbt.{internal as _, *}
 
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
