@@ -9,6 +9,7 @@ import sbt.{ProjectRef, State}
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 import java.nio.file.Files
+import scala.annotation.tailrec
 
 class ChangeDetectionSpec extends CatsEffectSuite {
 
@@ -41,12 +42,12 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           versionFile = new File(repo, "core/version.sbt")
         )
 
-        detectChanged(vcs, Seq(project), env.state).map { changed =>
-          Thread.sleep(50) // allow async log appender to flush
-          val logs = env.consoleBuffer.toString("UTF-8")
-          assertEquals(changed.map(_.name), Seq("core"))
-          assert(logs.contains("git describe failed for core"))
-          assert(!logs.contains("No previous tag matching"))
+        detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
+          awaitLogs(env, required = Seq("git describe failed for core")).map { logs =>
+            assertEquals(changed.map(_.name), Seq("core"))
+            assert(logs.contains("git describe failed for core"))
+            assert(!logs.contains("No previous tag matching"))
+          }
         }
       }
     }
@@ -78,13 +79,13 @@ class ChangeDetectionSpec extends CatsEffectSuite {
             versionFile = new File(repo, "core/version.sbt")
           )
 
-          detectChanged(vcs, Seq(project), env.state).map { changed =>
-            Thread.sleep(50) // allow async log appender to flush
-            val logs = env.consoleBuffer.toString("UTF-8")
-            assertEquals(changed.map(_.name), Seq("core"))
-            assert(logs.contains("is not under VCS baseDir"))
-            assert(logs.contains(outsideBaseDir.getAbsolutePath))
-            assert(logs.contains(repo.getAbsolutePath))
+          detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
+            awaitLogs(env, required = Seq("is not under VCS baseDir")).map { logs =>
+              assertEquals(changed.map(_.name), Seq("core"))
+              assert(logs.contains("is not under VCS baseDir"))
+              assert(logs.contains(outsideBaseDir.getAbsolutePath))
+              assert(logs.contains(repo.getAbsolutePath))
+            }
           }
         }
     }
@@ -120,12 +121,13 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           versionFile = new File(repo, "core/version.sbt")
         )
 
-        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).map { changed =>
-          Thread.sleep(50) // allow async log appender to flush
-          val logs = env.consoleBuffer.toString("UTF-8")
-          assertEquals(changed.map(_.name), Seq("core"))
-          assert(logs.contains("Shared path change(s) detected"))
-          assert(logs.contains("build.sbt"))
+        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
+          changed =>
+            awaitLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
+              assertEquals(changed.map(_.name), Seq("core"))
+              assert(logs.contains("Shared path change(s) detected"))
+              assert(logs.contains("build.sbt"))
+            }
         }
       }
     }
@@ -157,11 +159,13 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           versionFile = new File(repo, "core/version.sbt")
         )
 
-        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).map { changed =>
-          Thread.sleep(50) // allow async log appender to flush
-          val logs = env.consoleBuffer.toString("UTF-8")
-          assert(changed.isEmpty)
-          assert(!logs.contains("Shared path change(s) detected"))
+        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
+          changed =>
+            awaitLogs(env, required = Seq("core unchanged since core-v0.1.0")).map { logs =>
+              assert(changed.isEmpty)
+              assert(logs.contains("core unchanged since core-v0.1.0"))
+              assert(!logs.contains("Shared path change(s) detected"))
+            }
         }
       }
     }
@@ -211,10 +215,9 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           versionFile = new File(repo, "api/version.sbt")
         )
 
-        detectChanged(vcs, Seq(core, api), env.state, sharedPaths = Seq("build.sbt")).map {
+        detectChanged(vcs, Seq(core, api), env.state, sharedPaths = Seq("build.sbt")).flatMap {
           changed =>
-            Thread.sleep(50) // allow async log appender to flush
-            assertEquals(changed.map(_.name), Seq("core"))
+            IO(assertEquals(changed.map(_.name), Seq("core")))
         }
       }
     }
@@ -250,9 +253,8 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           versionFile = new File(repo, "core/version.sbt")
         )
 
-        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq.empty).map { changed =>
-          Thread.sleep(50) // allow async log appender to flush
-          assert(changed.isEmpty)
+        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq.empty).flatMap { changed =>
+          IO(assert(changed.isEmpty))
         }
       }
     }
@@ -305,11 +307,11 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           env.state,
           sharedPaths = Seq("build.sbt"),
           tagStrategy = MonorepoTagStrategy.Unified
-        ).map { changed =>
-          Thread.sleep(50) // allow async log appender to flush
-          val logs = env.consoleBuffer.toString("UTF-8")
-          assertEquals(changed.map(_.name), Seq("core", "api"))
-          assert(logs.contains("Shared path change(s) detected"))
+        ).flatMap { changed =>
+          awaitLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
+            assertEquals(changed.map(_.name), Seq("core", "api"))
+            assert(logs.contains("Shared path change(s) detected"))
+          }
         }
       }
     }
@@ -339,14 +341,43 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           versionFile = new File(repo, "version.sbt")
         )
 
-        detectChanged(vcs, Seq(project), env.state).map { changed =>
-          Thread.sleep(50) // allow async log appender to flush
-          val logs = env.consoleBuffer.toString("UTF-8")
-          assert(changed.isEmpty)
-          assert(logs.contains("root unchanged since root-v0.1.0"))
+        detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
+          awaitLogs(env, required = Seq("root unchanged since root-v0.1.0")).map { logs =>
+            assert(changed.isEmpty)
+            assert(logs.contains("root unchanged since root-v0.1.0"))
+          }
         }
       }
     }
+  }
+
+  /** Wait for specific log output and fail fast if the expected anchors never appear. */
+  private def awaitLogs(
+      env: TestEnv,
+      required: Seq[String],
+      timeoutMs: Long = 1000L,
+      pollMs: Long = 10L
+  ): IO[String] = IO.blocking {
+    val deadline = System.nanoTime() + timeoutMs * 1000000L
+
+    @tailrec
+    def loop(): String = {
+      val logs     = env.consoleBuffer.toString("UTF-8")
+      val timedOut = System.nanoTime() >= deadline
+      val missing  = required.filterNot(logs.contains)
+
+      if (missing.isEmpty) logs
+      else if (timedOut)
+        throw new java.util.concurrent.TimeoutException(
+          s"Timed out after ${timeoutMs}ms waiting for log(s): ${missing.mkString(", ")}"
+        )
+      else {
+        Thread.sleep(pollMs)
+        loop()
+      }
+    }
+
+    loop()
   }
 
   private val perProjectTagName: (String, String) => String =

@@ -186,66 +186,69 @@ private[monorepo] object MonorepoComposer {
       project: ProjectReleaseInfo,
       action: MonorepoContext => IO[MonorepoContext]
   )(ctx: MonorepoContext): IO[MonorepoContext] = IO.defer {
-    val extracted     = SbtRuntime.extracted(ctx.state)
-    val crossVersions =
-      (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
-    val entryVersion  =
-      (extracted.currentRef / scalaVersion)
-        .get(extracted.structure.data)
-        .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
+    IO.blocking {
+      val extracted     = SbtRuntime.extracted(ctx.state)
+      val crossVersions =
+        (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
+      val entryVersion  =
+        (extracted.currentRef / scalaVersion)
+          .get(extracted.structure.data)
+          .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
+      (crossVersions, entryVersion)
+    }.flatMap { case (crossVersions, entryVersion) =>
+      def switchTo(version: String)(currentCtx: MonorepoContext): IO[MonorepoContext] =
+        SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
 
-    def switchTo(version: String)(currentCtx: MonorepoContext): IO[MonorepoContext] =
-      SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
+      def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
+        entryVersion match {
+          case Some(ver) => switchTo(ver)(currentCtx)
+          case None      => IO.pure(currentCtx)
+        }
 
-    def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
-      entryVersion match {
-        case Some(ver) => switchTo(ver)(currentCtx)
-        case None      => IO.pure(currentCtx)
-      }
-
-    if (crossVersions.isEmpty)
-      IO.raiseError(
-        new IllegalStateException(
-          s"$LogPrefix Cross-build enabled but ${project.name} has empty crossScalaVersions"
+      if (crossVersions.isEmpty)
+        IO.raiseError(
+          new IllegalStateException(
+            s"$LogPrefix Cross-build enabled but ${project.name} has empty crossScalaVersions"
+          )
         )
-      )
-    else {
-      def restoreOnError(err: Throwable): IO[MonorepoContext] =
-        (entryVersion match {
-          case Some(ver) => switchTo(ver)(ctx).void
-          case None      => IO.unit
-        }).attempt *> IO.raiseError(err)
+      else {
+        def restoreOnError(err: Throwable): IO[MonorepoContext] =
+          (entryVersion match {
+            case Some(ver) => switchTo(ver)(ctx).void
+            case None      => IO.unit
+          }).attempt *> IO.raiseError(err)
 
-      if (crossVersions.length == 1)
-        (for {
-          _        <- IO.blocking(
-                        ctx.state.log.info(
-                          s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
+        if (crossVersions.length == 1)
+          (for {
+            _        <- IO.blocking(
+                          ctx.state.log.info(
+                            s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
+                          )
                         )
-                      )
-          switched <- switchTo(crossVersions.head)(ctx)
-          result   <- action(switched)
-          restored <- restoreEntry(result)
-        } yield restored).handleErrorWith(restoreOnError)
-      else
-        crossVersions.toList
-          .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-            ioCtx.flatMap { currentCtx =>
-              if (currentCtx.failed) IO.pure(currentCtx)
-              else
-                for {
-                  _        <- IO.blocking(
-                                currentCtx.state.log.info(
-                                  s"$LogPrefix Cross-building with Scala $version"
+            switched <- switchTo(crossVersions.head)(ctx)
+            result   <- action(switched)
+            restored <- restoreEntry(result)
+          } yield restored).handleErrorWith(restoreOnError)
+        else
+          crossVersions.toList
+            .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+              ioCtx.flatMap { currentCtx =>
+                if (currentCtx.failed) IO.pure(currentCtx)
+                else
+                  for {
+                    _        <- IO.blocking(
+                                  currentCtx.state.log.info(
+                                    s"$LogPrefix Cross-building with Scala $version"
+                                  )
                                 )
-                              )
-                  switched <- switchTo(version)(currentCtx)
-                  result   <- action(switched)
-                } yield result
+                    switched <- switchTo(version)(currentCtx)
+                    result   <- action(switched)
+                  } yield result
+              }
             }
-          }
-          .flatMap(restoreEntry)
-          .handleErrorWith(restoreOnError)
+            .flatMap(restoreEntry)
+            .handleErrorWith(restoreOnError)
+      }
     }
   }
 }

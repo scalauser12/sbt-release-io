@@ -24,14 +24,16 @@ private[monorepo] object MonorepoVersionSteps {
     name = "inquire-versions",
     validate = (ctx, project) =>
       MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
-        if (!versionInputs.versionFile.exists())
-          IO.raiseError(
-            new IllegalStateException(
-              s"Version file not found for ${project.name}: ${versionInputs.versionFile.getPath}. " +
-                """Create it with contents: version := "0.1.0-SNAPSHOT""""
+        IO.blocking(versionInputs.versionFile.exists()).flatMap { exists =>
+          if (!exists)
+            IO.raiseError(
+              new IllegalStateException(
+                s"Version file not found for ${project.name}: ${versionInputs.versionFile.getPath}. " +
+                  """Create it with contents: version := "0.1.0-SNAPSHOT""""
+              )
             )
-          )
-        else IO.unit
+          else IO.unit
+        }
       },
     execute = (ctx, project) =>
       project.versions match {

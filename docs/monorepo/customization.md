@@ -10,8 +10,8 @@ Construct steps directly through the canonical `MonorepoStepIO` builders in `bui
 or `project/*.scala`:
 
 ```scala
-import cats.effect.IO
-import io.release.monorepo.MonorepoStepIO
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoStepIO
 
 // Global step — runs once, logs a release summary
 val printSummary = MonorepoStepIO
@@ -122,8 +122,8 @@ All step construction goes through the fluent builder API on `MonorepoStepIO`. F
 validation or cross-build, chain the corresponding builder methods:
 
 ```scala
-import cats.effect.IO
-import io.release.monorepo.MonorepoStepIO
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoStepIO
 
 // Global validation-only step — fails the release if not on main
 val checkBranch = MonorepoStepIO
@@ -181,7 +181,7 @@ releaseIOMonorepoProcess := insertStepBefore(releaseIOMonorepoProcess.value, "ta
 )
 
 // Replace the entire process (step vals from MonorepoReleaseSteps)
-import io.release.monorepo.steps.MonorepoReleaseSteps.*
+import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.*
 
 releaseIOMonorepoProcess := Seq(
   initializeVcs, checkCleanWorkingDir, resolveReleaseOrder,
@@ -257,7 +257,7 @@ val fetchMetadata: HttpClient => MonorepoStepIO = MonorepoStepIO
 
 The plugin example above already shows `.executeAction` for side-effect-only steps.
 
-Use `insertAfter` / `insertBefore` (shown in [Customizing the release process](#customizing-the-release-process)) to insert resource-aware steps at specific positions. Override `monorepoReleaseProcess` directly to build the step sequence from scratch — plain steps from `MonorepoReleaseSteps` and resource-aware steps can be mixed freely via implicit conversion.
+In `build.sbt`, use `insertStepAfter` / `insertStepBefore` to position plain steps. Inside `MonorepoReleasePluginLike` subclasses, use the protected `insertAfter` / `insertBefore` helpers when inserting resource-aware steps into `monorepoReleaseProcess`. Plain steps from `MonorepoReleaseSteps` and resource-aware steps can still be mixed freely via implicit conversion.
 
 > **Common pitfalls** with custom plugins:
 > - `import sbt.*` shadows `io.release` — use `_root_` imports

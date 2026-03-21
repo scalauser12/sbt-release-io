@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.{IO, Ref, Resource}
 import io.release.TestSupport
+import io.release.internal.SbtCompat
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
@@ -151,6 +152,46 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
             .map(_.getMessage),
           Some("core failed")
         )
+      }
+    }
+  }
+
+  test(
+    "compose - detect FailureCommand sentinel after per-project execution and skip later steps"
+  ) {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val projects = Seq(dummyProject("core"), dummyProject("api"))
+        val pCtx     = ctx.withProjects(projects)
+
+        val injectFailure = MonorepoStepIO.PerProject(
+          name = "inject-failure-command",
+          execute = (c, project) =>
+            observed.update(_ :+ project.name).as {
+              if (project.name == "core")
+                c.withState(
+                  c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+                )
+              else c
+            }
+        )
+
+        val skipped = MonorepoStepIO.Global(
+          name = "skipped-after-failure",
+          execute = c => observed.update(_ :+ "after").as(c)
+        )
+
+        MonorepoStepIO
+          .compose(Seq(injectFailure, skipped))(pCtx)
+          .flatMap { result =>
+            observed.get.map { obs =>
+              assert(result.failed)
+              assertEquals(result.failureCause, None)
+              assertEquals(obs, List("core", "api"))
+              assertEquals(result.state.remainingCommands, Nil)
+              assertEquals(result.state.onFailure, None)
+            }
+          }
       }
     }
   }

@@ -5,8 +5,8 @@
 Define your own steps using the `ReleaseStepIO.step(name)` builder and add them to the release process alongside the built-in ones (see [Resource-aware steps](#resource-aware-steps-builder-api) for the full builder method reference):
 
 ```scala
-import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseStepIO}
+import _root_.cats.effect.IO
+import _root_.io.release.{ReleaseContext, ReleaseStepIO}
 
 // Log the planned release version
 val printVersion = ReleaseStepIO.step("print-version")

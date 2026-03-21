@@ -25,10 +25,10 @@ Example: compressing an already-built release archive and uploading it to an int
 service after `publishArtifacts`:
 
 ```scala
-import cats.effect.IO
+import _root_.cats.effect.IO
 import fs2.compression.Compression
 import fs2.io.file.{Files, Path}
-import io.release.ReleaseStepIO
+import _root_.io.release.ReleaseStepIO
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.{Method, Request, Uri}
 
@@ -61,7 +61,7 @@ val uploadArchive: ReleaseStepIO = ReleaseStepIO.step("upload-archive")
 Place this step after `publishArtifacts` so it runs only after the standard repository publish succeeds:
 
 ```scala
-import io.release.steps.ReleaseSteps
+import _root_.io.release.steps.ReleaseSteps
 
 releaseIOProcess := ReleaseSteps.defaults.flatMap {
   case step if step.name == "publish-artifacts" => Seq(step, uploadArchive)

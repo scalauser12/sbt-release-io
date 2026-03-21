@@ -189,18 +189,18 @@ trait ReleasePluginIOLike[T]
       interactive: Boolean
   ): IO[ReleaseContext] = {
     val maybeVersions = state.get(ReleaseKeys.versions)
-    val base          = Project.extract(state).get(sbt.Keys.thisProject).base
 
-    Vcs.detect(base).handleError(_ => None).map { maybeVcs =>
-      ReleaseContext(
-        state = state,
-        versions = maybeVersions,
-        vcs = maybeVcs,
-        skipTests = skipTests,
-        skipPublish = skipPublish,
-        interactive = interactive
-      )
-    }
+    for {
+      base     <- IO.blocking(Project.extract(state).get(sbt.Keys.thisProject).base)
+      maybeVcs <- Vcs.detect(base).handleError(_ => None)
+    } yield ReleaseContext(
+      state = state,
+      versions = maybeVersions,
+      vcs = maybeVcs,
+      skipTests = skipTests,
+      skipPublish = skipPublish,
+      interactive = interactive
+    )
   }
 
   /** Execute the release process: parse arguments, acquire the resource, run all steps.

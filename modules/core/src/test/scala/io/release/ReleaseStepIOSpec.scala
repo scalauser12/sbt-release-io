@@ -102,6 +102,8 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
               assert(result.failed)
               assertEquals(result.failureCause, None)
               assertEquals(obs, List("execute1"))
+              assertEquals(result.state.remainingCommands, Nil)
+              assertEquals(result.state.onFailure, None)
             }
           }
       }

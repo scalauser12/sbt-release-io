@@ -69,66 +69,72 @@ private[release] object ReleaseComposer {
   private def runCrossBuild(
       action: ReleaseContext => IO[ReleaseContext]
   )(ctx: ReleaseContext): IO[ReleaseContext] = IO.defer {
-    val extracted      = SbtRuntime.extracted(ctx.state)
-    val crossVersions  = extracted.get(crossScalaVersions)
-    val currentVersion =
-      (extracted.currentRef / scalaVersion)
-        .get(extracted.structure.data)
-        .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
-
-    if (crossVersions.isEmpty)
-      IO.raiseError(
-        new IllegalStateException(
-          s"$LogPrefix Cross-build enabled but crossScalaVersions is empty"
+    IO.blocking {
+      val extracted      = SbtRuntime.extracted(ctx.state)
+      val crossVersions  = extracted.get(crossScalaVersions)
+      val currentVersion =
+        (extracted.currentRef / scalaVersion)
+          .get(extracted.structure.data)
+          .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
+      (crossVersions, currentVersion)
+    }.flatMap { case (crossVersions, currentVersion) =>
+      if (crossVersions.isEmpty)
+        IO.raiseError(
+          new IllegalStateException(
+            s"$LogPrefix Cross-build enabled but crossScalaVersions is empty"
+          )
         )
-      )
-    else if (crossVersions.length == 1)
-      (for {
-        _        <- IO.blocking(
-                      ctx.state.log.info(
-                        s"$LogPrefix Cross-building with Scala ${crossVersions.head}"
-                      )
-                    )
-        switched <- SbtRuntime.switchScalaVersion(ctx.state, crossVersions.head).map(ctx.withState)
-        result   <- action(switched)
-        restored <- currentVersion match {
-                      case Some(ver) =>
-                        SbtRuntime.switchScalaVersion(result.state, ver).map(result.withState)
-                      case None      => IO.pure(result)
-                    }
-      } yield restored).handleErrorWith { err =>
-        (currentVersion match {
-          case Some(ver) => SbtRuntime.switchScalaVersion(ctx.state, ver).void
-          case None      => IO.unit
-        }).attempt *> IO.raiseError(err)
-      }
-    else {
-      val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-        for {
-          currentCtx <- ioCtx
-          _          <- IO.blocking(
-                          currentCtx.state.log.info(s"$LogPrefix Cross-building with Scala $version")
+      else if (crossVersions.length == 1)
+        (for {
+          _        <- IO.blocking(
+                        ctx.state.log.info(
+                          s"$LogPrefix Cross-building with Scala ${crossVersions.head}"
                         )
-          newCtx     <-
-            SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
-          result     <- action(newCtx)
-        } yield result
-      }
-
-      finalIO
-        .flatMap { finalCtx =>
-          currentVersion match {
-            case Some(ver) =>
-              SbtRuntime.switchScalaVersion(finalCtx.state, ver).map(finalCtx.withState)
-            case None      => IO.pure(finalCtx)
-          }
-        }
-        .handleErrorWith { err =>
+                      )
+          switched <-
+            SbtRuntime.switchScalaVersion(ctx.state, crossVersions.head).map(ctx.withState)
+          result   <- action(switched)
+          restored <- currentVersion match {
+                        case Some(ver) =>
+                          SbtRuntime.switchScalaVersion(result.state, ver).map(result.withState)
+                        case None      => IO.pure(result)
+                      }
+        } yield restored).handleErrorWith { err =>
           (currentVersion match {
             case Some(ver) => SbtRuntime.switchScalaVersion(ctx.state, ver).void
             case None      => IO.unit
           }).attempt *> IO.raiseError(err)
         }
+      else {
+        val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+          for {
+            currentCtx <- ioCtx
+            _          <- IO.blocking(
+                            currentCtx.state.log.info(
+                              s"$LogPrefix Cross-building with Scala $version"
+                            )
+                          )
+            newCtx     <-
+              SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
+            result     <- action(newCtx)
+          } yield result
+        }
+
+        finalIO
+          .flatMap { finalCtx =>
+            currentVersion match {
+              case Some(ver) =>
+                SbtRuntime.switchScalaVersion(finalCtx.state, ver).map(finalCtx.withState)
+              case None      => IO.pure(finalCtx)
+            }
+          }
+          .handleErrorWith { err =>
+            (currentVersion match {
+              case Some(ver) => SbtRuntime.switchScalaVersion(ctx.state, ver).void
+              case None      => IO.unit
+            }).attempt *> IO.raiseError(err)
+          }
+      }
     }
   }
 }

@@ -5,8 +5,8 @@
 In `build.sbt`:
 
 ```scala
-import cats.effect.IO
-import io.release.steps.ReleaseSteps
+import _root_.cats.effect.IO
+import _root_.io.release.steps.ReleaseSteps
 
 // Use default release steps (recommended)
 releaseIOProcess := ReleaseSteps.defaults
@@ -58,7 +58,7 @@ app.version=0.1.0-SNAPSHOT
 Override the settings in `build.sbt`:
 
 ```scala
-import cats.effect.IO
+import _root_.cats.effect.IO
 
 releaseIOVersionFile := baseDirectory.value / "version.properties"
 
