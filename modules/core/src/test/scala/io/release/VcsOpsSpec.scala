@@ -164,6 +164,71 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("StubVcs - capture method parameters when requested") {
+    tempDirResource.use { dir =>
+      Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
+        val vcs = new StubVcs(dir, recordedCalls0 = Some(calls))
+
+        for {
+          _    <- vcs.existsTag("v1.0.0")
+          _    <- vcs.checkRemote("origin")
+          _    <- vcs.add("version.sbt", "build.sbt")
+          _    <- vcs.commit("release", sign = true, signOff = false)
+          _    <- vcs.tag("v1.0.0", "Release 1.0.0", sign = false, force = true)
+          _    <- vcs.pushChanges
+          seen <- calls.get
+        } yield assertEquals(
+          seen,
+          Vector(
+            StubVcsCall.ExistsTag("v1.0.0"),
+            StubVcsCall.CheckRemote("origin"),
+            StubVcsCall.Add(List("version.sbt", "build.sbt")),
+            StubVcsCall.Commit("release", sign = true, signOff = false),
+            StubVcsCall.Tag("v1.0.0", "Release 1.0.0", sign = false, force = true),
+            StubVcsCall.PushChanges
+          )
+        )
+      }
+    }
+  }
+
+  test("StubVcs - run canned write effects after recording") {
+    tempDirResource.use { dir =>
+      Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
+        Ref.of[IO, Vector[String]](Vector.empty).flatMap { effects =>
+          val vcs = new StubVcs(
+            dir,
+            recordedCalls0 = Some(calls),
+            add0 = effects.update(_ :+ "add"),
+            commit0 = effects.update(_ :+ "commit"),
+            tag0 = effects.update(_ :+ "tag"),
+            pushChanges0 = effects.update(_ :+ "push")
+          )
+
+          for {
+            _           <- vcs.add("version.sbt")
+            _           <- vcs.commit("release", sign = false, signOff = true)
+            _           <- vcs.tag("v1.0.0", "Release", sign = true, force = false)
+            _           <- vcs.pushChanges
+            seenCalls   <- calls.get
+            seenEffects <- effects.get
+          } yield {
+            assertEquals(
+              seenCalls,
+              Vector(
+                StubVcsCall.Add(List("version.sbt")),
+                StubVcsCall.Commit("release", sign = false, signOff = true),
+                StubVcsCall.Tag("v1.0.0", "Release", sign = true, force = false),
+                StubVcsCall.PushChanges
+              )
+            )
+            assertEquals(seenEffects, Vector("add", "commit", "tag", "push"))
+          }
+        }
+      }
+    }
+  }
+
   test("validatePushRemote - succeed when the tracking remote is reachable") {
     tempDirResource.use { dir =>
       VcsOps
@@ -350,8 +415,16 @@ private final class StubVcs(
     stagedFiles0: IO[Seq[String]] = IO.pure(Nil),
     untrackedFiles0: IO[Seq[String]] = IO.pure(Nil),
     status0: IO[String] = IO.pure(""),
-    checkRemote0: IO[Int] = IO.pure(0)
+    checkRemote0: IO[Int] = IO.pure(0),
+    add0: IO[Unit] = IO.unit,
+    commit0: IO[Unit] = IO.unit,
+    tag0: IO[Unit] = IO.unit,
+    pushChanges0: IO[Unit] = IO.unit,
+    recordedCalls0: Option[Ref[IO, Vector[StubVcsCall]]] = None
 ) extends Vcs {
+  private def record(call: StubVcsCall): IO[Unit] =
+    recordedCalls0.fold(IO.unit)(_.update(_ :+ call))
+
   override def commandName: String = "git"
 
   override def currentHash: IO[String]              = currentHash0
@@ -359,19 +432,37 @@ private final class StubVcs(
   override def trackingRemote: IO[String]           = trackingRemote0
   override def hasUpstream: IO[Boolean]             = hasUpstream0
   override def isBehindRemote: IO[Boolean]          = isBehindRemote0
-  override def existsTag(name: String): IO[Boolean] = existsTag0
+  override def existsTag(name: String): IO[Boolean] = record(StubVcsCall.ExistsTag(name)) *> existsTag0
   override def modifiedFiles: IO[Seq[String]]       = modifiedFiles0
   override def stagedFiles: IO[Seq[String]]         = stagedFiles0
   override def untrackedFiles: IO[Seq[String]]      = untrackedFiles0
   override def status: IO[String]                   = status0
-  override def checkRemote(remote: String): IO[Int] = checkRemote0
+  override def checkRemote(remote: String): IO[Int] =
+    record(StubVcsCall.CheckRemote(remote)) *> checkRemote0
 
-  override def add(files: String*): IO[Unit] = IO.unit
+  // This stub records write-operation arguments and can optionally run canned effects, but it
+  // does not model real VCS mutations.
+  override def add(files: String*): IO[Unit] =
+    record(StubVcsCall.Add(files.toList)) *> add0
 
-  override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit] = IO.unit
+  override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit] =
+    record(StubVcsCall.Commit(message, sign, signOff)) *> commit0
 
   override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
-    IO.unit
+    record(StubVcsCall.Tag(name, comment, sign, force)) *> tag0
 
-  override def pushChanges: IO[Unit] = IO.unit
+  override def pushChanges: IO[Unit] =
+    record(StubVcsCall.PushChanges) *> pushChanges0
+}
+
+private sealed trait StubVcsCall
+
+private object StubVcsCall {
+  final case class ExistsTag(name: String) extends StubVcsCall
+  final case class CheckRemote(remote: String) extends StubVcsCall
+  final case class Add(files: List[String]) extends StubVcsCall
+  final case class Commit(message: String, sign: Boolean, signOff: Boolean) extends StubVcsCall
+  final case class Tag(name: String, comment: String, sign: Boolean, force: Boolean)
+      extends StubVcsCall
+  case object PushChanges extends StubVcsCall
 }

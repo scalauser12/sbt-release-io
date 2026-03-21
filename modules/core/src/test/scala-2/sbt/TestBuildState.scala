@@ -3,7 +3,10 @@ package sbt
 import sbt.internal.*
 import sbt.nio.{Settings as NioSettings}
 
-/** Test-only adapter over sbt loader internals. Expect to update it when bumping sbt. */
+/** Test-only adapter over sbt loader internals. Expect to update it when bumping sbt.
+  * Behavioral coverage lives in `sbt.TestBuildStateSpec`, and CI compiles/tests this on both
+  * sbt lines.
+  */
 object TestBuildState {
 
   def apply(

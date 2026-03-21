@@ -3,15 +3,33 @@ package io.release.monorepo
 import sbt.ProjectRef
 
 import java.io.File
-import java.net.URI
+import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicLong
 
 object MonorepoTestSupport {
 
-  def dummyProject(name: String): ProjectReleaseInfo =
+  private val dummyBuildRoot = {
+    val dir = Files.createTempDirectory("sbt-release-io-monorepo-dummy-build").toFile
+    dir.deleteOnExit()
+    dir
+  }
+
+  private val nextDummyProjectId = new AtomicLong(0L)
+
+  def dummyProject(name: String): ProjectReleaseInfo = {
+    val projectId   = nextDummyProjectId.incrementAndGet()
+    val baseDir     = new File(dummyBuildRoot, s"$name-$projectId")
+    val versionFile = new File(baseDir, "version.sbt")
+
+    baseDir.mkdirs()
+    baseDir.deleteOnExit()
+    versionFile.deleteOnExit()
+
     ProjectReleaseInfo(
-      ref = ProjectRef(new URI("file:///tmp/test"), name),
+      ref = ProjectRef(dummyBuildRoot.toURI, name),
       name = name,
-      baseDir = new File(s"/tmp/test/$name"),
-      versionFile = new File(s"/tmp/test/$name/version.sbt")
+      baseDir = baseDir,
+      versionFile = versionFile
     )
+  }
 }

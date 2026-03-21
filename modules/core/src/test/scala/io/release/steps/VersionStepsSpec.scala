@@ -55,6 +55,34 @@ class VersionStepsSpec extends FunSuite {
     }
   }
 
+  test("resolveVersionPlan - leave overrides empty when no execution state is attached") {
+    withTempDir { dir =>
+      val liveFile = new File(dir, "live-version.sbt")
+      val ctx      = ReleaseContext(state = TestSupport.dummyState(dir))
+
+      val result = VersionSteps.resolveVersionPlan(
+        ctx,
+        _ =>
+          VersionSteps.ResolvedSettings(
+            versionFile = liveFile,
+            readVersion = _ => IO.pure("0.9.0-SNAPSHOT"),
+            versionFileContents = (_, version) => IO.pure(s"live=$version"),
+            useGlobalVersion = false
+          )
+      )
+
+      assertEquals(result.versionFile, liveFile)
+      assertEquals(result.releaseVersionOverride, None)
+      assertEquals(result.nextVersionOverride, None)
+      assert(!result.useGlobalVersion)
+      assertEquals(result.readVersion(liveFile).unsafeRunSync(), "0.9.0-SNAPSHOT")
+      assertEquals(
+        result.versionFileContents(liveFile, "1.0.0").unsafeRunSync(),
+        "live=1.0.0"
+      )
+    }
+  }
+
   test(
     "resolveVersionPlan - delegate live resolution to CoreVersionResolver and read overrides"
   ) {

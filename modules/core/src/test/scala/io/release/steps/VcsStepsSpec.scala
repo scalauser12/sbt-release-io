@@ -25,6 +25,22 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("checkCleanWorkingDir.validate - fail for a dirty tracked file in a loaded repo") {
+    gitRepoWithLoadedStateResource.use { case (repo, state) =>
+      IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
+        VcsSteps.checkCleanWorkingDir
+          .validate(ReleaseContext(state = state))
+          .attempt
+          .map {
+            case Left(err: IllegalStateException) =>
+              assert(err.getMessage.contains("unstaged modified files"))
+              assert(err.getMessage.contains("file.txt"))
+            case other                            =>
+              fail(s"Expected IllegalStateException but got $other")
+          }
+    }
+  }
+
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
     releaseContextResource.use { ctx =>
       VcsSteps.pushChanges.validate(ctx).map { result =>
@@ -68,6 +84,38 @@ class VcsStepsSpec extends CatsEffectSuite {
             case other                            =>
               fail(s"Expected IllegalStateException but got $other")
           }
+    }
+  }
+
+  test("tagRelease.execute - create the tag and keep the resulting context usable") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      val versionFile = new File(repo, "version.sbt")
+      val state = loadedState(
+        repo,
+        Seq(
+          sbt.Keys.packageOptions                       := Seq.empty,
+          io.release.ReleaseIO.releaseIOVersionFile         := versionFile,
+          io.release.ReleaseIO.releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+          io.release.ReleaseIO.releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+            useGlobalVersion = true
+          ),
+          io.release.ReleaseIO.releaseIOUseGlobalVersion    := true,
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.1",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.1"
+        )
+      )
+
+      for {
+        result <- VcsSteps.tagRelease.execute(
+                    ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+                  )
+        _      <- VcsSteps.checkCleanWorkingDir.validate(result)
+        tags   <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "v1.0.1"))
+      } yield {
+        assertEquals(tags.trim, "v1.0.1")
+        assertEquals(result.vcs.map(_.commandName), Some("git"))
+      }
     }
   }
 

@@ -25,6 +25,29 @@ class VersionSpec extends FunSuite {
     testBothBumpNextStrategies("1", "2")
   }
 
+  test("Version.apply - return None for an empty string") {
+    assertEquals(Version(""), None)
+  }
+
+  test("Version.apply - return None for an invalid version string") {
+    assertEquals(Version("not-a-version"), None)
+  }
+
+  test("Version.apply - round-trip rendered representative versions") {
+    val versions = Seq(
+      version("1"),
+      version("1.2.3"),
+      version("1.2.3.4"),
+      version("1.2.3-RC1"),
+      version("1.2.3-beta.2"),
+      version("1.2.3-RC1-SNAPSHOT")
+    )
+
+    versions.foreach { parsed =>
+      assertEquals(Version(parsed.render), Some(parsed))
+    }
+  }
+
   test("Next Version bumping - bump the minor version if there's only a minor version") {
     testBothBumpNextStrategies("1.2", "1.3")
   }

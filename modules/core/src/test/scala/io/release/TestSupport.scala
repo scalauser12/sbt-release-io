@@ -8,7 +8,9 @@ import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
 import xsbti.*
 
 import java.io.File
-import java.nio.file.Files
+import java.io.IOException
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.{FileVisitResult, Files, LinkOption, Path, SimpleFileVisitor}
 import scala.sys.process.Process
 
 /** Shared test fixtures for constructing minimal sbt `State` instances and test repositories. */
@@ -23,12 +25,36 @@ object TestSupport {
     else Scala212TestVersion
 
   def deleteRecursively(file: File): Unit = {
-    if (file.isDirectory) {
-      val children = file.listFiles()
-      if (children != null) children.foreach(deleteRecursively)
-    }
-    file.delete()
-    ()
+    val root = file.toPath
+
+    if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) ()
+    else
+      Files.walkFileTree(
+        root,
+        new SimpleFileVisitor[Path] {
+          override def visitFile(
+              path: Path,
+              attrs: BasicFileAttributes
+          ): FileVisitResult = {
+            Files.deleteIfExists(path)
+            FileVisitResult.CONTINUE
+          }
+
+          override def visitFileFailed(path: Path, exc: IOException): FileVisitResult = {
+            Files.deleteIfExists(path)
+            FileVisitResult.CONTINUE
+          }
+
+          override def postVisitDirectory(
+              dir: Path,
+              exc: IOException
+          ): FileVisitResult = {
+            if (exc != null) throw exc
+            Files.deleteIfExists(dir)
+            FileVisitResult.CONTINUE
+          }
+        }
+      )
   }
 
   def tempDirResource(prefix: String): Resource[IO, File] =
@@ -81,22 +107,60 @@ object TestSupport {
   }
 
   def dummyAppConfiguration(baseDir: File): AppConfiguration = {
-    val launcher0: Launcher = new Launcher {
-      override def getScala(version: String): ScalaProvider                                   = ???
-      override def getScala(version: String, reason: String): ScalaProvider                   = ???
-      override def getScala(version: String, reason: String, scalaOrg: String): ScalaProvider = ???
-      override def app(id: ApplicationID, version: String): AppProvider                       = ???
-      override def topLoader(): ClassLoader                                                   = getClass.getClassLoader
-      override def globalLock(): GlobalLock                                                   = new GlobalLock {
-        override def apply[T](lockFile: File, run: java.util.concurrent.Callable[T]): T = run.call()
+    def classpathJar(className: String): File = {
+      val clazz        = Class.forName(className)
+      val codeSource   = Option(clazz.getProtectionDomain).flatMap(pd => Option(pd.getCodeSource))
+      val location     = codeSource.flatMap(cs => Option(cs.getLocation))
+
+      location match {
+        case Some(url) => new File(url.toURI)
+        case None      =>
+          throw new IllegalStateException(
+            s"Synthetic sbt test harness requires a concrete classpath location for '$className'."
+          )
       }
-      override def bootDirectory(): File                                                      = baseDir
-      override def ivyRepositories(): Array[Repository]                                       = Array.empty
-      override def appRepositories(): Array[Repository]                                       = Array.empty
-      override def isOverrideRepositories(): Boolean                                          = false
-      override def ivyHome(): File                                                            = baseDir
-      override def checksums(): Array[String]                                                 = Array.empty
     }
+
+    val runtimeLibraryJar = classpathJar("scala.Predef$")
+    val runtimeCompilerJar =
+      if (CurrentScalaVersion.startsWith("3.")) classpathJar("dotty.tools.dotc.Main")
+      else classpathJar("scala.tools.nsc.Main")
+
+    def componentProvider: ComponentProvider = new ComponentProvider {
+      override def componentLocation(id: String): File                     = new File(baseDir, s"component-$id")
+      override def component(id: String): Array[File]                      = Array.empty
+      override def defineComponent(id: String, files: Array[File]): Unit   = ()
+      override def addToComponent(id: String, files: Array[File]): Boolean = true
+      override def lockFile(): File                                        = new File(baseDir, ".components.lock")
+    }
+
+    def appProvider(appId0: ApplicationID, scalaProvider0: ScalaProvider): AppProvider =
+      new AppProvider {
+        override def scalaProvider(): ScalaProvider   = scalaProvider0
+        override def id(): ApplicationID              = appId0
+        override def loader(): ClassLoader            = getClass.getClassLoader
+        override def mainClass(): Class[? <: AppMain] = classOf[DummyAppMain]
+        override def entryPoint(): Class[?]           = classOf[DummyAppMain]
+        override def newMain(): AppMain               = new DummyAppMain
+        override def mainClasspath(): Array[File]     = Array.empty
+        override def components(): ComponentProvider  = componentProvider
+      }
+
+    def scalaProviderFor(
+        version0: String,
+        appId0: ApplicationID,
+        launcherRef: => Launcher
+    ): ScalaProvider =
+      new ScalaProvider {
+        self =>
+        override def launcher(): Launcher                = launcherRef
+        override def version(): String                   = version0
+        override def loader(): ClassLoader               = getClass.getClassLoader
+        override def jars(): Array[File]                 = Array(libraryJar(), compilerJar())
+        override def libraryJar(): File                  = runtimeLibraryJar
+        override def compilerJar(): File                 = runtimeCompilerJar
+        override def app(id: ApplicationID): AppProvider = appProvider(id, self)
+      }
 
     val appId: ApplicationID = new ApplicationID {
       override def groupID(): String                 = "test"
@@ -109,34 +173,33 @@ object TestSupport {
       override def classpathExtra(): Array[File]     = Array.empty
     }
 
-    lazy val scalaProvider0: ScalaProvider = new ScalaProvider {
-      override def launcher(): Launcher                = launcher0
-      override def version(): String                   = "2.12.21"
-      override def loader(): ClassLoader               = getClass.getClassLoader
-      override def jars(): Array[File]                 = Array.empty
-      override def libraryJar(): File                  = new File(baseDir, "scala-library.jar")
-      override def compilerJar(): File                 = new File(baseDir, "scala-compiler.jar")
-      override def app(id: ApplicationID): AppProvider = appProvider0
+    lazy val launcher0: Launcher = new Launcher {
+      override def getScala(version: String): ScalaProvider =
+        scalaProviderFor(version, appId, launcher0)
+
+      override def getScala(version: String, reason: String): ScalaProvider =
+        scalaProviderFor(version, appId, launcher0)
+
+      override def getScala(version: String, reason: String, scalaOrg: String): ScalaProvider =
+        scalaProviderFor(version, appId, launcher0)
+
+      override def app(id: ApplicationID, version: String): AppProvider =
+        appProvider(id, scalaProviderFor(version, id, launcher0))
+
+      override def topLoader(): ClassLoader                                                   = getClass.getClassLoader
+      override def globalLock(): GlobalLock                                                   = new GlobalLock {
+        override def apply[T](lockFile: File, run: java.util.concurrent.Callable[T]): T = run.call()
+      }
+      override def bootDirectory(): File                                                      = baseDir
+      override def ivyRepositories(): Array[Repository]                                       = Array.empty
+      override def appRepositories(): Array[Repository]                                       = Array.empty
+      override def isOverrideRepositories(): Boolean                                          = false
+      override def ivyHome(): File                                                            = baseDir
+      override def checksums(): Array[String]                                                 = Array.empty
     }
 
-    lazy val componentProvider0: ComponentProvider = new ComponentProvider {
-      override def componentLocation(id: String): File                     = new File(baseDir, s"component-$id")
-      override def component(id: String): Array[File]                      = Array.empty
-      override def defineComponent(id: String, files: Array[File]): Unit   = ()
-      override def addToComponent(id: String, files: Array[File]): Boolean = true
-      override def lockFile(): File                                        = new File(baseDir, ".components.lock")
-    }
-
-    lazy val appProvider0: AppProvider = new AppProvider {
-      override def scalaProvider(): ScalaProvider   = scalaProvider0
-      override def id(): ApplicationID              = appId
-      override def loader(): ClassLoader            = getClass.getClassLoader
-      override def mainClass(): Class[? <: AppMain] = classOf[DummyAppMain]
-      override def entryPoint(): Class[?]           = classOf[DummyAppMain]
-      override def newMain(): AppMain               = new DummyAppMain
-      override def mainClasspath(): Array[File]     = Array.empty
-      override def components(): ComponentProvider  = componentProvider0
-    }
+    lazy val scalaProvider0: ScalaProvider = scalaProviderFor(CurrentScalaVersion, appId, launcher0)
+    lazy val appProvider0: AppProvider     = appProvider(appId, scalaProvider0)
 
     new AppConfiguration {
       override def arguments(): Array[String] = Array.empty
