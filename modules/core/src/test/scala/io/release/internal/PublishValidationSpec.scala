@@ -1,5 +1,6 @@
 package io.release.internal
 
+import cats.effect.unsafe.implicits.global
 import munit.FunSuite
 
 class PublishValidationSpec extends FunSuite {
@@ -28,9 +29,37 @@ class PublishValidationSpec extends FunSuite {
   }
 
   test("publishTargetError - some when not skipped and publishTo empty") {
-    val err =
-      PublishValidation.publishTargetError(labels)(publishSkipped = false, publishToEmpty = true)
-    assert(err.isDefined)
-    assertEquals(err.get, PublishValidation.message(labels))
+    assertEquals(
+      PublishValidation.publishTargetError(labels)(publishSkipped = false, publishToEmpty = true),
+      Some(PublishValidation.message(labels))
+    )
+  }
+
+  test("requirePublishTarget - succeed when publish is skipped") {
+    assertEquals(
+      PublishValidation
+        .requirePublishTarget(labels)(publishSkipped = true, publishToEmpty = true)
+        .unsafeRunSync(),
+      ()
+    )
+  }
+
+  test("requirePublishTarget - succeed when publishTo is configured") {
+    assertEquals(
+      PublishValidation
+        .requirePublishTarget(labels)(publishSkipped = false, publishToEmpty = false)
+        .unsafeRunSync(),
+      ()
+    )
+  }
+
+  test("requirePublishTarget - raise IllegalStateException when publish is required but missing") {
+    val err = intercept[IllegalStateException] {
+      PublishValidation
+        .requirePublishTarget(labels)(publishSkipped = false, publishToEmpty = true)
+        .unsafeRunSync()
+    }
+
+    assertEquals(err.getMessage, PublishValidation.message(labels))
   }
 }

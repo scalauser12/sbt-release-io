@@ -1,18 +1,26 @@
 package io.release
 
-import cats.effect.IO
+import cats.effect.{IO, Resource}
+import io.release.internal.SbtRuntime
 import io.release.vcs.Vcs
-import sbt.State
+import sbt.{Project, Setting, State}
 import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
 import xsbti.*
 
 import java.io.File
+import java.nio.file.Files
 import scala.sys.process.Process
 
-/** Shared test fixtures for constructing minimal sbt `State` and `AppConfiguration`
-  * instances. Used by both core and monorepo test suites.
-  */
+/** Shared test fixtures for constructing minimal sbt `State` instances and test repositories. */
 object TestSupport {
+
+  val CurrentScalaVersion: String = scala.util.Properties.versionNumberString
+  val Scala212TestVersion: String = "2.12.21"
+  val Scala213TestVersion: String = "2.13.12"
+
+  def alternateScalaVersion: String =
+    if (CurrentScalaVersion.startsWith("2.12.")) Scala213TestVersion
+    else Scala212TestVersion
 
   def deleteRecursively(file: File): Unit = {
     if (file.isDirectory) {
@@ -23,6 +31,11 @@ object TestSupport {
     ()
   }
 
+  def tempDirResource(prefix: String): Resource[IO, File] =
+    Resource.make(IO.blocking(Files.createTempDirectory(prefix).toFile))(dir =>
+      IO.blocking(deleteRecursively(dir))
+    )
+
   def dummyState(baseDir: File): State = {
     val logFile       = new File(baseDir, "sbt-test.log")
     val globalLogging =
@@ -31,6 +44,7 @@ object TestSupport {
         logFile,
         ConsoleOut.systemOut
       )
+
     State(
       configuration = dummyAppConfiguration(baseDir),
       definedCommands = Nil,
@@ -44,6 +58,23 @@ object TestSupport {
       next = State.Continue
     )
   }
+
+  def loadedState(
+      baseDir: File,
+      projects: Seq[Project],
+      buildSettings: Seq[Setting[?]] = Nil,
+      currentProjectId: Option[String] = None
+  ): State =
+    sbt.TestBuildState(
+      baseState = dummyState(baseDir),
+      baseDir = baseDir,
+      projects = projects,
+      buildSettings = buildSettings,
+      currentProjectId = currentProjectId
+    )
+
+  def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
+    SbtRuntime.appendWithSession(state, settings)
 
   private class DummyAppMain extends AppMain {
     override def run(configuration: AppConfiguration): MainResult = new MainResult {}
@@ -118,6 +149,12 @@ object TestSupport {
     runGit(repo, "init")
     runGit(repo, "config", "user.email", "test@example.com")
     runGit(repo, "config", "user.name", "Test User")
+    ()
+  }
+
+  def commitAll(repo: File, message: String): Unit = {
+    runGit(repo, "add", ".")
+    runGit(repo, "commit", "-m", message)
     ()
   }
 

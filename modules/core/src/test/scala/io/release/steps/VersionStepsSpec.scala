@@ -166,6 +166,27 @@ class VersionStepsSpec extends FunSuite {
     }
   }
 
+  test("defaultReadVersion - raise IllegalStateException when no version can be parsed") {
+    withTempDir { dir =>
+      val f = writeVersionFile(
+        dir,
+        """// version := "9.9.9"
+          |/*
+          |ThisBuild / version := "0.1.0"
+          |*/
+          |lazy val root = project
+          |""".stripMargin
+      )
+
+      val err = intercept[IllegalStateException] {
+        VersionSteps.defaultReadVersion(f).unsafeRunSync()
+      }
+
+      assert(err.getMessage.contains("Could not parse version"))
+      assert(err.getMessage.contains(f.getName))
+    }
+  }
+
   private def writeVersionFile(dir: File, content: String): File = {
     val f = new File(dir, "version.sbt")
     sbt.IO.write(f, content)

@@ -3,9 +3,9 @@ package io.release
 import cats.effect.{IO, Ref, Resource}
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
+import sbt.{Project, State}
 
 import java.io.File
-import java.nio.file.Files
 
 class VcsOpsSpec extends CatsEffectSuite {
 
@@ -17,13 +17,13 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
-  test("detectVcsFromBase - raise RuntimeException for a non-Git directory") {
+  test("detectVcsFromBase - raise IllegalStateException for a non-Git directory") {
     tempDirResource.use { dir =>
       VcsOps.detectVcsFromBase(dir).attempt.map {
-        case Left(e: RuntimeException) =>
+        case Left(e: IllegalStateException) =>
           assert(e.getMessage.contains("No VCS detected at"))
-        case other                     =>
-          fail(s"Expected RuntimeException but got $other")
+        case other                        =>
+          fail(s"Expected IllegalStateException but got $other")
       }
     }
   }
@@ -41,11 +41,11 @@ class VcsOpsSpec extends CatsEffectSuite {
     gitRepoWithCommitResource.use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
         VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-          case Left(e: RuntimeException) =>
+          case Left(e: IllegalStateException) =>
             assert(e.getMessage.contains("unstaged modified files"))
             assert(e.getMessage.contains("file.txt"))
-          case other                     =>
-            fail(s"Expected RuntimeException but got $other")
+          case other                        =>
+            fail(s"Expected IllegalStateException but got $other")
         }
     }
   }
@@ -57,11 +57,11 @@ class VcsOpsSpec extends CatsEffectSuite {
         TestSupport.runGit(repo, "add", "staged.txt")
       } *>
         VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-          case Left(e: RuntimeException) =>
+          case Left(e: IllegalStateException) =>
             assert(e.getMessage.contains("staged uncommitted changes"))
             assert(e.getMessage.contains("staged.txt"))
-          case other                     =>
-            fail(s"Expected RuntimeException but got $other")
+          case other                        =>
+            fail(s"Expected IllegalStateException but got $other")
         }
     }
   }
@@ -70,11 +70,11 @@ class VcsOpsSpec extends CatsEffectSuite {
     gitRepoWithCommitResource.use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
         VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-          case Left(e: RuntimeException) =>
+          case Left(e: IllegalStateException) =>
             assert(e.getMessage.contains("untracked files"))
             assert(e.getMessage.contains("untracked.txt"))
-          case other                     =>
-            fail(s"Expected RuntimeException but got $other")
+          case other                        =>
+            fail(s"Expected IllegalStateException but got $other")
         }
     }
   }
@@ -88,12 +88,169 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("detectVcs - detect Git from a loaded sbt state") {
+    gitRepoWithCommitResource.use { case (repo, _) =>
+      IO(sessionState(repo, ignoreUntracked = true)).flatMap { state =>
+        VcsOps.detectVcs(state).map { vcs =>
+          assertEquals(vcs.commandName, "git")
+        }
+      }
+    }
+  }
+
+  test("checkCleanWorkingDir(state) - succeed for a clean loaded repo") {
+    gitRepoWithCommitResource.use { case (repo, _) =>
+      IO(sessionState(repo, ignoreUntracked = true)).flatMap { state =>
+        VcsOps.checkCleanWorkingDir(state).map { result =>
+          assert(result.currentHash.nonEmpty)
+          assertEquals(result.vcs.commandName, "git")
+        }
+      }
+    }
+  }
+
+  test("checkCleanWorkingDir(state, vcs) - read settings from the loaded state") {
+    gitRepoWithCommitResource.use { case (repo, _) =>
+      IO(sessionState(repo, ignoreUntracked = true)).flatMap { state =>
+        for {
+          vcs    <- VcsOps.detectVcs(state)
+          result <- VcsOps.checkCleanWorkingDir(state, vcs)
+        } yield {
+          assert(result.currentHash.nonEmpty)
+        }
+      }
+    }
+  }
+
+  test("relativizeToBase - return the path relative to the VCS root") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      IO.blocking {
+        val nested = new File(repo, "nested/version.sbt")
+        sbt.IO.write(nested, """version := "0.1.0-SNAPSHOT"""")
+        nested
+      }.flatMap { file =>
+        VcsOps.relativizeToBase(vcs, file).map { relativePath =>
+          assertEquals(relativePath, "nested/version.sbt")
+        }
+      }
+    }
+  }
+
+  test("relativizeToBase - raise when the file is outside the VCS root") {
+    tempDirResource.use { outside =>
+      gitRepoWithCommitResource.use { case (_, vcs) =>
+        val external = new File(outside, "version.sbt")
+        IO.blocking(sbt.IO.write(external, """version := "0.1.0-SNAPSHOT"""")) *>
+          VcsOps.relativizeToBase(vcs, external).attempt.map {
+            case Left(err: IllegalStateException) =>
+              assert(err.getMessage.contains("outside of VCS root"))
+            case other                            =>
+              fail(s"Expected IllegalStateException but got $other")
+          }
+      }
+    }
+  }
+
+  test("trackedStatus - drop untracked lines from porcelain status") {
+    tempDirResource.use { dir =>
+      val vcs = new StubVcs(
+        dir,
+        status0 = IO.pure(" M tracked.txt\n?? untracked.txt\nA  staged.txt")
+      )
+
+      VcsOps.trackedStatus(vcs).map { status =>
+        assertEquals(status, " M tracked.txt\nA  staged.txt")
+      }
+    }
+  }
+
+  test("validatePushRemote - succeed when the tracking remote is reachable") {
+    tempDirResource.use { dir =>
+      VcsOps
+        .validatePushRemote(
+          TestSupport.dummyState(dir),
+          interactive = false,
+          useDefaults = false,
+          new StubVcs(dir, checkRemote0 = IO.pure(0))
+        )
+    }
+  }
+
+  test("validatePushRemote - abort in non-interactive mode when the remote check fails") {
+    tempDirResource.use { dir =>
+      VcsOps
+        .validatePushRemote(
+          TestSupport.dummyState(dir),
+          interactive = false,
+          useDefaults = false,
+          new StubVcs(dir, checkRemote0 = IO.pure(1))
+        )
+        .attempt
+        .map {
+          case Left(err: IllegalStateException) =>
+            assertEquals(err.getMessage, "Aborting the release due to remote check failure.")
+          case other                            =>
+            fail(s"Expected IllegalStateException but got $other")
+        }
+    }
+  }
+
+  test("validatePushReadiness - fail when no tracking branch is configured") {
+    tempDirResource.use { dir =>
+      VcsOps
+        .validatePushReadiness(
+          TestSupport.dummyState(dir),
+          interactive = false,
+          useDefaults = false,
+          new StubVcs(dir, hasUpstream0 = IO.pure(false), currentBranch0 = IO.pure("feature"))
+        )
+        .attempt
+        .map {
+          case Left(err: IllegalStateException) =>
+            assert(err.getMessage.contains("No tracking branch configured for 'feature'"))
+          case other                            =>
+            fail(s"Expected IllegalStateException but got $other")
+        }
+    }
+  }
+
+  test("validatePushReadiness - abort in non-interactive mode when local is behind remote") {
+    tempDirResource.use { dir =>
+      VcsOps
+        .validatePushReadiness(
+          TestSupport.dummyState(dir),
+          interactive = false,
+          useDefaults = false,
+          new StubVcs(dir, isBehindRemote0 = IO.pure(true))
+        )
+        .attempt
+        .map {
+          case Left(err: IllegalStateException) =>
+            assertEquals(err.getMessage, "Merge the upstream commits and run release again.")
+          case other                            =>
+            fail(s"Expected IllegalStateException but got $other")
+        }
+    }
+  }
+
+  test("validatePushReadiness - ignore isBehindRemote errors and continue") {
+    tempDirResource.use { dir =>
+      VcsOps
+        .validatePushReadiness(
+          TestSupport.dummyState(dir),
+          interactive = false,
+          useDefaults = false,
+          new StubVcs(dir, isBehindRemote0 = IO.raiseError(new RuntimeException("boom")))
+        )
+    }
+  }
+
   test("interactivePushAfterRemote - non-interactive runs doPush") {
     tempDirResource.use { dir =>
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new PushStubVcs(dir)
+        vcs         = new StubVcs(dir)
         state       = TestSupport.dummyState(dir)
         _          <- VcsOps.interactivePushAfterRemote(
                         state,
@@ -120,7 +277,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new PushStubVcs(dir)
+        vcs         = new StubVcs(dir)
         _          <- VcsOps.interactivePushAfterRemote(
                         state,
                         interactive = true,
@@ -143,9 +300,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   // ── Helpers ──────────────────────────────────────────────────────────
 
   private val tempDirResource: Resource[IO, File] =
-    Resource.make(IO.blocking(Files.createTempDirectory("vcs-ops-spec").toFile))(dir =>
-      IO.blocking(TestSupport.deleteRecursively(dir))
-    )
+    TestSupport.tempDirResource("vcs-ops-spec")
 
   private val gitRepoResource: Resource[IO, File] =
     tempDirResource.evalMap { dir =>
@@ -159,8 +314,7 @@ class VcsOpsSpec extends CatsEffectSuite {
     gitRepoResource.evalMap { repo =>
       IO.blocking {
         sbt.IO.write(new File(repo, "file.txt"), "initial")
-        TestSupport.runGit(repo, "add", ".")
-        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.commitAll(repo, "Initial commit")
         repo
       }.flatMap { r =>
         Vcs.detect(r).flatMap {
@@ -172,23 +326,45 @@ class VcsOpsSpec extends CatsEffectSuite {
         }
       }
     }
+
+  private def sessionState(repo: File, ignoreUntracked: Boolean): State =
+    TestSupport.appendSessionSettings(
+      TestSupport.loadedState(
+        repo,
+        Seq(Project("root", repo)),
+        currentProjectId = Some("root")
+      ),
+      Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := ignoreUntracked)
+    )
 }
 
-/** Minimal [[Vcs]] for [[VcsOps.interactivePushAfterRemote]] success path (remote check passes). */
-private final class PushStubVcs(override val baseDir: File) extends Vcs {
+private final class StubVcs(
+    override val baseDir: File,
+    currentHash0: IO[String] = IO.pure("abc"),
+    currentBranch0: IO[String] = IO.pure("main"),
+    trackingRemote0: IO[String] = IO.pure("origin"),
+    hasUpstream0: IO[Boolean] = IO.pure(true),
+    isBehindRemote0: IO[Boolean] = IO.pure(false),
+    existsTag0: IO[Boolean] = IO.pure(false),
+    modifiedFiles0: IO[Seq[String]] = IO.pure(Nil),
+    stagedFiles0: IO[Seq[String]] = IO.pure(Nil),
+    untrackedFiles0: IO[Seq[String]] = IO.pure(Nil),
+    status0: IO[String] = IO.pure(""),
+    checkRemote0: IO[Int] = IO.pure(0)
+) extends Vcs {
   override def commandName: String = "git"
 
-  override def currentHash: IO[String]              = IO.pure("abc")
-  override def currentBranch: IO[String]            = IO.pure("main")
-  override def trackingRemote: IO[String]           = IO.pure("origin")
-  override def hasUpstream: IO[Boolean]             = IO.pure(true)
-  override def isBehindRemote: IO[Boolean]          = IO.pure(false)
-  override def existsTag(name: String): IO[Boolean] = IO.pure(false)
-  override def modifiedFiles: IO[Seq[String]]       = IO.pure(Nil)
-  override def stagedFiles: IO[Seq[String]]         = IO.pure(Nil)
-  override def untrackedFiles: IO[Seq[String]]      = IO.pure(Nil)
-  override def status: IO[String]                   = IO.pure("")
-  override def checkRemote(remote: String): IO[Int] = IO.pure(0)
+  override def currentHash: IO[String]              = currentHash0
+  override def currentBranch: IO[String]            = currentBranch0
+  override def trackingRemote: IO[String]           = trackingRemote0
+  override def hasUpstream: IO[Boolean]             = hasUpstream0
+  override def isBehindRemote: IO[Boolean]          = isBehindRemote0
+  override def existsTag(name: String): IO[Boolean] = existsTag0
+  override def modifiedFiles: IO[Seq[String]]       = modifiedFiles0
+  override def stagedFiles: IO[Seq[String]]         = stagedFiles0
+  override def untrackedFiles: IO[Seq[String]]      = untrackedFiles0
+  override def status: IO[String]                   = status0
+  override def checkRemote(remote: String): IO[Int] = checkRemote0
 
   override def add(files: String*): IO[Unit] = IO.unit
 

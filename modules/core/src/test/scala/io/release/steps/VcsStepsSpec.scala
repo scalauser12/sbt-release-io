@@ -3,11 +3,27 @@ package io.release.steps
 import cats.effect.{IO, Resource}
 import io.release.{ReleaseContext, TestSupport}
 import munit.CatsEffectSuite
+import sbt.{Def, Project}
 
 import java.io.File
-import java.nio.file.Files
 
 class VcsStepsSpec extends CatsEffectSuite {
+
+  test("initializeVcs - detect Git from the loaded project base") {
+    gitRepoWithLoadedStateResource.use { case (_, state) =>
+      VcsSteps.initializeVcs.execute(ReleaseContext(state = state)).map { result =>
+        assertEquals(result.vcs.map(_.commandName), Some("git"))
+      }
+    }
+  }
+
+  test("checkCleanWorkingDir.validate - succeed for a clean loaded repo") {
+    gitRepoWithLoadedStateResource.use { case (_, state) =>
+      VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state)).map { result =>
+        assertEquals(result, ())
+      }
+    }
+  }
 
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
     releaseContextResource.use { ctx =>
@@ -28,10 +44,35 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagRelease.execute - abort in non-interactive mode when the tag already exists") {
+    gitRepoWithCommitResource.use { case (repo, vcs) =>
+      val state = loadedState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        VcsSteps.tagRelease
+          .execute(ReleaseContext(state = state, vcs = Some(vcs), interactive = false))
+          .attempt
+          .map {
+            case Left(err: IllegalStateException) =>
+              assertEquals(
+                err.getMessage,
+                "Tag [v1.0.0] already exists. Aborting release in non-interactive mode."
+              )
+            case other                            =>
+              fail(s"Expected IllegalStateException but got $other")
+          }
+    }
+  }
+
   private val tempDirResource: Resource[IO, File] =
-    Resource.make(IO.blocking(Files.createTempDirectory("vcs-steps-spec").toFile))(dir =>
-      IO.blocking(TestSupport.deleteRecursively(dir))
-    )
+    TestSupport.tempDirResource("vcs-steps-spec")
 
   private val releaseContextResource: Resource[IO, ReleaseContext] =
     tempDirResource.evalMap { repo =>
@@ -43,4 +84,38 @@ class VcsStepsSpec extends CatsEffectSuite {
         )
       }
     }
+
+  private val gitRepoWithCommitResource: Resource[IO, (File, io.release.vcs.Vcs)] =
+    tempDirResource.evalMap { repo =>
+      IO.blocking {
+        TestSupport.initGitRepo(repo)
+        sbt.IO.write(new File(repo, "file.txt"), "initial")
+        TestSupport.commitAll(repo, "Initial commit")
+        repo
+      }.flatMap { initialized =>
+        io.release.vcs.Vcs.detect(initialized).flatMap {
+          case Some(vcs) => IO.pure((initialized, vcs))
+          case None      =>
+            IO.raiseError(
+              new RuntimeException(s"Failed to detect VCS in ${initialized.getAbsolutePath}")
+            )
+        }
+      }
+    }
+
+  private val gitRepoWithLoadedStateResource: Resource[IO, (File, sbt.State)] =
+    gitRepoWithCommitResource.evalMap { case (repo, _) =>
+      IO.blocking(repo -> loadedState(repo))
+    }
+
+  private def loadedState(repo: File, settings: Seq[Def.Setting[?]] = Nil): sbt.State =
+    TestSupport.loadedState(
+      repo,
+      Seq(
+        Project("root", repo).settings(
+          (Seq(io.release.ReleaseIO.releaseIOIgnoreUntrackedFiles := false) ++ settings)*
+        )
+      ),
+      currentProjectId = Some("root")
+    )
 }
