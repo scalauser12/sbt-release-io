@@ -4,7 +4,7 @@ import cats.effect.{IO, Ref, Resource}
 import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags, SbtCompat, SbtRuntime}
 import munit.CatsEffectSuite
 import sbt.Def.*
-import sbt.{AttributeKey, Def, InputKey, Keys, LocalProject, Project, State, TaskKey, inputKey, taskKey}
+import sbt.{AttributeKey, Def, InputKey, Keys, LocalProject, Project, ProjectRef, State, TaskKey, inputKey, taskKey}
 
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -390,28 +390,96 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
   }
 
   test("task steps - run fromTaskAggregated across aggregated projects") {
+    val aggregatedTask = taskKey[String](s"aggregatedStateTask${System.nanoTime()}")
     loadedContextWithProjectsResource("release-step-io-from-task-aggregated") { dir =>
-      val markerFor = (projectId: String) => new File(dir, s"aggregated-task-$projectId.txt")
-      val sharedSettings = Seq(
-        aggregatedStateTask := {
-          val value  = Keys.thisProjectRef.value.project
-          val marker = markerFor(value)
-          sbt.IO.write(marker, value)
-          value
-        }
-      )
-      val api            = Project("api", new File(dir, "api")).settings(sharedSettings*)
-      val core           = Project("core", new File(dir, "core")).settings(sharedSettings*)
+      val apiBase   = new File(dir, "api")
+      val coreBase  = new File(dir, "core")
+      apiBase.mkdirs()
+      coreBase.mkdirs()
+      val api            = Project("api", apiBase)
+      val core           = Project("core", coreBase)
       val root           = Project("root", dir)
         .aggregate(LocalProject("api"), LocalProject("core"))
-        .settings(sharedSettings*)
       Seq(root, api, core)
     }.use { ctx =>
-      ReleaseStepIO.fromTaskAggregated(aggregatedStateTask).execute(ctx).map { result =>
-        val base = SbtRuntime.extracted(result.state).get(Keys.baseDirectory)
-        assertEquals(readFile(new File(base, "aggregated-task-root.txt")), "root")
-        assertEquals(readFile(new File(base, "aggregated-task-api.txt")), "api")
-        assertEquals(readFile(new File(base, "aggregated-task-core.txt")), "core")
+      IO.blocking {
+        val extracted = SbtRuntime.extracted(ctx.state)
+        val base      = extracted.get(Keys.baseDirectory)
+        val build     = extracted.currentRef.build
+        val settings = Seq(
+          ProjectRef(build, "root") / aggregatedTask / Keys.aggregate := true,
+          ProjectRef(build, "root") / aggregatedTask := {
+            sbt.IO.write(new File(base, "aggregated-task-root.txt"), "root")
+            "root"
+          },
+          ProjectRef(build, "api") / aggregatedTask := {
+            sbt.IO.write(new File(base, "aggregated-task-api.txt"), "api")
+            "api"
+          },
+          ProjectRef(build, "core") / aggregatedTask := {
+            sbt.IO.write(new File(base, "aggregated-task-core.txt"), "core")
+            "core"
+          }
+        )
+        ctx.withState(TestSupport.appendSessionSettings(ctx.state, settings))
+      }.flatMap { seededCtx =>
+        ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(seededCtx).map { result =>
+          val base  = SbtRuntime.extracted(result.state).get(Keys.baseDirectory)
+          val files = Option(base.listFiles()).toList.flatten.map(_.getName).sorted
+          // Assert native aggregated task semantics across sbt lines, including root execution.
+          assert(clue(files).contains("aggregated-task-root.txt"))
+          assert(clue(files).contains("aggregated-task-api.txt"))
+          assert(clue(files).contains("aggregated-task-core.txt"))
+          assertEquals(readFile(new File(base, "aggregated-task-root.txt")), "root")
+          assertEquals(readFile(new File(base, "aggregated-task-api.txt")), "api")
+          assertEquals(readFile(new File(base, "aggregated-task-core.txt")), "core")
+        }
+      }
+    }
+  }
+
+  test("task steps - honor per-task aggregate := false in fromTaskAggregated") {
+    val aggregatedTask = taskKey[String](s"nonAggregatedStateTask${System.nanoTime()}")
+    loadedContextWithProjectsResource("release-step-io-from-task-aggregate-false") { dir =>
+      val apiBase   = new File(dir, "api")
+      val coreBase  = new File(dir, "core")
+      apiBase.mkdirs()
+      coreBase.mkdirs()
+      val api            = Project("api", apiBase)
+      val core           = Project("core", coreBase)
+      val root           = Project("root", dir)
+        .aggregate(LocalProject("api"), LocalProject("core"))
+      Seq(root, api, core)
+    }.use { ctx =>
+      IO.blocking {
+        val extracted = SbtRuntime.extracted(ctx.state)
+        val base      = extracted.get(Keys.baseDirectory)
+        val build     = extracted.currentRef.build
+        val settings = Seq(
+          ProjectRef(build, "root") / aggregatedTask / Keys.aggregate := false,
+          ProjectRef(build, "root") / aggregatedTask := {
+            sbt.IO.write(new File(base, "aggregate-false-root.txt"), "root")
+            "root"
+          },
+          ProjectRef(build, "api") / aggregatedTask := {
+            sbt.IO.write(new File(base, "aggregate-false-api.txt"), "api")
+            "api"
+          },
+          ProjectRef(build, "core") / aggregatedTask := {
+            sbt.IO.write(new File(base, "aggregate-false-core.txt"), "core")
+            "core"
+          }
+        )
+        ctx.withState(TestSupport.appendSessionSettings(ctx.state, settings))
+      }.flatMap { seededCtx =>
+        ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(seededCtx).map { result =>
+          val base  = SbtRuntime.extracted(result.state).get(Keys.baseDirectory)
+          val files = Option(base.listFiles()).toList.flatten.map(_.getName).sorted
+          assert(clue(files).contains("aggregate-false-root.txt"))
+          assert(!clue(files).contains("aggregate-false-api.txt"))
+          assert(!clue(files).contains("aggregate-false-core.txt"))
+          assertEquals(readFile(new File(base, "aggregate-false-root.txt")), "root")
+        }
       }
     }
   }
@@ -463,5 +531,4 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
 
   private val stateUpdateTask          = taskKey[String]("stateUpdateTask")
   private val stateUpdateInputTask     = inputKey[String]("stateUpdateInputTask")
-  private val aggregatedStateTask      = taskKey[String]("aggregatedStateTask")
 }

@@ -24,6 +24,20 @@ object TestBuildState:
       val atBase = projects.filter(_.base.getCanonicalFile == canonicalBase).map(_.id)
       if atBase.nonEmpty then atBase else Seq(projects.head.id)
     val rootProjectId = rootProjectIds.head
+    def resolveRef(ref: ProjectReference): Seq[ProjectRef] =
+      ref match
+        case pr: ProjectRef     => Seq(pr)
+        case LocalProject(id)   => Seq(ProjectRef(uri, id))
+        case LocalRootProject   => Seq(ProjectRef(uri, rootProjectId))
+        case RootProject(`uri`) => Seq(ProjectRef(uri, rootProjectId))
+        case RootProject(other) =>
+          throw new IllegalArgumentException(
+            s"Unsupported non-local RootProject reference in synthetic test state: $other"
+          )
+        case other              =>
+          throw new IllegalArgumentException(
+            s"Unsupported project reference in synthetic test state: $other"
+          )
     val launcher = baseState.configuration.provider.scalaProvider.launcher
     val rootPaths = Map(
       "OUT" -> canonicalBase.toPath.resolve("target").resolve("out"),
@@ -50,13 +64,15 @@ object TestBuildState:
       detected = DetectedPlugins(Nil, DetectedModules[BuildDef](Nil))
     )
     val unit = BuildUnit(uri, canonicalBase, definitions, plugins, converter)
+    val projectMap = projects.iterator.map(project => project.id -> project).toMap
     val partUnit = PartBuildUnit(
       unit,
-      projects.iterator.map(project => project.id -> project).toMap,
+      projectMap,
       rootProjectIds,
       buildSettings
     )
-    val loaded = Load.resolveProjects(PartBuild(uri, Map(uri -> partUnit), converter))
+    val loadedUnit = partUnit.resolveRefs(resolveRef)
+    val loaded = LoadedBuild(uri, Map(uri -> loadedUnit))
     val units = loaded.units
     val delegates = Util.withCaching(Load.defaultDelegates(loaded))
     val scopeLocal: Def.ScopeLocal =
