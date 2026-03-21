@@ -1,5 +1,6 @@
 package io.release
 
+import io.release.internal.{CoreExecutionState, ExecutionFlags}
 import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}
@@ -9,6 +10,10 @@ import sbt.{internal as _, *}
   * Created by [[ReleasePluginIOLike.initialContext]] at the start of the release command,
   * then passed through [[ReleaseStepIO.compose]] which threads it sequentially through
   * every execute step. Steps return a new `ReleaseContext` with updated state, versions, or flags.
+  * Internal startup metadata (command flags and CLI overrides) is threaded through
+  * `metadataBag`; the only intentional mirror onto `sbt.State` is the
+  * `ReleaseKeys.versions` attribute,
+  * which allows sbt task evaluation to observe the chosen release versions.
   *
   * @param state        the current `sbt.State`, updated between execute steps
   * @param versions     `(releaseVersion, nextVersion)` pair, set by `inquireVersions`
@@ -55,6 +60,17 @@ case class ReleaseContext(
 
   def releaseVersion: Option[String] = versions.map(_._1)
   def nextVersion: Option[String]    = versions.map(_._2)
+
+  private[release] def executionState: Option[CoreExecutionState] =
+    metadata(CoreExecutionState.key)
+
+  private[release] def withExecutionState(
+      state: CoreExecutionState
+  ): ReleaseContext =
+    withMetadata(CoreExecutionState.key, state)
+
+  private[release] def executionFlags: Option[ExecutionFlags] =
+    executionState.map(_.plan.flags)
 
   def fail: ReleaseContext                       = copy(failed = true)
   def failWith(cause: Throwable): ReleaseContext = copy(failed = true, failureCause = Some(cause))

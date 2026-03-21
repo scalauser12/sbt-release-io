@@ -1,8 +1,7 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.ReleaseContext
-import io.release.internal.InternalKeys
+import io.release.{ReleaseContext, ReleaseCtx}
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt.internal.Aggregation.KeyValue
@@ -16,8 +15,8 @@ private[release] object StepHelpers {
   def errorMessage(err: Throwable): String =
     Option(err.getMessage).getOrElse(err.toString)
 
-  def useDefaults(state: sbt.State): Boolean =
-    state.get(InternalKeys.executionFlags).exists(_.useDefaults)
+  def useDefaults[C <: ReleaseCtx[C]](ctx: C): Boolean =
+    ctx.useDefaults
 
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
     opt.fold(IO.raiseError[B](new IllegalStateException(error)))(f)
@@ -49,10 +48,14 @@ private[release] object StepHelpers {
         }
       }
 
-  /** Context-agnostic confirmation prompt. Shared by core and monorepo steps. */
+  /** Confirmation prompt shared by core and monorepo steps.
+    * `useDefaults` is supplied explicitly so the helper does not depend on `sbt.State`
+    * for startup-only execution flags.
+    */
   def confirmContinue(
       state: sbt.State,
       interactive: Boolean,
+      useDefaults: Boolean,
       prompt: String,
       defaultYes: Boolean,
       abortMessage: String
@@ -61,7 +64,7 @@ private[release] object StepHelpers {
       IO.raiseError(new IllegalStateException(abortMessage))
     else {
       val decisionIO =
-        if (useDefaults(state)) IO.pure(defaultYes)
+        if (useDefaults) IO.pure(defaultYes)
         else askYesNo(prompt, defaultYes = defaultYes)
 
       decisionIO.flatMap { continue =>
@@ -77,7 +80,14 @@ private[release] object StepHelpers {
       defaultYes: Boolean,
       abortMessage: String
   ): IO[Unit] =
-    confirmContinue(ctx.state, ctx.interactive, prompt, defaultYes, abortMessage)
+    confirmContinue(
+      ctx.state,
+      ctx.interactive,
+      useDefaults(ctx),
+      prompt,
+      defaultYes,
+      abortMessage
+    )
 
   /** Parse raw version input: trim whitespace, return default if empty, validate otherwise. */
   def parseVersionInput(raw: String, default: String): IO[String] = {
@@ -89,11 +99,14 @@ private[release] object StepHelpers {
       )
   }
 
-  /** Handle snapshot dependencies found during validation. Shared by core and monorepo. */
+  /** Handle snapshot dependencies found during validation. Shared by core and monorepo.
+    * The caller provides `useDefaults` from the threaded context runtime metadata.
+    */
   def handleSnapshotDependencies(
       deps: Seq[sbt.ModuleID],
       state: sbt.State,
       interactive: Boolean,
+      useDefaults: Boolean,
       logPrefix: String,
       context: String = ""
   ): IO[Unit] = {
@@ -111,6 +124,7 @@ private[release] object StepHelpers {
           confirmContinue(
             state,
             interactive,
+            useDefaults,
             prompt = "Do you want to continue (y/n)? [n] ",
             defaultYes = false,
             abortMessage = s"Aborting release due to snapshot dependencies$context."

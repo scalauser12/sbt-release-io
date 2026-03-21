@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.{IO, Ref, Resource}
-import io.release.internal.SbtCompat
+import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags, SbtCompat}
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
@@ -123,6 +123,31 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
         assertEquals(updated.metadata(attemptCount), Some(2))
         assertEquals(removed.metadata(releaseCompleted), None)
         assertEquals(removed.metadata(attemptCount), Some(2))
+      }
+    }
+  }
+
+  test("ReleaseContext internal execution state - survive state replacement") {
+    contextResource.use { ctx =>
+      IO {
+        val plan    = CoreReleasePlan(
+          flags = ExecutionFlags(
+            useDefaults = true,
+            skipTests = false,
+            skipPublish = false,
+            interactive = false,
+            crossBuild = false
+          ),
+          releaseVersionOverride = Some("1.0.0"),
+          nextVersionOverride = Some("1.0.1-SNAPSHOT"),
+          tagDefault = Some("k")
+        )
+        val updated = ctx
+          .withExecutionState(CoreExecutionState(plan))
+          .withState(ctx.state.copy(onFailure = None))
+
+        assertEquals(updated.executionState.map(_.plan.tagDefault), Some(Some("k")))
+        assertEquals(updated.useDefaults, true)
       }
     }
   }

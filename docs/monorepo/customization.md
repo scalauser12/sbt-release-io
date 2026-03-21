@@ -62,6 +62,12 @@ Every step receives a `MonorepoContext`. Per-project steps also receive a `Proje
 | `fail` | `MonorepoContext` | Mark release as failed |
 | `failWith(cause)` | `MonorepoContext` | Mark release as failed with a cause |
 
+The built-in monorepo flow also carries startup-only planning data internally (selection mode,
+CLI version overrides, `with-defaults`, and the global-version write marker), but that runtime
+metadata stays package-private. Custom steps should use `ctx.withMetadata` / `ctx.metadata`
+for their own shared data and should treat `metadataBag` as extension space, not as the main
+built-in plan channel.
+
 **`ProjectReleaseInfo`** — per-project metadata available in `PerProject` steps:
 
 | Field / Method | Type | Description |

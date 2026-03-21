@@ -1,5 +1,6 @@
 package io.release.monorepo
 
+import io.release.internal.ExecutionFlags
 import io.release.TestSupport
 import munit.FunSuite
 import sbt.{AttributeKey, State}
@@ -78,6 +79,46 @@ class MonorepoContextSpec extends FunSuite {
     val pp: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
     val u: MonorepoTagStrategy  = MonorepoTagStrategy.Unified
     assertNotEquals(pp, u)
+  }
+
+  test("MonorepoContext internal execution state - survive state replacement") {
+    withState { state =>
+      val ctx = MonorepoContext(state = state).withExecutionState(
+        MonorepoExecutionState(
+          MonorepoReleasePlan(
+            flags = ExecutionFlags(
+              useDefaults = true,
+              skipTests = false,
+              skipPublish = false,
+              interactive = false,
+              crossBuild = false
+            ),
+            selectionMode = SelectionMode.AllChanged,
+            selectedNames = Seq.empty,
+            releaseVersionOverrides = Map.empty,
+            nextVersionOverrides = Map.empty,
+            globalReleaseVersion = None,
+            globalNextVersion = None
+          ),
+          globalVersionWritten = Some("1.0.0")
+        )
+      )
+      val updated = ctx.withState(state.copy(onFailure = None))
+
+      assertEquals(updated.releasePlan.map(_.selectionMode), Some(SelectionMode.AllChanged))
+      assertEquals(updated.globalVersionWritten, Some("1.0.0"))
+      assertEquals(updated.useDefaults, true)
+    }
+  }
+
+  test("MonorepoContext internal execution state - require execution state before recording global version") {
+    withState { state =>
+      val error = intercept[IllegalStateException] {
+        MonorepoContext(state = state).withGlobalVersionWritten("1.0.0")
+      }
+
+      assert(clue(error.getMessage).contains("Monorepo execution state not initialized"))
+    }
   }
 
   private def dummyProject(name: String): ProjectReleaseInfo =

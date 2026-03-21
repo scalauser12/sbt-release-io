@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.{IO, Resource}
-import io.release.internal.{ExecutionFlags, InternalKeys, ReleaseCommandRunner, ReleaseLogPrefixes}
+import io.release.internal.{ExecutionFlags, ReleaseCommandRunner, ReleaseLogPrefixes}
 import io.release.monorepo.MonorepoTagStrategy as MonorepoTagStrategy_
 import io.release.steps.StepHelpers
 import io.release.{PluginLikeSupport, ReleaseKeys, ReleasePluginIO}
@@ -200,19 +200,13 @@ trait MonorepoReleasePluginLike[T]
 
     val cleanState = state
       .remove(ReleaseKeys.versions)
-      .remove(InternalKeys.executionFlags)
-      .remove(InternalKeys.coreReleasePlan)
 
     val program: IO[State] = for {
       plannedEither <- MonorepoReleasePlan.build(cleanState, plannerInputs(args, flags))
       result        <- plannedEither match {
                          case Left(failedState) => IO.pure(failedState)
                          case Right(plan)       =>
-                           val plannedState =
-                             cleanState.put(
-                               InternalKeys.executionFlags,
-                               plan.flags
-                             )
+                           val plannedState = cleanState
                            val stepFns      = monorepoReleaseProcess(plannedState)
                            for {
                              initialCtx <- buildContext(plannedState, flags, plan)

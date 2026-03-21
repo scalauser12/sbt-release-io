@@ -2,7 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.internal.{ExecutionFlags, ReleaseLogPrefixes}
-import sbt.{AttributeKey, State}
+import sbt.State
 
 /** How project selection is determined for a monorepo release. */
 private[monorepo] sealed trait SelectionMode
@@ -25,11 +25,6 @@ private[monorepo] final case class MonorepoReleasePlan(
 )
 
 private[monorepo] object MonorepoReleasePlan {
-
-  // ── Attribute keys (from MonorepoInternalKeys) ─────────────────────
-
-  val monorepoReleasePlanKey: AttributeKey[MonorepoReleasePlan] =
-    AttributeKey[MonorepoReleasePlan]("releaseIOInternalMonorepoPlan")
 
   // ── Planning types ─────────────────────────────────────────────────
 

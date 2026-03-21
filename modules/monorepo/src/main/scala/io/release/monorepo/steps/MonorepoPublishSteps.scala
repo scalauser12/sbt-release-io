@@ -76,6 +76,7 @@ private[monorepo] object MonorepoPublishSteps {
             externalSnapshots,
             ctx.state,
             ctx.interactive,
+            ctx.useDefaults,
             ReleaseLogPrefixes.Monorepo,
             context = s" in ${project.name}"
           )

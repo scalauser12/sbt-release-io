@@ -2,7 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseIO.*
-import io.release.internal.{CoreReleasePlan, ReleaseLogPrefixes, SbtRuntime, VersionPlan}
+import io.release.internal.{ReleaseLogPrefixes, SbtRuntime, VersionPlan}
 import io.release.steps.StepHelpers.*
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
@@ -41,11 +41,11 @@ private[release] object VersionSteps {
   }
 
   private def resolve(
-      state: State,
+      ctx: ReleaseContext,
       resolveSettings: State => ResolvedSettings = resolveCurrentSettings
   ): VersionPlan = {
-    val settings = resolveSettings(state)
-    val plan     = CoreReleasePlan.current(state)
+    val settings = resolveSettings(ctx.state)
+    val plan     = ctx.executionState.map(_.plan)
 
     VersionPlan(
       versionFile = settings.versionFile,
@@ -96,7 +96,7 @@ private[release] object VersionSteps {
   val inquireVersions: ReleaseStepIO = ReleaseStepIO(
     name = "inquire-versions",
     validate = ctx =>
-      IO.blocking(resolveVersionPlan(ctx.state).versionFile).flatMap { versionFile =>
+      IO.blocking(resolveVersionPlan(ctx).versionFile).flatMap { versionFile =>
         if (!versionFile.exists())
           IO.raiseError(
             new IllegalStateException(
@@ -118,7 +118,7 @@ private[release] object VersionSteps {
       )
 
       for {
-        versionPlan <- IO.blocking(resolveVersionPlan(ctx.state))
+        versionPlan <- IO.blocking(resolveVersionPlan(ctx))
         currentVer  <- versionPlan.readVersion(versionPlan.versionFile)
         data        <- IO.blocking {
                          val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseIOVersion)
@@ -131,7 +131,7 @@ private[release] object VersionSteps {
                            nextVersionFn = nextFn,
                            releaseVersionArg = versionPlan.releaseVersionOverride,
                            nextVersionArg = versionPlan.nextVersionOverride,
-                           useDefaults = useDefaults(ctx.state)
+                           useDefaults = useDefaults(ctx)
                          )
                        }
         releaseVer  <-
@@ -192,7 +192,7 @@ private[release] object VersionSteps {
     execute = ctx =>
       requireVersions(ctx) { case (releaseVer, _) =>
         for {
-          versionPlan             <- IO.blocking(resolveVersionPlan(ctx.state))
+          versionPlan             <- IO.blocking(resolveVersionPlan(ctx))
           commitResult            <- commitVersionNative(ctx, releaseIOCommitMessage, versionPlan.versionFile)
           (resultCtx, currentHash) = commitResult
           finalCtx                <- IO.blocking {
@@ -217,7 +217,7 @@ private[release] object VersionSteps {
   val commitNextVersion: ReleaseStepIO =
     ReleaseStepIO.io("commit-next-version") { ctx =>
       for {
-        versionPlan <- IO.blocking(resolveVersionPlan(ctx.state))
+        versionPlan <- IO.blocking(resolveVersionPlan(ctx))
         result      <- commitVersionNative(ctx, releaseIONextCommitMessage, versionPlan.versionFile)
       } yield result._1
     }
@@ -257,7 +257,7 @@ private[release] object VersionSteps {
 
   private def writeVersion(ctx: ReleaseContext, ver: String): IO[ReleaseContext] = {
     for {
-      versionPlan <- IO.blocking(resolveVersionPlan(ctx.state))
+      versionPlan <- IO.blocking(resolveVersionPlan(ctx))
       contents    <- versionPlan.versionFileContents(versionPlan.versionFile, ver)
       _           <- IO.blocking {
                        java.nio.file.Files
@@ -281,8 +281,8 @@ private[release] object VersionSteps {
   }
 
   private[release] def resolveVersionPlan(
-      state: State,
+      ctx: ReleaseContext,
       resolveSettings: State => ResolvedSettings = resolveCurrentSettings
   ): VersionPlan =
-    resolve(state, resolveSettings)
+    resolve(ctx, resolveSettings)
 }

@@ -16,8 +16,6 @@ import java.nio.file.Files
 /** Version-related monorepo release steps: inquire, set, commit. */
 private[monorepo] object MonorepoVersionSteps {
 
-  private val globalVersionWrittenKey = AttributeKey[String]("globalVersionWritten")
-
   /** Inquire release and next versions for each project.
     * If the project already has versions pre-populated (from command-line overrides),
     * those are used directly without prompting or computing.
@@ -52,8 +50,7 @@ private[monorepo] object MonorepoVersionSteps {
             // reuse the first project's versions to avoid prompting N times.
             // In non-interactive or use-defaults mode, evaluate each project's version
             // function so that task-derived mismatches are caught by validate-versions.
-            val useDefaults =
-              StepHelpers.useDefaults(ctx.state)
+            val useDefaults = StepHelpers.useDefaults(ctx)
             if (versionInputs.useGlobalVersion && ctx.interactive && !useDefaults) {
               ctx.currentProjects
                 .flatMap(_.versions)
@@ -93,8 +90,7 @@ private[monorepo] object MonorepoVersionSteps {
                                                     SbtRuntime.runTask(ctx.state, project.ref / releaseIOVersion)
                                                   val (_, nextFn)     =
                                                     SbtRuntime.runTask(s1, project.ref / releaseIONextVersion)
-                                                  val useDefaults     =
-                                                    StepHelpers.useDefaults(ctx.state)
+                                                  val useDefaults     = StepHelpers.useDefaults(ctx)
                                                   (releaseFn(currentVer), nextFn, useDefaults)
                                                 }
       (suggestedRelease, nextFn, useDefaults) = data
@@ -209,9 +205,7 @@ private[monorepo] object MonorepoVersionSteps {
       versionFile   = versionInputs.versionFile
       result       <-
         if (
-          versionInputs.useGlobalVersion && ctx
-            .metadata(globalVersionWrittenKey)
-            .contains(ver)
+          versionInputs.useGlobalVersion && ctx.globalVersionWritten.contains(ver)
         )
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
             .as(ctx)
@@ -231,7 +225,7 @@ private[monorepo] object MonorepoVersionSteps {
                           .withState(newState)
                           .updateProject(project.ref)(_.copy(versionFile = versionFile))
             withMeta  = if (versionInputs.useGlobalVersion)
-                          updated.withMetadata(globalVersionWrittenKey, ver)
+                          updated.withGlobalVersionWritten(ver)
                         else updated
             _        <-
               logInfo(withMeta, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")

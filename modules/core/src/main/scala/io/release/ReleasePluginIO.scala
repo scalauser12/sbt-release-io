@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.{IO, Resource}
-import io.release.internal.{CoreReleasePlan, InternalKeys, ReleaseCommandRunner, ReleaseLogPrefixes}
+import io.release.internal.{CoreExecutionState, CoreReleasePlan, ReleaseCommandRunner, ReleaseLogPrefixes}
 import io.release.steps.{ReleaseSteps, StepHelpers}
 import io.release.vcs.Vcs
 import io.release.version.Version
@@ -230,8 +230,6 @@ trait ReleasePluginIOLike[T]
 
     val cleanState = state
       .remove(ReleaseKeys.versions)
-      .remove(InternalKeys.executionFlags)
-      .remove(InternalKeys.coreReleasePlan)
 
     val plan         = CoreReleasePlan.build(
       CoreReleasePlan.Inputs(
@@ -245,18 +243,19 @@ trait ReleasePluginIOLike[T]
         tagDefault = tagDefaultArg
       )
     )
-    val plannedState = CoreReleasePlan.attach(cleanState, plan)
-    val stepFns      = releaseProcess(plannedState)
+    val stepFns      = releaseProcess(cleanState)
 
-    plannedState.log.info(s"${ReleaseLogPrefixes.Core} Starting release process...")
-    plannedState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")
-    if (crossEnabled) plannedState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
+    cleanState.log.info(s"${ReleaseLogPrefixes.Core} Starting release process...")
+    cleanState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")
+    if (crossEnabled) cleanState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
 
     val program = resource
       .use { t =>
         val steps = stepFns.map(_(t))
-        initialContext(plannedState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
-          ReleaseStepIO.compose(steps, crossEnabled)(initialCtx)
+        initialContext(cleanState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
+          ReleaseStepIO.compose(steps, crossEnabled)(
+            initialCtx.withExecutionState(CoreExecutionState(plan))
+          )
         }
       }
       .flatMap { finalCtx =>

@@ -30,7 +30,7 @@ private[release] final case class CoreReleasePlan(
     tagDefault: Option[String]
 )
 
-/** Builds and stores the typed execution plan for the core release command. */
+/** Builds the typed execution plan for the core release command. */
 private[release] object CoreReleasePlan {
 
   final case class Inputs(
@@ -59,15 +59,4 @@ private[release] object CoreReleasePlan {
       tagDefault = inputs.tagDefault
     )
   }
-
-  def attach(state: State, plan: CoreReleasePlan): State =
-    state
-      .put(InternalKeys.coreReleasePlan, plan)
-      .put(InternalKeys.executionFlags, plan.flags)
-
-  def current(state: State): Option[CoreReleasePlan] =
-    state.get(InternalKeys.coreReleasePlan)
-
-  def require(state: State): IO[CoreReleasePlan] =
-    IO.fromOption(current(state))(new IllegalStateException("Core release plan not initialized"))
 }

@@ -51,6 +51,12 @@ val checkBranch = ReleaseStepIO.step("check-branch")
 | `fail`                                      | `ReleaseContext`           | Mark release as failed                                     |
 | `failWith(cause)`                           | `ReleaseContext`           | Mark release as failed with a cause                        |
 
+The built-in implementation also threads startup-only command data internally (for example,
+`with-defaults` and CLI version overrides), but that runtime metadata is package-private.
+For custom steps, treat `ctx.withMetadata` / `ctx.metadata` as your extension space. The only
+intentional mirror onto `sbt.State` is the release version pair, which sbt tasks use to
+compute live tag names and commit messages.
+
 ### Creating steps from sbt tasks and commands
 
 Wrap existing sbt tasks, input tasks, or commands as release steps using the built-in factory methods:

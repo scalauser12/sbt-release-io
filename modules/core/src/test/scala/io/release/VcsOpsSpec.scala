@@ -1,7 +1,6 @@
 package io.release
 
 import cats.effect.{IO, Ref, Resource}
-import io.release.internal.{ExecutionFlags, InternalKeys}
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 
@@ -99,6 +98,7 @@ class VcsOpsSpec extends CatsEffectSuite {
         _          <- VcsOps.interactivePushAfterRemote(
                         state,
                         interactive = false,
+                        useDefaults = false,
                         vcs,
                         remoteCheckLog = None
                       )(
@@ -116,18 +116,7 @@ class VcsOpsSpec extends CatsEffectSuite {
 
   test("interactivePushAfterRemote - interactive with useDefaults runs doPush") {
     tempDirResource.use { dir =>
-      val state = TestSupport
-        .dummyState(dir)
-        .put(
-          InternalKeys.executionFlags,
-          ExecutionFlags(
-            useDefaults = true,
-            skipTests = false,
-            skipPublish = false,
-            interactive = true,
-            crossBuild = false
-          )
-        )
+      val state = TestSupport.dummyState(dir)
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
@@ -135,6 +124,7 @@ class VcsOpsSpec extends CatsEffectSuite {
         _          <- VcsOps.interactivePushAfterRemote(
                         state,
                         interactive = true,
+                        useDefaults = true,
                         vcs,
                         remoteCheckLog = None
                       )(

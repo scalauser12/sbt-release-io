@@ -1,5 +1,6 @@
 package io.release.monorepo
 
+import io.release.internal.ExecutionFlags
 import io.release.ReleaseCtx
 import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
@@ -63,6 +64,8 @@ object MonorepoTagStrategy {
   *    evaluation, and VCS state.
   *  - '''Context fields''' (`projects`, `vcs`, `tagStrategy`, etc.) — typed, immutable
   *    fields for release-specific data. These are the primary API for step authors.
+  *  - '''Internal runtime metadata''' — startup-only release planning data lives in
+  *    package-private metadata entries on this context, not on `sbt.State`.
   *  - '''`metadataBag: AttributeMap`''' — extensible typed key-value store for inter-step
   *    data that doesn't warrant a dedicated field. Steps should prefer context fields
   *    for commonly-needed data and `metadataBag` for step-specific data.
@@ -116,16 +119,41 @@ case class MonorepoContext(
   def withoutMetadata[A](key: AttributeKey[A]): MonorepoContext =
     copy(metadataBag = metadataBag.remove(key))
 
-  /** The monorepo release plan, stored in `metadataBag` to avoid adding a field to the
-    * public case class constructor. Access is `private[monorepo]` so user steps cannot
-    * read or modify the plan. Only `detectOrSelectProjects` reads it;
-    * only [[MonorepoReleasePluginLike.buildContext]] writes it.
-    */
-  private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
-    metadata(MonorepoReleasePlan.monorepoReleasePlanKey)
+  private[monorepo] def executionState: Option[MonorepoExecutionState] =
+    metadata(MonorepoExecutionState.key)
 
+  private[monorepo] def withExecutionState(
+      state: MonorepoExecutionState
+  ): MonorepoContext =
+    withMetadata(MonorepoExecutionState.key, state)
+
+  /** The monorepo release plan is internal runtime metadata, kept separate from user metadata. */
+  private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
+    executionState.map(_.plan)
+
+  /** Seed internal execution state during initialization.
+    * Replaces any prior execution-state payload, including `globalVersionWritten`.
+    * Built-in flow calls this once before step execution begins.
+    */
   private[monorepo] def withReleasePlan(plan: MonorepoReleasePlan): MonorepoContext =
-    withMetadata(MonorepoReleasePlan.monorepoReleasePlanKey, plan)
+    withExecutionState(MonorepoExecutionState(plan))
+
+  private[monorepo] def globalVersionWritten: Option[String] =
+    executionState.flatMap(_.globalVersionWritten)
+
+  private[monorepo] def withGlobalVersionWritten(version: String): MonorepoContext =
+    executionState match {
+      case Some(state) =>
+        withExecutionState(state.copy(globalVersionWritten = Some(version)))
+      case None        =>
+        throw new IllegalStateException(
+          "Monorepo execution state not initialized. " +
+            "Ensure buildContext(...).withReleasePlan(plan) runs before version writes."
+        )
+    }
+
+  private[release] def executionFlags: Option[ExecutionFlags] =
+    executionState.map(_.plan.flags)
 
   def fail: MonorepoContext                       = copy(failed = true)
   def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))

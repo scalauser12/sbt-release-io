@@ -3,7 +3,7 @@ package io.release.steps
 import cats.effect.IO
 import cats.syntax.flatMap.*
 import io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
-import io.release.internal.{CoreReleasePlan, ReleaseLogPrefixes, SbtRuntime, TagPlan}
+import io.release.internal.{ReleaseLogPrefixes, SbtRuntime, TagPlan}
 import io.release.steps.StepHelpers.*
 import io.release.vcs.Vcs
 import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
@@ -49,21 +49,21 @@ private[release] object VcsSteps {
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
-        params <- IO.blocking(resolveTagPlan(ctx.state))
+        params <- IO.blocking(resolveTagPlan(ctx))
         result <- resolveTag(vcs, params, ctx.withState(params.state))
       } yield result
     }
   }
 
-  private def resolveTagPlan(state: sbt.State): TagPlan = {
-    val (s1, tagName)    = SbtRuntime.runTask(state, releaseIOTagName)
+  private def resolveTagPlan(ctx: ReleaseContext): TagPlan = {
+    val (s1, tagName)    = SbtRuntime.runTask(ctx.state, releaseIOTagName)
     val (s2, tagComment) = SbtRuntime.runTask(s1, releaseIOTagComment)
     TagPlan(
       state = s2,
       tagName = tagName,
       tagComment = tagComment,
       sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
-      defaultAnswer = CoreReleasePlan.current(s2).flatMap(_.tagDefault)
+      defaultAnswer = ctx.executionState.flatMap(_.plan.tagDefault)
     )
   }
 
@@ -80,10 +80,11 @@ private[release] object VcsSteps {
       vcs: Vcs,
       params: TagPlan,
       ctx: ReleaseContext
-  ): IO[ReleaseContext] =
+  ): IO[ReleaseContext] = {
+    val useDefaults = ctx.useDefaults
+
     params.tailRecM[IO, ReleaseContext] { currentParams =>
       val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = currentParams
-      val useDefaults                                          = StepHelpers.useDefaults(currentParams.state)
       for {
         exists <- vcs.existsTag(tagName)
         result <- if (!exists)
@@ -142,6 +143,7 @@ private[release] object VcsSteps {
                   }
       } yield result
     }
+  }
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call.
@@ -149,13 +151,14 @@ private[release] object VcsSteps {
     name = "push-changes",
     validate = ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, vcs)
+        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, ctx.useDefaults, vcs)
       },
     execute = ctx =>
       requireVcs(ctx) { vcs =>
         VcsOps.interactivePushAfterRemote(
           ctx.state,
           ctx.interactive,
+          ctx.useDefaults,
           vcs,
           remoteCheckLog =
             Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))

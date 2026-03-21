@@ -30,6 +30,7 @@ private[release] object PublishSteps {
             deps,
             ctx.state,
             ctx.interactive,
+            ctx.useDefaults,
             ReleaseLogPrefixes.Core
           )
         case Right(_)                     => IO.unit

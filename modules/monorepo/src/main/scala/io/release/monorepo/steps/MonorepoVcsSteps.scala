@@ -86,8 +86,8 @@ private[monorepo] object MonorepoVcsSteps {
     vcs.existsTag(tagName).flatMap {
       case false => vcs.tag(tagName, comment, sign = sign)
       case true  =>
-        if (useDefaults(ctx.state) || !ctx.interactive) {
-          val mode = if (useDefaults(ctx.state)) "use-defaults mode" else "non-interactive mode"
+        if (useDefaults(ctx) || !ctx.interactive) {
+          val mode = if (useDefaults(ctx)) "use-defaults mode" else "non-interactive mode"
           IO.blocking(
             ctx.state.log.warn(
               s"${ReleaseLogPrefixes.Monorepo} Tag [$tagName] already exists for $label. " +
@@ -225,7 +225,7 @@ private[monorepo] object MonorepoVcsSteps {
     name = "push-changes",
     validate = ctx =>
       ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
-        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, vcs)
+        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, ctx.useDefaults, vcs)
       },
     execute = ctx =>
       required(ctx.vcs, "VCS not initialized") { vcs =>
@@ -236,6 +236,7 @@ private[monorepo] object MonorepoVcsSteps {
         VcsOps.interactivePushAfterRemote(
           ctx.state,
           ctx.interactive,
+          ctx.useDefaults,
           vcs,
           remoteCheckLog = Some(r =>
             ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] ...")

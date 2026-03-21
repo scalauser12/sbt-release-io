@@ -2,8 +2,9 @@ package io.release.steps
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import io.release.ReleaseContext
 import io.release.TestSupport
-import io.release.internal.{CoreReleasePlan, ExecutionFlags}
+import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags}
 import munit.FunSuite
 
 import java.io.File
@@ -14,9 +15,8 @@ class VersionStepsSpec extends FunSuite {
   test("resolveVersionPlan - use live version settings even when a startup plan is attached") {
     withTempDir { dir =>
       val resolvedFile = new File(dir, "resolved-version.sbt")
-      val state        =
-        CoreReleasePlan.attach(
-          TestSupport.dummyState(dir),
+      val ctx          = ReleaseContext(state = TestSupport.dummyState(dir)).withExecutionState(
+        CoreExecutionState(
           CoreReleasePlan(
             flags = ExecutionFlags(
               useDefaults = false,
@@ -30,9 +30,10 @@ class VersionStepsSpec extends FunSuite {
             tagDefault = None
           )
         )
+      )
 
       val result = VersionSteps.resolveVersionPlan(
-        state,
+        ctx,
         _ =>
           VersionSteps.ResolvedSettings(
             versionFile = resolvedFile,
@@ -60,9 +61,8 @@ class VersionStepsSpec extends FunSuite {
     withTempDir { dir =>
       val fallbackFile = new File(dir, "fallback-version.sbt")
       var resolverRuns = 0
-      val state        =
-        CoreReleasePlan.attach(
-          TestSupport.dummyState(dir),
+      val ctx          = ReleaseContext(state = TestSupport.dummyState(dir)).withExecutionState(
+        CoreExecutionState(
           CoreReleasePlan(
             flags = ExecutionFlags(
               useDefaults = false,
@@ -76,9 +76,10 @@ class VersionStepsSpec extends FunSuite {
             tagDefault = None
           )
         )
+      )
 
       val result = VersionSteps.resolveVersionPlan(
-        state,
+        ctx,
         _ => {
           resolverRuns += 1
           VersionSteps.ResolvedSettings(

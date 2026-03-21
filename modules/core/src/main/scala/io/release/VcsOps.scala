@@ -123,10 +123,12 @@ private[release] object VcsOps {
 
   /** Validate that the tracking remote is reachable. Shared by core and monorepo push steps.
     * @param log optional callback to log the remote name before checking
+    * @param useDefaults startup flag from the threaded release context
     */
   def validatePushRemote(
       state: State,
       interactive: Boolean,
+      useDefaults: Boolean,
       vcs: Vcs,
       log: Option[String => Unit] = None
   ): IO[Unit] =
@@ -140,6 +142,7 @@ private[release] object VcsOps {
           steps.StepHelpers.confirmContinue(
             state,
             interactive,
+            useDefaults,
             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
             defaultYes = false,
             abortMessage = "Aborting the release due to remote check failure."
@@ -148,10 +151,12 @@ private[release] object VcsOps {
 
   /** Validate that a tracking branch exists and the local branch is not behind remote.
     * Shared by core and monorepo push steps.
+    * `useDefaults` comes from the threaded release context, not `sbt.State`.
     */
   def validatePushReadiness(
       state: State,
       interactive: Boolean,
+      useDefaults: Boolean,
       vcs: Vcs
   ): IO[Unit] =
     for {
@@ -177,6 +182,7 @@ private[release] object VcsOps {
           steps.StepHelpers.confirmContinue(
             state,
             interactive,
+            useDefaults,
             prompt = "The upstream branch has unmerged commits. " +
               "A subsequent push may fail! Continue (y/n)? [n] ",
             defaultYes = false,
@@ -184,18 +190,21 @@ private[release] object VcsOps {
           )
     } yield ()
 
-  /** After [[validatePushRemote]], optionally prompt before pushing (interactive mode). */
+  /** After [[validatePushRemote]], optionally prompt before pushing (interactive mode).
+    * `useDefaults` comes from the threaded release context, not `sbt.State`.
+    */
   def interactivePushAfterRemote[T](
       state: State,
       interactive: Boolean,
+      useDefaults: Boolean,
       vcs: Vcs,
       remoteCheckLog: Option[String => Unit]
   )(doPush: IO[T], onDeclinePush: IO[T]): IO[T] =
-    validatePushRemote(state, interactive, vcs, remoteCheckLog) *>
+    validatePushRemote(state, interactive, useDefaults, vcs, remoteCheckLog) *>
       (if (!interactive) doPush
        else {
          val decisionIO =
-           if (steps.StepHelpers.useDefaults(state)) IO.pure(true)
+           if (useDefaults) IO.pure(true)
            else
              steps.StepHelpers.askYesNo(
                prompt = "Push changes to the remote repository (y/n)? [y] ",
