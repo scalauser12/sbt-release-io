@@ -1,7 +1,12 @@
 package io.release
 
 import cats.effect.{IO, Resource}
-import io.release.internal.{CoreExecutionState, CoreReleasePlan, ReleaseCommandRunner, ReleaseLogPrefixes}
+import io.release.internal.{
+  CoreExecutionState,
+  CoreReleasePlan,
+  ReleaseCommandRunner,
+  ReleaseLogPrefixes
+}
 import io.release.steps.{ReleaseSteps, StepHelpers}
 import io.release.vcs.Vcs
 import io.release.version.Version
