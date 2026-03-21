@@ -7,10 +7,12 @@ import io.release.steps.VersionSteps
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
-/** Setting keys and factory methods for the monorepo release plugin.
+/** Setting keys and process helpers for the monorepo release plugin.
   *
   * Keys are singletons defined in the companion object so multiple plugins
   * can safely mix in this trait without creating duplicate key instances.
+  * Step construction is handled by [[MonorepoStepIO]]; this trait keeps the
+  * build-facing settings surface and process helpers such as insertion utilities.
   */
 trait MonorepoReleaseIO {
   import MonorepoReleaseIO.*

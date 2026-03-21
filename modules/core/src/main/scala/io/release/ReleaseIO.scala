@@ -4,7 +4,7 @@ import cats.effect.IO
 import io.release.version.Version
 import sbt.{internal as _, *}
 
-/** Shared setting keys and factory methods for release-io plugins.
+/** Shared setting keys for release-io plugins.
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
   * mix in or import from here.
   *
