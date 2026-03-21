@@ -129,7 +129,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Tests both the negative case (failure) and positive case (success with flag)
 
 ### step-command-and-remaining
-- Tests `stepCommandAndRemaining` factory in `releaseIOProcess`
+- Tests `ReleaseStepIO.fromCommandAndRemaining` in `releaseIOProcess`
 - Verifies command execution and drain logic
 
 ### snapshot-deps
@@ -145,7 +145,7 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Covers abort, overwrite, keep, and custom tag name resolution
 
 ### tasks-as-steps
-- Tests `stepTask`, `stepTaskAggregated`, `stepInputTask`, and `stepCommand` factories
+- Tests `ReleaseStepIO.fromTask`, `fromTaskAggregated`, `fromInputTask`, and `fromCommand`
 - Verifies tasks, input tasks, and commands all execute correctly as release steps
 
 ### untracked-files

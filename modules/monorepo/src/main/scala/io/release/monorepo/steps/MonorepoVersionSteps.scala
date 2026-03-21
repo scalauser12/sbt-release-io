@@ -204,9 +204,7 @@ private[monorepo] object MonorepoVersionSteps {
       preserved     = MonorepoVersionFiles.sessionSettings(runtime)
       versionFile   = versionInputs.versionFile
       result       <-
-        if (
-          versionInputs.useGlobalVersion && ctx.globalVersionWritten.contains(ver)
-        )
+        if (versionInputs.useGlobalVersion && ctx.globalVersionWritten.contains(ver))
           logInfo(ctx, s"Global version already set to $ver, skipping write for ${project.name}")
             .as(ctx)
         else

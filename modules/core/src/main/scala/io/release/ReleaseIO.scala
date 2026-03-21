@@ -113,32 +113,6 @@ trait ReleaseIO {
   val releaseIOPublishArtifactsChecks: SettingKey[Boolean] =
     ReleaseIO._releaseIOPublishArtifactsChecks
 
-  // ── Factory methods ───────────────────────────────────────────────────────
-
-  /** Create a release step that runs a task. */
-  def stepTask[A](key: TaskKey[A], enableCrossBuild: Boolean = false): ReleaseStepIO =
-    ReleaseStepIO.fromTask(key, enableCrossBuild)
-
-  /** Create a release step that runs an aggregated task across sub-projects. */
-  def stepTaskAggregated[A](key: TaskKey[A], enableCrossBuild: Boolean = false): ReleaseStepIO =
-    ReleaseStepIO.fromTaskAggregated(key, enableCrossBuild)
-
-  /** Create a release step that runs an input task. */
-  def stepInputTask[A](
-      key: InputKey[A],
-      args: String = "",
-      enableCrossBuild: Boolean = false
-  ): ReleaseStepIO =
-    ReleaseStepIO.fromInputTask(key, args, enableCrossBuild)
-
-  /** Create a release step that runs an sbt command. */
-  def stepCommand(command: String): ReleaseStepIO =
-    ReleaseStepIO.fromCommand(command)
-
-  /** Create a release step that runs a command and drains remaining enqueued commands. */
-  def stepCommandAndRemaining(command: String): ReleaseStepIO =
-    ReleaseStepIO.fromCommandAndRemaining(command)
-
 }
 
 object ReleaseIO extends ReleaseIO {

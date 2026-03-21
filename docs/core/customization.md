@@ -59,7 +59,8 @@ compute live tag names and commit messages.
 
 ### Creating steps from sbt tasks and commands
 
-Wrap existing sbt tasks, input tasks, or commands as release steps using the built-in factory methods:
+Wrap existing sbt tasks, input tasks, or commands as release steps by calling the
+canonical `ReleaseStepIO` factory methods directly:
 
 ```scala
 releaseIOProcess := Seq(
@@ -67,22 +68,25 @@ releaseIOProcess := Seq(
   ReleaseSteps.checkCleanWorkingDir,
   ReleaseSteps.inquireVersions,
   // Run a TaskKey as a release step
-  stepTask(myCustomTask),
+  ReleaseStepIO.fromTask(myCustomTask),
   // Run a TaskKey with cross-building enabled
-  stepTask(myCustomTask, enableCrossBuild = true),
+  ReleaseStepIO.fromTask(myCustomTask, enableCrossBuild = true),
   // Run an InputKey with arguments
-  stepInputTask(myInputTask, args = "arg1 arg2"),
+  ReleaseStepIO.fromInputTask(myInputTask, args = "arg1 arg2"),
   // Run a TaskKey aggregated across subprojects
-  stepTaskAggregated(test),
+  ReleaseStepIO.fromTaskAggregated(test),
   // Run an sbt command string
-  stepCommand("publishLocal"),
+  ReleaseStepIO.fromCommand("publishLocal"),
   // Run a command that enqueues sub-commands (e.g. +publish)
-  stepCommandAndRemaining("+publish"),
+  ReleaseStepIO.fromCommandAndRemaining("+publish"),
   ReleaseSteps.pushChanges
 )
 ```
 
-These are also available directly on `ReleaseStepIO` as `fromTask`, `fromInputTask`, `fromTaskAggregated`, `fromCommand`, `fromCommandAndRemaining`, and `pure` (for non-effectful context transformations).
+The supported step-construction surface is `ReleaseStepIO`: use `step(...)` /
+`resourceStep(...)` for builder-style definitions, `fromTask` / `fromInputTask` /
+`fromTaskAggregated` / `fromCommand` / `fromCommandAndRemaining` for wrapping existing sbt
+entry points, and `pure` for non-effectful context transformations.
 
 ## Custom plugins
 

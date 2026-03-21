@@ -59,6 +59,7 @@ If you are updating a custom plugin or build from an older release:
 
 - rename `step.check` to `step.validate`
 - rename `step.action` to `step.execute`
+- replace `stepTask(...)`, `stepTaskAggregated(...)`, `stepInputTask(...)`, `stepCommand(...)`, and `stepCommandAndRemaining(...)` from `ReleaseIO` with the canonical `ReleaseStepIO.fromTask(...)`, `fromTaskAggregated(...)`, `fromInputTask(...)`, `fromCommand(...)`, and `fromCommandAndRemaining(...)` APIs
 - replace `resourceStep(...)`, `resourceStepAction(...)`, `resourceStepWithCheck(...)`, `resourceStepWithValidation(...)`, and `resourceStepActionWithValidation(...)` factory methods with `ReleaseStepIO.resourceStep[T](name)` builder API
 - replace string attributes with typed metadata via `ctx.withMetadata`, `ctx.metadata`, and `AttributeKey[A]`
 

@@ -1,3 +1,4 @@
+import _root_.io.release.ReleaseStepIO
 import sbt.*
 
 name := "step-command-and-remaining-test"
@@ -24,5 +25,5 @@ lazy val compileAndMark = Command.command("compileAndMark") { state =>
 
 commands += compileAndMark
 
-// Minimal process: only stepCommandAndRemaining to verify the factory drains queued commands
-releaseIOProcess := Seq(stepCommandAndRemaining("compileAndMark"))
+// Minimal process: only ReleaseStepIO.fromCommandAndRemaining to verify the command drains queued commands
+releaseIOProcess := Seq(ReleaseStepIO.fromCommandAndRemaining("compileAndMark"))

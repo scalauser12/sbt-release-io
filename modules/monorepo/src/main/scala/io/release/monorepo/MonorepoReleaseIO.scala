@@ -143,46 +143,6 @@ trait MonorepoReleaseIO {
   val releaseIOMonorepoNextCommitMessage: SettingKey[String => String] =
     _releaseIOMonorepoNextCommitMessage
 
-  // ── Factory methods ──────────────────────────────────────────────────
-
-  /** Create a global monorepo release step from a context-transforming IO action. */
-  def globalStep(name: String)(
-      execute: MonorepoContext => IO[MonorepoContext]
-  ): MonorepoStepIO.Global =
-    MonorepoStepIO.Global(name, execute)
-
-  /** Create a per-project monorepo release step from a project-level IO action. */
-  def perProjectStep(name: String, enableCrossBuild: Boolean = false)(
-      execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  ): MonorepoStepIO.PerProject =
-    MonorepoStepIO.PerProject(name, execute, enableCrossBuild = enableCrossBuild)
-
-  // ── Action factory methods (execute returns IO[Unit]) ──────────────
-
-  /** Create a global monorepo release step from a side-effecting IO action.
-    *
-    * Unlike [[globalStep]], the execute function returns `IO[Unit]` instead of
-    * `IO[MonorepoContext]`. The context is passed through unchanged.
-    */
-  def globalStepAction(name: String)(
-      execute: MonorepoContext => IO[Unit]
-  ): MonorepoStepIO.Global =
-    MonorepoStepIO.Global(name, ctx => execute(ctx).as(ctx))
-
-  /** Create a per-project monorepo release step from a side-effecting IO action.
-    *
-    * Unlike [[perProjectStep]], the execute function returns `IO[Unit]` instead of
-    * `IO[MonorepoContext]`. The context is passed through unchanged.
-    */
-  def perProjectStepAction(name: String, enableCrossBuild: Boolean = false)(
-      execute: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
-  ): MonorepoStepIO.PerProject =
-    MonorepoStepIO.PerProject(
-      name,
-      (ctx, proj) => execute(ctx, proj).as(ctx),
-      enableCrossBuild = enableCrossBuild
-    )
-
   // ── Process manipulation helpers ──────────────────────────────────
 
   /** Insert extra steps after the first occurrence of the named step.

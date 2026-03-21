@@ -83,7 +83,7 @@ class MonorepoContextSpec extends FunSuite {
 
   test("MonorepoContext internal execution state - survive state replacement") {
     withState { state =>
-      val ctx = MonorepoContext(state = state).withExecutionState(
+      val ctx     = MonorepoContext(state = state).withExecutionState(
         MonorepoExecutionState(
           MonorepoReleasePlan(
             flags = ExecutionFlags(
@@ -111,7 +111,9 @@ class MonorepoContextSpec extends FunSuite {
     }
   }
 
-  test("MonorepoContext internal execution state - require execution state before recording global version") {
+  test(
+    "MonorepoContext internal execution state - require execution state before recording global version"
+  ) {
     withState { state =>
       val error = intercept[IllegalStateException] {
         MonorepoContext(state = state).withGlobalVersionWritten("1.0.0")

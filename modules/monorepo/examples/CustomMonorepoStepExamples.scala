@@ -2,8 +2,8 @@ package io.release.monorepo.examples
 
 import cats.effect.{IO, Resource}
 import io.release.monorepo.{MonorepoReleasePluginLike, MonorepoStepIO}
+import io.release.monorepo.MonorepoReleaseIO.insertStepAfter
 import io.release.monorepo.steps.MonorepoReleaseSteps
-import io.release.monorepo.MonorepoReleaseIO.*
 import sbt.*
 import sbt.Keys.*
 
@@ -51,15 +51,19 @@ object CustomMonorepoStepExamples {
 
   // --- Global step: print a release summary ---
 
-  val printSummary: MonorepoStepIO = globalStepAction("print-summary")(ctx =>
-    IO.println(s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}")
-  )
+  val printSummary: MonorepoStepIO = MonorepoStepIO
+    .global("print-summary")
+    .executeAction(ctx =>
+      IO.println(
+        s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}"
+      )
+    )
 
   // --- Global step: validate branch name ---
 
-  val validateBranch: MonorepoStepIO = MonorepoStepIO.Global(
-    name = "validate-branch",
-    execute = ctx =>
+  val validateBranch: MonorepoStepIO = MonorepoStepIO
+    .global("validate-branch")
+    .execute(ctx =>
       ctx.vcs match {
         case Some(vcs) =>
           for {
@@ -75,12 +79,13 @@ object CustomMonorepoStepExamples {
         case None      =>
           IO.raiseError(new RuntimeException("VCS not initialized"))
       }
-  )
+    )
 
   // --- Per-project step: check for a required file ---
 
-  val checkReadmeExists: MonorepoStepIO =
-    perProjectStep("check-readme")((ctx, project) =>
+  val checkReadmeExists: MonorepoStepIO = MonorepoStepIO
+    .perProject("check-readme")
+    .execute((ctx, project) =>
       if (!(new java.io.File(project.baseDir, "README.md")).exists())
         IO.raiseError(
           new RuntimeException(
@@ -93,8 +98,9 @@ object CustomMonorepoStepExamples {
   // --- Per-project step: generate a changelog per project ---
   // Intentionally simple demo logic: append-only and not fully idempotent.
 
-  val generateChangelog: MonorepoStepIO =
-    perProjectStepAction("generate-changelog")((ctx, project) =>
+  val generateChangelog: MonorepoStepIO = MonorepoStepIO
+    .perProject("generate-changelog")
+    .executeAction((ctx, project) =>
       project.versions match {
         case Some((releaseVer, _)) =>
           IO.blocking {
@@ -111,8 +117,9 @@ object CustomMonorepoStepExamples {
 
   // --- Global step: store a custom attribute ---
 
-  val markReleaseDone: MonorepoStepIO =
-    globalStep("mark-done")(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
+  val markReleaseDone: MonorepoStepIO = MonorepoStepIO
+    .global("mark-done")
+    .execute(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
 
   // --- Composing a custom release process ---
 

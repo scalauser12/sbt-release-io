@@ -101,8 +101,7 @@ private[monorepo] object MonorepoComposer {
         val wrappedValidation =
           wrapValidationWithCrossBuild(perProject.validate, perProject.enableCrossBuild, crossBuild)
 
-        ctx =>
-          ctx.currentProjects.toList.traverse_(project => wrappedValidation(ctx, project))
+        ctx => ctx.currentProjects.toList.traverse_(wrappedValidation(ctx, _))
     }
 
   private def runSingleStepAction(

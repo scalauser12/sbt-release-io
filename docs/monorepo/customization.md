@@ -6,33 +6,29 @@ You can define your own `MonorepoStepIO` steps and add them to the release proce
 
 ### Plain steps
 
-Use these factory methods in `build.sbt` or `project/*.scala`:
-
-| Method | Scope | Execute returns |
-|--------|-------|-----------------|
-| `globalStep(name)(execute)` | Global | `IO[MonorepoContext]` |
-| `perProjectStep(name, enableCrossBuild)(execute)` | PerProject | `IO[MonorepoContext]` |
-| `globalStepAction(name)(execute)` | Global | `IO[Unit]` |
-| `perProjectStepAction(name, enableCrossBuild)(execute)` | PerProject | `IO[Unit]` |
-
-> `enableCrossBuild` is a named parameter that defaults to `false` — pass it by name to keep call
-> sites self-documenting: `perProjectStep("name", enableCrossBuild = true)(...)`.
+Construct steps directly through the canonical `MonorepoStepIO` builders in `build.sbt`
+or `project/*.scala`:
 
 ```scala
 import cats.effect.IO
+import io.release.monorepo.MonorepoStepIO
 
 // Global step — runs once, logs a release summary
-val printSummary = globalStepAction("print-summary")(ctx =>
-  IO.blocking {
-    val names = ctx.currentProjects.map(_.name).mkString(", ")
-    ctx.state.log.info(s"[release] Releasing projects: $names")
-  }
-)
+val printSummary = MonorepoStepIO
+  .global("print-summary")
+  .executeAction(ctx =>
+    IO.blocking {
+      val names = ctx.currentProjects.map(_.name).mkString(", ")
+      ctx.state.log.info(s"[release] Releasing projects: $names")
+    }
+  )
 
 // Per-project step — runs once per selected project
-val logProject = perProjectStepAction("log-project")((ctx, project) =>
-  IO.blocking(ctx.state.log.info(s"[release] Releasing ${project.name}"))
-)
+val logProject = MonorepoStepIO
+  .perProject("log-project")
+  .executeAction((ctx, project) =>
+    IO.blocking(ctx.state.log.info(s"[release] Releasing ${project.name}"))
+  )
 
 ```
 
@@ -90,16 +86,18 @@ This is the per-project complement to `ctx.withMetadata` / `ctx.metadata`, which
 
 ```scala
 // Global step: after inquire-versions has run, log every project's planned release version
-val logPlannedVersions = globalStepAction("log-planned-versions")(ctx =>
-  IO {
-    ctx.currentProjects.foreach(p =>
-      p.releaseVersion match {
-        case Some(v) => ctx.state.log.info(s"[release] ${p.name} → $v")
-        case None    => ctx.state.log.warn(s"[release] ${p.name} — no release version set yet")
-      }
-    )
-  }
-)
+val logPlannedVersions = MonorepoStepIO
+  .global("log-planned-versions")
+  .executeAction(ctx =>
+    IO {
+      ctx.currentProjects.foreach(p =>
+        p.releaseVersion match {
+          case Some(v) => ctx.state.log.info(s"[release] ${p.name} → $v")
+          case None    => ctx.state.log.warn(s"[release] ${p.name} — no release version set yet")
+        }
+      )
+    }
+  )
 ```
 
 For global (non-project-scoped) data shared across steps, use typed metadata:
@@ -107,18 +105,21 @@ For global (non-project-scoped) data shared across steps, use typed metadata:
 ```scala
 private val myKey = AttributeKey[String]("myKey")
 
-val writeStep = globalStep("write-metadata")(ctx =>
-  IO.pure(ctx.withMetadata(myKey, "hello"))
-)
+val writeStep = MonorepoStepIO
+  .global("write-metadata")
+  .execute(ctx => IO.pure(ctx.withMetadata(myKey, "hello")))
 
-val readStep = globalStepAction("read-metadata")(ctx =>
-  IO(ctx.state.log.info(ctx.metadata[String](myKey).getOrElse("(not set)")))
-)
+val readStep = MonorepoStepIO
+  .global("read-metadata")
+  .executeAction(ctx =>
+    IO(ctx.state.log.info(ctx.metadata[String](myKey).getOrElse("(not set)")))
+  )
 ```
 
 ### Builder API
 
-For steps with validation or cross-build, use the fluent builder API on `MonorepoStepIO`:
+All step construction goes through the fluent builder API on `MonorepoStepIO`. For
+validation or cross-build, chain the corresponding builder methods:
 
 ```scala
 import cats.effect.IO

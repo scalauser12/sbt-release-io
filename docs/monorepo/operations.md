@@ -54,6 +54,7 @@ If you are updating a custom plugin or build from an older release:
 
 - rename `check` to `validate`
 - rename `action` to `execute`
+- replace `globalStep(...)`, `perProjectStep(...)`, `globalStepAction(...)`, and `perProjectStepAction(...)` convenience methods from `MonorepoReleaseIO` with the canonical `MonorepoStepIO.global(...).execute` / `.executeAction` and `MonorepoStepIO.perProject(...).execute` / `.executeAction` builder API
 - replace `resourceGlobalStep(...)`, `resourcePerProjectStep(...)`, and all `resource*` factory method variants with the `MonorepoStepIO` builder API (`MonorepoStepIO.globalResource[T](name)`, `MonorepoStepIO.perProjectResource[T](name)`)
 - replace `withAttr` / `attr` string keys with typed metadata via `withMetadata`, `metadata`, and `AttributeKey[A]`
 

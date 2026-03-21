@@ -231,7 +231,7 @@ trait ReleasePluginIOLike[T]
     val cleanState = state
       .remove(ReleaseKeys.versions)
 
-    val plan         = CoreReleasePlan.build(
+    val plan    = CoreReleasePlan.build(
       CoreReleasePlan.Inputs(
         useDefaults = useDefaults,
         skipTests = skipTests,
@@ -243,7 +243,7 @@ trait ReleasePluginIOLike[T]
         tagDefault = tagDefaultArg
       )
     )
-    val stepFns      = releaseProcess(cleanState)
+    val stepFns = releaseProcess(cleanState)
 
     cleanState.log.info(s"${ReleaseLogPrefixes.Core} Starting release process...")
     cleanState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")

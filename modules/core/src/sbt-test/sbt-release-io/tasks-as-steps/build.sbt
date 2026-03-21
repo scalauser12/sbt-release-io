@@ -1,3 +1,5 @@
+import _root_.io.release.ReleaseStepIO
+
 name         := "foo"
 organization := "com.example"
 scalaVersion := "2.12.18"
@@ -64,14 +66,14 @@ lazy val myInputCommand2 = Command.make("myinputcommand2") { state =>
 commands ++= Seq(myCommand, myInputCommand, myCommand2, myInputCommand2)
 
 releaseIOProcess := Seq(
-  stepTask(myTask),
-  stepTaskAggregated(myAggregatedTask),
-  stepInputTask(myInputTask),
-  stepInputTask(myInputTask, " custominputtask"),
-  stepCommand("mycommand"),
-  stepCommand("myinputcommand"),
-  stepCommand("myinputcommand custominputcommand"),
-  stepCommand("mycommand2"),
-  stepCommand("myinputcommand2"),
-  stepCommand("myinputcommand2 custominputcommand2")
+  ReleaseStepIO.fromTask(myTask),
+  ReleaseStepIO.fromTaskAggregated(myAggregatedTask),
+  ReleaseStepIO.fromInputTask(myInputTask),
+  ReleaseStepIO.fromInputTask(myInputTask, " custominputtask"),
+  ReleaseStepIO.fromCommand("mycommand"),
+  ReleaseStepIO.fromCommand("myinputcommand"),
+  ReleaseStepIO.fromCommand("myinputcommand custominputcommand"),
+  ReleaseStepIO.fromCommand("mycommand2"),
+  ReleaseStepIO.fromCommand("myinputcommand2"),
+  ReleaseStepIO.fromCommand("myinputcommand2 custominputcommand2")
 )

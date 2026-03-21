@@ -8,65 +8,21 @@ class MonorepoStepDefSpec extends FunSuite {
 
   private val io = new MonorepoReleaseIO {}
 
-  test("globalStep creates a Global step") {
-    val key  = AttributeKey[String]("key")
-    val step = io.globalStep("test-global") { ctx =>
-      IO.pure(ctx.withMetadata(key, "value"))
-    }
-
-    assertEquals(step.name, "test-global")
-    assert(step.isInstanceOf[MonorepoStepIO.Global])
-  }
-
-  test("perProjectStep creates a PerProject step") {
-    val key  = AttributeKey[String]("project")
-    val step = io.perProjectStep("test-per-project") { (ctx, project) =>
-      IO.pure(ctx.withMetadata(key, project.name))
-    }
-
-    assertEquals(step.name, "test-per-project")
-    assert(step.isInstanceOf[MonorepoStepIO.PerProject])
-  }
-
-  test("globalStepAction creates a Global step that passes context through") {
-    val step = io.globalStepAction("test-action") { ctx =>
-      IO.unit
-    }
-
-    assertEquals(step.name, "test-action")
-    assert(step.isInstanceOf[MonorepoStepIO.Global])
-  }
-
-  test("perProjectStepAction creates a PerProject step that passes context through") {
-    val step = io.perProjectStepAction("test-pp-action") { (ctx, project) =>
-      IO.unit
-    }
-
-    assertEquals(step.name, "test-pp-action")
-    assert(step.isInstanceOf[MonorepoStepIO.PerProject])
-  }
-
-  test("perProjectStepAction supports enableCrossBuild") {
-    val step = io.perProjectStepAction("cross-action", enableCrossBuild = true) { (ctx, _) =>
-      IO.unit
-    }
-
-    assert(step.asInstanceOf[MonorepoStepIO.PerProject].enableCrossBuild)
-  }
-
   test("MonorepoStepIO.global creates a Global step via execute") {
+    val key  = AttributeKey[String]("key")
     val step = MonorepoStepIO
       .global("my-global")
-      .execute(ctx => IO.pure(ctx))
+      .execute(ctx => IO.pure(ctx.withMetadata(key, "value")))
 
     assertEquals(step.name, "my-global")
     assert(step.isInstanceOf[MonorepoStepIO.Global])
   }
 
   test("MonorepoStepIO.perProject creates a PerProject step via execute") {
+    val key  = AttributeKey[String]("project")
     val step = MonorepoStepIO
       .perProject("my-pp")
-      .execute((ctx, _) => IO.pure(ctx))
+      .execute((ctx, project) => IO.pure(ctx.withMetadata(key, project.name)))
 
     assertEquals(step.name, "my-pp")
     assert(step.isInstanceOf[MonorepoStepIO.PerProject])
@@ -166,12 +122,12 @@ class MonorepoStepDefSpec extends FunSuite {
   }
 
   private val steps = Seq(
-    MonorepoStepIO.Global("step-a", ctx => IO.pure(ctx)),
-    MonorepoStepIO.Global("step-b", ctx => IO.pure(ctx)),
-    MonorepoStepIO.Global("step-c", ctx => IO.pure(ctx))
+    MonorepoStepIO.global("step-a").execute(ctx => IO.pure(ctx)),
+    MonorepoStepIO.global("step-b").execute(ctx => IO.pure(ctx)),
+    MonorepoStepIO.global("step-c").execute(ctx => IO.pure(ctx))
   )
 
-  private val extra = Seq(MonorepoStepIO.Global("extra", ctx => IO.pure(ctx)))
+  private val extra = Seq(MonorepoStepIO.global("extra").execute(ctx => IO.pure(ctx)))
 
   test("insertStepAfter inserts after the named step") {
     val result = io.insertStepAfter(steps, "step-a")(extra)

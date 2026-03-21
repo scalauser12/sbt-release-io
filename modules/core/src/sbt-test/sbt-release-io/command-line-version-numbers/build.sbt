@@ -1,3 +1,4 @@
+import _root_.io.release.ReleaseStepIO
 import _root_.io.release.steps.ReleaseSteps
 import sbt.IO
 
@@ -21,7 +22,7 @@ releaseIOProcess := Seq(
   ReleaseSteps.checkSnapshotDependencies,
   ReleaseSteps.inquireVersions,
   ReleaseSteps.runTests,
-  stepTask(writeCompileMarker),
+  ReleaseStepIO.fromTask(writeCompileMarker),
   ReleaseSteps.setReleaseVersion,
   ReleaseSteps.commitReleaseVersion,
   ReleaseSteps.publishArtifacts,
