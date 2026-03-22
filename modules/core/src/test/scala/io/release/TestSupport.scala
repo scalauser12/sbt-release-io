@@ -62,6 +62,12 @@ object TestSupport {
       IO.blocking(deleteRecursively(dir))
     )
 
+  def dummyStateResource(prefix: String): Resource[IO, State] =
+    tempDirResource(prefix).evalMap(dir => IO.blocking(dummyState(dir)))
+
+  def dummyContextResource(prefix: String): Resource[IO, ReleaseContext] =
+    dummyStateResource(prefix).map(state => ReleaseContext(state = state))
+
   def dummyState(baseDir: File): State = {
     val logFile       = new File(baseDir, "sbt-test.log")
     val globalLogging =

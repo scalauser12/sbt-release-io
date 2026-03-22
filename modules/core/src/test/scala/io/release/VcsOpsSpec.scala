@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.{IO, Ref, Resource}
+import io.release.TestAssertions.{assertFailure, assertIllegalStateMessage}
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.{Project, State}
@@ -19,12 +20,9 @@ class VcsOpsSpec extends CatsEffectSuite {
 
   test("detectVcsFromBase - raise IllegalStateException for a non-Git directory") {
     tempDirResource.use { dir =>
-      VcsOps.detectVcsFromBase(dir).attempt.map {
-        case Left(e: IllegalStateException) =>
-          assert(e.getMessage.contains("No VCS detected at"))
-        case other                        =>
-          fail(s"Expected IllegalStateException but got $other")
-      }
+      assertFailure[IllegalStateException, Vcs](VcsOps.detectVcsFromBase(dir))(err =>
+        assert(err.getMessage.contains("No VCS detected at"))
+      )
     }
   }
 
@@ -40,12 +38,11 @@ class VcsOpsSpec extends CatsEffectSuite {
   test("checkCleanFromVcs - raise error listing modified files when a tracked file is modified") {
     gitRepoWithCommitResource.use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
-        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-          case Left(e: IllegalStateException) =>
-            assert(e.getMessage.contains("unstaged modified files"))
-            assert(e.getMessage.contains("file.txt"))
-          case other                        =>
-            fail(s"Expected IllegalStateException but got $other")
+        assertFailure[IllegalStateException, VcsOps.CleanCheckResult](
+          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false)
+        ) { err =>
+          assert(err.getMessage.contains("unstaged modified files"))
+          assert(err.getMessage.contains("file.txt"))
         }
     }
   }
@@ -56,12 +53,11 @@ class VcsOpsSpec extends CatsEffectSuite {
         sbt.IO.write(new File(repo, "staged.txt"), "staged content")
         TestSupport.runGit(repo, "add", "staged.txt")
       } *>
-        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-          case Left(e: IllegalStateException) =>
-            assert(e.getMessage.contains("staged uncommitted changes"))
-            assert(e.getMessage.contains("staged.txt"))
-          case other                        =>
-            fail(s"Expected IllegalStateException but got $other")
+        assertFailure[IllegalStateException, VcsOps.CleanCheckResult](
+          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false)
+        ) { err =>
+          assert(err.getMessage.contains("staged uncommitted changes"))
+          assert(err.getMessage.contains("staged.txt"))
         }
     }
   }
@@ -69,12 +65,11 @@ class VcsOpsSpec extends CatsEffectSuite {
   test("checkCleanFromVcs - raise error listing untracked files when untracked files exist") {
     gitRepoWithCommitResource.use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
-        VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).attempt.map {
-          case Left(e: IllegalStateException) =>
-            assert(e.getMessage.contains("untracked files"))
-            assert(e.getMessage.contains("untracked.txt"))
-          case other                        =>
-            fail(s"Expected IllegalStateException but got $other")
+        assertFailure[IllegalStateException, VcsOps.CleanCheckResult](
+          VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false)
+        ) { err =>
+          assert(err.getMessage.contains("untracked files"))
+          assert(err.getMessage.contains("untracked.txt"))
         }
     }
   }
@@ -141,12 +136,9 @@ class VcsOpsSpec extends CatsEffectSuite {
       gitRepoWithCommitResource.use { case (_, vcs) =>
         val external = new File(outside, "version.sbt")
         IO.blocking(sbt.IO.write(external, """version := "0.1.0-SNAPSHOT"""")) *>
-          VcsOps.relativizeToBase(vcs, external).attempt.map {
-            case Left(err: IllegalStateException) =>
-              assert(err.getMessage.contains("outside of VCS root"))
-            case other                            =>
-              fail(s"Expected IllegalStateException but got $other")
-          }
+          assertFailure[IllegalStateException, String](VcsOps.relativizeToBase(vcs, external))(
+            err => assert(err.getMessage.contains("outside of VCS root"))
+          )
       }
     }
   }
@@ -243,58 +235,42 @@ class VcsOpsSpec extends CatsEffectSuite {
 
   test("validatePushRemote - abort in non-interactive mode when the remote check fails") {
     tempDirResource.use { dir =>
-      VcsOps
-        .validatePushRemote(
+      assertIllegalStateMessage(
+        VcsOps.validatePushRemote(
           TestSupport.dummyState(dir),
           interactive = false,
           useDefaults = false,
           new StubVcs(dir, checkRemote0 = IO.pure(1))
-        )
-        .attempt
-        .map {
-          case Left(err: IllegalStateException) =>
-            assertEquals(err.getMessage, "Aborting the release due to remote check failure.")
-          case other                            =>
-            fail(s"Expected IllegalStateException but got $other")
-        }
+        ),
+        "Aborting the release due to remote check failure."
+      )
     }
   }
 
   test("validatePushReadiness - fail when no tracking branch is configured") {
     tempDirResource.use { dir =>
-      VcsOps
-        .validatePushReadiness(
+      assertFailure[IllegalStateException, Unit](
+        VcsOps.validatePushReadiness(
           TestSupport.dummyState(dir),
           interactive = false,
           useDefaults = false,
           new StubVcs(dir, hasUpstream0 = IO.pure(false), currentBranch0 = IO.pure("feature"))
         )
-        .attempt
-        .map {
-          case Left(err: IllegalStateException) =>
-            assert(err.getMessage.contains("No tracking branch configured for 'feature'"))
-          case other                            =>
-            fail(s"Expected IllegalStateException but got $other")
-        }
+      )(err => assert(err.getMessage.contains("No tracking branch configured for 'feature'")))
     }
   }
 
   test("validatePushReadiness - abort in non-interactive mode when local is behind remote") {
     tempDirResource.use { dir =>
-      VcsOps
-        .validatePushReadiness(
+      assertIllegalStateMessage(
+        VcsOps.validatePushReadiness(
           TestSupport.dummyState(dir),
           interactive = false,
           useDefaults = false,
           new StubVcs(dir, isBehindRemote0 = IO.pure(true))
-        )
-        .attempt
-        .map {
-          case Left(err: IllegalStateException) =>
-            assertEquals(err.getMessage, "Merge the upstream commits and run release again.")
-          case other                            =>
-            fail(s"Expected IllegalStateException but got $other")
-        }
+        ),
+        "Merge the upstream commits and run release again."
+      )
     }
   }
 

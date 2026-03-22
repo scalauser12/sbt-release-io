@@ -1,7 +1,7 @@
 package io.release.steps
 
 import cats.effect.{IO, Resource}
-import io.release.{ReleaseContext, TestSupport}
+import io.release.{ReleaseContext, TestAssertions, TestSupport}
 import munit.CatsEffectSuite
 import sbt.{Def, Project}
 
@@ -19,44 +19,33 @@ class VcsStepsSpec extends CatsEffectSuite {
 
   test("checkCleanWorkingDir.validate - succeed for a clean loaded repo") {
     gitRepoWithLoadedStateResource.use { case (_, state) =>
-      VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state)).map { result =>
-        assertEquals(result, ())
-      }
+      VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
     }
   }
 
   test("checkCleanWorkingDir.validate - fail for a dirty tracked file in a loaded repo") {
     gitRepoWithLoadedStateResource.use { case (repo, state) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
-        VcsSteps.checkCleanWorkingDir
-          .validate(ReleaseContext(state = state))
-          .attempt
-          .map {
-            case Left(err: IllegalStateException) =>
-              assert(err.getMessage.contains("unstaged modified files"))
-              assert(err.getMessage.contains("file.txt"))
-            case other                            =>
-              fail(s"Expected IllegalStateException but got $other")
-          }
+        TestAssertions.assertFailure[IllegalStateException, Unit](
+          VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
+        ) { err =>
+          assert(err.getMessage.contains("unstaged modified files"))
+          assert(err.getMessage.contains("file.txt"))
+        }
     }
   }
 
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
     releaseContextResource.use { ctx =>
-      VcsSteps.pushChanges.validate(ctx).map { result =>
-        assertEquals(result, ())
-      }
+      VcsSteps.pushChanges.validate(ctx)
     }
   }
 
   test("pushChanges.execute - fail during remote preflight in non-interactive mode") {
     releaseContextResource.use { ctx =>
-      VcsSteps.pushChanges.execute(ctx).attempt.map {
-        case Left(err: IllegalStateException) =>
-          assert(err.getMessage.contains("Aborting the release due to remote check failure."))
-        case other                            =>
-          fail(s"Expected IllegalStateException but got $other")
-      }
+      TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+        VcsSteps.pushChanges.execute(ctx)
+      )(err => assert(err.getMessage.contains("Aborting the release due to remote check failure.")))
     }
   }
 
@@ -72,18 +61,10 @@ class VcsStepsSpec extends CatsEffectSuite {
       )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
-        VcsSteps.tagRelease
-          .execute(ReleaseContext(state = state, vcs = Some(vcs), interactive = false))
-          .attempt
-          .map {
-            case Left(err: IllegalStateException) =>
-              assertEquals(
-                err.getMessage,
-                "Tag [v1.0.0] already exists. Aborting release in non-interactive mode."
-              )
-            case other                            =>
-              fail(s"Expected IllegalStateException but got $other")
-          }
+        TestAssertions.assertIllegalStateMessage(
+          VcsSteps.tagRelease.execute(ReleaseContext(state = state, vcs = Some(vcs), interactive = false)),
+          "Tag [v1.0.0] already exists. Aborting release in non-interactive mode."
+        )
     }
   }
 

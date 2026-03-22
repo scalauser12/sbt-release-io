@@ -1,36 +1,27 @@
 package io.release.steps
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
-import io.release.ReleaseContext
-import io.release.TestSupport
+import cats.effect.{IO, Resource}
+import io.release.{ReleaseContext, TestAssertions, TestSupport}
 import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags}
-import munit.FunSuite
+import munit.CatsEffectSuite
 
 import java.io.File
-import java.nio.file.Files
 
-class VersionStepsSpec extends FunSuite {
+class VersionStepsSpec extends CatsEffectSuite {
+
+  private val startupFlags = ExecutionFlags(
+    useDefaults = false,
+    skipTests = false,
+    skipPublish = false,
+    interactive = false,
+    crossBuild = false
+  )
 
   test("resolveVersionPlan - use live version settings even when a startup plan is attached") {
-    withTempDir { dir =>
+    contextResource.use { baseCtx =>
+      val dir          = baseCtx.state.configuration.baseDirectory
       val resolvedFile = new File(dir, "resolved-version.sbt")
-      val ctx          = ReleaseContext(state = TestSupport.dummyState(dir)).withExecutionState(
-        CoreExecutionState(
-          CoreReleasePlan(
-            flags = ExecutionFlags(
-              useDefaults = false,
-              skipTests = false,
-              skipPublish = false,
-              interactive = false,
-              crossBuild = false
-            ),
-            releaseVersionOverride = Some("1.2.3"),
-            nextVersionOverride = Some("1.2.4-SNAPSHOT"),
-            tagDefault = None
-          )
-        )
-      )
+      val ctx          = withStartupPlan(baseCtx, "1.2.3", "1.2.4-SNAPSHOT")
 
       val result = VersionSteps.resolveVersionPlan(
         ctx,
@@ -43,22 +34,24 @@ class VersionStepsSpec extends FunSuite {
           )
       )
 
-      assertEquals(result.versionFile, resolvedFile)
-      assertEquals(result.releaseVersionOverride, Some("1.2.3"))
-      assertEquals(result.nextVersionOverride, Some("1.2.4-SNAPSHOT"))
-      assert(result.useGlobalVersion)
-      assertEquals(result.readVersion(resolvedFile).unsafeRunSync(), "1.2.3-SNAPSHOT")
-      assertEquals(
-        result.versionFileContents(resolvedFile, "1.2.3").unsafeRunSync(),
-        "resolved=1.2.3"
-      )
+      for {
+        readContents  <- result.readVersion(resolvedFile)
+        fileContents  <- result.versionFileContents(resolvedFile, "1.2.3")
+      } yield {
+        assertEquals(result.versionFile, resolvedFile)
+        assertEquals(result.releaseVersionOverride, Some("1.2.3"))
+        assertEquals(result.nextVersionOverride, Some("1.2.4-SNAPSHOT"))
+        assert(result.useGlobalVersion)
+        assertEquals(readContents, "1.2.3-SNAPSHOT")
+        assertEquals(fileContents, "resolved=1.2.3")
+      }
     }
   }
 
   test("resolveVersionPlan - leave overrides empty when no execution state is attached") {
-    withTempDir { dir =>
+    contextResource.use { ctx =>
+      val dir      = ctx.state.configuration.baseDirectory
       val liveFile = new File(dir, "live-version.sbt")
-      val ctx      = ReleaseContext(state = TestSupport.dummyState(dir))
 
       val result = VersionSteps.resolveVersionPlan(
         ctx,
@@ -71,40 +64,28 @@ class VersionStepsSpec extends FunSuite {
           )
       )
 
-      assertEquals(result.versionFile, liveFile)
-      assertEquals(result.releaseVersionOverride, None)
-      assertEquals(result.nextVersionOverride, None)
-      assert(!result.useGlobalVersion)
-      assertEquals(result.readVersion(liveFile).unsafeRunSync(), "0.9.0-SNAPSHOT")
-      assertEquals(
-        result.versionFileContents(liveFile, "1.0.0").unsafeRunSync(),
-        "live=1.0.0"
-      )
+      for {
+        readContents <- result.readVersion(liveFile)
+        fileContents <- result.versionFileContents(liveFile, "1.0.0")
+      } yield {
+        assertEquals(result.versionFile, liveFile)
+        assertEquals(result.releaseVersionOverride, None)
+        assertEquals(result.nextVersionOverride, None)
+        assert(!result.useGlobalVersion)
+        assertEquals(readContents, "0.9.0-SNAPSHOT")
+        assertEquals(fileContents, "live=1.0.0")
+      }
     }
   }
 
   test(
     "resolveVersionPlan - delegate live resolution to CoreVersionResolver and read overrides"
   ) {
-    withTempDir { dir =>
+    contextResource.use { baseCtx =>
+      val dir          = baseCtx.state.configuration.baseDirectory
       val fallbackFile = new File(dir, "fallback-version.sbt")
       var resolverRuns = 0
-      val ctx          = ReleaseContext(state = TestSupport.dummyState(dir)).withExecutionState(
-        CoreExecutionState(
-          CoreReleasePlan(
-            flags = ExecutionFlags(
-              useDefaults = false,
-              skipTests = false,
-              skipPublish = false,
-              interactive = false,
-              crossBuild = false
-            ),
-            releaseVersionOverride = Some("2.0.0"),
-            nextVersionOverride = Some("2.0.1-SNAPSHOT"),
-            tagDefault = None
-          )
-        )
-      )
+      val ctx          = withStartupPlan(baseCtx, "2.0.0", "2.0.1-SNAPSHOT")
 
       val result = VersionSteps.resolveVersionPlan(
         ctx,
@@ -119,84 +100,71 @@ class VersionStepsSpec extends FunSuite {
         }
       )
 
-      assertEquals(resolverRuns, 1)
-      assertEquals(result.versionFile, fallbackFile)
-      assertEquals(result.releaseVersionOverride, Some("2.0.0"))
-      assertEquals(result.nextVersionOverride, Some("2.0.1-SNAPSHOT"))
-      assert(!result.useGlobalVersion)
-      assertEquals(result.readVersion(fallbackFile).unsafeRunSync(), "1.9.9-SNAPSHOT")
-      assertEquals(
-        result.versionFileContents(fallbackFile, "2.0.0").unsafeRunSync(),
-        "fallback=2.0.0"
-      )
+      for {
+        readContents <- result.readVersion(fallbackFile)
+        fileContents <- result.versionFileContents(fallbackFile, "2.0.0")
+      } yield {
+        assertEquals(resolverRuns, 1)
+        assertEquals(result.versionFile, fallbackFile)
+        assertEquals(result.releaseVersionOverride, Some("2.0.0"))
+        assertEquals(result.nextVersionOverride, Some("2.0.1-SNAPSHOT"))
+        assert(!result.useGlobalVersion)
+        assertEquals(readContents, "1.9.9-SNAPSHOT")
+        assertEquals(fileContents, "fallback=2.0.0")
+      }
     }
   }
 
-  test("defaultReadVersion - parse a standard version line") {
-    withTempDir { dir =>
-      val f = writeVersionFile(dir, """ThisBuild / version := "1.2.3-SNAPSHOT"""")
-      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "1.2.3-SNAPSHOT")
-    }
-  }
+  private val defaultReadVersionCases = Seq(
+    (
+      "defaultReadVersion - parse a standard version line",
+      """ThisBuild / version := "1.2.3-SNAPSHOT"""",
+      "1.2.3-SNAPSHOT"
+    ),
+    (
+      "defaultReadVersion - skip single-line // comments",
+      """// version := "9.9.9"
+        |version := "0.1.0"
+        |""".stripMargin,
+      "0.1.0"
+    ),
+    (
+      "defaultReadVersion - skip versions inside multiline block comments",
+      """/*
+        |ThisBuild / version := "9.9.9"
+        |*/
+        |ThisBuild / version := "0.1.0-SNAPSHOT"
+        |""".stripMargin,
+      "0.1.0-SNAPSHOT"
+    ),
+    (
+      "defaultReadVersion - skip single-line block comments",
+      """/* version := "9.9.9" */
+        |version := "0.1.0"
+        |""".stripMargin,
+      "0.1.0"
+    ),
+    (
+      "defaultReadVersion - skip block comments with *-prefixed lines",
+      """/*
+        | * version := "9.9.9"
+        | */
+        |version := "0.1.0"
+        |""".stripMargin,
+      "0.1.0"
+    )
+  )
 
-  test("defaultReadVersion - skip single-line // comments") {
-    withTempDir { dir =>
-      val f = writeVersionFile(
-        dir,
-        """// version := "9.9.9"
-          |version := "0.1.0"
-          |""".stripMargin
-      )
-      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "0.1.0")
-    }
-  }
-
-  test("defaultReadVersion - skip versions inside multiline block comments") {
-    withTempDir { dir =>
-      val f = writeVersionFile(
-        dir,
-        """/*
-          |ThisBuild / version := "9.9.9"
-          |*/
-          |ThisBuild / version := "0.1.0-SNAPSHOT"
-          |""".stripMargin
-      )
-      assertEquals(
-        VersionSteps.defaultReadVersion(f).unsafeRunSync(),
-        "0.1.0-SNAPSHOT"
-      )
-    }
-  }
-
-  test("defaultReadVersion - skip single-line block comments") {
-    withTempDir { dir =>
-      val f = writeVersionFile(
-        dir,
-        """/* version := "9.9.9" */
-          |version := "0.1.0"
-          |""".stripMargin
-      )
-      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "0.1.0")
-    }
-  }
-
-  test("defaultReadVersion - skip block comments with *-prefixed lines") {
-    withTempDir { dir =>
-      val f = writeVersionFile(
-        dir,
-        """/*
-          | * version := "9.9.9"
-          | */
-          |version := "0.1.0"
-          |""".stripMargin
-      )
-      assertEquals(VersionSteps.defaultReadVersion(f).unsafeRunSync(), "0.1.0")
-    }
+  defaultReadVersionCases.foreach {
+    case (name, contents, expected) =>
+      test(name) {
+        tempDirResource.use(dir => assertReadVersion(dir, contents, expected))
+      }
   }
 
   test("defaultReadVersion - raise IllegalStateException when no version can be parsed") {
-    withTempDir { dir =>
-      val f = writeVersionFile(
+    tempDirResource.use { dir =>
+      writeVersionFile(
         dir,
         """// version := "9.9.9"
           |/*
@@ -204,26 +172,49 @@ class VersionStepsSpec extends FunSuite {
           |*/
           |lazy val root = project
           |""".stripMargin
-      )
-
-      val err = intercept[IllegalStateException] {
-        VersionSteps.defaultReadVersion(f).unsafeRunSync()
+      ).flatMap { file =>
+        TestAssertions.assertFailure[IllegalStateException, String](
+          VersionSteps.defaultReadVersion(file)
+        ) { err =>
+          assert(err.getMessage.contains("Could not parse version"))
+          assert(err.getMessage.contains(file.getName))
+        }
       }
-
-      assert(err.getMessage.contains("Could not parse version"))
-      assert(err.getMessage.contains(f.getName))
     }
   }
 
-  private def writeVersionFile(dir: File, content: String): File = {
-    val f = new File(dir, "version.sbt")
-    sbt.IO.write(f, content)
-    f
-  }
+  private val contextResource: Resource[IO, ReleaseContext] =
+    TestSupport.dummyContextResource("version-steps-spec")
 
-  private def withTempDir[A](f: File => A): A = {
-    val dir = Files.createTempDirectory("version-steps-spec").toFile
-    try f(dir)
-    finally TestSupport.deleteRecursively(dir)
+  private val tempDirResource: Resource[IO, File] =
+    TestSupport.tempDirResource("version-steps-spec")
+
+  private def assertReadVersion(dir: File, content: String, expected: String): IO[Unit] =
+    writeVersionFile(dir, content).flatMap { file =>
+      VersionSteps.defaultReadVersion(file).map(result => assertEquals(result, expected))
+    }
+
+  private def withStartupPlan(
+      ctx: ReleaseContext,
+      releaseVersion: String,
+      nextVersion: String
+  ): ReleaseContext =
+    ctx.withExecutionState(
+      CoreExecutionState(
+        CoreReleasePlan(
+          flags = startupFlags,
+          releaseVersionOverride = Some(releaseVersion),
+          nextVersionOverride = Some(nextVersion),
+          tagDefault = None
+        )
+      )
+    )
+
+  private def writeVersionFile(dir: File, content: String): IO[File] = {
+    val file = new File(dir, "version.sbt")
+    IO.blocking {
+      sbt.IO.write(file, content)
+      file
+    }
   }
 }

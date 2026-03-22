@@ -1,18 +1,10 @@
 package io.release
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
-import munit.FunSuite
+import cats.effect.{IO, Ref, Resource}
+import io.release.TestAssertions.assertFailure
+import munit.CatsEffectSuite
 
-import java.nio.file.Files
-
-class ReleaseStepIOBuilderSpec extends FunSuite {
-
-  private def withContext[A](f: ReleaseContext => A): A = {
-    val dir = Files.createTempDirectory("sbt-release-io-builder-spec").toFile
-    try f(ReleaseContext(state = TestSupport.dummyState(dir)))
-    finally TestSupport.deleteRecursively(dir)
-  }
+class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("step.execute - creates a ReleaseStepIO with the correct name") {
     val step = ReleaseStepIO
@@ -23,13 +15,12 @@ class ReleaseStepIOBuilderSpec extends FunSuite {
   }
 
   test("step.execute - runs the provided function") {
-    withContext { ctx =>
+    contextResource.use { ctx =>
       val step = ReleaseStepIO
         .step("with-versions")
         .execute(c => IO.pure(c.withVersions("1.0.0", "1.1.0-SNAPSHOT")))
 
-      val result = step.execute(ctx).unsafeRunSync()
-      assertEquals(result.versions, Some(("1.0.0", "1.1.0-SNAPSHOT")))
+      step.execute(ctx).map(result => assertEquals(result.versions, Some(("1.0.0", "1.1.0-SNAPSHOT"))))
     }
   }
 
@@ -42,14 +33,11 @@ class ReleaseStepIOBuilderSpec extends FunSuite {
   }
 
   test("step.executeAction - passes context through unchanged") {
-    withContext { ctx =>
-      val step = ReleaseStepIO
+    assertPassesThrough(
+      ReleaseStepIO
         .step("pass-through")
         .executeAction(_ => IO.unit)
-
-      val result = step.execute(ctx).unsafeRunSync()
-      assertEquals(result, ctx)
-    }
+    )
   }
 
   test("step.withCrossBuild.execute - sets enableCrossBuild = true") {
@@ -79,81 +67,84 @@ class ReleaseStepIOBuilderSpec extends FunSuite {
   }
 
   test("step.withValidation.execute - wires the validation function") {
-    withContext { ctx =>
-      var validationRan = false
-      val step          = ReleaseStepIO
-        .step("validated-step")
-        .withValidation(_ => IO { validationRan = true })
-        .execute(c => IO.pure(c))
+    contextResource.use { ctx =>
+      Ref.of[IO, Boolean](false).flatMap { validationRan =>
+        val step = ReleaseStepIO
+          .step("validated-step")
+          .withValidation(_ => validationRan.set(true))
+          .execute(c => IO.pure(c))
 
-      step.validate(ctx).unsafeRunSync()
-      assert(validationRan)
+        step.validate(ctx) *> validationRan.get.map(assert(_))
+      }
     }
   }
 
   test("step.withValidation - validation error propagates") {
-    withContext { ctx =>
+    contextResource.use { ctx =>
       val step = ReleaseStepIO
         .step("failing-validation")
         .withValidation(_ => IO.raiseError(new RuntimeException("validation failed")))
         .execute(c => IO.pure(c))
 
-      val e = intercept[RuntimeException] {
-        step.validate(ctx).unsafeRunSync()
-      }
-      assert(e.getMessage.contains("validation failed"))
+      assertFailure[RuntimeException, Unit](step.validate(ctx))(err =>
+        assert(err.getMessage.contains("validation failed"))
+      )
     }
   }
 
   test("step.withValidation - does not affect the execute function") {
-    withContext { ctx =>
+    contextResource.use { ctx =>
       val step = ReleaseStepIO
         .step("validated-execute")
         .withValidation(_ => IO.raiseError(new RuntimeException("should not run here")))
         .execute(c => IO.pure(c.withVersions("2.0.0", "2.1.0-SNAPSHOT")))
 
-      val result = step.execute(ctx).unsafeRunSync()
-      assertEquals(result.versions, Some(("2.0.0", "2.1.0-SNAPSHOT")))
+      step.execute(ctx).map(result => assertEquals(result.versions, Some(("2.0.0", "2.1.0-SNAPSHOT"))))
     }
   }
 
   test("step - default validate is a no-op") {
-    withContext { ctx =>
-      val step = ReleaseStepIO
+    assertNoOpValidate(
+      ReleaseStepIO
         .step("no-validate")
         .execute(c => IO.pure(c))
-
-      assertEquals(step.validate(ctx).unsafeRunSync(), ())
-    }
+    )
   }
 
   test("step - chaining withCrossBuild and withValidation preserves both") {
-    withContext { ctx =>
-      var validationRan = false
-      val step          = ReleaseStepIO
-        .step("chain-step")
-        .withValidation(_ => IO { validationRan = true })
-        .withCrossBuild
-        .execute(c => IO.pure(c))
+    contextResource.use { ctx =>
+      Ref.of[IO, Boolean](false).flatMap { validationRan =>
+        val step = ReleaseStepIO
+          .step("chain-step")
+          .withValidation(_ => validationRan.set(true))
+          .withCrossBuild
+          .execute(c => IO.pure(c))
 
-      step.validate(ctx).unsafeRunSync()
-      assert(step.enableCrossBuild)
-      assert(validationRan)
+        step.validate(ctx) *> validationRan.get.map { ran =>
+          assert(step.enableCrossBuild)
+          assert(ran)
+        }
+      }
     }
   }
 
   test("step.validateOnly - creates a validation-only step with no-op execute") {
-    withContext { ctx =>
-      var validationRan = false
-      val step          = ReleaseStepIO
-        .step("build-step")
-        .withValidation(_ => IO { validationRan = true })
-        .validateOnly
+    contextResource.use { ctx =>
+      Ref.of[IO, Boolean](false).flatMap { validationRan =>
+        val step = ReleaseStepIO
+          .step("build-step")
+          .withValidation(_ => validationRan.set(true))
+          .validateOnly
 
-      val result = step.execute(ctx).unsafeRunSync()
-      step.validate(ctx).unsafeRunSync()
-      assertEquals(result, ctx)
-      assert(validationRan)
+        for {
+          result <- step.execute(ctx)
+          _      <- step.validate(ctx)
+          ran    <- validationRan.get
+        } yield {
+          assertEquals(result, ctx)
+          assert(ran)
+        }
+      }
     }
   }
 
@@ -167,14 +158,13 @@ class ReleaseStepIOBuilderSpec extends FunSuite {
   }
 
   test("resourceStep.execute - passes the resource value into the step function") {
-    withContext { ctx =>
+    contextResource.use { ctx =>
       val key                             = sbt.AttributeKey[String]("res-key")
       val stepFn: String => ReleaseStepIO = ReleaseStepIO
         .resourceStep[String]("res-execute")
         .execute(t => c => IO.pure(c.withMetadata(key, t)))
 
-      val result = stepFn("hello").execute(ctx).unsafeRunSync()
-      assertEquals(result.metadata(key), Some("hello"))
+      stepFn("hello").execute(ctx).map(result => assertEquals(result.metadata(key), Some("hello")))
     }
   }
 
@@ -188,14 +178,11 @@ class ReleaseStepIOBuilderSpec extends FunSuite {
   }
 
   test("resourceStep.executeAction - passes context through unchanged") {
-    withContext { ctx =>
-      val stepFn: Int => ReleaseStepIO = ReleaseStepIO
+    assertPassesThrough(
+      ReleaseStepIO
         .resourceStep[Int]("res-action-passthrough")
-        .executeAction(_ => _ => IO.unit)
-
-      val result = stepFn(42).execute(ctx).unsafeRunSync()
-      assertEquals(result, ctx)
-    }
+        .executeAction(_ => _ => IO.unit)(42)
+    )
   }
 
   test("resourceStep - each call produces an independent ReleaseStepIO") {
@@ -236,55 +223,70 @@ class ReleaseStepIOBuilderSpec extends FunSuite {
   }
 
   test("resourceStep.withValidation.execute - wires the validation function") {
-    withContext { ctx =>
-      var capturedResource                = Option.empty[String]
-      val stepFn: String => ReleaseStepIO = ReleaseStepIO
-        .resourceStep[String]("res-validated")
-        .withValidation(t => _ => IO { capturedResource = Some(t) })
-        .execute(_ => c => IO.pure(c))
+    contextResource.use { ctx =>
+      Ref.of[IO, Option[String]](None).flatMap { capturedResource =>
+        val stepFn: String => ReleaseStepIO = ReleaseStepIO
+          .resourceStep[String]("res-validated")
+          .withValidation(t => _ => capturedResource.set(Some(t)))
+          .execute(_ => c => IO.pure(c))
 
-      stepFn("my-val").validate(ctx).unsafeRunSync()
-      assertEquals(capturedResource, Some("my-val"))
+        stepFn("my-val").validate(ctx) *> capturedResource.get.map { captured =>
+          assertEquals(captured, Some("my-val"))
+        }
+      }
     }
   }
 
   test("resourceStep.withValidation - validation error propagates") {
-    withContext { ctx =>
+    contextResource.use { ctx =>
       val stepFn: String => ReleaseStepIO = ReleaseStepIO
         .resourceStep[String]("res-failing-val")
         .withValidation(t => _ => IO.raiseError(new RuntimeException(s"bad resource: $t")))
         .execute(_ => c => IO.pure(c))
 
-      val e = intercept[RuntimeException] {
-        stepFn("oops").validate(ctx).unsafeRunSync()
-      }
-      assert(e.getMessage.contains("bad resource: oops"))
+      assertFailure[RuntimeException, Unit](stepFn("oops").validate(ctx))(err =>
+        assert(err.getMessage.contains("bad resource: oops"))
+      )
     }
   }
 
   test("resourceStep - default validate is a no-op") {
-    withContext { ctx =>
-      val stepFn: String => ReleaseStepIO = ReleaseStepIO
+    assertNoOpValidate(
+      ReleaseStepIO
         .resourceStep[String]("res-no-validate")
-        .execute(_ => c => IO.pure(c))
-
-      assertEquals(stepFn("x").validate(ctx).unsafeRunSync(), ())
-    }
+        .execute(_ => c => IO.pure(c))("x")
+    )
   }
 
   test("resourceStep.validateOnly - creates a validation-only step with no-op execute") {
-    withContext { ctx =>
-      var capturedResource                = Option.empty[String]
-      val stepFn: String => ReleaseStepIO = ReleaseStepIO
-        .resourceStep[String]("res-build")
-        .withValidation(t => _ => IO { capturedResource = Some(t) })
-        .validateOnly
+    contextResource.use { ctx =>
+      Ref.of[IO, Option[String]](None).flatMap { capturedResource =>
+        val stepFn: String => ReleaseStepIO = ReleaseStepIO
+          .resourceStep[String]("res-build")
+          .withValidation(t => _ => capturedResource.set(Some(t)))
+          .validateOnly
 
-      val step   = stepFn("my-res")
-      val result = step.execute(ctx).unsafeRunSync()
-      step.validate(ctx).unsafeRunSync()
-      assertEquals(result, ctx)
-      assertEquals(capturedResource, Some("my-res"))
+        val step = stepFn("my-res")
+        for {
+          result   <- step.execute(ctx)
+          _        <- step.validate(ctx)
+          captured <- capturedResource.get
+        } yield {
+          assertEquals(result, ctx)
+          assertEquals(captured, Some("my-res"))
+        }
+      }
     }
   }
+
+  private val contextResource: Resource[IO, ReleaseContext] =
+    TestSupport.dummyContextResource("sbt-release-io-builder-spec")
+
+  private def assertPassesThrough(step: ReleaseStepIO): IO[Unit] =
+    contextResource.use { ctx =>
+      step.execute(ctx).map(result => assertEquals(result, ctx))
+    }
+
+  private def assertNoOpValidate(step: ReleaseStepIO): IO[Unit] =
+    contextResource.use(ctx => step.validate(ctx))
 }

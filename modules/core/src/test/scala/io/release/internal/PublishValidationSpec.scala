@@ -1,65 +1,63 @@
 package io.release.internal
 
-import cats.effect.unsafe.implicits.global
-import munit.FunSuite
+import io.release.TestAssertions.assertIllegalStateMessage
+import munit.CatsEffectSuite
 
-class PublishValidationSpec extends FunSuite {
+class PublishValidationSpec extends CatsEffectSuite {
 
   private val labels = "root"
 
-  test("publishTargetError - none when publish skipped and publishTo empty") {
-    assertEquals(
-      PublishValidation.publishTargetError(labels)(publishSkipped = true, publishToEmpty = true),
+  private val publishTargetErrorCases = Seq(
+    (
+      "publishTargetError - none when publish skipped and publishTo empty",
+      true,
+      true,
       None
-    )
-  }
-
-  test("publishTargetError - none when not skipped and publishTo non-empty") {
-    assertEquals(
-      PublishValidation.publishTargetError(labels)(publishSkipped = false, publishToEmpty = false),
+    ),
+    (
+      "publishTargetError - none when not skipped and publishTo non-empty",
+      false,
+      false,
       None
-    )
-  }
-
-  test("publishTargetError - none when skipped and publishTo non-empty") {
-    assertEquals(
-      PublishValidation.publishTargetError(labels)(publishSkipped = true, publishToEmpty = false),
+    ),
+    (
+      "publishTargetError - none when skipped and publishTo non-empty",
+      true,
+      false,
       None
-    )
-  }
-
-  test("publishTargetError - some when not skipped and publishTo empty") {
-    assertEquals(
-      PublishValidation.publishTargetError(labels)(publishSkipped = false, publishToEmpty = true),
+    ),
+    (
+      "publishTargetError - some when not skipped and publishTo empty",
+      false,
+      true,
       Some(PublishValidation.message(labels))
     )
+  )
+
+  publishTargetErrorCases.foreach {
+    case (name, publishSkipped, publishToEmpty, expected) =>
+      test(name) {
+        assertEquals(
+          PublishValidation.publishTargetError(labels)(publishSkipped, publishToEmpty),
+          expected
+        )
+      }
   }
 
   test("requirePublishTarget - succeed when publish is skipped") {
-    assertEquals(
-      PublishValidation
-        .requirePublishTarget(labels)(publishSkipped = true, publishToEmpty = true)
-        .unsafeRunSync(),
-      ()
-    )
+    PublishValidation
+      .requirePublishTarget(labels)(publishSkipped = true, publishToEmpty = true)
   }
 
   test("requirePublishTarget - succeed when publishTo is configured") {
-    assertEquals(
-      PublishValidation
-        .requirePublishTarget(labels)(publishSkipped = false, publishToEmpty = false)
-        .unsafeRunSync(),
-      ()
-    )
+    PublishValidation
+      .requirePublishTarget(labels)(publishSkipped = false, publishToEmpty = false)
   }
 
   test("requirePublishTarget - raise IllegalStateException when publish is required but missing") {
-    val err = intercept[IllegalStateException] {
-      PublishValidation
-        .requirePublishTarget(labels)(publishSkipped = false, publishToEmpty = true)
-        .unsafeRunSync()
-    }
-
-    assertEquals(err.getMessage, PublishValidation.message(labels))
+    assertIllegalStateMessage(
+      PublishValidation.requirePublishTarget(labels)(publishSkipped = false, publishToEmpty = true),
+      PublishValidation.message(labels)
+    )
   }
 }
