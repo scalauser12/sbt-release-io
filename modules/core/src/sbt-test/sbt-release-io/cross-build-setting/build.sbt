@@ -17,7 +17,7 @@ releaseIOCrossBuild := true
 val writeCrossMarker = ReleaseStepIO(
   name = "write-cross-marker",
   execute = ctx =>
-    _root_.cats.effect.IO {
+    _root_.cats.effect.IO.blocking {
       val extracted = Project.extract(ctx.state)
       val markerDir = extracted.get(baseDirectory) / "marker"
       val sv        = extracted.get(scalaVersion)

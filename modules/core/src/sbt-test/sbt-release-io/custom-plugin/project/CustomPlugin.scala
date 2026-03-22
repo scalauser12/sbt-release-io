@@ -12,9 +12,9 @@ object CustomPlugin extends ReleasePluginIOLike[java.io.File] {
   override def resource: Resource[IO, java.io.File] = {
     val marker = new java.io.File(System.getProperty("user.dir"), "resource-acquired")
     Resource.make(
-      IO { sbt.IO.touch(marker); marker }
+      IO.blocking { sbt.IO.touch(marker); marker }
     )(_ =>
-      IO { sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "resource-released")) }
+      IO.blocking { sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "resource-released")) }
     )
   }
 
@@ -23,7 +23,7 @@ object CustomPlugin extends ReleasePluginIOLike[java.io.File] {
       ReleaseStepIO(
         name = "use-resource",
         execute = (ctx: ReleaseContext) =>
-          IO {
+          IO.blocking {
             assert(acquired.exists(), s"Resource should exist: ${acquired.getAbsolutePath}")
             sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "step-used-resource"))
             ctx

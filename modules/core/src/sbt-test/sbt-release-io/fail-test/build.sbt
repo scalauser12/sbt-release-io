@@ -51,7 +51,7 @@ testFrameworks += new TestFramework("munit.Framework")
 
 // Custom step that creates a file - this should NOT execute if tests fail
 val createFile = ReleaseStepIO.io("create-file") { ctx =>
-  _root_.cats.effect.IO {
+  _root_.cats.effect.IO.blocking {
     IO.touch(file("marker-file"))
     ctx
   }

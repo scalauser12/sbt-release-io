@@ -14,7 +14,7 @@ object DefaultsWithAfterPlugin extends ReleasePluginIOLike[Unit] {
     insertAfter(Project.extract(state).get(releaseIOProcess), "check-clean-working-dir")(
       Seq((_: Unit) =>
         ReleaseStepIO.io("inserted-after-check") { ctx =>
-          IO {
+          IO.blocking {
             // Write to project root; target/ may not exist before runClean
             val marker =
               new java.io.File(System.getProperty("user.dir"), "inserted-after-check")

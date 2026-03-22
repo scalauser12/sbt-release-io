@@ -14,7 +14,7 @@ object DefaultsWithBeforePlugin extends ReleasePluginIOLike[Unit] {
     insertBefore(Project.extract(state).get(releaseIOProcess), "tag-release")(
       Seq((_: Unit) =>
         ReleaseStepIO.io("inserted-before-tag") { ctx =>
-          IO {
+          IO.blocking {
             // Write to project root; target/ may not exist before runClean
             val marker =
               new java.io.File(System.getProperty("user.dir"), "inserted-before-tag")

@@ -1,4 +1,6 @@
-# Test: missing version.sbt fails in check phase with a clear error
+# Test: missing version.sbt fails in check phase with a clear error.
+# The custom releaseIOProcess omits checkCleanWorkingDir, so the only expected
+# failure cause is the missing version file in inquireVersions.validate.
 $ exec git init
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"

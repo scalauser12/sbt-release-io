@@ -7,6 +7,8 @@ scalaVersion := "2.12.18"
 
 libraryDependencies += "org.example" %% "fake-lib" % "1.0.0-SNAPSHOT"
 
+releaseIOIgnoreUntrackedFiles := true
+
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {
   import sbt.complete.DefaultParsers.*

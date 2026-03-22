@@ -9,7 +9,7 @@ releaseIOIgnoreUntrackedFiles := true
 // Step whose validation always fails; execute creates a marker file to prove it ran
 val stepWithFailingCheck = ReleaseStepIO(
   name = "step-with-failing-check",
-  execute = (ctx: ReleaseContext) => _root_.cats.effect.IO { IO.touch(file("action-ran")); ctx },
+  execute = (ctx: ReleaseContext) => _root_.cats.effect.IO.blocking { IO.touch(file("action-ran")); ctx },
   validate = (_: ReleaseContext) =>
     _root_.cats.effect.IO.raiseError(new RuntimeException("check always fails"))
 )
