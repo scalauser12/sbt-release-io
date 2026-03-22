@@ -2,6 +2,8 @@ import sbt.IO
 import _root_.io.release.ReleaseStepIO
 import _root_.io.release.steps.ReleaseSteps
 
+val writePluginVersion = taskKey[Unit]("Write the loaded plugin version for nested sbt runs")
+
 name         := "fail-test-test"
 scalaVersion := "2.12.18"
 
@@ -22,5 +24,18 @@ releaseIOProcess := Seq(
   ReleaseSteps.runTests,
   createFile
 )
+
+writePluginVersion := {
+  val location = Class.forName("io.release.ReleasePluginIO$").getProtectionDomain.getCodeSource
+    .getLocation.toURI
+  val jarFile  = new java.io.File(location)
+  val version  =
+    Option(jarFile.getParentFile)
+      .flatMap(parent => Option(parent.getParentFile))
+      .map(_.getName)
+      .getOrElse(sys.error(s"Could not determine plugin version from [$jarFile]"))
+
+  IO.write(target.value / "plugin-version.txt", version)
+}
 
 releaseIOIgnoreUntrackedFiles := true

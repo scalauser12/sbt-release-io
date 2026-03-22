@@ -109,8 +109,12 @@ private[monorepo] object MonorepoComposer {
       crossBuild: Boolean,
       ctx: MonorepoContext
   ): IO[MonorepoContext] = {
-    val actions: Seq[MonorepoContext => IO[MonorepoContext]] =
-      Seq((currentCtx: MonorepoContext) => executeStep(step, crossBuild, currentCtx))
+    val actions = Seq(
+      ExecutionEngine.ActionStep[MonorepoContext](
+        step.name,
+        (currentCtx: MonorepoContext) => executeStep(step, crossBuild, currentCtx)
+      )
+    )
 
     ExecutionEngine
       .runActionPhase(actions)(ExecutionEngine.armOnFailure(ctx))

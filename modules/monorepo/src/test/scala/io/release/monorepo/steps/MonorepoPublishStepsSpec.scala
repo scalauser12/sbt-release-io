@@ -138,11 +138,11 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
         val ctx = fixture.context(Seq("core", "api"))
 
         MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map { result =>
-          val coreRun = new File(
+          val coreRun   = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
             "test-ran.txt"
           )
-          val apiRun  = new File(
+          val apiRun    = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "api").baseDir,
             "test-ran.txt"
           )
@@ -322,10 +322,9 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
       cause: Option[Throwable]
   ): MonorepoProjectFailures =
     cause match {
-      case Some(aggregate)
-          if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
+      case Some(aggregate) if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
         classOf[MonorepoProjectFailures].cast(aggregate)
-      case other =>
+      case other                                                                     =>
         fail(s"Expected MonorepoProjectFailures but got $other")
     }
 

@@ -11,6 +11,8 @@ import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
 
+import java.io.EOFException
+
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
 
@@ -109,6 +111,10 @@ private[release] object VcsSteps {
                         IO.print(
                           s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
                         ) *> IO.readLine
+                          .map(raw => Option(raw).getOrElse(""))
+                          .handleError { case _: EOFException =>
+                            ""
+                          }
                     }
 
                     effectiveAnswer.flatMap {

@@ -9,7 +9,7 @@ import io.release.internal.{
   SnapshotDependencyTasks
 }
 import io.release.steps.StepHelpers.*
-import io.release.{CleanCompat, ReleaseIOCompat, ReleaseStepIO}
+import io.release.{CleanCompat, ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -49,7 +49,12 @@ private[release] object PublishSteps {
           val newState  =
             extracted
               .runAggregated(extracted.currentRef / releaseIOPublishArtifactsAction, ctx.state)
-          ctx.withState(newState)
+          failOnSbtTaskFailure(
+            ctx,
+            newState,
+            s"publish-artifacts: sbt task '${releaseIOPublishArtifactsAction.key.label}' " +
+              "reported failure via FailureCommand"
+          )
         }
       },
     validate = ctx =>
@@ -88,7 +93,12 @@ private[release] object PublishSteps {
           val extracted = SbtRuntime.extracted(ctx.state)
           val ref       = extracted.get(thisProjectRef)
           val newState  = extracted.runAggregated(ref / Test / ReleaseIOCompat.testKey, ctx.state)
-          ctx.withState(newState)
+          failOnSbtTaskFailure(
+            ctx,
+            newState,
+            s"run-tests: sbt task 'Test / ${ReleaseIOCompat.testKey.key.label}' " +
+              "reported failure via FailureCommand"
+          )
         }
       },
     enableCrossBuild = true
@@ -101,9 +111,23 @@ private[release] object PublishSteps {
         val extracted = SbtRuntime.extracted(ctx.state)
         val ref       = extracted.get(thisProjectRef)
         val newState  = CleanCompat.runBuild(ctx.state, ref)
-        ctx.withState(newState)
+        failOnSbtTaskFailure(
+          ctx,
+          newState,
+          "run-clean: clean action reported failure via FailureCommand"
+        )
       }
   )
+
+  private[steps] def failOnSbtTaskFailure(
+      ctx: ReleaseContext,
+      newState: State,
+      failureMessage: String
+  ): ReleaseContext =
+    if (SbtRuntime.hasFailureCommand(newState)) {
+      val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
+      ctx.withState(cleaned).failWith(new IllegalStateException(failureMessage))
+    } else ctx.withState(newState)
 
   private def transitiveAggregates(extracted: Extracted): Seq[ProjectRef] = {
     val units                                                            = extracted.structure.units

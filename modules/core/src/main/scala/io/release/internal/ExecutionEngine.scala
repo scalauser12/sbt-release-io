@@ -33,15 +33,19 @@ private[release] object ExecutionEngine {
       actions: Seq[ActionStep[C]],
       startCtx: C
   ): IO[ExecutionResult[C]] =
-    runActionPhase(actions.map(_.run))(startCtx)
+    runActionPhase(actions)(startCtx)
 
   def armOnFailure[C <: ReleaseCtx[C]](ctx: C): C =
     ctx.withState(ctx.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
 
-  def detectSbtFailure[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO {
+  def detectSbtFailure[C <: ReleaseCtx[C]](stepName: String, ctx: C): IO[C] = IO {
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
-      ctx.withState(cleaned).fail
+      ctx
+        .withState(cleaned)
+        .failWith(
+          new IllegalStateException(s"$stepName: sbt action reported failure via FailureCommand")
+        )
     } else armOnFailure(ctx)
   }
 
@@ -63,15 +67,15 @@ private[release] object ExecutionEngine {
       }
 
   def runActionPhase[C <: ReleaseCtx[C]](
-      actions: Seq[C => IO[C]]
+      actions: Seq[ActionStep[C]]
   )(startCtx: C): IO[ExecutionResult[C]] = {
     // After each action, check whether sbt injected a FailureCommand into
     // remainingCommands (e.g. from a failed task). If so, mark the context
     // as failed so subsequent steps are skipped.
     val interleavedSteps = actions.flatMap { step =>
       Seq(
-        (ctx: C) => if (ctx.failed) IO.pure(ctx) else step(ctx),
-        (ctx: C) => detectSbtFailure(ctx)
+        (ctx: C) => if (ctx.failed) IO.pure(ctx) else step.run(ctx),
+        (ctx: C) => detectSbtFailure(step.name, ctx)
       )
     }
 

@@ -8,8 +8,12 @@ $ exec git commit -m "Initial commit"
 # Delete marker file if it exists
 $ delete marker-file
 
-# Try to release - should fail due to failing test
--> releaseIO
+# Try to release - should fail due to failing test and emit an attributed diagnostic
+$ exec mkdir -p target
+> writePluginVersion
+$ exec sh -c 'mkdir -p target && sbt -Dsbt.log.noformat=true -batch releaseIO > target/release.log 2>&1; test $? -ne 0'
+$ exec sh -c 'grep -q "Release failed: run-tests:" target/release.log || { cat target/release.log; exit 1; }'
+$ exec sh -c 'grep -q "FailureCommand" target/release.log'
 
 # Verify marker file was NOT created (because release failed before reaching createFile step)
 $ absent marker-file

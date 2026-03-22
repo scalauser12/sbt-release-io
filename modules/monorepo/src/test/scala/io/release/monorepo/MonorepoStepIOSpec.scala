@@ -431,7 +431,11 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
           .flatMap { result =>
             observed.get.map { obs =>
               assert(result.failed)
-              assertEquals(result.failureCause, None)
+              assert(
+                result.failureCause.exists(
+                  _.getMessage.contains("inject-failure-command")
+                )
+              )
               assertEquals(obs, List("core", "api"))
               assertEquals(result.state.remainingCommands, Nil)
               assertEquals(result.state.onFailure, None)
@@ -454,10 +458,9 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
       cause: Option[Throwable]
   ): MonorepoProjectFailures =
     cause match {
-      case Some(aggregate)
-          if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
+      case Some(aggregate) if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
         classOf[MonorepoProjectFailures].cast(aggregate)
-      case other =>
+      case other                                                                     =>
         fail(s"Expected MonorepoProjectFailures but got $other")
     }
 

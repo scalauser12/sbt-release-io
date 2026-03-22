@@ -121,7 +121,7 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
           .flatMap { result =>
             observed.get.map { obs =>
               assert(result.failed)
-              assertEquals(result.failureCause, None)
+              assert(result.failureCause.exists(_.getMessage.contains("inject-failure-command")))
               assertEquals(obs, List("execute1"))
               assertEquals(result.state.remainingCommands, Nil)
               assertEquals(result.state.onFailure, None)

@@ -192,7 +192,15 @@ trait ReleasePluginIOLike[T]
 
     for {
       base     <- IO.blocking(Project.extract(state).get(sbt.Keys.thisProject).base)
-      maybeVcs <- Vcs.detect(base).handleError(_ => None)
+      maybeVcs <-
+        Vcs.detect(base).handleErrorWith { err =>
+          IO.blocking(
+            state.log.warn(
+              s"${ReleaseLogPrefixes.Core} Failed to detect VCS during initial context hydration: " +
+                StepHelpers.errorMessage(err)
+            )
+          ).as(None)
+        }
     } yield ReleaseContext(
       state = state,
       versions = maybeVersions,

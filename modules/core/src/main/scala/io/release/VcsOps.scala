@@ -15,15 +15,14 @@ import sbt.{internal as _, *}
 private[release] object VcsOps {
 
   /** Detect VCS at the project base and return the context with the VCS adapter. */
-  def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO.defer {
-    val extracted = Project.extract(ctx.state)
-    val baseDir   = extracted.get(thisProject).base
-    Vcs.detect(baseDir).flatMap {
-      case Some(vcs) => IO.pure(ctx.withVcs(vcs))
-      case None      =>
-        IO.raiseError(new IllegalStateException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
+  def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+    IO.blocking(Project.extract(ctx.state).get(thisProject).base).flatMap { baseDir =>
+      Vcs.detect(baseDir).flatMap {
+        case Some(vcs) => IO.pure(ctx.withVcs(vcs))
+        case None      =>
+          IO.raiseError(new IllegalStateException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
+      }
     }
-  }
 
   private[release] def detectVcsFromBase(base: java.io.File): IO[Vcs] =
     Vcs.detect(base).flatMap {
@@ -33,10 +32,8 @@ private[release] object VcsOps {
     }
 
   /** Detect VCS at the project base directory. Does not modify sbt state. */
-  def detectVcs(state: State): IO[Vcs] = IO.defer {
-    val base = Project.extract(state).get(thisProject).base
-    detectVcsFromBase(base)
-  }
+  def detectVcs(state: State): IO[Vcs] =
+    IO.blocking(Project.extract(state).get(thisProject).base).flatMap(detectVcsFromBase)
 
   /** Result of a clean-working-directory check. */
   case class CleanCheckResult(vcs: Vcs, currentHash: String)
@@ -44,22 +41,23 @@ private[release] object VcsOps {
   /** Validate that the working directory has no uncommitted or (optionally) untracked files.
     * Returns the detected VCS adapter and the current commit hash on success.
     */
-  def checkCleanWorkingDir(state: State): IO[CleanCheckResult] = IO.defer {
-    val extracted       = Project.extract(state)
-    val ignoreUntracked = extracted.get(ReleaseIO.releaseIOIgnoreUntrackedFiles)
-    val base            = extracted.get(thisProject).base
-
-    detectVcsFromBase(base).flatMap(checkCleanFromVcs(_, ignoreUntracked))
-  }
+  def checkCleanWorkingDir(state: State): IO[CleanCheckResult] =
+    IO.blocking {
+      val extracted       = Project.extract(state)
+      val ignoreUntracked = extracted.get(ReleaseIO.releaseIOIgnoreUntrackedFiles)
+      val base            = extracted.get(thisProject).base
+      (ignoreUntracked, base)
+    }.flatMap { case (ignoreUntracked, base) =>
+      detectVcsFromBase(base).flatMap(checkCleanFromVcs(_, ignoreUntracked))
+    }
 
   /** Validate clean working directory using an already-detected VCS adapter, reading settings
     * from the given state.
     */
-  def checkCleanWorkingDir(state: State, vcs: Vcs): IO[CleanCheckResult] = {
-    val ignoreUntracked =
+  def checkCleanWorkingDir(state: State, vcs: Vcs): IO[CleanCheckResult] =
+    IO.blocking(
       Project.extract(state).getOpt(ReleaseIO.releaseIOIgnoreUntrackedFiles).getOrElse(false)
-    checkCleanFromVcs(vcs, ignoreUntracked)
-  }
+    ).flatMap(ignoreUntracked => checkCleanFromVcs(vcs, ignoreUntracked))
 
   /** Core clean-working-directory validation against an already-detected VCS adapter. */
   private[release] def checkCleanFromVcs(

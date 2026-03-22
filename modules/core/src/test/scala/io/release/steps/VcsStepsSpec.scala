@@ -1,10 +1,12 @@
 package io.release.steps
 
-import cats.effect.IO
+import cats.effect.{IO, Resource}
 import io.release.{ReleaseContext, TestAssertions, TestSupport}
 import munit.CatsEffectSuite
 
-import java.io.File
+import java.io.{ByteArrayInputStream, File, InputStream}
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.Semaphore
 
 class VcsStepsSpec extends CatsEffectSuite {
   private val fixturePrefix = "vcs-steps-spec"
@@ -100,4 +102,50 @@ class VcsStepsSpec extends CatsEffectSuite {
       }
     }
   }
+
+  test("tagRelease.execute - treat EOF as the default abort answer when the tag already exists") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        withInput("") {
+          TestAssertions.assertIllegalStateMessage(
+            VcsSteps.tagRelease.execute(
+              ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
+            ),
+            "Tag [v1.0.0] already exists. Aborting release!"
+          )
+        }
+    }
+  }
+
+  private val stdinLock = new Semaphore(1)
+
+  private def withInput[A](input: String)(io: IO[A]): IO[A] = {
+    val bytes = input.getBytes(StandardCharsets.UTF_8)
+
+    Resource
+      .make {
+        IO.blocking {
+          stdinLock.acquire()
+          val original = System.in
+          System.setIn(new ByteArrayInputStream(bytes))
+          original
+        }
+      }(restoreInput)
+      .use(_ => io)
+  }
+
+  private def restoreInput(original: InputStream): IO[Unit] =
+    IO.blocking {
+      System.setIn(original)
+      stdinLock.release()
+    }
 }
