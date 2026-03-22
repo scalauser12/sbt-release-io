@@ -1,10 +1,11 @@
 package io.release
 
-import cats.effect.{IO, Ref, Resource}
+import cats.effect.{IO, Ref}
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
 
 class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
+  private val fixturePrefix = "sbt-release-io-builder-spec"
 
   test("step.execute - creates a ReleaseStepIO with the correct name") {
     val step = ReleaseStepIO
@@ -15,12 +16,14 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("step.execute - runs the provided function") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val step = ReleaseStepIO
         .step("with-versions")
         .execute(c => IO.pure(c.withVersions("1.0.0", "1.1.0-SNAPSHOT")))
 
-      step.execute(ctx).map(result => assertEquals(result.versions, Some(("1.0.0", "1.1.0-SNAPSHOT"))))
+      step
+        .execute(ctx)
+        .map(result => assertEquals(result.versions, Some(("1.0.0", "1.1.0-SNAPSHOT"))))
     }
   }
 
@@ -67,20 +70,16 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("step.withValidation.execute - wires the validation function") {
-    contextResource.use { ctx =>
-      Ref.of[IO, Boolean](false).flatMap { validationRan =>
-        val step = ReleaseStepIO
-          .step("validated-step")
-          .withValidation(_ => validationRan.set(true))
-          .execute(c => IO.pure(c))
-
-        step.validate(ctx) *> validationRan.get.map(assert(_))
-      }
+    assertValidationRuns { validationRan =>
+      ReleaseStepIO
+        .step("validated-step")
+        .withValidation(_ => validationRan.set(true))
+        .execute(c => IO.pure(c))
     }
   }
 
   test("step.withValidation - validation error propagates") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val step = ReleaseStepIO
         .step("failing-validation")
         .withValidation(_ => IO.raiseError(new RuntimeException("validation failed")))
@@ -93,13 +92,15 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("step.withValidation - does not affect the execute function") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val step = ReleaseStepIO
         .step("validated-execute")
         .withValidation(_ => IO.raiseError(new RuntimeException("should not run here")))
         .execute(c => IO.pure(c.withVersions("2.0.0", "2.1.0-SNAPSHOT")))
 
-      step.execute(ctx).map(result => assertEquals(result.versions, Some(("2.0.0", "2.1.0-SNAPSHOT"))))
+      step
+        .execute(ctx)
+        .map(result => assertEquals(result.versions, Some(("2.0.0", "2.1.0-SNAPSHOT"))))
     }
   }
 
@@ -112,7 +113,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("step - chaining withCrossBuild and withValidation preserves both") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>
         val step = ReleaseStepIO
           .step("chain-step")
@@ -129,7 +130,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("step.validateOnly - creates a validation-only step with no-op execute") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>
         val step = ReleaseStepIO
           .step("build-step")
@@ -158,7 +159,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("resourceStep.execute - passes the resource value into the step function") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val key                             = sbt.AttributeKey[String]("res-key")
       val stepFn: String => ReleaseStepIO = ReleaseStepIO
         .resourceStep[String]("res-execute")
@@ -223,22 +224,16 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("resourceStep.withValidation.execute - wires the validation function") {
-    contextResource.use { ctx =>
-      Ref.of[IO, Option[String]](None).flatMap { capturedResource =>
-        val stepFn: String => ReleaseStepIO = ReleaseStepIO
-          .resourceStep[String]("res-validated")
-          .withValidation(t => _ => capturedResource.set(Some(t)))
-          .execute(_ => c => IO.pure(c))
-
-        stepFn("my-val").validate(ctx) *> capturedResource.get.map { captured =>
-          assertEquals(captured, Some("my-val"))
-        }
-      }
+    assertResourceValidationCapture("my-val") { capturedResource =>
+      ReleaseStepIO
+        .resourceStep[String]("res-validated")
+        .withValidation(t => _ => capturedResource.set(Some(t)))
+        .execute(_ => c => IO.pure(c))
     }
   }
 
   test("resourceStep.withValidation - validation error propagates") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val stepFn: String => ReleaseStepIO = ReleaseStepIO
         .resourceStep[String]("res-failing-val")
         .withValidation(t => _ => IO.raiseError(new RuntimeException(s"bad resource: $t")))
@@ -259,7 +254,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("resourceStep.validateOnly - creates a validation-only step with no-op execute") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { capturedResource =>
         val stepFn: String => ReleaseStepIO = ReleaseStepIO
           .resourceStep[String]("res-build")
@@ -279,14 +274,30 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
-  private val contextResource: Resource[IO, ReleaseContext] =
-    TestSupport.dummyContextResource("sbt-release-io-builder-spec")
-
   private def assertPassesThrough(step: ReleaseStepIO): IO[Unit] =
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       step.execute(ctx).map(result => assertEquals(result, ctx))
     }
 
   private def assertNoOpValidate(step: ReleaseStepIO): IO[Unit] =
-    contextResource.use(ctx => step.validate(ctx))
+    TestSupport.dummyContextResource(fixturePrefix).use(ctx => step.validate(ctx))
+
+  private def assertValidationRuns(buildStep: Ref[IO, Boolean] => ReleaseStepIO): IO[Unit] =
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Boolean](false).flatMap { validationRan =>
+        buildStep(validationRan).validate(ctx) *> validationRan.get.map(assert(_))
+      }
+    }
+
+  private def assertResourceValidationCapture(
+      resource: String
+  )(buildStep: Ref[IO, Option[String]] => String => ReleaseStepIO): IO[Unit] =
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Option[String]](None).flatMap { capturedResource =>
+        buildStep(capturedResource)(resource).validate(ctx) *> capturedResource.get.map {
+          captured =>
+            assertEquals(captured, Some(resource))
+        }
+      }
+    }
 }

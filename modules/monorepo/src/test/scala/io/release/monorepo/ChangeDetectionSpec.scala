@@ -9,7 +9,6 @@ import sbt.{ProjectRef, State}
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 import java.nio.file.Files
-import scala.annotation.tailrec
 
 class ChangeDetectionSpec extends CatsEffectSuite {
 
@@ -43,7 +42,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
         )
 
         detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
-          awaitLogs(env, required = Seq("git describe failed for core")).map { logs =>
+          readLogs(env, required = Seq("git describe failed for core")).map { logs =>
             assertEquals(changed.map(_.name), Seq("core"))
             assert(logs.contains("git describe failed for core"))
             assert(!logs.contains("No previous tag matching"))
@@ -80,7 +79,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           )
 
           detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
-            awaitLogs(env, required = Seq("is not under VCS baseDir")).map { logs =>
+            readLogs(env, required = Seq("is not under VCS baseDir")).map { logs =>
               assertEquals(changed.map(_.name), Seq("core"))
               assert(logs.contains("is not under VCS baseDir"))
               assert(logs.contains(outsideBaseDir.getAbsolutePath))
@@ -123,7 +122,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
 
         detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
           changed =>
-            awaitLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
+            readLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
               assertEquals(changed.map(_.name), Seq("core"))
               assert(logs.contains("Shared path change(s) detected"))
               assert(logs.contains("build.sbt"))
@@ -161,7 +160,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
 
         detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
           changed =>
-            awaitLogs(env, required = Seq("core unchanged since core-v0.1.0")).map { logs =>
+            readLogs(env, required = Seq("core unchanged since core-v0.1.0")).map { logs =>
               assert(changed.isEmpty)
               assert(logs.contains("core unchanged since core-v0.1.0"))
               assert(!logs.contains("Shared path change(s) detected"))
@@ -308,11 +307,177 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           sharedPaths = Seq("build.sbt"),
           tagStrategy = MonorepoTagStrategy.Unified
         ).flatMap { changed =>
-          awaitLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
+          readLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
             assertEquals(changed.map(_.name), Seq("core", "api"))
             assert(logs.contains("Shared path change(s) detected"))
           }
         }
+      }
+    }
+  }
+
+  test("detectChangedProjects - detect project-local changes under the project directory") {
+    tempDirResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
+        sbt.IO.createDirectory(new File(repo, "api"))
+        sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "api/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "core/src/main/scala/Core.scala"), "object Core {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+        TestSupport.runGit(repo, "tag", "api-v0.1.0")
+
+        sbt.IO.write(
+          new File(repo, "core/src/main/scala/Core.scala"),
+          "object Core { val changed = true }\n"
+        )
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
+      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+        val core = ProjectReleaseInfo(
+          ref = ProjectRef(repo.toURI, "core"),
+          name = "core",
+          baseDir = new File(repo, "core"),
+          versionFile = new File(repo, "core/version.sbt")
+        )
+        val api  = ProjectReleaseInfo(
+          ref = ProjectRef(repo.toURI, "api"),
+          name = "api",
+          baseDir = new File(repo, "api"),
+          versionFile = new File(repo, "api/version.sbt")
+        )
+
+        detectChanged(vcs, Seq(core, api), env.state).flatMap { changed =>
+          readLogs(
+            env,
+            required = Seq(
+              "core has 1 changed file(s) since core-v0.1.0",
+              "api unchanged since api-v0.1.0"
+            )
+          ).map { logs =>
+            assertEquals(changed.map(_.name), Seq("core"))
+            assert(logs.contains("core has 1 changed file(s) since core-v0.1.0"))
+            assert(logs.contains("api unchanged since api-v0.1.0"))
+          }
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - exclude child project directories from parent project diffs") {
+    tempDirResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
+        sbt.IO.write(new File(repo, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "core/src/main/scala/Core.scala"), "object Core {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "root-v0.1.0")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        sbt.IO.write(
+          new File(repo, "core/src/main/scala/Core.scala"),
+          "object Core { val changed = true }\n"
+        )
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo, new File(repo, "sbt-test.log"))))
+      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+        val root = ProjectReleaseInfo(
+          ref = ProjectRef(repo.toURI, "root"),
+          name = "root",
+          baseDir = repo,
+          versionFile = new File(repo, "version.sbt")
+        )
+        val core = ProjectReleaseInfo(
+          ref = ProjectRef(repo.toURI, "core"),
+          name = "core",
+          baseDir = new File(repo, "core"),
+          versionFile = new File(repo, "core/version.sbt")
+        )
+
+        detectChanged(vcs, Seq(root, core), env.state).flatMap { changed =>
+          readLogs(
+            env,
+            required = Seq(
+              "root has only version/excluded file changes since root-v0.1.0, treating as unchanged",
+              "core has 1 changed file(s) since core-v0.1.0"
+            )
+          ).map { logs =>
+            assertEquals(changed.map(_.name), Seq("core"))
+            assert(
+              logs.contains(
+                "root has only version/excluded file changes since root-v0.1.0, treating as unchanged"
+              )
+            )
+            assert(logs.contains("core has 1 changed file(s) since core-v0.1.0"))
+          }
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - ignore additional excluded files beyond the version file") {
+    tempDirResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
+        sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        val sourceFile = new File(repo, "core/src/main/scala/Core.scala")
+        sbt.IO.write(sourceFile, "object Core {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        sbt.IO.write(sourceFile, "object Core { val changed = true }\n")
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
+
+        repo -> sourceFile
+      }.flatMap { case (preparedRepo, sourceFile) =>
+        detectVcs(preparedRepo).map(vcs =>
+          (vcs, sourceFile, testEnv(preparedRepo, new File(preparedRepo, "sbt-test.log")))
+        )
+      }.flatMap { case (vcs: Vcs, sourceFile: File, env: TestEnv) =>
+        val project = ProjectReleaseInfo(
+          ref = ProjectRef(repo.toURI, "core"),
+          name = "core",
+          baseDir = new File(repo, "core"),
+          versionFile = new File(repo, "core/version.sbt")
+        )
+
+        detectChanged(vcs, Seq(project), env.state, additionalExcludeFiles = Seq(sourceFile))
+          .flatMap { changed =>
+            readLogs(
+              env,
+              required = Seq(
+                "core has only version/excluded file changes since core-v0.1.0, treating as unchanged"
+              )
+            ).map { logs =>
+              assert(changed.isEmpty)
+              assert(
+                logs.contains(
+                  "core has only version/excluded file changes since core-v0.1.0, treating as unchanged"
+                )
+              )
+              assert(!logs.contains("core has 1 changed file(s) since core-v0.1.0"))
+            }
+          }
       }
     }
   }
@@ -342,7 +507,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
         )
 
         detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
-          awaitLogs(env, required = Seq("root unchanged since root-v0.1.0")).map { logs =>
+          readLogs(env, required = Seq("root unchanged since root-v0.1.0")).map { logs =>
             assert(changed.isEmpty)
             assert(logs.contains("root unchanged since root-v0.1.0"))
           }
@@ -351,33 +516,14 @@ class ChangeDetectionSpec extends CatsEffectSuite {
     }
   }
 
-  /** Wait for specific log output and fail fast if the expected anchors never appear. */
-  private def awaitLogs(
+  private def readLogs(
       env: TestEnv,
-      required: Seq[String],
-      timeoutMs: Long = 1000L,
-      pollMs: Long = 10L
+      required: Seq[String] = Nil
   ): IO[String] = IO.blocking {
-    val deadline = System.nanoTime() + timeoutMs * 1000000L
-
-    @tailrec
-    def loop(): String = {
-      val logs     = env.consoleBuffer.toString("UTF-8")
-      val timedOut = System.nanoTime() >= deadline
-      val missing  = required.filterNot(logs.contains)
-
-      if (missing.isEmpty) logs
-      else if (timedOut)
-        throw new java.util.concurrent.TimeoutException(
-          s"Timed out after ${timeoutMs}ms waiting for log(s): ${missing.mkString(", ")}"
-        )
-      else {
-        Thread.sleep(pollMs)
-        loop()
-      }
-    }
-
-    loop()
+    val logs    = env.consoleBuffer.toString("UTF-8")
+    val missing = required.filterNot(logs.contains)
+    assert(missing.isEmpty, s"Missing expected log(s): ${missing.mkString(", ")}\n$logs")
+    logs
   }
 
   private val perProjectTagName: (String, String) => String =
@@ -391,7 +537,8 @@ class ChangeDetectionSpec extends CatsEffectSuite {
       projects: Seq[ProjectReleaseInfo],
       state: State,
       sharedPaths: Seq[String] = Seq.empty,
-      tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
+      tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject,
+      additionalExcludeFiles: Seq[File] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     ChangeDetection.detectChangedProjects(
       vcs,
@@ -400,6 +547,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
       perProjectTagName,
       unifiedTagName,
       state,
+      additionalExcludeFiles = additionalExcludeFiles,
       sharedPaths = sharedPaths
     )
 

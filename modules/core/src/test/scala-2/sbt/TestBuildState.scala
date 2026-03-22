@@ -18,19 +18,19 @@ object TestBuildState {
   ): State = {
     require(projects.nonEmpty, "Synthetic test states require at least one project.")
 
-    val canonicalBase = baseDir.getCanonicalFile
-    val uri           = canonicalBase.toURI
+    val canonicalBase  = baseDir.getCanonicalFile
+    val uri            = canonicalBase.toURI
     val rootProjectIds = {
       val atBase = projects.filter(_.base.getCanonicalFile == canonicalBase).map(_.id)
       if (atBase.nonEmpty) atBase else Seq(projects.head.id)
     }
-    val rootProjectId = rootProjectIds.head
+    val rootProjectId  = rootProjectIds.head
 
     def resolveRef(ref: ProjectReference): ProjectRef =
       ref match {
-        case pr: ProjectRef   => pr
-        case LocalProject(id) => ProjectRef(uri, id)
-        case LocalRootProject => ProjectRef(uri, rootProjectId)
+        case pr: ProjectRef     => pr
+        case LocalProject(id)   => ProjectRef(uri, id)
+        case LocalRootProject   => ProjectRef(uri, rootProjectId)
         case RootProject(`uri`) =>
           ProjectRef(uri, rootProjectId)
         case RootProject(other) =>
@@ -41,9 +41,9 @@ object TestBuildState {
           )
       }
 
-    val resolvedProjects = projects.iterator.map(p => p.id -> p.resolve(resolveRef)).toMap
-    val buildDefBase     = new File(canonicalBase, "project")
-    val definitions      = new LoadedDefinitions(
+    val resolvedProjects                                  = projects.iterator.map(p => p.id -> p.resolve(resolveRef)).toMap
+    val buildDefBase                                      = new File(canonicalBase, "project")
+    val definitions                                       = new LoadedDefinitions(
       base = buildDefBase,
       target = Nil,
       loader = getClass.getClassLoader,
@@ -52,33 +52,33 @@ object TestBuildState {
       buildNames = Nil,
       dslDefinitions = DefinedSbtValues.empty
     )
-    val plugins          = new LoadedPlugins(
+    val plugins                                           = new LoadedPlugins(
       base = buildDefBase,
       pluginData = PluginData(Seq.empty[sbt.internal.util.Attributed[java.io.File]]),
       loader = getClass.getClassLoader,
       detected = new DetectedPlugins(Nil, new DetectedModules[BuildDef](Nil))
     )
-    val unit             =
+    val unit                                              =
       new BuildUnit(uri, canonicalBase, definitions, plugins)
-    val loadedUnit       =
+    val loadedUnit                                        =
       new LoadedBuildUnit(unit, resolvedProjects, rootProjectIds, buildSettings)
-    val units            = Map(uri -> loadedUnit)
-    val loaded           = new LoadedBuild(uri, units)
-    val delegates        = Load.defaultDelegates(loaded)
-    val scopeLocal: Def.ScopeLocal =
+    val units                                             = Map(uri -> loadedUnit)
+    val loaded                                            = new LoadedBuild(uri, units)
+    val delegates                                         = Load.defaultDelegates(loaded)
+    val scopeLocal: Def.ScopeLocal                        =
       state => EvaluateTask.injectStreams(state) ++ NioSettings.inject(state)
-    val inject           = Load.InjectSettings(Load.injectGlobal(baseState), Nil, _ => Nil)
-    val settings         =
+    val inject                                            = Load.InjectSettings(Load.injectGlobal(baseState), Nil, _ => Nil)
+    val settings                                          =
       Load.finalTransforms(
         Load.buildConfigurations(loaded, Load.getRootProject(units), inject)
       )
     implicit val showKey: sbt.util.Show[Def.ScopedKey[_]] =
       Project.showLoadingKey(loaded)
-    val (compiledMap, data) =
+    val (compiledMap, data)                               =
       Def.makeWithCompiledMap(settings)(delegates, scopeLocal, showKey)
-    val index               =
+    val index                                             =
       Load.structureIndex(data, settings, loaded.extra(data), units)
-    val structure           = new BuildStructure(
+    val structure                                         = new BuildStructure(
       units = units,
       root = uri,
       settings = settings,
@@ -89,7 +89,7 @@ object TestBuildState {
       scopeLocal = scopeLocal,
       compiledMap = compiledMap
     )
-    val session             = SessionSettings(
+    val session                                           = SessionSettings(
       currentBuild = uri,
       currentProject = Map(uri -> currentProjectId.getOrElse(rootProjectId)),
       original = settings,

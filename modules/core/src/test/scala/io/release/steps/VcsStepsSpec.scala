@@ -1,16 +1,16 @@
 package io.release.steps
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
 import io.release.{ReleaseContext, TestAssertions, TestSupport}
 import munit.CatsEffectSuite
-import sbt.{Def, Project}
 
 import java.io.File
 
 class VcsStepsSpec extends CatsEffectSuite {
+  private val fixturePrefix = "vcs-steps-spec"
 
   test("initializeVcs - detect Git from the loaded project base") {
-    gitRepoWithLoadedStateResource.use { case (_, state) =>
+    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
       VcsSteps.initializeVcs.execute(ReleaseContext(state = state)).map { result =>
         assertEquals(result.vcs.map(_.commandName), Some("git"))
       }
@@ -18,13 +18,13 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanWorkingDir.validate - succeed for a clean loaded repo") {
-    gitRepoWithLoadedStateResource.use { case (_, state) =>
+    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
       VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
     }
   }
 
   test("checkCleanWorkingDir.validate - fail for a dirty tracked file in a loaded repo") {
-    gitRepoWithLoadedStateResource.use { case (repo, state) =>
+    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (repo, state) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
         TestAssertions.assertFailure[IllegalStateException, Unit](
           VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
@@ -36,13 +36,13 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
-    releaseContextResource.use { ctx =>
+    TestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
       VcsSteps.pushChanges.validate(ctx)
     }
   }
 
   test("pushChanges.execute - fail during remote preflight in non-interactive mode") {
-    releaseContextResource.use { ctx =>
+    TestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
       TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
         VcsSteps.pushChanges.execute(ctx)
       )(err => assert(err.getMessage.contains("Aborting the release due to remote check failure.")))
@@ -50,8 +50,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - abort in non-interactive mode when the tag already exists") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
-      val state = loadedState(
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -62,28 +62,29 @@ class VcsStepsSpec extends CatsEffectSuite {
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
         TestAssertions.assertIllegalStateMessage(
-          VcsSteps.tagRelease.execute(ReleaseContext(state = state, vcs = Some(vcs), interactive = false)),
+          VcsSteps.tagRelease
+            .execute(ReleaseContext(state = state, vcs = Some(vcs), interactive = false)),
           "Tag [v1.0.0] already exists. Aborting release in non-interactive mode."
         )
     }
   }
 
   test("tagRelease.execute - create the tag and keep the resulting context usable") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val versionFile = new File(repo, "version.sbt")
-      val state = loadedState(
+      val state       = TestSupport.gitRootState(
         repo,
         Seq(
-          sbt.Keys.packageOptions                       := Seq.empty,
+          sbt.Keys.packageOptions                           := Seq.empty,
           io.release.ReleaseIO.releaseIOVersionFile         := versionFile,
           io.release.ReleaseIO.releaseIOReadVersion         := VersionSteps.defaultReadVersion,
           io.release.ReleaseIO.releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
             useGlobalVersion = true
           ),
           io.release.ReleaseIO.releaseIOUseGlobalVersion    := true,
-          io.release.ReleaseIO.releaseIOVcsSign    := false,
-          io.release.ReleaseIO.releaseIOTagName    := "v1.0.1",
-          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.1"
+          io.release.ReleaseIO.releaseIOVcsSign             := false,
+          io.release.ReleaseIO.releaseIOTagName             := "v1.0.1",
+          io.release.ReleaseIO.releaseIOTagComment          := "Releasing 1.0.1"
         )
       )
 
@@ -99,52 +100,4 @@ class VcsStepsSpec extends CatsEffectSuite {
       }
     }
   }
-
-  private val tempDirResource: Resource[IO, File] =
-    TestSupport.tempDirResource("vcs-steps-spec")
-
-  private val releaseContextResource: Resource[IO, ReleaseContext] =
-    tempDirResource.evalMap { repo =>
-      TestSupport.initRepoWithBrokenRemote(repo).map { vcs =>
-        ReleaseContext(
-          state = TestSupport.dummyState(repo),
-          vcs = Some(vcs),
-          interactive = false
-        )
-      }
-    }
-
-  private val gitRepoWithCommitResource: Resource[IO, (File, io.release.vcs.Vcs)] =
-    tempDirResource.evalMap { repo =>
-      IO.blocking {
-        TestSupport.initGitRepo(repo)
-        sbt.IO.write(new File(repo, "file.txt"), "initial")
-        TestSupport.commitAll(repo, "Initial commit")
-        repo
-      }.flatMap { initialized =>
-        io.release.vcs.Vcs.detect(initialized).flatMap {
-          case Some(vcs) => IO.pure((initialized, vcs))
-          case None      =>
-            IO.raiseError(
-              new RuntimeException(s"Failed to detect VCS in ${initialized.getAbsolutePath}")
-            )
-        }
-      }
-    }
-
-  private val gitRepoWithLoadedStateResource: Resource[IO, (File, sbt.State)] =
-    gitRepoWithCommitResource.evalMap { case (repo, _) =>
-      IO.blocking(repo -> loadedState(repo))
-    }
-
-  private def loadedState(repo: File, settings: Seq[Def.Setting[?]] = Nil): sbt.State =
-    TestSupport.loadedState(
-      repo,
-      Seq(
-        Project("root", repo).settings(
-          (Seq(io.release.ReleaseIO.releaseIOIgnoreUntrackedFiles := false) ++ settings)*
-        )
-      ),
-      currentProjectId = Some("root")
-    )
 }

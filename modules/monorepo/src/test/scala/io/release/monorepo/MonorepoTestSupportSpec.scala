@@ -10,7 +10,10 @@ class MonorepoTestSupportSpec extends FunSuite {
     assertEquals(project.name, "core")
     assertEquals(project.ref.project, "core")
     assert(project.baseDir.isDirectory)
-    assertEquals(project.versionFile.getParentFile.getCanonicalFile, project.baseDir.getCanonicalFile)
+    assertEquals(
+      project.versionFile.getParentFile.getCanonicalFile,
+      project.baseDir.getCanonicalFile
+    )
     assertEquals(project.ref.build, project.baseDir.getParentFile.toURI)
     assert(!project.versionFile.exists())
   }

@@ -15,7 +15,10 @@ class TestBuildStateSpec extends CatsEffectSuite {
       CEIO.blocking {
         val extracted = Project.extract(state)
         assertEquals(extracted.currentRef.project, "root")
-        assertEquals(extracted.get(Keys.baseDirectory).getCanonicalFile, state.configuration.baseDirectory.getCanonicalFile)
+        assertEquals(
+          extracted.get(Keys.baseDirectory).getCanonicalFile,
+          state.configuration.baseDirectory.getCanonicalFile
+        )
       }
     }
   }
@@ -25,8 +28,8 @@ class TestBuildStateSpec extends CatsEffectSuite {
 
     singleProjectStateResource.use { state =>
       CEIO.blocking {
-        val base   = Project.extract(state).get(Keys.baseDirectory)
-        val seeded = TestSupport.appendSessionSettings(
+        val base              = Project.extract(state).get(Keys.baseDirectory)
+        val seeded            = TestSupport.appendSessionSettings(
           state,
           Seq(
             appendedTask := {
@@ -36,8 +39,8 @@ class TestBuildStateSpec extends CatsEffectSuite {
             }
           )
         )
-        val appendedExtracted  = Project.extract(seeded)
-        val (newState, value)  = appendedExtracted.runTask(appendedTask, seeded)
+        val appendedExtracted = Project.extract(seeded)
+        val (newState, value) = appendedExtracted.runTask(appendedTask, seeded)
 
         assertEquals(value, "appended")
         assertEquals(
@@ -62,13 +65,13 @@ class TestBuildStateSpec extends CatsEffectSuite {
           .aggregate(LocalProject("api"), LocalProject("core"))
           .settings(
             aggregatedTask / Keys.aggregate := true,
-            aggregatedTask := writeMarker("root").value
+            aggregatedTask                  := writeMarker("root").value
           ),
         Project("api", apiBase).settings(
-          aggregatedTask := writeMarker("api").value
+          aggregatedTask                    := writeMarker("api").value
         ),
         Project("core", coreBase).settings(
-          aggregatedTask := writeMarker("core").value
+          aggregatedTask                    := writeMarker("core").value
         )
       )
     }.use { state =>
@@ -93,18 +96,28 @@ class TestBuildStateSpec extends CatsEffectSuite {
             extracted.structure.data
           )
         )
-        val newState               =
+        val newState  =
           extracted.runAggregated(extracted.currentRef / aggregatedTask, state)
         assertEquals(
           readFile(new JFile(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")),
           "root"
         )
         assertEquals(
-          readFile(new JFile(extracted.get(LocalProject("api") / Keys.baseDirectory), "aggregated-task-api.txt")),
+          readFile(
+            new JFile(
+              extracted.get(LocalProject("api") / Keys.baseDirectory),
+              "aggregated-task-api.txt"
+            )
+          ),
           "api"
         )
         assertEquals(
-          readFile(new JFile(extracted.get(LocalProject("core") / Keys.baseDirectory), "aggregated-task-core.txt")),
+          readFile(
+            new JFile(
+              extracted.get(LocalProject("core") / Keys.baseDirectory),
+              "aggregated-task-core.txt"
+            )
+          ),
           "core"
         )
         assertEquals(Project.extract(newState).currentRef.project, "root")
@@ -125,13 +138,13 @@ class TestBuildStateSpec extends CatsEffectSuite {
           .aggregate(LocalProject("api"), LocalProject("core"))
           .settings(
             aggregatedTask / Keys.aggregate := false,
-            aggregatedTask := writeMarker("root").value
+            aggregatedTask                  := writeMarker("root").value
           ),
         Project("api", apiBase).settings(
-          aggregatedTask := writeMarker("api").value
+          aggregatedTask                    := writeMarker("api").value
         ),
         Project("core", coreBase).settings(
-          aggregatedTask := writeMarker("core").value
+          aggregatedTask                    := writeMarker("core").value
         )
       )
     }.use { state =>
@@ -156,11 +169,11 @@ class TestBuildStateSpec extends CatsEffectSuite {
             extracted.structure.data
           )
         )
-        val newState               =
+        val newState  =
           extracted.runAggregated(extracted.currentRef / aggregatedTask, state)
-        val rootBase               = extracted.get(Keys.baseDirectory)
-        val apiBase                = extracted.get(LocalProject("api") / Keys.baseDirectory)
-        val coreBase               = extracted.get(LocalProject("core") / Keys.baseDirectory)
+        val rootBase  = extracted.get(Keys.baseDirectory)
+        val apiBase   = extracted.get(LocalProject("api") / Keys.baseDirectory)
+        val coreBase  = extracted.get(LocalProject("core") / Keys.baseDirectory)
         assertEquals(readFile(new JFile(rootBase, "aggregated-task-root.txt")), "root")
         assert(!new JFile(apiBase, "aggregated-task-api.txt").exists())
         assert(!new JFile(coreBase, "aggregated-task-core.txt").exists())

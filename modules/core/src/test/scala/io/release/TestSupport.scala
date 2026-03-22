@@ -68,6 +68,65 @@ object TestSupport {
   def dummyContextResource(prefix: String): Resource[IO, ReleaseContext] =
     dummyStateResource(prefix).map(state => ReleaseContext(state = state))
 
+  def gitRepoResource(prefix: String): Resource[IO, File] =
+    tempDirResource(prefix).evalMap { dir =>
+      IO.blocking {
+        initGitRepo(dir)
+        dir
+      }
+    }
+
+  def gitRepoWithCommitResource(
+      prefix: String,
+      prepareRepo: File => IO[Unit] = repo =>
+        IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "initial")),
+      commitMessage: String = "Initial commit"
+  ): Resource[IO, (File, Vcs)] =
+    gitRepoResource(prefix).evalMap { repo =>
+      prepareRepo(repo) *>
+        IO.blocking(commitAll(repo, commitMessage)) *>
+        detectVcs(repo).map(repo -> _)
+    }
+
+  def gitRootState(
+      repo: File,
+      rootSettings: Seq[Setting[?]] = Nil
+  ): State =
+    loadedState(
+      repo,
+      Seq(
+        Project("root", repo).settings(
+          (Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := false) ++ rootSettings)*
+        )
+      ),
+      currentProjectId = Some("root")
+    )
+
+  def gitRepoWithLoadedStateResource(
+      prefix: String,
+      rootSettings: Seq[Setting[?]] = Nil,
+      prepareRepo: File => IO[Unit] = repo =>
+        IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "initial")),
+      commitMessage: String = "Initial commit"
+  ): Resource[IO, (File, State)] =
+    gitRepoWithCommitResource(prefix, prepareRepo, commitMessage).evalMap { case (repo, _) =>
+      IO.blocking(repo -> gitRootState(repo, rootSettings))
+    }
+
+  def brokenRemoteContextResource(
+      prefix: String,
+      interactive: Boolean = false
+  ): Resource[IO, ReleaseContext] =
+    tempDirResource(prefix).evalMap { repo =>
+      initRepoWithBrokenRemote(repo).map { vcs =>
+        ReleaseContext(
+          state = dummyState(repo),
+          vcs = Some(vcs),
+          interactive = interactive
+        )
+      }
+    }
+
   def dummyState(baseDir: File): State = {
     val logFile       = new File(baseDir, "sbt-test.log")
     val globalLogging =
@@ -114,9 +173,9 @@ object TestSupport {
 
   def dummyAppConfiguration(baseDir: File): AppConfiguration = {
     def classpathJar(className: String): File = {
-      val clazz        = Class.forName(className)
-      val codeSource   = Option(clazz.getProtectionDomain).flatMap(pd => Option(pd.getCodeSource))
-      val location     = codeSource.flatMap(cs => Option(cs.getLocation))
+      val clazz      = Class.forName(className)
+      val codeSource = Option(clazz.getProtectionDomain).flatMap(pd => Option(pd.getCodeSource))
+      val location   = codeSource.flatMap(cs => Option(cs.getLocation))
 
       location match {
         case Some(url) => new File(url.toURI)
@@ -127,7 +186,7 @@ object TestSupport {
       }
     }
 
-    val runtimeLibraryJar = classpathJar("scala.Predef$")
+    val runtimeLibraryJar  = classpathJar("scala.Predef$")
     val runtimeCompilerJar =
       if (CurrentScalaVersion.startsWith("3.")) classpathJar("dotty.tools.dotc.Main")
       else classpathJar("scala.tools.nsc.Main")
@@ -192,16 +251,16 @@ object TestSupport {
       override def app(id: ApplicationID, version: String): AppProvider =
         appProvider(id, scalaProviderFor(version, id, launcher0))
 
-      override def topLoader(): ClassLoader                                                   = getClass.getClassLoader
-      override def globalLock(): GlobalLock                                                   = new GlobalLock {
+      override def topLoader(): ClassLoader             = getClass.getClassLoader
+      override def globalLock(): GlobalLock             = new GlobalLock {
         override def apply[T](lockFile: File, run: java.util.concurrent.Callable[T]): T = run.call()
       }
-      override def bootDirectory(): File                                                      = baseDir
-      override def ivyRepositories(): Array[Repository]                                       = Array.empty
-      override def appRepositories(): Array[Repository]                                       = Array.empty
-      override def isOverrideRepositories(): Boolean                                          = false
-      override def ivyHome(): File                                                            = baseDir
-      override def checksums(): Array[String]                                                 = Array.empty
+      override def bootDirectory(): File                = baseDir
+      override def ivyRepositories(): Array[Repository] = Array.empty
+      override def appRepositories(): Array[Repository] = Array.empty
+      override def isOverrideRepositories(): Boolean    = false
+      override def ivyHome(): File                      = baseDir
+      override def checksums(): Array[String]           = Array.empty
     }
 
     lazy val scalaProvider0: ScalaProvider = scalaProviderFor(CurrentScalaVersion, appId, launcher0)
@@ -230,6 +289,13 @@ object TestSupport {
   def runGit(repo: File, args: String*): String =
     Process(Seq("git") ++ args, repo).!!
 
+  def detectVcs(repo: File): IO[Vcs] =
+    Vcs.detect(repo).flatMap {
+      case Some(vcs) => IO.pure(vcs)
+      case None      =>
+        IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+    }
+
   def initRepoWithBrokenRemote(repo: File): IO[Vcs] =
     IO.blocking {
       initGitRepo(repo)
@@ -241,11 +307,5 @@ object TestSupport {
       runGit(repo, "config", "branch.main.remote", "origin")
       runGit(repo, "config", "branch.main.merge", "refs/heads/main")
       repo
-    }.flatMap { r =>
-      Vcs.detect(r).flatMap {
-        case Some(vcs) => IO.pure(vcs)
-        case None      =>
-          IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${r.getAbsolutePath}"))
-      }
-    }
+    }.flatMap(detectVcs)
 }

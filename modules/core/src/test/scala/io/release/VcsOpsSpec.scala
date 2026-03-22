@@ -1,17 +1,17 @@
 package io.release
 
-import cats.effect.{IO, Ref, Resource}
+import cats.effect.{IO, Ref}
 import io.release.TestAssertions.{assertFailure, assertIllegalStateMessage}
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.{Project, State}
 
 import java.io.File
 
 class VcsOpsSpec extends CatsEffectSuite {
+  private val fixturePrefix = "vcs-ops-spec"
 
   test("detectVcsFromBase - succeed for an initialized Git repo") {
-    gitRepoResource.use { repo =>
+    TestSupport.gitRepoResource(fixturePrefix).use { repo =>
       VcsOps.detectVcsFromBase(repo).map { vcs =>
         assertEquals(vcs.commandName, "git")
       }
@@ -19,7 +19,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("detectVcsFromBase - raise IllegalStateException for a non-Git directory") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       assertFailure[IllegalStateException, Vcs](VcsOps.detectVcsFromBase(dir))(err =>
         assert(err.getMessage.contains("No VCS detected at"))
       )
@@ -27,7 +27,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - succeed on a clean repo and return the current hash") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).map { result =>
         assert(result.currentHash.nonEmpty)
         assertEquals(result.vcs.commandName, "git")
@@ -36,7 +36,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - raise error listing modified files when a tracked file is modified") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
         assertFailure[IllegalStateException, VcsOps.CleanCheckResult](
           VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false)
@@ -48,7 +48,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - raise error listing staged files when staged-but-uncommitted") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking {
         sbt.IO.write(new File(repo, "staged.txt"), "staged content")
         TestSupport.runGit(repo, "add", "staged.txt")
@@ -63,7 +63,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - raise error listing untracked files when untracked files exist") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
         assertFailure[IllegalStateException, VcsOps.CleanCheckResult](
           VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false)
@@ -75,7 +75,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - succeed with untracked files when ignoreUntracked is true") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
         VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = true).map { result =>
           assert(result.currentHash.nonEmpty)
@@ -84,8 +84,10 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("detectVcs - detect Git from a loaded sbt state") {
-    gitRepoWithCommitResource.use { case (repo, _) =>
-      IO(sessionState(repo, ignoreUntracked = true)).flatMap { state =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
+      IO.blocking(
+        TestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+      ).flatMap { state =>
         VcsOps.detectVcs(state).map { vcs =>
           assertEquals(vcs.commandName, "git")
         }
@@ -94,8 +96,10 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanWorkingDir(state) - succeed for a clean loaded repo") {
-    gitRepoWithCommitResource.use { case (repo, _) =>
-      IO(sessionState(repo, ignoreUntracked = true)).flatMap { state =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
+      IO.blocking(
+        TestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+      ).flatMap { state =>
         VcsOps.checkCleanWorkingDir(state).map { result =>
           assert(result.currentHash.nonEmpty)
           assertEquals(result.vcs.commandName, "git")
@@ -105,8 +109,10 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanWorkingDir(state, vcs) - read settings from the loaded state") {
-    gitRepoWithCommitResource.use { case (repo, _) =>
-      IO(sessionState(repo, ignoreUntracked = true)).flatMap { state =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
+      IO.blocking(
+        TestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+      ).flatMap { state =>
         for {
           vcs    <- VcsOps.detectVcs(state)
           result <- VcsOps.checkCleanWorkingDir(state, vcs)
@@ -118,7 +124,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("relativizeToBase - return the path relative to the VCS root") {
-    gitRepoWithCommitResource.use { case (repo, vcs) =>
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking {
         val nested = new File(repo, "nested/version.sbt")
         sbt.IO.write(nested, """version := "0.1.0-SNAPSHOT"""")
@@ -132,8 +138,8 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("relativizeToBase - raise when the file is outside the VCS root") {
-    tempDirResource.use { outside =>
-      gitRepoWithCommitResource.use { case (_, vcs) =>
+    TestSupport.tempDirResource(fixturePrefix).use { outside =>
+      TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (_, vcs) =>
         val external = new File(outside, "version.sbt")
         IO.blocking(sbt.IO.write(external, """version := "0.1.0-SNAPSHOT"""")) *>
           assertFailure[IllegalStateException, String](VcsOps.relativizeToBase(vcs, external))(
@@ -144,7 +150,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("trackedStatus - drop untracked lines from porcelain status") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val vcs = new StubVcs(
         dir,
         status0 = IO.pure(" M tracked.txt\n?? untracked.txt\nA  staged.txt")
@@ -157,7 +163,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("StubVcs - capture method parameters when requested") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
         val vcs = new StubVcs(dir, recordedCalls0 = Some(calls))
 
@@ -185,7 +191,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("StubVcs - run canned write effects after recording") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
         Ref.of[IO, Vector[String]](Vector.empty).flatMap { effects =>
           val vcs = new StubVcs(
@@ -222,7 +228,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("validatePushRemote - succeed when the tracking remote is reachable") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       VcsOps
         .validatePushRemote(
           TestSupport.dummyState(dir),
@@ -234,7 +240,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("validatePushRemote - abort in non-interactive mode when the remote check fails") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       assertIllegalStateMessage(
         VcsOps.validatePushRemote(
           TestSupport.dummyState(dir),
@@ -248,7 +254,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("validatePushReadiness - fail when no tracking branch is configured") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       assertFailure[IllegalStateException, Unit](
         VcsOps.validatePushReadiness(
           TestSupport.dummyState(dir),
@@ -261,7 +267,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("validatePushReadiness - abort in non-interactive mode when local is behind remote") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       assertIllegalStateMessage(
         VcsOps.validatePushReadiness(
           TestSupport.dummyState(dir),
@@ -275,7 +281,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("validatePushReadiness - ignore isBehindRemote errors and continue") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       VcsOps
         .validatePushReadiness(
           TestSupport.dummyState(dir),
@@ -287,7 +293,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("interactivePushAfterRemote - non-interactive runs doPush") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
@@ -313,7 +319,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("interactivePushAfterRemote - interactive with useDefaults runs doPush") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val state = TestSupport.dummyState(dir)
       for {
         pushed     <- Ref[IO].of(false)
@@ -338,45 +344,6 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────
-
-  private val tempDirResource: Resource[IO, File] =
-    TestSupport.tempDirResource("vcs-ops-spec")
-
-  private val gitRepoResource: Resource[IO, File] =
-    tempDirResource.evalMap { dir =>
-      IO.blocking {
-        TestSupport.initGitRepo(dir)
-        dir
-      }
-    }
-
-  private val gitRepoWithCommitResource: Resource[IO, (File, Vcs)] =
-    gitRepoResource.evalMap { repo =>
-      IO.blocking {
-        sbt.IO.write(new File(repo, "file.txt"), "initial")
-        TestSupport.commitAll(repo, "Initial commit")
-        repo
-      }.flatMap { r =>
-        Vcs.detect(r).flatMap {
-          case Some(vcs) => IO.pure((r, vcs))
-          case None      =>
-            IO.raiseError(
-              new RuntimeException(s"Failed to detect VCS in ${r.getAbsolutePath}")
-            )
-        }
-      }
-    }
-
-  private def sessionState(repo: File, ignoreUntracked: Boolean): State =
-    TestSupport.appendSessionSettings(
-      TestSupport.loadedState(
-        repo,
-        Seq(Project("root", repo)),
-        currentProjectId = Some("root")
-      ),
-      Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := ignoreUntracked)
-    )
 }
 
 private final class StubVcs(
@@ -408,7 +375,8 @@ private final class StubVcs(
   override def trackingRemote: IO[String]           = trackingRemote0
   override def hasUpstream: IO[Boolean]             = hasUpstream0
   override def isBehindRemote: IO[Boolean]          = isBehindRemote0
-  override def existsTag(name: String): IO[Boolean] = record(StubVcsCall.ExistsTag(name)) *> existsTag0
+  override def existsTag(name: String): IO[Boolean] =
+    record(StubVcsCall.ExistsTag(name)) *> existsTag0
   override def modifiedFiles: IO[Seq[String]]       = modifiedFiles0
   override def stagedFiles: IO[Seq[String]]         = stagedFiles0
   override def untrackedFiles: IO[Seq[String]]      = untrackedFiles0
@@ -434,11 +402,11 @@ private final class StubVcs(
 private sealed trait StubVcsCall
 
 private object StubVcsCall {
-  final case class ExistsTag(name: String) extends StubVcsCall
-  final case class CheckRemote(remote: String) extends StubVcsCall
-  final case class Add(files: List[String]) extends StubVcsCall
+  final case class ExistsTag(name: String)                                  extends StubVcsCall
+  final case class CheckRemote(remote: String)                              extends StubVcsCall
+  final case class Add(files: List[String])                                 extends StubVcsCall
   final case class Commit(message: String, sign: Boolean, signOff: Boolean) extends StubVcsCall
   final case class Tag(name: String, comment: String, sign: Boolean, force: Boolean)
       extends StubVcsCall
-  case object PushChanges extends StubVcsCall
+  case object PushChanges                                                   extends StubVcsCall
 }

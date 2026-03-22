@@ -10,6 +10,7 @@ import sbt.{AttributeKey, ModuleID}
 import scala.sys.process.Process
 
 class StepHelpersSpec extends CatsEffectSuite {
+  private val fixturePrefix = "step-helpers-spec"
 
   test("StepHelpers.required - return the callback result when the value is present") {
     StepHelpers
@@ -25,7 +26,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVcs - return the callback result when VCS is initialized") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val key = AttributeKey[String]("detected-vcs")
 
       StepHelpers
@@ -37,7 +38,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVcs - raise IllegalStateException when VCS is missing") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       assertIllegalStateMessage(
         StepHelpers.requireVcs(ctx)(_ => IO.pure(ctx)),
         "VCS not initialized. Ensure initializeVcs runs before this step."
@@ -46,7 +47,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVersions - return the callback result when versions are set") {
-    contextResource.use { baseCtx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
       val key = AttributeKey[String]("resolved-versions")
       val ctx = baseCtx.withVersions("1.0.0", "1.0.1-SNAPSHOT")
 
@@ -59,7 +60,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVersions - raise IllegalStateException when versions are missing") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       assertIllegalStateMessage(
         StepHelpers.requireVersions(ctx)(_ => IO.pure(ctx)),
         "Versions not set. Ensure inquireVersions runs before this step."
@@ -89,7 +90,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.confirmContinue - abort in non-interactive mode") {
-    stateResource.use { state =>
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
       assertIllegalStateMessage(
         StepHelpers.confirmContinue(
           state,
@@ -104,8 +105,10 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  test("StepHelpers.confirmContinue - succeed in interactive use-defaults mode when default is yes") {
-    stateResource.use { state =>
+  test(
+    "StepHelpers.confirmContinue - succeed in interactive use-defaults mode when default is yes"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
       StepHelpers
         .confirmContinue(
           state,
@@ -119,7 +122,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.confirmContinue - abort in interactive use-defaults mode when default is no") {
-    stateResource.use { state =>
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
       assertIllegalStateMessage(
         StepHelpers.confirmContinue(
           state,
@@ -152,8 +155,10 @@ class StepHelpersSpec extends CatsEffectSuite {
     )(err => assertEquals(err.getMessage, "Invalid version format: 'not-a-version'"))
   }
 
-  test("StepHelpers.handleSnapshotDependencies - do nothing when there are no snapshot dependencies") {
-    stateResource.use { state =>
+  test(
+    "StepHelpers.handleSnapshotDependencies - do nothing when there are no snapshot dependencies"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
       StepHelpers
         .handleSnapshotDependencies(
           deps = Nil,
@@ -165,18 +170,20 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  test("StepHelpers.handleSnapshotDependencies - raise with dependency coordinates in non-interactive mode") {
-    stateResource.use { state =>
+  test(
+    "StepHelpers.handleSnapshotDependencies - raise with dependency coordinates in non-interactive mode"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
       assertFailure[IllegalStateException, Unit](
         StepHelpers
-        .handleSnapshotDependencies(
-          deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
-          state = state,
-          interactive = false,
-          useDefaults = false,
-          logPrefix = "[test]",
-          context = " while validating"
-        )
+          .handleSnapshotDependencies(
+            deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+            state = state,
+            interactive = false,
+            useDefaults = false,
+            logPrefix = "[test]",
+            context = " while validating"
+          )
       ) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found while validating"))
         assert(err.getMessage.contains("org.example:demo:1.0.0-SNAPSHOT"))
@@ -205,32 +212,26 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  private val stateResource =
-    TestSupport.dummyStateResource("step-helpers-spec")
-
-  private val contextResource =
-    TestSupport.dummyContextResource("step-helpers-spec")
-
   private def stubVcs(base: java.io.File): Vcs =
     new Vcs {
-      override def baseDir: java.io.File                                       = base
-      override def commandName: String                                         = "git"
-      override def currentHash: IO[String]                                     = IO.pure("deadbeef")
-      override def currentBranch: IO[String]                                   = IO.pure("main")
-      override def trackingRemote: IO[String]                                  = IO.pure("origin")
-      override def hasUpstream: IO[Boolean]                                    = IO.pure(true)
-      override def isBehindRemote: IO[Boolean]                                 = IO.pure(false)
-      override def existsTag(name: String): IO[Boolean]                        = IO.pure(false)
-      override def modifiedFiles: IO[Seq[String]]                              = IO.pure(Nil)
-      override def stagedFiles: IO[Seq[String]]                                = IO.pure(Nil)
-      override def untrackedFiles: IO[Seq[String]]                             = IO.pure(Nil)
-      override def status: IO[String]                                          = IO.pure("")
-      override def checkRemote(remote: String): IO[Int]                        = IO.pure(0)
-      override def add(files: String*): IO[Unit]                               = IO.unit
-      override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit] =
+      override def baseDir: java.io.File                                                       = base
+      override def commandName: String                                                         = "git"
+      override def currentHash: IO[String]                                                     = IO.pure("deadbeef")
+      override def currentBranch: IO[String]                                                   = IO.pure("main")
+      override def trackingRemote: IO[String]                                                  = IO.pure("origin")
+      override def hasUpstream: IO[Boolean]                                                    = IO.pure(true)
+      override def isBehindRemote: IO[Boolean]                                                 = IO.pure(false)
+      override def existsTag(name: String): IO[Boolean]                                        = IO.pure(false)
+      override def modifiedFiles: IO[Seq[String]]                                              = IO.pure(Nil)
+      override def stagedFiles: IO[Seq[String]]                                                = IO.pure(Nil)
+      override def untrackedFiles: IO[Seq[String]]                                             = IO.pure(Nil)
+      override def status: IO[String]                                                          = IO.pure("")
+      override def checkRemote(remote: String): IO[Int]                                        = IO.pure(0)
+      override def add(files: String*): IO[Unit]                                               = IO.unit
+      override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit]          =
         IO.unit
       override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
         IO.unit
-      override def pushChanges: IO[Unit]                                      = IO.unit
+      override def pushChanges: IO[Unit]                                                       = IO.unit
     }
 }

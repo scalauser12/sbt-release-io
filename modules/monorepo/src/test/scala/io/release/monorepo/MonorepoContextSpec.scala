@@ -23,6 +23,19 @@ class MonorepoContextSpec extends FunSuite {
     }
   }
 
+  test("MonorepoContext - leave projects unchanged when updateProject ref does not match") {
+    withState { state =>
+      val projects = Seq(dummyProject("core"), dummyProject("api"))
+      val ctx      = MonorepoContext(state = state, projects = projects)
+      val updated  =
+        ctx.updateProject(dummyProject("missing").ref)(
+          _.copy(versions = Some(("1.0.0", "1.1.0-SNAPSHOT")))
+        )
+
+      assertEquals(updated, ctx)
+    }
+  }
+
   test("MonorepoContext - filter out failed projects in currentProjects") {
     withState { state =>
       val projects = Seq(
@@ -32,6 +45,20 @@ class MonorepoContextSpec extends FunSuite {
       val ctx      = MonorepoContext(state = state, projects = projects)
 
       assertEquals(ctx.currentProjects.map(_.name), Seq("api"))
+    }
+  }
+
+  test("MonorepoContext - return no currentProjects when all projects are failed") {
+    withState { state =>
+      val ctx = MonorepoContext(
+        state = state,
+        projects = Seq(
+          dummyProject("core").copy(failed = true),
+          dummyProject("api").copy(failed = true)
+        )
+      )
+
+      assertEquals(ctx.currentProjects, Seq.empty)
     }
   }
 
@@ -120,6 +147,32 @@ class MonorepoContextSpec extends FunSuite {
       }
 
       assert(clue(error.getMessage).contains("Monorepo execution state not initialized"))
+    }
+  }
+
+  test("MonorepoContext internal execution state - record the written global version") {
+    withState { state =>
+      val plan    = MonorepoReleasePlan(
+        flags = ExecutionFlags(
+          useDefaults = true,
+          skipTests = false,
+          skipPublish = false,
+          interactive = false,
+          crossBuild = false
+        ),
+        selectionMode = SelectionMode.AllChanged,
+        selectedNames = Seq.empty,
+        releaseVersionOverrides = Map.empty,
+        nextVersionOverrides = Map.empty,
+        globalReleaseVersion = None,
+        globalNextVersion = None
+      )
+      val updated = MonorepoContext(state = state)
+        .withExecutionState(MonorepoExecutionState(plan))
+        .withGlobalVersionWritten("1.0.0")
+
+      assertEquals(updated.globalVersionWritten, Some("1.0.0"))
+      assertEquals(updated.releasePlan, Some(plan))
     }
   }
 

@@ -1,10 +1,28 @@
 package io.release
 
 import cats.effect.{IO, Ref, Resource}
-import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags, SbtCompat, SbtRuntime}
+import io.release.internal.{
+  CoreExecutionState,
+  CoreReleasePlan,
+  ExecutionFlags,
+  SbtCompat,
+  SbtRuntime
+}
 import munit.CatsEffectSuite
 import sbt.Def.*
-import sbt.{AttributeKey, Def, InputKey, Keys, LocalProject, Project, ProjectRef, State, TaskKey, inputKey, taskKey}
+import sbt.{
+  AttributeKey,
+  Def,
+  InputKey,
+  Keys,
+  LocalProject,
+  Project,
+  ProjectRef,
+  State,
+  TaskKey,
+  inputKey,
+  taskKey
+}
 
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -113,21 +131,23 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
     }
   }
 
-  test("compose - cross-build step runs once for a single configured Scala version and restores the entry version") {
+  test(
+    "compose - cross-build step runs once for a single configured Scala version and restores the entry version"
+  ) {
     loadedContextResource(
       "release-step-io-single-cross",
       _.settings(
-        Keys.scalaVersion      := TestSupport.CurrentScalaVersion,
+        Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
         Keys.crossScalaVersions := Seq(TestSupport.alternateScalaVersion)
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
         val step = ReleaseStepIO(
           name = "cross-step",
-          execute = c =>
-            scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
-          validate = c =>
-            scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
+          execute =
+            c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
+          validate =
+            c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
           enableCrossBuild = true
         )
 
@@ -152,11 +172,13 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
     }
   }
 
-  test("compose - cross-build step runs for each configured Scala version while non-cross steps still run once") {
+  test(
+    "compose - cross-build step runs for each configured Scala version while non-cross steps still run once"
+  ) {
     loadedContextResource(
       "release-step-io-multi-cross",
       _.settings(
-        Keys.scalaVersion      := TestSupport.CurrentScalaVersion,
+        Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
         Keys.crossScalaVersions := Seq(
           TestSupport.CurrentScalaVersion,
           TestSupport.alternateScalaVersion
@@ -166,10 +188,10 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
         val crossStep = ReleaseStepIO(
           name = "cross-step",
-          execute = c =>
-            scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
-          validate = c =>
-            scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
+          execute =
+            c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
+          validate =
+            c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
           enableCrossBuild = true
         )
         val plainStep = ReleaseStepIO.io("plain-step") { c =>
@@ -204,7 +226,7 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
     loadedContextResource(
       "release-step-io-empty-cross",
       _.settings(
-        Keys.scalaVersion      := TestSupport.CurrentScalaVersion,
+        Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
         Keys.crossScalaVersions := Nil
       )
     ).use { ctx =>
@@ -240,7 +262,7 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
     loadedContextResource(
       "release-step-io-cross-failure",
       _.settings(
-        Keys.scalaVersion      := TestSupport.CurrentScalaVersion,
+        Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
         Keys.crossScalaVersions := Seq(
           TestSupport.CurrentScalaVersion,
           TestSupport.alternateScalaVersion
@@ -248,14 +270,16 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val step = ReleaseStepIO.io("cross-step") { c =>
-          scalaVersionOf(c.state).flatMap { version =>
-            observed.update(_ :+ s"execute:$version") *>
-              (if (version == TestSupport.alternateScalaVersion)
-                 IO.raiseError(new RuntimeException("boom"))
-               else IO.pure(c))
+        val step = ReleaseStepIO
+          .io("cross-step") { c =>
+            scalaVersionOf(c.state).flatMap { version =>
+              observed.update(_ :+ s"execute:$version") *>
+                (if (version == TestSupport.alternateScalaVersion)
+                   IO.raiseError(new RuntimeException("boom"))
+                 else IO.pure(c))
+            }
           }
-        }.copy(enableCrossBuild = true)
+          .copy(enableCrossBuild = true)
 
         ReleaseStepIO
           .compose(Seq(step), crossBuild = true)(ctx)
@@ -360,7 +384,8 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
       )
     ).use { ctx =>
       ReleaseStepIO.fromTask(stateUpdateTask).execute(ctx).map { result =>
-        val marker = new File(SbtRuntime.extracted(result.state).get(Keys.baseDirectory), "from-task.txt")
+        val marker =
+          new File(SbtRuntime.extracted(result.state).get(Keys.baseDirectory), "from-task.txt")
         assertEquals(readFile(marker), "task-ran")
       }
     }
@@ -383,7 +408,10 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
         .execute(ctx)
         .map { result =>
           val marker =
-            new File(SbtRuntime.extracted(result.state).get(Keys.baseDirectory), "from-input-task.txt")
+            new File(
+              SbtRuntime.extracted(result.state).get(Keys.baseDirectory),
+              "from-input-task.txt"
+            )
           assertEquals(readFile(marker), "alpha:beta")
         }
     }
@@ -392,29 +420,29 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
   test("task steps - run fromTaskAggregated across aggregated projects") {
     val aggregatedTask = taskKey[String](s"aggregatedStateTask${System.nanoTime()}")
     loadedContextWithProjectsResource("release-step-io-from-task-aggregated") { dir =>
-      val apiBase   = new File(dir, "api")
-      val coreBase  = new File(dir, "core")
+      val apiBase  = new File(dir, "api")
+      val coreBase = new File(dir, "core")
       apiBase.mkdirs()
       coreBase.mkdirs()
-      val api            = Project("api", apiBase).settings(
+      val api      = Project("api", apiBase).settings(
         aggregatedTask := {
           val marker = new File(Keys.baseDirectory.value, "aggregated-task-api.txt")
           sbt.IO.write(marker, "api")
           "api"
         }
       )
-      val core           = Project("core", coreBase).settings(
+      val core     = Project("core", coreBase).settings(
         aggregatedTask := {
           val marker = new File(Keys.baseDirectory.value, "aggregated-task-core.txt")
           sbt.IO.write(marker, "core")
           "core"
         }
       )
-      val root           = Project("root", dir)
+      val root     = Project("root", dir)
         .aggregate(LocalProject("api"), LocalProject("core"))
         .settings(
           aggregatedTask / Keys.aggregate := true,
-          aggregatedTask := {
+          aggregatedTask                  := {
             val marker = new File(Keys.baseDirectory.value, "aggregated-task-root.txt")
             sbt.IO.write(marker, "root")
             "root"
@@ -424,13 +452,26 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
     }.use { ctx =>
       ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(ctx).map { result =>
         val extracted = SbtRuntime.extracted(result.state)
-        assertEquals(readFile(new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")), "root")
         assertEquals(
-          readFile(new File(extracted.get(LocalProject("api") / Keys.baseDirectory), "aggregated-task-api.txt")),
+          readFile(new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")),
+          "root"
+        )
+        assertEquals(
+          readFile(
+            new File(
+              extracted.get(LocalProject("api") / Keys.baseDirectory),
+              "aggregated-task-api.txt"
+            )
+          ),
           "api"
         )
         assertEquals(
-          readFile(new File(extracted.get(LocalProject("core") / Keys.baseDirectory), "aggregated-task-core.txt")),
+          readFile(
+            new File(
+              extracted.get(LocalProject("core") / Keys.baseDirectory),
+              "aggregated-task-core.txt"
+            )
+          ),
           "core"
         )
       }
@@ -440,29 +481,29 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
   test("task steps - honor per-task aggregate := false in fromTaskAggregated") {
     val aggregatedTask = taskKey[String](s"nonAggregatedStateTask${System.nanoTime()}")
     loadedContextWithProjectsResource("release-step-io-from-task-aggregate-false") { dir =>
-      val apiBase   = new File(dir, "api")
-      val coreBase  = new File(dir, "core")
+      val apiBase  = new File(dir, "api")
+      val coreBase = new File(dir, "core")
       apiBase.mkdirs()
       coreBase.mkdirs()
-      val api            = Project("api", apiBase).settings(
+      val api      = Project("api", apiBase).settings(
         aggregatedTask := {
           val marker = new File(Keys.baseDirectory.value, "aggregated-task-api.txt")
           sbt.IO.write(marker, "api")
           "api"
         }
       )
-      val core           = Project("core", coreBase).settings(
+      val core     = Project("core", coreBase).settings(
         aggregatedTask := {
           val marker = new File(Keys.baseDirectory.value, "aggregated-task-core.txt")
           sbt.IO.write(marker, "core")
           "core"
         }
       )
-      val root           = Project("root", dir)
+      val root     = Project("root", dir)
         .aggregate(LocalProject("api"), LocalProject("core"))
         .settings(
           aggregatedTask / Keys.aggregate := false,
-          aggregatedTask := {
+          aggregatedTask                  := {
             val marker = new File(Keys.baseDirectory.value, "aggregated-task-root.txt")
             sbt.IO.write(marker, "root")
             "root"
@@ -472,9 +513,22 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
     }.use { ctx =>
       ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(ctx).map { result =>
         val extracted = SbtRuntime.extracted(result.state)
-        assertEquals(readFile(new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")), "root")
-        assert(!new File(extracted.get(LocalProject("api") / Keys.baseDirectory), "aggregated-task-api.txt").exists())
-        assert(!new File(extracted.get(LocalProject("core") / Keys.baseDirectory), "aggregated-task-core.txt").exists())
+        assertEquals(
+          readFile(new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")),
+          "root"
+        )
+        assert(
+          !new File(
+            extracted.get(LocalProject("api") / Keys.baseDirectory),
+            "aggregated-task-api.txt"
+          ).exists()
+        )
+        assert(
+          !new File(
+            extracted.get(LocalProject("core") / Keys.baseDirectory),
+            "aggregated-task-core.txt"
+          ).exists()
+        )
       }
     }
   }
@@ -524,6 +578,6 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
   private def readFile(file: File): String =
     sbt.IO.read(file, StandardCharsets.UTF_8)
 
-  private val stateUpdateTask          = taskKey[String]("stateUpdateTask")
-  private val stateUpdateInputTask     = inputKey[String]("stateUpdateInputTask")
+  private val stateUpdateTask      = taskKey[String]("stateUpdateTask")
+  private val stateUpdateInputTask = inputKey[String]("stateUpdateInputTask")
 }

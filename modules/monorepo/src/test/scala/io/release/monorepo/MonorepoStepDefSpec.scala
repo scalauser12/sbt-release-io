@@ -1,12 +1,13 @@
 package io.release.monorepo
 
-import cats.effect.IO
-import munit.FunSuite
+import cats.effect.{IO, Ref, Resource}
+import io.release.TestSupport
+import munit.CatsEffectSuite
 import sbt.AttributeKey
 
-class MonorepoStepDefSpec extends FunSuite {
+class MonorepoStepDefSpec extends CatsEffectSuite {
 
-  private val io = new MonorepoReleaseIO {}
+  private val releaseIO = new MonorepoReleaseIO {}
 
   test("MonorepoStepIO.global creates a Global step via execute") {
     val key  = AttributeKey[String]("key")
@@ -38,37 +39,68 @@ class MonorepoStepDefSpec extends FunSuite {
   }
 
   test("withValidation wires validation function on Global") {
-    val step = MonorepoStepIO
-      .global("validated")
-      .withValidation(_ => IO.unit)
-      .execute(ctx => IO.pure(ctx))
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO
+          .global("validated")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .execute(ctx => IO.pure(ctx))
 
-    assert(step.isInstanceOf[MonorepoStepIO.Global])
+        step.validate(ctx) *>
+          events.get.map(obs => assertEquals(obs, List("validate")))
+      }
+    }
   }
 
   test("withValidation wires validation function on PerProject") {
-    val step = MonorepoStepIO
-      .perProject("validated-pp")
-      .withValidation((_, _) => IO.unit)
-      .execute((ctx, _) => IO.pure(ctx))
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO
+          .perProject("validated-pp")
+          .withValidation((_, project) => events.update(_ :+ s"validate:${project.name}"))
+          .execute((ctx, _) => IO.pure(ctx))
 
-    assert(step.isInstanceOf[MonorepoStepIO.PerProject])
+        step.validate(ctx, dummyProject("core")) *>
+          events.get.map(obs => assertEquals(obs, List("validate:core")))
+      }
+    }
   }
 
   test("executeAction wraps IO[Unit] correctly for Global") {
-    val step = MonorepoStepIO
-      .global("action-global")
-      .executeAction(_ => IO.unit)
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO
+          .global("action-global")
+          .executeAction(_ => events.update(_ :+ "execute"))
 
-    assert(step.isInstanceOf[MonorepoStepIO.Global])
+        step.execute(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(result, ctx)
+            assertEquals(obs, List("execute"))
+          }
+        }
+      }
+    }
   }
 
   test("executeAction wraps IO[Unit] correctly for PerProject") {
-    val step = MonorepoStepIO
-      .perProject("action-pp")
-      .executeAction((_, _) => IO.unit)
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val project = dummyProject("core")
+        val step    = MonorepoStepIO
+          .perProject("action-pp")
+          .executeAction((_, currentProject) =>
+            events.update(_ :+ s"execute:${currentProject.name}")
+          )
 
-    assert(step.isInstanceOf[MonorepoStepIO.PerProject])
+        step.execute(ctx, project).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(result, ctx)
+            assertEquals(obs, List("execute:core"))
+          }
+        }
+      }
+    }
   }
 
   test("withSelectionBoundary sets the flag") {
@@ -102,23 +134,46 @@ class MonorepoStepDefSpec extends FunSuite {
   }
 
   test("validateOnly creates a Global step with no-op execute") {
-    val step = MonorepoStepIO
-      .global("build-global")
-      .withValidation(_ => IO.unit)
-      .validateOnly
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO
+          .global("build-global")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .validateOnly
 
-    assertEquals(step.name, "build-global")
-    assert(step.isInstanceOf[MonorepoStepIO.Global])
+        step.validate(ctx) *>
+          step.execute(ctx).flatMap { result =>
+            events.get.map { obs =>
+              assertEquals(step.name, "build-global")
+              assertEquals(result, ctx)
+              assertEquals(obs, List("validate"))
+            }
+          }
+      }
+    }
   }
 
   test("validateOnly creates a PerProject step with no-op execute") {
-    val step = MonorepoStepIO
-      .perProject("build-pp")
-      .withValidation((_, _) => IO.unit)
-      .validateOnly
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val project = dummyProject("core")
+        val step    = MonorepoStepIO
+          .perProject("build-pp")
+          .withValidation((_, currentProject) =>
+            events.update(_ :+ s"validate:${currentProject.name}")
+          )
+          .validateOnly
 
-    assertEquals(step.name, "build-pp")
-    assert(step.isInstanceOf[MonorepoStepIO.PerProject])
+        step.validate(ctx, project) *>
+          step.execute(ctx, project).flatMap { result =>
+            events.get.map { obs =>
+              assertEquals(step.name, "build-pp")
+              assertEquals(result, ctx)
+              assertEquals(obs, List("validate:core"))
+            }
+          }
+      }
+    }
   }
 
   private val steps = Seq(
@@ -130,26 +185,34 @@ class MonorepoStepDefSpec extends FunSuite {
   private val extra = Seq(MonorepoStepIO.global("extra").execute(ctx => IO.pure(ctx)))
 
   test("insertStepAfter inserts after the named step") {
-    val result = io.insertStepAfter(steps, "step-a")(extra)
+    val result = releaseIO.insertStepAfter(steps, "step-a")(extra)
     assertEquals(result.map(_.name), Seq("step-a", "extra", "step-b", "step-c"))
   }
 
   test("insertStepBefore inserts before the named step") {
-    val result = io.insertStepBefore(steps, "step-c")(extra)
+    val result = releaseIO.insertStepBefore(steps, "step-c")(extra)
     assertEquals(result.map(_.name), Seq("step-a", "step-b", "extra", "step-c"))
   }
 
   test("insertStepAfter throws on missing step name") {
     val e = intercept[IllegalArgumentException] {
-      io.insertStepAfter(steps, "nonexistent")(extra)
+      releaseIO.insertStepAfter(steps, "nonexistent")(extra)
     }
     assert(e.getMessage.contains("Step 'nonexistent' not found"))
   }
 
   test("insertStepBefore throws on missing step name") {
     val e = intercept[IllegalArgumentException] {
-      io.insertStepBefore(steps, "nonexistent")(extra)
+      releaseIO.insertStepBefore(steps, "nonexistent")(extra)
     }
     assert(e.getMessage.contains("Step 'nonexistent' not found"))
   }
+
+  private def dummyProject(name: String): ProjectReleaseInfo =
+    MonorepoTestSupport.dummyProject(name)
+
+  private val contextResource: Resource[IO, MonorepoContext] =
+    TestSupport
+      .dummyStateResource("monorepo-step-def-spec")
+      .map(state => MonorepoContext(state = state))
 }

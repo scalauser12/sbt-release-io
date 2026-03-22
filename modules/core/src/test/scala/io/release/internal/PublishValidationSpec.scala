@@ -34,14 +34,13 @@ class PublishValidationSpec extends CatsEffectSuite {
     )
   )
 
-  publishTargetErrorCases.foreach {
-    case (name, publishSkipped, publishToEmpty, expected) =>
-      test(name) {
-        assertEquals(
-          PublishValidation.publishTargetError(labels)(publishSkipped, publishToEmpty),
-          expected
-        )
-      }
+  publishTargetErrorCases.foreach { case (name, publishSkipped, publishToEmpty, expected) =>
+    test(name) {
+      assertEquals(
+        PublishValidation.publishTargetError(labels)(publishSkipped, publishToEmpty),
+        expected
+      )
+    }
   }
 
   test("requirePublishTarget - succeed when publish is skipped") {

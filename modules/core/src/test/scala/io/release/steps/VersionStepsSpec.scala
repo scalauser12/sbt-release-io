@@ -1,6 +1,6 @@
 package io.release.steps
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
 import io.release.{ReleaseContext, TestAssertions, TestSupport}
 import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags}
 import munit.CatsEffectSuite
@@ -8,6 +8,7 @@ import munit.CatsEffectSuite
 import java.io.File
 
 class VersionStepsSpec extends CatsEffectSuite {
+  private val fixturePrefix = "version-steps-spec"
 
   private val startupFlags = ExecutionFlags(
     useDefaults = false,
@@ -18,7 +19,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   )
 
   test("resolveVersionPlan - use live version settings even when a startup plan is attached") {
-    contextResource.use { baseCtx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
       val dir          = baseCtx.state.configuration.baseDirectory
       val resolvedFile = new File(dir, "resolved-version.sbt")
       val ctx          = withStartupPlan(baseCtx, "1.2.3", "1.2.4-SNAPSHOT")
@@ -35,8 +36,8 @@ class VersionStepsSpec extends CatsEffectSuite {
       )
 
       for {
-        readContents  <- result.readVersion(resolvedFile)
-        fileContents  <- result.versionFileContents(resolvedFile, "1.2.3")
+        readContents <- result.readVersion(resolvedFile)
+        fileContents <- result.versionFileContents(resolvedFile, "1.2.3")
       } yield {
         assertEquals(result.versionFile, resolvedFile)
         assertEquals(result.releaseVersionOverride, Some("1.2.3"))
@@ -49,7 +50,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   }
 
   test("resolveVersionPlan - leave overrides empty when no execution state is attached") {
-    contextResource.use { ctx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val dir      = ctx.state.configuration.baseDirectory
       val liveFile = new File(dir, "live-version.sbt")
 
@@ -81,7 +82,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   test(
     "resolveVersionPlan - delegate live resolution to CoreVersionResolver and read overrides"
   ) {
-    contextResource.use { baseCtx =>
+    TestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
       val dir          = baseCtx.state.configuration.baseDirectory
       val fallbackFile = new File(dir, "fallback-version.sbt")
       var resolverRuns = 0
@@ -155,15 +156,16 @@ class VersionStepsSpec extends CatsEffectSuite {
     )
   )
 
-  defaultReadVersionCases.foreach {
-    case (name, contents, expected) =>
-      test(name) {
-        tempDirResource.use(dir => assertReadVersion(dir, contents, expected))
-      }
+  defaultReadVersionCases.foreach { case (name, contents, expected) =>
+    test(name) {
+      TestSupport
+        .tempDirResource(fixturePrefix)
+        .use(dir => assertReadVersion(dir, contents, expected))
+    }
   }
 
   test("defaultReadVersion - raise IllegalStateException when no version can be parsed") {
-    tempDirResource.use { dir =>
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
       writeVersionFile(
         dir,
         """// version := "9.9.9"
@@ -182,12 +184,6 @@ class VersionStepsSpec extends CatsEffectSuite {
       }
     }
   }
-
-  private val contextResource: Resource[IO, ReleaseContext] =
-    TestSupport.dummyContextResource("version-steps-spec")
-
-  private val tempDirResource: Resource[IO, File] =
-    TestSupport.tempDirResource("version-steps-spec")
 
   private def assertReadVersion(dir: File, content: String, expected: String): IO[Unit] =
     writeVersionFile(dir, content).flatMap { file =>
