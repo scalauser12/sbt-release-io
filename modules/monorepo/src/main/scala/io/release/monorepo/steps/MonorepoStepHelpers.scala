@@ -199,10 +199,12 @@ private[monorepo] object MonorepoStepHelpers {
             else IO.unit
 
           consistencyCheck *>
-            paths.map(_._2).distinct.toList.traverse_(vcs.add(_)) *>
-            {
-              val summary = versionSummary(ctx, selector)
-              commitIfChanged(ctx, vcs, msgFormatter(summary), sign, signOff)
+            IO.uncancelable { _ =>
+              paths.map(_._2).distinct.toList.traverse_(vcs.add(_)) *>
+                {
+                  val summary = versionSummary(ctx, selector)
+                  commitIfChanged(ctx, vcs, msgFormatter(summary), sign, signOff)
+                }
             }
         }
       } yield result

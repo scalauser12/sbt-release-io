@@ -2,7 +2,13 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIOPublishArtifactsAction
-import io.release.internal.{PublishValidation, ReleaseLogPrefixes, SnapshotDependencyTasks}
+import io.release.internal.{
+  ExecutionEngine,
+  PublishValidation,
+  ReleaseLogPrefixes,
+  SbtRuntime,
+  SnapshotDependencyTasks
+}
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
@@ -16,11 +22,35 @@ import scala.util.control.NonFatal
 /** Publish, test, clean, and dependency-check monorepo release steps. */
 private[monorepo] object MonorepoPublishSteps {
 
-  private def runProjectTask[A](ctx: MonorepoContext, key: TaskKey[A]): IO[MonorepoContext] =
+  private def runProjectTask[A](
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      key: TaskKey[A],
+      taskLabel: String
+  ): IO[MonorepoContext] =
     IO.blocking {
       val extracted     = Project.extract(ctx.state)
       val (newState, _) = extracted.runTask(key, ctx.state)
-      ctx.withState(newState)
+      val updatedCtx    = ctx.withState(newState)
+      if (SbtRuntime.hasFailureCommand(newState)) {
+        val failure = new IllegalStateException(
+          s"${project.name}: sbt task '$taskLabel' reported failure via FailureCommand"
+        )
+        val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
+        Left(
+          failure -> ExecutionEngine
+            .armOnFailure(updatedCtx.withState(cleaned))
+            .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
+        )
+      } else Right(updatedCtx)
+    }.flatMap {
+      case Right(updatedCtx)           => IO.pure(updatedCtx)
+      case Left((failure, updatedCtx)) =>
+        IO.blocking(
+          updatedCtx.state.log.error(
+            s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}"
+          )
+        ).as(updatedCtx)
     }
 
   private def evaluateProjectTask[A](
@@ -101,7 +131,12 @@ private[monorepo] object MonorepoPublishSteps {
       if (ctx.skipTests)
         logInfo(ctx, s"Skipping tests for ${project.name}").as(ctx)
       else
-        runProjectTask(ctx, project.ref / Test / ReleaseIOCompat.testKey),
+        runProjectTask(
+          ctx,
+          project,
+          project.ref / Test / ReleaseIOCompat.testKey,
+          s"${project.name} / Test / ${ReleaseIOCompat.testKey.key.label}"
+        ),
     enableCrossBuild = true
   )
 
@@ -115,7 +150,13 @@ private[monorepo] object MonorepoPublishSteps {
         evaluatePublishSkip(ctx, project).flatMap { skipped =>
           if (skipped)
             logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
-          else runProjectTask(ctx, project.ref / releaseIOPublishArtifactsAction)
+          else
+            runProjectTask(
+              ctx,
+              project,
+              project.ref / releaseIOPublishArtifactsAction,
+              s"${project.name} / ${releaseIOPublishArtifactsAction.key.label}"
+            )
         },
     validate = (ctx, project) =>
       if (ctx.skipPublish) IO.unit

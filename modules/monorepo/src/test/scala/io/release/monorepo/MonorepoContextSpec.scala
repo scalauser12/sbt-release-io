@@ -142,17 +142,20 @@ class MonorepoContextSpec extends FunSuite {
     "MonorepoContext internal execution state - require execution state before recording global version"
   ) {
     withState { state =>
-      val error = intercept[IllegalStateException] {
-        MonorepoContext(state = state).withGlobalVersionWritten("1.0.0")
-      }
+      val result = MonorepoContext(state = state).withGlobalVersionWritten("1.0.0")
 
-      assert(clue(error.getMessage).contains("Monorepo execution state not initialized"))
+      result match {
+        case Left(error)  =>
+          assert(clue(error.getMessage).contains("Monorepo execution state not initialized"))
+        case Right(other) =>
+          fail(s"Expected Left(IllegalStateException) but got $other")
+      }
     }
   }
 
   test("MonorepoContext internal execution state - record the written global version") {
     withState { state =>
-      val plan    = MonorepoReleasePlan(
+      val plan   = MonorepoReleasePlan(
         flags = ExecutionFlags(
           useDefaults = true,
           skipTests = false,
@@ -167,12 +170,17 @@ class MonorepoContextSpec extends FunSuite {
         globalReleaseVersion = None,
         globalNextVersion = None
       )
-      val updated = MonorepoContext(state = state)
+      val result = MonorepoContext(state = state)
         .withExecutionState(MonorepoExecutionState(plan))
         .withGlobalVersionWritten("1.0.0")
 
-      assertEquals(updated.globalVersionWritten, Some("1.0.0"))
-      assertEquals(updated.releasePlan, Some(plan))
+      result match {
+        case Right(updated) =>
+          assertEquals(updated.globalVersionWritten, Some("1.0.0"))
+          assertEquals(updated.releasePlan, Some(plan))
+        case Left(error)    =>
+          fail(s"Expected Right(MonorepoContext) but got $error")
+      }
     }
   }
 

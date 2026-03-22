@@ -141,14 +141,18 @@ case class MonorepoContext(
   private[monorepo] def globalVersionWritten: Option[String] =
     executionState.flatMap(_.globalVersionWritten)
 
-  private[monorepo] def withGlobalVersionWritten(version: String): MonorepoContext =
+  private[monorepo] def withGlobalVersionWritten(
+      version: String
+  ): Either[IllegalStateException, MonorepoContext] =
     executionState match {
       case Some(state) =>
-        withExecutionState(state.copy(globalVersionWritten = Some(version)))
+        Right(withExecutionState(state.copy(globalVersionWritten = Some(version))))
       case None        =>
-        throw new IllegalStateException(
-          "Monorepo execution state not initialized. " +
-            "Ensure buildContext(...).withReleasePlan(plan) runs before version writes."
+        Left(
+          new IllegalStateException(
+            "Monorepo execution state not initialized. " +
+              "Ensure buildContext(...).withReleasePlan(plan) runs before version writes."
+          )
         )
     }
 

@@ -7,6 +7,8 @@ import sbt.{internal as _, *}
 /** Thin wrappers over sbt state/extraction APIs used by built-in release code. */
 private[release] object SbtRuntime {
 
+  private val FailureCommand = SbtCompat.FailureCommand
+
   def extracted(state: State): Extracted =
     Project.extract(state)
 
@@ -21,6 +23,16 @@ private[release] object SbtRuntime {
 
   def appendWithSession(state: State, settings: Seq[Setting[?]]): State =
     extracted(state).appendWithSession(settings, state)
+
+  def hasFailureCommand(state: State): Boolean =
+    state.remainingCommands.headOption.contains(FailureCommand)
+
+  def stripLeadingFailureCommand(state: State): State =
+    state.remainingCommands.toList match {
+      case head :: tail if head == FailureCommand =>
+        state.copy(remainingCommands = tail)
+      case _                                      => state
+    }
 
   def switchScalaVersion(state: State, version: String): IO[State] =
     CrossBuildSupport.switchScalaVersion(state, version)
@@ -39,7 +51,6 @@ private[release] object SbtRuntime {
     * caller's original remaining command queue.
     */
   def runCommandAndRemaining(state: State, command: String): State = {
-    val FailureCommand = SbtCompat.FailureCommand
     val savedRemaining = state.remainingCommands
 
     @scala.annotation.tailrec

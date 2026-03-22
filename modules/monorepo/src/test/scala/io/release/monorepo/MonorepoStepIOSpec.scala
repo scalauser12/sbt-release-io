@@ -338,6 +338,8 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
   }
 
   test("compose - restore the entry scalaVersion after a cross-build iteration fails") {
+    val metadataKey = AttributeKey[String]("cross-build-metadata-marker")
+
     loadedContextWithProjectsResource("monorepo-step-cross-failure") { dir =>
       val coreBase = new File(dir, "core")
       coreBase.mkdirs()
@@ -366,8 +368,12 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
           scalaVersionOf(c.state).flatMap { version =>
             appendCurrentScalaVersion(new File(project.baseDir, "cross-failure.txt"), c.state) *>
               (if (version == TestSupport.alternateScalaVersion)
-                 IO.raiseError(new RuntimeException("boom"))
-               else IO.pure(c))
+                 if (c.metadata(metadataKey).contains("updated"))
+                   IO.raiseError(new RuntimeException("boom"))
+                 else
+                   IO.raiseError(new RuntimeException("missing metadata before failure"))
+               else
+                 IO.pure(c.withMetadata(metadataKey, "updated")))
           },
         enableCrossBuild = true
       )

@@ -207,8 +207,8 @@ trait MonorepoReleasePluginLike[T]
                          case Left(failedState) => IO.pure(failedState)
                          case Right(plan)       =>
                            val plannedState = cleanState
-                           val stepFns      = monorepoReleaseProcess(plannedState)
                            for {
+                             stepFns    <- IO.blocking(monorepoReleaseProcess(plannedState))
                              initialCtx <- buildContext(plannedState, flags, plan)
                              _          <- IO.blocking(
                                              logReleaseStart(

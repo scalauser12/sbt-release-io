@@ -12,7 +12,7 @@ private[monorepo] object DependencyGraph {
   def dependedOnBy(
       projects: Seq[ProjectRef],
       state: State
-  ): IO[Map[ProjectRef, Set[ProjectRef]]] = IO.defer {
+  ): IO[Map[ProjectRef, Set[ProjectRef]]] = IO.blocking {
     val extracted  = Project.extract(state)
     val structure  = extracted.structure
     val projectSet = projects.toSet
@@ -29,7 +29,7 @@ private[monorepo] object DependencyGraph {
       .groupBy(_._1)
       .map { case (k, v) => k -> v.map(_._2).toSet }
 
-    IO.pure(reverseGraph)
+    reverseGraph
   }
 
   /** Compute all transitive dependents of the given root projects. */
@@ -59,7 +59,7 @@ private[monorepo] object DependencyGraph {
     val uniqueProjects = projects.distinct
     if (uniqueProjects.isEmpty) IO.pure(Seq.empty)
     else
-      IO.defer {
+      IO.blocking {
         val extracted  = Project.extract(state)
         val structure  = extracted.structure
         val projectSet = uniqueProjects.toSet
@@ -110,14 +110,10 @@ private[monorepo] object DependencyGraph {
 
         if (result.length != uniqueProjects.length) {
           val remaining = uniqueProjects.filterNot(result.contains)
-          IO.raiseError(
-            new IllegalStateException(
-              s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"
-            )
+          throw new IllegalStateException(
+            s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"
           )
-        } else {
-          IO.pure(result)
-        }
+        } else result
       }
   }
 }

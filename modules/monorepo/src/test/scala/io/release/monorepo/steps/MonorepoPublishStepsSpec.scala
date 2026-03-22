@@ -3,7 +3,12 @@ package io.release.monorepo.steps
 import cats.effect.{IO, Resource}
 import io.release.ReleaseIO
 import io.release.internal.PublishValidation
-import io.release.monorepo.{MonorepoReleaseIO, MonorepoSpecSupport}
+import io.release.monorepo.{
+  MonorepoProjectFailures,
+  MonorepoReleaseIO,
+  MonorepoSpecSupport,
+  MonorepoStepIO
+}
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
 import sbt.{Project, Resolver, *}
@@ -99,6 +104,63 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
 
         MonorepoPublishSteps.runTests.execute(ctx, project).map { _ =>
           assert(new File(fixture.dir, "test-ran.txt").exists())
+        }
+      }
+  }
+
+  test(
+    "runTests via compose - consume FailureCommand per project, keep later projects running, and fail with attribution"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-run-tests-failure-command") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        val coreRun  = new File(coreBase, "test-ran.txt")
+        val apiRun   = new File(apiBase, "test-ran.txt")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport.versionedProject(
+            "core",
+            coreBase,
+            settings = Seq(MonorepoStepTestCompat.failureCommandTestTaskSetting(coreRun))
+          ),
+          MonorepoSpecSupport.versionedProject(
+            "api",
+            apiBase,
+            settings = Seq(MonorepoStepTestCompat.successfulTestTaskSetting(apiRun))
+          )
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture.context(Seq("core", "api"))
+
+        MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map { result =>
+          val coreRun = new File(
+            MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
+            "test-ran.txt"
+          )
+          val apiRun  = new File(
+            MonorepoSpecSupport.projectNamed(result.projects, "api").baseDir,
+            "test-ran.txt"
+          )
+          assert(result.failed)
+          assert(coreRun.exists())
+          assert(apiRun.exists())
+          assertEquals(result.state.remainingCommands, Nil)
+          result.failureCause match {
+            case Some(aggregate: MonorepoProjectFailures) =>
+              assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+              assert(
+                aggregate.failures.head.cause.exists(
+                  _.getMessage.contains("core / Test /")
+                )
+              )
+            case other                                    =>
+              fail(s"Expected MonorepoProjectFailures but got $other")
+          }
         }
       }
   }

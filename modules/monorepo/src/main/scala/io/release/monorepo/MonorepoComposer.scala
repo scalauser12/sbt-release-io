@@ -212,42 +212,43 @@ private[monorepo] object MonorepoComposer {
           )
         )
       else {
-        def restoreOnError(err: Throwable): IO[MonorepoContext] =
-          (entryVersion match {
-            case Some(ver) => switchTo(ver)(ctx).void
-            case None      => IO.unit
-          }).attempt *> IO.raiseError(err)
+        def restoreOnError(currentCtx: MonorepoContext, err: Throwable): IO[MonorepoContext] =
+          restoreEntry(currentCtx).attempt *> IO.raiseError(err)
+
+        def runIteration(
+            currentCtx: MonorepoContext,
+            version: String,
+            logMessage: String
+        ): IO[MonorepoContext] =
+          for {
+            _        <- IO.blocking(currentCtx.state.log.info(logMessage))
+            switched <- switchTo(version)(currentCtx)
+            result   <- action(switched).attempt.flatMap {
+                          case Right(nextCtx) => IO.pure(nextCtx)
+                          case Left(err)      => restoreOnError(switched, err)
+                        }
+          } yield result
 
         if (crossVersions.length == 1)
-          (for {
-            _        <- IO.blocking(
-                          ctx.state.log.info(
-                            s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
-                          )
-                        )
-            switched <- switchTo(crossVersions.head)(ctx)
-            result   <- action(switched)
-            restored <- restoreEntry(result)
-          } yield restored).handleErrorWith(restoreOnError)
+          runIteration(
+            ctx,
+            crossVersions.head,
+            s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
+          ).flatMap(restoreEntry)
         else
           crossVersions.toList
             .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
               ioCtx.flatMap { currentCtx =>
                 if (currentCtx.failed) IO.pure(currentCtx)
                 else
-                  for {
-                    _        <- IO.blocking(
-                                  currentCtx.state.log.info(
-                                    s"$LogPrefix Cross-building with Scala $version"
-                                  )
-                                )
-                    switched <- switchTo(version)(currentCtx)
-                    result   <- action(switched)
-                  } yield result
+                  runIteration(
+                    currentCtx,
+                    version,
+                    s"$LogPrefix Cross-building with Scala $version"
+                  )
               }
             }
             .flatMap(restoreEntry)
-            .handleErrorWith(restoreOnError)
       }
     }
   }

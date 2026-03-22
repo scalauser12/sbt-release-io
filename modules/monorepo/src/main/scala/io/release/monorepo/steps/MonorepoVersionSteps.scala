@@ -224,9 +224,9 @@ private[monorepo] object MonorepoVersionSteps {
             updated   = ctx
                           .withState(newState)
                           .updateProject(project.ref)(_.copy(versionFile = versionFile))
-            withMeta  = if (versionInputs.useGlobalVersion)
-                          updated.withGlobalVersionWritten(ver)
-                        else updated
+            withMeta <- if (versionInputs.useGlobalVersion)
+                          IO.fromEither(updated.withGlobalVersionWritten(ver))
+                        else IO.pure(updated)
             _        <-
               logInfo(withMeta, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
           } yield withMeta

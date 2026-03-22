@@ -10,8 +10,6 @@ import scala.util.control.NonFatal
 /** Shared two-phase execution and failure-detection helpers used by core and monorepo composers. */
 private[release] object ExecutionEngine {
 
-  private val FailureCommand = SbtCompat.FailureCommand
-
   final case class ValidationStep[C <: ReleaseCtx[C]](
       name: String,
       run: C => IO[Unit]
@@ -38,22 +36,17 @@ private[release] object ExecutionEngine {
     runActionPhase(actions.map(_.run))(startCtx)
 
   def armOnFailure[C <: ReleaseCtx[C]](ctx: C): C =
-    ctx.withState(ctx.state.copy(onFailure = Some(FailureCommand)))
+    ctx.withState(ctx.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
 
   def detectSbtFailure[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO {
-    val hasFailure = ctx.state.remainingCommands.headOption.contains(FailureCommand)
-    if (hasFailure) {
-      val cleaned = ctx.state.copy(remainingCommands = ctx.state.remainingCommands.drop(1))
+    if (SbtRuntime.hasFailureCommand(ctx.state)) {
+      val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
       ctx.withState(cleaned).fail
     } else armOnFailure(ctx)
   }
 
   def stripFailureCommand[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO {
-    val cleaned = ctx.state.remainingCommands.toList match {
-      case head :: tail if head == FailureCommand =>
-        ctx.state.copy(remainingCommands = tail)
-      case _                                      => ctx.state
-    }
+    val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
     ctx.withState(cleaned.copy(onFailure = None))
   }
 

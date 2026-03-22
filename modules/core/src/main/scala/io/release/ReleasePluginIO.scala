@@ -248,37 +248,41 @@ trait ReleasePluginIOLike[T]
         tagDefault = tagDefaultArg
       )
     )
-    val stepFns = releaseProcess(cleanState)
-
-    cleanState.log.info(s"${ReleaseLogPrefixes.Core} Starting release process...")
-    cleanState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")
-    if (crossEnabled) cleanState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
-
-    val program = resource
-      .use { t =>
-        val steps = stepFns.map(_(t))
-        initialContext(cleanState, skipTests, skipPublish, interactive).flatMap { initialCtx =>
-          ReleaseStepIO.compose(steps, crossEnabled)(
-            initialCtx.withExecutionState(CoreExecutionState(plan))
-          )
-        }
-      }
-      .flatMap { finalCtx =>
-        if (finalCtx.failed) {
-          val cause = finalCtx.failureCause
-            .map(e => StepHelpers.errorMessage(e))
-            .getOrElse("unknown error")
-          IO.blocking(
-            finalCtx.state.log.error(s"${ReleaseLogPrefixes.Core} Release failed: $cause")
-          ) *>
-            IO.pure(finalCtx.state.fail)
-        } else {
-          IO.blocking(
-            finalCtx.state.log.info(s"${ReleaseLogPrefixes.Core} Release completed successfully!")
-          ) *>
-            IO.pure(finalCtx.state)
-        }
-      }
+    val program = for {
+      stepFns  <- IO.blocking(releaseProcess(cleanState))
+      _        <- IO.blocking {
+                    cleanState.log.info(s"${ReleaseLogPrefixes.Core} Starting release process...")
+                    cleanState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")
+                    if (crossEnabled)
+                      cleanState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
+                  }
+      finalCtx <- resource
+                    .use { t =>
+                      val steps = stepFns.map(_(t))
+                      initialContext(cleanState, skipTests, skipPublish, interactive).flatMap {
+                        initialCtx =>
+                          ReleaseStepIO.compose(steps, crossEnabled)(
+                            initialCtx.withExecutionState(CoreExecutionState(plan))
+                          )
+                      }
+                    }
+      result   <- if (finalCtx.failed) {
+                    val cause = finalCtx.failureCause
+                      .map(e => StepHelpers.errorMessage(e))
+                      .getOrElse("unknown error")
+                    IO.blocking(
+                      finalCtx.state.log.error(s"${ReleaseLogPrefixes.Core} Release failed: $cause")
+                    ) *>
+                      IO.pure(finalCtx.state.fail)
+                  } else {
+                    IO.blocking(
+                      finalCtx.state.log.info(
+                        s"${ReleaseLogPrefixes.Core} Release completed successfully!"
+                      )
+                    ) *>
+                      IO.pure(finalCtx.state)
+                  }
+    } yield result
 
     // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program)

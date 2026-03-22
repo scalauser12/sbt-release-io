@@ -1,6 +1,6 @@
 package io.release.monorepo.steps
 
-import cats.effect.{IO, Ref}
+import cats.effect.{Deferred, IO, Outcome, Ref}
 import io.release.TestAssertions.assertFailure
 import io.release.monorepo.{MonorepoContext, MonorepoReleaseIO, MonorepoSpecSupport, SelectionMode}
 import io.release.vcs.Vcs
@@ -327,11 +327,81 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
       }
   }
 
+  test("commitReleaseVersions - keep stage and commit together under cancellation") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-commit-cancel") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+        sbt.IO.write(new File(dir, "version.sbt"), """ThisBuild / version := "1.0.0"""" + "\n")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core", "api"),
+            settings = Seq(
+              MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion := true,
+              io.release.ReleaseIO.releaseIOVcsSign               := false,
+              io.release.ReleaseIO.releaseIOVcsSignOff            := false
+            )
+          ),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("api", apiBase)
+        )
+      }
+      .use { fixture =>
+        for {
+          added          <- Ref[IO].of(List.empty[Seq[String]])
+          commits        <- Ref[IO].of(List.empty[(String, Boolean, Boolean)])
+          addStarted     <- Deferred[IO, Unit]
+          allowCommit    <- Deferred[IO, Unit]
+          commitFinished <- Deferred[IO, Unit]
+          ctx             = fixture.context(
+                              Seq("core", "api"),
+                              versionsById = Map(
+                                "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+                                "api"  -> ("1.0.0" -> "1.1.0-SNAPSHOT")
+                              ),
+                              vcs = Some(
+                                new RecordingVcs(
+                                  baseDir = fixture.dir,
+                                  addCalls = added,
+                                  commitCalls = commits,
+                                  status0 = IO.pure("M version.sbt"),
+                                  addStarted = Some(addStarted),
+                                  allowCommit = Some(allowCommit),
+                                  commitFinished = Some(commitFinished)
+                                )
+                              )
+                            )
+          fiber          <- MonorepoVersionSteps.commitReleaseVersions.execute(ctx).start
+          _              <- addStarted.get
+          cancelFiber    <- fiber.cancel.start
+          _              <- allowCommit.complete(())
+          _              <- commitFinished.get
+          _              <- cancelFiber.join
+          outcome        <- fiber.join
+          commitObs      <- commits.get
+        } yield {
+          assertEquals(commitObs.length, 1)
+          outcome match {
+            case Outcome.Canceled()   => ()
+            case Outcome.Succeeded(_) => ()
+            case other                => fail(s"Expected canceled or succeeded outcome, got $other")
+          }
+        }
+      }
+  }
+
   private final class RecordingVcs(
       val baseDir: File,
       addCalls: Ref[IO, List[Seq[String]]],
       commitCalls: Ref[IO, List[(String, Boolean, Boolean)]],
-      status0: IO[String]
+      status0: IO[String],
+      addStarted: Option[Deferred[IO, Unit]] = None,
+      allowCommit: Option[Deferred[IO, Unit]] = None,
+      commitFinished: Option[Deferred[IO, Unit]] = None
   ) extends Vcs {
     override def commandName: String = "stub"
 
@@ -358,10 +428,13 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
     override def checkRemote(remote: String): IO[Int] = IO.pure(0)
 
     override def add(files: String*): IO[Unit] =
-      addCalls.update(_ :+ files)
+      addCalls.update(_ :+ files) *>
+        addStarted.fold(IO.unit)(_.complete(()).void)
 
     override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit] =
-      commitCalls.update(_ :+ ((message, sign, signOff)))
+      allowCommit.fold(IO.unit)(_.get) *>
+        commitCalls.update(_ :+ ((message, sign, signOff))) *>
+        commitFinished.fold(IO.unit)(_.complete(()).void)
 
     override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
       IO.unit

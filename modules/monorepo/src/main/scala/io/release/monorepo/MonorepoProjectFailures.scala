@@ -10,10 +10,10 @@ final case class MonorepoProjectFailure(
 final class MonorepoProjectFailures(
     val failures: Seq[MonorepoProjectFailure]
 ) extends IllegalStateException(
-      MonorepoProjectFailures.message(failures),
-      failures.flatMap(_.cause).headOption.orNull
+      MonorepoProjectFailures.message(failures)
     ) {
 
+  failures.flatMap(_.cause).headOption.foreach(initCause)
   failures.flatMap(_.cause).drop(1).foreach(addSuppressed)
 }
 

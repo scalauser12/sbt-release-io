@@ -12,4 +12,17 @@ private[steps] object MonorepoStepTestCompat {
     Test / ReleaseIOCompat.testKey := {
       sbt.IO.write(marker, "ran")
     }
+
+  def failureCommandTestTaskSetting(marker: File): Setting[?] =
+    Test / ReleaseIOCompat.testKey := Def
+      .task {
+        sbt.IO.write(marker, "ran")
+      }
+      .updateState { (state: State, _: Unit) =>
+        state.copy(
+          remainingCommands =
+            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+        )
+      }
+      .value
 }
