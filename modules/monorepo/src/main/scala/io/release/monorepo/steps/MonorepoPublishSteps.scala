@@ -119,8 +119,29 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-clean",
     execute = (ctx, project) =>
       IO.blocking {
-        val newState = CleanCompat.runProject(ctx.state, project.ref)
-        ctx.withState(newState)
+        val newState   = CleanCompat.runProject(ctx.state, project.ref)
+        val updatedCtx = ctx.withState(newState)
+        if (SbtRuntime.hasFailureCommand(newState)) {
+          val failure = new IllegalStateException(
+            s"${project.name}: sbt task '${project.name} / clean' reported failure via FailureCommand"
+          )
+          val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
+          Left(
+            failure -> ExecutionEngine
+              .armOnFailure(updatedCtx.withState(cleaned))
+              .updateProject(project.ref)(
+                _.copy(failed = true, failureCause = Some(failure))
+              )
+          )
+        } else Right(updatedCtx)
+      }.flatMap {
+        case Right(updatedCtx)           => IO.pure(updatedCtx)
+        case Left((failure, updatedCtx)) =>
+          IO.blocking(
+            updatedCtx.state.log.error(
+              s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}"
+            )
+          ).as(updatedCtx)
       }
   )
 

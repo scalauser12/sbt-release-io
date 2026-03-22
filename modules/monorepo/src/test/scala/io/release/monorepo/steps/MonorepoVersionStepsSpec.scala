@@ -2,7 +2,13 @@ package io.release.monorepo.steps
 
 import cats.effect.{Deferred, IO, Outcome, Ref}
 import io.release.TestAssertions.assertFailure
-import io.release.monorepo.{MonorepoContext, MonorepoReleaseIO, MonorepoSpecSupport, SelectionMode}
+import io.release.monorepo.{
+  MonorepoContext,
+  MonorepoReleaseIO,
+  MonorepoSpecSupport,
+  MonorepoTagStrategy,
+  SelectionMode
+}
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Project
@@ -199,6 +205,115 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
           )
           assert(err.getMessage.contains("core -> 1.0.0"))
           assert(err.getMessage.contains("api -> 2.0.0"))
+        }
+      }
+  }
+
+  test("validateVersions - fail in unified-tag mode when project versions disagree") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-validate-unified-fail") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("api", apiBase)
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture
+          .context(
+            Seq("core", "api"),
+            versionsById = Map(
+              "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+              "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
+            )
+          )
+          .copy(tagStrategy = MonorepoTagStrategy.Unified)
+
+        assertFailure[IllegalStateException, MonorepoContext](
+          MonorepoVersionSteps.validateVersions.execute(ctx)
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "Unified tag requires all projects to share the same release version"
+            )
+          )
+          assert(err.getMessage.contains("core -> 1.0.0"))
+          assert(err.getMessage.contains("api -> 2.0.0"))
+        }
+      }
+  }
+
+  test("validateVersions - succeed in unified-tag mode when all project versions agree") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-validate-unified-ok") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("api", apiBase)
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture
+          .context(
+            Seq("core", "api"),
+            versionsById = Map(
+              "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+              "api"  -> ("1.0.0" -> "1.1.0-SNAPSHOT")
+            )
+          )
+          .copy(tagStrategy = MonorepoTagStrategy.Unified)
+
+        MonorepoVersionSteps.validateVersions.execute(ctx).map { result =>
+          assertEquals(
+            result.projects.map(_.versions).distinct,
+            Seq(Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+          )
+        }
+      }
+  }
+
+  test(
+    "validateVersions - succeed in unified-tag mode when release versions match but next versions differ"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-validate-unified-next-differ") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("api", apiBase)
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture
+          .context(
+            Seq("core", "api"),
+            versionsById = Map(
+              "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+              "api"  -> ("1.0.0" -> "2.0.0-SNAPSHOT")
+            )
+          )
+          .copy(tagStrategy = MonorepoTagStrategy.Unified)
+
+        MonorepoVersionSteps.validateVersions.execute(ctx).map { result =>
+          assertEquals(
+            result.projects.flatMap(_.releaseVersion).distinct,
+            Seq("1.0.0")
+          )
         }
       }
   }

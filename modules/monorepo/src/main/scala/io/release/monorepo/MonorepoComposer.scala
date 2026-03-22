@@ -243,7 +243,9 @@ private[monorepo] object MonorepoComposer {
           crossVersions.toList
             .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
               ioCtx.flatMap { currentCtx =>
-                if (currentCtx.failed) IO.pure(currentCtx)
+                val projectFailed =
+                  currentCtx.projects.exists(p => p.ref == project.ref && p.failed)
+                if (currentCtx.failed || projectFailed) IO.pure(currentCtx)
                 else
                   runIteration(
                     currentCtx,

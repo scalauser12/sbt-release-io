@@ -136,6 +136,10 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Project with a SNAPSHOT dependency
 - Verifies release fails with appropriate error before any commit, tag, or `version.sbt` mutation
 
+### snapshot-deps-test-scope
+- Project with a Test-scoped SNAPSHOT dependency
+- Verifies release fails at `check-snapshot-dependencies` even when the SNAPSHOT is test-only
+
 ### snapshot-deps-cross
 - Cross-build project where only one Scala version has a SNAPSHOT dependency
 - Verifies `cross` release fails when any version has snapshot dependencies before any commit, tag, or `version.sbt` mutation

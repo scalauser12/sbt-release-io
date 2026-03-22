@@ -11,14 +11,14 @@ object ReleaseIOCompat:
   def testKey: TaskKey[sbt.protocol.testing.TestResult] = sbt.Keys.testFull
 
   /** Snapshot dependency setting initializer.
-    * Only checks resolved library dependencies from the managed classpath — inter-project
-    * dependencies (via `.dependsOn()`) are resolved internally by sbt and excluded.
+    * Checks resolved library dependencies from the Test classpath (which includes Runtime) —
+    * inter-project dependencies (via `.dependsOn()`) are resolved internally by sbt and excluded.
     * In sbt 2, `Attributed` uses `StringAttributeKey` only, so we read `moduleIDStr`
     * and deserialize via `Classpaths.moduleIdJsonKeyFormat` (same approach as sbt-release).
     */
   def snapshotDependenciesSetting: Setting[?] =
     ReleaseIO._releaseIOSnapshotDependencies := {
-      val modules = (Runtime / Keys.managedClasspath).value
+      val modules = (Test / Keys.managedClasspath).value
         .flatMap(_.get(Keys.moduleIDStr))
         .map(sbt.Classpaths.moduleIdJsonKeyFormat.read)
       modules.filter(m => m.isChanging || m.revision.endsWith("-SNAPSHOT"))

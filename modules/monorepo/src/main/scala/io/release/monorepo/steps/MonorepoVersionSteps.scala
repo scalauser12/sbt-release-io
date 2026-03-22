@@ -132,28 +132,52 @@ private[monorepo] object MonorepoVersionSteps {
                                                 )
     } yield result
 
-  /** Validate version consistency in global-version mode (before writing to shared file). */
+  /** Validate version consistency in global-version mode or unified-tag mode
+    * (before writing to shared file or creating a unified tag).
+    *
+    * Global-version mode requires both release and next versions to match (shared file).
+    * Unified-tag mode only requires release versions to match (single tag name).
+    */
   val validateVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "validate-versions",
     execute = ctx =>
       loadRuntime(ctx).flatMap { runtime =>
-        if (runtime.useGlobalVersion)
-          validateVersionConsistency(
+        val isGlobal  = runtime.useGlobalVersion
+        val isUnified = ctx.tagStrategy == MonorepoTagStrategy.Unified
+
+        if (isGlobal || isUnified) {
+          val releaseMsg =
+            if (isGlobal)
+              "Global version mode requires all projects to have the same release version"
+            else
+              "Unified tag requires all projects to share the same release version. " +
+                "Use per-project tag strategy or align versions"
+          val logSuffix  =
+            if (isGlobal) " for global version mode" else " for unified tag mode"
+
+          val releaseCheck = validateVersionConsistency(
             ctx.currentProjects,
             { case (rel, _) => rel },
-            "Global version mode requires all projects to have the same release version"
-          ) *> validateVersionConsistency(
-            ctx.currentProjects,
-            { case (_, next) => next },
-            "Global version mode requires all projects to have the same next version"
-          ) *> IO
+            releaseMsg
+          )
+
+          val nextCheck =
+            if (isGlobal)
+              validateVersionConsistency(
+                ctx.currentProjects,
+                { case (_, next) => next },
+                "Global version mode requires all projects to have the same next version"
+              )
+            else IO.unit
+
+          releaseCheck *> nextCheck *> IO
             .blocking(
               ctx.state.log.info(
-                s"${ReleaseLogPrefixes.Monorepo} Version consistency validated for global version mode"
+                s"${ReleaseLogPrefixes.Monorepo} Version consistency validated$logSuffix"
               )
             )
             .as(ctx)
-        else IO.pure(ctx)
+        } else IO.pure(ctx)
       }
   )
 

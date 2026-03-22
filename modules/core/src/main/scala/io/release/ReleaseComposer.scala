@@ -119,11 +119,13 @@ private[release] object ReleaseComposer {
       else {
         val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
           ioCtx.flatMap { currentCtx =>
-            runIteration(
-              currentCtx,
-              version,
-              s"$LogPrefix Cross-building with Scala $version"
-            )
+            if (currentCtx.failed) IO.pure(currentCtx)
+            else
+              runIteration(
+                currentCtx,
+                version,
+                s"$LogPrefix Cross-building with Scala $version"
+              )
           }
         }
 
