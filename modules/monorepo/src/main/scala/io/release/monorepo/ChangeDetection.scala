@@ -263,70 +263,97 @@ private[monorepo] object ChangeDetection {
   ): Boolean = {
     import TagLookupResult.*
 
-    import scala.sys.process.*
-
     tagLookup match {
       case NoMatchingTag =>
         state.log.info(
-          s"${ReleaseLogPrefixes.Monorepo} No previous tag matching '$tagPattern' for ${project.name}, marking as changed"
+          s"${ReleaseLogPrefixes.Monorepo} No previous tag matching '$tagPattern' " +
+            s"for ${project.name}, marking as changed"
         )
         true
 
       case LookupFailed(details) =>
         state.log.warn(
-          s"${ReleaseLogPrefixes.Monorepo} git describe failed for ${project.name} (pattern '$tagPattern'): " +
-            s"$details. Conservatively treating as changed"
+          s"${ReleaseLogPrefixes.Monorepo} git describe failed for ${project.name} " +
+            s"(pattern '$tagPattern'): $details. Conservatively treating as changed"
         )
         true
 
       case TagFound(tag) =>
         resolveDiffScope(vcs, project) match {
-          case Left(details) =>
+          case Left(details)       =>
             state.log.warn(
               s"${ReleaseLogPrefixes.Monorepo} Cannot diff ${project.name}: $details. " +
                 "Conservatively treating as changed"
             )
             true
-
           case Right(baseRelative) =>
-            Try(
-              Process(
-                Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
-                vcs.baseDir
-              ).!!.linesIterator.filter(_.nonEmpty).toList
-            ) match {
-              case Failure(_)            =>
-                state.log.warn(
-                  s"${ReleaseLogPrefixes.Monorepo} git diff failed for ${project.name}, conservatively treating as changed"
-                )
-                true
-              case Success(changedFiles) =>
-                val significantFiles = changedFiles
-                  .filterNot(excludePaths.contains)
-                  .filterNot(f =>
-                    childDirPrefixes.exists(prefix => f.startsWith(prefix + "/") || f == prefix)
-                  )
-                val excludedCount    = changedFiles.length - significantFiles.length
-                if (significantFiles.nonEmpty) {
-                  val note =
-                    if (excludedCount > 0) s" ($excludedCount version/excluded file(s) filtered)"
-                    else ""
-                  state.log.info(
-                    s"${ReleaseLogPrefixes.Monorepo} ${project.name} has ${significantFiles.length} changed file(s) since $tag$note"
-                  )
-                  true
-                } else {
-                  if (changedFiles.nonEmpty)
-                    state.log.info(
-                      s"${ReleaseLogPrefixes.Monorepo} ${project.name} has only version/excluded file changes since $tag, treating as unchanged"
-                    )
-                  else
-                    state.log.info(
-                      s"${ReleaseLogPrefixes.Monorepo} ${project.name} unchanged since $tag"
-                    )
-                  false
-                }
-            }
+            diffProjectSinceTag(
+              vcs,
+              project,
+              tag,
+              baseRelative,
+              state,
+              excludePaths,
+              childDirPrefixes
+            )
+        }
+    }
+  }
+
+  /** Run `git diff` for a project against a known tag and determine whether
+    * there are significant (non-excluded) file changes.
+    * '''Performs blocking I/O''' — must only be called from within `IO.blocking`.
+    */
+  private def diffProjectSinceTag(
+      vcs: Vcs,
+      project: ProjectReleaseInfo,
+      tag: String,
+      baseRelative: String,
+      state: State,
+      excludePaths: Set[String],
+      childDirPrefixes: Set[String]
+  ): Boolean = {
+    import scala.sys.process.*
+
+    Try(
+      Process(
+        Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
+        vcs.baseDir
+      ).!!.linesIterator.filter(_.nonEmpty).toList
+    ) match {
+      case Failure(_)            =>
+        state.log.warn(
+          s"${ReleaseLogPrefixes.Monorepo} git diff failed for ${project.name}, " +
+            "conservatively treating as changed"
+        )
+        true
+      case Success(changedFiles) =>
+        val significantFiles = changedFiles
+          .filterNot(excludePaths.contains)
+          .filterNot(f =>
+            childDirPrefixes.exists(prefix => f.startsWith(prefix + "/") || f == prefix)
+          )
+        val excludedCount    = changedFiles.length - significantFiles.length
+        if (significantFiles.nonEmpty) {
+          val note =
+            if (excludedCount > 0) s" ($excludedCount version/excluded file(s) filtered)"
+            else ""
+          state.log.info(
+            s"${ReleaseLogPrefixes.Monorepo} ${project.name} has " +
+              s"${significantFiles.length} changed file(s) since $tag$note"
+          )
+          true
+        } else {
+          if (changedFiles.nonEmpty)
+            state.log.info(
+              s"${ReleaseLogPrefixes.Monorepo} ${project.name} has only " +
+                s"version/excluded file changes since $tag, treating as unchanged"
+            )
+          else
+            state.log.info(
+              s"${ReleaseLogPrefixes.Monorepo} ${project.name} unchanged since $tag"
+            )
+          false
         }
     }
   }

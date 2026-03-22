@@ -154,7 +154,47 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
           assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
           assert(
             aggregate.failures.head.cause.exists(
-              _.getMessage.contains("core / Test /")
+              _.getMessage.contains("core: sbt task reported failure via FailureCommand")
+            )
+          )
+        }
+      }
+  }
+
+  test(
+    "runClean via compose - consume FailureCommand and fail with project attribution"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-run-clean-failure-command") { dir =>
+        val coreBase = new File(dir, "core")
+        val coreRun  = new File(coreBase, "clean-ran.txt")
+        coreBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core")),
+          MonorepoSpecSupport.versionedProject(
+            "core",
+            coreBase,
+            settings = Seq(MonorepoStepTestCompat.failureCommandCleanTaskSetting(coreRun))
+          )
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture.context(Seq("core"))
+
+        MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map { result =>
+          val coreRun   = new File(
+            MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
+            "clean-ran.txt"
+          )
+          assert(result.failed)
+          assert(coreRun.exists())
+          assertEquals(result.state.remainingCommands, Nil)
+          val aggregate = requireProjectFailures(result.failureCause)
+          assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+          assert(
+            aggregate.failures.head.cause.exists(
+              _.getMessage.contains("core: sbt task reported failure via FailureCommand")
             )
           )
         }

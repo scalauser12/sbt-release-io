@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
 import io.release.internal.{ReleaseLogPrefixes, SbtRuntime}
 import io.release.monorepo.steps.MonorepoStepHelpers.*
+import io.release.monorepo.steps.MonorepoVcsCommitHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
 import io.release.steps.StepHelpers.parseVersionInput
@@ -132,28 +133,52 @@ private[monorepo] object MonorepoVersionSteps {
                                                 )
     } yield result
 
-  /** Validate version consistency in global-version mode (before writing to shared file). */
+  /** Validate version consistency in global-version mode or unified-tag mode
+    * (before writing to shared file or creating a unified tag).
+    *
+    * Global-version mode requires both release and next versions to match (shared file).
+    * Unified-tag mode only requires release versions to match (single tag name).
+    */
   val validateVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "validate-versions",
     execute = ctx =>
-      loadRuntime(ctx).flatMap { runtime =>
-        if (runtime.useGlobalVersion)
-          validateVersionConsistency(
+      extractRuntime(ctx).flatMap { runtime =>
+        val isGlobal  = runtime.useGlobalVersion
+        val isUnified = ctx.tagStrategy == MonorepoTagStrategy.Unified
+
+        if (isGlobal || isUnified) {
+          val releaseMsg =
+            if (isGlobal)
+              "Global version mode requires all projects to have the same release version"
+            else
+              "Unified tag requires all projects to share the same release version. " +
+                "Use per-project tag strategy or align versions"
+          val logSuffix  =
+            if (isGlobal) " for global version mode" else " for unified tag mode"
+
+          val releaseCheck = validateVersionConsistency(
             ctx.currentProjects,
             { case (rel, _) => rel },
-            "Global version mode requires all projects to have the same release version"
-          ) *> validateVersionConsistency(
-            ctx.currentProjects,
-            { case (_, next) => next },
-            "Global version mode requires all projects to have the same next version"
-          ) *> IO
+            releaseMsg
+          )
+
+          val nextCheck =
+            if (isGlobal)
+              validateVersionConsistency(
+                ctx.currentProjects,
+                { case (_, next) => next },
+                "Global version mode requires all projects to have the same next version"
+              )
+            else IO.unit
+
+          releaseCheck *> nextCheck *> IO
             .blocking(
               ctx.state.log.info(
-                s"${ReleaseLogPrefixes.Monorepo} Version consistency validated for global version mode"
+                s"${ReleaseLogPrefixes.Monorepo} Version consistency validated$logSuffix"
               )
             )
             .as(ctx)
-        else IO.pure(ctx)
+        } else IO.pure(ctx)
       }
   )
 
@@ -231,4 +256,20 @@ private[monorepo] object MonorepoVersionSteps {
               logInfo(withMeta, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
           } yield withMeta
     } yield result
+
+  /** Resolve a version from an override, a default, or an interactive prompt. */
+  private def promptOrDefault(
+      override_ : Option[String],
+      suggested: String,
+      label: String,
+      interactive: Boolean,
+      useDefaults: Boolean
+  ): IO[String] = override_.filter(_.nonEmpty) match {
+    case Some(v) => IO.pure(v)
+    case None    =>
+      if (!interactive || useDefaults) IO.pure(suggested)
+      else
+        IO.print(s"$label [$suggested] : ") *>
+          IO.readLine.flatMap(parseVersionInput(_, suggested))
+  }
 }
