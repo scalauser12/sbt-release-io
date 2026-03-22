@@ -13,6 +13,8 @@ import java.nio.file.Files
 
 class MonorepoStepIOSpec extends CatsEffectSuite {
 
+  import MonorepoStepIOSpec.LoadedMonorepoFixture
+
   test("compose - run global validation before execute when no selection boundary exists") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
@@ -157,20 +159,16 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
       )
 
       MonorepoStepIO.compose(Seq(failingStep))(pCtx).map { result =>
-        result.failureCause match {
-          case Some(aggregate: MonorepoProjectFailures) =>
-            assert(result.failed)
-            assert(aggregate.failures.map(_.projectName).contains("core"))
-            assertEquals(
-              aggregate.failures
-                .find(_.projectName == "core")
-                .flatMap(_.cause)
-                .map(_.getMessage),
-              Some("core failed")
-            )
-          case other                                    =>
-            fail(s"Expected MonorepoProjectFailures but got $other")
-        }
+        val aggregate = requireProjectFailures(result.failureCause)
+        assert(result.failed)
+        assert(aggregate.failures.map(_.projectName).contains("core"))
+        assertEquals(
+          aggregate.failures
+            .find(_.projectName == "core")
+            .flatMap(_.cause)
+            .map(_.getMessage),
+          Some("core failed")
+        )
       }
     }
   }
@@ -393,15 +391,11 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
             List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
           )
           assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
-          result.failureCause match {
-            case Some(aggregate: MonorepoProjectFailures) =>
-              assertEquals(
-                aggregate.failures.find(_.projectName == "core").flatMap(_.cause).map(_.getMessage),
-                Some("boom")
-              )
-            case other                                    =>
-              fail(s"Expected MonorepoProjectFailures but got $other")
-          }
+          val aggregate = requireProjectFailures(result.failureCause)
+          assertEquals(
+            aggregate.failures.find(_.projectName == "core").flatMap(_.cause).map(_.getMessage),
+            Some("boom")
+          )
         }
       }
     }
@@ -456,10 +450,16 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
   private def appendCurrentScalaVersion(file: File, state: State): IO[Unit] =
     scalaVersionOf(state).flatMap(version => IO.blocking(sbt.IO.append(file, s"$version\n")))
 
-  private final case class LoadedMonorepoFixture(
-      projects: Seq[Project],
-      selectedProjectIds: Seq[String]
-  )
+  private def requireProjectFailures(
+      cause: Option[Throwable]
+  ): MonorepoProjectFailures =
+    cause match {
+      case Some(aggregate)
+          if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
+        classOf[MonorepoProjectFailures].cast(aggregate)
+      case other =>
+        fail(s"Expected MonorepoProjectFailures but got $other")
+    }
 
   private def loadedContextWithProjectsResource(
       prefix: String
@@ -510,4 +510,11 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
         IO.blocking(TestSupport.deleteRecursively(dir))
       )
       .map(dir => MonorepoContext(state = TestSupport.dummyState(dir)))
+}
+
+private object MonorepoStepIOSpec {
+  final case class LoadedMonorepoFixture(
+      projects: Seq[Project],
+      selectedProjectIds: Seq[String]
+  )
 }

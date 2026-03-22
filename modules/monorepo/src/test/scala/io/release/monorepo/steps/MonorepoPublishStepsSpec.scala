@@ -150,17 +150,13 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
           assert(coreRun.exists())
           assert(apiRun.exists())
           assertEquals(result.state.remainingCommands, Nil)
-          result.failureCause match {
-            case Some(aggregate: MonorepoProjectFailures) =>
-              assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
-              assert(
-                aggregate.failures.head.cause.exists(
-                  _.getMessage.contains("core / Test /")
-                )
-              )
-            case other                                    =>
-              fail(s"Expected MonorepoProjectFailures but got $other")
-          }
+          val aggregate = requireProjectFailures(result.failureCause)
+          assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+          assert(
+            aggregate.failures.head.cause.exists(
+              _.getMessage.contains("core / Test /")
+            )
+          )
         }
       }
   }
@@ -321,5 +317,16 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
         }
       }
   }
+
+  private def requireProjectFailures(
+      cause: Option[Throwable]
+  ): MonorepoProjectFailures =
+    cause match {
+      case Some(aggregate)
+          if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
+        classOf[MonorepoProjectFailures].cast(aggregate)
+      case other =>
+        fail(s"Expected MonorepoProjectFailures but got $other")
+    }
 
 }
