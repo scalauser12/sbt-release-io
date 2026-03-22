@@ -7,6 +7,7 @@ import io.release.monorepo.{
   MonorepoReleaseIO,
   MonorepoSpecSupport,
   MonorepoTagStrategy,
+  MonorepoTestSupport,
   SelectionMode
 }
 import io.release.vcs.Vcs
@@ -316,6 +317,26 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
           )
         }
       }
+  }
+
+  test(
+    "validateVersionConsistency - fail when a project has no version metadata"
+  ) {
+    val withVersions = MonorepoTestSupport
+      .dummyProject("core")
+      .copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+    val noVersions   = MonorepoTestSupport.dummyProject("api")
+
+    assertFailure[IllegalStateException, Unit](
+      MonorepoStepHelpers.validateVersionConsistency(
+        Seq(withVersions, noVersions),
+        { case (rel, _) => rel },
+        "Test context"
+      )
+    ) { err =>
+      assert(err.getMessage.contains("projects missing version metadata"))
+      assert(err.getMessage.contains("api"))
+    }
   }
 
   test("setReleaseVersions - write the shared global version file only once") {

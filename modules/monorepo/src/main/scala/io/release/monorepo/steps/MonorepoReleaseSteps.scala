@@ -89,7 +89,7 @@ object MonorepoReleaseSteps {
               (currentCtx, project) =>
                 logInfo(currentCtx, s"${pp.name} [${project.name}]") *>
                   pp.execute(currentCtx, project)
-            ).map(propagateFailures)
+            )
         }
       }
   )

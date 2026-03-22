@@ -2,12 +2,16 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
+import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes}
 import io.release.monorepo.steps.MonorepoStepHelpers
-import sbt.Keys.*
 import sbt.{internal as _, *}
 
-/** Orchestrates monorepo validation and execution with a selection-aware setup boundary. */
+/** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
+  *
+  * Cross-build iteration and FailureCommand detection are delegated to
+  * [[MonorepoStepHelpers]], which owns both the project loop and the version loop.
+  * The composer controls step sequencing, validation phases, and failure propagation.
+  */
 private[monorepo] object MonorepoComposer {
 
   private val LogPrefix                   = ReleaseLogPrefixes.Monorepo
@@ -98,10 +102,13 @@ private[monorepo] object MonorepoComposer {
       case global: MonorepoStepIO.Global         =>
         global.validate
       case perProject: MonorepoStepIO.PerProject =>
-        val wrappedValidation =
-          wrapValidationWithCrossBuild(perProject.validate, perProject.enableCrossBuild, crossBuild)
-
-        ctx => ctx.currentProjects.toList.traverse_(wrappedValidation(ctx, _))
+        ctx =>
+          MonorepoStepHelpers.validatePerProjectWithCrossBuild(
+            ctx,
+            perProject.validate,
+            crossBuild,
+            perProject.enableCrossBuild
+          )
     }
 
   private def runSingleStepAction(
@@ -133,129 +140,28 @@ private[monorepo] object MonorepoComposer {
       }(ctx)
 
     case perProject: MonorepoStepIO.PerProject =>
-      val wrappedAction =
-        wrapActionWithCrossBuild(perProject.execute, perProject.enableCrossBuild, crossBuild)
-      executePerProjectAction(ctx, perProject.name, wrappedAction)
+      executePerProjectAction(
+        ctx,
+        perProject.name,
+        perProject.execute,
+        crossBuild,
+        perProject.enableCrossBuild
+      )
   }
 
   private def executePerProjectAction(
       ctx: MonorepoContext,
       stepName: String,
-      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  ): IO[MonorepoContext] =
+      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
+      crossBuild: Boolean,
+      enableCrossBuild: Boolean
+  ): IO[MonorepoContext] = {
+    val logged: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
+      (currentCtx, project) =>
+        IO.blocking(currentCtx.state.log.info(s"$LogPrefix $stepName [${project.name}]")) *>
+          action(currentCtx, project)
+
     MonorepoStepHelpers
-      .runPerProject(
-        ctx,
-        (currentCtx, project) =>
-          IO.blocking(currentCtx.state.log.info(s"$LogPrefix $stepName [${project.name}]")) *>
-            action(currentCtx, project)
-      )
-      .map(MonorepoStepHelpers.propagateFailures)
-
-  // ── Cross-build wrapping ──────────────────────────────────────────────
-  //
-  // Cross-build is the composer's responsibility: it controls how per-project steps
-  // are orchestrated across Scala versions. The flow:
-  //
-  //  1. `wrapValidationWithCrossBuild` / `wrapActionWithCrossBuild` conditionally
-  //     wrap per-project functions so they execute once per crossScalaVersions entry.
-  //  2. Wrapping is applied only when both the step's `enableCrossBuild` flag and
-  //     the global `crossBuild` flag (from `MonorepoReleasePluginLike`) are true.
-  //  3. `runCrossBuild` is the shared engine: it reads `crossScalaVersions` from
-  //     the project settings, switches the Scala version before each iteration,
-  //     and restores the entry version afterward (even on error).
-  //
-  // This keeps cross-build orchestration in one place, transparent to step authors.
-
-  private def wrapValidationWithCrossBuild(
-      fn: (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
-      enableCrossBuild: Boolean,
-      crossBuild: Boolean
-  ): (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
-    if (enableCrossBuild && crossBuild)
-      (ctx, project) =>
-        runCrossBuild(project, innerCtx => fn(innerCtx, project).as(innerCtx))(ctx).void
-    else fn
-
-  private def wrapActionWithCrossBuild(
-      fn: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
-      enableCrossBuild: Boolean,
-      crossBuild: Boolean
-  ): (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
-    if (enableCrossBuild && crossBuild)
-      (ctx, project) => runCrossBuild(project, innerCtx => fn(innerCtx, project))(ctx)
-    else fn
-
-  private def runCrossBuild(
-      project: ProjectReleaseInfo,
-      action: MonorepoContext => IO[MonorepoContext]
-  )(ctx: MonorepoContext): IO[MonorepoContext] = IO.defer {
-    IO.blocking {
-      val extracted     = SbtRuntime.extracted(ctx.state)
-      val crossVersions =
-        (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
-      val entryVersion  =
-        (extracted.currentRef / scalaVersion)
-          .get(extracted.structure.data)
-          .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
-      (crossVersions, entryVersion)
-    }.flatMap { case (crossVersions, entryVersion) =>
-      def switchTo(version: String)(currentCtx: MonorepoContext): IO[MonorepoContext] =
-        SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
-
-      def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
-        entryVersion match {
-          case Some(ver) => switchTo(ver)(currentCtx)
-          case None      => IO.pure(currentCtx)
-        }
-
-      if (crossVersions.isEmpty)
-        IO.raiseError(
-          new IllegalStateException(
-            s"$LogPrefix Cross-build enabled but ${project.name} has empty crossScalaVersions"
-          )
-        )
-      else {
-        def restoreOnError(currentCtx: MonorepoContext, err: Throwable): IO[MonorepoContext] =
-          restoreEntry(currentCtx).attempt *> IO.raiseError(err)
-
-        def runIteration(
-            currentCtx: MonorepoContext,
-            version: String,
-            logMessage: String
-        ): IO[MonorepoContext] =
-          for {
-            _        <- IO.blocking(currentCtx.state.log.info(logMessage))
-            switched <- switchTo(version)(currentCtx)
-            result   <- action(switched).attempt.flatMap {
-                          case Right(nextCtx) => IO.pure(nextCtx)
-                          case Left(err)      => restoreOnError(switched, err)
-                        }
-          } yield result
-
-        if (crossVersions.length == 1)
-          runIteration(
-            ctx,
-            crossVersions.head,
-            s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
-          ).flatMap(restoreEntry)
-        else
-          crossVersions.toList
-            .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-              ioCtx.flatMap { currentCtx =>
-                val projectFailed =
-                  currentCtx.projects.exists(p => p.ref == project.ref && p.failed)
-                if (currentCtx.failed || projectFailed) IO.pure(currentCtx)
-                else
-                  runIteration(
-                    currentCtx,
-                    version,
-                    s"$LogPrefix Cross-building with Scala $version"
-                  )
-              }
-            }
-            .flatMap(restoreEntry)
-      }
-    }
+      .runPerProjectWithCrossBuild(ctx, logged, crossBuild, enableCrossBuild)
   }
 }

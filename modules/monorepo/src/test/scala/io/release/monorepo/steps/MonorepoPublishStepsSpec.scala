@@ -154,7 +154,7 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
           assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
           assert(
             aggregate.failures.head.cause.exists(
-              _.getMessage.contains("core / Test /")
+              _.getMessage.contains("core: sbt task reported failure via FailureCommand")
             )
           )
         }
@@ -194,7 +194,7 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
           assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
           assert(
             aggregate.failures.head.cause.exists(
-              _.getMessage.contains("core / clean")
+              _.getMessage.contains("core: sbt task reported failure via FailureCommand")
             )
           )
         }

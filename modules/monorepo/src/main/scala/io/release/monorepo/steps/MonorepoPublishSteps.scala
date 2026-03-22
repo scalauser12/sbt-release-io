@@ -2,13 +2,7 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIOPublishArtifactsAction
-import io.release.internal.{
-  ExecutionEngine,
-  PublishValidation,
-  ReleaseLogPrefixes,
-  SbtRuntime,
-  SnapshotDependencyTasks
-}
+import io.release.internal.{PublishValidation, ReleaseLogPrefixes, SnapshotDependencyTasks}
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
@@ -19,7 +13,11 @@ import sbt.{internal as _, *}
 
 import scala.util.control.NonFatal
 
-/** Publish, test, clean, and dependency-check monorepo release steps. */
+/** Publish, test, clean, and dependency-check monorepo release steps.
+  *
+  * FailureCommand detection is handled centrally by [[MonorepoStepHelpers.runPerProject]].
+  * Step implementations here just run their sbt tasks and return the updated context.
+  */
 private[monorepo] object MonorepoPublishSteps {
 
   private def runProjectTask[A](
@@ -31,26 +29,7 @@ private[monorepo] object MonorepoPublishSteps {
     IO.blocking {
       val extracted     = Project.extract(ctx.state)
       val (newState, _) = extracted.runTask(key, ctx.state)
-      val updatedCtx    = ctx.withState(newState)
-      if (SbtRuntime.hasFailureCommand(newState)) {
-        val failure = new IllegalStateException(
-          s"${project.name}: sbt task '$taskLabel' reported failure via FailureCommand"
-        )
-        val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
-        Left(
-          failure -> ExecutionEngine
-            .armOnFailure(updatedCtx.withState(cleaned))
-            .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
-        )
-      } else Right(updatedCtx)
-    }.flatMap {
-      case Right(updatedCtx)           => IO.pure(updatedCtx)
-      case Left((failure, updatedCtx)) =>
-        IO.blocking(
-          updatedCtx.state.log.error(
-            s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}"
-          )
-        ).as(updatedCtx)
+      ctx.withState(newState)
     }
 
   private def evaluateProjectTask[A](
@@ -119,29 +98,8 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-clean",
     execute = (ctx, project) =>
       IO.blocking {
-        val newState   = CleanCompat.runProject(ctx.state, project.ref)
-        val updatedCtx = ctx.withState(newState)
-        if (SbtRuntime.hasFailureCommand(newState)) {
-          val failure = new IllegalStateException(
-            s"${project.name}: sbt task '${project.name} / clean' reported failure via FailureCommand"
-          )
-          val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
-          Left(
-            failure -> ExecutionEngine
-              .armOnFailure(updatedCtx.withState(cleaned))
-              .updateProject(project.ref)(
-                _.copy(failed = true, failureCause = Some(failure))
-              )
-          )
-        } else Right(updatedCtx)
-      }.flatMap {
-        case Right(updatedCtx)           => IO.pure(updatedCtx)
-        case Left((failure, updatedCtx)) =>
-          IO.blocking(
-            updatedCtx.state.log.error(
-              s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}"
-            )
-          ).as(updatedCtx)
+        val newState = CleanCompat.runProject(ctx.state, project.ref)
+        ctx.withState(newState)
       }
   )
 

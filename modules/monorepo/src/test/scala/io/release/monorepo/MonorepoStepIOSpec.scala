@@ -174,6 +174,32 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
     }
   }
 
+  test("compose - per-project step returning ctx.failWith stops later projects") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val projects = Seq(dummyProject("core"), dummyProject("api"))
+        val pCtx     = ctx.withProjects(projects)
+
+        val failStep = MonorepoStepIO.PerProject(
+          name = "fail-with-step",
+          execute = (c, project) =>
+            observed.update(_ :+ project.name).as {
+              if (project.name == "core")
+                c.failWith(new RuntimeException("fatal stop"))
+              else c
+            }
+        )
+
+        MonorepoStepIO.compose(Seq(failStep))(pCtx).flatMap { result =>
+          observed.get.map { obs =>
+            assert(result.failed)
+            assertEquals(obs, List("core"))
+          }
+        }
+      }
+    }
+  }
+
   test(
     "compose - cross-build single-version per-project step validates and executes once and restores the entry scalaVersion"
   ) {
@@ -432,9 +458,11 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
           .flatMap { result =>
             observed.get.map { obs =>
               assert(result.failed)
+              val aggregate = requireProjectFailures(result.failureCause)
+              assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
               assert(
-                result.failureCause.exists(
-                  _.getMessage.contains("inject-failure-command")
+                aggregate.failures.head.cause.exists(
+                  _.getMessage.contains("sbt task reported failure via FailureCommand")
                 )
               )
               assertEquals(obs, List("core", "api"))
