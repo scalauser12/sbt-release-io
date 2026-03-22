@@ -328,7 +328,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
     val noVersions   = MonorepoTestSupport.dummyProject("api")
 
     assertFailure[IllegalStateException, Unit](
-      MonorepoStepHelpers.validateVersionConsistency(
+      MonorepoVcsCommitHelpers.validateVersionConsistency(
         Seq(withVersions, noVersions),
         { case (rel, _) => rel },
         "Test context"

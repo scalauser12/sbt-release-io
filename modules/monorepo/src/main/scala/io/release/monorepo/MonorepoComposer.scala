@@ -3,7 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes}
-import io.release.monorepo.steps.MonorepoStepHelpers
+import io.release.monorepo.steps.{MonorepoCrossBuild, MonorepoStepHelpers}
 import sbt.{internal as _, *}
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
@@ -14,7 +14,14 @@ import sbt.{internal as _, *}
   */
 private[monorepo] object MonorepoComposer {
 
-  private val LogPrefix                   = ReleaseLogPrefixes.Monorepo
+  private val LogPrefix = ReleaseLogPrefixes.Monorepo
+
+  /** Step name that divides the release process into two segments:
+    *  - '''Setup''' (before boundary): steps run sequentially, each validated then executed
+    *    before the next begins. Used for VCS init, working-dir checks, project selection.
+    *  - '''Main''' (after boundary): all validations run upfront, then all executions run
+    *    in order. This ensures the release is fully validated before any mutations begin.
+    */
   private[monorepo] val SelectionBoundary = "detect-or-select-projects"
 
   def compose(steps: Seq[MonorepoStepIO], crossBuild: Boolean = false)(
@@ -40,6 +47,9 @@ private[monorepo] object MonorepoComposer {
         )
     }
 
+  /** Split steps at the selection boundary into setup and main segments.
+    * Returns `None` if no boundary step exists (all steps run sequentially).
+    */
   private def splitAtBoundary(
       steps: Seq[MonorepoStepIO]
   ): Option[(Seq[MonorepoStepIO], Seq[MonorepoStepIO])] = {
@@ -103,7 +113,7 @@ private[monorepo] object MonorepoComposer {
         global.validate
       case perProject: MonorepoStepIO.PerProject =>
         ctx =>
-          MonorepoStepHelpers.validatePerProjectWithCrossBuild(
+          MonorepoCrossBuild.validatePerProjectWithCrossBuild(
             ctx,
             perProject.validate,
             crossBuild,
@@ -161,7 +171,7 @@ private[monorepo] object MonorepoComposer {
         IO.blocking(currentCtx.state.log.info(s"$LogPrefix $stepName [${project.name}]")) *>
           action(currentCtx, project)
 
-    MonorepoStepHelpers
+    MonorepoCrossBuild
       .runPerProjectWithCrossBuild(ctx, logged, crossBuild, enableCrossBuild)
   }
 }

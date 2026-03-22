@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
 import io.release.internal.{ReleaseLogPrefixes, SbtRuntime}
 import io.release.monorepo.steps.MonorepoStepHelpers.*
+import io.release.monorepo.steps.MonorepoVcsCommitHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
 import io.release.steps.StepHelpers.parseVersionInput
@@ -141,7 +142,7 @@ private[monorepo] object MonorepoVersionSteps {
   val validateVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "validate-versions",
     execute = ctx =>
-      loadRuntime(ctx).flatMap { runtime =>
+      extractRuntime(ctx).flatMap { runtime =>
         val isGlobal  = runtime.useGlobalVersion
         val isUnified = ctx.tagStrategy == MonorepoTagStrategy.Unified
 
@@ -255,4 +256,20 @@ private[monorepo] object MonorepoVersionSteps {
               logInfo(withMeta, s"Wrote version $ver to ${versionFile.getPath} for ${project.name}")
           } yield withMeta
     } yield result
+
+  /** Resolve a version from an override, a default, or an interactive prompt. */
+  private def promptOrDefault(
+      override_ : Option[String],
+      suggested: String,
+      label: String,
+      interactive: Boolean,
+      useDefaults: Boolean
+  ): IO[String] = override_.filter(_.nonEmpty) match {
+    case Some(v) => IO.pure(v)
+    case None    =>
+      if (!interactive || useDefaults) IO.pure(suggested)
+      else
+        IO.print(s"$label [$suggested] : ") *>
+          IO.readLine.flatMap(parseVersionInput(_, suggested))
+  }
 }
