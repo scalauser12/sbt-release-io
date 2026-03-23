@@ -107,13 +107,17 @@ private[monorepo] object DependencyGraph {
 
         val seeds  = uniqueProjects.filter(p => inDegree(p) == 0).toList
         val result = loop(seeds, inDegree, Nil)
-
+        (result, uniqueProjects)
+      }.flatMap { case (result, uniqueProjects) =>
         if (result.length != uniqueProjects.length) {
           val remaining = uniqueProjects.filterNot(result.contains)
-          throw new IllegalStateException(
-            s"Circular dependency detected among monorepo projects: ${remaining.map(_.project).mkString(", ")}"
+          IO.raiseError(
+            new IllegalStateException(
+              s"Circular dependency detected among monorepo projects: " +
+                remaining.map(_.project).mkString(", ")
+            )
           )
-        } else result
+        } else IO.pure(result)
       }
   }
 }

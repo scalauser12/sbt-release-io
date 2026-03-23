@@ -3,6 +3,7 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
 import io.release.monorepo.*
+import io.release.steps.StepHelpers.errorMessage
 
 import scala.util.control.NonFatal
 
@@ -91,9 +92,6 @@ private[monorepo] object MonorepoStepHelpers {
       result.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
       result
     } else ctx
-
-  private def errorMessage(err: Throwable): String =
-    Option(err.getMessage).getOrElse(err.getClass.getSimpleName)
 
   // ── Logging ───────────────────────────────────────────────────────────
 
