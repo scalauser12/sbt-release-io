@@ -5,8 +5,6 @@ import cats.syntax.all.*
 import io.release.ReleaseCtx
 import io.release.steps.StepHelpers
 
-import scala.util.control.NonFatal
-
 /** Shared two-phase execution and failure-detection helpers used by core and monorepo composers. */
 private[release] object ExecutionEngine {
 
@@ -58,7 +56,7 @@ private[release] object ExecutionEngine {
       f: C => IO[C]
   ): C => IO[C] =
     (ctx: C) =>
-      f(ctx).handleErrorWith { case NonFatal(err) =>
+      f(ctx).handleErrorWith { case err =>
         IO.blocking(
           ctx.state.log.error(
             s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"

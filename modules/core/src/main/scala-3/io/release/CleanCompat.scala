@@ -14,6 +14,4 @@ object CleanCompat:
     val extracted = Project.extract(state)
     extracted.runAggregated(ref / (Global / Keys.clean), state)
 
-  def runProject(state: State, ref: ProjectRef): State =
-    val extracted = Project.extract(state)
-    extracted.runAggregated(ref / (Global / Keys.clean), state)
+  def runProject(state: State, ref: ProjectRef): State = runBuild(state, ref)

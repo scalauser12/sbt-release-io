@@ -9,8 +9,6 @@ import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
 
-import java.io.File
-
 /** Version-related release steps: inquire, set, commit versions. */
 private[release] object VersionSteps {
 
