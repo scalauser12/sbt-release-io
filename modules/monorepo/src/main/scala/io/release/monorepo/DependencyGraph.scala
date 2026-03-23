@@ -105,10 +105,9 @@ private[monorepo] object DependencyGraph {
               loop(newQueue, newDegrees, current :: acc)
           }
 
-        val seeds  = uniqueProjects.filter(p => inDegree(p) == 0).toList
-        val result = loop(seeds, inDegree, Nil)
-        (result, uniqueProjects)
-      }.flatMap { case (result, uniqueProjects) =>
+        val seeds = uniqueProjects.filter(p => inDegree(p) == 0).toList
+        loop(seeds, inDegree, Nil)
+      }.flatMap { result =>
         if (result.length != uniqueProjects.length) {
           val remaining = uniqueProjects.filterNot(result.contains)
           IO.raiseError(

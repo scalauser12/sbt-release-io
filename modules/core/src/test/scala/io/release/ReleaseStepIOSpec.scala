@@ -26,7 +26,6 @@ import sbt.{
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 
 class ReleaseStepIOSpec extends CatsEffectSuite {
 
@@ -730,11 +729,7 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
   }
 
   private val contextResource: Resource[IO, ReleaseContext] =
-    Resource
-      .make(IO.blocking(Files.createTempDirectory("sbt-release-io-compose-spec").toFile))(dir =>
-        IO.blocking(TestSupport.deleteRecursively(dir))
-      )
-      .map(dir => ReleaseContext(state = TestSupport.dummyState(dir)))
+    TestSupport.dummyContextResource("sbt-release-io-compose-spec")
 
   private def loadedContextResource(
       prefix: String,
