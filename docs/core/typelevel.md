@@ -17,7 +17,7 @@ Some libraries that work well in release steps:
 Add the dependency in `project/plugins.sbt` alongside the plugin:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 

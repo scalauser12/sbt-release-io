@@ -25,7 +25,7 @@ User guides and reference: **[docs/README.md](docs/README.md)** (core and monore
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
 ```
 
 No `enablePlugins` needed — the core plugin activates automatically.
@@ -39,7 +39,7 @@ sbt "releaseIO with-defaults"
 In `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.5.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.6.0")
 ```
 
 In `build.sbt`:

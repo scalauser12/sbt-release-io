@@ -13,7 +13,7 @@ Per-project steps, change detection, validate-then-execute phases, per-project o
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.5.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.6.0")
 ```
 
 `build.sbt` (root):

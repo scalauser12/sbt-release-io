@@ -13,7 +13,7 @@ Two-phase release steps (`validate` / `execute`) in cats-effect `IO`, cross-buil
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.5.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
 ```
 
 Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin loads automatically (`allRequirements`).
