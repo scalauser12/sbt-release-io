@@ -111,7 +111,7 @@ class PublishStepsSpec extends CatsEffectSuite {
       () -> Seq(
         ReleaseIO.releaseIOPublishArtifactsChecks := true,
         CoreStepTestCompat.throwingPublishSkipSetting,
-        publishTo := Some(Resolver.file("local", new File(dir, "repo")))
+        publishTo                                 := Some(Resolver.file("local", new File(dir, "repo")))
       )
     }.use { case (ctx, _) =>
       PublishSteps.publishArtifacts.validate(ctx)

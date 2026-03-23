@@ -1,6 +1,7 @@
 package io.release.monorepo.steps
 
 import io.release.ReleaseIOCompat
+import sbt.Keys.*
 import sbt.{Setting, *}
 
 import java.io.File
@@ -43,4 +44,7 @@ private[monorepo] object MonorepoStepTestCompat {
         )
       }
       .value
+
+  def throwingPublishSkipSetting: Setting[?] =
+    publish / skip := { throw new RuntimeException("publish/skip eval error"); false }
 }
