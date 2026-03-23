@@ -2,6 +2,8 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.{ReleaseContext, TestAssertions, TestSupport}
+
+import java.util.concurrent.atomic.AtomicInteger
 import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags}
 import munit.CatsEffectSuite
 
@@ -85,13 +87,13 @@ class VersionStepsSpec extends CatsEffectSuite {
     TestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
       val dir          = baseCtx.state.configuration.baseDirectory
       val fallbackFile = new File(dir, "fallback-version.sbt")
-      var resolverRuns = 0
+      val resolverRuns = new AtomicInteger(0)
       val ctx          = withStartupPlan(baseCtx, "2.0.0", "2.0.1-SNAPSHOT")
 
       val result = VersionSteps.resolveVersionPlan(
         ctx,
         _ => {
-          resolverRuns += 1
+          resolverRuns.incrementAndGet()
           VersionSteps.ResolvedSettings(
             versionFile = fallbackFile,
             readVersion = _ => IO.pure("1.9.9-SNAPSHOT"),
@@ -105,7 +107,7 @@ class VersionStepsSpec extends CatsEffectSuite {
         readContents <- result.readVersion(fallbackFile)
         fileContents <- result.versionFileContents(fallbackFile, "2.0.0")
       } yield {
-        assertEquals(resolverRuns, 1)
+        assertEquals(resolverRuns.get(), 1)
         assertEquals(result.versionFile, fallbackFile)
         assertEquals(result.releaseVersionOverride, Some("2.0.0"))
         assertEquals(result.nextVersionOverride, Some("2.0.1-SNAPSHOT"))

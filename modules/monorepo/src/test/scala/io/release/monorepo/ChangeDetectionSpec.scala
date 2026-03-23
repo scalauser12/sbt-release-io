@@ -433,51 +433,56 @@ class ChangeDetectionSpec extends CatsEffectSuite {
 
   test("detectChangedProjects - ignore additional excluded files beyond the version file") {
     tempDirResource.use { repo =>
-      IO.blocking {
-        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
-        sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
-        val sourceFile = new File(repo, "core/src/main/scala/Core.scala")
-        sbt.IO.write(sourceFile, "object Core {}\n")
+      for {
+        sourceFile <- IO.blocking {
+                        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
+                        sbt.IO.write(
+                          new File(repo, "core/version.sbt"),
+                          """version := "0.1.0-SNAPSHOT"""" + "\n"
+                        )
+                        val sf = new File(repo, "core/src/main/scala/Core.scala")
+                        sbt.IO.write(sf, "object Core {}\n")
 
-        TestSupport.initGitRepo(repo)
-        TestSupport.runGit(repo, "add", ".")
-        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
-        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+                        TestSupport.initGitRepo(repo)
+                        TestSupport.runGit(repo, "add", ".")
+                        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+                        TestSupport.runGit(repo, "tag", "core-v0.1.0")
 
-        sbt.IO.write(sourceFile, "object Core { val changed = true }\n")
-        TestSupport.runGit(repo, "add", ".")
-        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
-
-        repo -> sourceFile
-      }.flatMap { case (preparedRepo, sourceFile) =>
-        detectVcs(preparedRepo).map(vcs =>
-          (vcs, sourceFile, testEnv(preparedRepo, new File(preparedRepo, "sbt-test.log")))
+                        sbt.IO.write(sf, "object Core { val changed = true }\n")
+                        TestSupport.runGit(repo, "add", ".")
+                        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
+                        sf
+                      }
+        vcs        <- detectVcs(repo)
+        env         = testEnv(repo, new File(repo, "sbt-test.log"))
+        project     = ProjectReleaseInfo(
+                        ref = ProjectRef(repo.toURI, "core"),
+                        name = "core",
+                        baseDir = new File(repo, "core"),
+                        versionFile = new File(repo, "core/version.sbt")
+                      )
+        changed    <- detectChanged(
+                        vcs,
+                        Seq(project),
+                        env.state,
+                        additionalExcludeFiles = Seq(sourceFile)
+                      )
+        logs       <- readLogs(
+                        env,
+                        required = Seq(
+                          "core has only version/excluded file changes since " +
+                            "core-v0.1.0, treating as unchanged"
+                        )
+                      )
+      } yield {
+        assert(changed.isEmpty)
+        assert(
+          logs.contains(
+            "core has only version/excluded file changes since " +
+              "core-v0.1.0, treating as unchanged"
+          )
         )
-      }.flatMap { case (vcs: Vcs, sourceFile: File, env: TestEnv) =>
-        val project = ProjectReleaseInfo(
-          ref = ProjectRef(repo.toURI, "core"),
-          name = "core",
-          baseDir = new File(repo, "core"),
-          versionFile = new File(repo, "core/version.sbt")
-        )
-
-        detectChanged(vcs, Seq(project), env.state, additionalExcludeFiles = Seq(sourceFile))
-          .flatMap { changed =>
-            readLogs(
-              env,
-              required = Seq(
-                "core has only version/excluded file changes since core-v0.1.0, treating as unchanged"
-              )
-            ).map { logs =>
-              assert(changed.isEmpty)
-              assert(
-                logs.contains(
-                  "core has only version/excluded file changes since core-v0.1.0, treating as unchanged"
-                )
-              )
-              assert(!logs.contains("core has 1 changed file(s) since core-v0.1.0"))
-            }
-          }
+        assert(!logs.contains("core has 1 changed file(s) since core-v0.1.0"))
       }
     }
   }

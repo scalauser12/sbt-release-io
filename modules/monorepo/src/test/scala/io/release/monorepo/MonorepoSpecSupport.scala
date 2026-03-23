@@ -161,4 +161,13 @@ object MonorepoSpecSupport {
         ) ++ settings
       )*
     )
+
+  def requireProjectFailures(
+      cause: Option[Throwable]
+  ): MonorepoProjectFailures =
+    cause match {
+      case Some(aggregate: MonorepoProjectFailures) => aggregate
+      case other                                    =>
+        fail(s"Expected MonorepoProjectFailures but got $other")
+    }
 }

@@ -1,9 +1,10 @@
 package io.release.internal
 
 import cats.effect.IO
+import io.release.TestAssertions.assertFailure
 import io.release.{ReleaseIO, TestSupport}
 import munit.CatsEffectSuite
-import sbt.{Project, ProjectRef, *}
+import sbt.*
 
 class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   private val fixturePrefix = "snapshot-deps-spec"
@@ -37,21 +38,19 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
           throw new RuntimeException("snapshot deps eval error")
           Seq.empty[ModuleID]
         }
-      val state: State    = TestSupport.loadedState(
-        dir,
-        Seq(Project("root", dir).settings(throwingSetting)),
-        currentProjectId = Some("root")
-      )
-      val ref: ProjectRef = ProjectRef(dir.toURI, "root")
-      SnapshotDependencyTasks
-        .projectSnapshotDependencies(state, ref, "test-project")
-        .attempt
-        .map { result =>
-          assert(result.isLeft)
-          val err = result.left.toOption.get
-          assert(err.isInstanceOf[IllegalStateException])
-          assert(err.getMessage.contains("test-project"))
-        }
+      IO.blocking {
+        val state = TestSupport.loadedState(
+          dir,
+          Seq(Project("root", dir).settings(throwingSetting)),
+          currentProjectId = Some("root")
+        )
+        val ref   = ProjectRef(dir.toURI, "root")
+        (state, ref)
+      }.flatMap { case (state, ref) =>
+        assertFailure[IllegalStateException, Seq[ModuleID]](
+          SnapshotDependencyTasks.projectSnapshotDependencies(state, ref, "test-project")
+        )(err => assert(err.getMessage.contains("test-project")))
+      }
     }
   }
 }

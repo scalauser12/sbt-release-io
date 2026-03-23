@@ -11,7 +11,7 @@ import io.release.monorepo.{
 }
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
-import sbt.{Project, Resolver, *}
+import sbt.*
 
 import java.io.File
 
@@ -557,16 +557,9 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
       }
   }
 
-  // ── helpers ─────────────────────────────────────────────────────────
-
   private def requireProjectFailures(
       cause: Option[Throwable]
   ): MonorepoProjectFailures =
-    cause match {
-      case Some(aggregate) if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
-        classOf[MonorepoProjectFailures].cast(aggregate)
-      case other                                                                     =>
-        fail(s"Expected MonorepoProjectFailures but got $other")
-    }
+    MonorepoSpecSupport.requireProjectFailures(cause)
 
 }

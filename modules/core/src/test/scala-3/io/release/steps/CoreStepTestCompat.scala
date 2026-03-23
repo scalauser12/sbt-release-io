@@ -46,9 +46,3 @@ private[steps] object CoreStepTestCompat:
 
   def throwingPublishSkipSetting: Setting[?] =
     publish / skip := { throw new RuntimeException("publish/skip eval error"); false }
-
-  def throwingSnapshotDepsSetting: Setting[?] =
-    ReleaseIO.releaseIOSnapshotDependencies := {
-      throw new RuntimeException("snapshot deps eval error")
-      Seq.empty[ModuleID]
-    }

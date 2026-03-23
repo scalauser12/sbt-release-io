@@ -12,7 +12,6 @@ import io.release.monorepo.{
 }
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.Project
 
 import java.io.File
 

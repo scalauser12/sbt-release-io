@@ -1,11 +1,12 @@
 package io.release.steps
 
 import cats.effect.{IO, Resource}
-import io.release.internal.{PublishValidation, SbtCompat}
+import io.release.TestAssertions.assertFailure
+import io.release.internal.SbtCompat
 import io.release.{ReleaseContext, ReleaseIO, ReleaseIOCompat, TestSupport}
 import munit.CatsEffectSuite
 import sbt.Keys.*
-import sbt.{Project, Setting, *}
+import sbt.*
 
 import java.io.File
 
@@ -72,14 +73,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     loadedContextResource(s"$fixturePrefix-val-missing") { _ =>
       () -> Seq(ReleaseIO.releaseIOPublishArtifactsChecks := true)
     }.use { case (ctx, _) =>
-      PublishSteps.publishArtifacts
-        .validate(ctx)
-        .attempt
-        .map { result =>
-          assert(result.isLeft)
-          val msg = result.left.toOption.get.getMessage
-          assert(msg.contains("publishTo not configured"))
-        }
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.publishArtifacts.validate(ctx)
+      )(err => assert(err.getMessage.contains("publishTo not configured")))
     }
   }
 
@@ -92,14 +88,9 @@ class PublishStepsSpec extends CatsEffectSuite {
         CoreStepTestCompat.throwingPublishToSetting
       )
     }.use { case (ctx, _) =>
-      PublishSteps.publishArtifacts
-        .validate(ctx)
-        .attempt
-        .map { result =>
-          assert(result.isLeft)
-          val msg = result.left.toOption.get.getMessage
-          assert(msg.contains("publishTo not configured"))
-        }
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.publishArtifacts.validate(ctx)
+      )(err => assert(err.getMessage.contains("publishTo not configured")))
     }
   }
 

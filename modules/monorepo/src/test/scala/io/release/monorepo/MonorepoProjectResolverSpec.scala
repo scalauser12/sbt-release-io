@@ -66,8 +66,8 @@ class MonorepoProjectResolverSpec extends FunSuite {
       plan,
       useGlobalVersion = false
     )
-    val core   = result.find(_.name == "core").get
-    val api    = result.find(_.name == "api").get
+    val core   = result.find(_.name == "core").getOrElse(fail("Expected project 'core'"))
+    val api    = result.find(_.name == "api").getOrElse(fail("Expected project 'api'"))
 
     assertEquals(core.versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
     assertEquals(api.versions, None)

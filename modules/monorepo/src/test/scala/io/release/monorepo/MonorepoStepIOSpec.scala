@@ -738,12 +738,7 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
   private def requireProjectFailures(
       cause: Option[Throwable]
   ): MonorepoProjectFailures =
-    cause match {
-      case Some(aggregate) if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
-        classOf[MonorepoProjectFailures].cast(aggregate)
-      case other                                                                     =>
-        fail(s"Expected MonorepoProjectFailures but got $other")
-    }
+    MonorepoSpecSupport.requireProjectFailures(cause)
 
   private def loadedContextWithProjectsResource(
       prefix: String

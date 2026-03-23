@@ -579,10 +579,10 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
         }
       )
     ).use { ctx =>
-      ReleaseStepIO.fromTask(stateUpdateTask).execute(ctx).map { result =>
+      ReleaseStepIO.fromTask(stateUpdateTask).execute(ctx).flatMap { result =>
         val marker =
           new File(SbtRuntime.extracted(result.state).get(Keys.baseDirectory), "from-task.txt")
-        assertEquals(readFile(marker), "task-ran")
+        readFile(marker).map(content => assertEquals(content, "task-ran"))
       }
     }
   }
@@ -602,13 +602,13 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
       ReleaseStepIO
         .fromInputTask(stateUpdateInputTask, args = " alpha beta")
         .execute(ctx)
-        .map { result =>
+        .flatMap { result =>
           val marker =
             new File(
               SbtRuntime.extracted(result.state).get(Keys.baseDirectory),
               "from-input-task.txt"
             )
-          assertEquals(readFile(marker), "alpha:beta")
+          readFile(marker).map(content => assertEquals(content, "alpha:beta"))
         }
     }
   }
@@ -646,30 +646,29 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
         )
       Seq(root, api, core)
     }.use { ctx =>
-      ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(ctx).map { result =>
+      ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(ctx).flatMap { result =>
         val extracted = SbtRuntime.extracted(result.state)
-        assertEquals(
-          readFile(new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")),
-          "root"
-        )
-        assertEquals(
-          readFile(
-            new File(
-              extracted.get(LocalProject("api") / Keys.baseDirectory),
-              "aggregated-task-api.txt"
-            )
-          ),
-          "api"
-        )
-        assertEquals(
-          readFile(
-            new File(
-              extracted.get(LocalProject("core") / Keys.baseDirectory),
-              "aggregated-task-core.txt"
-            )
-          ),
-          "core"
-        )
+        for {
+          root <- readFile(
+                    new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")
+                  )
+          api  <- readFile(
+                    new File(
+                      extracted.get(LocalProject("api") / Keys.baseDirectory),
+                      "aggregated-task-api.txt"
+                    )
+                  )
+          core <- readFile(
+                    new File(
+                      extracted.get(LocalProject("core") / Keys.baseDirectory),
+                      "aggregated-task-core.txt"
+                    )
+                  )
+        } yield {
+          assertEquals(root, "root")
+          assertEquals(api, "api")
+          assertEquals(core, "core")
+        }
       }
     }
   }
@@ -707,24 +706,25 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
         )
       Seq(root, api, core)
     }.use { ctx =>
-      ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(ctx).map { result =>
+      ReleaseStepIO.fromTaskAggregated(aggregatedTask).execute(ctx).flatMap { result =>
         val extracted = SbtRuntime.extracted(result.state)
-        assertEquals(
-          readFile(new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")),
-          "root"
-        )
-        assert(
-          !new File(
-            extracted.get(LocalProject("api") / Keys.baseDirectory),
-            "aggregated-task-api.txt"
-          ).exists()
-        )
-        assert(
-          !new File(
-            extracted.get(LocalProject("core") / Keys.baseDirectory),
-            "aggregated-task-core.txt"
-          ).exists()
-        )
+        readFile(
+          new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")
+        ).map { root =>
+          assertEquals(root, "root")
+          assert(
+            !new File(
+              extracted.get(LocalProject("api") / Keys.baseDirectory),
+              "aggregated-task-api.txt"
+            ).exists()
+          )
+          assert(
+            !new File(
+              extracted.get(LocalProject("core") / Keys.baseDirectory),
+              "aggregated-task-core.txt"
+            ).exists()
+          )
+        }
       }
     }
   }
@@ -771,8 +771,8 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
   private def scalaVersionOf(state: State): IO[String] =
     IO.blocking(SbtRuntime.extracted(state).get(Keys.scalaVersion))
 
-  private def readFile(file: File): String =
-    sbt.IO.read(file, StandardCharsets.UTF_8)
+  private def readFile(file: File): IO[String] =
+    IO.blocking(sbt.IO.read(file, StandardCharsets.UTF_8))
 
   private val stateUpdateTask      = taskKey[String]("stateUpdateTask")
   private val stateUpdateInputTask = inputKey[String]("stateUpdateInputTask")
