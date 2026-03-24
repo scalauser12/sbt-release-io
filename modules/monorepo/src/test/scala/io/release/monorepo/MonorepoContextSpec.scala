@@ -1,9 +1,10 @@
 package io.release.monorepo
 
-import io.release.internal.ExecutionFlags
 import io.release.TestSupport
+import io.release.internal.ExecutionFlags
 import munit.FunSuite
-import sbt.{AttributeKey, State}
+import sbt.AttributeKey
+import sbt.State
 
 import java.nio.file.Files
 

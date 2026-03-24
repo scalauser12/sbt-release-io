@@ -1,8 +1,12 @@
 package io.release.steps
 
-import io.release.{ReleaseIO, ReleaseIOCompat}
+import io.release.ReleaseIO
+import io.release.ReleaseIOCompat
+import sbt.*
+import sbt.Def
 import sbt.Keys.*
-import sbt.{Def, Setting, State, *}
+import sbt.Setting
+import sbt.State
 
 import java.io.File
 

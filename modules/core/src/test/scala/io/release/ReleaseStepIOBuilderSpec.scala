@@ -1,6 +1,7 @@
 package io.release
 
-import cats.effect.{IO, Ref}
+import cats.effect.IO
+import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
 

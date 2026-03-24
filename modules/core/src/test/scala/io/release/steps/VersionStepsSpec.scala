@@ -1,13 +1,16 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, TestAssertions, TestSupport}
-
-import java.util.concurrent.atomic.AtomicInteger
-import io.release.internal.{CoreExecutionState, CoreReleasePlan, ExecutionFlags}
+import io.release.ReleaseContext
+import io.release.TestAssertions
+import io.release.TestSupport
+import io.release.internal.CoreExecutionState
+import io.release.internal.CoreReleasePlan
+import io.release.internal.ExecutionFlags
 import munit.CatsEffectSuite
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class VersionStepsSpec extends CatsEffectSuite {
   private val fixturePrefix = "version-steps-spec"

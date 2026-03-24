@@ -1,7 +1,8 @@
 package io.release.internal
 
+import sbt.internal.Act
+import sbt.internal.Aggregation
 import sbt.internal.Aggregation.KeyValue
-import sbt.internal.{Act, Aggregation}
 import sbt.std.Transform.DummyTaskMap
 import sbt.{internal as _, *}
 

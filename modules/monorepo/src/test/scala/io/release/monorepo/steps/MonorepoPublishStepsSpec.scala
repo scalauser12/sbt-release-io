@@ -1,15 +1,14 @@
 package io.release.monorepo.steps
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.ReleaseIO
-import io.release.internal.PublishValidation
-import io.release.monorepo.{
-  MonorepoProjectFailures,
-  MonorepoReleaseIO,
-  MonorepoSpecSupport,
-  MonorepoStepIO
-}
 import io.release.TestAssertions.assertFailure
+import io.release.internal.PublishValidation
+import io.release.monorepo.MonorepoProjectFailures
+import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.MonorepoStepIO
 import munit.CatsEffectSuite
 import sbt.*
 

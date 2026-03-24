@@ -1,16 +1,26 @@
 package io.release
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.internal.SbtRuntime
 import io.release.vcs.Vcs
-import sbt.{Project, Setting, State}
-import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
+import sbt.Project
+import sbt.Setting
+import sbt.State
+import sbt.internal.util.AttributeMap
+import sbt.internal.util.ConsoleOut
+import sbt.internal.util.GlobalLogging
+import sbt.internal.util.MainAppender
 import xsbti.*
 
 import java.io.File
 import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.{FileVisitResult, Files, LinkOption, Path, SimpleFileVisitor}
 import scala.sys.process.Process
 
 /** Shared test fixtures for constructing minimal sbt `State` instances and test repositories. */

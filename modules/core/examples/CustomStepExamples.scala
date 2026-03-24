@@ -1,7 +1,10 @@
 package io.release.examples
 
-import cats.effect.{IO, Resource}
-import io.release.{ReleaseContext, ReleasePluginIOLike, ReleaseStepIO}
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.ReleaseContext
+import io.release.ReleasePluginIOLike
+import io.release.ReleaseStepIO
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.ReleaseSteps
 import sbt.*

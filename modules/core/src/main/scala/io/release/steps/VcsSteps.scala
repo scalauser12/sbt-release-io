@@ -2,11 +2,17 @@ package io.release.steps
 
 import cats.effect.IO
 import cats.syntax.flatMap.*
-import io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
-import io.release.internal.{ReleaseLogPrefixes, SbtRuntime, TagPlan}
+import io.release.ReleaseContext
+import io.release.ReleaseIO.releaseIOTagComment
+import io.release.ReleaseIO.releaseIOTagName
+import io.release.ReleaseIO.releaseIOVcsSign
+import io.release.ReleaseStepIO
+import io.release.VcsOps
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
+import io.release.internal.TagPlan
 import io.release.steps.StepHelpers.*
 import io.release.vcs.Vcs
-import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}

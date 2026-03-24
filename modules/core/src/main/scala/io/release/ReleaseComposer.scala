@@ -1,7 +1,9 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
+import io.release.internal.ExecutionEngine
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import sbt.Keys.*
 import sbt.{internal as _, *}
 

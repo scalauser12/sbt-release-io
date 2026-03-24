@@ -3,7 +3,9 @@ package io.release.vcs
 import cats.effect.IO
 
 import java.io.File
-import scala.sys.process.{Process, ProcessBuilder, ProcessLogger}
+import scala.sys.process.Process
+import scala.sys.process.ProcessBuilder
+import scala.sys.process.ProcessLogger
 
 /** Git implementation of [[Vcs]] with all operations wrapped in `IO.blocking`. */
 class Git(val baseDir: File) extends Vcs {

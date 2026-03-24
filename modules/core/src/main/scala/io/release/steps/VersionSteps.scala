@@ -1,10 +1,14 @@
 package io.release.steps
 
 import cats.effect.IO
+import io.release.ReleaseContext
 import io.release.ReleaseIO.*
-import io.release.internal.{ReleaseLogPrefixes, SbtRuntime, VersionPlan}
+import io.release.ReleaseStepIO
+import io.release.VcsOps
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
+import io.release.internal.VersionPlan
 import io.release.steps.StepHelpers.*
-import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}

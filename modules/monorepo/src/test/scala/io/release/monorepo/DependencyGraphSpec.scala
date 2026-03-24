@@ -1,6 +1,7 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.internal.SbtRuntime

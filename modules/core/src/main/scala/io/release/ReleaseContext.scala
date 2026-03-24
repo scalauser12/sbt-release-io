@@ -1,6 +1,7 @@
 package io.release
 
-import io.release.internal.{CoreExecutionState, ExecutionFlags}
+import io.release.internal.CoreExecutionState
+import io.release.internal.ExecutionFlags
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 

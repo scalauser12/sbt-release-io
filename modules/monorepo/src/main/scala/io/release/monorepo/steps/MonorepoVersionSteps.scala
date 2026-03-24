@@ -1,8 +1,10 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.{releaseIONextVersion, releaseIOVersion}
-import io.release.internal.{ReleaseLogPrefixes, SbtRuntime}
+import io.release.ReleaseIO.releaseIONextVersion
+import io.release.ReleaseIO.releaseIOVersion
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.steps.MonorepoVcsCommitHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}

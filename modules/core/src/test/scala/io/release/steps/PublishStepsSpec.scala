@@ -1,12 +1,16 @@
 package io.release.steps
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.ReleaseContext
+import io.release.ReleaseIO
+import io.release.ReleaseIOCompat
 import io.release.TestAssertions.assertFailure
+import io.release.TestSupport
 import io.release.internal.SbtCompat
-import io.release.{ReleaseContext, ReleaseIO, ReleaseIOCompat, TestSupport}
 import munit.CatsEffectSuite
-import sbt.Keys.*
 import sbt.*
+import sbt.Keys.*
 
 import java.io.File
 
@@ -30,7 +34,7 @@ class PublishStepsSpec extends CatsEffectSuite {
         assert(
           result.failureCause.exists(
             _.getMessage.contains(
-              s"publish-artifacts: sbt task " +
+              "publish-artifacts: sbt task " +
                 s"'${ReleaseIO.releaseIOPublishArtifactsAction.key.label}'"
             )
           )

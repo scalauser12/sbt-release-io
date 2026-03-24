@@ -1,6 +1,8 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Ref, Resource}
+import cats.effect.IO
+import cats.effect.Ref
+import cats.effect.Resource
 import io.release.TestSupport
 import munit.CatsEffectSuite
 import sbt.AttributeKey

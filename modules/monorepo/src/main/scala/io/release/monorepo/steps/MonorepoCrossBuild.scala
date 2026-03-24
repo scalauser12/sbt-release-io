@@ -2,7 +2,8 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.internal.{ReleaseLogPrefixes, SbtRuntime}
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import io.release.monorepo.*
 import sbt.Keys.*
 import sbt.{internal as _, *}

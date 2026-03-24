@@ -2,10 +2,12 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.ReleaseIO.{releaseIOVcsSign, releaseIOVcsSignOff}
+import io.release.ReleaseIO.releaseIOVcsSign
+import io.release.ReleaseIO.releaseIOVcsSignOff
 import io.release.VcsOps
 import io.release.monorepo.*
-import io.release.monorepo.steps.MonorepoStepHelpers.{logInfo, versionSummary}
+import io.release.monorepo.steps.MonorepoStepHelpers.logInfo
+import io.release.monorepo.steps.MonorepoStepHelpers.versionSummary
 import io.release.steps.StepHelpers.required
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}

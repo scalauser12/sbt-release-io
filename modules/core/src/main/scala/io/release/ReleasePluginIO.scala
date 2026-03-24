@@ -1,13 +1,13 @@
 package io.release
 
-import cats.effect.{IO, Resource}
-import io.release.internal.{
-  CoreExecutionState,
-  CoreReleasePlan,
-  ReleaseCommandRunner,
-  ReleaseLogPrefixes
-}
-import io.release.steps.{ReleaseSteps, StepHelpers}
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.internal.CoreExecutionState
+import io.release.internal.CoreReleasePlan
+import io.release.internal.ReleaseCommandRunner
+import io.release.internal.ReleaseLogPrefixes
+import io.release.steps.ReleaseSteps
+import io.release.steps.StepHelpers
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt.Keys.*

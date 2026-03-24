@@ -1,21 +1,28 @@
 package io.release.monorepo.steps
 
-import cats.effect.{IO, Ref, Resource}
+import cats.effect.IO
+import cats.effect.Ref
+import cats.effect.Resource
+import io.release.TestAssertions
+import io.release.TestSupport
 import io.release.internal.SbtRuntime
-import io.release.monorepo.{
-  MonorepoContext,
-  MonorepoReleaseIO,
-  MonorepoSpecSupport,
-  MonorepoTagStrategy,
-  ProjectReleaseInfo,
-  SelectionMode
-}
-import io.release.{TestAssertions, TestSupport}
+import io.release.monorepo.MonorepoContext
+import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.MonorepoTagStrategy
+import io.release.monorepo.ProjectReleaseInfo
+import io.release.monorepo.SelectionMode
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.{Def, LocalProject, Project, ProjectRef, State}
+import sbt.Def
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.State
 
-import java.io.{ByteArrayInputStream, File, InputStream}
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
 

@@ -1,10 +1,15 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Resource}
-import io.release.internal.{ExecutionFlags, ReleaseCommandRunner, ReleaseLogPrefixes}
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.PluginLikeSupport
+import io.release.ReleaseKeys
+import io.release.ReleasePluginIO
+import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseCommandRunner
+import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.MonorepoTagStrategy as MonorepoTagStrategy_
 import io.release.steps.StepHelpers
-import io.release.{PluginLikeSupport, ReleaseKeys, ReleasePluginIO}
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser

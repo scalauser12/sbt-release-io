@@ -197,7 +197,7 @@ private[monorepo] object MonorepoSelectionResolver {
            )
       _ <- failWhen(
              invalidOverrides.nonEmpty,
-             s"Unknown projects in version overrides: " +
+             "Unknown projects in version overrides: " +
                s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}"
            )
       _ <- failWhen(
@@ -208,9 +208,9 @@ private[monorepo] object MonorepoSelectionResolver {
       _ <- failWhen(
              useGlobalVersion && plan.selectedNames.nonEmpty &&
                plan.selectedNames.toSet != validNames,
-             s"Global version mode is active — all projects share a single " +
+             "Global version mode is active — all projects share a single " +
                s"version file. Selecting a subset of projects (${plan.selectedNames.mkString(", ")}) is " +
-               s"not supported. Release all projects or disable releaseIOMonorepoUseGlobalVersion."
+               "not supported. Release all projects or disable releaseIOMonorepoUseGlobalVersion."
            )
       _ <- failWhen(
              useGlobalVersion &&
@@ -233,7 +233,7 @@ private[monorepo] object MonorepoSelectionResolver {
       val unused        = overrideNames -- selectedNames
       IO.raiseUnless(unused.isEmpty)(
         new IllegalStateException(
-          s"Version overrides target projects not selected for release: " +
+          "Version overrides target projects not selected for release: " +
             s"${unused.mkString(", ")}. " +
             s"Selected: ${selectedNames.mkString(", ")}"
         )

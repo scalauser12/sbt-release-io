@@ -1,9 +1,14 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
-import sbt.{ClasspathDependency, LocalProject, Project, ProjectRef, classpathDependency}
+import sbt.ClasspathDependency
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.classpathDependency
 
 import java.io.File
 

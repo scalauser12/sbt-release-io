@@ -1,15 +1,16 @@
 package io.release.monorepo.steps
 
-import cats.effect.{Deferred, IO, Outcome, Ref}
+import cats.effect.Deferred
+import cats.effect.IO
+import cats.effect.Outcome
+import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
-import io.release.monorepo.{
-  MonorepoContext,
-  MonorepoReleaseIO,
-  MonorepoSpecSupport,
-  MonorepoTagStrategy,
-  MonorepoTestSupport,
-  SelectionMode
-}
+import io.release.monorepo.MonorepoContext
+import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.MonorepoTagStrategy
+import io.release.monorepo.MonorepoTestSupport
+import io.release.monorepo.SelectionMode
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 

@@ -1,15 +1,17 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOPublishArtifactsChecks}
-import io.release.internal.{
-  PublishValidation,
-  ReleaseLogPrefixes,
-  SbtRuntime,
-  SnapshotDependencyTasks
-}
+import io.release.CleanCompat
+import io.release.ReleaseContext
+import io.release.ReleaseIO.releaseIOPublishArtifactsAction
+import io.release.ReleaseIO.releaseIOPublishArtifactsChecks
+import io.release.ReleaseIOCompat
+import io.release.ReleaseStepIO
+import io.release.internal.PublishValidation
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
+import io.release.internal.SnapshotDependencyTasks
 import io.release.steps.StepHelpers.*
-import io.release.{CleanCompat, ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -133,9 +135,9 @@ private[release] object PublishSteps {
   /** Resolve the projects that `runAggregated` will actually execute for the publish task.
     * Respects per-task `aggregate := false` so validation matches execution.
     */
-  private def effectiveAggregates[A](
+  private def effectiveAggregates(
       extracted: Extracted,
-      taskKey: TaskKey[A]
+      taskKey: TaskKey[?]
   ): Seq[ProjectRef] = {
     val scopedKey = (extracted.currentRef / taskKey).scopedKey
     val enabled   = sbt.internal.Aggregation.aggregationEnabled(scopedKey, extracted.structure.data)

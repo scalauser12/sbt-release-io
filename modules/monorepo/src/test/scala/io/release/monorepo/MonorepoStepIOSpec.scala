@@ -1,13 +1,21 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Ref, Resource}
+import cats.effect.IO
+import cats.effect.Ref
+import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.internal.{SbtCompat, SbtRuntime}
-import io.release.monorepo.steps.{MonorepoPublishSteps, MonorepoStepTestCompat}
+import io.release.internal.SbtCompat
+import io.release.internal.SbtRuntime
+import io.release.monorepo.steps.MonorepoPublishSteps
+import io.release.monorepo.steps.MonorepoStepTestCompat
 import munit.CatsEffectSuite
+import sbt.AttributeKey
 import sbt.Keys.*
-import sbt.{AttributeKey, LocalProject, Project, ProjectRef, State}
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.State
 
 import java.io.File
 import java.nio.file.Files

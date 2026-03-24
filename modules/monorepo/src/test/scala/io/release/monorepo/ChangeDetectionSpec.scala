@@ -1,13 +1,20 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.TestSupport
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.internal.util.{AttributeMap, ConsoleOut, GlobalLogging, MainAppender}
-import sbt.{ProjectRef, State}
+import sbt.ProjectRef
+import sbt.State
+import sbt.internal.util.AttributeMap
+import sbt.internal.util.ConsoleOut
+import sbt.internal.util.GlobalLogging
+import sbt.internal.util.MainAppender
 
-import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.PrintStream
 import java.nio.file.Files
 
 class ChangeDetectionSpec extends CatsEffectSuite {

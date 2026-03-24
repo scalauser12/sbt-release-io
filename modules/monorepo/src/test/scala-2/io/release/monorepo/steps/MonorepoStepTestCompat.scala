@@ -1,8 +1,9 @@
 package io.release.monorepo.steps
 
 import io.release.ReleaseIOCompat
+import sbt.*
 import sbt.Keys.*
-import sbt.{Setting, *}
+import sbt.Setting
 
 import java.io.File
 

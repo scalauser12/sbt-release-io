@@ -2,7 +2,9 @@ package io.release
 
 import io.release.internal.ExecutionFlags
 import io.release.vcs.Vcs
-import sbt.{AttributeKey, AttributeMap, State}
+import sbt.AttributeKey
+import sbt.AttributeMap
+import sbt.State
 
 /** Common interface for immutable release contexts threaded through steps.
   *

@@ -1,13 +1,16 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
+import io.release.CleanCompat
 import io.release.ReleaseIO.releaseIOPublishArtifactsAction
-import io.release.internal.{PublishValidation, ReleaseLogPrefixes, SnapshotDependencyTasks}
+import io.release.ReleaseIOCompat
+import io.release.internal.PublishValidation
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SnapshotDependencyTasks
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers
-import io.release.{CleanCompat, ReleaseIOCompat}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 

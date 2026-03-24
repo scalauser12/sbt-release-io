@@ -112,7 +112,7 @@ private[monorepo] object DependencyGraph {
           val remaining = uniqueProjects.filterNot(result.contains)
           IO.raiseError(
             new IllegalStateException(
-              s"Circular dependency detected among monorepo projects: " +
+              "Circular dependency detected among monorepo projects: " +
                 remaining.map(_.project).mkString(", ")
             )
           )

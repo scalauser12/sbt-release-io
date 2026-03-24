@@ -1,11 +1,13 @@
 package io.release
 
 import cats.effect.IO
-import io.release.TestAssertions.{assertFailure, assertIllegalStateMessage}
+import io.release.TestAssertions.assertFailure
+import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.steps.StepHelpers
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.{AttributeKey, ModuleID}
+import sbt.AttributeKey
+import sbt.ModuleID
 
 import scala.sys.process.Process
 

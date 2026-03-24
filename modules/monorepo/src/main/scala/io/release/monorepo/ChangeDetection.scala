@@ -6,7 +6,9 @@ import io.release.steps.StepHelpers.errorMessage
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 /** Git diff-based change detection for monorepo subprojects. */
 private[monorepo] object ChangeDetection {

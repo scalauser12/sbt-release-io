@@ -7,7 +7,10 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.steps.MonorepoVcsCommitHelpers.validateVersionConsistency
-import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
+import io.release.steps.StepHelpers.askYesNo
+import io.release.steps.StepHelpers.required
+import io.release.steps.StepHelpers.runProcess
+import io.release.steps.StepHelpers.useDefaults
 import io.release.vcs.Vcs
 
 import scala.sys.process.Process

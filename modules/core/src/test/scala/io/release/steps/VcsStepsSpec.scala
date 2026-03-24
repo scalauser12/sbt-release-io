@@ -1,10 +1,15 @@
 package io.release.steps
 
-import cats.effect.{IO, Resource}
-import io.release.{ReleaseContext, TestAssertions, TestSupport}
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.ReleaseContext
+import io.release.TestAssertions
+import io.release.TestSupport
 import munit.CatsEffectSuite
 
-import java.io.{ByteArrayInputStream, File, InputStream}
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
 

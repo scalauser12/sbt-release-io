@@ -1,28 +1,26 @@
 package io.release
 
-import cats.effect.{IO, Ref, Resource}
-import io.release.internal.{
-  CoreExecutionState,
-  CoreReleasePlan,
-  ExecutionFlags,
-  SbtCompat,
-  SbtRuntime
-}
+import cats.effect.IO
+import cats.effect.Ref
+import cats.effect.Resource
+import io.release.internal.CoreExecutionState
+import io.release.internal.CoreReleasePlan
+import io.release.internal.ExecutionFlags
+import io.release.internal.SbtCompat
+import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
+import sbt.AttributeKey
+import sbt.Def
 import sbt.Def.*
-import sbt.{
-  AttributeKey,
-  Def,
-  InputKey,
-  Keys,
-  LocalProject,
-  Project,
-  ProjectRef,
-  State,
-  TaskKey,
-  inputKey,
-  taskKey
-}
+import sbt.InputKey
+import sbt.Keys
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.State
+import sbt.TaskKey
+import sbt.inputKey
+import sbt.taskKey
 
 import java.io.File
 import java.nio.charset.StandardCharsets

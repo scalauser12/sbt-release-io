@@ -1,8 +1,10 @@
 package io.release.monorepo.examples
 
-import cats.effect.{IO, Resource}
-import io.release.monorepo.{MonorepoReleasePluginLike, MonorepoStepIO}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.monorepo.MonorepoReleaseIO.insertStepAfter
+import io.release.monorepo.MonorepoReleasePluginLike
+import io.release.monorepo.MonorepoStepIO
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import sbt.*
 import sbt.Keys.*

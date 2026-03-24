@@ -1,7 +1,7 @@
 package io.release.monorepo
 
-import io.release.internal.ExecutionFlags
 import io.release.ReleaseCtx
+import io.release.internal.ExecutionFlags
 import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}

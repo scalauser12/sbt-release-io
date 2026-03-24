@@ -1,11 +1,17 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.TestSupport
-import io.release.internal.{ExecutionFlags, SbtRuntime}
+import io.release.internal.ExecutionFlags
+import io.release.internal.SbtRuntime
 import io.release.vcs.Vcs
 import munit.Assertions.fail
-import sbt.{Def, LocalProject, Project, ProjectRef, State}
+import sbt.Def
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.State
 
 import java.io.File
 

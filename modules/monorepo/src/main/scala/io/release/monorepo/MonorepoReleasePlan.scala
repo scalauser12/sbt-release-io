@@ -1,7 +1,8 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.internal.{ExecutionFlags, ReleaseLogPrefixes}
+import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseLogPrefixes
 import sbt.State
 
 /** How project selection is determined for a monorepo release. */

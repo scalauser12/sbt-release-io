@@ -1,8 +1,11 @@
 package io.release
 
 import sbt.Def.ScopedKey
+import sbt.Inc
+import sbt.Incomplete
+import sbt.Result
+import sbt.Value
 import sbt.internal.Aggregation.KeyValue
-import sbt.{Inc, Incomplete, Result, Value}
 
 private[release] object ResultTestCompat {
   def aggregatedSuccess[T](values: Seq[Seq[T]]): Result[Seq[KeyValue[Seq[T]]]] =
