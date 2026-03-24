@@ -66,7 +66,8 @@ private[release] object PublishSteps {
             for {
               missing <- IO.blocking {
                            val extracted = SbtRuntime.extracted(ctx.state)
-                           val allRefs   = transitiveAggregates(extracted)
+                           val allRefs   =
+                             effectiveAggregates(extracted, releaseIOPublishArtifactsAction)
                            allRefs
                              .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
                              .filter(r => checkPublishToMissing(extracted, r, ctx.state))
@@ -129,19 +130,30 @@ private[release] object PublishSteps {
       ctx.withState(cleaned).failWith(new IllegalStateException(failureMessage))
     } else ctx.withState(newState)
 
-  private def transitiveAggregates(extracted: Extracted): Seq[ProjectRef] = {
-    val units                                                            = extracted.structure.units
-    def resolve(ref: ProjectRef): Seq[ProjectRef]                        = {
-      val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
-      project.map(_.aggregate).getOrElse(Seq.empty)
-    }
-    def loop(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
-      if (visited.contains(ref)) Seq.empty
-      else {
-        val direct = resolve(ref)
-        direct.flatMap(agg => agg +: loop(agg, visited + ref))
+  /** Resolve the projects that `runAggregated` will actually execute for the publish task.
+    * Respects per-task `aggregate := false` so validation matches execution.
+    */
+  private def effectiveAggregates(
+      extracted: Extracted,
+      taskKey: TaskKey[?]
+  ): Seq[ProjectRef] = {
+    val scopedKey = (extracted.currentRef / taskKey).scopedKey
+    val enabled   = sbt.internal.Aggregation.aggregationEnabled(scopedKey, extracted.structure.data)
+    if (!enabled) Seq(extracted.currentRef)
+    else {
+      val units = extracted.structure.units
+      def resolve(ref: ProjectRef): Seq[ProjectRef] = {
+        val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
+        project.map(_.aggregate).getOrElse(Seq.empty)
       }
-    (extracted.currentRef +: loop(extracted.currentRef, Set.empty)).distinct
+      def loop(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
+        if (visited.contains(ref)) Seq.empty
+        else {
+          val direct = resolve(ref)
+          direct.flatMap(agg => agg +: loop(agg, visited + ref))
+        }
+      (extracted.currentRef +: loop(extracted.currentRef, Set.empty)).distinct
+    }
   }
 
   private def checkPublishSkip(

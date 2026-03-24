@@ -55,6 +55,16 @@ private[release] object VersionSteps {
     )
   }
 
+  private final case class InquireData(
+      state: State,
+      currentVersion: String,
+      suggestedRelease: String,
+      nextVersionFn: String => String,
+      releaseVersionArg: Option[String],
+      nextVersionArg: Option[String],
+      useDefaults: Boolean
+  )
+
   private val versionPattern = """(?:ThisBuild\s*/\s*)?version\s*:=\s*"([^"]+)"""".r
 
   /** Default version file reader. Parses `[ThisBuild /] version := "x.y.z"`.
@@ -64,17 +74,14 @@ private[release] object VersionSteps {
     for {
       contents <- IO.blocking(sbt.IO.read(file))
       result   <- IO.fromOption {
-                    contents.linesIterator
+                    contents
+                      .replaceAll("""(?s)/\*.*?\*/""", "")
+                      .linesIterator
                       .map(_.trim)
-                      .foldLeft((false, Option.empty[String])) { case ((inBlock, found), line) =>
-                        if (found.nonEmpty) (inBlock, found)
-                        else if (inBlock) (!inBlock || !line.contains("*/"), None)
-                        else if (line.startsWith("/*")) (!line.contains("*/"), None)
-                        else if (line.startsWith("//")) (false, None)
-                        else
-                          (false, versionPattern.findFirstMatchIn(line).map(_.group(1)))
-                      }
-                      ._2
+                      .filterNot(_.startsWith("//"))
+                      .flatMap(versionPattern.findFirstMatchIn(_).map(_.group(1)))
+                      .buffered
+                      .headOption
                   }(
                     new IllegalStateException(
                       s"Could not parse version from ${file.getName}. " +
@@ -105,16 +112,6 @@ private[release] object VersionSteps {
         else IO.unit
       },
     execute = { ctx =>
-      final case class InquireData(
-          state: State,
-          currentVersion: String,
-          suggestedRelease: String,
-          nextVersionFn: String => String,
-          releaseVersionArg: Option[String],
-          nextVersionArg: Option[String],
-          useDefaults: Boolean
-      )
-
       for {
         versionPlan <- IO.blocking(resolveVersionPlan(ctx))
         currentVer  <- versionPlan.readVersion(versionPlan.versionFile)

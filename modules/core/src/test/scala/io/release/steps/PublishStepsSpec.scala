@@ -109,6 +109,46 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "publishArtifacts.validate - pass when child has no publishTo but " +
+      "publish task aggregate is false"
+  ) {
+    multiProjectContextResource(
+      s"$fixturePrefix-val-agg-false",
+      rootSettings = Seq(
+        ReleaseIO.releaseIOPublishArtifactsChecks                   := true,
+        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate  := false,
+        publishTo                                                   := Some(
+          Resolver.file("local", new File("target/repo"))
+        )
+      ),
+      childSettings = Seq.empty // no publishTo on child
+    ).use { case (ctx, _) =>
+      PublishSteps.publishArtifacts.validate(ctx)
+    }
+  }
+
+  test(
+    "publishArtifacts.validate - fail when child has no publishTo and " +
+      "publish task aggregate is true"
+  ) {
+    multiProjectContextResource(
+      s"$fixturePrefix-val-agg-true",
+      rootSettings = Seq(
+        ReleaseIO.releaseIOPublishArtifactsChecks                   := true,
+        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate  := true,
+        publishTo                                                   := Some(
+          Resolver.file("local", new File("target/repo"))
+        )
+      ),
+      childSettings = Seq.empty // no publishTo on child
+    ).use { case (ctx, _) =>
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.publishArtifacts.validate(ctx)
+      )(err => assert(err.getMessage.contains("publishTo not configured")))
+    }
+  }
+
   // ── runTests.execute ────────────────────────────────────────────────
 
   test(
@@ -174,6 +214,30 @@ class PublishStepsSpec extends CatsEffectSuite {
   }
 
   // ── helpers ─────────────────────────────────────────────────────────
+
+  private def multiProjectContextResource(
+      prefix: String,
+      rootSettings: Seq[Setting[?]],
+      childSettings: Seq[Setting[?]]
+  ): Resource[IO, (ReleaseContext, Unit)] =
+    TestSupport.tempDirResource(prefix).evalMap { dir =>
+      IO.blocking {
+        val childBase = new File(dir, "child")
+        childBase.mkdirs()
+        val state = TestSupport.loadedState(
+          dir,
+          Seq(
+            Project("root", dir)
+              .aggregate(LocalProject("child"))
+              .settings(rootSettings*),
+            Project("child", childBase)
+              .settings(childSettings*)
+          ),
+          currentProjectId = Some("root")
+        )
+        (ReleaseContext(state = state), ())
+      }
+    }
 
   private def loadedContextResource[A](
       prefix: String

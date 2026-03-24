@@ -56,14 +56,16 @@ class Git(val baseDir: File) extends Vcs {
   // ── Queries ──────────────────────────────────────────────────────────
 
   def currentHash: IO[String] =
-    IO.blocking(cmd("rev-parse", "HEAD").!!.trim)
+    runLines("rev-parse", "HEAD")("git rev-parse HEAD").map(_.head)
 
   def currentBranch: IO[String] =
-    IO.blocking(cmd("symbolic-ref", "HEAD").!!.trim.stripPrefix("refs/heads/"))
+    runLines("symbolic-ref", "HEAD")("git symbolic-ref HEAD")
+      .map(_.head.stripPrefix("refs/heads/"))
 
   def trackingRemote: IO[String] =
     currentBranch.flatMap { branch =>
-      IO.blocking(cmd("config", s"branch.$branch.remote").!!.trim)
+      runLines("config", s"branch.$branch.remote")(s"git config branch.$branch.remote")
+        .map(_.head)
     }
 
   def hasUpstream: IO[Boolean] =
@@ -79,9 +81,11 @@ class Git(val baseDir: File) extends Vcs {
       info            <- branchInfo
       (branch, remote) = info
       upstream        <-
-        IO.blocking(cmd("config", s"branch.$branch.merge").!!.trim.stripPrefix("refs/heads/"))
+        runLines("config", s"branch.$branch.merge")(s"git config branch.$branch.merge")
+          .map(_.head.stripPrefix("refs/heads/"))
       behind          <-
-        IO.blocking(cmd("rev-list", s"$branch..$remote/$upstream").!!(devnull).trim.nonEmpty)
+        runLines("rev-list", s"$branch..$remote/$upstream")("git rev-list")
+          .map(_.nonEmpty)
     } yield behind
 
   def existsTag(name: String): IO[Boolean] =
@@ -145,9 +149,9 @@ class Git(val baseDir: File) extends Vcs {
     for {
       info            <- branchInfo
       (branch, remote) = info
-      upstream        <- IO.blocking(
-                           cmd("config", s"branch.$branch.merge").!!.trim.stripPrefix("refs/heads/")
-                         )
+      upstream        <- runLines("config", s"branch.$branch.merge")(
+                           s"git config branch.$branch.merge"
+                         ).map(_.head.stripPrefix("refs/heads/"))
       _               <- runCmd("push", "--follow-tags", remote, s"$branch:$upstream")(
                            "git push --follow-tags"
                          )
