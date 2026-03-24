@@ -16,6 +16,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
 | [Change detection](change-detection.md) | Git diff, downstream, overrides, custom detectors |
 | [Tagging and versions](tagging-and-versions.md) | Per-project vs unified tags, global version mode, cross-build |
 | [Customization](customization.md) | Custom steps, builder API, custom plugins, step timing |
+| [Recipes](recipes.md) | Cross-build, CI/CD, dry-run |
 | [Operations](operations.md) | Recovery, migration, testing, compatibility |
 
 Core plugin docs (shared settings and single-project behavior): [../core/README.md](../core/README.md).

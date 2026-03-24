@@ -17,10 +17,9 @@ import _root_.io.release.monorepo.MonorepoStepIO
 val printSummary = MonorepoStepIO
   .global("print-summary")
   .executeAction(ctx =>
-    IO.blocking {
-      val names = ctx.currentProjects.map(_.name).mkString(", ")
-      ctx.state.log.info(s"[release] Releasing projects: $names")
-    }
+    IO.println(
+      s"[release] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}"
+    )
   )
 
 // Per-project step — runs once per selected project
@@ -177,7 +176,7 @@ releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(_.name == "
 
 // Add a step at a specific position
 releaseIOMonorepoProcess := insertStepBefore(releaseIOMonorepoProcess.value, "tag-releases")(
-  Seq(validateBranch)
+  Seq(checkBranch)
 )
 
 // Replace the entire process (step vals from MonorepoReleaseSteps)
