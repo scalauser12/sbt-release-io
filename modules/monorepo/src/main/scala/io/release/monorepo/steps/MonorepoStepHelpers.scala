@@ -49,16 +49,18 @@ private[monorepo] object MonorepoStepHelpers {
           else
             action(currentCtx, latestProj)
               .map(detectProjectFailureCommand(_, latestProj))
-              .handleErrorWith { case NonFatal(err) =>
-                IO.blocking(
-                  currentCtx.state.log.error(
-                    s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
+              .handleErrorWith {
+                case NonFatal(err) =>
+                  IO.blocking(
+                    currentCtx.state.log.error(
+                      s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
+                    )
+                  ) *> IO.pure(
+                    currentCtx.updateProject(latestProj.ref)(
+                      _.copy(failed = true, failureCause = Some(err))
+                    )
                   )
-                ) *> IO.pure(
-                  currentCtx.updateProject(latestProj.ref)(
-                    _.copy(failed = true, failureCause = Some(err))
-                  )
-                )
+                case fatal         => IO.raiseError(fatal)
               }
         }
       }
