@@ -133,9 +133,9 @@ private[release] object PublishSteps {
   /** Resolve the projects that `runAggregated` will actually execute for the publish task.
     * Respects per-task `aggregate := false` so validation matches execution.
     */
-  private def effectiveAggregates(
+  private def effectiveAggregates[A](
       extracted: Extracted,
-      taskKey: TaskKey[?]
+      taskKey: TaskKey[A]
   ): Seq[ProjectRef] = {
     val scopedKey = (extracted.currentRef / taskKey).scopedKey
     val enabled   = sbt.internal.Aggregation.aggregationEnabled(scopedKey, extracted.structure.data)
