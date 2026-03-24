@@ -116,9 +116,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-false",
       rootSettings = Seq(
-        ReleaseIO.releaseIOPublishArtifactsChecks                   := true,
-        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate  := false,
-        publishTo                                                   := Some(
+        ReleaseIO.releaseIOPublishArtifactsChecks                  := true,
+        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate := false,
+        publishTo                                                  := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),
@@ -135,9 +135,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-true",
       rootSettings = Seq(
-        ReleaseIO.releaseIOPublishArtifactsChecks                   := true,
-        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate  := true,
-        publishTo                                                   := Some(
+        ReleaseIO.releaseIOPublishArtifactsChecks                  := true,
+        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate := true,
+        publishTo                                                  := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),
@@ -224,7 +224,7 @@ class PublishStepsSpec extends CatsEffectSuite {
       IO.blocking {
         val childBase = new File(dir, "child")
         childBase.mkdirs()
-        val state = TestSupport.loadedState(
+        val state     = TestSupport.loadedState(
           dir,
           Seq(
             Project("root", dir)

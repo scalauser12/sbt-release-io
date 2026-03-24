@@ -141,8 +141,8 @@ private[release] object PublishSteps {
     val enabled   = sbt.internal.Aggregation.aggregationEnabled(scopedKey, extracted.structure.data)
     if (!enabled) Seq(extracted.currentRef)
     else {
-      val units = extracted.structure.units
-      def resolve(ref: ProjectRef): Seq[ProjectRef] = {
+      val units                                                            = extracted.structure.units
+      def resolve(ref: ProjectRef): Seq[ProjectRef]                        = {
         val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
         project.map(_.aggregate).getOrElse(Seq.empty)
       }
