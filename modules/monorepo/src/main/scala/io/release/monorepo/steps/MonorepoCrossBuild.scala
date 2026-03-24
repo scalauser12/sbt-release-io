@@ -93,7 +93,7 @@ private[monorepo] object MonorepoCrossBuild {
       action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
       switcher: VersionSwitcher
   ): IO[MonorepoContext] = {
-    def detectFailure(c: MonorepoContext): MonorepoContext =
+    def detectFailure(c: MonorepoContext): IO[MonorepoContext] =
       MonorepoStepHelpers.detectProjectFailureCommand(c, project)
 
     if (crossVersions.length == 1)
@@ -101,7 +101,7 @@ private[monorepo] object MonorepoCrossBuild {
         .runIteration(ctx, crossVersions.head, action, project) {
           s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
         }
-        .map(detectFailure)
+        .flatMap(detectFailure)
         .flatMap(switcher.restoreEntry)
     else
       crossVersions.toList
@@ -115,7 +115,7 @@ private[monorepo] object MonorepoCrossBuild {
                 .runIteration(currentCtx, version, action, project) {
                   s"$LogPrefix Cross-building with Scala $version"
                 }
-                .map(detectFailure)
+                .flatMap(detectFailure)
           }
         }
         .flatMap(switcher.restoreEntry)

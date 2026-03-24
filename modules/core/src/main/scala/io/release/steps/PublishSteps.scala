@@ -143,18 +143,23 @@ private[release] object PublishSteps {
     val enabled   = sbt.internal.Aggregation.aggregationEnabled(scopedKey, extracted.structure.data)
     if (!enabled) Seq(extracted.currentRef)
     else {
-      val units                                                            = extracted.structure.units
-      def resolve(ref: ProjectRef): Seq[ProjectRef]                        = {
+      val units = extracted.structure.units
+      def resolve(ref: ProjectRef): Seq[ProjectRef] = {
         val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
         project.map(_.aggregate).getOrElse(Seq.empty)
       }
-      def loop(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
-        if (visited.contains(ref)) Seq.empty
-        else {
-          val direct = resolve(ref)
-          direct.flatMap(agg => agg +: loop(agg, visited + ref))
+      def loop(
+          refs: Seq[ProjectRef],
+          visited: Set[ProjectRef]
+      ): (Seq[ProjectRef], Set[ProjectRef]) =
+        refs.foldLeft((Seq.empty[ProjectRef], visited)) { case ((acc, vis), ref) =>
+          if (vis.contains(ref)) (acc, vis)
+          else {
+            val (childAcc, childVis) = loop(resolve(ref), vis + ref)
+            (acc ++ (ref +: childAcc), childVis)
+          }
         }
-      (extracted.currentRef +: loop(extracted.currentRef, Set.empty)).distinct
+      extracted.currentRef +: loop(resolve(extracted.currentRef), Set(extracted.currentRef))._1
     }
   }
 

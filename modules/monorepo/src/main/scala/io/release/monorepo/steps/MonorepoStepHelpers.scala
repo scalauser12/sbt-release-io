@@ -50,7 +50,7 @@ private[monorepo] object MonorepoStepHelpers {
           if (currentCtx.failed || latestProj.failed) IO.pure(currentCtx)
           else
             action(currentCtx, latestProj)
-              .map(detectProjectFailureCommand(_, latestProj))
+              .flatMap(detectProjectFailureCommand(_, latestProj))
               .handleErrorWith {
                 case NonFatal(err) =>
                   IO.blocking(
@@ -84,7 +84,7 @@ private[monorepo] object MonorepoStepHelpers {
   private[monorepo] def detectProjectFailureCommand(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): MonorepoContext =
+  ): IO[MonorepoContext] =
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val failure = new IllegalStateException(
         s"${project.name}: sbt task reported failure via FailureCommand"
@@ -93,9 +93,10 @@ private[monorepo] object MonorepoStepHelpers {
       val result  = ExecutionEngine
         .armOnFailure(ctx.withState(cleaned))
         .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
-      result.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
-      result
-    } else ctx
+      IO.blocking(
+        result.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
+      ).as(result)
+    } else IO.pure(ctx)
 
   // ── Logging ───────────────────────────────────────────────────────────
 
