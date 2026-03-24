@@ -12,7 +12,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 | [Configuration](configuration.md) | `build.sbt` settings, custom version file formats |
 | [Customization](customization.md) | Custom steps, tasks/commands as steps, custom plugins, resource-aware API |
 | [Typelevel libraries](typelevel.md) | HTTP, fs2, and other FP libraries in release steps |
-| [Recipes](recipes.md) | Cross-build, CI/CD, dry-run |
+| [Recipes](recipes.md) | Cross-build, CI/CD, local rehearsal |
 | [Settings reference](reference.md) | All `releaseIO*` settings, version bump types |
 | [Operations](operations.md) | Recovery/rollback, migration, testing, compatibility, execution model vs sbt-release |
 

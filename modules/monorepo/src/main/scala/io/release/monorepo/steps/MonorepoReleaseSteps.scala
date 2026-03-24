@@ -61,8 +61,12 @@ object MonorepoReleaseSteps {
                 case SelectionMode.DetectChanges =>
                   "No projects have changed since their last release tag. " +
                     "Check the per-project log output above for last-known tags. " +
-                    "To release all projects regardless, re-run with the `all-changed` flag."
-                case _                           => "No projects configured. Nothing to release."
+                    "To inspect the planned selection without changes, run `releaseIOMonorepo check`. " +
+                    "To release all projects regardless, re-run with the `all-changed` flag. " +
+                    "See `releaseIOMonorepo help` for details."
+                case _                           =>
+                  "No projects configured. Nothing to release. " +
+                    "See `releaseIOMonorepo help` for setup guidance."
               }
             IO.raiseError(new IllegalStateException(errorMessage))
           } else {

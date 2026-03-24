@@ -89,11 +89,11 @@ jobs:
 | `cross`                       | Enable cross-building            |
 | `release-version <ver>`       | Override the release version     |
 | `next-version <ver>`          | Override the next snapshot version |
-| `default-tag-exists-answer <o\|k\|a>` | Auto-answer the tag-exists prompt |
+| `default-tag-exists-answer <o\|k\|a\|<tag-name>>` | Auto-answer the tag-exists prompt |
 
-## Dry-run / local testing
+## Local rehearsal
 
-To test the release flow without publishing or pushing, omit `push-changes` and skip publish:
+To rehearse a release locally, remove `push-changes`, skip publish, run `check`, then run the real release with explicit versions:
 
 ```scala
 // build.sbt
@@ -101,13 +101,21 @@ releaseIOProcess    := releaseIOProcess.value.filterNot(_.name == "push-changes"
 releaseIOSkipPublish := true
 ```
 
-Then run:
+First run the preflight with no release side effects:
+
+```bash
+sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+```
+
+`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+
+Then run the real release:
 
 ```bash
 sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
-This creates local commits and a tag but does not publish artifacts or push to the remote. Inspect the result:
+The second command creates local commits and a tag but does not publish artifacts or push to the remote. Inspect the result:
 
 ```bash
 git log --oneline -5
@@ -115,7 +123,7 @@ git tag
 cat version.sbt
 ```
 
-To clean up after the dry-run, see [Recovery and rollback](operations.md#recovery-and-rollback):
+To clean up after the rehearsal run, see [Recovery and rollback](operations.md#recovery-and-rollback):
 
 ```bash
 git tag -d v1.0.0

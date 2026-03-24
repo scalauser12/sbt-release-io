@@ -96,9 +96,9 @@ jobs:
 | `cross`        | Enable cross-building                             |
 | `all-changed`  | Release all changed projects (skip interactive selection) |
 
-## Dry-run / local testing
+## Local rehearsal
 
-To test the release flow without publishing or pushing, omit `push-changes` and skip publish:
+To rehearse a release locally, remove `push-changes`, skip publish, run `check`, then run the real release with explicit versions:
 
 ```scala
 // build.sbt
@@ -106,13 +106,23 @@ releaseIOMonorepoProcess    := releaseIOMonorepoProcess.value.filterNot(_.name =
 releaseIOMonorepoSkipPublish := true
 ```
 
-Then run:
+First run the preflight with no release side effects:
 
 ```bash
-sbt "releaseIOMonorepo with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
-This creates local commits and tags but does not publish artifacts or push to the remote. Inspect the result:
+`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+
+Then run the real release:
+
+```bash
+sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+```
+
+The second command creates local commits and tags but does not publish artifacts or push to the remote. If you use global version mode, replace the per-project overrides with `release-version 1.0.0 next-version 1.1.0-SNAPSHOT`.
+
+Inspect the result:
 
 ```bash
 git log --oneline -5
@@ -120,4 +130,4 @@ git tag
 cat version.sbt
 ```
 
-To clean up after the dry-run, see [Recovery and rollback](operations.md#recovery-and-rollback).
+To clean up after the rehearsal run, see [Recovery and rollback](operations.md#recovery-and-rollback).

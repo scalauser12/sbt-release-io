@@ -18,6 +18,13 @@ import scala.sys.process.Process
 /** VCS-related monorepo release steps. */
 private[monorepo] object MonorepoVcsSteps {
 
+  private val DefaultCommandName = "releaseIOMonorepo"
+
+  private[monorepo] final case class PreflightTagOutcome(
+      rendered: String,
+      status: String
+  )
+
   private final case class GitPushTarget(
       remote: String,
       localBranch: String,
@@ -121,6 +128,65 @@ private[monorepo] object MonorepoVcsSteps {
                   )
                 )
             }
+    }
+
+  private def preflightCreateTag(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      rendered: String,
+      label: String
+  ): IO[PreflightTagOutcome] = {
+    val commandName = ctx.releasePlan.map(_.commandName).getOrElse(DefaultCommandName)
+
+    vcs.existsTag(rendered).flatMap {
+      case false => IO.pure(PreflightTagOutcome(rendered, "available"))
+      case true  =>
+        if (useDefaults(ctx))
+          IO.raiseError(
+            new IllegalStateException(
+              s"Tag [$rendered] already exists for $label. Current settings would abort in use-defaults mode. " +
+                s"See `$commandName help` for guidance."
+            )
+          )
+        else if (!ctx.interactive)
+          IO.raiseError(
+            new IllegalStateException(
+              s"Tag [$rendered] already exists for $label. Current settings would abort in non-interactive mode. " +
+                s"See `$commandName help` for guidance."
+            )
+          )
+        else
+          IO.pure(
+            PreflightTagOutcome(
+              rendered,
+              "exists; interactive release will prompt for overwrite"
+            )
+          )
+    }
+  }
+
+  private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
+    required(ctx.vcs, "VCS not initialized") { vcs =>
+      IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
+        settings.tagStrategy match {
+          case MonorepoTagStrategy.PerProject =>
+            ctx.currentProjects.toList.traverse { project =>
+              required(project.versions, s"Versions not set for ${project.name}") {
+                case (releaseVer, _) =>
+                  val rendered = settings.perProjectTagName(project.name, releaseVer)
+                  preflightCreateTag(ctx, vcs, rendered, project.name)
+              }
+            }
+          case MonorepoTagStrategy.Unified    =>
+            required(
+              ctx.currentProjects.flatMap(_.versions).headOption,
+              "No release versions set"
+            ) { case (releaseVer, _) =>
+              val rendered = settings.unifiedTagName(releaseVer)
+              preflightCreateTag(ctx, vcs, rendered, "release").map(Seq(_))
+            }
+        }
+      }
     }
 
   private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =

@@ -22,7 +22,8 @@ private[monorepo] final case class MonorepoReleasePlan(
     releaseVersionOverrides: Map[String, String],
     nextVersionOverrides: Map[String, String],
     globalReleaseVersion: Option[String],
-    globalNextVersion: Option[String]
+    globalNextVersion: Option[String],
+    commandName: String = "releaseIOMonorepo"
 )
 
 private[monorepo] object MonorepoReleasePlan {
@@ -36,7 +37,8 @@ private[monorepo] object MonorepoReleasePlan {
       releaseVersionPairs: Seq[(String, String)],
       nextVersionPairs: Seq[(String, String)],
       globalReleaseVersions: Seq[String],
-      globalNextVersions: Seq[String]
+      globalNextVersions: Seq[String],
+      commandName: String = "releaseIOMonorepo"
   )
 
   // ── Build & validate ──────────────────────────────────────────────
@@ -122,7 +124,8 @@ private[monorepo] object MonorepoReleasePlan {
         releaseVersionOverrides = releaseVersionOverrides,
         nextVersionOverrides = nextVersionOverrides,
         globalReleaseVersion = globalReleaseVersion,
-        globalNextVersion = globalNextVersion
+        globalNextVersion = globalNextVersion,
+        commandName = inputs.commandName
       )
     }
   }

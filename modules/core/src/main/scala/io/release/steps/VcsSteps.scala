@@ -22,6 +22,13 @@ import java.io.EOFException
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
 
+  private val DefaultCommandName = "releaseIO"
+
+  private[release] final case class PreflightTagOutcome(
+      tagName: String,
+      status: String
+  )
+
   val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
     VcsOps.detectAndInit(ctx)
   }
@@ -74,6 +81,33 @@ private[release] object VcsSteps {
       defaultAnswer = ctx.executionState.flatMap(_.plan.tagDefault)
     )
   }
+
+  private[release] def preflightTag(ctx: ReleaseContext): IO[PreflightTagOutcome] =
+    preparePreflightContext(ctx).flatMap { preflightCtx =>
+      IO.blocking(resolveTagPlan(preflightCtx)).flatMap { params =>
+        val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
+        detectedVcs.flatMap(vcs => resolveTagPreflight(vcs, params, preflightCtx))
+      }
+    }
+
+  private def preparePreflightContext(ctx: ReleaseContext): IO[ReleaseContext] =
+    ctx.releaseVersion match {
+      case None             => IO.pure(ctx)
+      case Some(releaseVer) =>
+        IO.blocking {
+          val versionSettings =
+            // Tag-name resolution only needs the release version visible through sbt settings.
+            // Set both scopes so preflight works even in minimal/custom test states that do not
+            // define the full version-file configuration.
+            Seq(ThisBuild / version := releaseVer, version := releaseVer)
+          val preflightState  = SbtRuntime.appendWithSession(
+            ctx.state,
+            versionSettings
+          )
+
+          ctx.withState(preflightState)
+        }
+    }
 
   private def applyTagToState(ctx: ReleaseContext, tagName: String): ReleaseContext =
     ctx.withState(
@@ -155,6 +189,66 @@ private[release] object VcsSteps {
                   }
       } yield result
     }
+  }
+
+  private def resolveTagPreflight(
+      vcs: Vcs,
+      params: TagPlan,
+      ctx: ReleaseContext
+  ): IO[PreflightTagOutcome] = {
+    val commandName = ctx.executionState.map(_.plan.commandName).getOrElse(DefaultCommandName)
+
+    def loop(current: TagPlan): IO[PreflightTagOutcome] = {
+      val TagPlan(_, tagName, _, _, defaultAnswer) = current
+
+      vcs.existsTag(tagName).flatMap {
+        case false => IO.pure(PreflightTagOutcome(tagName, "available"))
+        case true  =>
+          defaultAnswer match {
+            case Some("k") | Some("K")            =>
+              IO.pure(PreflightTagOutcome(tagName, "exists; release will keep the existing tag"))
+            case Some("o") | Some("O")            =>
+              IO.pure(PreflightTagOutcome(tagName, "exists; release will overwrite the tag"))
+            case Some("a") | Some("A") | Some("") =>
+              IO.raiseError(
+                new IllegalStateException(
+                  s"Tag [$tagName] already exists. Current settings would abort the release. " +
+                    s"Use `$commandName help` for tag conflict options."
+                )
+              )
+            case Some(newTagName)                 =>
+              loop(current.copy(tagName = newTagName, defaultAnswer = None)).map { outcome =>
+                outcome.copy(
+                  status =
+                    s"[$tagName] exists; release will retry with [${outcome.tagName}] (${outcome.status})"
+                )
+              }
+            case None if ctx.useDefaults          =>
+              IO.raiseError(
+                new IllegalStateException(
+                  s"Tag [$tagName] already exists. Current settings would abort in use-defaults mode. " +
+                    s"Use `$commandName help` for tag conflict options."
+                )
+              )
+            case None if !ctx.interactive         =>
+              IO.raiseError(
+                new IllegalStateException(
+                  s"Tag [$tagName] already exists. Current settings would abort in non-interactive mode. " +
+                    s"Use `$commandName help` for tag conflict options."
+                )
+              )
+            case None                             =>
+              IO.pure(
+                PreflightTagOutcome(
+                  tagName,
+                  "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                )
+              )
+          }
+      }
+    }
+
+    loop(params)
   }
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is

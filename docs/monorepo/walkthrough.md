@@ -54,6 +54,8 @@ lazy val root = (project in file("."))
 version := "0.1.0-SNAPSHOT"
 ```
 
+This walkthrough uses the default per-project version mode, so each subproject gets its own `version.sbt`.
+
 ## 4. Initialise git and make the first commit
 
 ```bash
@@ -62,7 +64,21 @@ git add .
 git commit -m "Initial commit"
 ```
 
-## 5. Run the first release
+## 5. Inspect the command help
+
+```bash
+sbt "releaseIOMonorepo help"
+```
+
+## 6. Run a local rehearsal
+
+```bash
+sbt "releaseIOMonorepo check with-defaults"
+```
+
+The preflight has no release side effects: it resolves the selected projects, versions, and tags, then runs validations without writing version files, creating commits or tags, publishing artifacts, or pushing to a remote. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+
+## 7. Run the first release
 
 ```bash
 sbt "releaseIOMonorepo with-defaults"
@@ -80,4 +96,4 @@ cat core/version.sbt  # version := "0.2.0-SNAPSHOT"
 
 > **Note:** The first release triggers all projects as changed because change detection looks for a prior release tag and finds none. On subsequent runs, only projects with file changes since their last tag are released. To force all projects regardless, use the `all-changed` flag.
 
-> **Dry run:** The walkthrough above already filters out `push-changes` and `publish-artifacts`. Use this same `filterNot` pattern to rehearse any release without side effects. To undo a dry run, see [Recovery and Rollback](operations.md#recovery-and-rollback).
+> **Local rehearsal:** The walkthrough above already filters out `push-changes` and `publish-artifacts`. Use the same `filterNot` pattern together with `releaseIOMonorepo check` to rehearse any release locally before running the real command. To undo a rehearsal run, see [Recovery and Rollback](operations.md#recovery-and-rollback).

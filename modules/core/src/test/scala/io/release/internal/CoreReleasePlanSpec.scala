@@ -13,7 +13,8 @@ class CoreReleasePlanSpec extends FunSuite {
       crossBuild = true,
       releaseVersionOverride = Some("1.2.3"),
       nextVersionOverride = Some("1.2.4-SNAPSHOT"),
-      tagDefault = Some("k")
+      tagDefault = Some("k"),
+      commandName = "releaseCustom"
     )
 
     val plan = CoreReleasePlan.build(inputs)
@@ -31,6 +32,7 @@ class CoreReleasePlanSpec extends FunSuite {
     assertEquals(plan.releaseVersionOverride, Some("1.2.3"))
     assertEquals(plan.nextVersionOverride, Some("1.2.4-SNAPSHOT"))
     assertEquals(plan.tagDefault, Some("k"))
+    assertEquals(plan.commandName, "releaseCustom")
   }
 
   test("CoreReleasePlan.build - leave optional overrides empty when they are not provided") {

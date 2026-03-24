@@ -19,6 +19,13 @@ import java.nio.file.Files
 /** Version-related monorepo release steps: inquire, set, commit. */
 private[monorepo] object MonorepoVersionSteps {
 
+  private[monorepo] final case class ResolvedProjectVersions(
+      versionFile: File,
+      currentVersion: String,
+      releaseVersion: String,
+      nextVersion: String
+  )
+
   /** Inquire release and next versions for each project.
     * If the project already has versions pre-populated (from command-line overrides),
     * those are used directly without prompting or computing.
@@ -32,7 +39,9 @@ private[monorepo] object MonorepoVersionSteps {
             IO.raiseError(
               new IllegalStateException(
                 s"Version file not found for ${project.name}: ${versionInputs.versionFile.getPath}. " +
-                  """Create it with contents: version := "0.1.0-SNAPSHOT""""
+                  "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, or configure " +
+                  "`releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and " +
+                  "`releaseIOMonorepoVersionFileContents`. See `releaseIOMonorepo help`."
               )
             )
           else IO.unit
@@ -88,51 +97,29 @@ private[monorepo] object MonorepoVersionSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     for {
-      versionInputs                          <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
-      currentVer                             <- versionInputs.readVersion(versionInputs.versionFile)
-      data                                   <- IO.blocking {
-                                                  val (s1, releaseFn) =
-                                                    SbtRuntime.runTask(ctx.state, project.ref / releaseIOVersion)
-                                                  val (_, nextFn)     =
-                                                    SbtRuntime.runTask(s1, project.ref / releaseIONextVersion)
-                                                  val useDefaults     = StepHelpers.useDefaults(ctx)
-                                                  (releaseFn(currentVer), nextFn, useDefaults)
-                                                }
-      (suggestedRelease, nextFn, useDefaults) = data
-      releaseVer                             <- project.releaseVersion.filter(_.nonEmpty) match {
-                                                  case Some(v) => parseVersionInput(v, v)
-                                                  case None    =>
-                                                    promptOrDefault(
-                                                      None,
-                                                      suggestedRelease,
-                                                      s"Release version for ${project.name}",
-                                                      ctx.interactive,
-                                                      useDefaults
-                                                    )
-                                                }
-      nextVer                                <- project.nextVersion.filter(_.nonEmpty) match {
-                                                  case Some(v) => parseVersionInput(v, v)
-                                                  case None    =>
-                                                    val suggestedNext = nextFn(releaseVer)
-                                                    promptOrDefault(
-                                                      None,
-                                                      suggestedNext,
-                                                      s"Next version for ${project.name}",
-                                                      ctx.interactive,
-                                                      useDefaults
-                                                    )
-                                                }
-      result                                 <- logInfo(
-                                                  ctx,
-                                                  s"${project.name}: $currentVer -> $releaseVer (next: $nextVer)"
-                                                ).as(
-                                                  ctx.updateProject(project.ref)(
-                                                    _.copy(
-                                                      versionFile = versionInputs.versionFile,
-                                                      versions = Some((releaseVer, nextVer))
-                                                    )
-                                                  )
-                                                )
+      resolved <- resolveProjectVersions(
+                    ctx,
+                    project,
+                    allowPrompts = true
+                  )
+      result   <- logInfo(
+                    ctx,
+                    s"${project.name}: ${resolved.currentVersion} -> " +
+                      s"${resolved.releaseVersion} " +
+                      s"(next: ${resolved.nextVersion})"
+                  ).as(
+                    ctx.updateProject(project.ref)(
+                      _.copy(
+                        versionFile = resolved.versionFile,
+                        versions = Some(
+                          (
+                            resolved.releaseVersion,
+                            resolved.nextVersion
+                          )
+                        )
+                      )
+                    )
+                  )
     } yield result
 
   /** Validate version consistency in global-version mode or unified-tag mode
@@ -265,13 +252,65 @@ private[monorepo] object MonorepoVersionSteps {
       suggested: String,
       label: String,
       interactive: Boolean,
-      useDefaults: Boolean
+      useDefaults: Boolean,
+      allowPrompts: Boolean = true
   ): IO[String] = override_.filter(_.nonEmpty) match {
-    case Some(v) => IO.pure(v)
+    case Some(v) => parseVersionInput(v, v)
     case None    =>
-      if (!interactive || useDefaults) IO.pure(suggested)
+      if (!interactive || useDefaults || !allowPrompts) IO.pure(suggested)
       else
         IO.print(s"$label [$suggested] : ") *>
           IO.readLine.flatMap(parseVersionInput(_, suggested))
   }
+
+  private[monorepo] def resolveProjectVersions(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      allowPrompts: Boolean
+  ): IO[ResolvedProjectVersions] =
+    for {
+      versionInputs                          <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
+      _                                      <- IO.blocking(versionInputs.versionFile.exists()).flatMap { exists =>
+                                                  if (exists) IO.unit
+                                                  else
+                                                    IO.raiseError(
+                                                      new IllegalStateException(
+                                                        s"Version file not found for ${project.name}: " +
+                                                          s"${versionInputs.versionFile.getPath}. " +
+                                                          "See `releaseIOMonorepo help`."
+                                                      )
+                                                    )
+                                                }
+      currentVer                             <- versionInputs.readVersion(versionInputs.versionFile)
+      data                                   <- IO.blocking {
+                                                  val (s1, releaseFn) =
+                                                    SbtRuntime.runTask(ctx.state, project.ref / releaseIOVersion)
+                                                  val (_, nextFn)     =
+                                                    SbtRuntime.runTask(s1, project.ref / releaseIONextVersion)
+                                                  val useDefaults     = StepHelpers.useDefaults(ctx)
+                                                  (releaseFn(currentVer), nextFn, useDefaults)
+                                                }
+      (suggestedRelease, nextFn, useDefaults) = data
+      releaseVer                             <- promptOrDefault(
+                                                  project.releaseVersion.filter(_.nonEmpty),
+                                                  suggestedRelease,
+                                                  s"Release version for ${project.name}",
+                                                  ctx.interactive,
+                                                  useDefaults,
+                                                  allowPrompts = allowPrompts
+                                                )
+      nextVer                                <- promptOrDefault(
+                                                  project.nextVersion.filter(_.nonEmpty),
+                                                  nextFn(releaseVer),
+                                                  s"Next version for ${project.name}",
+                                                  ctx.interactive,
+                                                  useDefaults,
+                                                  allowPrompts = allowPrompts
+                                                )
+    } yield ResolvedProjectVersions(
+      versionFile = versionInputs.versionFile,
+      currentVersion = currentVer,
+      releaseVersion = releaseVer,
+      nextVersion = nextVer
+    )
 }

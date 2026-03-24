@@ -23,13 +23,27 @@ The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0
 
 ## Usage
 
+Start by inspecting the built-in command help:
+
+```bash
+sbt "releaseIO help"
+```
+
+Run a preflight with no release side effects:
+
+```bash
+sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+```
+
+`check` resolves versions and tag names, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+
 Run the release process:
 
 ```bash
-sbt releaseIO
+sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
-With command-line options:
+Additional command-line options:
 
 ```bash
 # Use default answers for all prompts
@@ -44,9 +58,23 @@ sbt "releaseIO cross"
 # Specify versions
 sbt "releaseIO release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 
+# Auto-answer the tag-exists prompt
+sbt "releaseIO with-defaults default-tag-exists-answer o"
+
 # Combine options
 sbt "releaseIO with-defaults skip-tests release-version 1.0.0"
 ```
+
+Available flags:
+
+| Flag | Effect |
+| ---- | ------ |
+| `with-defaults` | Use default answers for prompts |
+| `skip-tests` | Skip the `run-tests` step |
+| `cross` | Enable cross-building |
+| `release-version <ver>` | Override the release version |
+| `next-version <ver>` | Override the next snapshot version |
+| `default-tag-exists-answer <o\|k\|a\|<tag-name>>` | Auto-answer the tag-exists prompt |
 
 ## Default release steps
 

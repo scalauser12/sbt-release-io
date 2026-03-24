@@ -98,7 +98,10 @@ private[release] object StepHelpers {
     if (input.isEmpty) IO.pure(default)
     else
       IO.fromOption(Version(input).map(_.render))(
-        new IllegalArgumentException(s"Invalid version format: '$input'")
+        new IllegalArgumentException(
+          s"Invalid version format: '$input'. " +
+            "Use values like '1.2.3' or '1.2.4-SNAPSHOT'. See the command help for examples."
+        )
       )
   }
 

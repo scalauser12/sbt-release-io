@@ -2,8 +2,13 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
+import cats.syntax.all.*
+import io.release.internal.CheckModeOutput
+import io.release.internal.CorePreflight
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
+import io.release.internal.ReleaseCommandParsers
+import io.release.internal.ReleaseCli
 import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.ReleaseSteps
@@ -136,37 +141,13 @@ trait ReleasePluginIOLike[T]
   override lazy val projectSettings: Seq[Setting[?]] =
     baseReleaseSettings ++ defaultSettingsValues
 
-  /** Parse results for command-line arguments. */
-  protected sealed trait ReleaseArg
-  protected object ReleaseArg {
-    case object WithDefaults                 extends ReleaseArg
-    case object SkipTests                    extends ReleaseArg
-    case object CrossBuild                   extends ReleaseArg
-    case class ReleaseVersion(value: String) extends ReleaseArg
-    case class NextVersion(value: String)    extends ReleaseArg
-    case class TagDefault(value: String)     extends ReleaseArg
-  }
-
-  /** Parser for releaseIO command arguments. */
-  protected lazy val releaseParser: Parser[Seq[ReleaseArg]] = {
-    import ReleaseArg.*
-
-    val withDefaults: Parser[ReleaseArg]   = token("with-defaults").map(_ => WithDefaults)
-    val skipTests: Parser[ReleaseArg]      = token("skip-tests").map(_ => SkipTests)
-    val crossBuild: Parser[ReleaseArg]     = token("cross").map(_ => CrossBuild)
-    val releaseVersion: Parser[ReleaseArg] =
-      (token("release-version") ~> Space ~> token(NotSpace, "<release version>"))
-        .map(ReleaseVersion.apply)
-    val nextVersion: Parser[ReleaseArg]    =
-      (token("next-version") ~> Space ~> token(NotSpace, "<next version>"))
-        .map(NextVersion.apply)
-    val tagDefault: Parser[ReleaseArg]     =
-      (token("default-tag-exists-answer") ~> Space ~> token(NotSpace, "o|k|a|<tag-name>"))
-        .map(TagDefault.apply)
-
-    val arg = withDefaults | skipTests | crossBuild | releaseVersion | nextVersion | tagDefault
-    (Space ~> arg).*
-  }
+  /** Structured parser for `releaseIO` subcommands and arguments.
+    *
+    * Emits canonical tokens for the shared CLI decoder so sbt keeps keyword completion while
+    * mode and argument decoding stays centralized.
+    */
+  protected lazy val releaseParser: Parser[Seq[String]] =
+    ReleaseCommandParsers.build
 
   /** The name of the main release command. Override to use a different name
     * when coexisting with [[ReleasePluginIO]].
@@ -175,7 +156,7 @@ trait ReleasePluginIOLike[T]
 
   /** Setting that registers the release command. Uses [[commandName]]. */
   protected def releaseIOCommand: Setting[?] =
-    commands += Command(commandName)(_ => releaseParser)(doReleaseIO)
+    commands += Command(commandName)(_ => releaseParser)(handleReleaseIO)
 
   /** Build the initial release context from the current state.
     *
@@ -211,11 +192,24 @@ trait ReleasePluginIOLike[T]
     )
   }
 
-  /** Execute the release process: parse arguments, acquire the resource, run all steps.
-    * Override [[commandName]] to change the command that invokes this method.
-    */
-  protected def doReleaseIO(state: State, args: Seq[ReleaseArg]): State = {
-    import ReleaseArg.*
+  private def logLines(state: State, lines: Seq[String]): IO[Unit] =
+    lines.toList.traverse_(line => IO.blocking(state.log.info(s"${ReleaseLogPrefixes.Core} $line")))
+
+  private final class CoreCommandInputs(
+      val cleanState: State,
+      val skipTests: Boolean,
+      val skipPublish: Boolean,
+      val interactive: Boolean,
+      val crossEnabled: Boolean,
+      val plan: CoreReleasePlan
+  )
+
+  private def buildCommandInputs(
+      state: State,
+      args: Seq[ReleaseCli.Arg],
+      warnOnDuplicates: Boolean
+  ): CoreCommandInputs = {
+    import ReleaseCli.Arg.*
 
     val useDefaults   = args.contains(WithDefaults)
     val skipTests     = args.contains(SkipTests)
@@ -228,50 +222,112 @@ trait ReleasePluginIOLike[T]
     val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
     val tagDefaultArg     = args.collectFirst { case TagDefault(v) => v }
 
-    if (args.count(_.isInstanceOf[ReleaseVersion]) > 1)
-      state.log.warn(
-        s"${ReleaseLogPrefixes.Core} Multiple release-version args provided; using '${releaseVersionArg.getOrElse("<unknown>")}'"
-      )
-    if (args.count(_.isInstanceOf[NextVersion]) > 1)
-      state.log.warn(
-        s"${ReleaseLogPrefixes.Core} Multiple next-version args provided; using '${nextVersionArg.getOrElse("<unknown>")}'"
-      )
-    if (args.count(_.isInstanceOf[TagDefault]) > 1)
-      state.log.warn(
-        s"${ReleaseLogPrefixes.Core} Multiple default-tag-exists-answer args provided; using '${tagDefaultArg.getOrElse("<unknown>")}'"
-      )
+    def warnIfRepeated(
+        argName: String,
+        selected: Option[String],
+        matches: ReleaseCli.Arg => Boolean
+    ): Unit =
+      if (warnOnDuplicates && args.count(matches) > 1)
+        state.log.warn(
+          s"${ReleaseLogPrefixes.Core} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
+        )
 
-    val cleanState = state
-      .remove(ReleaseKeys.versions)
+    warnIfRepeated(
+      "release-version",
+      releaseVersionArg,
+      {
+        case ReleaseVersion(_) => true
+        case _                 => false
+      }
+    )
+    warnIfRepeated(
+      "next-version",
+      nextVersionArg,
+      {
+        case NextVersion(_) => true
+        case _              => false
+      }
+    )
+    warnIfRepeated(
+      "default-tag-exists-answer",
+      tagDefaultArg,
+      {
+        case TagDefault(_) => true
+        case _             => false
+      }
+    )
 
-    val plan    = CoreReleasePlan.build(
-      CoreReleasePlan.Inputs(
-        useDefaults = useDefaults,
-        skipTests = skipTests,
-        skipPublish = skipPublish,
-        interactive = interactive,
-        crossBuild = crossEnabled,
-        releaseVersionOverride = releaseVersionArg,
-        nextVersionOverride = nextVersionArg,
-        tagDefault = tagDefaultArg
+    val cleanState = state.remove(ReleaseKeys.versions)
+
+    new CoreCommandInputs(
+      cleanState = cleanState,
+      skipTests = skipTests,
+      skipPublish = skipPublish,
+      interactive = interactive,
+      crossEnabled = crossEnabled,
+      plan = CoreReleasePlan.build(
+        CoreReleasePlan.Inputs(
+          useDefaults = useDefaults,
+          skipTests = skipTests,
+          skipPublish = skipPublish,
+          interactive = interactive,
+          crossBuild = crossEnabled,
+          releaseVersionOverride = releaseVersionArg,
+          nextVersionOverride = nextVersionArg,
+          tagDefault = tagDefaultArg,
+          commandName = commandName
+        )
       )
     )
+  }
+
+  private def handleReleaseIO(state: State, tokens: Seq[String]): State =
+    ReleaseCli.parse(tokens, commandName) match {
+      case Left(message) =>
+        state.log.error(s"${ReleaseLogPrefixes.Core} $message")
+        state.fail
+      case Right(parsed) =>
+        parsed.mode match {
+          case ReleaseCli.CommandMode.Help  => doReleaseHelp(state)
+          case ReleaseCli.CommandMode.Check => doReleaseCheck(state, parsed.args)
+          case ReleaseCli.CommandMode.Run   => doReleaseIO(state, parsed.args)
+        }
+    }
+
+  protected def doReleaseHelp(state: State): State = {
+    val program = logLines(state, CorePreflight.helpLines(commandName))
+    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program.as(state))
+  }
+
+  /** Execute the release process: parse arguments, acquire the resource, run all steps.
+    * Override [[commandName]] to change the command that invokes this method.
+    */
+  protected def doReleaseIO(state: State, args: Seq[ReleaseCli.Arg]): State = {
+    val inputs  = buildCommandInputs(state, args, warnOnDuplicates = true)
     val program = for {
-      stepFns  <- IO.blocking(releaseProcess(cleanState))
+      stepFns  <- IO.blocking(releaseProcess(inputs.cleanState))
       _        <- IO.blocking {
-                    cleanState.log.info(s"${ReleaseLogPrefixes.Core} Starting release process...")
-                    cleanState.log.info(s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute")
-                    if (crossEnabled)
-                      cleanState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
+                    inputs.cleanState.log.info(
+                      s"${ReleaseLogPrefixes.Core} Starting release process..."
+                    )
+                    inputs.cleanState.log.info(
+                      s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute"
+                    )
+                    if (inputs.crossEnabled)
+                      inputs.cleanState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
                   }
       finalCtx <- resource
                     .use { t =>
                       val steps = stepFns.map(_(t))
-                      initialContext(cleanState, skipTests, skipPublish, interactive).flatMap {
-                        initialCtx =>
-                          ReleaseStepIO.compose(steps, crossEnabled)(
-                            initialCtx.withExecutionState(CoreExecutionState(plan))
-                          )
+                      initialContext(
+                        inputs.cleanState,
+                        inputs.skipTests,
+                        inputs.skipPublish,
+                        inputs.interactive
+                      ).flatMap { initialCtx =>
+                        ReleaseStepIO.compose(steps, inputs.crossEnabled)(
+                          initialCtx.withExecutionState(CoreExecutionState(inputs.plan))
+                        )
                       }
                     }
       result   <- if (finalCtx.failed) {
@@ -293,6 +349,46 @@ trait ReleasePluginIOLike[T]
     } yield result
 
     // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
+    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program)
+  }
+
+  protected def doReleaseCheck(state: State, args: Seq[ReleaseCli.Arg]): State = {
+    val inputs = buildCommandInputs(state, args, warnOnDuplicates = false)
+
+    val program = for {
+      stepFns <- IO.blocking(releaseProcess(inputs.cleanState))
+      _       <- IO.blocking {
+                   inputs.cleanState.log.info(
+                     s"${ReleaseLogPrefixes.Core} Starting preflight checks..."
+                   )
+                   inputs.cleanState.log.info(
+                     s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps configured"
+                   )
+                   inputs.cleanState.log.info(
+                     s"${ReleaseLogPrefixes.Core} ${CheckModeOutput.CheckModeLogSummary}"
+                   )
+                 }
+      summary <- resource.use { t =>
+                   val steps = stepFns.map(_(t))
+                   initialContext(
+                     inputs.cleanState,
+                     inputs.skipTests,
+                     inputs.skipPublish,
+                     inputs.interactive
+                   ).flatMap { initialCtx =>
+                     CorePreflight.check(
+                       initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
+                       steps,
+                       inputs.crossEnabled
+                     )
+                   }
+                 }
+      _       <- logLines(inputs.cleanState, CorePreflight.renderSummary(summary))
+      _       <- IO.blocking(
+                   inputs.cleanState.log.info(s"${ReleaseLogPrefixes.Core} Preflight checks passed.")
+                 )
+    } yield state
+
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program)
   }
 }

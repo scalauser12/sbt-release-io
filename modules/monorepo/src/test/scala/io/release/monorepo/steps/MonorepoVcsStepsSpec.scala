@@ -198,6 +198,54 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("preflightTags - fail deterministically for an existing per-project tag") {
+    perProjectTagContextResource.use { case (repo, _, ctx) =>
+      IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
+        TestAssertions
+          .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
+            MonorepoVcsSteps.preflightTags(ctx)
+          ) { err =>
+            assert(err.getMessage.contains("Current settings would abort in non-interactive mode"))
+            assert(err.getMessage.contains("releaseIOMonorepo help"))
+          }
+    }
+  }
+
+  test("preflightTags - report interactive overwrite prompts for an existing unified tag") {
+    unifiedTagContextResource.use { case (repo, baseCtx) =>
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        MonorepoVcsSteps.preflightTags(baseCtx.copy(interactive = true)).map { outcomes =>
+          assertEquals(outcomes.length, 1)
+          assertEquals(outcomes.head.rendered, "v1.0.0")
+          assertEquals(
+            outcomes.head.status,
+            "exists; interactive release will prompt for overwrite"
+          )
+        }
+    }
+  }
+
+  test("preflightTags - use the configured command name in tag conflict guidance") {
+    perProjectTagContextResource.use { case (repo, _, baseCtx) =>
+      val ctx = MonorepoSpecSupport.withPlan(
+        baseCtx,
+        MonorepoSpecSupport.releasePlan(
+          selectionMode = SelectionMode.AllChanged,
+          commandName = "releaseMonorepoCustom"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
+        TestAssertions
+          .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
+            MonorepoVcsSteps.preflightTags(ctx)
+          ) { err =>
+            assert(err.getMessage.contains("releaseMonorepoCustom help"))
+            assert(!err.getMessage.contains("releaseIOMonorepo help"))
+          }
+    }
+  }
+
   test(
     "pushChanges.execute - abort when the interactive user declines after a remote check failure"
   ) {

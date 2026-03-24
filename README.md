@@ -30,8 +30,26 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
 
 No `enablePlugins` needed — the core plugin activates automatically.
 
+The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`.
+
+Start by inspecting the command help:
+
 ```bash
-sbt "releaseIO with-defaults"
+sbt "releaseIO help"
+```
+
+Run a preflight with no release side effects:
+
+```bash
+sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+```
+
+`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+
+Run the actual release:
+
+```bash
+sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
 ### Monorepo
@@ -50,11 +68,30 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-Each subproject needs a `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
+By default, each subproject needs a `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
+
+Start by inspecting the command help:
 
 ```bash
-sbt "releaseIOMonorepo with-defaults"
+sbt "releaseIOMonorepo help"
 ```
+
+Run a preflight with no release side effects:
+
+```bash
+sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+```
+
+`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+
+Run the actual release:
+
+```bash
+sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+```
+
+For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
+[docs/monorepo/recipes.md](docs/monorepo/recipes.md).
 
 ## Build & Test
 

@@ -91,7 +91,8 @@ object MonorepoSpecSupport {
       releaseVersionOverrides: Map[String, String] = Map.empty,
       nextVersionOverrides: Map[String, String] = Map.empty,
       globalReleaseVersion: Option[String] = None,
-      globalNextVersion: Option[String] = None
+      globalNextVersion: Option[String] = None,
+      commandName: String = "releaseIOMonorepo"
   ): MonorepoReleasePlan =
     MonorepoReleasePlan(
       flags = flags,
@@ -100,7 +101,8 @@ object MonorepoSpecSupport {
       releaseVersionOverrides = releaseVersionOverrides,
       nextVersionOverrides = nextVersionOverrides,
       globalReleaseVersion = globalReleaseVersion,
-      globalNextVersion = globalNextVersion
+      globalNextVersion = globalNextVersion,
+      commandName = commandName
     )
 
   def withPlan(

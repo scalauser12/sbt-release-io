@@ -2,9 +2,11 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
+import cats.syntax.all.*
 import io.release.PluginLikeSupport
 import io.release.ReleaseKeys
 import io.release.ReleasePluginIO
+import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
@@ -64,60 +66,18 @@ trait MonorepoReleasePluginLike[T]
 
   override lazy val projectSettings: Seq[Setting[?]] =
     MonorepoReleaseIO.monorepoDefaultSettings ++ Seq(
-      commands += Command(commandName)(_ => monorepoParser)(doMonorepoRelease)
+      commands += Command(commandName)(monorepoParser)(handleMonorepoRelease)
     )
-
-  // ── Command-line argument types ─────────────────────────────────────
-
-  protected sealed trait MonorepoArg
-  protected object MonorepoArg {
-    case object WithDefaults                                    extends MonorepoArg
-    case object SkipTests                                       extends MonorepoArg
-    case object CrossBuild                                      extends MonorepoArg
-    case object AllChanged                                      extends MonorepoArg
-    case class SelectProject(name: String)                      extends MonorepoArg
-    case class ReleaseVersion(project: String, version: String) extends MonorepoArg
-    case class NextVersion(project: String, version: String)    extends MonorepoArg
-    case class GlobalReleaseVersion(version: String)            extends MonorepoArg
-    case class GlobalNextVersion(version: String)               extends MonorepoArg
-  }
 
   // ── Parser ──────────────────────────────────────────────────────────
 
-  /** Parser for monorepo release command arguments with tab completion. */
-  protected lazy val monorepoParser: Parser[Seq[MonorepoArg]] = {
-    import MonorepoArg.*
-
-    val withDefaults: Parser[MonorepoArg] = token("with-defaults").map(_ => WithDefaults)
-    val skipTests: Parser[MonorepoArg]    = token("skip-tests").map(_ => SkipTests)
-    val crossBuild: Parser[MonorepoArg]   = token("cross").map(_ => CrossBuild)
-    val allChanged: Parser[MonorepoArg]   = token("all-changed").map(_ => AllChanged)
-
-    def versionParser(
-        keyword: String,
-        perProject: (String, String) => MonorepoArg,
-        global: String => MonorepoArg
-    ): Parser[MonorepoArg] =
-      (token(keyword) ~> Space ~> token(NotSpace, "<version> or <project>=<version>")).map { s =>
-        val parts = s.split("=", 2)
-        if (parts.length == 2) perProject(parts(0), parts(1))
-        else global(s)
-      }
-
-    val releaseVer                       = versionParser(
-      "release-version",
-      ReleaseVersion.apply,
-      GlobalReleaseVersion.apply
-    )
-    val nextVer                          = versionParser("next-version", NextVersion.apply, GlobalNextVersion.apply)
-    val projectName: Parser[MonorepoArg] =
-      token(NotSpace, "<project>").map(SelectProject(_))
-
-    // projectName must be last — it's the catch-all
-    val arg =
-      withDefaults | skipTests | crossBuild | allChanged | releaseVer | nextVer | projectName
-    (Space ~> arg).*
-  }
+  /** Structured parser for monorepo release commands.
+    *
+    * Uses live project ids for explicit project-name completion and emits canonical tokens for
+    * the shared monorepo CLI decoder.
+    */
+  protected def monorepoParser(state: State): Parser[Seq[String]] =
+    MonorepoCommandParsers.buildFromState(state, commandName)
 
   // ── Parsed flags ───────────────────────────────────────────────────
 
@@ -131,8 +91,14 @@ trait MonorepoReleasePluginLike[T]
       tagStrategy: MonorepoTagStrategy
   )
 
-  private def parseFlags(args: Seq[MonorepoArg], extracted: Extracted): ReleaseFlags = {
-    import MonorepoArg.*
+  private final class PlannedCommand(
+      val cleanState: State,
+      val flags: ReleaseFlags,
+      val plan: MonorepoReleasePlan
+  )
+
+  private def parseFlags(args: Seq[MonorepoCli.Arg], extracted: Extracted): ReleaseFlags = {
+    import MonorepoCli.Arg.*
     ReleaseFlags(
       useDefaults = args.contains(WithDefaults),
       skipTests = args.contains(SkipTests) || extracted.get(releaseIOMonorepoSkipTests),
@@ -145,10 +111,11 @@ trait MonorepoReleasePluginLike[T]
   }
 
   private def plannerInputs(
-      args: Seq[MonorepoArg],
-      flags: ReleaseFlags
+      args: Seq[MonorepoCli.Arg],
+      flags: ReleaseFlags,
+      commandName: String
   ): MonorepoReleasePlan.Inputs = {
-    import MonorepoArg.*
+    import MonorepoCli.Arg.*
 
     MonorepoReleasePlan.Inputs(
       flags = ExecutionFlags(
@@ -163,8 +130,45 @@ trait MonorepoReleasePluginLike[T]
       releaseVersionPairs = args.collect { case ReleaseVersion(p, v) => p -> v },
       nextVersionPairs = args.collect { case NextVersion(p, v) => p -> v },
       globalReleaseVersions = args.collect { case GlobalReleaseVersion(v) => v },
-      globalNextVersions = args.collect { case GlobalNextVersion(v) => v }
+      globalNextVersions = args.collect { case GlobalNextVersion(v) => v },
+      commandName = commandName
     )
+  }
+
+  private def logLines(state: State, lines: Seq[String]): IO[Unit] =
+    lines.toList.traverse_(line =>
+      IO.blocking(state.log.info(s"${ReleaseLogPrefixes.Monorepo} $line"))
+    )
+
+  private def prepareCommand(
+      state: State,
+      args: Seq[MonorepoCli.Arg]
+  ): IO[Either[State, PlannedCommand]] = {
+    val extracted  = Project.extract(state)
+    val flags      = parseFlags(args, extracted)
+    val cleanState = state.remove(ReleaseKeys.versions)
+
+    MonorepoReleasePlan
+      .build(cleanState, plannerInputs(args, flags, commandName))
+      .map(_.map(new PlannedCommand(cleanState, flags, _)))
+  }
+
+  private def handleMonorepoRelease(state: State, tokens: Seq[String]): State =
+    MonorepoCli.parse(tokens, commandName) match {
+      case Left(message) =>
+        state.log.error(s"${ReleaseLogPrefixes.Monorepo} $message")
+        state.fail
+      case Right(parsed) =>
+        parsed.mode match {
+          case MonorepoCli.CommandMode.Help  => doMonorepoHelp(state)
+          case MonorepoCli.CommandMode.Check => doMonorepoCheck(state, parsed.args)
+          case MonorepoCli.CommandMode.Run   => doMonorepoRelease(state, parsed.args)
+        }
+    }
+
+  protected def doMonorepoHelp(state: State): State = {
+    val program = logLines(state, MonorepoPreflight.helpLines(commandName))
+    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo)(program.as(state))
   }
 
   // ── Context building ──────────────────────────────────────────────
@@ -199,33 +203,30 @@ trait MonorepoReleasePluginLike[T]
 
   // ── Release execution ───────────────────────────────────────────────
 
-  protected def doMonorepoRelease(state: State, args: Seq[MonorepoArg]): State = {
-    val extracted = Project.extract(state)
-    val flags     = parseFlags(args, extracted)
-
-    val cleanState = state
-      .remove(ReleaseKeys.versions)
-
+  protected def doMonorepoRelease(state: State, args: Seq[MonorepoCli.Arg]): State = {
     val program: IO[State] = for {
-      plannedEither <- MonorepoReleasePlan.build(cleanState, plannerInputs(args, flags))
+      plannedEither <- prepareCommand(state, args)
       result        <- plannedEither match {
                          case Left(failedState) => IO.pure(failedState)
-                         case Right(plan)       =>
-                           val plannedState = cleanState
+                         case Right(command)    =>
+                           val plannedState = command.cleanState
                            for {
                              stepFns    <- IO.blocking(monorepoReleaseProcess(plannedState))
-                             initialCtx <- buildContext(plannedState, flags, plan)
+                             initialCtx <- buildContext(plannedState, command.flags, command.plan)
                              _          <- IO.blocking(
                                              logReleaseStart(
                                                plannedState,
                                                stepFns.length,
                                                initialCtx.projects.length,
-                                               flags
+                                               command.flags
                                              )
                                            )
                              finalCtx   <- resource.use { t =>
                                              val steps = stepFns.map(_(t))
-                                             MonorepoStepIO.compose(steps, flags.crossBuild)(
+                                             MonorepoStepIO.compose(
+                                               steps,
+                                               command.flags.crossBuild
+                                             )(
                                                initialCtx
                                              )
                                            }
@@ -250,6 +251,48 @@ trait MonorepoReleasePluginLike[T]
     } yield result
 
     // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
+    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo)(program)
+  }
+
+  protected def doMonorepoCheck(state: State, args: Seq[MonorepoCli.Arg]): State = {
+    val program: IO[State] = for {
+      plannedEither <- prepareCommand(state, args)
+      result        <- plannedEither match {
+                         case Left(failedState) => IO.pure(failedState)
+                         case Right(command)    =>
+                           val plannedState = command.cleanState
+                           for {
+                             stepFns    <- IO.blocking(monorepoReleaseProcess(plannedState))
+                             initialCtx <- buildContext(plannedState, command.flags, command.plan)
+                             _          <- IO.blocking {
+                                             plannedState.log.info(
+                                               s"${ReleaseLogPrefixes.Monorepo} Starting preflight checks..."
+                                             )
+                                             plannedState.log.info(
+                                               s"${ReleaseLogPrefixes.Monorepo} ${stepFns.length} steps configured"
+                                             )
+                                             plannedState.log.info(
+                                               s"${ReleaseLogPrefixes.Monorepo} ${CheckModeOutput.CheckModeLogSummary}"
+                                             )
+                                           }
+                             summary    <- resource.use { t =>
+                                             val steps = stepFns.map(_(t))
+                                             MonorepoPreflight.check(
+                                               initialCtx,
+                                               steps,
+                                               command.flags.crossBuild
+                                             )
+                                           }
+                             _          <- logLines(plannedState, MonorepoPreflight.renderSummary(summary))
+                             _          <- IO.blocking(
+                                             plannedState.log.info(
+                                               s"${ReleaseLogPrefixes.Monorepo} Preflight checks passed."
+                                             )
+                                           )
+                           } yield state
+                       }
+    } yield result
+
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo)(program)
   }
 }

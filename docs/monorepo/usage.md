@@ -33,6 +33,8 @@ next-version <version>
 
 Per-project overrides are not allowed in global version mode. Global overrides are not allowed in non-global mode.
 
+Project ids must not collide with CLI keywords such as `with-defaults`, `skip-tests`, `cross`, `all-changed`, `release-version`, `next-version`, `help`, or `check`.
+
 ## Examples
 
 ```bash

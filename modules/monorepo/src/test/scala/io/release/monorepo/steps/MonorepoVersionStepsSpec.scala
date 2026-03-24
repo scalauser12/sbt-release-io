@@ -5,6 +5,7 @@ import cats.effect.IO
 import cats.effect.Outcome
 import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
+import io.release.ReleaseIO.*
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoSpecSupport
@@ -315,6 +316,39 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
             result.projects.flatMap(_.releaseVersion).distinct,
             Seq("1.0.0")
           )
+        }
+      }
+  }
+
+  test("resolveProjectVersions - compute defaults without prompting when prompts are disabled") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-no-prompt") { dir =>
+        val coreBase = new File(dir, "core")
+        coreBase.mkdirs()
+        sbt.IO.write(new File(coreBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core")),
+          MonorepoSpecSupport.versionedProject(
+            "core",
+            coreBase,
+            settings = Seq(
+              releaseIOVersion     := (_.stripSuffix("-SNAPSHOT")),
+              releaseIONextVersion := (_ => "0.2.0-SNAPSHOT")
+            )
+          )
+        )
+      }
+      .use { fixture =>
+        val ctx     = fixture.context(Seq("core"), interactive = true)
+        val project = fixture.projectInfo("core")
+
+        MonorepoVersionSteps.resolveProjectVersions(ctx, project, allowPrompts = false).map {
+          resolved =>
+            assertEquals(resolved.versionFile.getName, "version.sbt")
+            assertEquals(resolved.currentVersion, "0.1.0-SNAPSHOT")
+            assertEquals(resolved.releaseVersion, "0.1.0")
+            assertEquals(resolved.nextVersion, "0.2.0-SNAPSHOT")
         }
       }
   }

@@ -154,7 +154,14 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.parseVersionInput - raise IllegalArgumentException for invalid versions") {
     assertFailure[IllegalArgumentException, String](
       StepHelpers.parseVersionInput("not-a-version", default = "ignored")
-    )(err => assertEquals(err.getMessage, "Invalid version format: 'not-a-version'"))
+    ) { err =>
+      assertEquals(
+        err.getMessage,
+        "Invalid version format: 'not-a-version'. " +
+          "Use values like '1.2.3' or '1.2.4-SNAPSHOT'. " +
+          "See the command help for examples."
+      )
+    }
   }
 
   test(

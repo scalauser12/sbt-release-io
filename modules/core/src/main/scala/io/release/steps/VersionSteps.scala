@@ -23,6 +23,13 @@ private[release] object VersionSteps {
       useGlobalVersion: Boolean
   )
 
+  private[release] final case class ResolvedVersions(
+      versionFile: File,
+      currentVersion: String,
+      releaseVersion: String,
+      nextVersion: String
+  )
+
   private[steps] def resolveCurrentSettings(state: State): ResolvedSettings =
     ResolvedSettings(
       versionFile = SbtRuntime.getSetting(state, releaseIOVersionFile),
@@ -89,7 +96,10 @@ private[release] object VersionSteps {
                   }(
                     new IllegalStateException(
                       s"Could not parse version from ${file.getName}. " +
-                        s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents"""
+                        s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents\n""" +
+                        "If you use a custom version file format, configure " +
+                        "`releaseIOVersionFile`, `releaseIOReadVersion`, and " +
+                        "`releaseIOVersionFileContents`. See `releaseIO help` for examples."
                     )
                   )
     } yield result
@@ -104,70 +114,24 @@ private[release] object VersionSteps {
 
   val inquireVersions: ReleaseStepIO = ReleaseStepIO(
     name = "inquire-versions",
-    validate = ctx =>
-      IO.blocking(resolveVersionPlan(ctx).versionFile).flatMap { versionFile =>
-        if (!versionFile.exists())
-          IO.raiseError(
-            new IllegalStateException(
-              s"Version file not found: ${versionFile.getPath}. " +
-                """Create it with contents: version := "0.1.0-SNAPSHOT""""
-            )
-          )
-        else IO.unit
-      },
+    validate =
+      ctx => IO.blocking(resolveVersionPlan(ctx).versionFile).flatMap(ensureVersionFileExists),
     execute = { ctx =>
       for {
-        versionPlan <- IO.blocking(resolveVersionPlan(ctx))
-        currentVer  <- versionPlan.readVersion(versionPlan.versionFile)
-        data        <- IO.blocking {
-                         val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseIOVersion)
-                         val (_, nextFn)     = SbtRuntime.runTask(s1, releaseIONextVersion)
+        resolved <- resolveVersions(ctx, allowPrompts = true)
+        updated  <- IO.blocking {
+                      ctx.state.log.info(
+                        s"${ReleaseLogPrefixes.Core} Current version : ${resolved.currentVersion}"
+                      )
+                      ctx.state.log.info(
+                        s"${ReleaseLogPrefixes.Core} Release version : ${resolved.releaseVersion}"
+                      )
+                      ctx.state.log.info(
+                        s"${ReleaseLogPrefixes.Core} Next version    : ${resolved.nextVersion}"
+                      )
 
-                         InquireData(
-                           state = ctx.state,
-                           currentVersion = currentVer,
-                           suggestedRelease = releaseFn(currentVer),
-                           nextVersionFn = nextFn,
-                           releaseVersionArg = versionPlan.releaseVersionOverride,
-                           nextVersionArg = versionPlan.nextVersionOverride,
-                           useDefaults = useDefaults(ctx)
-                         )
-                       }
-        releaseVer  <-
-          data.releaseVersionArg match {
-            case Some(v)                                      => parseVersionInput(v, v)
-            case None if !ctx.interactive || data.useDefaults => IO.pure(data.suggestedRelease)
-            case None                                         =>
-              IO.blocking(data.state.log.info("Press enter to use the default value")) *>
-                readVersionPrompt(
-                  prompt = s"Release version [${data.suggestedRelease}] : ",
-                  defaultVersion = data.suggestedRelease
-                )
-          }
-        nextVer     <-
-          data.nextVersionArg match {
-            case Some(v) => parseVersionInput(v, v)
-            case None    =>
-              IO(data.nextVersionFn(releaseVer)).flatMap { suggestedNext =>
-                if (!ctx.interactive || data.useDefaults) IO.pure(suggestedNext)
-                else
-                  readVersionPrompt(
-                    prompt = s"Next version [$suggestedNext] : ",
-                    defaultVersion = suggestedNext
-                  )
-              }
-          }
-        updated     <- IO.blocking {
-                         data.state.log.info(
-                           s"${ReleaseLogPrefixes.Core} Current version : ${data.currentVersion}"
-                         )
-                         data.state.log.info(
-                           s"${ReleaseLogPrefixes.Core} Release version : $releaseVer"
-                         )
-                         data.state.log.info(s"${ReleaseLogPrefixes.Core} Next version    : $nextVer")
-
-                         ctx.withVersions(releaseVer, nextVer)
-                       }
+                      ctx.withVersions(resolved.releaseVersion, resolved.nextVersion)
+                    }
       } yield updated
     }
   )
@@ -223,6 +187,87 @@ private[release] object VersionSteps {
 
   private def readVersionPrompt(prompt: String, defaultVersion: String): IO[String] =
     IO.print(prompt) *> IO.readLine.flatMap(parseVersionInput(_, defaultVersion))
+
+  private[release] def resolveVersions(
+      ctx: ReleaseContext,
+      allowPrompts: Boolean
+  ): IO[ResolvedVersions] =
+    for {
+      versionPlan <- IO.blocking(resolveVersionPlan(ctx))
+      _           <- ensureVersionFileExists(versionPlan.versionFile)
+      currentVer  <- versionPlan.readVersion(versionPlan.versionFile)
+      data        <- IO.blocking {
+                       val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseIOVersion)
+                       val (_, nextFn)     = SbtRuntime.runTask(s1, releaseIONextVersion)
+
+                       InquireData(
+                         state = ctx.state,
+                         currentVersion = currentVer,
+                         suggestedRelease = releaseFn(currentVer),
+                         nextVersionFn = nextFn,
+                         releaseVersionArg = versionPlan.releaseVersionOverride,
+                         nextVersionArg = versionPlan.nextVersionOverride,
+                         useDefaults = useDefaults(ctx)
+                       )
+                     }
+      releaseVer  <- resolveReleaseVersion(data, ctx.interactive, allowPrompts)
+      nextVer     <- resolveNextVersion(data, releaseVer, ctx.interactive, allowPrompts)
+    } yield ResolvedVersions(
+      versionFile = versionPlan.versionFile,
+      currentVersion = currentVer,
+      releaseVersion = releaseVer,
+      nextVersion = nextVer
+    )
+
+  private def resolveReleaseVersion(
+      data: InquireData,
+      interactive: Boolean,
+      allowPrompts: Boolean
+  ): IO[String] =
+    data.releaseVersionArg match {
+      case Some(v)                                                   => parseVersionInput(v, v)
+      case None if !interactive || data.useDefaults || !allowPrompts =>
+        IO.pure(data.suggestedRelease)
+      case None                                                      =>
+        IO.blocking(data.state.log.info("Press enter to use the default value")) *>
+          readVersionPrompt(
+            prompt = s"Release version [${data.suggestedRelease}] : ",
+            defaultVersion = data.suggestedRelease
+          )
+    }
+
+  private def resolveNextVersion(
+      data: InquireData,
+      releaseVersion: String,
+      interactive: Boolean,
+      allowPrompts: Boolean
+  ): IO[String] =
+    data.nextVersionArg match {
+      case Some(v) => parseVersionInput(v, v)
+      case None    =>
+        IO(data.nextVersionFn(releaseVersion)).flatMap { suggestedNext =>
+          if (!interactive || data.useDefaults || !allowPrompts) IO.pure(suggestedNext)
+          else
+            readVersionPrompt(
+              prompt = s"Next version [$suggestedNext] : ",
+              defaultVersion = suggestedNext
+            )
+        }
+    }
+
+  private def ensureVersionFileExists(versionFile: File): IO[Unit] =
+    IO.blocking(versionFile.exists()).flatMap { exists =>
+      if (exists) IO.unit
+      else
+        IO.raiseError(
+          new IllegalStateException(
+            s"Version file not found: ${versionFile.getPath}. " +
+              "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, " +
+              "or configure `releaseIOVersionFile`, `releaseIOReadVersion`, and " +
+              "`releaseIOVersionFileContents`. See `releaseIO help` for setup details."
+          )
+        )
+    }
 
   private def commitVersionNative(
       ctx: ReleaseContext,

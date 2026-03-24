@@ -116,6 +116,14 @@ class MonorepoReleasePlanSpec extends CatsEffectSuite {
     assertEquals(plan.globalReleaseVersion, Some("1.0.0"))
   }
 
+  test("validateOverrideInputs - preserve the configured command name") {
+    val plan = validatedPlan(
+      baseInputs.copy(commandName = "releaseMonorepoCustom")
+    )
+
+    assertEquals(plan.commandName, "releaseMonorepoCustom")
+  }
+
   test("enforceGlobalVersionAllOrNothing - fail when subset in global version mode") {
     assertFailure[IllegalStateException, Seq[ProjectReleaseInfo]](
       MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
@@ -149,7 +157,8 @@ class MonorepoReleasePlanSpec extends CatsEffectSuite {
     releaseVersionPairs = Nil,
     nextVersionPairs = Nil,
     globalReleaseVersions = Nil,
-    globalNextVersions = Nil
+    globalNextVersions = Nil,
+    commandName = "releaseIOMonorepo"
   )
 
   private val allProjects = Seq(

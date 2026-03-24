@@ -2,12 +2,14 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
+import io.release.ReleaseIO.*
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
 import munit.CatsEffectSuite
+import sbt.Project
 
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
@@ -186,6 +188,45 @@ class VersionStepsSpec extends CatsEffectSuite {
           assert(err.getMessage.contains("Could not parse version"))
           assert(err.getMessage.contains(file.getName))
         }
+      }
+    }
+  }
+
+  test("resolveVersions - compute defaults without prompting when prompts are disabled") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                releaseIOVersionFile         := versionFile,
+                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+                releaseIOVersionFileContents := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOUseGlobalVersion    := true,
+                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
+                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+              )
+            )
+          )
+          val ctx   = ReleaseContext(state = state, interactive = true).withExecutionState(
+            CoreExecutionState(
+              CoreReleasePlan(
+                flags = startupFlags.copy(interactive = true),
+                releaseVersionOverride = None,
+                nextVersionOverride = None,
+                tagDefault = None
+              )
+            )
+          )
+
+          VersionSteps.resolveVersions(ctx, allowPrompts = false).map { resolved =>
+            assertEquals(resolved.versionFile.getName, "version.sbt")
+            assertEquals(resolved.currentVersion, "0.1.0-SNAPSHOT")
+            assertEquals(resolved.releaseVersion, "0.1.0")
+            assertEquals(resolved.nextVersion, "0.2.0-SNAPSHOT")
+          }
       }
     }
   }

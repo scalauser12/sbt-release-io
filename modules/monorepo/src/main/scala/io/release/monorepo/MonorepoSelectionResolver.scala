@@ -198,12 +198,14 @@ private[monorepo] object MonorepoSelectionResolver {
       _ <- failWhen(
              invalidOverrides.nonEmpty,
              "Unknown projects in version overrides: " +
-               s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}"
+               s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}. " +
+               "See `releaseIOMonorepo help` for selection and override syntax."
            )
       _ <- failWhen(
              plan.selectedNames.nonEmpty && invalidSelections.nonEmpty,
              s"Unknown projects: ${invalidSelections.mkString(", ")}. " +
-               s"Available: ${validNames.mkString(", ")}"
+               s"Available: ${validNames.mkString(", ")}. " +
+               "See `releaseIOMonorepo help` for selection syntax."
            )
       _ <- failWhen(
              useGlobalVersion && plan.selectedNames.nonEmpty &&

@@ -67,6 +67,24 @@ private[release] object ReleaseComposer {
     } yield result.context
   }
 
+  /** Run only the validation phase for the given steps.
+    * Used by preflight checks to reuse the exact validation wiring without executing actions.
+    */
+  def validateOnly(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
+      initialCtx: ReleaseContext
+  ): IO[Unit] =
+    ExecutionEngine.runValidations(
+      logPrefix = LogPrefix,
+      validations = steps.map { step =>
+        val wrappedValidation =
+          if (step.enableCrossBuild && crossBuild)
+            (ctx: ReleaseContext) => runCrossBuild(c => step.validate(c).as(c))(ctx).void
+          else step.validate
+        ExecutionEngine.ValidationStep(step.name, wrappedValidation)
+      },
+      initialCtx = initialCtx
+    )
+
   /** Run a step function across all crossScalaVersions using proper project reload. */
   private def runCrossBuild(
       action: ReleaseContext => IO[ReleaseContext]
