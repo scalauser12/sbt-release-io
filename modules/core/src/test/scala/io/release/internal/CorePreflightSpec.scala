@@ -21,7 +21,8 @@ class CorePreflightSpec extends CatsEffectSuite {
       tagStatus = "available",
       crossBuildEnabled = true,
       publishSummary = "enabled",
-      pushSummary = "configured (not executed in check mode)"
+      pushSummary = "configured (not executed in check mode)",
+      stepNames = Seq("initialize-vcs", "check-clean-working-dir", "tag-release")
     )
 
     val lines = CorePreflight.renderSummary(summary)
@@ -34,6 +35,11 @@ class CorePreflightSpec extends CatsEffectSuite {
     assert(lines.exists(_.contains("cross-build    : enabled")))
     assert(lines.exists(_.contains("publish        : enabled")))
     assert(lines.exists(_.contains("push           : configured (not executed in check mode)")))
+    assert(
+      lines.exists(
+        _.contains("steps          : initialize-vcs -> check-clean-working-dir -> tag-release")
+      )
+    )
   }
 
   test("helpLines - describe no release side effects and the cross-build caveat") {
@@ -123,6 +129,7 @@ class CorePreflightSpec extends CatsEffectSuite {
           assertEquals(summary.tagStatus, "available")
           assertEquals(summary.publishSummary, "step not configured")
           assertEquals(summary.pushSummary, "step not configured")
+          assertEquals(summary.stepNames, Seq("check-clean-working-dir"))
           assertEquals(beforeVersion, afterVersion)
           assertEquals(beforeTags.trim, afterTags.trim)
         }

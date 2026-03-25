@@ -289,7 +289,7 @@ trait MonorepoReleasePluginLike[T]
                                                s"${ReleaseLogPrefixes.Monorepo} Preflight checks passed."
                                              )
                                            )
-                           } yield state
+                           } yield command.cleanState
                        }
     } yield result
 

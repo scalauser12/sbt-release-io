@@ -24,7 +24,7 @@ private[monorepo] object MonorepoCommandParsers {
   def buildFromState(state: State, commandName: String): Parser[Tokens] =
     resolveProjectNames(state, commandName) match {
       case Right(projectNames) => build(projectNames)
-      case Left(message)       => helpParser | failure(message)
+      case Left(message)       => helpParser | sbt.complete.DefaultParsers.failure(message)
     }
 
   def resolveProjectNames(state: State, commandName: String): Either[String, Seq[String]] =

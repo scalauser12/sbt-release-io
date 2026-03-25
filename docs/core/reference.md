@@ -9,7 +9,7 @@ All release settings use the `releaseIO` prefix:
 | `releaseIOSkipPublish`            | `Boolean`                      | `false`                                  | Skip the publish step entirely                                                |
 | `releaseIOInteractive`            | `Boolean`                      | `false`                                  | Enable interactive prompts                                                    |
 | `releaseIOVersionFile`            | `File`                         | `baseDirectory / "version.sbt"`          | Path to the version file                                                      |
-| `releaseIOUseGlobalVersion`       | `Boolean`                      | `true`                                   | Use `ThisBuild / version` format                                              |
+| `releaseIOUseGlobalVersion`       | `Boolean`                      | `true`                                   | Read and write `ThisBuild / version` instead of project-scoped `version`      |
 | `releaseIOReadVersion`            | `File => IO[String]`           | parses `version := "x.y.z"`              | Read version from file                                                        |
 | `releaseIOVersionFileContents`    | `(File, String) => IO[String]` | writes `ThisBuild / version := "x.y.z"`  | Produce version file contents                                                 |
 | `releaseIOVersionBump`            | `Version.Bump`                 | `Next`                                   | Version bump strategy (see bump types below)                                  |
@@ -37,3 +37,24 @@ All release settings use the `releaseIO` prefix:
 | `Nano`       | 1.0.0.0 → 1.0.0.1 | Bump nano version                                           |
 | `Next`       | 1.0-RC1 → 1.0-RC2 | Increment next component including prerelease **(default)** |
 | `NextStable` | 1.0-RC1 → 1.0     | Increment next component, remove prerelease qualifier       |
+
+## CLI
+
+### Subcommands
+
+| Subcommand | Effect |
+|------------|--------|
+| _(none)_ | Run the full release |
+| `help` | Print usage, flags, examples, and docs links |
+| `check` | Run a preflight with no release side effects: resolve versions and tags, run step validations, and print a summary — without writing version files, creating commits or tags, publishing, or pushing |
+
+### Flags
+
+| Flag | Effect |
+| ---- | ------ |
+| `with-defaults` | Use default answers for prompts |
+| `skip-tests` | Skip the `run-tests` step |
+| `cross` | Enable cross-building |
+| `release-version <ver>` | Override the release version |
+| `next-version <ver>` | Override the next snapshot version |
+| `default-tag-exists-answer <o\|k\|a\|<tag-name>>` | Auto-answer the tag-exists prompt |

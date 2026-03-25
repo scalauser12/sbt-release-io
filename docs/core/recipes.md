@@ -80,16 +80,7 @@ jobs:
           sbt "releaseIO with-defaults release-version $RELEASE_VERSION next-version $NEXT_VERSION"
 ```
 
-### Available CLI flags
-
-| Flag                          | Effect                           |
-| ----------------------------- | -------------------------------- |
-| `with-defaults`               | Use default answers for all prompts |
-| `skip-tests`                  | Skip the `run-tests` step        |
-| `cross`                       | Enable cross-building            |
-| `release-version <ver>`       | Override the release version     |
-| `next-version <ver>`          | Override the next snapshot version |
-| `default-tag-exists-answer <o\|k\|a\|<tag-name>>` | Auto-answer the tag-exists prompt |
+For the full list of CLI flags and subcommands, see [Settings reference — CLI](reference.md#cli).
 
 ## Local rehearsal
 
@@ -104,6 +95,12 @@ releaseIOSkipPublish := true
 First run the preflight with no release side effects:
 
 ```bash
+sbt "releaseIO check with-defaults"
+```
+
+Or with explicit versions:
+
+```bash
 sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
@@ -112,7 +109,7 @@ sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAP
 Then run the real release:
 
 ```bash
-sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+sbt "releaseIO with-defaults"
 ```
 
 The second command creates local commits and a tag but does not publish artifacts or push to the remote. Inspect the result:

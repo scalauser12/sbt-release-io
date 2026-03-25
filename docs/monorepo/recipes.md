@@ -87,14 +87,7 @@ jobs:
 
 > **Note:** `fetch-depth: 0` is important — change detection uses `git diff` against the last tag, so shallow clones may produce incorrect results.
 
-### Useful CI flags
-
-| Flag           | Effect                                            |
-| -------------- | ------------------------------------------------- |
-| `with-defaults`| Use default answers for all prompts               |
-| `skip-tests`   | Skip the `run-tests` step                         |
-| `cross`        | Enable cross-building                             |
-| `all-changed`  | Release all changed projects (skip interactive selection) |
+For the full list of CLI flags and subcommands, see [Usage](usage.md).
 
 ## Local rehearsal
 
@@ -109,6 +102,12 @@ releaseIOMonorepoSkipPublish := true
 First run the preflight with no release side effects:
 
 ```bash
+sbt "releaseIOMonorepo check with-defaults"
+```
+
+Or with explicit project and versions:
+
+```bash
 sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
@@ -117,7 +116,7 @@ sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-
 Then run the real release:
 
 ```bash
-sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo with-defaults"
 ```
 
 The second command creates local commits and tags but does not publish artifacts or push to the remote. If you use global version mode, replace the per-project overrides with `release-version 1.0.0 next-version 1.1.0-SNAPSHOT`.

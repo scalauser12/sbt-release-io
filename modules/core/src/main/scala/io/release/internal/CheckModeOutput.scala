@@ -10,7 +10,8 @@ private[release] object CheckModeOutput {
     "Check mode has no release side effects: no version-file writes, commits, tags, publish, or push"
 
   val CrossBuildValidationNote: String =
-    "With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version"
+    "With cross-build validation enabled, sbt may temporarily switch " +
+      "Scala versions during validation and then restore the entry version"
 
   val PushConfiguredSummary: String =
     "configured (not executed in check mode)"

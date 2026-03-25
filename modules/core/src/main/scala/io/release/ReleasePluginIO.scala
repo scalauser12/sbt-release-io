@@ -387,7 +387,7 @@ trait ReleasePluginIOLike[T]
       _       <- IO.blocking(
                    inputs.cleanState.log.info(s"${ReleaseLogPrefixes.Core} Preflight checks passed.")
                  )
-    } yield state
+    } yield inputs.cleanState
 
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program)
   }

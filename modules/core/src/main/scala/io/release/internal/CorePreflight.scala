@@ -22,7 +22,8 @@ private[release] object CorePreflight {
       tagStatus: String,
       crossBuildEnabled: Boolean,
       publishSummary: String,
-      pushSummary: String
+      pushSummary: String,
+      stepNames: Seq[String]
   )
 
   def helpLines(commandName: String): List[String] = {
@@ -74,7 +75,8 @@ private[release] object CorePreflight {
       s"  tag            : ${summary.tagName} (${summary.tagStatus})",
       s"  cross-build    : ${CheckModeOutput.enabled(summary.crossBuildEnabled)}",
       s"  publish        : ${summary.publishSummary}",
-      s"  push           : ${summary.pushSummary}"
+      s"  push           : ${summary.pushSummary}",
+      s"  steps          : ${summary.stepNames.mkString(" -> ")}"
     )
 
   def check(
@@ -103,7 +105,8 @@ private[release] object CorePreflight {
                         skipPublish = enriched.skipPublish,
                         skippedMessage = "skipped via releaseIOSkipPublish := true"
                       ),
-                      pushSummary = CheckModeOutput.pushStatus(pushConfigured)
+                      pushSummary = CheckModeOutput.pushStatus(pushConfigured),
+                      stepNames = steps.map(_.name)
                     )
     } yield summary
   }

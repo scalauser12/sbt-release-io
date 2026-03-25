@@ -3,8 +3,18 @@
 ## Command
 
 ```
-sbt releaseIOMonorepo [project...] [flags] [version overrides]
+sbt "releaseIOMonorepo [help | check] [project...] [flags] [version overrides]"
 ```
+
+## Subcommands
+
+| Subcommand | Effect |
+|------------|--------|
+| _(none)_ | Run the full release |
+| `help` | Print usage, flags, examples, and docs links |
+| `check` | Run a preflight with no release side effects: resolve projects, versions, and tags, run step validations, and print a summary — without writing version files, creating commits or tags, publishing, or pushing |
+
+`help` and `check` are reserved only as the first token after `releaseIOMonorepo`. If a subproject happens to be named `help` or `check`, it cannot be selected by name.
 
 ## Flags
 

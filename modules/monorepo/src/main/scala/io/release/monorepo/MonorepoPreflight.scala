@@ -28,7 +28,8 @@ private[monorepo] object MonorepoPreflight {
       projects: Seq[ProjectSummary],
       crossBuildEnabled: Boolean,
       publishSummary: String,
-      pushSummary: String
+      pushSummary: String,
+      stepNames: Seq[String]
   )
 
   def helpLines(commandName: String): List[String] =
@@ -49,7 +50,8 @@ private[monorepo] object MonorepoPreflight {
       "",
       "Constraints:",
       "  - help and check are reserved only as the first token",
-      "  - Project ids must not reuse CLI keywords such as with-defaults, skip-tests, cross, all-changed, release-version, next-version, help, or check",
+      "  - Project ids must not reuse CLI keywords such as with-defaults, skip-tests, " +
+        "cross, all-changed, release-version, next-version, help, or check",
       "  - Global version mode requires all projects to participate together",
       "  - Per-project overrides are not allowed in global version mode",
       "",
@@ -80,6 +82,7 @@ private[monorepo] object MonorepoPreflight {
       s"  cross-build   : ${CheckModeOutput.enabled(summary.crossBuildEnabled)}",
       s"  publish       : ${summary.publishSummary}",
       s"  push          : ${summary.pushSummary}",
+      s"  steps         : ${summary.stepNames.mkString(" -> ")}",
       "  projects      :"
     ) ++ summary.projects.map { project =>
       s"    - ${project.name}: release ${project.releaseVersion}, next ${project.nextVersion}, " +
@@ -118,7 +121,8 @@ private[monorepo] object MonorepoPreflight {
                           skipPublish = withVersions.skipPublish,
                           skippedMessage = "skipped via releaseIOMonorepoSkipPublish := true"
                         ),
-                        pushSummary = CheckModeOutput.pushStatus(pushConfigured)
+                        pushSummary = CheckModeOutput.pushStatus(pushConfigured),
+                        stepNames = steps.map(_.name)
                       )
     } yield summary
   }

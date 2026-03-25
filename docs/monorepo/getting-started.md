@@ -46,50 +46,39 @@ Start by inspecting the built-in command help:
 sbt "releaseIOMonorepo help"
 ```
 
-Run a preflight with no release side effects for an explicit project selection:
+Run a preflight to validate the release setup without side effects:
 
 ```bash
-sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo check with-defaults"
 ```
 
 `check` resolves the selected projects, computes versions and tags, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
-Run the actual release:
+Run the release (changed projects detected automatically, versions computed from each subproject's `version.sbt`):
+
+```bash
+sbt "releaseIOMonorepo with-defaults"
+```
+
+Or select projects and specify versions explicitly:
 
 ```bash
 sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
-If you omit project names, the plugin uses change detection. Use `all-changed` to bypass change detection and include every configured project.
+Use `all-changed` to bypass change detection and include every configured project.
 
-Examples:
+Additional examples:
 
 ```bash
-# Detect changed projects automatically
-sbt "releaseIOMonorepo with-defaults"
+# Preflight with explicit project and versions
+sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 
-# Explicit project selection
+# Multiple projects with per-project versions
 sbt "releaseIOMonorepo api core with-defaults release-version api=2.0.0 core=1.0.0 next-version api=2.1.0-SNAPSHOT core=1.1.0-SNAPSHOT"
 
 # Global version mode
-sbt "releaseIOMonorepo check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
-Available flags:
-
-| Flag | Effect |
-| ---- | ------ |
-| `with-defaults` | Use default answers for prompts |
-| `skip-tests` | Skip the `run-tests` step |
-| `cross` | Enable cross-building |
-| `all-changed` | Select all configured projects without interactive change detection |
-
-Version override syntax:
-
-| Mode | Release override | Next override |
-| ---- | ---------------- | ------------- |
-| Per-project | `release-version core=1.0.0` | `next-version core=1.1.0-SNAPSHOT` |
-| Global | `release-version 1.0.0` | `next-version 1.1.0-SNAPSHOT` |
-
-`help` and `check` are reserved only when they appear as the first token after `releaseIOMonorepo`.
-Avoid using project ids that collide with CLI keywords such as `with-defaults`, `skip-tests`, `cross`, `all-changed`, `release-version`, `next-version`, `help`, or `check`.
+For the full list of CLI flags, subcommands, version override syntax, and keyword restrictions, see [Usage](usage.md).

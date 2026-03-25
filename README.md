@@ -46,7 +46,13 @@ sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAP
 
 `check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
-Run the actual release:
+Run the actual release (versions computed from `version.sbt`):
+
+```bash
+sbt "releaseIO with-defaults"
+```
+
+Or specify versions explicitly:
 
 ```bash
 sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
@@ -84,7 +90,13 @@ sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-
 
 `check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
-Run the actual release:
+Run the actual release (versions computed from each subproject's `version.sbt`):
+
+```bash
+sbt "releaseIOMonorepo with-defaults"
+```
+
+Or specify projects and versions explicitly:
 
 ```bash
 sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"

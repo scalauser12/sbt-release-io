@@ -28,7 +28,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
       ),
       crossBuildEnabled = false,
       publishSummary = "enabled",
-      pushSummary = "configured (not executed in check mode)"
+      pushSummary = "configured (not executed in check mode)",
+      stepNames = Seq("select-projects", "check-clean-working-dir", "tag-release")
     )
 
     val lines = MonorepoPreflight.renderSummary(summary)
@@ -38,6 +39,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
     assert(lines.exists(_.contains("tag strategy  : per-project")))
     assert(lines.exists(_.contains("publish       : enabled")))
     assert(lines.exists(_.contains("push          : configured (not executed in check mode)")))
+    assert(
+      lines.exists(
+        _.contains("steps         : select-projects -> check-clean-working-dir -> tag-release")
+      )
+    )
     assert(lines.exists(_.contains("core: release 1.0.0, next 1.1.0-SNAPSHOT")))
     assert(lines.exists(_.contains("tag core/v1.0.0 (available)")))
   }
@@ -86,6 +92,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
         assertEquals(summary.projects.map(_.tagStatus), Seq("available"))
         assertEquals(summary.publishSummary, "step not configured")
         assertEquals(summary.pushSummary, "step not configured")
+        assertEquals(summary.stepNames, Seq("check-clean-working-dir"))
         assertEquals(beforeVersion, afterVersion)
         assertEquals(beforeTags.trim, afterTags.trim)
       }
