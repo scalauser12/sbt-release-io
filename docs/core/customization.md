@@ -157,6 +157,8 @@ override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
 That hook is the intended customization point for `check`. It lets custom plugins restore
 preflight coverage for resource-backed release logic without acquiring the main release resource.
 
+> **Tag preflight and custom version resolution:** `check` preflights tag availability only when `inquire-versions` is in the configured process. If you replace `inquire-versions` with custom version resolution, `check` reports tag status as "not evaluated (tags depend on runtime/custom version setup)" because it cannot compute the tag name without the built-in version step. The real release will still create tags normally.
+
 ### Configuring in build.sbt
 
 Enable the plugin and configure the release process as usual:

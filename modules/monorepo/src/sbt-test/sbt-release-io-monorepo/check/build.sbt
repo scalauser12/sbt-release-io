@@ -10,8 +10,6 @@ val expectDetectChangesCheckSuccess =
   taskKey[Unit]("Run a detect-changes monorepo check and assert the preflight summary")
 val expectUnknownOverrideFailure =
   taskKey[Unit]("Run monorepo check with an unknown override target and assert the failure output")
-val expectGlobalVersionMismatchFailure =
-  taskKey[Unit]("Run monorepo check with per-project overrides in global version mode")
 val expectMissingVersionFileFailure =
   taskKey[Unit]("Run monorepo check without a project version file and assert the failure output")
 val expectZeroChangedProjectsFailure =
@@ -157,7 +155,6 @@ lazy val root = (project in file("."))
         shouldSucceed = true,
         expectedSubstrings = Seq(
           "selection mode: explicit selection",
-          "version mode  : per-project",
           "core: release 0.1.0, next 0.2.0-SNAPSHOT",
           "tag core/v0.1.0 (available)",
           "Preflight checks passed."
@@ -196,23 +193,6 @@ lazy val root = (project in file("."))
         expectedSubstrings = Seq(
           "Unknown projects in version overrides: missing",
           "releaseIOMonorepo help"
-        ),
-        sbtVersion0 = sbtVersion.value,
-        workingDir = baseDirectory.value
-      )
-      ()
-    },
-    expectGlobalVersionMismatchFailure := {
-      assertNestedRun(
-        commands = Seq(
-          "set releaseIOMonorepoUseGlobalVersion := true",
-          "releaseIOMonorepo check core api with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT"
-        ),
-        outputFile = target.value / "global-version-mismatch.log",
-        shouldSucceed = false,
-        expectedSubstrings = Seq(
-          "Global version mode is active",
-          "Per-project version overrides"
         ),
         sbtVersion0 = sbtVersion.value,
         workingDir = baseDirectory.value

@@ -10,7 +10,8 @@ import scala.util.Try
 /** Structured sbt parsers for `releaseIOMonorepo`.
   *
   * The parser emits canonical token sequences for [[MonorepoCli]] while using live
-  * project ids to provide explicit project-name completion and reject stray plain tokens.
+  * project ids to provide explicit project-name completion, `project <id>` selector
+  * completion, and rejection of stray plain tokens.
   */
 private[monorepo] object MonorepoCommandParsers {
 
@@ -54,19 +55,26 @@ private[monorepo] object MonorepoCommandParsers {
     projectNames.distinct.sorted
 
   private def argParser(projectNames: Seq[String]): Parser[Tokens] = {
-    val builtInParsers = Seq(
+    val projectNameParser     = namedProjectParser(projectNames)
+    val builtInParsers        = Seq(
       token("with-defaults").map(_ => Seq("with-defaults")),
       token("skip-tests").map(_ => Seq("skip-tests")),
       token("cross").map(_ => Seq("cross")),
       token("all-changed").map(_ => Seq("all-changed")),
-      (token("release-version") ~> Space ~> token(NotSpace, "<version> or <project>=<version>"))
+      (token("release-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
         .map(value => Seq("release-version", value)),
-      (token("next-version") ~> Space ~> token(NotSpace, "<version> or <project>=<version>"))
+      (token("next-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
         .map(value => Seq("next-version", value))
     )
-    val projectParsers = projectNames.map(name => token(name).map(_ => Seq(name)))
+    val explicitProjectParser =
+      (token("project") ~> Space ~> projectNameParser).map(name => Seq("project", name))
+    val projectParsers        = projectNames.map(name => token(name).map(_ => Seq(name)))
 
-    oneOf(builtInParsers ++ projectParsers)
+    oneOf(builtInParsers ++ Seq(explicitProjectParser) ++ projectParsers)
   }
+
+  private def namedProjectParser(projectNames: Seq[String]): Parser[String] =
+    if (projectNames.nonEmpty) oneOf(projectNames.map(name => token(name)))
+    else failure("No configured monorepo projects")
 
 }

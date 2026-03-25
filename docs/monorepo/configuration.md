@@ -27,17 +27,13 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | `releaseIOMonorepoVersionFile` | `MonorepoVersionFileResolver` | Scoped `releaseIOVersionFile` | Per-project version file resolver `(ProjectRef, State) => File`. Called during version inquiry and write steps. Default reads each project's scoped `releaseIOVersionFile` (typically `<projectDir>/version.sbt`). |
 | `releaseIOMonorepoReadVersion` | `File => IO[String]` | Regex parser (same as core) | Version file reader |
 | `releaseIOMonorepoVersionFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Returns the new version file content as a string. The plugin writes this string to disk. The `File` arg is the current version file, available for reading existing content (e.g., to preserve other fields during partial updates); the default ignores it. |
-| `releaseIOMonorepoUseGlobalVersion` | `Boolean` | `false` | Use root `version.sbt` instead of per-project files |
 
 ## Tagging settings
 
 | Setting | Type | Default | Description |
 |-----|------|---------|-------------|
-| `releaseIOMonorepoTagStrategy` | `MonorepoTagStrategy` | `PerProject` | `PerProject` or `Unified` |
 | `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Per-project tag formatter. Must preserve `*` literally (used as a glob wildcard for change detection) |
-| `releaseIOMonorepoUnifiedTagName` | `String => String` | `ver => s"v$ver"` | Unified tag formatter. Must preserve `*` literally (used as a glob wildcard for change detection) |
 | `releaseIOMonorepoTagComment` | `(String, String) => String` | `(name, ver) => s"Release $name $ver"` | Per-project tag comment formatter |
-| `releaseIOMonorepoUnifiedTagComment` | `String => String` | `summary => s"Release: $summary"` | Unified tag comment formatter |
 
 ## Change detection settings
 
@@ -49,9 +45,7 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | `releaseIOMonorepoDetectChangesExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
 | `releaseIOMonorepoSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level paths checked for shared changes per project |
 
-Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's last release tag. If any shared file changed since that tag, the project is marked as changed. This catches modifications to shared build definitions, compiler plugins, or dependency versions.
-
-In per-project tag mode, each project is evaluated against its own tag independently. Set to `Seq.empty` to disable.
+Files matching `releaseIOMonorepoSharedPaths` (relative to the repo root) are checked against each project's last release tag. If any shared file changed since that tag, the project is marked as changed. This catches modifications to shared build definitions, compiler plugins, or dependency versions. Set to `Seq.empty` to disable.
 
 ```scala
 // Add extra shared paths (e.g. a shared source directory and formatting config)
@@ -64,8 +58,7 @@ releaseIOMonorepoSharedPaths := Seq.empty
 ## Example configuration
 
 ```scala
-releaseIOMonorepoSkipTests   := true
-releaseIOMonorepoCrossBuild  := true
-releaseIOMonorepoTagStrategy := MonorepoTagStrategy.Unified
-releaseIOMonorepoTagName     := ((name, ver) => s"release/$name/$ver")
+releaseIOMonorepoSkipTests  := true
+releaseIOMonorepoCrossBuild := true
+releaseIOMonorepoTagName    := ((name, ver) => s"release/$name/$ver")
 ```

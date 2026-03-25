@@ -45,21 +45,14 @@ trait MonorepoReleaseIO {
   /** Per-project version reader. Default: same regex as core `defaultReadVersion`. */
   val releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] = _releaseIOMonorepoReadVersion
 
-  /** Per-project version writer. Default: produces `version := "x.y.z"\n`,
-    * or `ThisBuild / version := "x.y.z"\n` when `releaseIOMonorepoUseGlobalVersion` is true.
+  /** Per-project version writer. Default: produces `version := "x.y.z"\n`.
     * The default implementation ignores the `File` parameter; custom implementations
     * may read the existing file to perform partial updates.
     */
   val releaseIOMonorepoVersionFileContents: SettingKey[(File, String) => IO[String]] =
     _releaseIOMonorepoVersionFileContents
 
-  /** Use global (root) version.sbt instead of per-project version files. Default: false. */
-  val releaseIOMonorepoUseGlobalVersion: SettingKey[Boolean] = _releaseIOMonorepoUseGlobalVersion
-
   // ── Tagging settings ──────────────────────────────────────────────────
-
-  /** Tagging strategy: PerProject or Unified. Default: PerProject. */
-  val releaseIOMonorepoTagStrategy: SettingKey[MonorepoTagStrategy] = _releaseIOMonorepoTagStrategy
 
   /** Tag name formatter for per-project tags. (projectName, version) => tagName.
     * Must preserve `*` literally — change detection passes `"*"` as the version
@@ -67,20 +60,9 @@ trait MonorepoReleaseIO {
     */
   val releaseIOMonorepoTagName: SettingKey[(String, String) => String] = _releaseIOMonorepoTagName
 
-  /** Tag name formatter for unified tags. version => tagName.
-    * Must preserve `*` literally — change detection passes `"*"` as the version
-    * to generate glob patterns for `git tag --list`.
-    */
-  val releaseIOMonorepoUnifiedTagName: SettingKey[String => String] =
-    _releaseIOMonorepoUnifiedTagName
-
   /** Tag comment formatter for per-project tags. (projectName, version) => comment. */
   val releaseIOMonorepoTagComment: SettingKey[(String, String) => String] =
     _releaseIOMonorepoTagComment
-
-  /** Tag comment formatter for unified tags. versionSummary => comment. */
-  val releaseIOMonorepoUnifiedTagComment: SettingKey[String => String] =
-    _releaseIOMonorepoUnifiedTagComment
 
   // ── Change detection settings ─────────────────────────────────────────
 
@@ -199,25 +181,12 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoChangeDetector         := None,
     releaseIOMonorepoDetectChangesExcludes  := Seq.empty,
     releaseIOMonorepoSharedPaths            := Seq("build.sbt", "project/"),
-    releaseIOMonorepoUseGlobalVersion       := false,
-    releaseIOMonorepoTagStrategy            := MonorepoTagStrategy.PerProject,
     releaseIOMonorepoTagName                := ((name: String, ver: String) => s"$name/v$ver"),
-    releaseIOMonorepoUnifiedTagName         := ((ver: String) => s"v$ver"),
     releaseIOMonorepoTagComment             := ((name: String, ver: String) => s"Release $name $ver"),
-    releaseIOMonorepoUnifiedTagComment      := ((summary: String) => s"Release: $summary"),
     releaseIOMonorepoReadVersion            := VersionSteps.defaultReadVersion,
-    // releaseIOMonorepoUseGlobalVersion is captured at setting-evaluation time via .value.
-    // The writer emits `ThisBuild / version` in global mode, `version` otherwise.
-    releaseIOMonorepoVersionFileContents    := {
-      val useGlobal = releaseIOMonorepoUseGlobalVersion.value
-      (_, ver) => {
-        val key = if (useGlobal) "ThisBuild / version" else "version"
-        IO.pure(s"""$key := "$ver"\n""")
-      }
+    releaseIOMonorepoVersionFileContents    := { (_, ver) =>
+      IO.pure(s"""version := "$ver"\n""")
     },
-    // The default per-project resolver mirrors each project's scoped
-    // releaseIOVersionFile setting. Global-version mode still bypasses this resolver
-    // and uses the shared root releaseIOVersionFile instead.
     releaseIOMonorepoVersionFile            := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / releaseIOVersionFile)
     },
@@ -275,40 +244,16 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       "Function that produces version file contents"
     )
 
-  private[monorepo] lazy val _releaseIOMonorepoUseGlobalVersion: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOMonorepoUseGlobalVersion",
-      "Use root version.sbt instead of per-project version files"
-    )
-
-  private[monorepo] lazy val _releaseIOMonorepoTagStrategy: SettingKey[MonorepoTagStrategy] =
-    SettingKey[MonorepoTagStrategy](
-      "releaseIOMonorepoTagStrategy",
-      "Tagging strategy: PerProject or Unified"
-    )
-
   private[monorepo] lazy val _releaseIOMonorepoTagName: SettingKey[(String, String) => String] =
     SettingKey[(String, String) => String](
       "releaseIOMonorepoTagName",
       "Tag name formatter for per-project tags: (name, version) => tag"
     )
 
-  private[monorepo] lazy val _releaseIOMonorepoUnifiedTagName: SettingKey[String => String] =
-    SettingKey[String => String](
-      "releaseIOMonorepoUnifiedTagName",
-      "Tag name formatter for unified tags: version => tag"
-    )
-
   private[monorepo] lazy val _releaseIOMonorepoTagComment: SettingKey[(String, String) => String] =
     SettingKey[(String, String) => String](
       "releaseIOMonorepoTagComment",
       "Tag comment formatter for per-project tags: (name, version) => comment"
-    )
-
-  private[monorepo] lazy val _releaseIOMonorepoUnifiedTagComment: SettingKey[String => String] =
-    SettingKey[String => String](
-      "releaseIOMonorepoUnifiedTagComment",
-      "Tag comment formatter for unified tags: versionSummary => comment"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoDetectChanges: SettingKey[Boolean] =
@@ -388,22 +333,16 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
 
   /** Snapshot of all tag-related settings resolved from sbt state. */
   private[monorepo] final case class ResolvedMonorepoTagSettings(
-      tagStrategy: MonorepoTagStrategy,
       perProjectTagName: (String, String) => String,
-      unifiedTagName: String => String,
       tagComment: (String, String) => String,
-      unifiedTagComment: String => String,
       sign: Boolean
   )
 
   private[monorepo] def resolveTagSettings(state: State): ResolvedMonorepoTagSettings = {
     val extracted = Project.extract(state)
     ResolvedMonorepoTagSettings(
-      tagStrategy = extracted.get(releaseIOMonorepoTagStrategy),
       perProjectTagName = extracted.get(releaseIOMonorepoTagName),
-      unifiedTagName = extracted.get(releaseIOMonorepoUnifiedTagName),
       tagComment = extracted.get(releaseIOMonorepoTagComment),
-      unifiedTagComment = extracted.get(releaseIOMonorepoUnifiedTagComment),
       sign = extracted.get(_root_.io.release.ReleaseIO.releaseIOVcsSign)
     )
   }

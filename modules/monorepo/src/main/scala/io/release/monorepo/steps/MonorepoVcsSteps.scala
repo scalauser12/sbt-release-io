@@ -6,7 +6,6 @@ import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.monorepo.steps.MonorepoVcsCommitHelpers.validateVersionConsistency
 import io.release.steps.StepHelpers.askYesNo
 import io.release.steps.StepHelpers.required
 import io.release.steps.StepHelpers.runProcess
@@ -168,23 +167,12 @@ private[monorepo] object MonorepoVcsSteps {
   private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
-        settings.tagStrategy match {
-          case MonorepoTagStrategy.PerProject =>
-            ctx.currentProjects.toList.traverse { project =>
-              required(project.versions, s"Versions not set for ${project.name}") {
-                case (releaseVer, _) =>
-                  val rendered = settings.perProjectTagName(project.name, releaseVer)
-                  preflightCreateTag(ctx, vcs, rendered, project.name)
-              }
-            }
-          case MonorepoTagStrategy.Unified    =>
-            required(
-              ctx.currentProjects.flatMap(_.versions).headOption,
-              "No release versions set"
-            ) { case (releaseVer, _) =>
-              val rendered = settings.unifiedTagName(releaseVer)
-              preflightCreateTag(ctx, vcs, rendered, "release").map(Seq(_))
-            }
+        ctx.currentProjects.toList.traverse { project =>
+          required(project.versions, s"Versions not set for ${project.name}") {
+            case (releaseVer, _) =>
+              val rendered = settings.perProjectTagName(project.name, releaseVer)
+              preflightCreateTag(ctx, vcs, rendered, project.name)
+          }
         }
       }
     }
@@ -214,43 +202,6 @@ private[monorepo] object MonorepoVcsSteps {
           }
         }
     )
-
-  private[monorepo] val tagReleasesUnified: MonorepoStepIO.Global = MonorepoStepIO.Global(
-    name = "tag-release",
-    execute = ctx =>
-      required(ctx.vcs, "VCS not initialized") { vcs =>
-        validateVersionConsistency(
-          ctx.currentProjects,
-          { case (releaseVer, _) => releaseVer },
-          "Unified tag requires all projects to share the same release version. " +
-            "Use per-project tag strategy or align versions"
-        ) *> {
-          ctx.currentProjects.flatMap(_.versions).headOption match {
-            case None           =>
-              IO.raiseError(new IllegalStateException("No release versions set for any project"))
-            case Some((rel, _)) =>
-              IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
-                val tagName = settings.unifiedTagName(rel)
-                val summary =
-                  versionSummary(ctx, { case (releaseVer, _) => releaseVer })
-                createTag(
-                  ctx,
-                  vcs,
-                  tagName,
-                  settings.unifiedTagComment(summary),
-                  settings.sign,
-                  "release"
-                ) *>
-                  logInfo(ctx, s"Tagged release as $tagName").as(
-                    ctx.currentProjects.foldLeft(ctx) { (c, p) =>
-                      c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
-                    }
-                  )
-              }
-          }
-        }
-      }
-  )
 
   private def gitPush(ctx: MonorepoContext, vcs: Vcs): IO[MonorepoContext] = {
     val tags = ctx.currentProjects.flatMap(_.tagName).distinct

@@ -62,8 +62,7 @@ object MonorepoSpecSupport {
         vcs: Option[Vcs] = None,
         interactive: Boolean = false,
         skipTests: Boolean = false,
-        skipPublish: Boolean = false,
-        tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
+        skipPublish: Boolean = false
     ): MonorepoContext =
       MonorepoContext(
         state = state,
@@ -71,8 +70,7 @@ object MonorepoSpecSupport {
         projects = selectedProjectIds.map(id => projectInfo(id, versions = versionsById.get(id))),
         skipTests = skipTests,
         skipPublish = skipPublish,
-        interactive = interactive,
-        tagStrategy = tagStrategy
+        interactive = interactive
       )
   }
 
@@ -90,8 +88,6 @@ object MonorepoSpecSupport {
       selectedNames: Seq[String] = Nil,
       releaseVersionOverrides: Map[String, String] = Map.empty,
       nextVersionOverrides: Map[String, String] = Map.empty,
-      globalReleaseVersion: Option[String] = None,
-      globalNextVersion: Option[String] = None,
       commandName: String = "releaseIOMonorepo"
   ): MonorepoReleasePlan =
     MonorepoReleasePlan(
@@ -100,22 +96,11 @@ object MonorepoSpecSupport {
       selectedNames = selectedNames,
       releaseVersionOverrides = releaseVersionOverrides,
       nextVersionOverrides = nextVersionOverrides,
-      globalReleaseVersion = globalReleaseVersion,
-      globalNextVersion = globalNextVersion,
       commandName = commandName
     )
 
-  def withPlan(
-      ctx: MonorepoContext,
-      plan: MonorepoReleasePlan,
-      globalVersionWritten: Option[String] = None
-  ): MonorepoContext =
-    ctx.withExecutionState(
-      MonorepoExecutionState(
-        plan = plan,
-        globalVersionWritten = globalVersionWritten
-      )
-    )
+  def withPlan(ctx: MonorepoContext, plan: MonorepoReleasePlan): MonorepoContext =
+    ctx.withExecutionState(MonorepoExecutionState(plan))
 
   def loadedFixtureResource(
       prefix: String

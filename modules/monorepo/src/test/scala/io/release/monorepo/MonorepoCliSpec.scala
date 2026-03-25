@@ -28,6 +28,26 @@ class MonorepoCliSpec extends FunSuite {
     )
   }
 
+  test("parse - decode explicit project selector tokens after parser admission") {
+    val result = MonorepoCli.parse(
+      Seq("project", "cross", "with-defaults"),
+      "releaseIOMonorepo"
+    )
+
+    assertEquals(
+      result,
+      Right(
+        MonorepoCli.Parsed(
+          MonorepoCli.CommandMode.Run,
+          Seq(
+            MonorepoCli.Arg.SelectProject("cross"),
+            MonorepoCli.Arg.WithDefaults
+          )
+        )
+      )
+    )
+  }
+
   test("parse - reject trailing tokens after help") {
     val result = MonorepoCli.parse(Seq("help", "extra"), "releaseIOMonorepo")
 
@@ -67,30 +87,17 @@ class MonorepoCliSpec extends FunSuite {
     )
   }
 
-  test("parse - decode global version overrides in check mode") {
+  test("parse - reject override values without a project prefix") {
     val result = MonorepoCli.parse(
-      Seq(
-        "check",
-        "with-defaults",
-        "release-version",
-        "1.0.0",
-        "next-version",
-        "1.1.0-SNAPSHOT"
-      ),
+      Seq("check", "with-defaults", "release-version", "1.0.0"),
       "releaseIOMonorepo"
     )
 
     assertEquals(
       result,
-      Right(
-        MonorepoCli.Parsed(
-          MonorepoCli.CommandMode.Check,
-          Seq(
-            MonorepoCli.Arg.WithDefaults,
-            MonorepoCli.Arg.GlobalReleaseVersion("1.0.0"),
-            MonorepoCli.Arg.GlobalNextVersion("1.1.0-SNAPSHOT")
-          )
-        )
+      Left(
+        "Invalid release-version format. Expected project=version. " +
+          "See 'releaseIOMonorepo help' for usage."
       )
     )
   }
@@ -101,6 +108,15 @@ class MonorepoCliSpec extends FunSuite {
     assertEquals(
       result,
       Left("Missing value after 'release-version'. See 'releaseIOMonorepo help' for usage.")
+    )
+  }
+
+  test("parse - fail with a help hint when the explicit selector is missing its project id") {
+    val result = MonorepoCli.parse(Seq("project"), "releaseIOMonorepo")
+
+    assertEquals(
+      result,
+      Left("Missing value after 'project'. See 'releaseIOMonorepo help' for usage.")
     )
   }
 }

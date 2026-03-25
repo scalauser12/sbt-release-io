@@ -44,7 +44,6 @@ Every step receives a `MonorepoContext`. Per-project steps also receive a `Proje
 | `projects` | `Seq[ProjectReleaseInfo]` | Selected projects in topological order |
 | `currentProjects` | `Seq[ProjectReleaseInfo]` | Non-failed projects only |
 | `skipTests` / `skipPublish` / `interactive` | `Boolean` | Execution flags |
-| `tagStrategy` | `MonorepoTagStrategy` | `PerProject` or `Unified` |
 | `failed` | `Boolean` | Whether the release has failed |
 | `failureCause` | `Option[Throwable]` | Throwable captured on failure |
 | `withState(s)` | `MonorepoContext` | Replace sbt state |
@@ -58,7 +57,7 @@ Every step receives a `MonorepoContext`. Per-project steps also receive a `Proje
 | `failWith(cause)` | `MonorepoContext` | Mark release as failed with a cause |
 
 The built-in monorepo flow also carries startup-only planning data internally (selection mode,
-CLI version overrides, `with-defaults`, and the global-version write marker), but that runtime
+CLI version overrides, and `with-defaults`), but that runtime
 metadata stays package-private. Custom steps should use `ctx.withMetadata` / `ctx.metadata`
 for their own shared data and should treat `metadataBag` as extension space, not as the main
 built-in plan channel.
@@ -185,7 +184,7 @@ import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.*
 releaseIOMonorepoProcess := Seq(
   initializeVcs, checkCleanWorkingDir, resolveReleaseOrder,
   detectOrSelectProjects, checkSnapshotDependencies, inquireVersions,
-  // validateVersions, runClean, runTests, and publishArtifacts omitted — tag-only release
+  // runClean, runTests, and publishArtifacts omitted — tag-only release
   setReleaseVersions, commitReleaseVersions, tagReleases,
   setNextVersions, commitNextVersions, pushChanges
 )
@@ -246,6 +245,8 @@ override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoSt
 
 That hook is the intended customization point for `check`. It lets custom plugins keep preflight
 coverage for resource-backed release logic without acquiring the main release resource.
+
+> **Tag preflight and custom version resolution:** `check` preflights tag availability only when `inquire-versions` is in the configured process. If you replace `inquire-versions` with custom version resolution, `check` reports tag status as "not evaluated (tags depend on runtime/custom version setup)" because it cannot compute the tag name without the built-in version step. The real release will still create tags normally.
 
 Enable in `build.sbt` and run:
 

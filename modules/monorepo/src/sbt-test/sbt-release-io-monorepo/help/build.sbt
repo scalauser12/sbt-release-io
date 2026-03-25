@@ -116,13 +116,11 @@ lazy val root = (project in file("."))
       )
 
       val expectedSubstrings = Seq(
-        """Usage: sbt "releaseIOMonorepo [project...] [flags] [version overrides]""",
+        """Usage: sbt "releaseIOMonorepo [selectors] [flags] [version overrides]""",
         "No release side effects: no version-file writes, commits, tags, publish, or push",
         "may temporarily switch Scala versions during validation and then restore the entry version",
         "release-version <project>=<version>",
-        "Project ids must not reuse CLI keywords such as with-defaults, skip-tests, cross, all-changed, release-version, next-version, help, or check",
-        "Global version mode requires all projects to participate together",
-        "Per-project overrides are not allowed in global version mode",
+        "Use project <id> when a project id collides with a CLI keyword or subcommand",
         "https://github.com/scalauser12/sbt-release-io/blob/main/docs/monorepo/README.md"
       )
 

@@ -28,7 +28,6 @@ private[monorepo] object ChangeDetection {
       globalExcludes: Set[String],
       projectRelPaths: Seq[(String, String)],
       sharedPaths: Seq[String],
-      unifiedLookup: Option[ProjectTagLookup],
       tagNameFn: (String, String) => String
   )
 
@@ -94,10 +93,6 @@ private[monorepo] object ChangeDetection {
   /** Detect which projects have changed since their last release tag.
     * Uses file-level `git diff` between the last matching tag and HEAD.
     *
-    * Tag pattern computation is strategy-aware:
-    *   - PerProject: one pattern per project (e.g. `core-v*`)
-    *   - Unified: a single shared pattern (e.g. `v*`)
-    *
     * Each project's version file is automatically excluded from diff results,
     * since version bumps from the previous release are not meaningful changes.
     * Additional files to exclude can be passed via `additionalExcludeFiles`.
@@ -105,9 +100,7 @@ private[monorepo] object ChangeDetection {
   def detectChangedProjects(
       vcs: Vcs,
       projects: Seq[ProjectReleaseInfo],
-      tagStrategy: MonorepoTagStrategy,
       tagNameFn: (String, String) => String,
-      unifiedTagNameFn: String => String,
       state: State,
       additionalExcludeFiles: Seq[File] = Seq.empty,
       sharedPaths: Seq[String] = Seq.empty
@@ -120,14 +113,13 @@ private[monorepo] object ChangeDetection {
         projectRelPaths =
           projects.flatMap(p => gitRelativize(vcs.baseDir, p.baseDir).map(p.name -> _)),
         sharedPaths = sharedPaths,
-        unifiedLookup = unifiedLookup(tagStrategy, unifiedTagNameFn, vcs),
         tagNameFn = tagNameFn
       )
 
       val (_, changedProjects) =
         projects.foldLeft(Map.empty[String, Boolean] -> Vector.empty[ProjectReleaseInfo]) {
           case ((sharedPathCache, acc), project) =>
-            val ProjectTagLookup(tagPattern, tagLookup) = selectTagLookup(inputs, project)
+            val ProjectTagLookup(tagPattern, tagLookup) = projectTagLookup(inputs, project)
             val excludes                                =
               inputs.globalExcludes ++ gitRelativize(vcs.baseDir, project.versionFile).toSet
             val (updatedCache, sharedChanged)           =
@@ -151,28 +143,14 @@ private[monorepo] object ChangeDetection {
       changedProjects
     }
 
-  private def unifiedLookup(
-      tagStrategy: MonorepoTagStrategy,
-      unifiedTagNameFn: String => String,
-      vcs: Vcs
-  ): Option[ProjectTagLookup] =
-    tagStrategy match {
-      case MonorepoTagStrategy.Unified =>
-        // "*" is used as a glob wildcard for git tag lookup — tag formatters must preserve it literally.
-        val pattern = unifiedTagNameFn("*")
-        Some(ProjectTagLookup(pattern, lookupLastTag(vcs, pattern)))
-      case _                           => None
-    }
-
-  private def selectTagLookup(
+  private def projectTagLookup(
       inputs: DetectionInputs,
       project: ProjectReleaseInfo
-  ): ProjectTagLookup =
-    inputs.unifiedLookup.getOrElse {
-      // "*" is used as a glob wildcard for git tag lookup — tag formatters must preserve it literally.
-      val pattern = inputs.tagNameFn(project.name, "*")
-      ProjectTagLookup(pattern, lookupLastTag(inputs.vcs, pattern))
-    }
+  ): ProjectTagLookup = {
+    // "*" is used as a glob wildcard for git tag lookup — tag formatters must preserve it literally.
+    val pattern = inputs.tagNameFn(project.name, "*")
+    ProjectTagLookup(pattern, lookupLastTag(inputs.vcs, pattern))
+  }
 
   private def sharedPathsChanged(
       inputs: DetectionInputs,

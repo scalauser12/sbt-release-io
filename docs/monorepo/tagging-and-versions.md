@@ -1,8 +1,6 @@
-# Tagging, global version, and cross-build (monorepo)
+# Tagging, versions, and cross-build (monorepo)
 
-## Tagging strategies
-
-### PerProject (default)
+## Per-project tags
 
 Each released project gets its own tag:
 
@@ -17,35 +15,10 @@ Customize the format:
 releaseIOMonorepoTagName := ((name, ver) => s"release/$name/$ver")
 ```
 
-### Unified
+Each project keeps its own `version.sbt`, and CLI overrides are always expressed as `project=version` pairs:
 
-A single tag covers the entire release:
-
-```
-v1.0.0
-```
-
-Requires all projects to have the same release version. The tag annotation lists all project names and versions.
-
-> **Note:** The version consistency check applies only to the projects selected for release. When change detection is enabled, unchanged projects are excluded, so partial releases are possible — the unified tag will only reflect the changed subset. For true all-or-nothing unified releases, combine with Global Version mode or use the `all-changed` flag.
-
-```scala
-releaseIOMonorepoTagStrategy    := MonorepoTagStrategy.Unified
-releaseIOMonorepoUnifiedTagName := (ver => s"release-v$ver")
-```
-
-## Global version mode
-
-When `releaseIOMonorepoUseGlobalVersion := true`:
-
-- All projects share the root `version.sbt` (the file defined by `releaseIOVersionFile`).
-- Version file content uses `ThisBuild / version := "x.y.z"` instead of `version := "x.y.z"`.
-- Per-project version overrides are rejected at parse time; use global overrides instead (`release-version 1.0.0`).
-- Partial project selection is blocked (CLI validation returns an error if a subset is named).
-- Change detection must select either all projects or none.
-
-```scala
-releaseIOMonorepoUseGlobalVersion := true
+```bash
+sbt "releaseIOMonorepo core api with-defaults release-version core=1.0.0 release-version api=2.0.0 next-version core=1.1.0-SNAPSHOT next-version api=2.1.0-SNAPSHOT"
 ```
 
 ## Cross-build support

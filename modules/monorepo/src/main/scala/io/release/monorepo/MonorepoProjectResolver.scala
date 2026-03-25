@@ -67,16 +67,11 @@ private[monorepo] object MonorepoProjectResolver {
 
   def applyVersionOverrides(
       projects: Seq[ProjectReleaseInfo],
-      plan: MonorepoReleasePlan,
-      useGlobalVersion: Boolean
+      plan: MonorepoReleasePlan
   ): Seq[ProjectReleaseInfo] =
     projects.map { project =>
-      val releaseOverride =
-        if (useGlobalVersion) plan.globalReleaseVersion
-        else plan.releaseVersionOverrides.get(project.name)
-      val nextOverride    =
-        if (useGlobalVersion) plan.globalNextVersion
-        else plan.nextVersionOverrides.get(project.name)
+      val releaseOverride = plan.releaseVersionOverrides.get(project.name)
+      val nextOverride    = plan.nextVersionOverrides.get(project.name)
 
       if (releaseOverride.isEmpty && nextOverride.isEmpty) project
       else {

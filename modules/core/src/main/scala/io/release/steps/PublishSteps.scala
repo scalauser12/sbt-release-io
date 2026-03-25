@@ -133,27 +133,32 @@ private[release] object PublishSteps {
     } else ctx.withState(newState)
 
   /** Resolve the projects that `runAggregated` will actually execute for the publish task.
-    * Respects per-task `aggregate := false` so validation matches execution.
+    * Checks `aggregationEnabled` at each level so the expansion matches sbt's
+    * `runAggregated` behavior when an intermediate project sets `aggregate := false`.
     */
   private def effectiveAggregates[A](
       extracted: Extracted,
       taskKey: TaskKey[A]
   ): Seq[ProjectRef] = {
-    val scopedKey = (extracted.currentRef / taskKey).scopedKey
-    val enabled   = sbt.internal.Aggregation.aggregationEnabled(scopedKey, extracted.structure.data)
+    val data    = extracted.structure.data
+    val rootKey = (extracted.currentRef / taskKey).scopedKey
+    val enabled = sbt.internal.Aggregation.aggregationEnabled(rootKey, data)
     if (!enabled) Seq(extracted.currentRef)
     else {
-      val units                                     = extracted.structure.units
-      def resolve(ref: ProjectRef): Seq[ProjectRef] = {
+      val units                                           = extracted.structure.units
+      def resolve(ref: ProjectRef): Seq[ProjectRef]       = {
         val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
         project.map(_.aggregate).getOrElse(Seq.empty)
       }
+      def aggregationEnabledFor(ref: ProjectRef): Boolean =
+        sbt.internal.Aggregation.aggregationEnabled((ref / taskKey).scopedKey, data)
       def loop(
           refs: Seq[ProjectRef],
           visited: Set[ProjectRef]
-      ): (Seq[ProjectRef], Set[ProjectRef])         =
+      ): (Seq[ProjectRef], Set[ProjectRef])               =
         refs.foldLeft((Seq.empty[ProjectRef], visited)) { case ((acc, vis), ref) =>
           if (vis.contains(ref)) (acc, vis)
+          else if (!aggregationEnabledFor(ref)) (acc :+ ref, vis + ref)
           else {
             val (childAcc, childVis) = loop(resolve(ref), vis + ref)
             (acc ++ (ref +: childAcc), childVis)

@@ -21,8 +21,6 @@ private[monorepo] final case class MonorepoReleasePlan(
     selectedNames: Seq[String],
     releaseVersionOverrides: Map[String, String],
     nextVersionOverrides: Map[String, String],
-    globalReleaseVersion: Option[String],
-    globalNextVersion: Option[String],
     commandName: String = "releaseIOMonorepo"
 )
 
@@ -36,8 +34,6 @@ private[monorepo] object MonorepoReleasePlan {
       selectedNames: Seq[String],
       releaseVersionPairs: Seq[(String, String)],
       nextVersionPairs: Seq[(String, String)],
-      globalReleaseVersions: Seq[String],
-      globalNextVersions: Seq[String],
       commandName: String = "releaseIOMonorepo"
   )
 
@@ -58,10 +54,6 @@ private[monorepo] object MonorepoReleasePlan {
     val nextVersionPairs        = inputs.nextVersionPairs
     val releaseVersionOverrides = releaseVersionPairs.toMap
     val nextVersionOverrides    = nextVersionPairs.toMap
-    val globalReleaseVersions   = inputs.globalReleaseVersions
-    val globalNextVersions      = inputs.globalNextVersions
-    val globalReleaseVersion    = globalReleaseVersions.headOption
-    val globalNextVersion       = globalNextVersions.headOption
 
     def failWhen(condition: Boolean, msg: => String): Either[String, Unit] =
       if (condition) Left(msg) else Right(())
@@ -76,14 +68,6 @@ private[monorepo] object MonorepoReleasePlan {
              "Invalid next-version format. Expected project=version"
            )
       _ <- failWhen(
-             globalReleaseVersion.exists(_.isEmpty),
-             "Invalid release-version format. Expected a non-empty version string"
-           )
-      _ <- failWhen(
-             globalNextVersion.exists(_.isEmpty),
-             "Invalid next-version format. Expected a non-empty version string"
-           )
-      _ <- failWhen(
              releaseVersionPairs.groupBy(_._1).exists(_._2.length > 1),
              "Duplicate per-project release-version overrides: " +
                releaseVersionPairs.groupBy(_._1).filter(_._2.length > 1).keys.mkString(", ")
@@ -92,19 +76,6 @@ private[monorepo] object MonorepoReleasePlan {
              nextVersionPairs.groupBy(_._1).exists(_._2.length > 1),
              "Duplicate per-project next-version overrides: " +
                nextVersionPairs.groupBy(_._1).filter(_._2.length > 1).keys.mkString(", ")
-           )
-      _ <- failWhen(
-             globalReleaseVersions.length > 1,
-             "Multiple global release-version overrides provided. Only one is allowed"
-           )
-      _ <- failWhen(
-             globalNextVersions.length > 1,
-             "Multiple global next-version overrides provided. Only one is allowed"
-           )
-      _ <- failWhen(
-             (globalReleaseVersion.nonEmpty || globalNextVersion.nonEmpty) &&
-               (releaseVersionOverrides.nonEmpty || nextVersionOverrides.nonEmpty),
-             "Cannot mix global version overrides with per-project version overrides"
            )
       _ <- failWhen(
              inputs.allChanged && inputs.selectedNames.nonEmpty,
@@ -123,33 +94,7 @@ private[monorepo] object MonorepoReleasePlan {
         selectedNames = inputs.selectedNames,
         releaseVersionOverrides = releaseVersionOverrides,
         nextVersionOverrides = nextVersionOverrides,
-        globalReleaseVersion = globalReleaseVersion,
-        globalNextVersion = globalNextVersion,
         commandName = inputs.commandName
-      )
-    }
-  }
-
-  def enforceGlobalVersionAllOrNothing(
-      allProjects: Seq[ProjectReleaseInfo],
-      changedProjects: Seq[ProjectReleaseInfo],
-      useGlobalVersion: Boolean
-  ): IO[Seq[ProjectReleaseInfo]] = {
-    val changedRefs = changedProjects.map(_.ref).toSet
-    val allRefs     = allProjects.map(_.ref).toSet
-    if (!useGlobalVersion || changedProjects.isEmpty || changedRefs == allRefs)
-      IO.pure(changedProjects)
-    else {
-      val changedNames  = changedProjects.map(_.name).mkString(", ")
-      val excludedNames =
-        allProjects.filterNot(p => changedRefs.contains(p.ref)).map(_.name).mkString(", ")
-      IO.raiseError(
-        new IllegalStateException(
-          "Global version mode is active, but change detection selected only a subset of projects. " +
-            s"Changed: $changedNames. Excluded: $excludedNames. " +
-            "Release all projects (for example, use `all-changed`), disable change detection, " +
-            "or disable releaseIOMonorepoUseGlobalVersion."
-        )
       )
     }
   }

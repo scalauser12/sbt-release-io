@@ -266,7 +266,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
     }
   }
 
-  test("detectChangedProjects - detect shared path changes in unified tag mode") {
+  test("detectChangedProjects - detect shared path changes against per-project tags") {
     tempDirResource.use { repo =>
       IO.blocking {
         sbt.IO.createDirectory(new File(repo, "core"))
@@ -284,7 +284,8 @@ class ChangeDetectionSpec extends CatsEffectSuite {
         TestSupport.initGitRepo(repo)
         TestSupport.runGit(repo, "add", ".")
         TestSupport.runGit(repo, "commit", "-m", "Initial commit")
-        TestSupport.runGit(repo, "tag", "v0.1.0")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+        TestSupport.runGit(repo, "tag", "api-v0.1.0")
 
         sbt.IO.write(new File(repo, "build.sbt"), "name := \"root-updated\"\n")
         TestSupport.runGit(repo, "add", "build.sbt")
@@ -311,8 +312,7 @@ class ChangeDetectionSpec extends CatsEffectSuite {
           vcs,
           Seq(core, api),
           env.state,
-          sharedPaths = Seq("build.sbt"),
-          tagStrategy = MonorepoTagStrategy.Unified
+          sharedPaths = Seq("build.sbt")
         ).flatMap { changed =>
           readLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
             assertEquals(changed.map(_.name), Seq("core", "api"))
@@ -541,23 +541,17 @@ class ChangeDetectionSpec extends CatsEffectSuite {
   private val perProjectTagName: (String, String) => String =
     (name, version) => s"$name-v$version"
 
-  private val unifiedTagName: String => String =
-    version => s"v$version"
-
   private def detectChanged(
       vcs: Vcs,
       projects: Seq[ProjectReleaseInfo],
       state: State,
       sharedPaths: Seq[String] = Seq.empty,
-      tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject,
       additionalExcludeFiles: Seq[File] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     ChangeDetection.detectChangedProjects(
       vcs,
       projects,
-      tagStrategy,
       perProjectTagName,
-      unifiedTagName,
       state,
       additionalExcludeFiles = additionalExcludeFiles,
       sharedPaths = sharedPaths

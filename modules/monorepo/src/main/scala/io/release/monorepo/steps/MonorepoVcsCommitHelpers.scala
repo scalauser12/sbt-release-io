@@ -12,43 +12,8 @@ import io.release.steps.StepHelpers.required
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
-/** VCS commit helpers and version-consistency validation for monorepo release steps. */
+/** VCS commit helpers for monorepo release steps. */
 private[monorepo] object MonorepoVcsCommitHelpers {
-
-  // ── Version consistency ───────────────────────────────────────────────
-
-  /** Validate that all projects agree on a version dimension. Raises on mismatch.
-    *
-    * Called at multiple points by design:
-    *  - `MonorepoVersionSteps.validateVersions` — catches mismatches early.
-    *  - `commitVersions` below — precondition before committing.
-    *  - `MonorepoVcsSteps.tagReleasesUnified` — precondition before unified tag.
-    */
-  def validateVersionConsistency(
-      projects: Seq[ProjectReleaseInfo],
-      selector: ((String, String)) => String,
-      context: String
-  ): IO[Unit] = {
-    val missing = projects.filter(_.versions.isEmpty)
-    if (missing.nonEmpty)
-      IO.raiseError(
-        new IllegalStateException(
-          s"$context: projects missing version metadata: ${missing.map(_.name).mkString(", ")}"
-        )
-      )
-    else {
-      val versions = projects.flatMap(p => p.versions.map(v => p.name -> selector(v)))
-      val distinct = versions.map(_._2).distinct
-      if (distinct.length > 1) {
-        val detail = versions.map { case (n, v) => s"  $n -> $v" }.mkString("\n")
-        IO.raiseError(
-          new IllegalStateException(
-            s"$context:\n$detail"
-          )
-        )
-      } else IO.unit
-    }
-  }
 
   // ── Runtime resolution ────────────────────────────────────────────────
 
@@ -123,25 +88,19 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                           )
                                         }
         (sign, signOff, msgFormatter) = settings
-        result                       <- {
-          val consistencyCheck =
-            if (runtime.useGlobalVersion)
-              validateVersionConsistency(
-                ctx.currentProjects,
-                selector,
-                "Global version mode requires all projects to have the same version"
-              )
-            else IO.unit
-
-          consistencyCheck *>
-            IO.uncancelable { _ =>
-              paths.map(_._2).distinct.toList.traverse_(vcs.add(_)) *>
-                {
-                  val summary = versionSummary(ctx, selector)
-                  commitIfChanged(ctx, vcs, msgFormatter(summary), sign, signOff)
-                }
-            }
-        }
+        result                       <- IO.uncancelable { _ =>
+                                          paths.map(_._2).distinct.toList.traverse_(vcs.add(_)) *>
+                                            {
+                                              val summary = versionSummary(ctx, selector)
+                                              commitIfChanged(
+                                                ctx,
+                                                vcs,
+                                                msgFormatter(summary),
+                                                sign,
+                                                signOff
+                                              )
+                                            }
+                                        }
       } yield result
     }
 }

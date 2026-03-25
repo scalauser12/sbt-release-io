@@ -16,7 +16,7 @@ User guides and reference: **[docs/README.md](docs/README.md)** (core and monore
 | Module | Artifact | README | Description |
 |--------|----------|--------|-------------|
 | [core](modules/core/README.md) | `sbt-release-io` | [docs/core](docs/core/README.md) | IO-based release plugin for single-project builds. Independent codebase porting sbt-release onto cats-effect IO with `Resource` lifecycle, cross-build validation, and typed context threading. |
-| [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | [docs/monorepo](docs/monorepo/README.md) | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and tagging strategies. |
+| [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | [docs/monorepo](docs/monorepo/README.md) | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and per-project tags. |
 
 ## Quick Start
 

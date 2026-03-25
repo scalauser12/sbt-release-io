@@ -7,15 +7,14 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.steps.MonorepoCrossBuild
-import io.release.monorepo.steps.MonorepoVersionSteps
 import io.release.monorepo.steps.MonorepoVcsSteps
+import io.release.monorepo.steps.MonorepoVersionSteps
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
 
   private val DetectOrSelectProjectsStep = "detect-or-select-projects"
   private val InquireVersionsStep        = "inquire-versions"
-  private val ValidateVersionsStep       = "validate-versions"
   private val TagReleasesStep            = "tag-releases"
 
   sealed trait Evaluation[+A]
@@ -35,8 +34,6 @@ private[monorepo] object MonorepoPreflight {
 
   final case class Summary(
       selectionMode: Evaluation[SelectionMode],
-      versionMode: String,
-      tagStrategy: Evaluation[MonorepoTagStrategy],
       projects: Seq[ProjectSummary],
       crossBuildEnabled: Boolean,
       publishSummary: String,
@@ -46,32 +43,28 @@ private[monorepo] object MonorepoPreflight {
 
   private final case class SelectionSnapshot(
       context: MonorepoContext,
-      selectionMode: Evaluation[SelectionMode],
-      tagStrategy: Evaluation[MonorepoTagStrategy]
+      selectionMode: Evaluation[SelectionMode]
   )
 
   def helpLines(commandName: String): List[String] =
     List(
-      s"""Usage: sbt "$commandName [project...] [flags] [version overrides]"""",
-      s"""       sbt "$commandName check [project...] [flags] [version overrides]"""",
+      s"""Usage: sbt "$commandName [selectors] [flags] [version overrides]"""",
+      s"""       sbt "$commandName check [selectors] [flags] [version overrides]"""",
       s"""       sbt "$commandName help"""",
       "",
       "Selection:",
       "  - Omit project names to use change detection",
-      "  - Pass project names explicitly to release only that subset",
+      "  - Pass bare project names to release only that subset",
+      "  - Use project <id> when a project id collides with a CLI keyword or subcommand",
       "  - Use all-changed to bypass change detection and include every configured project",
       "",
       "Version overrides:",
       "  - release-version <project>=<version>",
       "  - next-version <project>=<version>",
-      "  - In global version mode, use release-version <version> and next-version <version>",
       "",
       "Constraints:",
       "  - help and check are reserved only as the first token",
-      "  - Project ids must not reuse CLI keywords such as with-defaults, skip-tests, " +
-        "cross, all-changed, release-version, next-version, help, or check",
-      "  - Global version mode requires all projects to participate together",
-      "  - Per-project overrides are not allowed in global version mode",
+      "  - Keyword-like project ids stay selectable through project <id>",
       "",
       "Check mode:",
       s"  - ${CheckModeOutput.NoReleaseSideEffects}",
@@ -84,7 +77,8 @@ private[monorepo] object MonorepoPreflight {
       "Examples:",
       s"""  - sbt "$commandName help"""",
       s"""  - sbt "$commandName check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"""",
-      s"""  - sbt "$commandName check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"""",
+      s"""  - sbt "$commandName check project cross with-defaults release-version cross=1.0.0 next-version cross=1.1.0-SNAPSHOT"""",
+      s"""  - sbt "$commandName check core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=2.0.0 next-version api=2.1.0-SNAPSHOT"""",
       "",
       "Docs:",
       s"  - ${HelpDocsLinks.MonorepoReadme}",
@@ -95,8 +89,6 @@ private[monorepo] object MonorepoPreflight {
     List(
       "Preflight summary:",
       s"  selection mode: ${renderSelectionMode(summary.selectionMode)}",
-      s"  version mode  : ${summary.versionMode}",
-      s"  tag strategy  : ${renderTagStrategy(summary.tagStrategy)}",
       s"  cross-build   : ${CheckModeOutput.enabled(summary.crossBuildEnabled)}",
       s"  publish       : ${summary.publishSummary}",
       s"  push          : ${summary.pushSummary}",
@@ -114,7 +106,6 @@ private[monorepo] object MonorepoPreflight {
     val publishConfigured      = stepNames.contains("publish-artifacts")
     val shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep)
     val shouldResolveVersions  = stepNames.contains(InquireVersionsStep)
-    val shouldValidateVersions = stepNames.contains(ValidateVersionsStep)
     val shouldPreflightTags    = stepNames.contains(TagReleasesStep)
 
     for {
@@ -126,15 +117,11 @@ private[monorepo] object MonorepoPreflight {
                       else IO.pure(initialCtx)
       selected     <- resolveSelection(baseCtx, plan, shouldResolveSelection)
       withVersions <- resolveVersionSnapshot(selected.context, shouldResolveVersions)
-      _            <- maybeValidateVersions(withVersions, shouldValidateVersions)
       tagOutcomes  <- resolveTagSnapshot(withVersions, shouldPreflightTags, shouldResolveVersions)
       _            <- validateOnly(steps, crossBuild)(withVersions)
-      runtime      <- IO.blocking(MonorepoRuntime.fromState(withVersions.state))
       projects     <- renderProjects(withVersions.currentProjects, shouldResolveVersions, tagOutcomes)
       summary       = Summary(
                         selectionMode = selected.selectionMode,
-                        versionMode = if (runtime.useGlobalVersion) "global" else "per-project",
-                        tagStrategy = selected.tagStrategy,
                         projects = projects,
                         crossBuildEnabled = crossBuild,
                         publishSummary = CheckModeOutput.publishStatus(
@@ -157,10 +144,7 @@ private[monorepo] object MonorepoPreflight {
       IO.pure(
         SelectionSnapshot(
           context = ctx,
-          selectionMode = Evaluation.NotEvaluated(
-            "detect-or-select-projects not in check process"
-          ),
-          tagStrategy = Evaluation.Resolved(ctx.tagStrategy)
+          selectionMode = Evaluation.NotEvaluated("detect-or-select-projects not in check process")
         )
       )
     else
@@ -169,8 +153,7 @@ private[monorepo] object MonorepoPreflight {
         nextCtx  <- ensureSelectedProjects(ctx, selected)
       } yield SelectionSnapshot(
         context = nextCtx,
-        selectionMode = Evaluation.Resolved(selected.selectionMode),
-        tagStrategy = Evaluation.Resolved(selected.tagStrategy)
+        selectionMode = Evaluation.Resolved(selected.selectionMode)
       )
 
   private def ensureSelectedProjects(
@@ -178,7 +161,7 @@ private[monorepo] object MonorepoPreflight {
       selected: MonorepoSelectionResolver.SelectionResult
   ): IO[MonorepoContext] =
     if (selected.projects.nonEmpty)
-      IO.pure(ctx.withProjects(selected.projects).copy(tagStrategy = selected.tagStrategy))
+      IO.pure(ctx.withProjects(selected.projects))
     else {
       val errorMessage =
         selected.selectionMode match {
@@ -218,18 +201,6 @@ private[monorepo] object MonorepoPreflight {
           }
       }
     }
-
-  private def maybeValidateVersions(
-      ctx: MonorepoContext,
-      shouldValidateVersions: Boolean
-  ): IO[Unit] =
-    if (
-      shouldValidateVersions && ctx.currentProjects.nonEmpty && ctx.currentProjects.forall(
-        projectHasResolvedVersions
-      )
-    )
-      MonorepoVersionSteps.validateVersions.execute(ctx).void
-    else IO.unit
 
   private def resolveTagSnapshot(
       ctx: MonorepoContext,
@@ -287,22 +258,17 @@ private[monorepo] object MonorepoPreflight {
       case Evaluation.NotEvaluated(reason) =>
         IO.pure(projects.map(_ => Evaluation.NotEvaluated(reason)))
       case Evaluation.Resolved(outcomes)   =>
-        val projectTags =
-          if (outcomes.length == projects.length)
-            IO.pure(projects.zip(outcomes))
-          else if (outcomes.length == 1 && projects.length > 1)
-            IO.pure(projects.map(_ -> outcomes.head))
-          else
-            IO.raiseError(
-              new IllegalStateException(
-                "Monorepo preflight produced inconsistent project/tag counts: " +
-                  s"${projects.length} project(s), ${outcomes.length} tag outcome(s)."
-              )
+        if (outcomes.length != projects.length)
+          IO.raiseError(
+            new IllegalStateException(
+              "Monorepo preflight produced inconsistent project/tag counts: " +
+                s"${projects.length} project(s), ${outcomes.length} tag outcome(s)."
             )
-
-        projectTags.map(_.map { case (_, tagOutcome) =>
-          Evaluation.Resolved(ProjectTag(tagOutcome.rendered, tagOutcome.status))
-        })
+          )
+        else
+          IO.pure(projects.zip(outcomes).map { case (_, tagOutcome) =>
+            Evaluation.Resolved(ProjectTag(tagOutcome.rendered, tagOutcome.status))
+          })
     }
 
   private def projectHasResolvedVersions(project: ProjectReleaseInfo): Boolean =
@@ -329,13 +295,6 @@ private[monorepo] object MonorepoPreflight {
       case Evaluation.Resolved(SelectionMode.AllChanged)        => "all changed"
       case Evaluation.Resolved(SelectionMode.DetectChanges)     => "detect changes"
       case Evaluation.NotEvaluated(reason)                      => s"not evaluated ($reason)"
-    }
-
-  private def renderTagStrategy(strategy: Evaluation[MonorepoTagStrategy]): String =
-    strategy match {
-      case Evaluation.Resolved(MonorepoTagStrategy.PerProject) => "per-project"
-      case Evaluation.Resolved(MonorepoTagStrategy.Unified)    => "unified"
-      case Evaluation.NotEvaluated(reason)                     => s"not evaluated ($reason)"
     }
 
   private def renderProject(project: ProjectSummary): String = {

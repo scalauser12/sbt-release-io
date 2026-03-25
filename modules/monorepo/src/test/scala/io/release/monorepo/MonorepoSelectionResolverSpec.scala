@@ -89,27 +89,6 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     }
   }
 
-  test("resolve - force all projects in global-version mode when a global override is provided") {
-    resolverFixtureResource(
-      prefix = "monorepo-selection-global-override",
-      rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion := true
-      )
-    ).use { fixture =>
-      val plan = MonorepoSpecSupport.releasePlan(
-        selectionMode = SelectionMode.DetectChanges,
-        globalReleaseVersion = Some("2.0.0"),
-        globalNextVersion = Some("2.1.0-SNAPSHOT")
-      )
-
-      MonorepoSelectionResolver.resolve(fixture.context(Seq.empty), plan).map { result =>
-        assertEquals(result.selectionMode, SelectionMode.DetectChanges)
-        assertEquals(result.projects.map(_.name), Seq("core", "api", "consumer"))
-        assert(result.projects.forall(_.versions.contains("2.0.0" -> "2.1.0-SNAPSHOT")))
-      }
-    }
-  }
-
   test("resolve - force-include unchanged projects that have CLI version overrides") {
     resolverFixtureResource(
       prefix = "monorepo-selection-force-include",

@@ -5,8 +5,8 @@ import io.release.ReleaseComposer
 import io.release.ReleaseContext
 import io.release.ReleaseStepIO
 import io.release.steps.ReleaseSteps
-import io.release.steps.VersionSteps
 import io.release.steps.VcsSteps
+import io.release.steps.VersionSteps
 
 import java.io.File
 

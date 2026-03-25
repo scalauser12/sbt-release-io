@@ -14,7 +14,6 @@ object MonorepoReleaseSteps {
   val inquireVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.inquireVersions
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoVersionSteps.setReleaseVersions
   val setNextVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.setNextVersions
-  val validateVersions: MonorepoStepIO.Global       = MonorepoVersionSteps.validateVersions
   val commitReleaseVersions: MonorepoStepIO.Global  =
     MonorepoVersionSteps.commitReleaseVersions
   val commitNextVersions: MonorepoStepIO.Global     = MonorepoVersionSteps.commitNextVersions
@@ -70,9 +69,7 @@ object MonorepoReleaseSteps {
               }
             IO.raiseError(new IllegalStateException(errorMessage))
           } else {
-            logInfo(ctx, message).as(
-              ctx.withProjects(selectedInfos).copy(tagStrategy = result.tagStrategy)
-            )
+            logInfo(ctx, message).as(ctx.withProjects(selectedInfos))
           }
         }
       }
@@ -80,22 +77,15 @@ object MonorepoReleaseSteps {
 
   val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-releases",
-    execute = ctx =>
-      IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
-        settings.tagStrategy match {
-          case MonorepoTagStrategy.Unified    =>
-            MonorepoVcsSteps.tagReleasesUnified
-              .execute(ctx.copy(tagStrategy = settings.tagStrategy))
-          case MonorepoTagStrategy.PerProject =>
-            val pp = MonorepoVcsSteps.tagReleasesPerProject
-            runPerProject(
-              ctx.copy(tagStrategy = settings.tagStrategy),
-              (currentCtx, project) =>
-                logInfo(currentCtx, s"${pp.name} [${project.name}]") *>
-                  pp.execute(currentCtx, project)
-            )
-        }
-      }
+    execute = ctx => {
+      val step = MonorepoVcsSteps.tagReleasesPerProject
+      runPerProject(
+        ctx,
+        (currentCtx, project) =>
+          logInfo(currentCtx, s"${step.name} [${project.name}]") *>
+            step.execute(currentCtx, project)
+      )
+    }
   )
 
   val defaults: Seq[MonorepoStepIO] = Seq(
@@ -105,7 +95,6 @@ object MonorepoReleaseSteps {
     detectOrSelectProjects,
     checkSnapshotDependencies,
     inquireVersions,
-    validateVersions,
     runClean,
     runTests,
     setReleaseVersions,

@@ -35,17 +35,6 @@ case class ProjectReleaseInfo(
   def nextVersion: Option[String]    = versions.map(_._2)
 }
 
-/** Tagging strategy for monorepo releases. */
-sealed trait MonorepoTagStrategy
-object MonorepoTagStrategy {
-
-  /** Each subproject gets its own tag (e.g., core-v1.2.0, api-v0.5.0). */
-  case object PerProject extends MonorepoTagStrategy
-
-  /** A single tag covers the entire release (e.g., v1.2.0). */
-  case object Unified extends MonorepoTagStrategy
-}
-
 /** Immutable context threaded through each monorepo release step during both phases.
   *
   * Created by [[MonorepoReleasePluginLike.doMonorepoRelease]], then passed through
@@ -62,7 +51,7 @@ object MonorepoTagStrategy {
   *  - '''`state: State`''' — sbt's native state, threaded because sbt commands are
   *    `State => State`. Updated for session settings (version reloads), sbt task
   *    evaluation, and VCS state.
-  *  - '''Context fields''' (`projects`, `vcs`, `tagStrategy`, etc.) — typed, immutable
+  *  - '''Context fields''' (`projects`, `vcs`, etc.) — typed, immutable
   *    fields for release-specific data. These are the primary API for step authors.
   *  - '''Internal runtime metadata''' — startup-only release planning data lives in
   *    package-private metadata entries on this context, not on `sbt.State`.
@@ -84,7 +73,6 @@ object MonorepoTagStrategy {
   * @param skipTests   when true, test steps are skipped
   * @param skipPublish when true, publish steps are skipped
   * @param interactive when true, steps may prompt for user input
-  * @param tagStrategy current snapshot of the tagging strategy
   * @param metadataBag typed inter-step metadata
   * @param failed      set to true by the composer on step failure; subsequent steps are skipped
   */
@@ -95,7 +83,6 @@ case class MonorepoContext(
     skipTests: Boolean = false,
     skipPublish: Boolean = false,
     interactive: Boolean = false,
-    tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject,
     metadataBag: AttributeMap = AttributeMap.empty,
     failed: Boolean = false,
     failureCause: Option[Throwable] = None
@@ -132,29 +119,11 @@ case class MonorepoContext(
     executionState.map(_.plan)
 
   /** Seed internal execution state during initialization.
-    * Replaces any prior execution-state payload, including `globalVersionWritten`.
+    * Replaces any prior execution-state payload.
     * Built-in flow calls this once before step execution begins.
     */
   private[monorepo] def withReleasePlan(plan: MonorepoReleasePlan): MonorepoContext =
     withExecutionState(MonorepoExecutionState(plan))
-
-  private[monorepo] def globalVersionWritten: Option[String] =
-    executionState.flatMap(_.globalVersionWritten)
-
-  private[monorepo] def withGlobalVersionWritten(
-      version: String
-  ): Either[IllegalStateException, MonorepoContext] =
-    executionState match {
-      case Some(state) =>
-        Right(withExecutionState(state.copy(globalVersionWritten = Some(version))))
-      case None        =>
-        Left(
-          new IllegalStateException(
-            "Monorepo execution state not initialized. " +
-              "Ensure buildContext(...).withReleasePlan(plan) runs before version writes."
-          )
-        )
-    }
 
   private[release] def executionFlags: Option[ExecutionFlags] =
     executionState.map(_.plan.flags)

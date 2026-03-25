@@ -2,7 +2,6 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.ReleaseIO.releaseIOVersionFile
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers.errorMessage
 import sbt.State
@@ -14,8 +13,7 @@ private[monorepo] object MonorepoSelectionResolver {
 
   final case class SelectionResult(
       projects: Seq[ProjectReleaseInfo],
-      selectionMode: SelectionMode,
-      tagStrategy: MonorepoTagStrategy
+      selectionMode: SelectionMode
   )
 
   def resolve(
@@ -23,14 +21,13 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[SelectionResult] =
     for {
-      runtime                  <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
       tagSettings              <- IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state))
       liveOrdered              <- MonorepoProjectResolver.resolveOrdered(ctx.state)
       ordered                   = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
-      validated                <- IO.fromEither(
-                                    validateResolvedProjects(ordered, plan, runtime.useGlobalVersion).left
-                                      .map(new IllegalStateException(_))
-                                  )
+      validated                <-
+        IO.fromEither(
+          validateResolvedProjects(ordered, plan).left.map(new IllegalStateException(_))
+        )
       selectionResult          <- plan.selectionMode match {
                                     case SelectionMode.ExplicitSelection =>
                                       IO.pure(
@@ -42,35 +39,19 @@ private[monorepo] object MonorepoSelectionResolver {
                                     case SelectionMode.AllChanged        =>
                                       IO.pure((ordered, SelectionMode.AllChanged))
                                     case SelectionMode.DetectChanges     =>
-                                      resolveDetectChanges(
-                                        ctx,
-                                        ordered,
-                                        runtime,
-                                        tagSettings,
-                                        validated
-                                      )
+                                      resolveDetectChanges(ctx, ordered, tagSettings, validated)
                                   }
       (selected, effectiveMode) = selectionResult
-      constrained              <- MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
-                                    ordered,
-                                    selected,
-                                    runtime.useGlobalVersion
-                                  )
       _                        <- if (
                                     effectiveMode == SelectionMode.ExplicitSelection ||
                                     effectiveMode == SelectionMode.DetectChanges
                                   )
-                                    validateUnusedOverrides(constrained, validated)
+                                    validateUnusedOverrides(selected, validated)
                                   else IO.unit
-      withVersions              = MonorepoProjectResolver.applyVersionOverrides(
-                                    constrained,
-                                    validated,
-                                    runtime.useGlobalVersion
-                                  )
+      withVersions              = MonorepoProjectResolver.applyVersionOverrides(selected, validated)
     } yield SelectionResult(
       projects = withVersions,
-      selectionMode = effectiveMode,
-      tagStrategy = tagSettings.tagStrategy
+      selectionMode = effectiveMode
     )
 
   // ── Detection helpers ───────────────────────────────────────────────
@@ -78,32 +59,20 @@ private[monorepo] object MonorepoSelectionResolver {
   private def resolveDetectChanges(
       ctx: MonorepoContext,
       ordered: Seq[ProjectReleaseInfo],
-      runtime: MonorepoRuntime,
       tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
       validated: MonorepoReleasePlan
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
-    if (
-      runtime.useGlobalVersion &&
-      (validated.globalReleaseVersion.nonEmpty || validated.globalNextVersion.nonEmpty)
-    )
-      IO.blocking(
-        ctx.state.log.info(
-          s"${ReleaseLogPrefixes.Monorepo} Global version override provided — " +
-            "selecting all projects for release"
-        )
-      ).as((ordered, SelectionMode.DetectChanges))
-    else
-      detectSelectedProjects(ctx, ordered, runtime, tagSettings)
-        .flatMap { case (detected, mode) =>
-          forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
-        }
+    detectSelectedProjects(ctx, ordered, tagSettings)
+      .flatMap { case (detected, mode) =>
+        forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
+      }
 
   private def detectSelectedProjects(
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
-      runtime: MonorepoRuntime,
       tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] = {
+    val runtime           = MonorepoRuntime.fromState(ctx.state)
     val detectChanges     = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges)
     val includeDownstream =
       runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream)
@@ -116,23 +85,17 @@ private[monorepo] object MonorepoSelectionResolver {
         case Some(detector) =>
           detectWithCustomDetector(ctx, orderedProjects, detector)
         case None           =>
-          val userExcludes   =
+          val userExcludes =
             runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes)
-          val globalExcludes =
-            if (runtime.useGlobalVersion)
-              Seq(runtime.extracted.get(releaseIOVersionFile))
-            else Seq.empty
-          val sharedPaths    = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
+          val sharedPaths  = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
 
           IO.fromOption(ctx.vcs)(new IllegalStateException("VCS not initialized")).flatMap { vcs =>
             ChangeDetection.detectChangedProjects(
               vcs,
               orderedProjects,
-              tagSettings.tagStrategy,
               tagSettings.perProjectTagName,
-              tagSettings.unifiedTagName,
               ctx.state,
-              userExcludes ++ globalExcludes,
+              userExcludes,
               sharedPaths
             )
           }
@@ -176,8 +139,7 @@ private[monorepo] object MonorepoSelectionResolver {
 
   private def validateResolvedProjects(
       allProjects: Seq[ProjectReleaseInfo],
-      plan: MonorepoReleasePlan,
-      useGlobalVersion: Boolean
+      plan: MonorepoReleasePlan
   ): Either[String, MonorepoReleasePlan] = {
     val validNames        = allProjects.map(_.name).toSet
     val invalidOverrides  =
@@ -189,13 +151,6 @@ private[monorepo] object MonorepoSelectionResolver {
 
     for {
       _ <- failWhen(
-             !useGlobalVersion &&
-               (plan.globalReleaseVersion.nonEmpty || plan.globalNextVersion.nonEmpty),
-             "Global version overrides (release-version <version>) are only supported " +
-               "when releaseIOMonorepoUseGlobalVersion is enabled. " +
-               "Use per-project overrides (release-version <project>=<version>) instead."
-           )
-      _ <- failWhen(
              invalidOverrides.nonEmpty,
              "Unknown projects in version overrides: " +
                s"${invalidOverrides.mkString(", ")}. Available: ${validNames.mkString(", ")}. " +
@@ -206,20 +161,6 @@ private[monorepo] object MonorepoSelectionResolver {
              s"Unknown projects: ${invalidSelections.mkString(", ")}. " +
                s"Available: ${validNames.mkString(", ")}. " +
                "See `releaseIOMonorepo help` for selection syntax."
-           )
-      _ <- failWhen(
-             useGlobalVersion && plan.selectedNames.nonEmpty &&
-               plan.selectedNames.toSet != validNames,
-             "Global version mode is active — all projects share a single " +
-               s"version file. Selecting a subset of projects (${plan.selectedNames.mkString(", ")}) is " +
-               "not supported. Release all projects or disable releaseIOMonorepoUseGlobalVersion."
-           )
-      _ <- failWhen(
-             useGlobalVersion &&
-               (plan.releaseVersionOverrides.nonEmpty || plan.nextVersionOverrides.nonEmpty),
-             "Global version mode is active — all projects share a single version. " +
-               "Per-project version overrides (release-version project=version) are not supported. " +
-               "Use global overrides (release-version <version>) or remove per-project overrides."
            )
     } yield plan
   }

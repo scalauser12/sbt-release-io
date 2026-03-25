@@ -1,0 +1,12 @@
+# Test: shared version file guard rejects stale global-version-mode config
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release should fail at set-release-version because both projects resolve to the same file
+-> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Verify the failure was clean: no version file mutation, no commits, no tags
+> checkUnchanged

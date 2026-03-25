@@ -37,12 +37,12 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
     }
   }
 
-  test("build - parse global version overrides in check mode") {
+  test("build - parse per-project overrides in check mode") {
     fixtureResource.use { fixture =>
       IO {
         val parser = parserFromState(fixture.state)
         val result = ParserImpl.parse(
-          " check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT",
+          " check with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT",
           parser
         )
 
@@ -53,14 +53,34 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
               "check",
               "with-defaults",
               "release-version",
-              "1.0.0",
+              "core=1.0.0",
               "next-version",
-              "1.1.0-SNAPSHOT"
+              "core=1.1.0-SNAPSHOT"
             )
           )
         )
       }
     }
+  }
+
+  test("build - parse explicit project selector for an ordinary project id") {
+    val parser = MonorepoCommandParsers.build(Seq("core", "api"))
+    val result = ParserImpl.parse(" project core with-defaults", parser)
+
+    assertEquals(result, Right(Seq("project", "core", "with-defaults")))
+  }
+
+  test("build - parse explicit project selector for keyword-like project ids") {
+    val parser = MonorepoCommandParsers.build(Seq("core", "cross", "help"))
+
+    assertEquals(
+      ParserImpl.parse(" project cross with-defaults", parser),
+      Right(Seq("project", "cross", "with-defaults"))
+    )
+    assertEquals(
+      ParserImpl.parse(" project help with-defaults", parser),
+      Right(Seq("project", "help", "with-defaults"))
+    )
   }
 
   test("build - keep later help and check tokens as project names when they are real ids") {
@@ -122,6 +142,32 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
         assert(completions.contains("api"))
       }
     }
+  }
+
+  test("build - expose project-name completion after the explicit selector") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-command-parsers-selector-completion") { dir =>
+        val coreBase  = new File(dir, "core")
+        val crossBase = new File(dir, "cross")
+        coreBase.mkdirs()
+        crossBase.mkdirs()
+        TestSupport.initGitRepo(dir)
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "cross")),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("cross", crossBase)
+        )
+      }
+      .use { fixture =>
+        IO {
+          val parser      = parserFromState(fixture.state)
+          val completions =
+            ParserImpl.completions(parser, " project cr", 20).get.map(_.display).toSet
+
+          assert(completions.contains("cross"))
+        }
+      }
   }
 
   test("buildFromState - allow bare help when project ids cannot be resolved") {

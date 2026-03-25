@@ -99,7 +99,6 @@ lazy val root = (project in file("."))
       Set(
         "detect-or-select-projects",
         "inquire-versions",
-        "validate-versions",
         "tag-releases",
         "push-changes",
         "publish-artifacts"

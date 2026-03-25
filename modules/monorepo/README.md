@@ -2,11 +2,11 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
 
-A monorepo release plugin for sbt, extending [sbt-release-io](../../docs/core/README.md) with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and tagging strategies.
+A monorepo release plugin for sbt, extending [sbt-release-io](../../docs/core/README.md) with per-project version files, git-based change detection, topological ordering, per-project failure isolation, and per-project tags.
 
 ## Features
 
-Per-project steps, change detection, validate-then-execute phases, per-project or unified tags, optional global `version.sbt`, cross-build, and `MonorepoReleasePluginLike[T]` for shared resources.
+Per-project steps, change detection, validate-then-execute phases, per-project tags, cross-build, and `MonorepoReleasePluginLike[T]` for shared resources.
 
 ## Quick start
 
@@ -24,7 +24,21 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-Each subproject needs `version.sbt` with `version := "0.1.0-SNAPSHOT"` (unless using global version mode — see docs).
+Each subproject needs `version.sbt` with `version := "0.1.0-SNAPSHOT"`.
+
+Inspect the command help first:
+
+```bash
+sbt "releaseIOMonorepo help"
+```
+
+Run a preflight with no release side effects:
+
+```bash
+sbt "releaseIOMonorepo check with-defaults"
+```
+
+Run the actual release:
 
 ```bash
 sbt "releaseIOMonorepo with-defaults"

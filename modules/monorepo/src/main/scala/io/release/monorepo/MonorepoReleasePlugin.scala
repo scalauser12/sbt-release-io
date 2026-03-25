@@ -10,7 +10,6 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
-import io.release.monorepo.MonorepoTagStrategy as MonorepoTagStrategy_
 import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
@@ -96,8 +95,7 @@ trait MonorepoReleasePluginLike[T]
       crossBuild: Boolean,
       allChanged: Boolean,
       skipPublish: Boolean,
-      interactive: Boolean,
-      tagStrategy: MonorepoTagStrategy
+      interactive: Boolean
   )
 
   private final class PlannedCommand(
@@ -114,8 +112,7 @@ trait MonorepoReleasePluginLike[T]
       crossBuild = args.contains(CrossBuild) || extracted.get(releaseIOMonorepoCrossBuild),
       allChanged = args.contains(AllChanged),
       skipPublish = extracted.get(releaseIOMonorepoSkipPublish),
-      interactive = extracted.get(releaseIOMonorepoInteractive),
-      tagStrategy = extracted.get(releaseIOMonorepoTagStrategy)
+      interactive = extracted.get(releaseIOMonorepoInteractive)
     )
   }
 
@@ -138,8 +135,6 @@ trait MonorepoReleasePluginLike[T]
       selectedNames = args.collect { case SelectProject(name) => name },
       releaseVersionPairs = args.collect { case ReleaseVersion(p, v) => p -> v },
       nextVersionPairs = args.collect { case NextVersion(p, v) => p -> v },
-      globalReleaseVersions = args.collect { case GlobalReleaseVersion(v) => v },
-      globalNextVersions = args.collect { case GlobalNextVersion(v) => v },
       commandName = commandName
     )
   }
@@ -193,8 +188,7 @@ trait MonorepoReleasePluginLike[T]
         projects = projects,
         skipTests = plan.flags.skipTests,
         skipPublish = plan.flags.skipPublish,
-        interactive = plan.flags.interactive,
-        tagStrategy = flags.tagStrategy
+        interactive = plan.flags.interactive
       ).withReleasePlan(plan)
     }
 
@@ -321,7 +315,5 @@ object MonorepoReleasePlugin extends MonorepoReleasePluginLike[Unit] {
 
   override def resource: Resource[IO, Unit] = Resource.unit
 
-  object autoImport extends MonorepoReleaseIO {
-    val MonorepoTagStrategy = MonorepoTagStrategy_
-  }
+  object autoImport extends MonorepoReleaseIO
 }

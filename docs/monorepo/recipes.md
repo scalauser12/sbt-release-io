@@ -52,15 +52,7 @@ The plugin defaults to non-interactive mode (`releaseIOMonorepoInteractive := fa
 ### Per-project version overrides
 
 ```bash
-sbt "releaseIOMonorepo with-defaults release-version core=1.0.0 api=2.0.0 next-version core=1.1.0-SNAPSHOT api=2.1.0-SNAPSHOT"
-```
-
-### Global version mode
-
-When `releaseIOMonorepoUseGlobalVersion := true`, pass a single version:
-
-```bash
-sbt "releaseIOMonorepo with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo with-defaults release-version core=1.0.0 release-version api=2.0.0 next-version core=1.1.0-SNAPSHOT next-version api=2.1.0-SNAPSHOT"
 ```
 
 ### GitHub Actions example
@@ -79,10 +71,10 @@ jobs:
           java-version: 21
       - name: Release
         env:
-          RELEASE_VERSION: ${{ github.event.inputs.version }}
-          NEXT_VERSION: ${{ github.event.inputs.next_version }}
+          CORE_RELEASE_VERSION: ${{ github.event.inputs.core_version }}
+          CORE_NEXT_VERSION: ${{ github.event.inputs.core_next_version }}
         run: |
-          sbt "releaseIOMonorepo with-defaults release-version $RELEASE_VERSION next-version $NEXT_VERSION"
+          sbt "releaseIOMonorepo with-defaults release-version core=$CORE_RELEASE_VERSION next-version core=$CORE_NEXT_VERSION"
 ```
 
 > **Note:** `fetch-depth: 0` is important — change detection uses `git diff` against the last tag, so shallow clones may produce incorrect results.
@@ -119,14 +111,15 @@ Then run the real release:
 sbt "releaseIOMonorepo with-defaults"
 ```
 
-The second command creates local commits and tags but does not publish artifacts or push to the remote. If you use global version mode, replace the per-project overrides with `release-version 1.0.0 next-version 1.1.0-SNAPSHOT`.
+The second command creates local commits and tags but does not publish artifacts or push to the remote.
 
 Inspect the result:
 
 ```bash
 git log --oneline -5
 git tag
-cat version.sbt
+cat core/version.sbt
+cat api/version.sbt
 ```
 
 To clean up after the rehearsal run, see [Recovery and rollback](operations.md#recovery-and-rollback).

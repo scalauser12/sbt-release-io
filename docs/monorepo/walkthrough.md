@@ -54,7 +54,7 @@ lazy val root = (project in file("."))
 version := "0.1.0-SNAPSHOT"
 ```
 
-This walkthrough uses the default per-project version mode, so each subproject gets its own `version.sbt`.
+This walkthrough uses the per-project model, so each subproject gets its own `version.sbt`.
 
 ## 4. Initialise git and make the first commit
 
