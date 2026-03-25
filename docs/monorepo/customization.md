@@ -225,6 +225,28 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
 }
 ```
 
+`myRelease check ...` does **not** acquire `resource` by default. `check` reads the plain
+configured `releaseIOMonorepoProcess` through the protected
+`monorepoReleaseCheckProcess(state)` hook, so normal release behavior stays unchanged while
+preflight avoids custom resource acquisition.
+
+If you want custom monorepo steps to participate in `check`, override that hook with
+resource-free preflight equivalents:
+
+```scala
+override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
+  Project.extract(state).get(releaseIOMonorepoProcess) :+
+    MonorepoStepIO
+      .global("notify-slack-preflight")
+      .withValidation(ctx =>
+        IO.blocking(ctx.state.log.info("Would notify Slack during the real release"))
+      )
+      .validateOnly
+```
+
+That hook is the intended customization point for `check`. It lets custom plugins keep preflight
+coverage for resource-backed release logic without acquiring the main release resource.
+
 Enable in `build.sbt` and run:
 
 ```scala

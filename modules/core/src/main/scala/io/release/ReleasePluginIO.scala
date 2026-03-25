@@ -60,6 +60,15 @@ trait ReleasePluginIOLike[T]
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess))
 
+  /** Resource-free steps used by `check`.
+    *
+    * Defaults to the plain configured `releaseIOProcess` so `check` avoids acquiring the plugin
+    * resource. Custom plugins can override this to add resource-free preflight equivalents for
+    * custom resource-backed steps.
+    */
+  protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
+    Project.extract(state).get(releaseIOProcess)
+
   /** Whether cross-building is enabled (before command-line args are applied).
     * Defaults to reading from the `releaseIOCrossBuild` setting.
     */
@@ -356,32 +365,29 @@ trait ReleasePluginIOLike[T]
     val inputs = buildCommandInputs(state, args, warnOnDuplicates = false)
 
     val program = for {
-      stepFns <- IO.blocking(releaseProcess(inputs.cleanState))
+      steps   <- IO.blocking(releaseCheckProcess(inputs.cleanState))
       _       <- IO.blocking {
                    inputs.cleanState.log.info(
                      s"${ReleaseLogPrefixes.Core} Starting preflight checks..."
                    )
                    inputs.cleanState.log.info(
-                     s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps configured"
+                     s"${ReleaseLogPrefixes.Core} ${steps.length} steps configured"
                    )
                    inputs.cleanState.log.info(
                      s"${ReleaseLogPrefixes.Core} ${CheckModeOutput.CheckModeLogSummary}"
                    )
                  }
-      summary <- resource.use { t =>
-                   val steps = stepFns.map(_(t))
-                   initialContext(
-                     inputs.cleanState,
-                     inputs.skipTests,
-                     inputs.skipPublish,
-                     inputs.interactive
-                   ).flatMap { initialCtx =>
-                     CorePreflight.check(
-                       initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
-                       steps,
-                       inputs.crossEnabled
-                     )
-                   }
+      summary <- initialContext(
+                   inputs.cleanState,
+                   inputs.skipTests,
+                   inputs.skipPublish,
+                   inputs.interactive
+                 ).flatMap { initialCtx =>
+                   CorePreflight.check(
+                     initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
+                     steps,
+                     inputs.crossEnabled
+                   )
                  }
       _       <- logLines(inputs.cleanState, CorePreflight.renderSummary(summary))
       _       <- IO.blocking(

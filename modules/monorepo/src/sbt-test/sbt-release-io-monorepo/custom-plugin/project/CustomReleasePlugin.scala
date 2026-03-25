@@ -31,4 +31,15 @@ object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
           }
       )
     )
+
+  override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
+    Project.extract(state).get(releaseIOMonorepoProcess) :+
+      MonorepoStepIO
+        .global("check-hook")
+        .withValidation(ctx =>
+          IO.blocking {
+            sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "check-hook-ran"))
+          }
+        )
+        .validateOnly
 }

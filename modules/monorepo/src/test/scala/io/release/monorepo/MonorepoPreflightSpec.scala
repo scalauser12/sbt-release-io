@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.internal.HelpDocsLinks
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.monorepo.steps.MonorepoVcsSteps
 import munit.CatsEffectSuite
@@ -14,22 +15,28 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
 
   test("renderSummary - include selection, mode, and per-project tag summaries") {
     val summary = MonorepoPreflight.Summary(
-      selectionMode = SelectionMode.ExplicitSelection,
+      selectionMode = MonorepoPreflight.Evaluation.Resolved(SelectionMode.ExplicitSelection),
       versionMode = "per-project",
-      tagStrategy = MonorepoTagStrategy.PerProject,
+      tagStrategy = MonorepoPreflight.Evaluation.Resolved(MonorepoTagStrategy.PerProject),
       projects = Seq(
         MonorepoPreflight.ProjectSummary(
           name = "core",
-          releaseVersion = "1.0.0",
-          nextVersion = "1.1.0-SNAPSHOT",
-          tagName = "core/v1.0.0",
-          tagStatus = "available"
+          versions = MonorepoPreflight.Evaluation.Resolved(
+            MonorepoPreflight.ProjectVersions("1.0.0", "1.1.0-SNAPSHOT")
+          ),
+          tag = MonorepoPreflight.Evaluation.Resolved(
+            MonorepoPreflight.ProjectTag("core/v1.0.0", "available")
+          )
         )
       ),
       crossBuildEnabled = false,
       publishSummary = "enabled",
       pushSummary = "configured (not executed in check mode)",
-      stepNames = Seq("select-projects", "check-clean-working-dir", "tag-release")
+      stepNames = Seq(
+        "detect-or-select-projects",
+        "check-clean-working-dir",
+        "tag-releases"
+      )
     )
 
     val lines = MonorepoPreflight.renderSummary(summary)
@@ -41,7 +48,9 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
     assert(lines.exists(_.contains("push          : configured (not executed in check mode)")))
     assert(
       lines.exists(
-        _.contains("steps         : select-projects -> check-clean-working-dir -> tag-release")
+        _.contains(
+          "steps         : detect-or-select-projects -> check-clean-working-dir -> tag-releases"
+        )
       )
     )
     assert(lines.exists(_.contains("core: release 1.0.0, next 1.1.0-SNAPSHOT")))
@@ -65,37 +74,114 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
         )
       )
     )
-    assert(lines.exists(_.contains(io.release.internal.HelpDocsLinks.MonorepoReadme)))
-    assert(lines.exists(_.contains(io.release.internal.HelpDocsLinks.MonorepoUsage)))
+    assert(lines.exists(_.contains(HelpDocsLinks.MonorepoReadme)))
+    assert(lines.exists(_.contains(HelpDocsLinks.MonorepoUsage)))
   }
 
-  test("check - resolve explicit selection without mutating files or tags") {
+  test("check - resolve explicit selection, versions, and tags without mutating files or tags") {
     preflightFixtureResource.use { case (repo, ctx, versionFile) =>
       for {
         beforeVersion <- IO.blocking(sbt.IO.read(versionFile))
         beforeTags    <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
         summary       <- MonorepoPreflight.check(
                            ctx,
-                           Seq(MonorepoReleaseSteps.checkCleanWorkingDir),
+                           Seq(
+                             MonorepoReleaseSteps.checkCleanWorkingDir,
+                             MonorepoReleaseSteps.detectOrSelectProjects,
+                             MonorepoReleaseSteps.inquireVersions,
+                             MonorepoReleaseSteps.validateVersions,
+                             MonorepoReleaseSteps.tagReleases
+                           ),
                            crossBuild = false
                          )
         afterVersion  <- IO.blocking(sbt.IO.read(versionFile))
         afterTags     <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
       } yield {
-        assertEquals(summary.selectionMode, SelectionMode.ExplicitSelection)
+        assertEquals(
+          summary.selectionMode,
+          MonorepoPreflight.Evaluation.Resolved(SelectionMode.ExplicitSelection)
+        )
         assertEquals(summary.versionMode, "per-project")
-        assertEquals(summary.tagStrategy, MonorepoTagStrategy.PerProject)
+        assertEquals(
+          summary.tagStrategy,
+          MonorepoPreflight.Evaluation.Resolved(MonorepoTagStrategy.PerProject)
+        )
         assertEquals(summary.projects.map(_.name), Seq("core"))
-        assertEquals(summary.projects.map(_.releaseVersion), Seq("0.1.0"))
-        assertEquals(summary.projects.map(_.nextVersion), Seq("0.2.0-SNAPSHOT"))
-        assertEquals(summary.projects.map(_.tagName), Seq("core/v0.1.0"))
-        assertEquals(summary.projects.map(_.tagStatus), Seq("available"))
+        assertEquals(
+          summary.projects.map(_.versions),
+          Seq(
+            MonorepoPreflight.Evaluation.Resolved(
+              MonorepoPreflight.ProjectVersions("0.1.0", "0.2.0-SNAPSHOT")
+            )
+          )
+        )
+        assertEquals(
+          summary.projects.map(_.tag),
+          Seq(
+            MonorepoPreflight.Evaluation.Resolved(
+              MonorepoPreflight.ProjectTag("core/v0.1.0", "available")
+            )
+          )
+        )
         assertEquals(summary.publishSummary, "step not configured")
         assertEquals(summary.pushSummary, "step not configured")
-        assertEquals(summary.stepNames, Seq("check-clean-working-dir"))
+        assertEquals(
+          summary.stepNames,
+          Seq(
+            "check-clean-working-dir",
+            "detect-or-select-projects",
+            "inquire-versions",
+            "validate-versions",
+            "tag-releases"
+          )
+        )
         assertEquals(beforeVersion, afterVersion)
         assertEquals(beforeTags.trim, afterTags.trim)
       }
+    }
+  }
+
+  test(
+    "check - render selection, versions, and tags as not evaluated when the check process omits the built-in steps"
+  ) {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      MonorepoPreflight
+        .check(
+          ctx,
+          Seq(MonorepoReleaseSteps.checkCleanWorkingDir),
+          crossBuild = false
+        )
+        .map { summary =>
+          assertEquals(
+            summary.selectionMode,
+            MonorepoPreflight.Evaluation.NotEvaluated(
+              "detect-or-select-projects not in check process"
+            )
+          )
+          assertEquals(summary.versionMode, "per-project")
+          assertEquals(
+            summary.tagStrategy,
+            MonorepoPreflight.Evaluation.Resolved(MonorepoTagStrategy.PerProject)
+          )
+          assertEquals(summary.projects.map(_.name), Seq("core"))
+          assertEquals(
+            summary.projects.map(_.versions),
+            Seq(
+              MonorepoPreflight.Evaluation.NotEvaluated(
+                "inquire-versions not in check process"
+              )
+            )
+          )
+          assertEquals(
+            summary.projects.map(_.tag),
+            Seq(
+              MonorepoPreflight.Evaluation.NotEvaluated("tag-releases not in check process")
+            )
+          )
+          assertEquals(summary.publishSummary, "step not configured")
+          assertEquals(summary.pushSummary, "step not configured")
+          assertEquals(summary.stepNames, Seq("check-clean-working-dir"))
+        }
     }
   }
 
@@ -104,14 +190,20 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
       MonorepoTestSupport.dummyProject("core").copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
       MonorepoTestSupport.dummyProject("api").copy(versions = Some("2.0.0" -> "2.1.0-SNAPSHOT"))
     )
-    val tags     = Seq(
-      MonorepoVcsSteps.PreflightTagOutcome("core/v1.0.0", "available"),
-      MonorepoVcsSteps.PreflightTagOutcome("api/v2.0.0", "available"),
-      MonorepoVcsSteps.PreflightTagOutcome("extra/v3.0.0", "available")
+    val tags     = MonorepoPreflight.Evaluation.Resolved(
+      Seq(
+        MonorepoVcsSteps.PreflightTagOutcome("core/v1.0.0", "available"),
+        MonorepoVcsSteps.PreflightTagOutcome("api/v2.0.0", "available"),
+        MonorepoVcsSteps.PreflightTagOutcome("extra/v3.0.0", "available")
+      )
     )
 
     assertFailure[IllegalStateException, Seq[MonorepoPreflight.ProjectSummary]](
-      MonorepoPreflight.renderProjects(projects, tags)
+      MonorepoPreflight.renderProjects(
+        projects,
+        builtInVersionsResolved = true,
+        tagOutcomes = tags
+      )
     )(err => assert(err.getMessage.contains("inconsistent project/tag counts")))
   }
 
@@ -147,7 +239,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
           )
         )
         val state    = TestSupport.loadedState(repo, projects, currentProjectId = Some("root"))
-        val ctx      = MonorepoContext(state = state, interactive = false).withReleasePlan(
+        val current  = Seq(
+          MonorepoProjectResolver.resolveAll(state).unsafeRunSync().find(_.name == "core").get
+        )
+        val ctx      = MonorepoContext(
+          state = state,
+          projects = current,
+          interactive = false
+        ).withReleasePlan(
           MonorepoSpecSupport.releasePlan(
             selectionMode = SelectionMode.ExplicitSelection,
             selectedNames = Seq("core")

@@ -13,12 +13,16 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("renderSummary - include resolved versions, tag status, and workflow flags") {
     val summary = CorePreflight.Summary(
-      versionFile = new File("/tmp/version.sbt"),
-      currentVersion = "0.1.0-SNAPSHOT",
-      releaseVersion = "0.1.0",
-      nextVersion = "0.2.0-SNAPSHOT",
-      tagName = "v0.1.0",
-      tagStatus = "available",
+      versions = CorePreflight.VersionsSummary.Resolved(
+        versionFile = new File("/tmp/version.sbt"),
+        currentVersion = "0.1.0-SNAPSHOT",
+        releaseVersion = "0.1.0",
+        nextVersion = "0.2.0-SNAPSHOT"
+      ),
+      tag = CorePreflight.TagSummary.Resolved(
+        tagName = "v0.1.0",
+        status = "available"
+      ),
       crossBuildEnabled = true,
       publishSummary = "enabled",
       pushSummary = "configured (not executed in check mode)",
@@ -62,7 +66,81 @@ class CorePreflightSpec extends CatsEffectSuite {
     assert(lines.exists(_.contains(HelpDocsLinks.CoreReadme)))
   }
 
-  test("check - resolve versions and tag summary without mutating the repository") {
+  test(
+    "check - resolve versions and tag summary when the check process includes the built-in steps"
+  ) {
+    withInitialContext { case (repo, versionFile, initialCtx) =>
+      for {
+        beforeVersion <- IO.blocking(sbt.IO.read(versionFile))
+        beforeTags    <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
+        summary       <- CorePreflight.check(
+                           initialCtx,
+                           Seq(
+                             VcsSteps.checkCleanWorkingDir,
+                             VersionSteps.inquireVersions,
+                             VcsSteps.tagRelease
+                           ),
+                           crossBuild = false
+                         )
+        afterVersion  <- IO.blocking(sbt.IO.read(versionFile))
+        afterTags     <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
+      } yield {
+        assertEquals(
+          summary.versions,
+          CorePreflight.VersionsSummary.Resolved(
+            versionFile = versionFile,
+            currentVersion = "0.1.0-SNAPSHOT",
+            releaseVersion = "0.1.0",
+            nextVersion = "0.2.0-SNAPSHOT"
+          )
+        )
+        assertEquals(
+          summary.tag,
+          CorePreflight.TagSummary.Resolved("v0.1.0", "available")
+        )
+        assertEquals(summary.publishSummary, "step not configured")
+        assertEquals(summary.pushSummary, "step not configured")
+        assertEquals(
+          summary.stepNames,
+          Seq("check-clean-working-dir", "inquire-versions", "tag-release")
+        )
+        assertEquals(beforeVersion, afterVersion)
+        assertEquals(beforeTags.trim, afterTags.trim)
+      }
+    }
+  }
+
+  test(
+    "check - render versions and tags as not evaluated when the check process omits the built-in steps"
+  ) {
+    withInitialContext { case (_, _, initialCtx) =>
+      CorePreflight
+        .check(
+          initialCtx,
+          Seq(VcsSteps.checkCleanWorkingDir),
+          crossBuild = false
+        )
+        .map { summary =>
+          assertEquals(
+            summary.versions,
+            CorePreflight.VersionsSummary.NotEvaluated(
+              "inquire-versions not in check process"
+            )
+          )
+          assertEquals(
+            summary.tag,
+            CorePreflight.TagSummary.NotEvaluated("tag-release not in check process")
+          )
+          assertEquals(summary.publishSummary, "step not configured")
+          assertEquals(summary.pushSummary, "step not configured")
+          assertEquals(summary.stepNames, Seq("check-clean-working-dir"))
+        }
+    }
+  }
+
+  private def withInitialContext[A](
+      f: (File, File, ReleaseContext) => IO[A]
+  ): IO[A] =
     TestSupport
       .gitRepoWithCommitResource(
         "core-preflight-spec",
@@ -111,28 +189,6 @@ class CorePreflightSpec extends CatsEffectSuite {
           )
         )
 
-        for {
-          beforeVersion <- IO.blocking(sbt.IO.read(versionFile))
-          beforeTags    <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
-          summary       <- CorePreflight.check(
-                             initialCtx,
-                             Seq(VcsSteps.checkCleanWorkingDir),
-                             crossBuild = false
-                           )
-          afterVersion  <- IO.blocking(sbt.IO.read(versionFile))
-          afterTags     <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
-        } yield {
-          assertEquals(summary.currentVersion, "0.1.0-SNAPSHOT")
-          assertEquals(summary.releaseVersion, "0.1.0")
-          assertEquals(summary.nextVersion, "0.2.0-SNAPSHOT")
-          assertEquals(summary.tagName, "v0.1.0")
-          assertEquals(summary.tagStatus, "available")
-          assertEquals(summary.publishSummary, "step not configured")
-          assertEquals(summary.pushSummary, "step not configured")
-          assertEquals(summary.stepNames, Seq("check-clean-working-dir"))
-          assertEquals(beforeVersion, afterVersion)
-          assertEquals(beforeTags.trim, afterTags.trim)
-        }
+        f(repo, versionFile, initialCtx)
       }
-  }
 }

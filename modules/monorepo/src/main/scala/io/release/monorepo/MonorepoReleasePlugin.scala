@@ -59,6 +59,15 @@ trait MonorepoReleasePluginLike[T]
   protected def monorepoReleaseProcess(state: State): Seq[T => MonorepoStepIO] =
     liftSteps(Project.extract(state).get(releaseIOMonorepoProcess))
 
+  /** Resource-free steps used by `check`.
+    *
+    * Defaults to the plain configured `releaseIOMonorepoProcess` so `check` avoids acquiring the
+    * plugin resource. Custom plugins can override this to add resource-free preflight equivalents
+    * for custom resource-backed steps.
+    */
+  protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
+    Project.extract(state).get(releaseIOMonorepoProcess)
+
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
     */
@@ -262,27 +271,24 @@ trait MonorepoReleasePluginLike[T]
                          case Right(command)    =>
                            val plannedState = command.cleanState
                            for {
-                             stepFns    <- IO.blocking(monorepoReleaseProcess(plannedState))
+                             steps      <- IO.blocking(monorepoReleaseCheckProcess(plannedState))
                              initialCtx <- buildContext(plannedState, command.flags, command.plan)
                              _          <- IO.blocking {
                                              plannedState.log.info(
                                                s"${ReleaseLogPrefixes.Monorepo} Starting preflight checks..."
                                              )
                                              plannedState.log.info(
-                                               s"${ReleaseLogPrefixes.Monorepo} ${stepFns.length} steps configured"
+                                               s"${ReleaseLogPrefixes.Monorepo} ${steps.length} steps configured"
                                              )
                                              plannedState.log.info(
                                                s"${ReleaseLogPrefixes.Monorepo} ${CheckModeOutput.CheckModeLogSummary}"
                                              )
                                            }
-                             summary    <- resource.use { t =>
-                                             val steps = stepFns.map(_(t))
-                                             MonorepoPreflight.check(
-                                               initialCtx,
-                                               steps,
-                                               command.flags.crossBuild
-                                             )
-                                           }
+                             summary    <- MonorepoPreflight.check(
+                                             initialCtx,
+                                             steps,
+                                             command.flags.crossBuild
+                                           )
                              _          <- logLines(plannedState, MonorepoPreflight.renderSummary(summary))
                              _          <- IO.blocking(
                                              plannedState.log.info(

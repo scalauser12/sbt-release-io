@@ -136,6 +136,27 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
 }
 ```
 
+`releaseWithClient check ...` does **not** acquire `resource` by default. `check` reads the plain
+configured `releaseIOProcess` through the protected `releaseCheckProcess(state)` hook, so normal
+release behavior is unchanged while preflight stays free of custom resource acquisition.
+
+If you want custom steps to participate in `check`, override `releaseCheckProcess` with
+resource-free preflight equivalents:
+
+```scala
+override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
+  Project.extract(state).get(releaseIOProcess) :+
+    ReleaseStepIO
+      .step("notify-api-preflight")
+      .withValidation(ctx =>
+        IO.blocking(println(s"Would notify for ${ctx.releaseVersion.getOrElse("unknown")}"))
+      )
+      .validateOnly
+```
+
+That hook is the intended customization point for `check`. It lets custom plugins restore
+preflight coverage for resource-backed release logic without acquiring the main release resource.
+
 ### Configuring in build.sbt
 
 Enable the plugin and configure the release process as usual:

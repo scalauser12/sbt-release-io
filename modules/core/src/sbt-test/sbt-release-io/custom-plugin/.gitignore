@@ -4,3 +4,7 @@ project/project/
 *.class
 *.log
 global/
+resource-acquired
+resource-released
+step-used-resource
+check-hook-ran

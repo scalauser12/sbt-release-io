@@ -5,6 +5,13 @@ $ exec git config user.name "Test User"
 $ exec git add .gitignore build.sbt version.sbt project/plugins.sbt project/ResourceStepWithCheckPlugin.scala
 $ exec git commit -m "Initial commit"
 
+# Check mode should not acquire the plugin resource or include resource-aware steps by default
+> releaseResourceCheck check with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+$ absent resource-acquired
+$ absent resource-released
+$ absent check-ran
+$ absent action-ran
+
 # Run release - custom plugin uses resourceStepWithCheck
 > releaseResourceCheck with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 
