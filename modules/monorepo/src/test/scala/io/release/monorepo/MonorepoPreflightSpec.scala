@@ -72,18 +72,19 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
 
   test("check - resolve explicit selection, versions, and tags without mutating files or tags") {
     preflightFixtureResource.use { case (repo, ctx, versionFile) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
       for {
         beforeVersion <- IO.blocking(sbt.IO.read(versionFile))
         beforeTags    <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
         summary       <- MonorepoPreflight.check(
-                           ctx,
+                           session,
                            Seq(
                              MonorepoReleaseSteps.checkCleanWorkingDir,
                              MonorepoReleaseSteps.detectOrSelectProjects,
                              MonorepoReleaseSteps.inquireVersions,
                              MonorepoReleaseSteps.tagReleases
-                           ),
-                           crossBuild = false
+                           )
                          )
         afterVersion  <- IO.blocking(sbt.IO.read(versionFile))
         afterTags     <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
@@ -130,11 +131,12 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
     "check - render selection, versions, and tags as not evaluated when the check process omits the built-in steps"
   ) {
     preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
       MonorepoPreflight
         .check(
-          ctx,
-          Seq(MonorepoReleaseSteps.checkCleanWorkingDir),
-          crossBuild = false
+          session,
+          Seq(MonorepoReleaseSteps.checkCleanWorkingDir)
         )
         .map { summary =>
           assertEquals(

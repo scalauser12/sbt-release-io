@@ -19,7 +19,9 @@ private[monorepo] object MonorepoSelectionResolver {
   )
 
   /** Shared error message for the "no projects selected" case.
-    * Used by both `detectOrSelectProjects` (run path) and `ensureSelectedProjects` (check path).
+    *
+    * Used by [[MonorepoPreparation.selectProjects]], which is shared by both the
+    * built-in `detect-or-select-projects` run step and the check/preflight path.
     */
   def noProjectsError(selectionMode: SelectionMode): String =
     selectionMode match {

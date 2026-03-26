@@ -4,11 +4,10 @@ import cats.effect.IO
 import cats.syntax.all.*
 import io.release.VcsOps
 import io.release.internal.CheckModeOutput
+import io.release.internal.ExecutionEngine
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ReleaseLogPrefixes
-import io.release.monorepo.steps.MonorepoCrossBuild
 import io.release.monorepo.steps.MonorepoVcsSteps
-import io.release.monorepo.steps.MonorepoVersionSteps
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
@@ -97,10 +96,10 @@ private[monorepo] object MonorepoPreflight {
     ) ++ summary.projects.map(renderProject)
 
   def check(
-      initialCtx: MonorepoContext,
-      steps: Seq[MonorepoStepIO],
-      crossBuild: Boolean
+      session: MonorepoPreparedSession,
+      steps: Seq[MonorepoStepIO]
   ): IO[Summary] = {
+    val initialCtx              = session.context
     val stepNames              = steps.map(_.name)
     val pushConfigured         = stepNames.contains("push-changes")
     val publishConfigured      = stepNames.contains("publish-artifacts")
@@ -109,21 +108,18 @@ private[monorepo] object MonorepoPreflight {
     val shouldPreflightTags    = stepNames.contains(TagReleasesStep)
 
     for {
-      plan         <- IO.fromOption(initialCtx.releasePlan)(
-                        new IllegalStateException("Monorepo release plan not initialized")
-                      )
       baseCtx      <- if (shouldResolveSelection || (shouldPreflightTags && shouldResolveVersions))
                         VcsOps.detectAndInit(initialCtx)
                       else IO.pure(initialCtx)
-      selected     <- resolveSelection(baseCtx, plan, shouldResolveSelection)
+      selected     <- resolveSelection(baseCtx, session.plan, shouldResolveSelection)
       withVersions <- resolveVersionSnapshot(selected.context, shouldResolveVersions)
       tagOutcomes  <- resolveTagSnapshot(withVersions, shouldPreflightTags, shouldResolveVersions)
-      _            <- validateOnly(steps, crossBuild)(withVersions)
+      _            <- validateOnly(steps, session.flags.crossBuild)(withVersions)
       projects     <- renderProjects(withVersions.currentProjects, shouldResolveVersions, tagOutcomes)
       summary       = Summary(
                         selectionMode = selected.selectionMode,
                         projects = projects,
-                        crossBuildEnabled = crossBuild,
+                        crossBuildEnabled = session.flags.crossBuild,
                         publishSummary = CheckModeOutput.publishStatus(
                           publishConfigured = publishConfigured,
                           skipPublish = withVersions.skipPublish,
@@ -148,49 +144,21 @@ private[monorepo] object MonorepoPreflight {
         )
       )
     else
-      for {
-        selected <- MonorepoSelectionResolver.resolve(ctx, plan)
-        nextCtx  <- ensureSelectedProjects(ctx, selected)
-      } yield SelectionSnapshot(
-        context = nextCtx,
-        selectionMode = Evaluation.Resolved(selected.selectionMode)
-      )
-
-  private def ensureSelectedProjects(
-      ctx: MonorepoContext,
-      selected: MonorepoSelectionResolver.SelectionResult
-  ): IO[MonorepoContext] =
-    if (selected.projects.nonEmpty)
-      IO.pure(ctx.withProjects(selected.projects))
-    else
-      IO.raiseError(
-        new IllegalStateException(
-          MonorepoSelectionResolver.noProjectsError(selected.selectionMode)
+      MonorepoPreparation
+        .selectProjects(ctx, plan)
+        .map(selected =>
+          SelectionSnapshot(
+            context = selected.context,
+            selectionMode = Evaluation.Resolved(selected.selectionMode)
+          )
         )
-      )
 
   private def resolveVersionSnapshot(
       ctx: MonorepoContext,
       shouldResolveVersions: Boolean
   ): IO[MonorepoContext] =
     if (!shouldResolveVersions) IO.pure(ctx)
-    else resolveVersions(ctx)
-
-  private def resolveVersions(ctx: MonorepoContext): IO[MonorepoContext] =
-    ctx.currentProjects.toList.foldLeft(IO.pure(ctx)) { (ioCtx, project) =>
-      ioCtx.flatMap { currentCtx =>
-        MonorepoVersionSteps
-          .resolveProjectVersions(currentCtx, project, allowPrompts = false)
-          .map { resolved =>
-            currentCtx.updateProject(project.ref)(
-              _.copy(
-                versionFile = resolved.versionFile,
-                versions = Some(resolved.releaseVersion -> resolved.nextVersion)
-              )
-            )
-          }
-      }
-    }
+    else MonorepoPreparation.resolveVersions(ctx, allowPrompts = false)
 
   private def resolveTagSnapshot(
       ctx: MonorepoContext,
@@ -208,22 +176,11 @@ private[monorepo] object MonorepoPreflight {
       steps: Seq[MonorepoStepIO],
       crossBuild: Boolean
   )(ctx: MonorepoContext): IO[Unit] =
-    steps.toList.traverse_ {
-      case global: MonorepoStepIO.Global         =>
-        IO.blocking(
-          ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Validating step: ${global.name}")
-        ) *> global.validate(ctx)
-      case perProject: MonorepoStepIO.PerProject =>
-        IO.blocking(
-          ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Validating step: ${perProject.name}")
-        ) *>
-          MonorepoCrossBuild.validatePerProjectWithCrossBuild(
-            ctx,
-            perProject.validate,
-            crossBuild,
-            perProject.enableCrossBuild
-          )
-    }
+    ExecutionEngine.runValidations(
+      ReleaseLogPrefixes.Monorepo,
+      MonorepoProcessStep.normalize(steps, crossBuild).map(_.validationStep),
+      ctx
+    )
 
   private[monorepo] def renderProjects(
       projects: Seq[ProjectReleaseInfo],
@@ -259,11 +216,6 @@ private[monorepo] object MonorepoPreflight {
           IO.pure(projects.zip(outcomes).map { case (_, tagOutcome) =>
             Evaluation.Resolved(ProjectTag(tagOutcome.rendered, tagOutcome.status))
           })
-    }
-
-  private def projectHasResolvedVersions(project: ProjectReleaseInfo): Boolean =
-    project.versions.exists { case (releaseVersion, nextVersion) =>
-      releaseVersion.nonEmpty && nextVersion.nonEmpty
     }
 
   private def renderProjectVersions(

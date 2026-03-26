@@ -40,30 +40,14 @@ object MonorepoReleaseSteps {
     name = MonorepoComposer.SelectionBoundary,
     isSelectionBoundary = true,
     execute = ctx =>
-      IO.fromOption(ctx.releasePlan)(
-        new IllegalStateException("Monorepo release plan not initialized")
-      ).flatMap { plan =>
-        MonorepoSelectionResolver.resolve(ctx, plan).flatMap { result =>
-          val selectedInfos = result.projects
-          val message       = result.selectionMode match {
-            case SelectionMode.ExplicitSelection =>
-              s"Releasing explicitly selected projects: ${selectedInfos.map(_.name).mkString(", ")}"
-            case SelectionMode.AllChanged        =>
-              s"Releasing all projects: ${selectedInfos.map(_.name).mkString(", ")}"
-            case SelectionMode.DetectChanges     =>
-              s"Releasing projects: ${selectedInfos.map(_.name).mkString(", ")}"
-          }
-
-          if (selectedInfos.isEmpty) {
-            IO.raiseError(
-              new IllegalStateException(
-                MonorepoSelectionResolver.noProjectsError(result.selectionMode)
-              )
-            )
-          } else {
-            logInfo(ctx, message).as(ctx.withProjects(selectedInfos))
-          }
-        }
+      MonorepoPreparation.selectProjects(ctx).flatMap { selected =>
+        logInfo(
+          ctx,
+          MonorepoPreparation.selectionMessage(
+            selected.context.currentProjects,
+            selected.selectionMode
+          )
+        ).as(selected.context)
       }
   )
 

@@ -115,6 +115,52 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
     }
   }
 
+  test("compose - preserve custom process order around the selection boundary") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        val core = dummyProject("core")
+        val api  = dummyProject("api")
+        val pCtx = ctx.withProjects(Seq(core, api))
+
+        val setup = MonorepoStepIO.Global(
+          name = "custom-setup",
+          validate = _ => log.update(_ :+ "validate-setup"),
+          execute = c => log.update(_ :+ "execute-setup").as(c)
+        )
+        val boundary = MonorepoStepIO
+          .global("detect-or-select-projects")
+          .withSelectionBoundary
+          .execute(c => log.update(_ :+ "select").as(c.withProjects(Seq(api))))
+        val afterPer = MonorepoStepIO.PerProject(
+          name = "custom-project",
+          validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
+          execute = (c, project) => log.update(_ :+ s"execute-project:${project.name}").as(c)
+        )
+        val afterGlobal = MonorepoStepIO.Global(
+          name = "custom-global",
+          validate = _ => log.update(_ :+ "validate-global"),
+          execute = c => log.update(_ :+ "execute-global").as(c)
+        )
+
+        MonorepoStepIO.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx) *>
+          log.get.map { obs =>
+            assertEquals(
+              obs,
+              List(
+                "validate-setup",
+                "execute-setup",
+                "select",
+                "validate-project:api",
+                "validate-global",
+                "execute-project:api",
+                "execute-global"
+              )
+            )
+          }
+      }
+    }
+  }
+
   test("compose - thread MonorepoContext metadata through sequential execute steps") {
     contextResource.use { ctx =>
       val metadataKey = AttributeKey[String]("verified")
