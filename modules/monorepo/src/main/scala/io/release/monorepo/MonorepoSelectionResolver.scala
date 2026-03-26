@@ -4,8 +4,10 @@ import cats.effect.IO
 import cats.syntax.all.*
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers.errorMessage
+import sbt.ProjectRef
 import sbt.State
 
+import java.io.File
 import scala.util.control.NonFatal
 
 /** Resolves the selected monorepo project set from the current live state. */
@@ -15,6 +17,22 @@ private[monorepo] object MonorepoSelectionResolver {
       projects: Seq[ProjectReleaseInfo],
       selectionMode: SelectionMode
   )
+
+  /** Shared error message for the "no projects selected" case.
+    * Used by both `detectOrSelectProjects` (run path) and `ensureSelectedProjects` (check path).
+    */
+  def noProjectsError(selectionMode: SelectionMode): String =
+    selectionMode match {
+      case SelectionMode.DetectChanges =>
+        "No projects have changed since their last release tag. " +
+          "Check the per-project log output above for last-known tags. " +
+          "To inspect the planned selection without changes, run `releaseIOMonorepo check`. " +
+          "To release all projects regardless, re-run with the `all-changed` flag. " +
+          "See `releaseIOMonorepo help` for details."
+      case _                           =>
+        "No projects configured. Nothing to release. " +
+          "See `releaseIOMonorepo help` for setup guidance."
+    }
 
   def resolve(
       ctx: MonorepoContext,
@@ -67,28 +85,40 @@ private[monorepo] object MonorepoSelectionResolver {
         forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
       }
 
+  private final case class DetectionSettings(
+      detectChanges: Boolean,
+      includeDownstream: Boolean,
+      customDetector: Option[(ProjectRef, File, State) => IO[Boolean]]
+  )
+
+  private def resolveDetectionSettings(state: State): DetectionSettings = {
+    val runtime = MonorepoRuntime.fromState(state)
+    DetectionSettings(
+      detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges),
+      includeDownstream =
+        runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream),
+      customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector)
+    )
+  }
+
   private def detectSelectedProjects(
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
       tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] = {
-    val runtime           = MonorepoRuntime.fromState(ctx.state)
-    val detectChanges     = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges)
-    val includeDownstream =
-      runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream)
-    val customDetector    = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector)
+    val settings = resolveDetectionSettings(ctx.state)
 
-    if (!detectChanges) {
+    if (!settings.detectChanges)
       IO.pure((orderedProjects, SelectionMode.AllChanged))
-    } else {
-      val detected = customDetector match {
+    else {
+      val detected = settings.customDetector match {
         case Some(detector) =>
           detectWithCustomDetector(ctx, orderedProjects, detector)
         case None           =>
+          val runtime      = MonorepoRuntime.fromState(ctx.state)
           val userExcludes =
             runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes)
           val sharedPaths  = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
-
           IO.fromOption(ctx.vcs)(new IllegalStateException("VCS not initialized")).flatMap { vcs =>
             ChangeDetection.detectChangedProjects(
               vcs,
@@ -101,7 +131,7 @@ private[monorepo] object MonorepoSelectionResolver {
           }
       }
 
-      if (!includeDownstream) detected.map((_, SelectionMode.DetectChanges))
+      if (!settings.includeDownstream) detected.map((_, SelectionMode.DetectChanges))
       else
         detected.flatMap { directlyChanged =>
           expandToDownstream(ctx, orderedProjects, directlyChanged)

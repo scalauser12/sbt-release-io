@@ -207,93 +207,81 @@ trait MonorepoReleasePluginLike[T]
   // ── Release execution ───────────────────────────────────────────────
 
   protected def doMonorepoRelease(state: State, args: Seq[MonorepoCli.Arg]): State = {
-    val program: IO[State] = for {
-      plannedEither <- prepareCommand(state, args)
-      result        <- plannedEither match {
-                         case Left(failedState) => IO.pure(failedState)
-                         case Right(command)    =>
-                           val plannedState = command.cleanState
-                           for {
-                             stepFns    <- IO.blocking(monorepoReleaseProcess(plannedState))
-                             initialCtx <- buildContext(plannedState, command.flags, command.plan)
-                             _          <- IO.blocking(
-                                             logReleaseStart(
-                                               plannedState,
-                                               stepFns.length,
-                                               initialCtx.projects.length,
-                                               command.flags
-                                             )
-                                           )
-                             finalCtx   <- resource.use { t =>
-                                             val steps = stepFns.map(_(t))
-                                             MonorepoStepIO.compose(
-                                               steps,
-                                               command.flags.crossBuild
-                                             )(
-                                               initialCtx
-                                             )
-                                           }
-                             result     <- if (finalCtx.failed) {
-                                             val cause = finalCtx.failureCause
-                                               .map(e => StepHelpers.errorMessage(e))
-                                               .getOrElse("unknown error")
-                                             IO.blocking(
-                                               finalCtx.state.log.error(
-                                                 s"${ReleaseLogPrefixes.Monorepo} Release failed: $cause"
-                                               )
-                                             ).as(finalCtx.state.fail)
-                                           } else {
-                                             IO.blocking(
-                                               finalCtx.state.log.info(
-                                                 s"${ReleaseLogPrefixes.Monorepo} Monorepo release completed successfully!"
-                                               )
-                                             ).as(finalCtx.state)
-                                           }
-                           } yield result
-                       }
-    } yield result
-
-    // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
+    val program: IO[State] = prepareCommand(state, args).flatMap {
+      case Left(failedState) => IO.pure(failedState)
+      case Right(command)    => runPlannedRelease(command)
+    }
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo)(program)
   }
 
-  protected def doMonorepoCheck(state: State, args: Seq[MonorepoCli.Arg]): State = {
-    val program: IO[State] = for {
-      plannedEither <- prepareCommand(state, args)
-      result        <- plannedEither match {
-                         case Left(failedState) => IO.pure(failedState)
-                         case Right(command)    =>
-                           val plannedState = command.cleanState
-                           for {
-                             steps      <- IO.blocking(monorepoReleaseCheckProcess(plannedState))
-                             initialCtx <- buildContext(plannedState, command.flags, command.plan)
-                             _          <- IO.blocking {
-                                             plannedState.log.info(
-                                               s"${ReleaseLogPrefixes.Monorepo} Starting preflight checks..."
-                                             )
-                                             plannedState.log.info(
-                                               s"${ReleaseLogPrefixes.Monorepo} ${steps.length} steps configured"
-                                             )
-                                             plannedState.log.info(
-                                               s"${ReleaseLogPrefixes.Monorepo} ${CheckModeOutput.CheckModeLogSummary}"
-                                             )
-                                           }
-                             summary    <- MonorepoPreflight.check(
-                                             initialCtx,
-                                             steps,
-                                             command.flags.crossBuild
-                                           )
-                             _          <- logLines(plannedState, MonorepoPreflight.renderSummary(summary))
-                             _          <- IO.blocking(
-                                             plannedState.log.info(
-                                               s"${ReleaseLogPrefixes.Monorepo} Preflight checks passed."
-                                             )
-                                           )
-                           } yield command.cleanState
-                       }
+  private def runPlannedRelease(command: PlannedCommand): IO[State] = {
+    val plannedState = command.cleanState
+    for {
+      stepFns    <- IO.blocking(monorepoReleaseProcess(plannedState))
+      initialCtx <- buildContext(plannedState, command.flags, command.plan)
+      _          <- IO.blocking(
+                      logReleaseStart(
+                        plannedState,
+                        stepFns.length,
+                        initialCtx.projects.length,
+                        command.flags
+                      )
+                    )
+      finalCtx   <- resource.use { t =>
+                      val steps = stepFns.map(_(t))
+                      MonorepoStepIO.compose(steps, command.flags.crossBuild)(initialCtx)
+                    }
+      result     <- if (finalCtx.failed) {
+                      val cause = finalCtx.failureCause
+                        .map(e => StepHelpers.errorMessage(e))
+                        .getOrElse("unknown error")
+                      IO.blocking(
+                        finalCtx.state.log.error(
+                          s"${ReleaseLogPrefixes.Monorepo} Release failed: $cause"
+                        )
+                      ).as(finalCtx.state.fail)
+                    } else {
+                      IO.blocking(
+                        finalCtx.state.log.info(
+                          s"${ReleaseLogPrefixes.Monorepo} Monorepo release completed successfully!"
+                        )
+                      ).as(finalCtx.state)
+                    }
     } yield result
+  }
 
+  protected def doMonorepoCheck(state: State, args: Seq[MonorepoCli.Arg]): State = {
+    val program: IO[State] = prepareCommand(state, args).flatMap {
+      case Left(failedState) => IO.pure(failedState)
+      case Right(command)    => runPlannedCheck(command)
+    }
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo)(program)
+  }
+
+  private def runPlannedCheck(command: PlannedCommand): IO[State] = {
+    val plannedState = command.cleanState
+    for {
+      steps      <- IO.blocking(monorepoReleaseCheckProcess(plannedState))
+      initialCtx <- buildContext(plannedState, command.flags, command.plan)
+      _          <- IO.blocking {
+                      plannedState.log.info(
+                        s"${ReleaseLogPrefixes.Monorepo} Starting preflight checks..."
+                      )
+                      plannedState.log.info(
+                        s"${ReleaseLogPrefixes.Monorepo} ${steps.length} steps configured"
+                      )
+                      plannedState.log.info(
+                        s"${ReleaseLogPrefixes.Monorepo} ${CheckModeOutput.CheckModeLogSummary}"
+                      )
+                    }
+      summary    <- MonorepoPreflight.check(initialCtx, steps, command.flags.crossBuild)
+      _          <- logLines(plannedState, MonorepoPreflight.renderSummary(summary))
+      _          <- IO.blocking(
+                      plannedState.log.info(
+                        s"${ReleaseLogPrefixes.Monorepo} Preflight checks passed."
+                      )
+                    )
+    } yield command.cleanState
   }
 }
 

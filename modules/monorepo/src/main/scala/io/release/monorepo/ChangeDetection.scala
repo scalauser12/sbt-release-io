@@ -118,30 +118,38 @@ private[monorepo] object ChangeDetection {
 
       val (_, changedProjects) =
         projects.foldLeft(Map.empty[String, Boolean] -> Vector.empty[ProjectReleaseInfo]) {
-          case ((sharedPathCache, acc), project) =>
-            val ProjectTagLookup(tagPattern, tagLookup) = projectTagLookup(inputs, project)
-            val excludes                                =
-              inputs.globalExcludes ++ gitRelativize(vcs.baseDir, project.versionFile).toSet
-            val (updatedCache, sharedChanged)           =
-              sharedPathsChanged(inputs, sharedPathCache, tagLookup)
-            val excludedChildDirs                       = childDirPrefixes(inputs, project)
-            val changed                                 =
-              sharedChanged || hasChangedSinceLastTag(
-                vcs,
-                project,
-                tagPattern,
-                tagLookup,
-                state,
-                excludes,
-                excludedChildDirs
-              )
-
-            val nextProjects = if (changed) acc :+ project else acc
-            updatedCache -> nextProjects
+          case ((cache, acc), project) =>
+            val (updatedCache, changed) = processProject(inputs, project, cache)
+            updatedCache -> (if (changed) acc :+ project else acc)
         }
 
       changedProjects
     }
+
+  /** Evaluate a single project: look up its tag, check shared paths, diff project files.
+    * Returns the updated shared-path cache and whether the project has changed.
+    */
+  private def processProject(
+      inputs: DetectionInputs,
+      project: ProjectReleaseInfo,
+      sharedPathCache: Map[String, Boolean]
+  ): (Map[String, Boolean], Boolean) = {
+    val ProjectTagLookup(tagPattern, tagLookup) = projectTagLookup(inputs, project)
+    val excludes                                =
+      inputs.globalExcludes ++ gitRelativize(inputs.vcs.baseDir, project.versionFile).toSet
+    val (updatedCache, sharedChanged)           = sharedPathsChanged(inputs, sharedPathCache, tagLookup)
+    val excludedChildDirs                       = childDirPrefixes(inputs, project)
+    val changed                                 = sharedChanged || hasChangedSinceLastTag(
+      inputs.vcs,
+      project,
+      tagPattern,
+      tagLookup,
+      inputs.state,
+      excludes,
+      excludedChildDirs
+    )
+    (updatedCache, changed)
+  }
 
   private def projectTagLookup(
       inputs: DetectionInputs,
