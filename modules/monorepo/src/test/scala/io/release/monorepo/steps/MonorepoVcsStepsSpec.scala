@@ -86,7 +86,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                      sbt.IO.write(new File(repo, "file.txt"), "updated")
                      TestSupport.commitAll(repo, "Second commit")
                    }
-        result  <- withInput("y\n") {
+        result  <- withInput("o\n") {
                      MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
                    }
         tagRev  <- IO.blocking(TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim)
@@ -109,11 +109,11 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
-          withInput("n\n") {
+          withInput("a\n") {
             MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
           }
         ) { err =>
-          assertEquals(err.getMessage, "Tag [core-v1.0.0] already exists for core. Aborting.")
+          assertEquals(err.getMessage, "Tag [core-v1.0.0] already exists. Aborting release!")
         }
     }
   }

@@ -30,17 +30,7 @@ private[release] object ReleaseComposer {
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] = {
 
-    val validationPhase: IO[Unit] = ExecutionEngine.runValidations(
-      logPrefix = LogPrefix,
-      validations = steps.map { step =>
-        val wrappedValidation =
-          if (step.enableCrossBuild && crossBuild)
-            (ctx: ReleaseContext) => runCrossBuild(c => step.validate(c).as(c))(ctx).void
-          else step.validate
-        ExecutionEngine.ValidationStep(step.name, wrappedValidation)
-      },
-      initialCtx = initialCtx
-    )
+    val validationPhase: IO[Unit] = runValidationPhase(steps, crossBuild, initialCtx)
 
     val startCtx = ExecutionEngine.armOnFailure(initialCtx)
 
@@ -71,6 +61,13 @@ private[release] object ReleaseComposer {
     * Used by preflight checks to reuse the exact validation wiring without executing actions.
     */
   def validateOnly(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
+      initialCtx: ReleaseContext
+  ): IO[Unit] =
+    runValidationPhase(steps, crossBuild, initialCtx)
+
+  private def runValidationPhase(
+      steps: Seq[ReleaseStepIO],
+      crossBuild: Boolean,
       initialCtx: ReleaseContext
   ): IO[Unit] =
     ExecutionEngine.runValidations(

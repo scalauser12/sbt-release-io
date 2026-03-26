@@ -1,7 +1,6 @@
 package io.release.steps
 
 import cats.effect.IO
-import cats.syntax.flatMap.*
 import io.release.ReleaseContext
 import io.release.ReleaseIO.releaseIOTagComment
 import io.release.ReleaseIO.releaseIOTagName
@@ -12,12 +11,11 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.TagPlan
 import io.release.steps.StepHelpers.*
+import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
-
-import java.io.EOFException
 
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
@@ -122,74 +120,23 @@ private[release] object VcsSteps {
       vcs: Vcs,
       params: TagPlan,
       ctx: ReleaseContext
-  ): IO[ReleaseContext] = {
-    val useDefaults = ctx.useDefaults
-
-    params.tailRecM[IO, ReleaseContext] { currentParams =>
-      val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = currentParams
-      for {
-        exists <- vcs.existsTag(tagName)
-        result <- if (!exists)
-                    (vcs.tag(tagName, tagComment, sign) *>
-                      IO.blocking(applyTagToState(ctx, tagName))).map(Right(_))
-                  else {
-                    val effectiveAnswer: IO[String] = defaultAnswer match {
-                      case Some(ans)                => IO.pure(ans)
-                      case None if useDefaults      =>
-                        IO.blocking(
-                          ctx.state.log.warn(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Aborting (use-defaults mode)."
-                          )
-                        ).as("a")
-                      case None if !ctx.interactive =>
-                        IO.raiseError(
-                          new IllegalStateException(
-                            s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
-                          )
-                        )
-                      case None                     =>
-                        IO.print(
-                          s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-                        ) *> IO.readLine
-                          .map(raw => Option(raw).getOrElse(""))
-                          .handleError { case _: EOFException =>
-                            ""
-                          }
-                    }
-
-                    effectiveAnswer.flatMap {
-                      case "a" | "A" | "" =>
-                        IO.raiseError(
-                          new IllegalStateException(
-                            s"Tag [$tagName] already exists. Aborting release!"
-                          )
-                        )
-                      case "k" | "K"      =>
-                        IO.blocking {
-                          ctx.state.log.warn(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Keeping existing tag."
-                          )
-                          Right(applyTagToState(ctx, tagName))
-                        }
-                      case "o" | "O"      =>
-                        IO.blocking(
-                          ctx.state.log.warn(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Overwriting."
-                          )
-                        ) *>
-                          vcs.tag(tagName, tagComment, sign, force = true) *>
-                          IO.blocking(Right(applyTagToState(ctx, tagName)))
-                      case newTagName     =>
-                        IO.blocking(
-                          ctx.state.log.info(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] exists. Trying tag [$newTagName]."
-                          )
-                        ).as(Left(currentParams.copy(tagName = newTagName, defaultAnswer = None)))
-                    }
-                  }
-      } yield result
-    }
-  }
+  ): IO[ReleaseContext] =
+    TagConflictResolver
+      .resolveConflict(
+        vcs,
+        TagConflictResolver.TagParams(
+          tagName = params.tagName,
+          tagComment = params.tagComment,
+          sign = params.sign,
+          interactive = ctx.interactive,
+          useDefaults = ctx.useDefaults,
+          defaultAnswer = params.defaultAnswer,
+          logPrefix = ReleaseLogPrefixes.Core,
+          label = ""
+        ),
+        ctx.state
+      )
+      .map(result => applyTagToState(ctx, result.tagName))
 
   private def resolveTagPreflight(
       vcs: Vcs,
@@ -198,57 +145,19 @@ private[release] object VcsSteps {
   ): IO[PreflightTagOutcome] = {
     val commandName = ctx.executionState.map(_.plan.commandName).getOrElse(DefaultCommandName)
 
-    def loop(current: TagPlan): IO[PreflightTagOutcome] = {
-      val TagPlan(_, tagName, _, _, defaultAnswer) = current
-
-      vcs.existsTag(tagName).flatMap {
-        case false => IO.pure(PreflightTagOutcome(tagName, "available"))
-        case true  =>
-          defaultAnswer match {
-            case Some("k") | Some("K")            =>
-              IO.pure(PreflightTagOutcome(tagName, "exists; release will keep the existing tag"))
-            case Some("o") | Some("O")            =>
-              IO.pure(PreflightTagOutcome(tagName, "exists; release will overwrite the tag"))
-            case Some("a") | Some("A") | Some("") =>
-              IO.raiseError(
-                new IllegalStateException(
-                  s"Tag [$tagName] already exists. Current settings would abort the release. " +
-                    s"Use `$commandName help` for tag conflict options."
-                )
-              )
-            case Some(newTagName)                 =>
-              loop(current.copy(tagName = newTagName, defaultAnswer = None)).map { outcome =>
-                outcome.copy(
-                  status =
-                    s"[$tagName] exists; release will retry with [${outcome.tagName}] (${outcome.status})"
-                )
-              }
-            case None if ctx.useDefaults          =>
-              IO.raiseError(
-                new IllegalStateException(
-                  s"Tag [$tagName] already exists. Current settings would abort in use-defaults mode. " +
-                    s"Use `$commandName help` for tag conflict options."
-                )
-              )
-            case None if !ctx.interactive         =>
-              IO.raiseError(
-                new IllegalStateException(
-                  s"Tag [$tagName] already exists. Current settings would abort in non-interactive mode. " +
-                    s"Use `$commandName help` for tag conflict options."
-                )
-              )
-            case None                             =>
-              IO.pure(
-                PreflightTagOutcome(
-                  tagName,
-                  "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
-                )
-              )
-          }
-      }
-    }
-
-    loop(params)
+    TagConflictResolver
+      .preflightConflict(
+        vcs,
+        TagConflictResolver.PreflightParams(
+          tagName = params.tagName,
+          interactive = ctx.interactive,
+          useDefaults = ctx.useDefaults,
+          defaultAnswer = params.defaultAnswer,
+          commandName = commandName,
+          label = ""
+        )
+      )
+      .map(o => PreflightTagOutcome(o.tagName, o.status))
   }
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is

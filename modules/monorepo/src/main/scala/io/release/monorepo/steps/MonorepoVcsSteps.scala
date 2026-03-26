@@ -6,10 +6,10 @@ import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.steps.StepHelpers.askYesNo
 import io.release.steps.StepHelpers.required
 import io.release.steps.StepHelpers.runProcess
 import io.release.steps.StepHelpers.useDefaults
+import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 
 import scala.sys.process.Process
@@ -93,41 +93,22 @@ private[monorepo] object MonorepoVcsSteps {
       sign: Boolean,
       label: String
   ): IO[Unit] =
-    vcs.existsTag(tagName).flatMap {
-      case false => vcs.tag(tagName, comment, sign = sign)
-      case true  =>
-        if (useDefaults(ctx) || !ctx.interactive) {
-          val mode = if (useDefaults(ctx)) "use-defaults mode" else "non-interactive mode"
-          IO.blocking(
-            ctx.state.log.warn(
-              s"${ReleaseLogPrefixes.Monorepo} Tag [$tagName] already exists for $label. " +
-                s"Aborting ($mode)."
-            )
-          ) *> IO.raiseError(
-            new IllegalStateException(
-              s"Tag [$tagName] already exists for $label. Aborting in $mode."
-            )
-          )
-        } else
-          askYesNo(
-            s"Tag [$tagName] already exists for $label! Overwrite? (y/n) [n] ",
-            defaultYes = false
-          )
-            .flatMap {
-              case true  =>
-                IO.blocking(
-                  ctx.state.log.warn(
-                    s"${ReleaseLogPrefixes.Monorepo} Tag [$tagName] already exists. Overwriting."
-                  )
-                ) *> vcs.tag(tagName, comment, sign = sign, force = true)
-              case false =>
-                IO.raiseError(
-                  new IllegalStateException(
-                    s"Tag [$tagName] already exists for $label. Aborting."
-                  )
-                )
-            }
-    }
+    TagConflictResolver
+      .resolveConflict(
+        vcs,
+        TagConflictResolver.TagParams(
+          tagName = tagName,
+          tagComment = comment,
+          sign = sign,
+          interactive = ctx.interactive,
+          useDefaults = useDefaults(ctx),
+          defaultAnswer = None,
+          logPrefix = ReleaseLogPrefixes.Monorepo,
+          label = label
+        ),
+        ctx.state
+      )
+      .void
 
   private def preflightCreateTag(
       ctx: MonorepoContext,
@@ -137,31 +118,19 @@ private[monorepo] object MonorepoVcsSteps {
   ): IO[PreflightTagOutcome] = {
     val commandName = ctx.releasePlan.map(_.commandName).getOrElse(DefaultCommandName)
 
-    vcs.existsTag(rendered).flatMap {
-      case false => IO.pure(PreflightTagOutcome(rendered, "available"))
-      case true  =>
-        if (useDefaults(ctx))
-          IO.raiseError(
-            new IllegalStateException(
-              s"Tag [$rendered] already exists for $label. Current settings would abort in use-defaults mode. " +
-                s"See `$commandName help` for guidance."
-            )
-          )
-        else if (!ctx.interactive)
-          IO.raiseError(
-            new IllegalStateException(
-              s"Tag [$rendered] already exists for $label. Current settings would abort in non-interactive mode. " +
-                s"See `$commandName help` for guidance."
-            )
-          )
-        else
-          IO.pure(
-            PreflightTagOutcome(
-              rendered,
-              "exists; interactive release will prompt for overwrite"
-            )
-          )
-    }
+    TagConflictResolver
+      .preflightConflict(
+        vcs,
+        TagConflictResolver.PreflightParams(
+          tagName = rendered,
+          interactive = ctx.interactive,
+          useDefaults = useDefaults(ctx),
+          defaultAnswer = None,
+          commandName = commandName,
+          label = label
+        )
+      )
+      .map(o => PreflightTagOutcome(o.tagName, o.status))
   }
 
   private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
