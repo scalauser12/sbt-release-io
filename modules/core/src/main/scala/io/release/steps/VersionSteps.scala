@@ -41,13 +41,25 @@ private[release] object VersionSteps {
   private[steps] def sessionSettings(state: State): Seq[Setting[?]] = {
     val settings = resolveCurrentSettings(state)
 
-    Seq(
-      releaseIOVersionFile         := settings.versionFile,
-      releaseIOReadVersion         := settings.readVersion,
-      releaseIOVersionFileContents := settings.versionFileContents,
-      releaseIOUseGlobalVersion    := settings.useGlobalVersion
+    sessionSettings(
+      VersionPlan(
+        versionFile = settings.versionFile,
+        readVersion = settings.readVersion,
+        versionFileContents = settings.versionFileContents,
+        releaseVersionOverride = None,
+        nextVersionOverride = None,
+        useGlobalVersion = settings.useGlobalVersion
+      )
     )
   }
+
+  private[steps] def sessionSettings(versionPlan: VersionPlan): Seq[Setting[?]] =
+    Seq(
+      releaseIOVersionFile         := versionPlan.versionFile,
+      releaseIOReadVersion         := versionPlan.readVersion,
+      releaseIOVersionFileContents := versionPlan.versionFileContents,
+      releaseIOUseGlobalVersion    := versionPlan.useGlobalVersion
+    )
 
   private def resolve(
       ctx: ReleaseContext,
@@ -165,7 +177,7 @@ private[release] object VersionSteps {
                                          else Seq(version          := releaseVer)
                                        val newState        = SbtRuntime.appendWithSession(
                                          resultCtx.state,
-                                         VersionSteps.sessionSettings(resultCtx.state) ++ Seq(
+                                         VersionSteps.sessionSettings(versionPlan) ++ Seq(
                                            packageOptions += ManifestAttributes(
                                              "Vcs-Release-Hash" -> currentHash
                                            )
@@ -179,10 +191,23 @@ private[release] object VersionSteps {
 
   val commitNextVersion: ReleaseStepIO =
     ReleaseStepIO.io("commit-next-version") { ctx =>
-      for {
-        versionPlan <- IO.blocking(resolveVersionPlan(ctx))
-        result      <- commitVersionNative(ctx, releaseIONextCommitMessage, versionPlan.versionFile)
-      } yield result._1
+      requireVersions(ctx) { case (_, nextVer) =>
+        for {
+          versionPlan <- IO.blocking(resolveVersionPlan(ctx))
+          result      <- commitVersionNative(ctx, releaseIONextCommitMessage, versionPlan.versionFile)
+          finalCtx    <- IO.blocking {
+                           val versionSettings =
+                             if (versionPlan.useGlobalVersion)
+                               Seq(ThisBuild / version := nextVer, version := nextVer)
+                             else Seq(version          := nextVer)
+                           val newState        = SbtRuntime.appendWithSession(
+                             result._1.state,
+                             VersionSteps.sessionSettings(versionPlan) ++ versionSettings
+                           )
+                           result._1.withState(newState)
+                         }
+        } yield finalCtx
+      }
     }
 
   private def readVersionPrompt(prompt: String, defaultVersion: String): IO[String] =
@@ -316,7 +341,7 @@ private[release] object VersionSteps {
                            Seq(ThisBuild / version := ver, version := ver)
                          else Seq(version          := ver)
                        val allSettings     =
-                         VersionSteps.sessionSettings(ctx.state) ++ versionSettings
+                         VersionSteps.sessionSettings(versionPlan) ++ versionSettings
                        val newState        =
                          SbtRuntime.appendWithSession(ctx.state, allSettings)
                        ctx.withState(newState)

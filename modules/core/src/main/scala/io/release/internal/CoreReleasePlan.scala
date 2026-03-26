@@ -19,7 +19,8 @@ private[release] final case class TagPlan(
     tagName: String,
     tagComment: String,
     sign: Boolean,
-    defaultAnswer: Option[String]
+    defaultAnswer: Option[String],
+    versionSessionSettings: Seq[Setting[?]]
 )
 
 /** Typed startup plan for the core release command. */

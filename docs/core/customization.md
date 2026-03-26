@@ -1,5 +1,46 @@
 # Custom steps and plugins (core)
 
+## Hook-based customization
+
+The default `ReleasePluginIO` now supports semantic lifecycle hooks and phase policies
+without requiring raw `releaseIOProcess` surgery. When the built-in process is left
+intact, the plugin compiles `releaseIOEnable*` and `releaseIO*Hooks` settings into the
+internal engine so `releaseIO` and `releaseIO check` stay aligned.
+
+```scala
+import sbt.*
+import sbt.Keys.*
+import _root_.cats.effect.IO
+import _root_.io.release.ReleaseHookIO
+
+def markerHook(marker: String): ReleaseHookIO =
+  ReleaseHookIO.action(marker) { ctx =>
+    IO.blocking {
+      val base = Project.extract(ctx.state).get(baseDirectory)
+      sbt.IO.write(base / s"$marker.marker", marker + "\n")
+    }
+  }
+
+releaseIOEnablePush := false
+releaseIOBeforeTagHooks += markerHook("before-tag")
+releaseIOAfterTagHooks += markerHook("after-tag")
+releaseIOEnablePublish := false
+```
+
+Hook semantics:
+
+- `beforeX` / `afterX` hooks run only when phase `X` actually runs
+- Disabled or skipped phases do not fire their normal hooks
+- Hooks extend release behavior, but they do not control phase ordering or batching
+- `releaseIO check` validates the same compiled lifecycle shape that `releaseIO` executes
+
+### Legacy raw-process mode
+
+`releaseIOProcess`, `ReleasePluginIOLike.releaseProcess`, and
+`ReleasePluginIOLike.releaseCheckProcess` remain supported during the migration window,
+but they are now the legacy raw-process API. When any of those are customized, the plugin
+stays in legacy mode and ignores the hook/policy settings above.
+
 ## Custom steps
 
 Define your own steps using the `ReleaseStepIO.step(name)` builder and add them to the release process alongside the built-in ones (see [Resource-aware steps](#resource-aware-steps-builder-api) for the full builder method reference):
@@ -241,6 +282,10 @@ override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseSt
 Override `releaseProcess` directly to build the step sequence from scratch instead of
 appending to the defaults. Plain steps (from `ReleaseSteps`) and resource-aware steps
 can be mixed freely — an implicit conversion lifts plain steps into resource-ignoring functions.
+
+This is legacy raw-process mode. Prefer the hook/policy API above when it can express the
+desired behavior, and keep direct process construction for advanced cases that truly need
+step-level control.
 
 ```scala
 // project/MyReleasePlugin.scala

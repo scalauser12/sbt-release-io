@@ -27,6 +27,38 @@ All release settings use the `releaseIO` prefix:
 | `releaseIOSnapshotDependencies`   | `Seq[ModuleID]`                | auto-resolved                            | SNAPSHOT deps for validation                                                  |
 | `releaseIORuntimeVersion`         | `String`                       | scope-aware `version`                    | Reads `ThisBuild / version` or `version` based on `releaseIOUseGlobalVersion` |
 
+## Hook / policy settings
+
+These settings participate in the compiled hook-based flow when the raw process is left
+alone. If `releaseIOProcess`, `releaseProcess`, or `releaseCheckProcess` are customized,
+the plugin stays in legacy raw-process mode and ignores these keys.
+
+| Setting                                  | Type                 | Default      | Description                                                        |
+| ---------------------------------------- | -------------------- | ------------ | ------------------------------------------------------------------ |
+| `releaseIOEnableSnapshotDependenciesCheck` | `Boolean`          | `true`       | Include `check-snapshot-dependencies` in the compiled process      |
+| `releaseIOEnableRunClean`                | `Boolean`            | `true`       | Include `run-clean` in the compiled process                        |
+| `releaseIOEnableRunTests`                | `Boolean`            | `true`       | Include `run-tests` in the compiled process                        |
+| `releaseIOEnableTagging`                 | `Boolean`            | `true`       | Include `tag-release` in the compiled process                      |
+| `releaseIOEnablePublish`                 | `Boolean`            | `true`       | Include `publish-artifacts` in the compiled process                |
+| `releaseIOEnablePush`                    | `Boolean`            | `true`       | Include `push-changes` in the compiled process                     |
+| `releaseIOAfterCleanCheckHooks`          | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `check-clean-working-dir`                     |
+| `releaseIOBeforeVersionResolutionHooks`  | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `inquire-versions`                           |
+| `releaseIOAfterVersionResolutionHooks`   | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `inquire-versions`                            |
+| `releaseIOBeforeReleaseVersionWriteHooks`| `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `set-release-version`                        |
+| `releaseIOAfterReleaseVersionWriteHooks` | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `set-release-version`                         |
+| `releaseIOBeforeReleaseCommitHooks`      | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `commit-release-version`                     |
+| `releaseIOAfterReleaseCommitHooks`       | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `commit-release-version`                      |
+| `releaseIOBeforeTagHooks`                | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `tag-release` when tagging is enabled        |
+| `releaseIOAfterTagHooks`                 | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `tag-release` when tagging is enabled         |
+| `releaseIOBeforePublishHooks`            | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `publish-artifacts` when publish runs        |
+| `releaseIOAfterPublishHooks`             | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `publish-artifacts` when publish runs         |
+| `releaseIOBeforeNextVersionWriteHooks`   | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `set-next-version`                           |
+| `releaseIOAfterNextVersionWriteHooks`    | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `set-next-version`                            |
+| `releaseIOBeforeNextCommitHooks`         | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `commit-next-version`                        |
+| `releaseIOAfterNextCommitHooks`          | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `commit-next-version`                         |
+| `releaseIOBeforePushHooks`               | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run before `push-changes` when push is enabled          |
+| `releaseIOAfterPushHooks`                | `Seq[ReleaseHookIO]` | `Seq.empty`  | Hooks that run after `push-changes` when push is enabled           |
+
 ## Version bump types
 
 | Bump         | Example           | Description                                                 |

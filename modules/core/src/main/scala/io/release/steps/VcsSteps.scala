@@ -69,6 +69,7 @@ private[release] object VcsSteps {
   }
 
   private def resolveTagPlan(ctx: ReleaseContext): TagPlan = {
+    val versionSettings  = VersionSteps.sessionSettings(ctx.state)
     val (s1, tagName)    = SbtRuntime.runTask(ctx.state, releaseIOTagName)
     val (s2, tagComment) = SbtRuntime.runTask(s1, releaseIOTagComment)
     TagPlan(
@@ -76,7 +77,8 @@ private[release] object VcsSteps {
       tagName = tagName,
       tagComment = tagComment,
       sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
-      defaultAnswer = ctx.executionState.flatMap(_.plan.tagDefault)
+      defaultAnswer = ctx.executionState.flatMap(_.plan.tagDefault),
+      versionSessionSettings = versionSettings
     )
   }
 
@@ -107,11 +109,15 @@ private[release] object VcsSteps {
         }
     }
 
-  private def applyTagToState(ctx: ReleaseContext, tagName: String): ReleaseContext =
+  private def applyTagToState(
+      ctx: ReleaseContext,
+      params: TagPlan,
+      tagName: String
+  ): ReleaseContext =
     ctx.withState(
       SbtRuntime.appendWithSession(
         ctx.state,
-        VersionSteps.sessionSettings(ctx.state) ++
+        params.versionSessionSettings ++
           Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
       )
     )
@@ -136,7 +142,7 @@ private[release] object VcsSteps {
         ),
         ctx.state
       )
-      .map(result => applyTagToState(ctx, result.tagName))
+      .map(result => applyTagToState(ctx, params, result.tagName))
 
   private def resolveTagPreflight(
       vcs: Vcs,

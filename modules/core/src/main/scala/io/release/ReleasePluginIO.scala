@@ -3,12 +3,14 @@ package io.release
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.internal.CheckModeOutput
+import io.release.internal.CoreHookConfiguration
 import io.release.internal.CorePreflight
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ReleaseCommandParsers
 import io.release.internal.ReleaseCli
 import io.release.internal.ReleaseCommandRunner
+import io.release.internal.ReleaseHookCompiler
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.ReleaseSteps
 import io.release.steps.StepHelpers
@@ -55,6 +57,9 @@ trait ReleasePluginIOLike[T]
 
   /** The release steps. Reads plain steps from the `releaseIOProcess` setting and lifts
     * each into a resource-ignoring function. Override to append resource-aware steps.
+    *
+    * Overriding this method opts the plugin into legacy raw-process mode, where the
+    * hook/policy settings are ignored and the custom process wiring remains authoritative.
     */
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess))
@@ -64,6 +69,9 @@ trait ReleasePluginIOLike[T]
     * Defaults to the plain configured `releaseIOProcess` so `check` avoids acquiring the plugin
     * resource. Custom plugins can override this to add resource-free preflight equivalents for
     * custom resource-backed steps.
+    *
+    * Overriding this method opts the plugin into legacy raw-process mode, where the
+    * hook/policy settings are ignored and the custom process wiring remains authoritative.
     */
   protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
     Project.extract(state).get(releaseIOProcess)
@@ -95,6 +103,29 @@ trait ReleasePluginIOLike[T]
     releaseIOCrossBuild             := false,
     releaseIOSkipPublish            := false,
     releaseIOInteractive            := false,
+    releaseIOEnableSnapshotDependenciesCheck := true,
+    releaseIOEnableRunClean         := true,
+    releaseIOEnableRunTests         := true,
+    releaseIOEnableTagging          := true,
+    releaseIOEnablePublish          := true,
+    releaseIOEnablePush             := true,
+    releaseIOAfterCleanCheckHooks   := Seq.empty,
+    releaseIOBeforeVersionResolutionHooks := Seq.empty,
+    releaseIOAfterVersionResolutionHooks := Seq.empty,
+    releaseIOBeforeReleaseVersionWriteHooks := Seq.empty,
+    releaseIOAfterReleaseVersionWriteHooks := Seq.empty,
+    releaseIOBeforeReleaseCommitHooks := Seq.empty,
+    releaseIOAfterReleaseCommitHooks := Seq.empty,
+    releaseIOBeforeTagHooks         := Seq.empty,
+    releaseIOAfterTagHooks          := Seq.empty,
+    releaseIOBeforePublishHooks     := Seq.empty,
+    releaseIOAfterPublishHooks      := Seq.empty,
+    releaseIOBeforeNextVersionWriteHooks := Seq.empty,
+    releaseIOAfterNextVersionWriteHooks := Seq.empty,
+    releaseIOBeforeNextCommitHooks  := Seq.empty,
+    releaseIOAfterNextCommitHooks   := Seq.empty,
+    releaseIOBeforePushHooks        := Seq.empty,
+    releaseIOAfterPushHooks         := Seq.empty,
     releaseIOReadVersion            := ReleaseSteps.defaultReadVersion,
     releaseIOVersionFileContents    := ReleaseSteps.defaultWriteVersion(
       releaseIOUseGlobalVersion.value
@@ -202,6 +233,81 @@ trait ReleasePluginIOLike[T]
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)
+
+  private final case class ResolvedProcessMode(
+      releaseSteps: Seq[T => ReleaseStepIO],
+      checkSteps: Seq[ReleaseStepIO],
+      legacyMode: Boolean,
+      legacyReasons: Seq[String],
+      hookConfiguration: CoreHookConfiguration
+  )
+
+  private def declaresProcessHookOverride(methodName: String): Boolean =
+    this.getClass.getDeclaredMethods.exists { method =>
+      method.getName == methodName &&
+      method.getParameterTypes.toList == List(classOf[State])
+    }
+
+  private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
+    IO.blocking {
+      val extracted                   = Project.extract(state)
+      val configuredRaw               = extracted.get(releaseIOProcess)
+      val configuredCheck             = releaseCheckProcess(state)
+      val configuredRelease           = releaseProcess(state)
+      val hookConfiguration           = ReleaseHookCompiler.resolve(state)
+      val rawProcessChanged           = configuredRaw != ReleaseSteps.defaults
+      val checkProcessChanged = configuredCheck != configuredRaw
+      val processHooksOverridden      =
+        this.getClass != ReleasePluginIO.getClass &&
+          (declaresProcessHookOverride("releaseProcess") ||
+            declaresProcessHookOverride("releaseCheckProcess"))
+      val releaseProcessChanged =
+        configuredRelease.length != configuredRaw.length
+      val legacyReasons               =
+        Seq(
+          if (rawProcessChanged) Some("`releaseIOProcess` differs from defaults") else None,
+          if (checkProcessChanged)
+            Some("`releaseCheckProcess` differs from the configured raw process")
+          else None,
+          if (processHooksOverridden)
+            Some("plugin overrides `releaseProcess` or `releaseCheckProcess`")
+          else None,
+          if (releaseProcessChanged)
+            Some("`releaseProcess` differs from the configured raw process")
+          else None
+        ).flatten
+      val legacyMode                 = legacyReasons.nonEmpty
+      val compiled                   = ReleaseHookCompiler.compile(state)
+
+      ResolvedProcessMode(
+        releaseSteps = if (legacyMode) configuredRelease else liftSteps(compiled),
+        checkSteps = if (legacyMode) configuredCheck else compiled,
+        legacyMode = legacyMode,
+        legacyReasons = legacyReasons,
+        hookConfiguration = hookConfiguration
+      )
+    }
+
+  private def logLegacyModeWarning(
+      state: State,
+      processMode: ResolvedProcessMode
+  ): IO[Unit] =
+    if (!processMode.legacyMode) IO.unit
+    else
+      IO.blocking {
+        val reasons = processMode.legacyReasons.mkString("; ")
+        state.log.warn(
+          s"${ReleaseLogPrefixes.Core} Legacy raw process mode enabled: $reasons"
+        )
+        state.log.warn(
+          s"${ReleaseLogPrefixes.Core} Prefer `releaseIOEnable*` policies and `releaseIO*Hooks` settings. " +
+            "See docs/core/customization.md#hook-based-customization."
+        )
+        if (processMode.hookConfiguration.hasCustomizations)
+          state.log.warn(
+            s"${ReleaseLogPrefixes.Core} Hook/policy settings are ignored while legacy raw process mode is active."
+          )
+      }
 
   private final class CoreCommandInputs(
       val cleanState: State,
@@ -313,20 +419,21 @@ trait ReleasePluginIOLike[T]
   protected def doReleaseIO(state: State, args: Seq[ReleaseCli.Arg]): State = {
     val inputs  = buildCommandInputs(state, args, warnOnDuplicates = true)
     val program = for {
-      stepFns  <- IO.blocking(releaseProcess(inputs.cleanState))
+      process  <- resolveProcessMode(inputs.cleanState)
+      _        <- logLegacyModeWarning(inputs.cleanState, process)
       _        <- IO.blocking {
                     inputs.cleanState.log.info(
                       s"${ReleaseLogPrefixes.Core} Starting release process..."
                     )
                     inputs.cleanState.log.info(
-                      s"${ReleaseLogPrefixes.Core} ${stepFns.length} steps to execute"
+                      s"${ReleaseLogPrefixes.Core} ${process.releaseSteps.length} steps to execute"
                     )
                     if (inputs.crossEnabled)
                       inputs.cleanState.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
                   }
       finalCtx <- resource
                     .use { t =>
-                      val steps = stepFns.map(_(t))
+                      val steps = process.releaseSteps.map(_(t))
                       initialContext(
                         inputs.cleanState,
                         inputs.skipTests,
@@ -350,11 +457,12 @@ trait ReleasePluginIOLike[T]
     val inputs = buildCommandInputs(state, args, warnOnDuplicates = false)
 
     val program = for {
-      steps   <- IO.blocking(releaseCheckProcess(inputs.cleanState))
+      process <- resolveProcessMode(inputs.cleanState)
+      _       <- logLegacyModeWarning(inputs.cleanState, process)
       _       <- CheckModeOutput.logCheckStart(
                    inputs.cleanState,
                    ReleaseLogPrefixes.Core,
-                   steps.length
+                   process.checkSteps.length
                  )
       summary <- initialContext(
                    inputs.cleanState,
@@ -364,7 +472,7 @@ trait ReleasePluginIOLike[T]
                  ).flatMap { initialCtx =>
                    CorePreflight.check(
                      initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
-                     steps,
+                     process.checkSteps,
                      inputs.crossEnabled
                    )
                  }

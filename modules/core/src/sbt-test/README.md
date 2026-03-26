@@ -66,6 +66,18 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies that failing tests abort the release before later steps execute
 - Checks that a marker file is not created when tests fail
 
+### hook-disabled-phases
+- Tests `releaseIOEnableRunTests`, `releaseIOEnablePublish`, and `releaseIOEnablePush`
+- Verifies disabled phases are omitted and publish hooks do not fire when publish is disabled
+
+### hook-late-bound-settings
+- Tests hook-based late-bound `releaseIOVersionFile` / `releaseIOTagName` changes
+- Verifies before-version-resolution and before-tag hooks are evaluated from live state
+
+### hook-lifecycle
+- Tests semantic lifecycle hooks around tagging and publishing
+- Verifies before/after tag and publish hooks run without raw process customization
+
 ### global-version-false
 - Tests `releaseUseGlobalVersion := false`
 - Verifies `version.sbt` uses `version :=` instead of `ThisBuild / version :=`

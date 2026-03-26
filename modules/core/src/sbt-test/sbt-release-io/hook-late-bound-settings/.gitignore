@@ -1,0 +1,8 @@
+target/
+project/target/
+project/project/
+*.log
+.bsp/
+global/
+late-bound-version-settings-ran
+late-bound-tag-settings-ran
