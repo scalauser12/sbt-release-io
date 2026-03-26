@@ -1,5 +1,8 @@
 package io.release.internal
 
+import cats.effect.IO
+import sbt.State
+
 /** Shared wording and summary helpers for `check` mode across both plugins. */
 private[release] object CheckModeOutput {
 
@@ -31,4 +34,16 @@ private[release] object CheckModeOutput {
 
   def enabled(flag: Boolean): String =
     if (flag) "enabled" else "disabled"
+
+  /** Log the standard three-line check-mode preamble. */
+  def logCheckStart(state: State, prefix: String, stepCount: Int): IO[Unit] =
+    IO.blocking {
+      state.log.info(s"$prefix Starting preflight checks...")
+      state.log.info(s"$prefix $stepCount steps configured")
+      state.log.info(s"$prefix $CheckModeLogSummary")
+    }
+
+  /** Log the standard check-mode success line. */
+  def logCheckPassed(state: State, prefix: String): IO[Unit] =
+    IO.blocking(state.log.info(s"$prefix Preflight checks passed."))
 }

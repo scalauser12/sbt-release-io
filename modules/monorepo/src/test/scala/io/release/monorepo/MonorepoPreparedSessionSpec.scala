@@ -70,7 +70,10 @@ class MonorepoPreparedSessionSpec extends CatsEffectSuite {
       coreBase.mkdirs()
       apiBase.mkdirs()
 
-      sbt.IO.write(new File(dir, "version.sbt"), """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n")
+      sbt.IO.write(
+        new File(dir, "version.sbt"),
+        """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+      )
       sbt.IO.write(new File(coreBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
       sbt.IO.write(new File(apiBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
 

@@ -40,7 +40,7 @@ private[monorepo] object MonorepoProcessStep {
       crossBuild: Boolean
   ): MonorepoProcessStep =
     step match {
-      case global: MonorepoStepIO.Global         =>
+      case global: MonorepoStepIO.Global =>
         MonorepoProcessStep(
           name = global.name,
           validate = global.validate,

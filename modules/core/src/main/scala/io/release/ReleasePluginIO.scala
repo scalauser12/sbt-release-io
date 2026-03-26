@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
-import cats.syntax.all.*
 import io.release.internal.CheckModeOutput
 import io.release.internal.CorePreflight
 import io.release.internal.CoreExecutionState
@@ -202,7 +201,7 @@ trait ReleasePluginIOLike[T]
   }
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
-    lines.toList.traverse_(line => IO.blocking(state.log.info(s"${ReleaseLogPrefixes.Core} $line")))
+    ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)
 
   private final class CoreCommandInputs(
       val cleanState: State,
@@ -339,22 +338,8 @@ trait ReleasePluginIOLike[T]
                         )
                       }
                     }
-      result   <- if (finalCtx.failed) {
-                    val cause = finalCtx.failureCause
-                      .map(e => StepHelpers.errorMessage(e))
-                      .getOrElse("unknown error")
-                    IO.blocking(
-                      finalCtx.state.log.error(s"${ReleaseLogPrefixes.Core} Release failed: $cause")
-                    ) *>
-                      IO.pure(finalCtx.state.fail)
-                  } else {
-                    IO.blocking(
-                      finalCtx.state.log.info(
-                        s"${ReleaseLogPrefixes.Core} Release completed successfully!"
-                      )
-                    ) *>
-                      IO.pure(finalCtx.state)
-                  }
+      result   <- ReleaseCommandRunner
+                    .handleReleaseResult(finalCtx, ReleaseLogPrefixes.Core)
     } yield result
 
     // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
@@ -366,17 +351,11 @@ trait ReleasePluginIOLike[T]
 
     val program = for {
       steps   <- IO.blocking(releaseCheckProcess(inputs.cleanState))
-      _       <- IO.blocking {
-                   inputs.cleanState.log.info(
-                     s"${ReleaseLogPrefixes.Core} Starting preflight checks..."
-                   )
-                   inputs.cleanState.log.info(
-                     s"${ReleaseLogPrefixes.Core} ${steps.length} steps configured"
-                   )
-                   inputs.cleanState.log.info(
-                     s"${ReleaseLogPrefixes.Core} ${CheckModeOutput.CheckModeLogSummary}"
-                   )
-                 }
+      _       <- CheckModeOutput.logCheckStart(
+                   inputs.cleanState,
+                   ReleaseLogPrefixes.Core,
+                   steps.length
+                 )
       summary <- initialContext(
                    inputs.cleanState,
                    inputs.skipTests,
@@ -390,9 +369,7 @@ trait ReleasePluginIOLike[T]
                    )
                  }
       _       <- logLines(inputs.cleanState, CorePreflight.renderSummary(summary))
-      _       <- IO.blocking(
-                   inputs.cleanState.log.info(s"${ReleaseLogPrefixes.Core} Preflight checks passed.")
-                 )
+      _       <- CheckModeOutput.logCheckPassed(inputs.cleanState, ReleaseLogPrefixes.Core)
     } yield inputs.cleanState
 
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program)

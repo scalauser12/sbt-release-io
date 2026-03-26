@@ -2,7 +2,6 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
-import cats.syntax.all.*
 import io.release.PluginLikeSupport
 import io.release.ReleaseKeys
 import io.release.ReleasePluginIO
@@ -10,7 +9,6 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
-import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
@@ -140,9 +138,7 @@ trait MonorepoReleasePluginLike[T]
   }
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
-    lines.toList.traverse_(line =>
-      IO.blocking(state.log.info(s"${ReleaseLogPrefixes.Monorepo} $line"))
-    )
+    ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
 
   private def prepareCommand(
       state: State,
@@ -204,36 +200,22 @@ trait MonorepoReleasePluginLike[T]
 
   private def runPlannedRelease(command: PlannedCommand): IO[State] = {
     for {
-      session    <- prepareSession(command)
-      stepFns    <- IO.blocking(monorepoReleaseProcess(session.cleanState))
-      _          <- IO.blocking(
-                      logReleaseStart(
-                        session.cleanState,
-                        stepFns.length,
-                        session.context.projects.length,
-                        command.flags
-                      )
+      session  <- prepareSession(command)
+      stepFns  <- IO.blocking(monorepoReleaseProcess(session.cleanState))
+      _        <- IO.blocking(
+                    logReleaseStart(
+                      session.cleanState,
+                      stepFns.length,
+                      session.context.projects.length,
+                      command.flags
                     )
-      finalCtx   <- resource.use { t =>
-                      val steps = stepFns.map(_(t))
-                      MonorepoStepIO.compose(steps, command.flags.crossBuild)(session.context)
-                    }
-      result     <- if (finalCtx.failed) {
-                      val cause = finalCtx.failureCause
-                        .map(e => StepHelpers.errorMessage(e))
-                        .getOrElse("unknown error")
-                      IO.blocking(
-                        finalCtx.state.log.error(
-                          s"${ReleaseLogPrefixes.Monorepo} Release failed: $cause"
-                        )
-                      ).as(finalCtx.state.fail)
-                    } else {
-                      IO.blocking(
-                        finalCtx.state.log.info(
-                          s"${ReleaseLogPrefixes.Monorepo} Monorepo release completed successfully!"
-                        )
-                      ).as(finalCtx.state)
-                    }
+                  )
+      finalCtx <- resource.use { t =>
+                    val steps = stepFns.map(_(t))
+                    MonorepoStepIO.compose(steps, command.flags.crossBuild)(session.context)
+                  }
+      result   <- ReleaseCommandRunner
+                    .handleReleaseResult(finalCtx, ReleaseLogPrefixes.Monorepo)
     } yield result
   }
 
@@ -247,26 +229,19 @@ trait MonorepoReleasePluginLike[T]
 
   private def runPlannedCheck(command: PlannedCommand): IO[State] = {
     for {
-      session    <- prepareSession(command)
-      steps      <- IO.blocking(monorepoReleaseCheckProcess(session.cleanState))
-      _          <- IO.blocking {
-                      session.cleanState.log.info(
-                        s"${ReleaseLogPrefixes.Monorepo} Starting preflight checks..."
-                      )
-                      session.cleanState.log.info(
-                        s"${ReleaseLogPrefixes.Monorepo} ${steps.length} steps configured"
-                      )
-                      session.cleanState.log.info(
-                        s"${ReleaseLogPrefixes.Monorepo} ${CheckModeOutput.CheckModeLogSummary}"
-                      )
-                    }
-      summary    <- MonorepoPreflight.check(session, steps)
-      _          <- logLines(session.cleanState, MonorepoPreflight.renderSummary(summary))
-      _          <- IO.blocking(
-                      session.cleanState.log.info(
-                        s"${ReleaseLogPrefixes.Monorepo} Preflight checks passed."
-                      )
-                    )
+      session <- prepareSession(command)
+      steps   <- IO.blocking(monorepoReleaseCheckProcess(session.cleanState))
+      _       <- CheckModeOutput.logCheckStart(
+                   session.cleanState,
+                   ReleaseLogPrefixes.Monorepo,
+                   steps.length
+                 )
+      summary <- MonorepoPreflight.check(session, steps)
+      _       <- logLines(session.cleanState, MonorepoPreflight.renderSummary(summary))
+      _       <- CheckModeOutput.logCheckPassed(
+                   session.cleanState,
+                   ReleaseLogPrefixes.Monorepo
+                 )
     } yield command.cleanState
   }
 }

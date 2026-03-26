@@ -99,7 +99,7 @@ private[monorepo] object MonorepoPreflight {
       session: MonorepoPreparedSession,
       steps: Seq[MonorepoStepIO]
   ): IO[Summary] = {
-    val initialCtx              = session.context
+    val initialCtx             = session.context
     val stepNames              = steps.map(_.name)
     val pushConfigured         = stepNames.contains("push-changes")
     val publishConfigured      = stepNames.contains("publish-artifacts")

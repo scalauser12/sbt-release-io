@@ -122,16 +122,16 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
         val api  = dummyProject("api")
         val pCtx = ctx.withProjects(Seq(core, api))
 
-        val setup = MonorepoStepIO.Global(
+        val setup       = MonorepoStepIO.Global(
           name = "custom-setup",
           validate = _ => log.update(_ :+ "validate-setup"),
           execute = c => log.update(_ :+ "execute-setup").as(c)
         )
-        val boundary = MonorepoStepIO
+        val boundary    = MonorepoStepIO
           .global("detect-or-select-projects")
           .withSelectionBoundary
           .execute(c => log.update(_ :+ "select").as(c.withProjects(Seq(api))))
-        val afterPer = MonorepoStepIO.PerProject(
+        val afterPer    = MonorepoStepIO.PerProject(
           name = "custom-project",
           validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
           execute = (c, project) => log.update(_ :+ s"execute-project:${project.name}").as(c)
