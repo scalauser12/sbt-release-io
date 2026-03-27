@@ -58,13 +58,14 @@ val uploadArchive: ReleaseStepIO = ReleaseStepIO.step("upload-archive")
   )
 ```
 
-Place this step after `publishArtifacts` so it runs only after the standard repository publish succeeds:
+If the standard publish phase should still run first, prefer an `afterPublish` hook instead of
+rewriting the step list:
 
 ```scala
-import _root_.io.release.steps.ReleaseSteps
+import _root_.io.release.ReleaseHookIO
 
-releaseIOProcess := ReleaseSteps.defaults.flatMap {
-  case step if step.name == "publish-artifacts" => Seq(step, uploadArchive)
-  case step                                     => Seq(step)
-}
+releaseIOAfterPublishHooks += ReleaseHookIO("upload-archive")(
+  execute = ctx => uploadArchive.execute(ctx),
+  validate = _ => IO.unit
+)
 ```

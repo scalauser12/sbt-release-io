@@ -6,13 +6,14 @@ In `build.sbt`:
 
 ```scala
 import _root_.cats.effect.IO
-import _root_.io.release.steps.ReleaseSteps
+import _root_.io.release.ReleaseHookIO
 
-// Use default release steps (recommended)
-releaseIOProcess := ReleaseSteps.defaults
+// Keep the built-in process and disable phases semantically
+releaseIOEnablePush    := false
+releaseIOEnablePublish := false
 
-// Or customize the release process (see [Customization](customization.md))
-releaseIOProcess := releaseIOProcess.value.filterNot(_.name == "push-changes")
+// Add lifecycle hooks around the remaining phases
+releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-audit")(_ => IO.unit)
 
 // Enable cross-building by default
 releaseIOCrossBuild := true

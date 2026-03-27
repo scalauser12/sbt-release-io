@@ -21,6 +21,8 @@ import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
+import scala.annotation.nowarn
+
 /** Base trait for resource-parameterized release plugins. Each release step is a function
   * `T => ReleaseStepIO` where `T` is a resource acquired once for the entire release process.
   *
@@ -61,6 +63,10 @@ trait ReleasePluginIOLike[T]
     * Overriding this method opts the plugin into legacy raw-process mode, where the
     * hook/policy settings are ignored and the custom process wiring remains authoritative.
     */
+  @deprecated(
+    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; overriding `releaseProcess` opts the plugin into legacy raw-process mode.",
+    "0.7.0"
+  )
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
     liftSteps(Project.extract(state).get(releaseIOProcess))
 
@@ -73,6 +79,10 @@ trait ReleasePluginIOLike[T]
     * Overriding this method opts the plugin into legacy raw-process mode, where the
     * hook/policy settings are ignored and the custom process wiring remains authoritative.
     */
+  @deprecated(
+    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; overriding `releaseCheckProcess` opts the plugin into legacy raw-process mode.",
+    "0.7.0"
+  )
   protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
     Project.extract(state).get(releaseIOProcess)
 
@@ -99,7 +109,7 @@ trait ReleasePluginIOLike[T]
 
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] = Seq(
-    releaseIOProcess                         := ReleaseSteps.defaults,
+    ReleaseIO._releaseIOProcess              := ReleaseSteps.defaults,
     releaseIOCrossBuild                      := false,
     releaseIOSkipPublish                     := false,
     releaseIOInteractive                     := false,
@@ -248,10 +258,11 @@ trait ReleasePluginIOLike[T]
       method.getParameterTypes.toList == List(classOf[State])
     }
 
+  @nowarn("cat=deprecation")
   private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
     IO.blocking {
       val extracted              = Project.extract(state)
-      val configuredRaw          = extracted.get(releaseIOProcess)
+      val configuredRaw          = extracted.get(ReleaseIO._releaseIOProcess)
       val configuredCheck        = releaseCheckProcess(state)
       val configuredRelease      = releaseProcess(state)
       val hookConfiguration      = ReleaseHookCompiler.resolve(state)

@@ -44,6 +44,21 @@ Global lifecycle points use `MonorepoGlobalHookIO`; per-project lifecycle points
 migration window, but they are now the legacy raw-process API. When any of those are
 customized, the plugin stays in legacy mode and ignores the hook/policy settings above.
 
+### Migration from raw-process customization
+
+For the common customization cases, prefer the semantic hook/policy settings over direct
+`releaseIOMonorepoProcess` surgery:
+
+| Legacy pattern | Hook / policy replacement |
+| -------------- | ------------------------- |
+| Remove `push-changes` | `releaseIOMonorepoEnablePush := false` |
+| Remove `publish-artifacts` | `releaseIOMonorepoEnablePublish := false` |
+| Remove `run-tests` | `releaseIOMonorepoEnableRunTests := false` |
+| Insert logic before or after project selection | `releaseIOMonorepoBeforeSelectionHooks` / `releaseIOMonorepoAfterSelectionHooks` |
+| Insert logic before or after per-project phases | `releaseIOMonorepoBefore*Hooks` / `releaseIOMonorepoAfter*Hooks` |
+| Keep the built-in process but add extra behavior | Hook settings |
+| Replace the full step order or use resource-backed custom plugin wiring | Legacy raw-process mode |
+
 ## Custom steps
 
 You can define your own `MonorepoStepIO` steps and add them to the release process alongside the built-in ones. Steps are either **Global** (run once) or **PerProject** (run once per selected project in topological order). Each step receives an immutable context (`MonorepoContext`) that it can read and transform.
@@ -209,7 +224,7 @@ Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project
 
 > **Selection boundary**: The built-in `detect-or-select-projects` step splits the release into a setup segment and a main segment. Steps before the boundary run validate-then-execute sequentially; steps after it run all validations first, then all executions.
 
-### Customizing the release process
+### Customizing the release process (legacy raw-process mode)
 
 Filter, insert, or replace steps in `build.sbt`. Use `insertStepBefore` / `insertStepAfter` to add steps at specific positions by name (matching the `step.name` strings in the [default steps table](concepts.md#default-release-steps)).
 

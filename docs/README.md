@@ -13,6 +13,10 @@
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Releases
+
+- [v0.7.0 draft release notes](releases/v0.7.0.md)
+
 ## Repository
 
 Build, CI, and module overview: [../README.md](../README.md).

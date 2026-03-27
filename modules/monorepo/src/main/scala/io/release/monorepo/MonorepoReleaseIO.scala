@@ -30,6 +30,10 @@ trait MonorepoReleaseIO {
     * migration. Prefer `releaseIOMonorepoEnable*` and `releaseIOMonorepo*Hooks` when the
     * default plugin can express the desired behavior.
     */
+  @deprecated(
+    "Use `releaseIOMonorepoEnable*` policies, `releaseIOMonorepo*Hooks`, or a custom `MonorepoReleasePluginLike` resource plugin; raw `releaseIOMonorepoProcess` editing is legacy mode.",
+    "0.7.0"
+  )
   val releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] =
     _releaseIOMonorepoProcess
 
@@ -230,6 +234,10 @@ trait MonorepoReleaseIO {
     * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
     * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
     */
+  @deprecated(
+    "Prefer `releaseIOMonorepo*Hooks` and `releaseIOMonorepoEnable*`; step insertion is legacy raw-process customization.",
+    "0.7.0"
+  )
   def insertStepAfter(steps: Seq[MonorepoStepIO], afterStep: String)(
       extra: Seq[MonorepoStepIO]
   ): Seq[MonorepoStepIO] = {
@@ -248,6 +256,10 @@ trait MonorepoReleaseIO {
     * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
     * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
     */
+  @deprecated(
+    "Prefer `releaseIOMonorepo*Hooks` and `releaseIOMonorepoEnable*`; step insertion is legacy raw-process customization.",
+    "0.7.0"
+  )
   def insertStepBefore(steps: Seq[MonorepoStepIO], beforeStep: String)(
       extra: Seq[MonorepoStepIO]
   ): Seq[MonorepoStepIO] = {
@@ -263,7 +275,7 @@ trait MonorepoReleaseIO {
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
-    releaseIOMonorepoProcess                         := MonorepoReleaseSteps.defaults,
+    MonorepoReleaseIO._releaseIOMonorepoProcess      := MonorepoReleaseSteps.defaults,
     releaseIOMonorepoCrossBuild                      := false,
     releaseIOMonorepoSkipTests                       := false,
     releaseIOMonorepoSkipPublish                     := false,

@@ -84,11 +84,11 @@ For the full list of CLI flags and subcommands, see [Settings reference — CLI]
 
 ## Local rehearsal
 
-To rehearse a release locally, remove `push-changes`, skip publish, run `check`, then run the real release with explicit versions:
+To rehearse a release locally, disable push, skip publish, run `check`, then run the real release with explicit versions:
 
 ```scala
 // build.sbt
-releaseIOProcess    := releaseIOProcess.value.filterNot(_.name == "push-changes")
+releaseIOEnablePush := false
 releaseIOSkipPublish := true
 ```
 

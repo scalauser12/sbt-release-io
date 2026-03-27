@@ -6,7 +6,9 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 
 ## Features
 
-Two-phase release steps (`validate` / `execute`) in cats-effect `IO`, cross-build support, resource-safe custom plugins (`ReleasePluginIOLike[T]`), optional interactive prompts, and configurable version files and VCS behavior.
+Two-phase release steps (`validate` / `execute`) in cats-effect `IO`, hook-based lifecycle
+customization, cross-build support, resource-safe custom plugins (`ReleasePluginIOLike[T]`),
+optional interactive prompts, and configurable version files and VCS behavior.
 
 ## Quick start
 
@@ -35,6 +37,9 @@ Run the actual release:
 ```bash
 sbt "releaseIO with-defaults"
 ```
+
+Preferred customization keeps the built-in process intact and uses `releaseIOEnable*` policies plus
+`releaseIO*Hooks`. Raw `releaseIOProcess` editing remains available as a legacy advanced path.
 
 ## Documentation
 

@@ -25,6 +25,10 @@ trait ReleaseIO {
     * migration. Prefer `releaseIOEnable*` and `releaseIO*Hooks` when the default plugin
     * can express the desired behavior.
     */
+  @deprecated(
+    "Use `releaseIOEnable*` policies, `releaseIO*Hooks`, or a custom `ReleasePluginIOLike` resource plugin; raw `releaseIOProcess` editing is legacy mode.",
+    "0.7.0"
+  )
   val releaseIOProcess: SettingKey[Seq[ReleaseStepIO]] = ReleaseIO._releaseIOProcess
 
   /** When `true`, steps with `enableCrossBuild = true` are executed once per `crossScalaVersions`.

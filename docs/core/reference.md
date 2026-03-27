@@ -4,7 +4,7 @@ All release settings use the `releaseIO` prefix:
 
 | Setting                           | Type                           | Default                                  | Description                                                                   |
 | --------------------------------- | ------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------- |
-| `releaseIOProcess`                | `Seq[ReleaseStepIO]`           | `ReleaseSteps.defaults`                  | Ordered sequence of release steps                                             |
+| `releaseIOProcess`                | `Seq[ReleaseStepIO]`           | `ReleaseSteps.defaults`                  | Legacy raw-process customization surface for release steps                    |
 | `releaseIOCrossBuild`             | `Boolean`                      | `false`                                  | Cross-build steps per `crossScalaVersions`                                  |
 | `releaseIOSkipPublish`            | `Boolean`                      | `false`                                  | Skip the publish step entirely                                                |
 | `releaseIOInteractive`            | `Boolean`                      | `false`                                  | Enable interactive prompts                                                    |

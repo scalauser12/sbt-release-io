@@ -39,10 +39,9 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    // Filter out push and publish during initial setup — re-enable when ready
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    )
+    // Disable push and publish during initial setup — re-enable when ready
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnablePublish := false
   )
 ```
 
@@ -84,7 +83,7 @@ The preflight has no release side effects: it resolves the selected projects, ve
 sbt "releaseIOMonorepo with-defaults"
 ```
 
-The plugin runs the [default release steps](concepts.md#default-release-steps) in order — sorting projects by dependency, computing versions, writing version files, committing, and tagging. Push is filtered out in this walkthrough; re-enable once confident.
+The plugin runs the [default release steps](concepts.md#default-release-steps) in order — sorting projects by dependency, computing versions, writing version files, committing, and tagging. Push and publish are disabled in this walkthrough; re-enable them once confident.
 
 After the release:
 
@@ -96,4 +95,4 @@ cat core/version.sbt  # version := "0.2.0-SNAPSHOT"
 
 > **Note:** The first release triggers all projects as changed because change detection looks for a prior release tag and finds none. On subsequent runs, only projects with file changes since their last tag are released. To force all projects regardless, use the `all-changed` flag.
 
-> **Local rehearsal:** The walkthrough above already filters out `push-changes` and `publish-artifacts`. Use the same `filterNot` pattern together with `releaseIOMonorepo check` to rehearse any release locally before running the real command. To undo a rehearsal run, see [Recovery and Rollback](operations.md#recovery-and-rollback).
+> **Local rehearsal:** The walkthrough above already disables `push-changes` and `publish-artifacts` via hook/policy settings. Use the same pattern together with `releaseIOMonorepo check` to rehearse any release locally before running the real command. To undo a rehearsal run, see [Recovery and Rollback](operations.md#recovery-and-rollback).

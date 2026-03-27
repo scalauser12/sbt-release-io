@@ -102,6 +102,11 @@ Or specify projects and versions explicitly:
 sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
+For routine customization, prefer the hook/policy settings (`releaseIOEnable*`,
+`releaseIO*Hooks`, `releaseIOMonorepoEnable*`, `releaseIOMonorepo*Hooks`) and leave the built-in
+process intact. Raw `releaseIOProcess` / `releaseIOMonorepoProcess` editing remains supported as a
+legacy advanced path.
+
 For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
 [docs/monorepo/recipes.md](docs/monorepo/recipes.md).
 

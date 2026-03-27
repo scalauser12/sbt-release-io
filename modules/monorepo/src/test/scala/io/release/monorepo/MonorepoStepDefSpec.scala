@@ -7,6 +7,9 @@ import io.release.TestSupport
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
+import scala.annotation.nowarn
+
+@nowarn("cat=deprecation")
 class MonorepoStepDefSpec extends CatsEffectSuite {
 
   private val releaseIO = new MonorepoReleaseIO {}

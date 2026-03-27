@@ -15,6 +15,8 @@ import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
+import scala.annotation.nowarn
+
 /** Base trait for resource-parameterized monorepo release plugins. Each release step
   * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the
   * entire release process.
@@ -57,6 +59,10 @@ trait MonorepoReleasePluginLike[T]
     * Overriding this method opts the plugin into legacy raw-process mode, where the
     * hook/policy settings are ignored and the custom process wiring remains authoritative.
     */
+  @deprecated(
+    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; overriding `monorepoReleaseProcess` opts the plugin into legacy raw-process mode.",
+    "0.7.0"
+  )
   protected def monorepoReleaseProcess(state: State): Seq[T => MonorepoStepIO] =
     liftSteps(Project.extract(state).get(releaseIOMonorepoProcess))
 
@@ -69,6 +75,10 @@ trait MonorepoReleasePluginLike[T]
     * Overriding this method opts the plugin into legacy raw-process mode, where the
     * hook/policy settings are ignored and the custom process wiring remains authoritative.
     */
+  @deprecated(
+    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; overriding `monorepoReleaseCheckProcess` opts the plugin into legacy raw-process mode.",
+    "0.7.0"
+  )
   protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
     Project.extract(state).get(releaseIOMonorepoProcess)
 
@@ -161,10 +171,11 @@ trait MonorepoReleasePluginLike[T]
       method.getParameterTypes.toList == List(classOf[State])
     }
 
+  @nowarn("cat=deprecation")
   private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
     IO.blocking {
       val extracted              = Project.extract(state)
-      val configuredRaw          = extracted.get(releaseIOMonorepoProcess)
+      val configuredRaw          = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
       val configuredCheck        = monorepoReleaseCheckProcess(state)
       val configuredRelease      = monorepoReleaseProcess(state)
       val hookConfiguration      = MonorepoHookCompiler.resolve(state)

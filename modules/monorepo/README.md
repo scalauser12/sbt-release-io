@@ -6,7 +6,9 @@ A monorepo release plugin for sbt, extending [sbt-release-io](../../docs/core/RE
 
 ## Features
 
-Per-project steps, change detection, validate-then-execute phases, per-project tags, cross-build, and `MonorepoReleasePluginLike[T]` for shared resources.
+Per-project steps, hook-based lifecycle customization, change detection,
+validate-then-execute phases, per-project tags, cross-build, and
+`MonorepoReleasePluginLike[T]` for shared resources.
 
 ## Quick start
 
@@ -43,6 +45,10 @@ Run the actual release:
 ```bash
 sbt "releaseIOMonorepo with-defaults"
 ```
+
+Preferred customization keeps the built-in process intact and uses
+`releaseIOMonorepoEnable*` policies plus `releaseIOMonorepo*Hooks`. Raw
+`releaseIOMonorepoProcess` editing remains available as a legacy advanced path.
 
 ## Documentation
 

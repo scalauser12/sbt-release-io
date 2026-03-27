@@ -41,6 +41,20 @@ Hook semantics:
 but they are now the legacy raw-process API. When any of those are customized, the plugin
 stays in legacy mode and ignores the hook/policy settings above.
 
+### Migration from raw-process customization
+
+For the common customization cases, prefer the semantic hook/policy settings over direct
+`releaseIOProcess` surgery:
+
+| Legacy pattern | Hook / policy replacement |
+| -------------- | ------------------------- |
+| Remove `push-changes` | `releaseIOEnablePush := false` |
+| Remove `publish-artifacts` | `releaseIOEnablePublish := false` |
+| Remove `run-tests` / `run-clean` | `releaseIOEnableRunTests := false` / `releaseIOEnableRunClean := false` |
+| Insert logic before or after a built-in phase | `releaseIOBefore*Hooks` / `releaseIOAfter*Hooks` |
+| Keep the built-in process but add extra behavior | Hook settings |
+| Replace the full step order or use resource-backed custom plugin wiring | Legacy raw-process mode |
+
 ## Custom steps
 
 Define your own steps using the `ReleaseStepIO.step(name)` builder and add them to the release process alongside the built-in ones (see [Resource-aware steps](#resource-aware-steps-builder-api) for the full builder method reference):
@@ -208,10 +222,8 @@ Enable the plugin and configure the release process as usual:
 // build.sbt
 enablePlugins(MyReleasePlugin)
 
-// All standard settings work — they come from the default ReleasePluginIO
-releaseIOProcess := releaseIOProcess.value.filterNot(step =>
-  step.name == "push-changes"
-)
+// Keep the default process and configure it semantically
+releaseIOEnablePush := false
 
 releaseIOCrossBuild := true
 ```
@@ -264,7 +276,7 @@ override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseSt
   liftSteps(Project.extract(state).get(releaseIOProcess)) ++ Seq(notifySlack, startDeploy)
 ```
 
-### Inserting steps at specific positions
+### Inserting steps at specific positions (legacy raw-process mode)
 
 `liftSteps` lifts plain `ReleaseStepIO` steps into resource-compatible `T => ReleaseStepIO` functions; `++` appends the resource steps. To insert at a specific position, use `insertAfter` or `insertBefore`:
 

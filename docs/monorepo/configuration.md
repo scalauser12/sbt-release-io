@@ -11,7 +11,7 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | Setting | Type | Default | Description |
 |-----|------|---------|-------------|
 | `releaseIOMonorepoProjects` | `Seq[ProjectRef]` | All transitively aggregated subprojects | Which subprojects participate in releases |
-| `releaseIOMonorepoProcess` | `Seq[MonorepoStepIO]` | `MonorepoReleaseSteps.defaults` | Ordered release steps |
+| `releaseIOMonorepoProcess` | `Seq[MonorepoStepIO]` | `MonorepoReleaseSteps.defaults` | Legacy raw-process customization surface for ordered release steps |
 | `releaseIOMonorepoCrossBuild` | `Boolean` | `false` | Enable cross-building by default |
 | `releaseIOMonorepoSkipTests` | `Boolean` | `false` | Skip tests |
 | `releaseIOMonorepoSkipPublish` | `Boolean` | `false` | Skip publish |
