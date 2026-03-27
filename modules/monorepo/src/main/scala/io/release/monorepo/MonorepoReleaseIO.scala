@@ -25,9 +25,104 @@ trait MonorepoReleaseIO {
   /** The ordered sequence of monorepo release steps.
     * Resource-aware steps should be added by overriding `monorepoReleaseProcess` in a
     * [[MonorepoReleasePluginLike]] subclass, where the resource type `T` is known at compile time.
+    *
+    * This remains the legacy raw-process customization surface during the hook/policy
+    * migration. Prefer `releaseIOMonorepoEnable*` and `releaseIOMonorepo*Hooks` when the
+    * default plugin can express the desired behavior.
     */
   val releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] =
     _releaseIOMonorepoProcess
+
+  // ── Hook / policy settings ────────────────────────────────────────────
+
+  /** When false, omits the snapshot-dependency validation phase from the compiled hook process. */
+  val releaseIOMonorepoEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
+    _releaseIOMonorepoEnableSnapshotDependenciesCheck
+
+  /** When false, omits the `run-tests` phase from the compiled hook process. */
+  val releaseIOMonorepoEnableRunTests: SettingKey[Boolean] =
+    _releaseIOMonorepoEnableRunTests
+
+  /** When false, omits the `tag-releases` phase from the compiled hook process. */
+  val releaseIOMonorepoEnableTagging: SettingKey[Boolean] = _releaseIOMonorepoEnableTagging
+
+  /** When false, omits the `publish-artifacts` phase from the compiled hook process. */
+  val releaseIOMonorepoEnablePublish: SettingKey[Boolean] = _releaseIOMonorepoEnablePublish
+
+  /** When false, omits the `push-changes` phase from the compiled hook process. */
+  val releaseIOMonorepoEnablePush: SettingKey[Boolean] = _releaseIOMonorepoEnablePush
+
+  /** Hooks that run immediately before project selection/change detection. */
+  val releaseIOMonorepoBeforeSelectionHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoBeforeSelectionHooks
+
+  /** Hooks that run immediately after project selection/change detection. */
+  val releaseIOMonorepoAfterSelectionHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoAfterSelectionHooks
+
+  /** Hooks that run immediately before `inquire-versions`. */
+  val releaseIOMonorepoBeforeVersionResolutionHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoBeforeVersionResolutionHooks
+
+  /** Hooks that run immediately after `inquire-versions`. */
+  val releaseIOMonorepoAfterVersionResolutionHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoAfterVersionResolutionHooks
+
+  /** Hooks that run immediately before `set-release-version`. */
+  val releaseIOMonorepoBeforeReleaseVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoBeforeReleaseVersionWriteHooks
+
+  /** Hooks that run immediately after `set-release-version`. */
+  val releaseIOMonorepoAfterReleaseVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoAfterReleaseVersionWriteHooks
+
+  /** Hooks that run immediately before `commit-release-versions`. */
+  val releaseIOMonorepoBeforeReleaseCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoBeforeReleaseCommitHooks
+
+  /** Hooks that run immediately after `commit-release-versions`. */
+  val releaseIOMonorepoAfterReleaseCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoAfterReleaseCommitHooks
+
+  /** Hooks that run immediately before `tag-releases`. */
+  val releaseIOMonorepoBeforeTagHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoBeforeTagHooks
+
+  /** Hooks that run immediately after `tag-releases`. */
+  val releaseIOMonorepoAfterTagHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoAfterTagHooks
+
+  /** Hooks that run immediately before `publish-artifacts`. */
+  val releaseIOMonorepoBeforePublishHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoBeforePublishHooks
+
+  /** Hooks that run immediately after `publish-artifacts`. */
+  val releaseIOMonorepoAfterPublishHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoAfterPublishHooks
+
+  /** Hooks that run immediately before `set-next-version`. */
+  val releaseIOMonorepoBeforeNextVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoBeforeNextVersionWriteHooks
+
+  /** Hooks that run immediately after `set-next-version`. */
+  val releaseIOMonorepoAfterNextVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
+    _releaseIOMonorepoAfterNextVersionWriteHooks
+
+  /** Hooks that run immediately before `commit-next-versions`. */
+  val releaseIOMonorepoBeforeNextCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoBeforeNextCommitHooks
+
+  /** Hooks that run immediately after `commit-next-versions`. */
+  val releaseIOMonorepoAfterNextCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoAfterNextCommitHooks
+
+  /** Hooks that run immediately before `push-changes`. */
+  val releaseIOMonorepoBeforePushHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoBeforePushHooks
+
+  /** Hooks that run immediately after `push-changes`. */
+  val releaseIOMonorepoAfterPushHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    _releaseIOMonorepoAfterPushHooks
 
   // ── Version settings ──────────────────────────────────────────────────
 
@@ -168,29 +263,52 @@ trait MonorepoReleaseIO {
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
-    releaseIOMonorepoProcess                := MonorepoReleaseSteps.defaults,
-    releaseIOMonorepoCrossBuild             := false,
-    releaseIOMonorepoSkipTests              := false,
-    releaseIOMonorepoSkipPublish            := false,
-    releaseIOMonorepoPublishArtifactsChecks := true,
-    releaseIOMonorepoInteractive            := false,
-    releaseIOMonorepoCommitMessage          := ((summary: String) => s"Setting release versions: $summary"),
-    releaseIOMonorepoNextCommitMessage      := ((summary: String) => s"Setting next versions: $summary"),
-    releaseIOMonorepoDetectChanges          := true,
-    releaseIOMonorepoIncludeDownstream      := false,
-    releaseIOMonorepoChangeDetector         := None,
-    releaseIOMonorepoDetectChangesExcludes  := Seq.empty,
-    releaseIOMonorepoSharedPaths            := Seq("build.sbt", "project/"),
-    releaseIOMonorepoTagName                := ((name: String, ver: String) => s"$name/v$ver"),
-    releaseIOMonorepoTagComment             := ((name: String, ver: String) => s"Release $name $ver"),
-    releaseIOMonorepoReadVersion            := VersionSteps.defaultReadVersion,
-    releaseIOMonorepoVersionFileContents    := { (_, ver) =>
+    releaseIOMonorepoProcess                         := MonorepoReleaseSteps.defaults,
+    releaseIOMonorepoCrossBuild                      := false,
+    releaseIOMonorepoSkipTests                       := false,
+    releaseIOMonorepoSkipPublish                     := false,
+    releaseIOMonorepoEnableSnapshotDependenciesCheck := true,
+    releaseIOMonorepoEnableRunTests                  := true,
+    releaseIOMonorepoEnableTagging                   := true,
+    releaseIOMonorepoEnablePublish                   := true,
+    releaseIOMonorepoEnablePush                      := true,
+    releaseIOMonorepoBeforeSelectionHooks            := Seq.empty,
+    releaseIOMonorepoAfterSelectionHooks             := Seq.empty,
+    releaseIOMonorepoBeforeVersionResolutionHooks    := Seq.empty,
+    releaseIOMonorepoAfterVersionResolutionHooks     := Seq.empty,
+    releaseIOMonorepoBeforeReleaseVersionWriteHooks  := Seq.empty,
+    releaseIOMonorepoAfterReleaseVersionWriteHooks   := Seq.empty,
+    releaseIOMonorepoBeforeReleaseCommitHooks        := Seq.empty,
+    releaseIOMonorepoAfterReleaseCommitHooks         := Seq.empty,
+    releaseIOMonorepoBeforeTagHooks                  := Seq.empty,
+    releaseIOMonorepoAfterTagHooks                   := Seq.empty,
+    releaseIOMonorepoBeforePublishHooks              := Seq.empty,
+    releaseIOMonorepoAfterPublishHooks               := Seq.empty,
+    releaseIOMonorepoBeforeNextVersionWriteHooks     := Seq.empty,
+    releaseIOMonorepoAfterNextVersionWriteHooks      := Seq.empty,
+    releaseIOMonorepoBeforeNextCommitHooks           := Seq.empty,
+    releaseIOMonorepoAfterNextCommitHooks            := Seq.empty,
+    releaseIOMonorepoBeforePushHooks                 := Seq.empty,
+    releaseIOMonorepoAfterPushHooks                  := Seq.empty,
+    releaseIOMonorepoPublishArtifactsChecks          := true,
+    releaseIOMonorepoInteractive                     := false,
+    releaseIOMonorepoCommitMessage                   := ((summary: String) => s"Setting release versions: $summary"),
+    releaseIOMonorepoNextCommitMessage               := ((summary: String) => s"Setting next versions: $summary"),
+    releaseIOMonorepoDetectChanges                   := true,
+    releaseIOMonorepoIncludeDownstream               := false,
+    releaseIOMonorepoChangeDetector                  := None,
+    releaseIOMonorepoDetectChangesExcludes           := Seq.empty,
+    releaseIOMonorepoSharedPaths                     := Seq("build.sbt", "project/"),
+    releaseIOMonorepoTagName                         := ((name: String, ver: String) => s"$name/v$ver"),
+    releaseIOMonorepoTagComment                      := ((name: String, ver: String) => s"Release $name $ver"),
+    releaseIOMonorepoReadVersion                     := VersionSteps.defaultReadVersion,
+    releaseIOMonorepoVersionFileContents             := { (_, ver) =>
       IO.pure(s"""version := "$ver"\n""")
     },
-    releaseIOMonorepoVersionFile            := { (ref: ProjectRef, state: State) =>
+    releaseIOMonorepoVersionFile                     := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / releaseIOVersionFile)
     },
-    releaseIOMonorepoProjects               := {
+    releaseIOMonorepoProjects                        := {
       val build      = loadedBuild.value
       val root       = thisProjectRef.value
       val projectMap = build.allProjectRefs.map { case (ref, proj) => ref -> proj.aggregate }.toMap
@@ -222,6 +340,163 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Seq[MonorepoStepIO]](
       "releaseIOMonorepoProcess",
       "The ordered sequence of monorepo release steps"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoEnableSnapshotDependenciesCheck
+      : SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoEnableSnapshotDependenciesCheck",
+      "Whether to include snapshot dependency validation in the compiled hook process"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoEnableRunTests: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoEnableRunTests",
+      "Whether to include the test phase in the compiled hook process"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoEnableTagging: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoEnableTagging",
+      "Whether to include the tag phase in the compiled hook process"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoEnablePublish: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoEnablePublish",
+      "Whether to include the publish phase in the compiled hook process"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoEnablePush: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoEnablePush",
+      "Whether to include the push phase in the compiled hook process"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforeSelectionHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoBeforeSelectionHooks",
+      "Hooks that run before project selection/change detection"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterSelectionHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoAfterSelectionHooks",
+      "Hooks that run after project selection/change detection"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforeVersionResolutionHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoBeforeVersionResolutionHooks",
+      "Hooks that run before inquire-versions"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterVersionResolutionHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoAfterVersionResolutionHooks",
+      "Hooks that run after inquire-versions"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforeReleaseVersionWriteHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoBeforeReleaseVersionWriteHooks",
+      "Hooks that run before set-release-version"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterReleaseVersionWriteHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoAfterReleaseVersionWriteHooks",
+      "Hooks that run after set-release-version"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforeReleaseCommitHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoBeforeReleaseCommitHooks",
+      "Hooks that run before commit-release-versions"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterReleaseCommitHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoAfterReleaseCommitHooks",
+      "Hooks that run after commit-release-versions"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforeTagHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoBeforeTagHooks",
+      "Hooks that run before tag-releases"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterTagHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoAfterTagHooks",
+      "Hooks that run after tag-releases"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforePublishHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoBeforePublishHooks",
+      "Hooks that run before publish-artifacts"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterPublishHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoAfterPublishHooks",
+      "Hooks that run after publish-artifacts"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforeNextVersionWriteHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoBeforeNextVersionWriteHooks",
+      "Hooks that run before set-next-version"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterNextVersionWriteHooks
+      : SettingKey[Seq[MonorepoProjectHookIO]] =
+    SettingKey[Seq[MonorepoProjectHookIO]](
+      "releaseIOMonorepoAfterNextVersionWriteHooks",
+      "Hooks that run after set-next-version"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforeNextCommitHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoBeforeNextCommitHooks",
+      "Hooks that run before commit-next-versions"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterNextCommitHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoAfterNextCommitHooks",
+      "Hooks that run after commit-next-versions"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoBeforePushHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoBeforePushHooks",
+      "Hooks that run before push-changes"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterPushHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoAfterPushHooks",
+      "Hooks that run after push-changes"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoVersionFile

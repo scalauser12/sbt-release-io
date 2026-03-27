@@ -15,6 +15,7 @@ Each scenario lives under `sbt-release-io-monorepo/<test-name>/` and typically c
 - Change-detection extensions: `change-detection-downstream`, `custom-change-detector`, `custom-detector-error`, `custom-detector-uses-basedir`, `detect-changes-disabled`, `detect-changes-excludes`, `shared-paths-*`
 - CLI and help: `help`, `check`, `check-without-builtins`, `cli-override-forces-detection`, `cli-parse-errors`, `empty-override-value`, `invalid-override`, `keyword-project-selector`
 - Version files and custom formats: `custom-version-format`, `late-bound-version-settings`, `per-project-releaseversionfile`, `version-file-change-detection`
+- Hook-based lifecycle and policies: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`
 - Tagging: `custom-tag-name`, `tag-exists-error`
 - Dependency ordering and aggregation: `diamond-dependency`, `topological-order`, `transitive-aggregates`, `nested-parent-exclusion`, `root-project-*`
 - Cross-build behavior: `cross-build-setting`, `cross-build-heterogeneous`, `cross-build-empty-cross`, `cross-build-restore`

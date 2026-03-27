@@ -1,5 +1,49 @@
 # Custom steps and plugins (monorepo)
 
+## Hook-based customization
+
+The default `MonorepoReleasePlugin` now supports semantic lifecycle hooks and phase
+policies without requiring raw `releaseIOMonorepoProcess` surgery. When the built-in
+process is left intact, the plugin compiles `releaseIOMonorepoEnable*` and
+`releaseIOMonorepo*Hooks` settings into the internal engine so `releaseIOMonorepo`
+and `releaseIOMonorepo check` stay aligned.
+
+```scala
+import sbt.*
+import sbt.Keys.*
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoProjectHookIO
+
+def markerHook(marker: String): MonorepoProjectHookIO =
+  MonorepoProjectHookIO.action(marker) { (_, project) =>
+    IO.blocking {
+      sbt.IO.write(project.baseDir / s"$marker.marker", marker + "\n")
+    }
+  }
+
+releaseIOMonorepoEnablePush      := false
+releaseIOMonorepoBeforeTagHooks  += markerHook("before-tag")
+releaseIOMonorepoAfterTagHooks   += markerHook("after-tag")
+releaseIOMonorepoEnablePublish   := false
+```
+
+Hook semantics:
+
+- `beforeX` / `afterX` hooks run only when phase `X` is present in the compiled process
+- Disabled or skipped phases do not fire their normal hooks
+- Hooks extend release behavior, but they do not control phase ordering or batching
+- `releaseIOMonorepo check` validates the same compiled lifecycle shape that `releaseIOMonorepo` executes
+
+Global lifecycle points use `MonorepoGlobalHookIO`; per-project lifecycle points use
+`MonorepoProjectHookIO`.
+
+### Legacy raw-process mode
+
+`releaseIOMonorepoProcess`, `MonorepoReleasePluginLike.monorepoReleaseProcess`, and
+`MonorepoReleasePluginLike.monorepoReleaseCheckProcess` remain supported during the
+migration window, but they are now the legacy raw-process API. When any of those are
+customized, the plugin stays in legacy mode and ignores the hook/policy settings above.
+
 ## Custom steps
 
 You can define your own `MonorepoStepIO` steps and add them to the release process alongside the built-in ones. Steps are either **Global** (run once) or **PerProject** (run once per selected project in topological order). Each step receives an immutable context (`MonorepoContext`) that it can read and transform.

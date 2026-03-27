@@ -1,0 +1,83 @@
+import scala.sys.process.*
+import sbt.*
+import sbt.Keys.*
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoProjectHookIO
+
+lazy val core = (project in file("core"))
+  .settings(
+    name         := "core",
+    scalaVersion := "2.12.18"
+  )
+
+val checkLateBoundVersionFile = taskKey[Unit]("Check the late-bound version file")
+val checkLateBoundTag         = taskKey[Unit]("Check the late-bound tag")
+
+def lateBoundVersionSettings: Seq[Setting[?]] =
+  Seq(
+    releaseIOMonorepoVersionFile         := { (ref: ProjectRef, state: State) =>
+      Project.extract(state).get(ref / baseDirectory) / "version.properties"
+    },
+    releaseIOMonorepoReadVersion         := { file =>
+      IO.blocking(sbt.IO.read(file).trim)
+    },
+    releaseIOMonorepoVersionFileContents := { (_, version) =>
+      IO.pure(version + "\n")
+    }
+  )
+
+lazy val root = (project in file("."))
+  .aggregate(core)
+  .enablePlugins(MonorepoReleasePlugin)
+  .settings(
+    name                          := "hook-late-bound-settings-monorepo",
+    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush   := false,
+    releaseIOMonorepoBeforeVersionResolutionHooks := Seq(
+      MonorepoProjectHookIO.io("late-bound-version-settings") { (ctx, _) =>
+        IO.blocking {
+          val extracted    = Project.extract(ctx.state)
+          val updatedState = extracted.appendWithSession(
+            lateBoundVersionSettings,
+            ctx.state
+          )
+          sbt.IO.touch(extracted.get(baseDirectory) / "late-bound-version-settings-ran")
+          ctx.withState(updatedState)
+        }
+      }
+    ),
+    releaseIOMonorepoBeforeTagHooks := Seq(
+      MonorepoProjectHookIO.io("late-bound-tag-settings") { (ctx, _) =>
+        IO.blocking {
+          val extracted    = Project.extract(ctx.state)
+          val updatedState = extracted.appendWithSession(
+            lateBoundVersionSettings ++ Seq(
+              releaseIOMonorepoTagName := ((_: String, _: String) => "late-bound-runtime-tag")
+            ),
+            ctx.state
+          )
+          sbt.IO.touch(extracted.get(baseDirectory) / "late-bound-tag-settings-ran")
+          ctx.withState(updatedState)
+        }
+      }
+    ),
+    checkLateBoundVersionFile     := {
+      val runtimeVersion = sbt.IO.read(file("core/version.properties")).trim
+      val scopedVersion  = sbt.IO.read(file("core/version.sbt")).trim
+
+      assert(
+        runtimeVersion == "1.1.0-SNAPSHOT",
+        s"Unexpected core/version.properties: $runtimeVersion"
+      )
+      assert(
+        scopedVersion.contains("""version := "0.2.0-SNAPSHOT""""),
+        s"core/version.sbt should stay unchanged, but was: $scopedVersion"
+      )
+    },
+    checkLateBoundTag             := {
+      val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
+      assert(tags == List("late-bound-runtime-tag"), s"Unexpected tags: ${tags.mkString(", ")}")
+    }
+  )

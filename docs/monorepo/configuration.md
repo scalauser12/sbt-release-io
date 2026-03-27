@@ -20,6 +20,39 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | `releaseIOMonorepoCommitMessage` | `String => String` | `summary => s"Setting release versions: $summary"` | Commit message formatter for release version commits. Receives the version summary (e.g. "core 1.0.0, api 2.0.0"). |
 | `releaseIOMonorepoNextCommitMessage` | `String => String` | `summary => s"Setting next versions: $summary"` | Commit message formatter for next version commits. Receives the version summary. |
 
+## Hook / policy settings
+
+These settings participate in the compiled hook-based flow when the raw process is left
+alone. If `releaseIOMonorepoProcess`, `monorepoReleaseProcess`, or
+`monorepoReleaseCheckProcess` are customized, the plugin stays in legacy raw-process
+mode and ignores these keys.
+
+| Setting | Type | Default | Description |
+|-----|------|---------|-------------|
+| `releaseIOMonorepoEnableSnapshotDependenciesCheck` | `Boolean` | `true` | Include `check-snapshot-dependencies` in the compiled process |
+| `releaseIOMonorepoEnableRunTests` | `Boolean` | `true` | Include `run-tests` in the compiled process |
+| `releaseIOMonorepoEnableTagging` | `Boolean` | `true` | Include `tag-releases` in the compiled process |
+| `releaseIOMonorepoEnablePublish` | `Boolean` | `true` | Include `publish-artifacts` in the compiled process |
+| `releaseIOMonorepoEnablePush` | `Boolean` | `true` | Include `push-changes` in the compiled process |
+| `releaseIOMonorepoBeforeSelectionHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run before `detect-or-select-projects` |
+| `releaseIOMonorepoAfterSelectionHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run after `detect-or-select-projects` |
+| `releaseIOMonorepoBeforeVersionResolutionHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run before `inquire-versions` |
+| `releaseIOMonorepoAfterVersionResolutionHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run after `inquire-versions` |
+| `releaseIOMonorepoBeforeReleaseVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run before `set-release-version` |
+| `releaseIOMonorepoAfterReleaseVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run after `set-release-version` |
+| `releaseIOMonorepoBeforeReleaseCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run before `commit-release-versions` |
+| `releaseIOMonorepoAfterReleaseCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run after `commit-release-versions` |
+| `releaseIOMonorepoBeforeTagHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run before `tag-releases` when tagging is enabled |
+| `releaseIOMonorepoAfterTagHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run after `tag-releases` when tagging is enabled |
+| `releaseIOMonorepoBeforePublishHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run before `publish-artifacts` when publish runs |
+| `releaseIOMonorepoAfterPublishHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run after `publish-artifacts` when publish runs |
+| `releaseIOMonorepoBeforeNextVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run before `set-next-version` |
+| `releaseIOMonorepoAfterNextVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks that run after `set-next-version` |
+| `releaseIOMonorepoBeforeNextCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run before `commit-next-versions` |
+| `releaseIOMonorepoAfterNextCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run after `commit-next-versions` |
+| `releaseIOMonorepoBeforePushHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run before `push-changes` when push is enabled |
+| `releaseIOMonorepoAfterPushHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks that run after `push-changes` when push is enabled |
+
 ## Version settings
 
 | Setting | Type | Default | Description |
