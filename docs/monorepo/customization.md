@@ -253,6 +253,12 @@ releaseIOMonorepoProcess := Seq(
 
 If your release process needs a shared resource (HTTP client, database connection, temporary directory), create a custom plugin that extends `MonorepoReleasePluginLike[T]`. The resource is acquired once before all steps run and released after they complete (or on failure).
 
+Custom plugins still participate in the compiled hook/policy flow by default. Legacy raw-process
+mode starts only when the plugin materially changes the effective process, for example by
+returning extra steps from `monorepoReleaseProcess` or `monorepoReleaseCheckProcess`. Merely
+defining a custom plugin or overriding unrelated members such as `commandName` or `resource` does
+not bypass hooks.
+
 Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sbt discovers `AutoPlugin` classes during meta-build compilation. You only need `enablePlugins(MyReleasePlugin)` — you do not need to enable `MonorepoReleasePlugin`.
 
 > **Do not add `object autoImport`** to custom plugins. When both `MonorepoReleasePlugin` and a custom plugin define `autoImport`, the build gets ambiguous references (e.g. `reference to releaseIOMonorepoProcess is ambiguous`).
@@ -283,6 +289,9 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
 }
 ```
 
+Because this example changes the effective release process, it intentionally uses legacy
+raw-process mode for that custom command.
+
 `myRelease check ...` does **not** acquire `resource` by default. `check` reads the plain
 configured `releaseIOMonorepoProcess` through the protected
 `monorepoReleaseCheckProcess(state)` hook, so normal release behavior stays unchanged while
@@ -302,8 +311,9 @@ override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoSt
       .validateOnly
 ```
 
-That hook is the intended customization point for `check`. It lets custom plugins keep preflight
-coverage for resource-backed release logic without acquiring the main release resource.
+That hook is the intended legacy/custom-plugin customization point for `check`. It lets custom
+plugins keep preflight coverage for resource-backed release logic without acquiring the main
+release resource.
 
 > **Tag preflight and custom version resolution:** `check` preflights tag availability only when `inquire-versions` is in the configured process. If you replace `inquire-versions` with custom version resolution, `check` reports tag status as "not evaluated (tags depend on runtime/custom version setup)" because it cannot compute the tag name without the built-in version step. The real release will still create tags normally.
 

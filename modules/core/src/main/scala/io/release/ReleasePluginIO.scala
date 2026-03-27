@@ -60,11 +60,13 @@ trait ReleasePluginIOLike[T]
   /** The release steps. Reads plain steps from the `releaseIOProcess` setting and lifts
     * each into a resource-ignoring function. Override to append resource-aware steps.
     *
-    * Overriding this method opts the plugin into legacy raw-process mode, where the
-    * hook/policy settings are ignored and the custom process wiring remains authoritative.
+    * Hooks and policies are the preferred customization path. Changing the effective process
+    * returned from this method uses legacy raw-process mode, where the hook/policy settings are
+    * ignored and the custom process wiring remains authoritative. Merely defining a custom plugin
+    * or overriding unrelated members such as [[commandName]] or [[resource]] does not.
     */
   @deprecated(
-    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; overriding `releaseProcess` opts the plugin into legacy raw-process mode.",
+    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; changing the effective process returned from `releaseProcess` uses legacy raw-process mode.",
     "0.7.0"
   )
   protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
@@ -76,11 +78,14 @@ trait ReleasePluginIOLike[T]
     * resource. Custom plugins can override this to add resource-free preflight equivalents for
     * custom resource-backed steps.
     *
-    * Overriding this method opts the plugin into legacy raw-process mode, where the
-    * hook/policy settings are ignored and the custom process wiring remains authoritative.
+    * Hooks and policies are the preferred customization path. Changing the effective preflight
+    * process returned from this method uses legacy raw-process mode, where the hook/policy
+    * settings are ignored and the custom process wiring remains authoritative. Merely defining a
+    * custom plugin or overriding unrelated members such as [[commandName]] or [[resource]] does
+    * not.
     */
   @deprecated(
-    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; overriding `releaseCheckProcess` opts the plugin into legacy raw-process mode.",
+    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; changing the effective process returned from `releaseCheckProcess` uses legacy raw-process mode.",
     "0.7.0"
   )
   protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
@@ -251,62 +256,28 @@ trait ReleasePluginIOLike[T]
       legacyReasons: Seq[String]
   )
 
-  private def builtInPluginClass: Class[?] = ReleasePluginIO.getClass
-
-  private def declaresProcessHook(methodName: String): Boolean =
-    this.getClass.getDeclaredMethods.exists { method =>
-      method.getName == methodName &&
-      method.getParameterTypes.toList == List(classOf[State])
-    }
-
-  // Scala emits concrete forwarders for trait defaults on plugin objects, so reflective
-  // method inspection cannot reliably distinguish inherited defaults from real overrides.
-  // Treating custom plugin classes and custom plugin superclasses as legacy mode is
-  // conservative, but it avoids silently dropping inherited custom process wiring.
-  private def usesCustomProcessHooks: Boolean = {
-    val customPluginClass = this.getClass != builtInPluginClass && (
-      declaresProcessHook("releaseProcess") || declaresProcessHook("releaseCheckProcess")
-    )
-
-    customPluginClass || inheritsCustomProcessHooks
-  }
-
-  private def inheritsCustomProcessHooks: Boolean = {
-    @scala.annotation.tailrec
-    def loop(clazz: Class[?]): Boolean =
-      if (clazz == null || clazz == classOf[AutoPlugin] || clazz == classOf[Object]) false
-      else if (classOf[ReleasePluginIOLike[?]].isAssignableFrom(clazz)) true
-      else loop(clazz.getSuperclass)
-
-    loop(this.getClass.getSuperclass)
-  }
-
   @nowarn("cat=deprecation")
   private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
     IO.blocking {
-      val extracted              = Project.extract(state)
-      val configuredRaw          = extracted.get(ReleaseIO._releaseIOProcess)
-      val configuredCheck        = releaseCheckProcess(state)
-      val configuredRelease      = releaseProcess(state)
-      val rawProcessChanged      = configuredRaw != ReleaseSteps.defaults
-      val checkProcessChanged    = configuredCheck != configuredRaw
-      val processHooksOverridden = usesCustomProcessHooks
-      val releaseProcessChanged  =
+      val extracted             = Project.extract(state)
+      val configuredRaw         = extracted.get(ReleaseIO._releaseIOProcess)
+      val configuredCheck       = releaseCheckProcess(state)
+      val configuredRelease     = releaseProcess(state)
+      val rawProcessChanged     = configuredRaw != ReleaseSteps.defaults
+      val checkProcessChanged   = configuredCheck != configuredRaw
+      val releaseProcessChanged =
         configuredRelease.length != configuredRaw.length
-      val legacyReasons          =
+      val legacyReasons         =
         Seq(
           if (rawProcessChanged) Some("`releaseIOProcess` differs from defaults") else None,
           if (checkProcessChanged)
             Some("`releaseCheckProcess` differs from the configured raw process")
           else None,
-          if (processHooksOverridden)
-            Some("plugin overrides `releaseProcess` or `releaseCheckProcess`")
-          else None,
           if (releaseProcessChanged)
             Some("`releaseProcess` differs from the configured raw process")
           else None
         ).flatten
-      val legacyMode             = legacyReasons.nonEmpty
+      val legacyMode            = legacyReasons.nonEmpty
 
       if (legacyMode)
         ResolvedProcessMode(

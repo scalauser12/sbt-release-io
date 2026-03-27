@@ -56,11 +56,13 @@ trait MonorepoReleasePluginLike[T]
   /** The monorepo release steps. Reads plain steps from the `releaseIOMonorepoProcess` setting
     * and lifts each into a resource-ignoring function. Override to append resource-aware steps.
     *
-    * Overriding this method opts the plugin into legacy raw-process mode, where the
-    * hook/policy settings are ignored and the custom process wiring remains authoritative.
+    * Hooks and policies are the preferred customization path. Changing the effective process
+    * returned from this method uses legacy raw-process mode, where the hook/policy settings are
+    * ignored and the custom process wiring remains authoritative. Merely defining a custom plugin
+    * or overriding unrelated members such as [[commandName]] or [[resource]] does not.
     */
   @deprecated(
-    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; overriding `monorepoReleaseProcess` opts the plugin into legacy raw-process mode.",
+    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; changing the effective process returned from `monorepoReleaseProcess` uses legacy raw-process mode.",
     "0.7.0"
   )
   protected def monorepoReleaseProcess(state: State): Seq[T => MonorepoStepIO] =
@@ -72,11 +74,14 @@ trait MonorepoReleasePluginLike[T]
     * plugin resource. Custom plugins can override this to add resource-free preflight equivalents
     * for custom resource-backed steps.
     *
-    * Overriding this method opts the plugin into legacy raw-process mode, where the
-    * hook/policy settings are ignored and the custom process wiring remains authoritative.
+    * Hooks and policies are the preferred customization path. Changing the effective preflight
+    * process returned from this method uses legacy raw-process mode, where the hook/policy
+    * settings are ignored and the custom process wiring remains authoritative. Merely defining a
+    * custom plugin or overriding unrelated members such as [[commandName]] or [[resource]] does
+    * not.
     */
   @deprecated(
-    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; overriding `monorepoReleaseCheckProcess` opts the plugin into legacy raw-process mode.",
+    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; changing the effective process returned from `monorepoReleaseCheckProcess` uses legacy raw-process mode.",
     "0.7.0"
   )
   protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
@@ -164,63 +169,26 @@ trait MonorepoReleasePluginLike[T]
       legacyReasons: Seq[String]
   )
 
-  private def builtInPluginClass: Class[?] = MonorepoReleasePlugin.getClass
-
-  private def declaresProcessHook(methodName: String): Boolean =
-    this.getClass.getDeclaredMethods.exists { method =>
-      method.getName == methodName &&
-      method.getParameterTypes.toList == List(classOf[State])
-    }
-
-  // Scala emits concrete forwarders for trait defaults on plugin objects, so reflective
-  // method inspection cannot reliably distinguish inherited defaults from real overrides.
-  // Treating custom plugin classes and custom plugin superclasses as legacy mode is
-  // conservative, but it avoids silently dropping inherited custom process wiring.
-  private def usesCustomProcessHooks: Boolean = {
-    val customPluginClass = this.getClass != builtInPluginClass && (
-      declaresProcessHook("monorepoReleaseProcess") ||
-        declaresProcessHook("monorepoReleaseCheckProcess")
-    )
-
-    customPluginClass || inheritsCustomProcessHooks
-  }
-
-  private def inheritsCustomProcessHooks: Boolean = {
-    @scala.annotation.tailrec
-    def loop(clazz: Class[?]): Boolean =
-      if (clazz == null || clazz == classOf[AutoPlugin] || clazz == classOf[Object]) false
-      else if (classOf[MonorepoReleasePluginLike[?]].isAssignableFrom(clazz)) true
-      else loop(clazz.getSuperclass)
-
-    loop(this.getClass.getSuperclass)
-  }
-
   @nowarn("cat=deprecation")
   private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
     IO.blocking {
-      val extracted              = Project.extract(state)
-      val configuredRaw          = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
-      val configuredCheck        = monorepoReleaseCheckProcess(state)
-      val configuredRelease      = monorepoReleaseProcess(state)
-      val rawProcessChanged      = configuredRaw != MonorepoReleaseSteps.defaults
-      val checkProcessChanged    = configuredCheck != configuredRaw
-      val processHooksOverridden = usesCustomProcessHooks
-      val releaseProcessChanged  = configuredRelease.length != configuredRaw.length
-      val legacyReasons          = Seq(
+      val extracted             = Project.extract(state)
+      val configuredRaw         = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
+      val configuredCheck       = monorepoReleaseCheckProcess(state)
+      val configuredRelease     = monorepoReleaseProcess(state)
+      val rawProcessChanged     = configuredRaw != MonorepoReleaseSteps.defaults
+      val checkProcessChanged   = configuredCheck != configuredRaw
+      val releaseProcessChanged = configuredRelease.length != configuredRaw.length
+      val legacyReasons         = Seq(
         if (rawProcessChanged) Some("`releaseIOMonorepoProcess` differs from defaults") else None,
         if (checkProcessChanged)
           Some("`monorepoReleaseCheckProcess` differs from the configured raw process")
-        else None,
-        if (processHooksOverridden)
-          Some(
-            "plugin overrides `monorepoReleaseProcess` or `monorepoReleaseCheckProcess`"
-          )
         else None,
         if (releaseProcessChanged)
           Some("`monorepoReleaseProcess` differs from the configured raw process")
         else None
       ).flatten
-      val legacyMode             = legacyReasons.nonEmpty
+      val legacyMode            = legacyReasons.nonEmpty
 
       if (legacyMode)
         ResolvedProcessMode(

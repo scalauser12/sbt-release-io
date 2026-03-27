@@ -77,6 +77,43 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
   }
 
   test(
+    "resolveProcessMode - keep a direct custom plugin with unrelated overrides on compiled hook mode"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks +=
+        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+    )
+
+    stateResource("monorepo-plugin-custom-compiled-hooks", HookFriendlyPlugin, settings).use {
+      loaded =>
+        resolveProcessMode(HookFriendlyPlugin, loaded.state).map { processMode =>
+          assertEquals(legacyMode(processMode), false)
+          assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
+        }
+    }
+  }
+
+  test(
+    "resolveProcessMode - keep an inherited custom plugin with unrelated overrides on compiled hook mode"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks +=
+        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+    )
+
+    stateResource(
+      "monorepo-plugin-inherited-compiled-hooks",
+      InheritedHookFriendlyPlugin,
+      settings
+    ).use { loaded =>
+      resolveProcessMode(InheritedHookFriendlyPlugin, loaded.state).map { processMode =>
+        assertEquals(legacyMode(processMode), false)
+        assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
+      }
+    }
+  }
+
+  test(
     "resolveProcessMode - do not evaluate hook settings while legacy raw process mode is active"
   ) {
     val rawProcess                = Seq(
@@ -103,64 +140,82 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
     }
   }
 
-  test("resolveProcessMode - treat process hook overrides as legacy mode") {
-    stateResource("monorepo-plugin-legacy-override", OverriddenProcessPlugin).use { loaded =>
-      resolveProcessMode(OverriddenProcessPlugin, loaded.state).map { processMode =>
+  test("resolveProcessMode - treat custom check-process wiring as legacy mode") {
+    stateResource("monorepo-plugin-legacy-check-process", CustomCheckProcessPlugin).use { loaded =>
+      resolveProcessMode(CustomCheckProcessPlugin, loaded.state).map { processMode =>
         assertEquals(legacyMode(processMode), true)
         assert(
           legacyReasons(processMode)
             .contains(
-              "plugin overrides `monorepoReleaseProcess` or `monorepoReleaseCheckProcess`"
+              "`monorepoReleaseCheckProcess` differs from the configured raw process"
             )
         )
+        assert(checkStepNames(processMode).contains("custom-check-preflight"))
       }
     }
   }
 
-  test("resolveProcessMode - treat inherited process hook overrides as legacy mode") {
-    stateResource("monorepo-plugin-legacy-inherited-override", InheritedProcessPlugin).use {
+  test("resolveProcessMode - treat custom release-process wiring as legacy mode") {
+    stateResource("monorepo-plugin-legacy-release-process", CustomReleaseProcessPlugin).use {
       loaded =>
-        resolveProcessMode(InheritedProcessPlugin, loaded.state).map { processMode =>
+        resolveProcessMode(CustomReleaseProcessPlugin, loaded.state).map { processMode =>
           assertEquals(legacyMode(processMode), true)
           assert(
             legacyReasons(processMode)
               .contains(
-                "plugin overrides `monorepoReleaseProcess` or `monorepoReleaseCheckProcess`"
+                "`monorepoReleaseProcess` differs from the configured raw process"
               )
           )
+          assert(releaseStepNames(processMode).contains("custom-release-step"))
         }
     }
   }
 
-  private object OverriddenProcessPlugin extends MonorepoReleasePluginLike[Unit] {
+  private object HookFriendlyPlugin extends MonorepoReleasePluginLike[Unit] {
     override def trigger = noTrigger
 
-    override protected def commandName = "releaseMonorepoLegacyOverride"
+    override protected def commandName = "releaseMonorepoHookFriendly"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+  }
+
+  private abstract class BaseHookFriendlyPlugin extends MonorepoReleasePluginLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseMonorepoHookFriendlyInherited"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+  }
+
+  private object InheritedHookFriendlyPlugin extends BaseHookFriendlyPlugin
+
+  private object CustomCheckProcessPlugin extends MonorepoReleasePluginLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseMonorepoLegacyCheckProcess"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
+      super.monorepoReleaseCheckProcess(state) :+
+        MonorepoStepIO
+          .global("custom-check-preflight")
+          .validateOnly
+  }
+
+  private object CustomReleaseProcessPlugin extends MonorepoReleasePluginLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseMonorepoLegacyReleaseProcess"
 
     override def resource: Resource[IO, Unit] = Resource.unit
 
     override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-      super.monorepoReleaseProcess(state)
-
-    override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
-      super.monorepoReleaseCheckProcess(state)
+      super.monorepoReleaseProcess(state) :+
+        MonorepoStepIO
+          .globalResource[Unit]("custom-release-step")
+          .executeAction(_ => _ => IO.unit)
   }
-
-  private abstract class BaseProcessPlugin extends MonorepoReleasePluginLike[Unit] {
-    override def trigger = noTrigger
-
-    override protected def commandName = "releaseMonorepoLegacyInherited"
-
-    override def resource: Resource[IO, Unit] = Resource.unit
-
-    override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-      super.monorepoReleaseProcess(state)
-
-    override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
-      super.monorepoReleaseCheckProcess(state)
-  }
-
-  private object InheritedProcessPlugin extends BaseProcessPlugin
 
   private def throwingHookSeq(message: String): Seq[MonorepoGlobalHookIO] =
     new scala.collection.immutable.Seq[MonorepoGlobalHookIO] {
@@ -270,6 +325,9 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
 
   private def checkStepNames(processMode: AnyRef): Seq[String] =
     invokeGetter[Seq[MonorepoStepIO]](processMode, "checkSteps").map(_.name)
+
+  private def releaseStepNames(processMode: AnyRef): Seq[String] =
+    invokeGetter[Seq[Unit => MonorepoStepIO]](processMode, "releaseSteps").map(_(()).name)
 
   private def invokeGetter[A](target: AnyRef, methodName: String): A = {
     val method = findMethod(target.getClass, _.endsWith(methodName), 0)

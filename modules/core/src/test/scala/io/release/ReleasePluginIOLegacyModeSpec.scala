@@ -68,6 +68,41 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
   }
 
   test(
+    "resolveProcessMode - keep a direct custom plugin with unrelated overrides on compiled hook mode"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+    )
+
+    stateResource("release-plugin-custom-compiled-hooks", HookFriendlyPlugin, settings).use {
+      loaded =>
+        resolveProcessMode(HookFriendlyPlugin, loaded.state).map { processMode =>
+          assertEquals(legacyMode(processMode), false)
+          assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
+        }
+    }
+  }
+
+  test(
+    "resolveProcessMode - keep an inherited custom plugin with unrelated overrides on compiled hook mode"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+    )
+
+    stateResource(
+      "release-plugin-inherited-compiled-hooks",
+      InheritedHookFriendlyPlugin,
+      settings
+    ).use { loaded =>
+      resolveProcessMode(InheritedHookFriendlyPlugin, loaded.state).map { processMode =>
+        assertEquals(legacyMode(processMode), false)
+        assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
+      }
+    }
+  }
+
+  test(
     "resolveProcessMode - do not evaluate hook settings while legacy raw process mode is active"
   ) {
     val rawProcess                = Seq(ReleaseSteps.initializeVcs, ReleaseSteps.inquireVersions)
@@ -90,56 +125,78 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
     }
   }
 
-  test("resolveProcessMode - treat process hook overrides as legacy mode") {
-    stateResource("release-plugin-legacy-override", OverriddenProcessPlugin).use { loaded =>
-      resolveProcessMode(OverriddenProcessPlugin, loaded.state).map { processMode =>
+  test("resolveProcessMode - treat custom check-process wiring as legacy mode") {
+    stateResource("release-plugin-legacy-check-process", CustomCheckProcessPlugin).use { loaded =>
+      resolveProcessMode(CustomCheckProcessPlugin, loaded.state).map { processMode =>
         assertEquals(legacyMode(processMode), true)
         assert(
           legacyReasons(processMode)
-            .contains("plugin overrides `releaseProcess` or `releaseCheckProcess`")
+            .contains("`releaseCheckProcess` differs from the configured raw process")
         )
+        assert(checkStepNames(processMode).contains("custom-check-preflight"))
       }
     }
   }
 
-  test("resolveProcessMode - treat inherited process hook overrides as legacy mode") {
-    stateResource("release-plugin-legacy-inherited-override", InheritedProcessPlugin).use {
+  test("resolveProcessMode - treat custom release-process wiring as legacy mode") {
+    stateResource("release-plugin-legacy-release-process", CustomReleaseProcessPlugin).use {
       loaded =>
-        resolveProcessMode(InheritedProcessPlugin, loaded.state).map { processMode =>
+        resolveProcessMode(CustomReleaseProcessPlugin, loaded.state).map { processMode =>
           assertEquals(legacyMode(processMode), true)
           assert(
             legacyReasons(processMode)
-              .contains("plugin overrides `releaseProcess` or `releaseCheckProcess`")
+              .contains("`releaseProcess` differs from the configured raw process")
           )
+          assert(releaseStepNames(processMode).contains("custom-release-step"))
         }
     }
   }
 
-  private object OverriddenProcessPlugin extends ReleasePluginIOLike[Unit] {
+  private object HookFriendlyPlugin extends ReleasePluginIOLike[Unit] {
     override def trigger = noTrigger
+
+    override protected def commandName = "releaseHookFriendly"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+  }
+
+  private abstract class BaseHookFriendlyPlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseHookFriendlyInherited"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+  }
+
+  private object InheritedHookFriendlyPlugin extends BaseHookFriendlyPlugin
+
+  private object CustomCheckProcessPlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseLegacyCheckProcess"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
+      super.releaseCheckProcess(state) :+
+        ReleaseStepIO
+          .step("custom-check-preflight")
+          .validateOnly
+  }
+
+  private object CustomReleaseProcessPlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseLegacyReleaseProcess"
 
     override def resource: Resource[IO, Unit] = Resource.unit
 
     override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
-      super.releaseProcess(state)
-
-    override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
-      super.releaseCheckProcess(state)
+      super.releaseProcess(state) :+
+        ReleaseStepIO
+          .resourceStep[Unit]("custom-release-step")
+          .executeAction(_ => _ => IO.unit)
   }
-
-  private abstract class BaseProcessPlugin extends ReleasePluginIOLike[Unit] {
-    override def trigger = noTrigger
-
-    override def resource: Resource[IO, Unit] = Resource.unit
-
-    override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
-      super.releaseProcess(state)
-
-    override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
-      super.releaseCheckProcess(state)
-  }
-
-  private object InheritedProcessPlugin extends BaseProcessPlugin
 
   private def throwingHookSeq(message: String): Seq[ReleaseHookIO] =
     new scala.collection.immutable.Seq[ReleaseHookIO] {
@@ -248,6 +305,9 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
 
   private def checkStepNames(processMode: AnyRef): Seq[String] =
     invokeGetter[Seq[ReleaseStepIO]](processMode, "checkSteps").map(_.name)
+
+  private def releaseStepNames(processMode: AnyRef): Seq[String] =
+    invokeGetter[Seq[Unit => ReleaseStepIO]](processMode, "releaseSteps").map(_(()).name)
 
   private def invokeGetter[A](target: AnyRef, methodName: String): A = {
     val method = findMethod(target.getClass, _.endsWith(methodName), 0)

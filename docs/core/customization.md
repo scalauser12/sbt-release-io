@@ -147,6 +147,11 @@ entry points, and `pure` for non-effectful context transformations.
 
 If your release process needs a shared resource — an HTTP client, a database connection, a temporary directory — you can create a custom plugin that extends `ReleasePluginIOLike[T]`. The resource is acquired once before all steps run and released after they complete (or on failure), following the cats-effect `Resource` pattern.
 
+Custom plugins still participate in the compiled hook/policy flow by default. Legacy raw-process
+mode starts only when the plugin materially changes the effective process, for example by
+returning extra steps from `releaseProcess` or `releaseCheckProcess`. Merely defining a custom
+plugin or overriding unrelated members such as `commandName` or `resource` does not bypass hooks.
+
 ### Creating the plugin
 
 Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sbt discovers `AutoPlugin` classes during meta-build compilation.
@@ -191,6 +196,9 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
 }
 ```
 
+Because this example changes the effective release process, it intentionally uses legacy
+raw-process mode for that custom command.
+
 `releaseWithClient check ...` does **not** acquire `resource` by default. `check` reads the plain
 configured `releaseIOProcess` through the protected `releaseCheckProcess(state)` hook, so normal
 release behavior is unchanged while preflight stays free of custom resource acquisition.
@@ -209,8 +217,9 @@ override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
       .validateOnly
 ```
 
-That hook is the intended customization point for `check`. It lets custom plugins restore
-preflight coverage for resource-backed release logic without acquiring the main release resource.
+That hook is the intended legacy/custom-plugin customization point for `check`. It lets custom
+plugins restore preflight coverage for resource-backed release logic without acquiring the main
+release resource.
 
 > **Tag preflight and custom version resolution:** `check` preflights tag availability only when `inquire-versions` is in the configured process. If you replace `inquire-versions` with custom version resolution, `check` reports tag status as "not evaluated (tags depend on runtime/custom version setup)" because it cannot compute the tag name without the built-in version step. The real release will still create tags normally.
 
