@@ -49,9 +49,10 @@ private[release] object ReleaseHookCompiler {
     )
   }
 
-  def compile(state: State): Seq[ReleaseStepIO] = {
-    val hooks = resolve(state)
+  def compile(state: State): Seq[ReleaseStepIO] =
+    compile(resolve(state))
 
+  def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO] =
     Seq(ReleaseSteps.initializeVcs, ReleaseSteps.checkCleanWorkingDir) ++
       compileHooks("after-clean-check", hooks.afterCleanCheckHooks, Always, crossBuild = false) ++
       optionalStep(hooks.enableSnapshotDependenciesCheck)(ReleaseSteps.checkSnapshotDependencies) ++
@@ -147,7 +148,6 @@ private[release] object ReleaseHookCompiler {
           Seq(ReleaseSteps.pushChanges) ++
           compileHooks("after-push", hooks.afterPushHooks, Always, crossBuild = false)
       }
-  }
 
   private def optionalStep(enabled: Boolean)(step: => ReleaseStepIO): Seq[ReleaseStepIO] =
     if (enabled) Seq(step) else Seq.empty

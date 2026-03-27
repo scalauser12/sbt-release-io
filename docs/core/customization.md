@@ -55,6 +55,59 @@ For the common customization cases, prefer the semantic hook/policy settings ove
 | Keep the built-in process but add extra behavior | Hook settings |
 | Replace the full step order or use resource-backed custom plugin wiring | Legacy raw-process mode |
 
+### Copy/paste replacements
+
+Disable push and publish without touching the step list:
+
+```scala
+releaseIOEnablePush := false
+releaseIOEnablePublish := false
+```
+
+Replace “insert a marker step before tagging” with a lifecycle hook:
+
+```scala
+import _root_.cats.effect.IO
+import _root_.io.release.ReleaseHookIO
+
+releaseIOBeforeTagHooks += ReleaseHookIO.action("write-release-marker") { ctx =>
+  IO.blocking {
+    val base = Project.extract(ctx.state).get(baseDirectory)
+    sbt.IO.write(base / "release.marker", "before-tag\n")
+  }
+}
+```
+
+Keep the built-in process and add a notification after tagging:
+
+```scala
+import _root_.cats.effect.IO
+import _root_.io.release.ReleaseHookIO
+
+releaseIOAfterTagHooks += ReleaseHookIO.action("notify-tagged") { ctx =>
+  IO.blocking {
+    val version = ctx.releaseVersion.getOrElse("unknown")
+    ctx.state.log.info(s"[release-io] Tagged $version")
+  }
+}
+```
+
+### Migrating older custom step APIs
+
+If you are updating a custom plugin or build from an older release:
+
+- rename `step.check` to `step.validate`
+- rename `step.action` to `step.execute`
+- replace `stepTask(...)`, `stepTaskAggregated(...)`, `stepInputTask(...)`, `stepCommand(...)`,
+  and `stepCommandAndRemaining(...)` from `ReleaseIO` with the canonical
+  `ReleaseStepIO.fromTask(...)`, `fromTaskAggregated(...)`, `fromInputTask(...)`,
+  `fromCommand(...)`, and `fromCommandAndRemaining(...)` APIs
+- replace `resourceStep(...)`, `resourceStepAction(...)`, `resourceStepWithCheck(...)`,
+  `resourceStepWithValidation(...)`, and `resourceStepActionWithValidation(...)` factory methods
+  with the `ReleaseStepIO.resourceStep[T](name)` builder API
+- replace string attributes with typed metadata via `ctx.withMetadata`, `ctx.metadata`, and
+  `AttributeKey[A]`
+
 ## Custom steps
 
 Define your own steps using the `ReleaseStepIO.step(name)` builder and add them to the release process alongside the built-in ones (see [Resource-aware steps](#resource-aware-steps-builder-api) for the full builder method reference):
@@ -158,7 +211,7 @@ Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sb
 
 > **Important:** In `project/*.scala` files, `io.release` is shadowed by sbt's `sbt.io` package. Always use `_root_.io.release` and `_root_.cats.effect` imports.
 
-Here is a plugin that manages an HTTP client for the release process:
+Here is a plugin that manages an HTTP client and keeps that custom behavior on compiled hook mode:
 
 ```scala
 // project/MyReleasePlugin.scala
@@ -183,47 +236,45 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       c
     })(c => IO.blocking(c.close()))
 
-  // Resource-aware step using the builder API (see "Resource-aware steps")
-  private val notifyApi = ReleaseStepIO
-    .resourceStep[HttpClient]("notify-api")
-    .executeAction(client => ctx =>
-      IO.blocking(client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}"""))
-    )
+  private val validateBranch = ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client =>
+    ctx =>
+      IO.blocking(client.get("/allowed-branches").split(",").toSet).flatMap(allowed =>
+        ctx.vcs match {
+          case Some(vcs) =>
+            vcs.currentBranch.flatMap(branch =>
+              if (allowed(branch)) IO.pure(ctx)
+              else IO.raiseError(new RuntimeException(s"Branch '$branch' not allowed"))
+            )
+          case None      => IO.raiseError(new RuntimeException("VCS not initialized"))
+        }
+      )
+  )
 
-  // Append the step after the defaults
-  override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-    liftSteps(Project.extract(state).get(releaseIOProcess)) :+ notifyApi
+  private val notifyApi = ReleaseResourceHookIO.action[HttpClient]("notify-api")(client =>
+    ctx =>
+      IO.blocking(
+        client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}""")
+      )
+  )
+
+  override protected def releaseResourceHooks(
+      state: State
+  ): ReleaseResourceHooks[HttpClient] =
+    ReleaseResourceHooks(
+      beforeVersionResolutionHooks = Seq(validateBranch),
+      afterTagHooks = Seq(notifyApi)
+    )
 }
 ```
 
-Because this example changes the effective release process, it intentionally uses legacy
-raw-process mode for that custom command.
+`releaseWithClient check ...` still stays resource-free. Resource-aware hooks contribute their
+`validate` function during `check`, but the plugin resource is acquired only for the real release
+run, where both validation and execute logic are active.
 
-`releaseWithClient check ...` does **not** acquire `resource` by default. `check` reads the plain
-configured `releaseIOProcess` through the protected `releaseCheckProcess(state)` hook, so normal
-release behavior is unchanged while preflight stays free of custom resource acquisition.
-
-If a custom plugin only changes `releaseProcess`, the real release run switches to legacy
-raw-process mode after the resource-backed steps are materialized. `check` stays on the plain
-configured process until `releaseCheckProcess` is also customized.
-
-If you want custom steps to participate in `check`, override `releaseCheckProcess` with
-resource-free preflight equivalents:
-
-```scala
-override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
-  Project.extract(state).get(releaseIOProcess) :+
-    ReleaseStepIO
-      .step("notify-api-preflight")
-      .withValidation(ctx =>
-        IO.blocking(println(s"Would notify for ${ctx.releaseVersion.getOrElse("unknown")}"))
-      )
-      .validateOnly
-```
-
-That hook is the intended legacy/custom-plugin customization point for `check`. It lets custom
-plugins restore preflight coverage for resource-backed release logic without acquiring the main
-release resource.
+If a supported lifecycle point is enough, prefer `releaseResourceHooks` over direct
+`releaseProcess` editing. Override `releaseProcess` / `releaseCheckProcess` only when you truly
+need custom step ordering or a fully custom pipeline; that path still uses legacy raw-process
+mode.
 
 > **Tag preflight and custom version resolution:** `check` preflights tag availability only when `inquire-versions` is in the configured process. If you replace `inquire-versions` with custom version resolution, `check` reports tag status as "not evaluated (tags depend on runtime/custom version setup)" because it cannot compute the tag name without the built-in version step. The real release will still create tags normally.
 
@@ -282,7 +333,8 @@ val checkApi: HttpClient => ReleaseStepIO = ReleaseStepIO
 
 Builder methods: `.withValidation(...)`, `.withCrossBuild`. Every chain ends with a terminal: `.execute(f)` runs `f` and returns the modified context, `.executeAction(f)` runs `f` for side effects and passes context through unchanged, `.validateOnly` creates a validation-only step with no execute logic.
 
-Use these in `releaseProcess`:
+Use these in `releaseProcess` when you need legacy raw-process wiring that the lifecycle hooks
+cannot express:
 
 ```scala
 override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =

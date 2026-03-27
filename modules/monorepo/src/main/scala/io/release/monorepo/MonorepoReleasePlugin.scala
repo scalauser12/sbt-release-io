@@ -53,8 +53,19 @@ trait MonorepoReleasePluginLike[T]
   /** The resource acquired once for the entire monorepo release process and passed to each step. */
   def resource: Resource[IO, T]
 
+  /** Resource-aware hooks compiled into the normal monorepo hook/policy lifecycle.
+    *
+    * Use this when the built-in lifecycle points are sufficient but the hook logic needs the
+    * shared plugin resource. Overriding this method keeps the plugin on compiled hook mode:
+    * `check` runs only the resource-free `validate` functions, while `run` acquires [[resource]]
+    * and runs both validation and execution.
+    */
+  protected def monorepoResourceHooks(state: State): MonorepoResourceHooks[T] =
+    MonorepoResourceHooks.empty
+
   /** The monorepo release steps. Reads plain steps from the `releaseIOMonorepoProcess` setting
-    * and lifts each into a resource-ignoring function. Override to append resource-aware steps.
+    * and lifts each into a resource-ignoring function. Override only when you need legacy
+    * raw-process customization beyond what hooks and resource-aware hooks can express.
     *
     * Hooks and policies are the preferred customization path. Changing the effective release
     * process returned from this method switches the real release run into legacy raw-process
@@ -73,8 +84,9 @@ trait MonorepoReleasePluginLike[T]
   /** Resource-free steps used by `check`.
     *
     * Defaults to the plain configured `releaseIOMonorepoProcess` so `check` avoids acquiring the
-    * plugin resource. Custom plugins can override this to add resource-free preflight equivalents
-    * for custom resource-backed steps.
+    * plugin resource. Prefer [[monorepoResourceHooks]] when the built-in lifecycle points are
+    * sufficient. Override this only to add legacy raw-process preflight equivalents for custom
+    * step wiring.
     *
     * Hooks and policies are the preferred customization path. Changing the effective preflight
     * process returned from this method switches `check` into legacy raw-process mode, where the
@@ -228,7 +240,13 @@ trait MonorepoReleasePluginLike[T]
           legacyReasons = legacyReasons
         )
       else {
-        val compiled = MonorepoHookCompiler.compile(state)
+        val compiled = MonorepoHookCompiler.compile(
+          mergeHookConfiguration(
+            MonorepoHookCompiler.resolve(state),
+            monorepoResourceHooks(state),
+            maybeResource = None
+          )
+        )
 
         ResolvedProcessMode(
           releaseSteps = liftSteps(compiled),
@@ -268,11 +286,136 @@ trait MonorepoReleasePluginLike[T]
           )
         else
           ResolvedReleaseRun(
-            steps = processMode.releaseSteps.map(_(resourceValue)),
+            steps = MonorepoHookCompiler.compile(
+              mergeHookConfiguration(
+                MonorepoHookCompiler.resolve(state),
+                monorepoResourceHooks(state),
+                maybeResource = Some(resourceValue)
+              )
+            ),
             legacyMode = false,
             legacyReasons = Seq.empty
           )
       }
+
+  private def mergeHookConfiguration(
+      plainHooks: MonorepoHookConfiguration,
+      resourceHooks: MonorepoResourceHooks[T],
+      maybeResource: Option[T]
+  ): MonorepoHookConfiguration =
+    MonorepoHookConfiguration(
+      enableSnapshotDependenciesCheck = plainHooks.enableSnapshotDependenciesCheck,
+      enableRunClean = plainHooks.enableRunClean,
+      enableRunTests = plainHooks.enableRunTests,
+      enableTagging = plainHooks.enableTagging,
+      enablePublish = plainHooks.enablePublish,
+      enablePush = plainHooks.enablePush,
+      beforeSelectionHooks = plainHooks.beforeSelectionHooks ++ materializeGlobalHooks(
+        resourceHooks.beforeSelectionHooks,
+        maybeResource
+      ),
+      afterSelectionHooks = plainHooks.afterSelectionHooks ++ materializeGlobalHooks(
+        resourceHooks.afterSelectionHooks,
+        maybeResource
+      ),
+      beforeVersionResolutionHooks =
+        plainHooks.beforeVersionResolutionHooks ++ materializeProjectHooks(
+          resourceHooks.beforeVersionResolutionHooks,
+          maybeResource
+        ),
+      afterVersionResolutionHooks =
+        plainHooks.afterVersionResolutionHooks ++ materializeProjectHooks(
+          resourceHooks.afterVersionResolutionHooks,
+          maybeResource
+        ),
+      beforeReleaseVersionWriteHooks =
+        plainHooks.beforeReleaseVersionWriteHooks ++ materializeProjectHooks(
+          resourceHooks.beforeReleaseVersionWriteHooks,
+          maybeResource
+        ),
+      afterReleaseVersionWriteHooks =
+        plainHooks.afterReleaseVersionWriteHooks ++ materializeProjectHooks(
+          resourceHooks.afterReleaseVersionWriteHooks,
+          maybeResource
+        ),
+      beforeReleaseCommitHooks = plainHooks.beforeReleaseCommitHooks ++ materializeGlobalHooks(
+        resourceHooks.beforeReleaseCommitHooks,
+        maybeResource
+      ),
+      afterReleaseCommitHooks = plainHooks.afterReleaseCommitHooks ++ materializeGlobalHooks(
+        resourceHooks.afterReleaseCommitHooks,
+        maybeResource
+      ),
+      beforeTagHooks = plainHooks.beforeTagHooks ++ materializeProjectHooks(
+        resourceHooks.beforeTagHooks,
+        maybeResource
+      ),
+      afterTagHooks = plainHooks.afterTagHooks ++ materializeProjectHooks(
+        resourceHooks.afterTagHooks,
+        maybeResource
+      ),
+      beforePublishHooks = plainHooks.beforePublishHooks ++ materializeProjectHooks(
+        resourceHooks.beforePublishHooks,
+        maybeResource
+      ),
+      afterPublishHooks = plainHooks.afterPublishHooks ++ materializeProjectHooks(
+        resourceHooks.afterPublishHooks,
+        maybeResource
+      ),
+      beforeNextVersionWriteHooks =
+        plainHooks.beforeNextVersionWriteHooks ++ materializeProjectHooks(
+          resourceHooks.beforeNextVersionWriteHooks,
+          maybeResource
+        ),
+      afterNextVersionWriteHooks = plainHooks.afterNextVersionWriteHooks ++ materializeProjectHooks(
+        resourceHooks.afterNextVersionWriteHooks,
+        maybeResource
+      ),
+      beforeNextCommitHooks = plainHooks.beforeNextCommitHooks ++ materializeGlobalHooks(
+        resourceHooks.beforeNextCommitHooks,
+        maybeResource
+      ),
+      afterNextCommitHooks = plainHooks.afterNextCommitHooks ++ materializeGlobalHooks(
+        resourceHooks.afterNextCommitHooks,
+        maybeResource
+      ),
+      beforePushHooks = plainHooks.beforePushHooks ++ materializeGlobalHooks(
+        resourceHooks.beforePushHooks,
+        maybeResource
+      ),
+      afterPushHooks = plainHooks.afterPushHooks ++ materializeGlobalHooks(
+        resourceHooks.afterPushHooks,
+        maybeResource
+      )
+    )
+
+  private def materializeGlobalHooks(
+      hooks: Seq[MonorepoGlobalResourceHookIO[T]],
+      maybeResource: Option[T]
+  ): Seq[MonorepoGlobalHookIO] =
+    hooks.map { hook =>
+      MonorepoGlobalHookIO(
+        name = hook.name,
+        execute = ctx =>
+          maybeResource.fold(IO.pure(ctx))(resourceValue => hook.execute(resourceValue)(ctx)),
+        validate = hook.validate
+      )
+    }
+
+  private def materializeProjectHooks(
+      hooks: Seq[MonorepoProjectResourceHookIO[T]],
+      maybeResource: Option[T]
+  ): Seq[MonorepoProjectHookIO] =
+    hooks.map { hook =>
+      MonorepoProjectHookIO(
+        name = hook.name,
+        execute = (ctx, project) =>
+          maybeResource.fold(IO.pure(ctx))(resourceValue =>
+            hook.execute(resourceValue)(ctx, project)
+          ),
+        validate = hook.validate
+      )
+    }
 
   private def logLegacyModeWarning(
       state: State,

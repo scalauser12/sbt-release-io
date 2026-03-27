@@ -20,7 +20,7 @@ Each scenario lives under `sbt-release-io-monorepo/<test-name>/` and typically c
 - Dependency ordering and aggregation: `diamond-dependency`, `topological-order`, `transitive-aggregates`, `nested-parent-exclusion`, `root-project-*`
 - Cross-build behavior: `cross-build-setting`, `cross-build-heterogeneous`, `cross-build-empty-cross`, `cross-build-restore`
 - Publish and push flow: `missing-publishto`, `publish-*`, `push-*`, `skip-publish`, `skip-tests`, `vcs-signoff`
-- Custom plugin and step composition: `custom-plugin`, `custom-projects-setting`, `insert-step`, `late-bound-*`
+- Custom plugin and step composition: `custom-plugin`, `custom-plugin-resource-hooks`, `custom-projects-setting`, `insert-step`, `late-bound-*`
 
 ## Migration note
 
@@ -38,3 +38,8 @@ The surviving scripted suite still covers the remaining monorepo surface in grou
 - per-project version files and formats: `per-project-releaseversionfile`, `custom-version-format`, `version-file-change-detection`
 - per-project change detection: `change-detection`, `shared-paths-*`, `first-release-detection`, `root-project-*`
 - CLI/help/check behavior: `help`, `check`, `check-without-builtins`, `cli-*`, `invalid-override`, `empty-override-value`, `keyword-project-selector`
+
+## Custom plugin coverage
+
+- `custom-plugin` covers resource-backed legacy raw-process customization through `monorepoReleaseProcess`
+- `custom-plugin-resource-hooks` covers resource-aware hooks on compiled hook mode, including both global and per-project lifecycle hooks

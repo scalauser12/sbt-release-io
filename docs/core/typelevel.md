@@ -17,7 +17,7 @@ Some libraries that work well in release steps:
 Add the dependency in `project/plugins.sbt` alongside the plugin:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 
@@ -64,8 +64,7 @@ rewriting the step list:
 ```scala
 import _root_.io.release.ReleaseHookIO
 
-releaseIOAfterPublishHooks += ReleaseHookIO("upload-archive")(
-  execute = ctx => uploadArchive.execute(ctx),
-  validate = _ => IO.unit
+releaseIOAfterPublishHooks += ReleaseHookIO.io("upload-archive")(ctx =>
+  uploadArchive.execute(ctx)
 )
 ```

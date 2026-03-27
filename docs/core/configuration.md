@@ -1,6 +1,10 @@
 # Configuration (core)
 
-## Configuration
+Use this page for starter `build.sbt` patterns and common configuration recipes. For the
+exhaustive settings and CLI catalog, see [Settings reference](reference.md). For a worked
+hook-first tutorial, see [Hook-first walkthrough](hook-first-walkthrough.md).
+
+## Starter configuration
 
 In `build.sbt`:
 
@@ -13,12 +17,17 @@ releaseIOEnablePush    := false
 releaseIOEnablePublish := false
 
 // Add lifecycle hooks around the remaining phases
-releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-audit")(_ => IO.unit)
+releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-audit")(ctx =>
+  IO.blocking {
+    val version = ctx.releaseVersion.getOrElse("unknown")
+    ctx.state.log.info(s"[release-io] Auditing tag inputs for $version")
+  }
+)
 
 // Enable cross-building by default
 releaseIOCrossBuild := true
 
-// Skip publish during release
+// Runtime flag: keep the publish step available, but skip it when the release runs
 releaseIOSkipPublish := true
 
 // Enable interactive prompts (disabled by default)
@@ -37,6 +46,10 @@ releaseIOVersionFileContents := ((_, version) =>
   IO.pure(s"$version\n")
 )
 ```
+
+`releaseIOEnablePublish := false` removes publish from the compiled hook-first lifecycle
+entirely, including `beforePublish` / `afterPublish` hooks. `releaseIOSkipPublish := true`
+keeps the phase in the process shape but skips the publish action at execution time.
 
 ## Custom version formats
 

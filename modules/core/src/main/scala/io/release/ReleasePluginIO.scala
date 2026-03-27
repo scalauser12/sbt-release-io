@@ -57,8 +57,19 @@ trait ReleasePluginIOLike[T]
   /** The resource acquired once for the entire release process and passed to each step. */
   def resource: Resource[IO, T]
 
+  /** Resource-aware hooks compiled into the normal hook/policy lifecycle for this custom plugin.
+    *
+    * Use this when the built-in lifecycle points are sufficient but the hook logic needs the
+    * shared plugin resource. Overriding this method keeps the plugin on compiled hook mode:
+    * `check` runs only the resource-free `validate` functions, while `run` acquires [[resource]]
+    * and runs both validation and execution.
+    */
+  protected def releaseResourceHooks(state: State): ReleaseResourceHooks[T] =
+    ReleaseResourceHooks.empty
+
   /** The release steps. Reads plain steps from the `releaseIOProcess` setting and lifts
-    * each into a resource-ignoring function. Override to append resource-aware steps.
+    * each into a resource-ignoring function. Override only when you need legacy raw-process
+    * customization beyond what hooks and resource-aware hooks can express.
     *
     * Hooks and policies are the preferred customization path. Changing the effective release
     * process returned from this method switches the real release run into legacy raw-process
@@ -77,8 +88,8 @@ trait ReleasePluginIOLike[T]
   /** Resource-free steps used by `check`.
     *
     * Defaults to the plain configured `releaseIOProcess` so `check` avoids acquiring the plugin
-    * resource. Custom plugins can override this to add resource-free preflight equivalents for
-    * custom resource-backed steps.
+    * resource. Prefer [[releaseResourceHooks]] when the built-in lifecycle points are sufficient.
+    * Override this only to add legacy raw-process preflight equivalents for custom step wiring.
     *
     * Hooks and policies are the preferred customization path. Changing the effective preflight
     * process returned from this method switches `check` into legacy raw-process mode, where the
@@ -318,7 +329,13 @@ trait ReleasePluginIOLike[T]
           legacyReasons = legacyReasons
         )
       else {
-        val compiled = ReleaseHookCompiler.compile(state)
+        val compiled = ReleaseHookCompiler.compile(
+          mergeHookConfiguration(
+            ReleaseHookCompiler.resolve(state),
+            releaseResourceHooks(state),
+            maybeResource = None
+          )
+        )
 
         ResolvedProcessMode(
           releaseSteps = liftSteps(compiled),
@@ -358,11 +375,107 @@ trait ReleasePluginIOLike[T]
           )
         else
           ResolvedReleaseRun(
-            steps = processMode.releaseSteps.map(_(resourceValue)),
+            steps = ReleaseHookCompiler.compile(
+              mergeHookConfiguration(
+                ReleaseHookCompiler.resolve(state),
+                releaseResourceHooks(state),
+                maybeResource = Some(resourceValue)
+              )
+            ),
             legacyMode = false,
             legacyReasons = Seq.empty
           )
       }
+
+  private def mergeHookConfiguration(
+      plainHooks: CoreHookConfiguration,
+      resourceHooks: ReleaseResourceHooks[T],
+      maybeResource: Option[T]
+  ): CoreHookConfiguration =
+    CoreHookConfiguration(
+      enableSnapshotDependenciesCheck = plainHooks.enableSnapshotDependenciesCheck,
+      enableRunClean = plainHooks.enableRunClean,
+      enableRunTests = plainHooks.enableRunTests,
+      enableTagging = plainHooks.enableTagging,
+      enablePublish = plainHooks.enablePublish,
+      enablePush = plainHooks.enablePush,
+      afterCleanCheckHooks = plainHooks.afterCleanCheckHooks ++ materializeHooks(
+        resourceHooks.afterCleanCheckHooks,
+        maybeResource
+      ),
+      beforeVersionResolutionHooks = plainHooks.beforeVersionResolutionHooks ++ materializeHooks(
+        resourceHooks.beforeVersionResolutionHooks,
+        maybeResource
+      ),
+      afterVersionResolutionHooks = plainHooks.afterVersionResolutionHooks ++ materializeHooks(
+        resourceHooks.afterVersionResolutionHooks,
+        maybeResource
+      ),
+      beforeReleaseVersionWriteHooks =
+        plainHooks.beforeReleaseVersionWriteHooks ++ materializeHooks(
+          resourceHooks.beforeReleaseVersionWriteHooks,
+          maybeResource
+        ),
+      afterReleaseVersionWriteHooks = plainHooks.afterReleaseVersionWriteHooks ++ materializeHooks(
+        resourceHooks.afterReleaseVersionWriteHooks,
+        maybeResource
+      ),
+      beforeReleaseCommitHooks = plainHooks.beforeReleaseCommitHooks ++ materializeHooks(
+        resourceHooks.beforeReleaseCommitHooks,
+        maybeResource
+      ),
+      afterReleaseCommitHooks = plainHooks.afterReleaseCommitHooks ++ materializeHooks(
+        resourceHooks.afterReleaseCommitHooks,
+        maybeResource
+      ),
+      beforeTagHooks =
+        plainHooks.beforeTagHooks ++ materializeHooks(resourceHooks.beforeTagHooks, maybeResource),
+      afterTagHooks =
+        plainHooks.afterTagHooks ++ materializeHooks(resourceHooks.afterTagHooks, maybeResource),
+      beforePublishHooks = plainHooks.beforePublishHooks ++ materializeHooks(
+        resourceHooks.beforePublishHooks,
+        maybeResource
+      ),
+      afterPublishHooks = plainHooks.afterPublishHooks ++ materializeHooks(
+        resourceHooks.afterPublishHooks,
+        maybeResource
+      ),
+      beforeNextVersionWriteHooks = plainHooks.beforeNextVersionWriteHooks ++ materializeHooks(
+        resourceHooks.beforeNextVersionWriteHooks,
+        maybeResource
+      ),
+      afterNextVersionWriteHooks = plainHooks.afterNextVersionWriteHooks ++ materializeHooks(
+        resourceHooks.afterNextVersionWriteHooks,
+        maybeResource
+      ),
+      beforeNextCommitHooks = plainHooks.beforeNextCommitHooks ++ materializeHooks(
+        resourceHooks.beforeNextCommitHooks,
+        maybeResource
+      ),
+      afterNextCommitHooks = plainHooks.afterNextCommitHooks ++ materializeHooks(
+        resourceHooks.afterNextCommitHooks,
+        maybeResource
+      ),
+      beforePushHooks = plainHooks.beforePushHooks ++ materializeHooks(
+        resourceHooks.beforePushHooks,
+        maybeResource
+      ),
+      afterPushHooks =
+        plainHooks.afterPushHooks ++ materializeHooks(resourceHooks.afterPushHooks, maybeResource)
+    )
+
+  private def materializeHooks(
+      hooks: Seq[ReleaseResourceHookIO[T]],
+      maybeResource: Option[T]
+  ): Seq[ReleaseHookIO] =
+    hooks.map { hook =>
+      ReleaseHookIO(
+        name = hook.name,
+        execute = ctx =>
+          maybeResource.fold(IO.pure(ctx))(resourceValue => hook.execute(resourceValue)(ctx)),
+        validate = hook.validate
+      )
+    }
 
   private def logLegacyModeWarning(
       state: State,

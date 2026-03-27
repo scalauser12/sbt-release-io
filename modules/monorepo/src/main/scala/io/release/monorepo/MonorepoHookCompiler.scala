@@ -56,9 +56,10 @@ private[monorepo] object MonorepoHookCompiler {
     )
   }
 
-  def compile(state: State): Seq[MonorepoStepIO] = {
-    val hooks = resolve(state)
+  def compile(state: State): Seq[MonorepoStepIO] =
+    compile(resolve(state))
 
+  def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoStepIO] =
     Seq(
       MonorepoReleaseSteps.initializeVcs,
       MonorepoReleaseSteps.checkCleanWorkingDir,
@@ -168,7 +169,6 @@ private[monorepo] object MonorepoHookCompiler {
           Seq(MonorepoReleaseSteps.pushChanges) ++
           compileGlobalHooks("after-push", hooks.afterPushHooks, AlwaysGlobal)
       }
-  }
 
   private def optionalStep(enabled: Boolean)(step: => MonorepoStepIO): Seq[MonorepoStepIO] =
     if (enabled) Seq(step) else Seq.empty

@@ -26,6 +26,17 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     }
   }
 
+  test("compile(configuration) - match compile(state) for the same resolved hook configuration") {
+    hookStateResource("release-hook-compiler-overload").use { state =>
+      IO {
+        assertEquals(
+          ReleaseHookCompiler.compile(ReleaseHookCompiler.resolve(state)).map(_.name),
+          ReleaseHookCompiler.compile(state).map(_.name)
+        )
+      }
+    }
+  }
+
   test("compile - apply policy flags and lifecycle hooks around the remaining built-in phases") {
     val settings: Seq[Setting[?]] = Seq(
       ReleaseIO.releaseIOEnableSnapshotDependenciesCheck := false,

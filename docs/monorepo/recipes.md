@@ -103,7 +103,13 @@ Or with explicit project and versions:
 sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
-`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` has no release side effects: no version-file writes, commits, tags, publish, or
+push. With cross-build validation enabled, sbt may temporarily switch Scala versions during
+validation and then restore the entry version.
+
+`releaseIOMonorepoSkipPublish := true` keeps the publish phase available but skips it at
+execution time. If you want to remove publish from the compiled lifecycle entirely,
+use `releaseIOMonorepoEnablePublish := false` instead.
 
 Then run the real release:
 
@@ -123,3 +129,38 @@ cat api/version.sbt
 ```
 
 To clean up after the rehearsal run, see [Recovery and rollback](operations.md#recovery-and-rollback).
+
+## Targeted project rehearsal
+
+When change detection is too broad for the question you want to answer, keep the same safe local
+settings but drive the plan with explicit selectors and version overrides.
+
+In `build.sbt`:
+
+```scala
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoGlobalHookIO
+
+releaseIOMonorepoEnablePush := false
+releaseIOMonorepoEnablePublish := false
+releaseIOMonorepoEnableRunClean := false
+releaseIOMonorepoAfterSelectionHooks +=
+  MonorepoGlobalHookIO.action("print-selected-projects")(ctx =>
+    IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
+  )
+```
+
+Then rehearse one project directly:
+
+```bash
+sbt "releaseIOMonorepo check api with-defaults release-version api=1.1.0 next-version api=1.2.0-SNAPSHOT"
+```
+
+This path is useful when:
+
+- you want to validate one project's version overrides
+- you want to confirm selector behavior without involving the full changed set
+- you want a smaller rehearsal before running a broader change-detection flow
+
+For a full hook-first example that combines change detection and downstream inclusion, see
+[Selective release walkthrough](selective-release-walkthrough.md).

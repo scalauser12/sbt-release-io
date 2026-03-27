@@ -25,6 +25,17 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     }
   }
 
+  test("compile(configuration) - match compile(state) for the same resolved hook configuration") {
+    hookFixtureResource("monorepo-hook-compiler-overload").use { fixture =>
+      IO {
+        assertEquals(
+          MonorepoHookCompiler.compile(MonorepoHookCompiler.resolve(fixture.state)).map(_.name),
+          MonorepoHookCompiler.compile(fixture.state).map(_.name)
+        )
+      }
+    }
+  }
+
   test(
     "compile - apply monorepo policies and lifecycle hooks around the remaining built-in phases"
   ) {

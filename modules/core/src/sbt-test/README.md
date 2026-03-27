@@ -42,6 +42,11 @@ Each test is located in `sbt-release-io/<test-name>/` and contains:
 - Verifies marker files prove the resource was acquired, used by a step, and released
 - Verifies release side effects: default tag creation and next-version write
 
+### custom-plugin-resource-hooks
+- Tests `ReleasePluginIOLike.releaseResourceHooks` on the compiled hook path
+- Verifies `check` validates both plain and resource-aware hooks without acquiring the resource
+- Verifies `run` acquires/releases the resource and executes plain hooks before resource-aware hooks in the same lifecycle point
+
 ### defaults-with-after
 - Tests `insertAfter` inserts a custom step at the correct position
 - Custom plugin inserts step after `check-clean-working-dir`

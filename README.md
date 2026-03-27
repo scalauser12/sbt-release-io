@@ -9,7 +9,11 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 
 ## Documentation
 
-User guides and reference: **[docs/README.md](docs/README.md)** (core and monorepo topics with cross-links).
+Start with the plugin-specific onboarding guides:
+
+- Single-project builds: [docs/core/getting-started.md](docs/core/getting-started.md)
+- Monorepos: [docs/monorepo/getting-started.md](docs/monorepo/getting-started.md)
+- Full docs index: [docs/README.md](docs/README.md)
 
 ## Modules
 
@@ -22,48 +26,32 @@ User guides and reference: **[docs/README.md](docs/README.md)** (core and monore
 
 ### Single project
 
-In `project/plugins.sbt`:
+Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
 ```
 
-No `enablePlugins` needed — the core plugin activates automatically.
+The plugin activates automatically. Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`.
 
-The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`.
-
-Start by inspecting the command help:
+First command:
 
 ```bash
-sbt "releaseIO help"
+sbt "releaseIO check with-defaults"
 ```
 
-Run a preflight with no release side effects:
+Read next:
 
-```bash
-sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
-```
-
-`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
-
-Run the actual release (versions computed from `version.sbt`):
-
-```bash
-sbt "releaseIO with-defaults"
-```
-
-Or specify versions explicitly:
-
-```bash
-sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
-```
+- [Core getting started](docs/core/getting-started.md)
+- [Core hook-first walkthrough](docs/core/hook-first-walkthrough.md)
+- [Core customization](docs/core/customization.md)
 
 ### Monorepo
 
-In `project/plugins.sbt`:
+Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.0")
 ```
 
 In `build.sbt`:
@@ -74,33 +62,19 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-By default, each subproject needs a `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
+By default, each subproject needs its own `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
 
-Start by inspecting the command help:
-
-```bash
-sbt "releaseIOMonorepo help"
-```
-
-Run a preflight with no release side effects:
+First command:
 
 ```bash
-sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo check with-defaults"
 ```
 
-`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+Read next:
 
-Run the actual release (versions computed from each subproject's `version.sbt`):
-
-```bash
-sbt "releaseIOMonorepo with-defaults"
-```
-
-Or specify projects and versions explicitly:
-
-```bash
-sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
-```
+- [Monorepo getting started](docs/monorepo/getting-started.md)
+- [Selective release walkthrough](docs/monorepo/selective-release-walkthrough.md)
+- [Monorepo customization](docs/monorepo/customization.md)
 
 For routine customization, prefer the hook/policy settings (`releaseIOEnable*`,
 `releaseIO*Hooks`, `releaseIOMonorepoEnable*`, `releaseIOMonorepo*Hooks`) and leave the built-in
@@ -108,7 +82,9 @@ process intact. Raw `releaseIOProcess` / `releaseIOMonorepoProcess` editing rema
 legacy advanced path.
 
 For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
-[docs/monorepo/recipes.md](docs/monorepo/recipes.md).
+[docs/monorepo/recipes.md](docs/monorepo/recipes.md). For rollback and recovery, see
+[docs/core/operations.md](docs/core/operations.md) and
+[docs/monorepo/operations.md](docs/monorepo/operations.md).
 
 ## Build & Test
 

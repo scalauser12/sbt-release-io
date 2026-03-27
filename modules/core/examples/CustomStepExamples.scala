@@ -6,6 +6,8 @@ import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
 import io.release.ReleasePluginIOLike
+import io.release.ReleaseResourceHookIO
+import io.release.ReleaseResourceHooks
 import io.release.ReleaseStepIO
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.ReleaseSteps
@@ -70,6 +72,30 @@ object CustomStepExamples {
     ReleaseIO.releaseIOAfterVersionResolutionHooks += generateChangelogHook,
     ReleaseIO.releaseIOAfterTagHooks += optionalNotifyHook,
     ReleaseIO.releaseIOAfterNextCommitHooks += markReleaseDoneHook
+  )
+
+  /** Recommended template for a safe local rehearsal with the compiled built-ins intact.
+    *
+    * This disables push, publish, and run-clean, then adds one validation-oriented hook after
+    * the clean-working-dir check and one lifecycle hook before tagging.
+    *
+    * {{{
+    * lazy val root = (project in file("."))
+    *   .settings(CustomStepExamples.rehearsalSettings)
+    *
+    * // Rehearse the planned release without side effects
+    * // sbt "releaseIO check with-defaults"
+    *
+    * // Rehearse with explicit versions
+    * // sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+    * }}}
+    */
+  lazy val rehearsalSettings: Seq[Setting[?]] = Seq(
+    ReleaseIO.releaseIOEnablePush     := false,
+    ReleaseIO.releaseIOEnablePublish  := false,
+    ReleaseIO.releaseIOEnableRunClean := false,
+    ReleaseIO.releaseIOAfterCleanCheckHooks += validateBranchHook,
+    ReleaseIO.releaseIOBeforeTagHooks += printBannerHook
   )
 
   val printBannerHook: ReleaseHookIO = ReleaseHookIO.action("print-banner")(_ =>
@@ -346,7 +372,7 @@ trait HttpClient {
 
 /**
  * Advanced/custom-plugin example: acquire an HTTP client once and use it in
- * resource-aware steps at non-adjacent positions.
+ * resource-aware hooks while staying on compiled hook mode.
  *
  * Prefer hook/policy settings for routine customization. Extend `ReleasePluginIOLike[T]`
  * when your release flow needs a shared resource (e.g., HTTP client, database connection)
@@ -389,68 +415,50 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       }
     )(c => IO(c.close()))
 
-  override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-    Seq(
-      // Plain steps — lifted automatically via the implicit conversion
-      ReleaseSteps.initializeVcs,
-      ReleaseSteps.checkCleanWorkingDir,
-
-      // 1st resource step — validate branch via API (raises error or succeeds)
-      ReleaseStepIO
-        .resourceStep[HttpClient]("validate-branch")
-        .executeAction(client =>
-          ctx =>
-            IO.blocking(client.get("/allowed-branches").split(",").toSet)
-              .flatMap(allowed =>
-                ctx.vcs match {
-                  case Some(vcs) =>
-                    vcs.currentBranch.flatMap(branch =>
-                      if (!allowed.contains(branch))
-                        IO.raiseError(
-                          new RuntimeException(s"Branch '$branch' is not allowed for release")
-                        )
-                      else IO.unit
+  private val validateBranch: ReleaseResourceHookIO[HttpClient] =
+    ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client =>
+      ctx =>
+        IO.blocking(client.get("/allowed-branches").split(",").toSet)
+          .flatMap(allowed =>
+            ctx.vcs match {
+              case Some(vcs) =>
+                vcs.currentBranch.flatMap(branch =>
+                  if (!allowed.contains(branch))
+                    IO.raiseError(
+                      new RuntimeException(s"Branch '$branch' is not allowed for release")
                     )
-                  case None      =>
-                    IO.raiseError(new RuntimeException("VCS not initialized"))
-                }
-              )
-        ),
-
-      ReleaseSteps.checkSnapshotDependencies,
-      ReleaseSteps.inquireVersions,
-      ReleaseSteps.runClean,
-      ReleaseSteps.runTests,
-      ReleaseSteps.setReleaseVersion,
-      ReleaseSteps.commitReleaseVersion,
-      ReleaseSteps.tagRelease,
-
-      // 2nd resource step — notify Slack after tagging (side-effect only, context unchanged)
-      ReleaseStepIO
-        .resourceStep[HttpClient]("notify-slack")
-        .executeAction(client =>
-          ctx =>
-            IO.blocking {
-              val version = ctx.releaseVersion.getOrElse("unknown")
-              client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+                  else IO.pure(ctx)
+                )
+              case None      =>
+                IO.raiseError(new RuntimeException("VCS not initialized"))
             }
-        ),
+          )
+    )
 
-      ReleaseSteps.publishArtifacts,
+  private val notifySlack: ReleaseResourceHookIO[HttpClient] =
+    ReleaseResourceHookIO.action[HttpClient]("notify-slack")(client =>
+      ctx =>
+        IO.blocking {
+          val version = ctx.releaseVersion.getOrElse("unknown")
+          client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+        }
+    )
 
-      // 3rd resource step — verify the published artifact (side-effect only, context unchanged)
-      ReleaseStepIO
-        .resourceStep[HttpClient]("verify-publish")
-        .executeAction(client =>
-          ctx =>
-            IO.blocking {
-              val version = ctx.releaseVersion.getOrElse("unknown")
-              client.get(s"/artifacts/$version")
-            }.void
-        ),
+  private val verifyPublish: ReleaseResourceHookIO[HttpClient] =
+    ReleaseResourceHookIO.action[HttpClient]("verify-publish")(client =>
+      ctx =>
+        IO.blocking {
+          val version = ctx.releaseVersion.getOrElse("unknown")
+          client.get(s"/artifacts/$version")
+        }.void
+    )
 
-      ReleaseSteps.setNextVersion,
-      ReleaseSteps.commitNextVersion,
-      ReleaseSteps.pushChanges
+  override protected def releaseResourceHooks(
+      state: State
+  ): ReleaseResourceHooks[HttpClient] =
+    ReleaseResourceHooks(
+      beforeVersionResolutionHooks = Seq(validateBranch),
+      afterTagHooks = Seq(notifySlack),
+      afterPublishHooks = Seq(verifyPublish)
     )
 }

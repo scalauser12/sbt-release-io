@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import cats.effect.Ref
 import cats.effect.Resource
 import io.release.internal.SbtRuntime
 import io.release.steps.ReleaseSteps
@@ -68,6 +69,130 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
       resolveProcessMode(ReleasePluginIO, loaded.state).map { processMode =>
         assertEquals(legacyMode(processMode), false)
         assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
+      }
+    }
+  }
+
+  test(
+    "resolveProcessMode - validate resource-aware hooks during check without acquiring resource"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val settings: Seq[Setting[?]] = Seq(
+        ReleaseIO.releaseIOBeforeTagHooks +=
+          ReleaseHookIO.action("plain-before-tag")(_ => observed.update(_ :+ "plain-execute"))
+      )
+
+      stateResource("release-plugin-resource-check", plugin, settings).use { loaded =>
+        for {
+          processMode <- resolveProcessMode(plugin, loaded.state)
+          _            = assertEquals(legacyMode(processMode), false)
+          _            = assert(checkStepNames(processMode).contains("before-tag:plain-before-tag"))
+          _            = assert(checkStepNames(processMode).contains("before-tag:resource-before-tag"))
+          ctx          = ReleaseContext(state = loaded.state)
+          _           <- checkSteps(processMode)
+                           .filter(_.name.startsWith("before-tag:"))
+                           .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
+                             ioCtx
+                               .flatTap(current => step.validate(current))
+                               .flatMap(step.execute)
+                           }
+                           .void
+          events      <- observed.get
+        } yield assertEquals(events, List("plain-execute", "resource-validate"))
+      }
+    }
+  }
+
+  test("resolveReleaseRun - execute resource-aware hooks after plain hooks without legacy mode") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val settings: Seq[Setting[?]] = Seq(
+        ReleaseIO.releaseIOBeforeTagHooks +=
+          ReleaseHookIO.action("plain-before-tag")(_ => observed.update(_ :+ "plain-execute"))
+      )
+
+      stateResource("release-plugin-resource-run", plugin, settings).use { loaded =>
+        for {
+          processMode <- resolveProcessMode(plugin, loaded.state)
+          _            = assertEquals(legacyMode(processMode), false)
+          _           <- plugin.resource.use { _ =>
+                           for {
+                             runProcess <- resolveReleaseRun(plugin, loaded.state, processMode)
+                             _           = assertEquals(legacyMode(runProcess), false)
+                             _           = assert(
+                                             runStepNames(runProcess).contains("before-tag:plain-before-tag")
+                                           )
+                             _           = assert(
+                                             runStepNames(runProcess)
+                                               .contains("before-tag:resource-before-tag")
+                                           )
+                             ctx         = ReleaseContext(state = loaded.state)
+                             _          <- runSteps(runProcess)
+                                             .filter(_.name.startsWith("before-tag:"))
+                                             .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
+                                               ioCtx
+                                                 .flatTap(current => step.validate(current))
+                                                 .flatMap(step.execute)
+                                             }
+                                             .void
+                           } yield ()
+                         }
+          events      <- observed.get
+        } yield assertEquals(
+          events,
+          List(
+            "resource-acquire",
+            "plain-execute",
+            "resource-validate",
+            "resource-execute",
+            "resource-release"
+          )
+        )
+      }
+    }
+  }
+
+  test("resolveReleaseRun - omit resource-aware hooks when the phase is disabled") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val settings: Seq[Setting[?]] = Seq(
+        ReleaseIO.releaseIOEnableTagging := false,
+        ReleaseIO.releaseIOBeforeTagHooks +=
+          ReleaseHookIO.action("plain-before-tag")(_ => observed.update(_ :+ "plain-execute"))
+      )
+
+      stateResource("release-plugin-resource-disabled-phase", plugin, settings).use { loaded =>
+        for {
+          processMode <- resolveProcessMode(plugin, loaded.state)
+          _            = assertEquals(legacyMode(processMode), false)
+          _            = assert(!checkStepNames(processMode).exists(_.startsWith("before-tag:")))
+          _           <- plugin.resource.use { _ =>
+                           resolveReleaseRun(plugin, loaded.state, processMode).map { runProcess =>
+                             assertEquals(legacyMode(runProcess), false)
+                             assert(!runStepNames(runProcess).exists(_.startsWith("before-tag:")))
+                           }
+                         }
+        } yield ()
+      }
+    }
+  }
+
+  test("resolveProcessMode - bypass resource-aware hooks while legacy raw process mode is active") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val rawProcess                = Seq(ReleaseSteps.initializeVcs, ReleaseSteps.inquireVersions)
+      val settings: Seq[Setting[?]] = Seq(ReleaseIO.releaseIOProcess := rawProcess)
+
+      stateResource("release-plugin-resource-legacy-bypass", plugin, settings).use { loaded =>
+        resolveProcessMode(plugin, loaded.state).flatMap { processMode =>
+          for {
+            _      <- IO(assertEquals(legacyMode(processMode), true))
+            _      <- IO(assertEquals(checkStepNames(processMode), rawProcess.map(_.name)))
+            _      <- IO(assert(!checkStepNames(processMode).contains("before-tag:resource-before-tag")))
+            events <- observed.get
+          } yield assertEquals(events, Nil)
+        }
       }
     }
   }
@@ -325,6 +450,29 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
           .executeAction(_ => _ => IO.unit)
   }
 
+  private def resourceAwareHookPlugin(observed: Ref[IO, List[String]]): ReleasePluginIOLike[Unit] =
+    new ReleasePluginIOLike[Unit] {
+      override def trigger = noTrigger
+
+      override protected def commandName = "releaseResourceAwareHooks"
+
+      override def resource: Resource[IO, Unit] =
+        Resource.make(observed.update(_ :+ "resource-acquire"))(_ =>
+          observed.update(_ :+ "resource-release")
+        )
+
+      override protected def releaseResourceHooks(state: State): ReleaseResourceHooks[Unit] =
+        ReleaseResourceHooks(
+          beforeTagHooks = Seq(
+            ReleaseResourceHookIO[Unit](
+              name = "resource-before-tag",
+              execute = _ => ctx => observed.update(_ :+ "resource-execute").as(ctx),
+              validate = _ => observed.update(_ :+ "resource-validate")
+            )
+          )
+        )
+    }
+
   private def throwingHookSeq(message: String): Seq[ReleaseHookIO] =
     new scala.collection.immutable.Seq[ReleaseHookIO] {
       override def iterator: Iterator[ReleaseHookIO] =
@@ -462,6 +610,9 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
 
   private def checkStepNames(processMode: AnyRef): Seq[String] =
     invokeGetter[Seq[ReleaseStepIO]](processMode, "checkSteps").map(_.name)
+
+  private def checkSteps(processMode: AnyRef): Seq[ReleaseStepIO] =
+    invokeGetter[Seq[ReleaseStepIO]](processMode, "checkSteps")
 
   private def releaseStepNames(processMode: AnyRef): Seq[String] =
     invokeGetter[Seq[Unit => ReleaseStepIO]](processMode, "releaseSteps").map(_(()).name)

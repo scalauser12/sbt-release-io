@@ -3,10 +3,13 @@ package io.release.monorepo.examples
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.monorepo.MonorepoGlobalHookIO
+import io.release.monorepo.MonorepoGlobalResourceHookIO
 import io.release.monorepo.MonorepoProjectHookIO
+import io.release.monorepo.MonorepoProjectResourceHookIO
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoReleaseIO.insertStepAfter
 import io.release.monorepo.MonorepoReleasePluginLike
+import io.release.monorepo.MonorepoResourceHooks
 import io.release.monorepo.MonorepoStepIO
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import sbt.*
@@ -63,6 +66,54 @@ object CustomMonorepoStepExamples {
     MonorepoReleaseIO.releaseIOMonorepoAfterNextCommitHooks += markReleaseDoneHook
   )
 
+  /** Recommended template for selective monorepo rehearsals driven by change detection.
+    *
+    * This keeps the compiled built-ins, disables mutating remote phases, skips `run-clean`,
+    * includes downstream dependents of changed projects, and logs the resolved selection after
+    * `detect-or-select-projects`.
+    *
+    * {{{
+    * lazy val root = (project in file("."))
+    *   .aggregate(core, api, web)
+    *   .settings(CustomMonorepoStepExamples.selectionAndDetectionSettings)
+    *
+    * // Detect changes automatically and include downstream dependents
+    * // sbt "releaseIOMonorepo check with-defaults"
+    *
+    * // Rehearse a focused release for one project with explicit versions
+    * // sbt "releaseIOMonorepo check api with-defaults release-version api=1.1.0 next-version api=1.2.0-SNAPSHOT"
+    * }}}
+    */
+  val selectionAndDetectionSettings: Seq[Setting[?]] = Seq(
+    MonorepoReleaseIO.releaseIOMonorepoEnablePush        := false,
+    MonorepoReleaseIO.releaseIOMonorepoEnablePublish     := false,
+    MonorepoReleaseIO.releaseIOMonorepoEnableRunClean    := false,
+    MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream := true,
+    MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks += printSummaryHook
+  )
+
+  /** Recommended template for targeted project rehearsals with explicit selectors.
+    *
+    * This keeps the built-in process, disables remote phases, and adds lightweight validation
+    * around selection and version resolution so you can focus on one project at a time.
+    *
+    * {{{
+    * lazy val root = (project in file("."))
+    *   .aggregate(core, api, web)
+    *   .settings(CustomMonorepoStepExamples.targetedRehearsalSettings)
+    *
+    * // Rehearse a targeted release plan
+    * // sbt "releaseIOMonorepo check api with-defaults release-version api=1.1.0 next-version api=1.2.0-SNAPSHOT"
+    * }}}
+    */
+  val targetedRehearsalSettings: Seq[Setting[?]] = Seq(
+    MonorepoReleaseIO.releaseIOMonorepoEnablePush     := false,
+    MonorepoReleaseIO.releaseIOMonorepoEnablePublish  := false,
+    MonorepoReleaseIO.releaseIOMonorepoEnableRunClean := false,
+    MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks += printSummaryHook,
+    MonorepoReleaseIO.releaseIOMonorepoBeforeVersionResolutionHooks += checkReadmeHook
+  )
+
   val printSummaryHook: MonorepoGlobalHookIO = MonorepoGlobalHookIO.action("print-summary")(ctx =>
     IO.println(s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}")
   )
@@ -101,16 +152,18 @@ object CustomMonorepoStepExamples {
 
   // ── Legacy raw-process customization (advanced) ─────────────────────
 
-  /** Minimal working setup in legacy raw-process mode — just the default steps. */
-  val minimalProcess: Seq[MonorepoStepIO] = MonorepoReleaseSteps.defaults
-
-  /** Legacy example: insert a custom step after project selection while keeping the default flow.
+  /** Minimal non-trivial legacy example: insert a custom step after project selection while
+    * keeping the default flow.
+    *
+    * This demonstrates the smallest raw-process change that materially alters behavior:
+    * the built-in selection step still runs, but a custom summary step is inserted immediately
+    * after `detect-or-select-projects`.
     *
     * Prefer [[firstHookSettings]] for routine customization. Keep this pattern for advanced
     * cases that need raw process editing.
     */
   @nowarn("cat=deprecation")
-  lazy val firstCustomProcess: Seq[MonorepoStepIO] =
+  lazy val minimalLegacyProcess: Seq[MonorepoStepIO] =
     insertStepAfter(MonorepoReleaseSteps.defaults, "detect-or-select-projects")(Seq(printSummary))
 
   // --- Global step: print a release summary ---
@@ -235,7 +288,7 @@ trait HttpClient {
 }
 
 /** Advanced/custom-plugin example: acquire an HTTP client once and use it in
-  * resource-aware steps at non-adjacent positions.
+  * resource-aware hooks while staying on compiled hook mode.
   *
   * Prefer hook/policy settings for routine customization. Copy to
   * `project/MyMonorepoRelease.scala` so sbt can discover it. Use `_root_` imports in that
@@ -266,64 +319,48 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       }
     )(c => IO(c.close()))
 
-  override protected def monorepoReleaseProcess(
-      state: State
-  ): Seq[HttpClient => MonorepoStepIO] =
-    Seq(
-      // Plain steps — lifted automatically via the implicit conversion
-      MonorepoReleaseSteps.initializeVcs,
-      MonorepoReleaseSteps.checkCleanWorkingDir,
-      MonorepoReleaseSteps.resolveReleaseOrder,
-      MonorepoReleaseSteps.detectOrSelectProjects,
-      // 1st resource step — validate allowed projects via API
-      MonorepoStepIO
-        .globalResource[HttpClient]("validate-projects")
-        .execute(client =>
-          ctx =>
-            IO.blocking {
-              val allowed = client.get("/allowed-projects").split(",").toSet
-              ctx.currentProjects.map(_.name).filterNot(allowed.contains)
-            }.flatMap(invalid =>
-              if (invalid.nonEmpty)
-                IO.raiseError(
-                  new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}")
-                )
-              else IO.pure(ctx)
+  private val validateProjects: MonorepoGlobalResourceHookIO[HttpClient] =
+    MonorepoGlobalResourceHookIO.io[HttpClient]("validate-projects")(client =>
+      ctx =>
+        IO.blocking {
+          val allowed = client.get("/allowed-projects").split(",").toSet
+          ctx.currentProjects.map(_.name).filterNot(allowed.contains)
+        }.flatMap(invalid =>
+          if (invalid.nonEmpty)
+            IO.raiseError(
+              new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}")
             )
-        ),
-      MonorepoReleaseSteps.checkSnapshotDependencies,
-      MonorepoReleaseSteps.inquireVersions,
-      MonorepoReleaseSteps.runClean,
-      MonorepoReleaseSteps.runTests,
-      MonorepoReleaseSteps.setReleaseVersions,
-      MonorepoReleaseSteps.commitReleaseVersions,
-      MonorepoReleaseSteps.tagReleases,
-      // 2nd resource step — notify Slack after tagging
-      MonorepoStepIO
-        .globalResource[HttpClient]("notify-slack")
-        .executeAction(client =>
-          ctx =>
-            IO.blocking {
-              val summary = ctx.currentProjects
-                .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
-                .mkString(", ")
-              client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
-            }
-        ),
-      MonorepoReleaseSteps.publishArtifacts,
-      // 3rd resource step — verify published artifacts per project
-      MonorepoStepIO
-        .perProjectResource[HttpClient]("verify-publish")
-        .executeAction(client =>
-          (ctx, project) =>
-            project.versions match {
-              case Some((releaseVer, _)) =>
-                IO.blocking(client.get(s"/artifacts/${project.name}/$releaseVer")).void
-              case None                  => IO.unit
-            }
-        ),
-      MonorepoReleaseSteps.setNextVersions,
-      MonorepoReleaseSteps.commitNextVersions,
-      MonorepoReleaseSteps.pushChanges
+          else IO.pure(ctx)
+        )
+    )
+
+  private val notifySlack: MonorepoGlobalResourceHookIO[HttpClient] =
+    MonorepoGlobalResourceHookIO.action[HttpClient]("notify-slack")(client =>
+      ctx =>
+        IO.blocking {
+          val summary = ctx.currentProjects
+            .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
+            .mkString(", ")
+          client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
+        }
+    )
+
+  private val verifyPublish: MonorepoProjectResourceHookIO[HttpClient] =
+    MonorepoProjectResourceHookIO.action[HttpClient]("verify-publish")(client =>
+      (_, project) =>
+        project.versions match {
+          case Some((releaseVer, _)) =>
+            IO.blocking(client.get(s"/artifacts/${project.name}/$releaseVer")).void
+          case None                  => IO.unit
+        }
+    )
+
+  override protected def monorepoResourceHooks(
+      state: State
+  ): MonorepoResourceHooks[HttpClient] =
+    MonorepoResourceHooks(
+      afterSelectionHooks = Seq(validateProjects),
+      afterReleaseCommitHooks = Seq(notifySlack),
+      afterPublishHooks = Seq(verifyPublish)
     )
 }

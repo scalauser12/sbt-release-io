@@ -1,12 +1,16 @@
 # Configuration (monorepo)
 
+Use this page when you need the grouped settings surface for the monorepo plugin. For an
+onboarding tutorial, start with [Getting started](getting-started.md). For CLI syntax and
+examples, see [Usage](usage.md).
+
 Settings prefixed `releaseIO` (no `Monorepo`) come from the **core plugin** (`sbt-release-io`) and are
 available whenever that plugin is on the classpath. Settings prefixed `releaseIOMonorepo` come from
 **this plugin**. Several monorepo settings mirror their core counterpart with a different default — for
 example `releaseIOMonorepoVersionFile` resolves per-project files, while `releaseIOVersionFile` is a
 single root-project file. Always configure the `releaseIOMonorepo*` variant when using the monorepo plugin.
 
-## Core settings
+## Main settings
 
 | Setting | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -24,11 +28,21 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 ## Hook / policy settings
 
 These settings participate in the compiled hook-based flow when the raw process is left
-alone. If `releaseIOMonorepoProcess` or `monorepoReleaseCheckProcess` are customized,
-both `run` and `check` stay in legacy raw-process mode and ignore these keys. If only
-`monorepoReleaseProcess` is customized, the real release run switches to legacy mode
-while `check` stays on the plain configured process until
+alone. There are two separate legacy surfaces:
+
+- the public raw-process setting `releaseIOMonorepoProcess`
+- the protected custom-plugin hooks `monorepoReleaseProcess` / `monorepoReleaseCheckProcess`
+
+If the raw-process setting or the protected check-process hook is customized, both `run`
+and `check` stay in legacy raw-process mode and ignore these keys. If only the protected
+`monorepoReleaseProcess` hook is customized, the real release run switches to legacy
+mode while `check` stays on the plain configured process until
 `monorepoReleaseCheckProcess` is also customized.
+
+`releaseIOMonorepoSkipPublish` is the runtime execution flag that skips publish even if
+the publish step is still present. `releaseIOMonorepoEnablePublish` removes the publish
+phase from the compiled hook-first lifecycle entirely, so `beforePublish` /
+`afterPublish` hooks do not exist when it is `false`.
 
 | Setting | Type | Default | Description |
 |-----|------|---------|-------------|

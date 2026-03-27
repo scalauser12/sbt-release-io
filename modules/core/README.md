@@ -15,37 +15,29 @@ optional interactive prompts, and configurable version files and VCS behavior.
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
 ```
 
-Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin loads automatically (`allRequirements`).
+Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin loads automatically
+(`allRequirements`).
 
-Inspect the command help first:
-
-```bash
-sbt "releaseIO help"
-```
-
-Run a preflight with no release side effects:
+First command:
 
 ```bash
 sbt "releaseIO check with-defaults"
 ```
 
-Run the actual release:
-
-```bash
-sbt "releaseIO with-defaults"
-```
-
 Preferred customization keeps the built-in process intact and uses `releaseIOEnable*` policies plus
 `releaseIO*Hooks`. Raw `releaseIOProcess` editing remains available as a legacy advanced path.
 
-## Documentation
+## Read next
 
-Full guide: **[Documentation](../../docs/core/README.md)** (getting started, configuration, custom steps, settings reference, operations).
-
-Top-level index: [docs/README.md](../../docs/README.md).
+- [Core getting started](../../docs/core/getting-started.md) for install, first `help` / `check` / `run`, and the default built-in steps
+- [Core hook-first walkthrough](../../docs/core/hook-first-walkthrough.md) for a safe local rehearsal that keeps the built-in process intact
+- [Core configuration](../../docs/core/configuration.md) for starter `build.sbt` patterns, and [Core reference](../../docs/core/reference.md) for the full settings and CLI catalog
+- [Core customization](../../docs/core/customization.md) for hooks, custom steps, custom plugins, and migration from raw-process edits
+- [Core operations](../../docs/core/operations.md) for rollback and recovery
+- [Docs index](../../docs/README.md) for the full documentation tree
 
 ## License
 

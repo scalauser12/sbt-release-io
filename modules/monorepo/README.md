@@ -15,7 +15,7 @@ validate-then-execute phases, per-project tags, cross-build, and
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.0")
 ```
 
 `build.sbt` (root):
@@ -28,33 +28,25 @@ lazy val root = (project in file("."))
 
 Each subproject needs `version.sbt` with `version := "0.1.0-SNAPSHOT"`.
 
-Inspect the command help first:
-
-```bash
-sbt "releaseIOMonorepo help"
-```
-
-Run a preflight with no release side effects:
+First command:
 
 ```bash
 sbt "releaseIOMonorepo check with-defaults"
-```
-
-Run the actual release:
-
-```bash
-sbt "releaseIOMonorepo with-defaults"
 ```
 
 Preferred customization keeps the built-in process intact and uses
 `releaseIOMonorepoEnable*` policies plus `releaseIOMonorepo*Hooks`. Raw
 `releaseIOMonorepoProcess` editing remains available as a legacy advanced path.
 
-## Documentation
+## Read next
 
-Full guide: **[Documentation](../../docs/monorepo/README.md)** (usage, walkthrough, configuration, change detection, customization).
-
-Core plugin (shared settings): [docs/core/README.md](../../docs/core/README.md). Index: [docs/README.md](../../docs/README.md).
+- [Monorepo getting started](../../docs/monorepo/getting-started.md) for install, first `help` / `check` / `run`, and the main navigation path
+- [First release walkthrough](../../docs/monorepo/walkthrough.md) for an end-to-end setup from scratch
+- [Selective release walkthrough](../../docs/monorepo/selective-release-walkthrough.md) for hook-first change detection, downstream inclusion, and explicit selectors
+- [Monorepo configuration](../../docs/monorepo/configuration.md) for the grouped settings surface and [Monorepo usage](../../docs/monorepo/usage.md) for CLI syntax
+- [Monorepo customization](../../docs/monorepo/customization.md) for hooks, custom steps, custom plugins, and migration from raw-process edits
+- [Monorepo operations](../../docs/monorepo/operations.md) for rollback and recovery
+- [Docs index](../../docs/README.md) and [core plugin docs](../../docs/core/README.md) for shared concepts and settings
 
 Demo repos: [scala-monorepo-demo](https://github.com/scalauser12/scala-monorepo-demo), [files-monorepo-demo](https://github.com/scalauser12/files-monorepo-demo).
 

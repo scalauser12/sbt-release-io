@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
 import io.release.internal.SbtRuntime
@@ -20,6 +21,8 @@ import java.io.PrintStream
 import java.lang.reflect.Method
 import scala.annotation.nowarn
 import scala.annotation.tailrec
+
+import sbt.ProjectRef
 
 @nowarn("cat=deprecation")
 class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
@@ -77,6 +80,162 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       resolveProcessMode(MonorepoReleasePlugin, loaded.state).map { processMode =>
         assertEquals(legacyMode(processMode), false)
         assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
+      }
+    }
+  }
+
+  test(
+    "resolveProcessMode - validate resource-aware global and per-project hooks during check without acquiring resource"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val settings: Seq[Setting[?]] = Seq(
+        MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks +=
+          MonorepoGlobalHookIO
+            .action("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
+        MonorepoReleaseIO.releaseIOMonorepoAfterTagHooks +=
+          MonorepoProjectHookIO.action("plain-after-tag")((_, project) =>
+            observed.update(_ :+ s"plain-project-execute:${project.name}")
+          )
+      )
+
+      stateResource("monorepo-plugin-resource-check", plugin, settings).use { loaded =>
+        val project = sampleProject(loaded)
+        val ctx     = sampleContext(loaded, project)
+
+        for {
+          processMode <- resolveProcessMode(plugin, loaded.state)
+          _            = assertEquals(legacyMode(processMode), false)
+          _            = assert(
+                           checkStepNames(processMode).contains("after-selection:plain-after-selection")
+                         )
+          _            = assert(
+                           checkStepNames(processMode)
+                             .contains("after-selection:resource-after-selection")
+                         )
+          _            = assert(checkStepNames(processMode).contains("after-tag:plain-after-tag"))
+          _            = assert(checkStepNames(processMode).contains("after-tag:resource-after-tag"))
+          _           <- runMonorepoCheckSteps(checkSteps(processMode), ctx, project)
+          events      <- observed.get
+        } yield assertEquals(
+          events,
+          List(
+            "plain-global-execute",
+            "resource-global-validate",
+            s"plain-project-execute:${project.name}",
+            s"resource-project-validate:${project.name}"
+          )
+        )
+      }
+    }
+  }
+
+  test(
+    "resolveReleaseRun - execute resource-aware global and per-project hooks without legacy mode"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val settings: Seq[Setting[?]] = Seq(
+        MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks +=
+          MonorepoGlobalHookIO
+            .action("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
+        MonorepoReleaseIO.releaseIOMonorepoAfterTagHooks +=
+          MonorepoProjectHookIO.action("plain-after-tag")((_, project) =>
+            observed.update(_ :+ s"plain-project-execute:${project.name}")
+          )
+      )
+
+      stateResource("monorepo-plugin-resource-run", plugin, settings).use { loaded =>
+        val project = sampleProject(loaded)
+        val ctx     = sampleContext(loaded, project)
+
+        for {
+          processMode <- resolveProcessMode(plugin, loaded.state)
+          _            = assertEquals(legacyMode(processMode), false)
+          _           <- plugin.resource.use { _ =>
+                           for {
+                             runProcess <- resolveReleaseRun(plugin, loaded.state, processMode)
+                             _           = assertEquals(legacyMode(runProcess), false)
+                             _           = assert(
+                                             runStepNames(runProcess)
+                                               .contains("after-selection:resource-after-selection")
+                                           )
+                             _           = assert(
+                                             runStepNames(runProcess)
+                                               .contains("after-tag:resource-after-tag")
+                                           )
+                             _          <- runMonorepoRunSteps(
+                                             runSteps(runProcess),
+                                             ctx,
+                                             project
+                                           )
+                           } yield ()
+                         }
+          events      <- observed.get
+        } yield assertEquals(
+          events,
+          List(
+            "resource-acquire",
+            "plain-global-execute",
+            "resource-global-validate",
+            "resource-global-execute",
+            s"plain-project-execute:${project.name}",
+            s"resource-project-validate:${project.name}",
+            s"resource-project-execute:${project.name}",
+            "resource-release"
+          )
+        )
+      }
+    }
+  }
+
+  test("resolveReleaseRun - omit resource-aware hooks when the phase is disabled") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val settings: Seq[Setting[?]] = Seq(
+        MonorepoReleaseIO.releaseIOMonorepoEnableTagging := false
+      )
+
+      stateResource("monorepo-plugin-resource-disabled-phase", plugin, settings).use { loaded =>
+        for {
+          processMode <- resolveProcessMode(plugin, loaded.state)
+          _            = assertEquals(legacyMode(processMode), false)
+          _            = assert(!checkStepNames(processMode).exists(_.startsWith("after-tag:")))
+          _           <- plugin.resource.use { _ =>
+                           resolveReleaseRun(plugin, loaded.state, processMode).map { runProcess =>
+                             assertEquals(legacyMode(runProcess), false)
+                             assert(!runStepNames(runProcess).exists(_.startsWith("after-tag:")))
+                           }
+                         }
+        } yield ()
+      }
+    }
+  }
+
+  test("resolveProcessMode - bypass resource-aware hooks while legacy raw process mode is active") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val plugin                    = resourceAwareHookPlugin(observed)
+      val rawProcess                = Seq(
+        MonorepoReleaseSteps.initializeVcs,
+        MonorepoReleaseSteps.resolveReleaseOrder,
+        MonorepoReleaseSteps.detectOrSelectProjects
+      )
+      val settings: Seq[Setting[?]] = Seq(MonorepoReleaseIO.releaseIOMonorepoProcess := rawProcess)
+
+      stateResource("monorepo-plugin-resource-legacy-bypass", plugin, settings).use { loaded =>
+        resolveProcessMode(plugin, loaded.state).flatMap { processMode =>
+          for {
+            _      <- IO(assertEquals(legacyMode(processMode), true))
+            _      <- IO(assertEquals(checkStepNames(processMode), rawProcess.map(_.name)))
+            _      <-
+              IO(
+                assert(
+                  !checkStepNames(processMode).contains("after-selection:resource-after-selection")
+                )
+              )
+            events <- observed.get
+          } yield assertEquals(events, Nil)
+        }
       }
     }
   }
@@ -350,6 +509,43 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
           .executeAction(_ => _ => IO.unit)
   }
 
+  private def resourceAwareHookPlugin(
+      observed: Ref[IO, List[String]]
+  ): MonorepoReleasePluginLike[Unit] =
+    new MonorepoReleasePluginLike[Unit] {
+      override def trigger = noTrigger
+
+      override protected def commandName = "releaseMonorepoResourceAwareHooks"
+
+      override def resource: Resource[IO, Unit] =
+        Resource.make(observed.update(_ :+ "resource-acquire"))(_ =>
+          observed.update(_ :+ "resource-release")
+        )
+
+      override protected def monorepoResourceHooks(
+          state: State
+      ): MonorepoResourceHooks[Unit] =
+        MonorepoResourceHooks(
+          afterSelectionHooks = Seq(
+            MonorepoGlobalResourceHookIO[Unit](
+              name = "resource-after-selection",
+              execute = _ => ctx => observed.update(_ :+ "resource-global-execute").as(ctx),
+              validate = _ => observed.update(_ :+ "resource-global-validate")
+            )
+          ),
+          afterTagHooks = Seq(
+            MonorepoProjectResourceHookIO[Unit](
+              name = "resource-after-tag",
+              execute = _ =>
+                (ctx, project) =>
+                  observed.update(_ :+ s"resource-project-execute:${project.name}").as(ctx),
+              validate =
+                (_, project) => observed.update(_ :+ s"resource-project-validate:${project.name}")
+            )
+          )
+        )
+    }
+
   private def throwingHookSeq(message: String): Seq[MonorepoGlobalHookIO] =
     new scala.collection.immutable.Seq[MonorepoGlobalHookIO] {
       override def iterator: Iterator[MonorepoGlobalHookIO] =
@@ -494,6 +690,9 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
   private def checkStepNames(processMode: AnyRef): Seq[String] =
     invokeGetter[Seq[MonorepoStepIO]](processMode, "checkSteps").map(_.name)
 
+  private def checkSteps(processMode: AnyRef): Seq[MonorepoStepIO] =
+    invokeGetter[Seq[MonorepoStepIO]](processMode, "checkSteps")
+
   private def releaseStepNames(processMode: AnyRef): Seq[String] =
     invokeGetter[Seq[Unit => MonorepoStepIO]](processMode, "releaseSteps").map(_(()).name)
 
@@ -502,6 +701,52 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
 
   private def runSteps(processMode: AnyRef): Seq[MonorepoStepIO] =
     invokeGetter[Seq[MonorepoStepIO]](processMode, "steps")
+
+  private def sampleProject(loaded: LoadedState): ProjectReleaseInfo =
+    ProjectReleaseInfo(
+      ref = ProjectRef(loaded.dir, "core"),
+      name = "core",
+      baseDir = loaded.dir,
+      versionFile = new File(loaded.dir, "version.sbt"),
+      versions = Some(("1.0.0", "1.1.0-SNAPSHOT"))
+    )
+
+  private def sampleContext(
+      loaded: LoadedState,
+      project: ProjectReleaseInfo
+  ): MonorepoContext =
+    MonorepoContext(
+      state = loaded.state,
+      projects = Seq(project)
+    )
+
+  private def runMonorepoCheckSteps(
+      steps: Seq[MonorepoStepIO],
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Unit] =
+    steps
+      .filter(step =>
+        step.name.startsWith("after-selection:") || step.name.startsWith("after-tag:")
+      )
+      .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
+        ioCtx.flatMap { current =>
+          step match {
+            case global: MonorepoStepIO.Global         =>
+              global.validate(current) *> global.execute(current)
+            case perProject: MonorepoStepIO.PerProject =>
+              perProject.validate(current, project) *> perProject.execute(current, project)
+          }
+        }
+      }
+      .void
+
+  private def runMonorepoRunSteps(
+      steps: Seq[MonorepoStepIO],
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Unit] =
+    runMonorepoCheckSteps(steps, ctx, project)
 
   private def invokeGetter[A](target: AnyRef, methodName: String): A = {
     val method = findMethod(target.getClass, _.endsWith(methodName), 0)

@@ -16,7 +16,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
 ```
 
 The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom version formats](configuration.md#custom-version-formats).
@@ -69,6 +69,9 @@ sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAP
 
 For the full list of CLI flags and subcommands, see [Settings reference — CLI](reference.md#cli).
 
+For a concrete hook-first rehearsal that keeps the built-in process intact while disabling remote
+phases and adding lifecycle hooks, see [Hook-first walkthrough](hook-first-walkthrough.md).
+
 ## Default release steps
 
 The default release process includes:
@@ -88,3 +91,18 @@ The default release process includes:
 13. **push-changes** - Push commits and tags to remote
 
 These names are the stable built-in insertion points for `insertAfter` and `insertBefore`.
+
+## What to read next
+
+- Safe local rehearsal with hooks and policy keys:
+  [Hook-first walkthrough](hook-first-walkthrough.md)
+- Starter `build.sbt` patterns and common configuration recipes:
+  [Configuration](configuration.md)
+- Full settings and CLI catalog:
+  [Settings reference](reference.md)
+- Hooks, custom steps, custom plugins, and migration from raw-process edits:
+  [Customization](customization.md)
+- Validate/execute semantics and execution model details:
+  [Concepts](concepts.md)
+- Rollback and recovery after a failed release:
+  [Operations](operations.md)

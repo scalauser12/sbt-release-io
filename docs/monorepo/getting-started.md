@@ -15,7 +15,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.0")
 ```
 
 Enable on your root project in `build.sbt`:
@@ -36,6 +36,9 @@ By default, each subproject needs a `version.sbt` file (e.g., `core/version.sbt`
 If you are migrating from an older configuration, move any shared root version file setup to per-project `version.sbt` files and replace any global CLI overrides with `project=version` overrides.
 
 For working examples, see [scala-monorepo-demo](https://github.com/scalauser12/scala-monorepo-demo) and [files-monorepo-demo](https://github.com/scalauser12/files-monorepo-demo).
+
+For a concrete hook-first rehearsal that combines change detection, downstream inclusion, and
+explicit project selectors, see [Selective release walkthrough](selective-release-walkthrough.md).
 
 ## Usage
 
@@ -67,7 +70,7 @@ Or select projects and specify versions explicitly:
 sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
-Use `all-changed` to bypass change detection and include every configured project.
+Use `all-changed` to override change detection and release all configured projects.
 
 Additional examples:
 
@@ -86,3 +89,20 @@ sbt "releaseIOMonorepo project cross with-defaults release-version cross=1.0.0 n
 ```
 
 For the full list of CLI flags, subcommands, version override syntax, and selector syntax, see [Usage](usage.md).
+
+## What to read next
+
+- End-to-end setup from scratch:
+  [First release walkthrough](walkthrough.md)
+- Hook-first selective rehearsal with change detection and explicit selectors:
+  [Selective release walkthrough](selective-release-walkthrough.md)
+- CLI grammar, selectors, flags, and override syntax:
+  [Usage](usage.md)
+- Grouped settings surface and shared core knobs:
+  [Configuration](configuration.md)
+- Hooks, custom steps, custom plugins, and migration from raw-process edits:
+  [Customization](customization.md)
+- Execution model, failure isolation, and ordering:
+  [Concepts](concepts.md)
+- Rollback and recovery:
+  [Operations](operations.md)

@@ -1,5 +1,9 @@
 # Settings reference (core)
 
+This page is the exhaustive reference for core settings and CLI flags. If you want a smaller
+starter configuration example, see [Configuration](configuration.md). If you want a tutorial,
+start with [Getting started](getting-started.md).
+
 All release settings use the `releaseIO` prefix:
 
 | Setting                           | Type                           | Default                                  | Description                                                                   |
@@ -31,10 +35,21 @@ All release settings use the `releaseIO` prefix:
 ## Hook / policy settings
 
 These settings participate in the compiled hook-based flow when the raw process is left
-alone. If `releaseIOProcess` or `releaseCheckProcess` are customized, both `run` and
-`check` stay in legacy raw-process mode and ignore these keys. If only `releaseProcess`
-is customized, the real release run switches to legacy mode while `check` stays on the
-plain configured process until `releaseCheckProcess` is also customized.
+alone. There are two separate legacy surfaces:
+
+- the public raw-process setting `releaseIOProcess`
+- the protected custom-plugin hooks `releaseProcess` / `releaseCheckProcess`
+
+If the raw-process setting or the protected check-process hook is customized, both `run`
+and `check` stay in legacy raw-process mode and ignore these keys. If only the protected
+`releaseProcess` hook is customized, the real release run switches to legacy mode while
+`check` stays on the plain configured process until `releaseCheckProcess` is also
+customized.
+
+`releaseIOSkipPublish` is the runtime execution flag that skips publish even if the
+publish step is still present. `releaseIOEnablePublish` removes the publish phase from
+the compiled hook-first lifecycle entirely, so `beforePublish` / `afterPublish` hooks do
+not exist when it is `false`.
 
 | Setting                                  | Type                 | Default      | Description                                                        |
 | ---------------------------------------- | -------------------- | ------------ | ------------------------------------------------------------------ |
