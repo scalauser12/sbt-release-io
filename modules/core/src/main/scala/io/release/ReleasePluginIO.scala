@@ -99,52 +99,52 @@ trait ReleasePluginIOLike[T]
 
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] = Seq(
-    releaseIOProcess                := ReleaseSteps.defaults,
-    releaseIOCrossBuild             := false,
-    releaseIOSkipPublish            := false,
-    releaseIOInteractive            := false,
+    releaseIOProcess                         := ReleaseSteps.defaults,
+    releaseIOCrossBuild                      := false,
+    releaseIOSkipPublish                     := false,
+    releaseIOInteractive                     := false,
     releaseIOEnableSnapshotDependenciesCheck := true,
-    releaseIOEnableRunClean         := true,
-    releaseIOEnableRunTests         := true,
-    releaseIOEnableTagging          := true,
-    releaseIOEnablePublish          := true,
-    releaseIOEnablePush             := true,
-    releaseIOAfterCleanCheckHooks   := Seq.empty,
-    releaseIOBeforeVersionResolutionHooks := Seq.empty,
-    releaseIOAfterVersionResolutionHooks := Seq.empty,
-    releaseIOBeforeReleaseVersionWriteHooks := Seq.empty,
-    releaseIOAfterReleaseVersionWriteHooks := Seq.empty,
-    releaseIOBeforeReleaseCommitHooks := Seq.empty,
-    releaseIOAfterReleaseCommitHooks := Seq.empty,
-    releaseIOBeforeTagHooks         := Seq.empty,
-    releaseIOAfterTagHooks          := Seq.empty,
-    releaseIOBeforePublishHooks     := Seq.empty,
-    releaseIOAfterPublishHooks      := Seq.empty,
-    releaseIOBeforeNextVersionWriteHooks := Seq.empty,
-    releaseIOAfterNextVersionWriteHooks := Seq.empty,
-    releaseIOBeforeNextCommitHooks  := Seq.empty,
-    releaseIOAfterNextCommitHooks   := Seq.empty,
-    releaseIOBeforePushHooks        := Seq.empty,
-    releaseIOAfterPushHooks         := Seq.empty,
-    releaseIOReadVersion            := ReleaseSteps.defaultReadVersion,
-    releaseIOVersionFileContents    := ReleaseSteps.defaultWriteVersion(
+    releaseIOEnableRunClean                  := true,
+    releaseIOEnableRunTests                  := true,
+    releaseIOEnableTagging                   := true,
+    releaseIOEnablePublish                   := true,
+    releaseIOEnablePush                      := true,
+    releaseIOAfterCleanCheckHooks            := Seq.empty,
+    releaseIOBeforeVersionResolutionHooks    := Seq.empty,
+    releaseIOAfterVersionResolutionHooks     := Seq.empty,
+    releaseIOBeforeReleaseVersionWriteHooks  := Seq.empty,
+    releaseIOAfterReleaseVersionWriteHooks   := Seq.empty,
+    releaseIOBeforeReleaseCommitHooks        := Seq.empty,
+    releaseIOAfterReleaseCommitHooks         := Seq.empty,
+    releaseIOBeforeTagHooks                  := Seq.empty,
+    releaseIOAfterTagHooks                   := Seq.empty,
+    releaseIOBeforePublishHooks              := Seq.empty,
+    releaseIOAfterPublishHooks               := Seq.empty,
+    releaseIOBeforeNextVersionWriteHooks     := Seq.empty,
+    releaseIOAfterNextVersionWriteHooks      := Seq.empty,
+    releaseIOBeforeNextCommitHooks           := Seq.empty,
+    releaseIOAfterNextCommitHooks            := Seq.empty,
+    releaseIOBeforePushHooks                 := Seq.empty,
+    releaseIOAfterPushHooks                  := Seq.empty,
+    releaseIOReadVersion                     := ReleaseSteps.defaultReadVersion,
+    releaseIOVersionFileContents             := ReleaseSteps.defaultWriteVersion(
       releaseIOUseGlobalVersion.value
     ),
-    releaseIOVersionFile            := baseDirectory.value / "version.sbt",
-    releaseIOUseGlobalVersion       := true,
-    releaseIOVcsSign                := false,
-    releaseIOVcsSignOff             := false,
-    releaseIOIgnoreUntrackedFiles   := false,
-    releaseIORuntimeVersion         := {
+    releaseIOVersionFile                     := baseDirectory.value / "version.sbt",
+    releaseIOUseGlobalVersion                := true,
+    releaseIOVcsSign                         := false,
+    releaseIOVcsSignOff                      := false,
+    releaseIOIgnoreUntrackedFiles            := false,
+    releaseIORuntimeVersion                  := {
       if (releaseIOUseGlobalVersion.value) (ThisBuild / Keys.version).value
       else Keys.version.value
     },
-    releaseIOTagName                := s"v${releaseIORuntimeVersion.value}",
-    releaseIOTagComment             := s"Releasing ${releaseIORuntimeVersion.value}",
-    releaseIOCommitMessage          := s"Setting version to ${releaseIORuntimeVersion.value}",
-    releaseIONextCommitMessage      := s"Setting version to ${releaseIORuntimeVersion.value}",
-    releaseIOVersionBump            := Version.Bump.default,
-    releaseIOVersion                := {
+    releaseIOTagName                         := s"v${releaseIORuntimeVersion.value}",
+    releaseIOTagComment                      := s"Releasing ${releaseIORuntimeVersion.value}",
+    releaseIOCommitMessage                   := s"Setting version to ${releaseIORuntimeVersion.value}",
+    releaseIONextCommitMessage               := s"Setting version to ${releaseIORuntimeVersion.value}",
+    releaseIOVersionBump                     := Version.Bump.default,
+    releaseIOVersion                         := {
       val bump = releaseIOVersionBump.value
       ver =>
         Version(ver)
@@ -163,7 +163,7 @@ trait ReleasePluginIOLike[T]
             throw new IllegalArgumentException(s"Cannot parse version: $ver")
           )
     },
-    releaseIONextVersion            := {
+    releaseIONextVersion                     := {
       val bump = releaseIOVersionBump.value
       ver =>
         Version(ver)
@@ -173,8 +173,8 @@ trait ReleasePluginIOLike[T]
           )
     },
     ReleaseIOCompat.snapshotDependenciesSetting,
-    releaseIOPublishArtifactsChecks := true,
-    releaseIOPublishArtifactsAction := publish.value
+    releaseIOPublishArtifactsChecks          := true,
+    releaseIOPublishArtifactsAction          := publish.value
   )
 
   override lazy val projectSettings: Seq[Setting[?]] =
@@ -250,20 +250,20 @@ trait ReleasePluginIOLike[T]
 
   private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
     IO.blocking {
-      val extracted                   = Project.extract(state)
-      val configuredRaw               = extracted.get(releaseIOProcess)
-      val configuredCheck             = releaseCheckProcess(state)
-      val configuredRelease           = releaseProcess(state)
-      val hookConfiguration           = ReleaseHookCompiler.resolve(state)
-      val rawProcessChanged           = configuredRaw != ReleaseSteps.defaults
-      val checkProcessChanged = configuredCheck != configuredRaw
-      val processHooksOverridden      =
+      val extracted              = Project.extract(state)
+      val configuredRaw          = extracted.get(releaseIOProcess)
+      val configuredCheck        = releaseCheckProcess(state)
+      val configuredRelease      = releaseProcess(state)
+      val hookConfiguration      = ReleaseHookCompiler.resolve(state)
+      val rawProcessChanged      = configuredRaw != ReleaseSteps.defaults
+      val checkProcessChanged    = configuredCheck != configuredRaw
+      val processHooksOverridden =
         this.getClass != ReleasePluginIO.getClass &&
           (declaresProcessHookOverride("releaseProcess") ||
             declaresProcessHookOverride("releaseCheckProcess"))
-      val releaseProcessChanged =
+      val releaseProcessChanged  =
         configuredRelease.length != configuredRaw.length
-      val legacyReasons               =
+      val legacyReasons          =
         Seq(
           if (rawProcessChanged) Some("`releaseIOProcess` differs from defaults") else None,
           if (checkProcessChanged)
@@ -276,8 +276,8 @@ trait ReleasePluginIOLike[T]
             Some("`releaseProcess` differs from the configured raw process")
           else None
         ).flatten
-      val legacyMode                 = legacyReasons.nonEmpty
-      val compiled                   = ReleaseHookCompiler.compile(state)
+      val legacyMode             = legacyReasons.nonEmpty
+      val compiled               = ReleaseHookCompiler.compile(state)
 
       ResolvedProcessMode(
         releaseSteps = if (legacyMode) configuredRelease else liftSteps(compiled),

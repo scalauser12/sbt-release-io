@@ -4,12 +4,17 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseIO.releaseIOTagComment
 import io.release.ReleaseIO.releaseIOTagName
+import io.release.ReleaseIO.releaseIOReadVersion
 import io.release.ReleaseIO.releaseIOVcsSign
+import io.release.ReleaseIO.releaseIOUseGlobalVersion
+import io.release.ReleaseIO.releaseIOVersionFile
+import io.release.ReleaseIO.releaseIOVersionFileContents
 import io.release.ReleaseStepIO
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.TagPlan
+import io.release.internal.VersionPlan
 import io.release.steps.StepHelpers.*
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
@@ -68,8 +73,27 @@ private[release] object VcsSteps {
     }
   }
 
+  private def versionSessionSettings(state: State): Seq[Setting[?]] = {
+    val extracted        = SbtRuntime.extracted(state)
+    val maybeVersionPlan = for {
+      versionFile         <- extracted.getOpt(releaseIOVersionFile)
+      readVersion         <- extracted.getOpt(releaseIOReadVersion)
+      versionFileContents <- extracted.getOpt(releaseIOVersionFileContents)
+      useGlobalVersion    <- extracted.getOpt(releaseIOUseGlobalVersion)
+    } yield VersionPlan(
+      versionFile = versionFile,
+      readVersion = readVersion,
+      versionFileContents = versionFileContents,
+      releaseVersionOverride = None,
+      nextVersionOverride = None,
+      useGlobalVersion = useGlobalVersion
+    )
+
+    maybeVersionPlan.fold(Seq.empty[Setting[?]])(VersionSteps.sessionSettings)
+  }
+
   private def resolveTagPlan(ctx: ReleaseContext): TagPlan = {
-    val versionSettings  = VersionSteps.sessionSettings(ctx.state)
+    val versionSettings  = versionSessionSettings(ctx.state)
     val (s1, tagName)    = SbtRuntime.runTask(ctx.state, releaseIOTagName)
     val (s2, tagComment) = SbtRuntime.runTask(s1, releaseIOTagComment)
     TagPlan(

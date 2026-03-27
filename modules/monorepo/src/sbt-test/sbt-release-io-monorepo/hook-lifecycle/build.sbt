@@ -45,7 +45,7 @@ lazy val root = (project in file("."))
     },
     checkPublished                := {
       val repo           = file("core") / "target" / "test-repo"
-      val publishedFiles = (repo ** "*").get.filter(_.isFile)
+      val publishedFiles = (repo ** "*").get().filter(_.isFile)
       assert(repo.exists, s"Expected publish repo at ${repo.getAbsolutePath}")
       assert(publishedFiles.nonEmpty, s"Expected published files under ${repo.getAbsolutePath}")
     }

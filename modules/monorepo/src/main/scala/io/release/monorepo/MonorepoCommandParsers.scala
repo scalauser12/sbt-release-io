@@ -75,6 +75,6 @@ private[monorepo] object MonorepoCommandParsers {
 
   private def namedProjectParser(projectNames: Seq[String]): Parser[String] =
     if (projectNames.nonEmpty) oneOf(projectNames.map(name => token(name)))
-    else failure("No configured monorepo projects")
+    else sbt.complete.DefaultParsers.failure("No configured monorepo projects")
 
 }

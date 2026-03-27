@@ -112,6 +112,9 @@ sbt compile              # compile both modules
 sbt test                 # run unit tests (MUnit)
 sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2 / Scala 3 (version defined as Sbt2Version in build.sbt)
 sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2 / Scala 3
+./bin/sbt2-clean test    # same sbt 2 test lane from a clean tracked snapshot (ignores local Metals/Bloop files)
+./bin/sbt2-clean core/scripted
+./bin/sbt2-clean monorepo/scripted
 sbt scripted             # run all scripted integration tests
 sbt core/test            # core unit tests only
 sbt monorepo/test        # monorepo unit tests only
@@ -120,6 +123,10 @@ sbt scalafmtSbt          # format .sbt and project/*.scala build files
 sbt scalafmtCheckAll     # verify Scala source formatting
 sbt scalafmtSbtCheck     # verify sbt/build file formatting
 ```
+
+Use `./bin/sbt2-clean ...` for local sbt 2 verification if your checkout has generated IDE files such
+as `project/metals.sbt` or `.bloop/`. CI runs on a clean checkout and can use plain
+`sbt -Dsbt.version=2.0.0-RC9 ...`.
 
 ## Compatibility
 

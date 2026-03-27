@@ -6,7 +6,6 @@ import io.release.ReleaseHookIO
 import io.release.ReleaseIO
 import io.release.ReleaseStepIO
 import io.release.steps.ReleaseSteps
-import sbt.Project
 import sbt.State
 
 /** Compiles semantic core hook settings into the existing linear release engine. */
@@ -18,7 +17,7 @@ private[release] object ReleaseHookCompiler {
   private val PublishGate: Gate = ctx => !ctx.skipPublish
 
   def resolve(state: State): CoreHookConfiguration = {
-    val extracted = Project.extract(state)
+    val extracted = SbtRuntime.extracted(state)
 
     CoreHookConfiguration(
       enableSnapshotDependenciesCheck =
@@ -29,8 +28,7 @@ private[release] object ReleaseHookCompiler {
       enablePublish = extracted.get(ReleaseIO.releaseIOEnablePublish),
       enablePush = extracted.get(ReleaseIO.releaseIOEnablePush),
       afterCleanCheckHooks = extracted.get(ReleaseIO.releaseIOAfterCleanCheckHooks),
-      beforeVersionResolutionHooks =
-        extracted.get(ReleaseIO.releaseIOBeforeVersionResolutionHooks),
+      beforeVersionResolutionHooks = extracted.get(ReleaseIO.releaseIOBeforeVersionResolutionHooks),
       afterVersionResolutionHooks = extracted.get(ReleaseIO.releaseIOAfterVersionResolutionHooks),
       beforeReleaseVersionWriteHooks =
         extracted.get(ReleaseIO.releaseIOBeforeReleaseVersionWriteHooks),
@@ -42,8 +40,7 @@ private[release] object ReleaseHookCompiler {
       afterTagHooks = extracted.get(ReleaseIO.releaseIOAfterTagHooks),
       beforePublishHooks = extracted.get(ReleaseIO.releaseIOBeforePublishHooks),
       afterPublishHooks = extracted.get(ReleaseIO.releaseIOAfterPublishHooks),
-      beforeNextVersionWriteHooks =
-        extracted.get(ReleaseIO.releaseIOBeforeNextVersionWriteHooks),
+      beforeNextVersionWriteHooks = extracted.get(ReleaseIO.releaseIOBeforeNextVersionWriteHooks),
       afterNextVersionWriteHooks = extracted.get(ReleaseIO.releaseIOAfterNextVersionWriteHooks),
       beforeNextCommitHooks = extracted.get(ReleaseIO.releaseIOBeforeNextCommitHooks),
       afterNextCommitHooks = extracted.get(ReleaseIO.releaseIOAfterNextCommitHooks),

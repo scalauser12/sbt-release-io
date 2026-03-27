@@ -13,7 +13,9 @@ import sbt.Setting
 
 class ReleaseHookCompilerSpec extends CatsEffectSuite {
 
-  test("compile - match the built-in release steps when no hook or policy customization is present") {
+  test(
+    "compile - match the built-in release steps when no hook or policy customization is present"
+  ) {
     hookStateResource("release-hook-compiler-defaults").use { state =>
       IO {
         assertEquals(
@@ -27,23 +29,23 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
   test("compile - apply policy flags and lifecycle hooks around the remaining built-in phases") {
     val settings: Seq[Setting[?]] = Seq(
       ReleaseIO.releaseIOEnableSnapshotDependenciesCheck := false,
-      ReleaseIO.releaseIOEnableRunClean := false,
-      ReleaseIO.releaseIOEnableRunTests := false,
-      ReleaseIO.releaseIOEnablePublish := false,
-      ReleaseIO.releaseIOEnablePush := false,
-      ReleaseIO.releaseIOAfterCleanCheckHooks := Seq(
+      ReleaseIO.releaseIOEnableRunClean                  := false,
+      ReleaseIO.releaseIOEnableRunTests                  := false,
+      ReleaseIO.releaseIOEnablePublish                   := false,
+      ReleaseIO.releaseIOEnablePush                      := false,
+      ReleaseIO.releaseIOAfterCleanCheckHooks            := Seq(
         ReleaseHookIO.action("after-clean")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOBeforeVersionResolutionHooks := Seq(
+      ReleaseIO.releaseIOBeforeVersionResolutionHooks    := Seq(
         ReleaseHookIO.action("before-version")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOAfterVersionResolutionHooks := Seq(
+      ReleaseIO.releaseIOAfterVersionResolutionHooks     := Seq(
         ReleaseHookIO.action("after-version")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOBeforeTagHooks := Seq(
+      ReleaseIO.releaseIOBeforeTagHooks                  := Seq(
         ReleaseHookIO.action("before-tag")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOAfterTagHooks := Seq(
+      ReleaseIO.releaseIOAfterTagHooks                   := Seq(
         ReleaseHookIO.action("after-tag")(_ => IO.unit)
       )
     )
@@ -86,7 +88,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
             validate = _ => observed.update(_ :+ "validate-before")
           )
         ),
-        ReleaseIO.releaseIOAfterPublishHooks := Seq(
+        ReleaseIO.releaseIOAfterPublishHooks  := Seq(
           ReleaseHookIO(
             name = "after-publish",
             execute = ctx => observed.update(_ :+ "execute-after").as(ctx),
@@ -110,11 +112,11 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
           }
 
         for {
-          _      <- runPublishHooks(skippedCtx)
+          _       <- runPublishHooks(skippedCtx)
           skipped <- observed.get
-          _       = assertEquals(skipped, Nil)
-          _      <- runPublishHooks(enabledCtx)
-          events <- observed.get
+          _        = assertEquals(skipped, Nil)
+          _       <- runPublishHooks(enabledCtx)
+          events  <- observed.get
         } yield assertEquals(
           events,
           List("validate-before", "execute-before", "validate-after", "execute-after")
@@ -142,27 +144,27 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
   private def hookSettingsDefaults: Seq[Setting[?]] =
     Seq(
       ReleaseIO.releaseIOEnableSnapshotDependenciesCheck := true,
-      ReleaseIO.releaseIOEnableRunClean := true,
-      ReleaseIO.releaseIOEnableRunTests := true,
-      ReleaseIO.releaseIOEnableTagging := true,
-      ReleaseIO.releaseIOEnablePublish := true,
-      ReleaseIO.releaseIOEnablePush := true,
-      ReleaseIO.releaseIOAfterCleanCheckHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeVersionResolutionHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterVersionResolutionHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeReleaseVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterReleaseVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeReleaseCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterReleaseCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeTagHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterTagHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforePublishHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterPublishHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeNextVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterNextVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeNextCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterNextCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforePushHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterPushHooks := Seq.empty
+      ReleaseIO.releaseIOEnableRunClean                  := true,
+      ReleaseIO.releaseIOEnableRunTests                  := true,
+      ReleaseIO.releaseIOEnableTagging                   := true,
+      ReleaseIO.releaseIOEnablePublish                   := true,
+      ReleaseIO.releaseIOEnablePush                      := true,
+      ReleaseIO.releaseIOAfterCleanCheckHooks            := Seq.empty,
+      ReleaseIO.releaseIOBeforeVersionResolutionHooks    := Seq.empty,
+      ReleaseIO.releaseIOAfterVersionResolutionHooks     := Seq.empty,
+      ReleaseIO.releaseIOBeforeReleaseVersionWriteHooks  := Seq.empty,
+      ReleaseIO.releaseIOAfterReleaseVersionWriteHooks   := Seq.empty,
+      ReleaseIO.releaseIOBeforeReleaseCommitHooks        := Seq.empty,
+      ReleaseIO.releaseIOAfterReleaseCommitHooks         := Seq.empty,
+      ReleaseIO.releaseIOBeforeTagHooks                  := Seq.empty,
+      ReleaseIO.releaseIOAfterTagHooks                   := Seq.empty,
+      ReleaseIO.releaseIOBeforePublishHooks              := Seq.empty,
+      ReleaseIO.releaseIOAfterPublishHooks               := Seq.empty,
+      ReleaseIO.releaseIOBeforeNextVersionWriteHooks     := Seq.empty,
+      ReleaseIO.releaseIOAfterNextVersionWriteHooks      := Seq.empty,
+      ReleaseIO.releaseIOBeforeNextCommitHooks           := Seq.empty,
+      ReleaseIO.releaseIOAfterNextCommitHooks            := Seq.empty,
+      ReleaseIO.releaseIOBeforePushHooks                 := Seq.empty,
+      ReleaseIO.releaseIOAfterPushHooks                  := Seq.empty
     )
 }

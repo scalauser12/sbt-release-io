@@ -144,8 +144,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - summarize the compiled hook process and disabled phases") {
     withPluginInitialContext(
       Seq(
-        ReleaseIO.releaseIOEnablePublish := false,
-        ReleaseIO.releaseIOEnablePush := false,
+        ReleaseIO.releaseIOEnablePublish  := false,
+        ReleaseIO.releaseIOEnablePush     := false,
         ReleaseIO.releaseIOBeforeTagHooks := Seq(
           ReleaseHookIO.action("before-tag-marker")(_ => IO.unit)
         )
@@ -249,45 +249,45 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   private def baseVersionSettings(versionFile: File): Seq[sbt.Setting[?]] =
     Seq(
-      io.release.ReleaseIO.releaseIOVersionFile         := versionFile,
-      io.release.ReleaseIO.releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-      io.release.ReleaseIO.releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+      io.release.ReleaseIO.releaseIOVersionFile          := versionFile,
+      io.release.ReleaseIO.releaseIOReadVersion          := VersionSteps.defaultReadVersion,
+      io.release.ReleaseIO.releaseIOVersionFileContents  := VersionSteps.defaultWriteVersion(
         useGlobalVersion = true
       ),
-      io.release.ReleaseIO.releaseIOUseGlobalVersion    := true,
-      io.release.ReleaseIO.releaseIOVersion             := ((_: String) => "0.1.0"),
-      io.release.ReleaseIO.releaseIONextVersion         := ((_: String) => "0.2.0-SNAPSHOT"),
-      io.release.ReleaseIO.releaseIOTagName             := "v0.1.0",
-      io.release.ReleaseIO.releaseIOTagComment          := "Releasing 0.1.0",
-      io.release.ReleaseIO.releaseIOVcsSign             := false,
+      io.release.ReleaseIO.releaseIOUseGlobalVersion     := true,
+      io.release.ReleaseIO.releaseIOVersion              := ((_: String) => "0.1.0"),
+      io.release.ReleaseIO.releaseIONextVersion          := ((_: String) => "0.2.0-SNAPSHOT"),
+      io.release.ReleaseIO.releaseIOTagName              := "v0.1.0",
+      io.release.ReleaseIO.releaseIOTagComment           := "Releasing 0.1.0",
+      io.release.ReleaseIO.releaseIOVcsSign              := false,
       io.release.ReleaseIO.releaseIOIgnoreUntrackedFiles := false
     )
 
   private def hookSettingsDefaults: Seq[sbt.Setting[?]] =
     Seq(
       ReleaseIO.releaseIOEnableSnapshotDependenciesCheck := true,
-      ReleaseIO.releaseIOEnableRunClean := true,
-      ReleaseIO.releaseIOEnableRunTests := true,
-      ReleaseIO.releaseIOEnableTagging := true,
-      ReleaseIO.releaseIOEnablePublish := true,
-      ReleaseIO.releaseIOEnablePush := true,
-      ReleaseIO.releaseIOAfterCleanCheckHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeVersionResolutionHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterVersionResolutionHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeReleaseVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterReleaseVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeReleaseCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterReleaseCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeTagHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterTagHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforePublishHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterPublishHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeNextVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterNextVersionWriteHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforeNextCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterNextCommitHooks := Seq.empty,
-      ReleaseIO.releaseIOBeforePushHooks := Seq.empty,
-      ReleaseIO.releaseIOAfterPushHooks := Seq.empty
+      ReleaseIO.releaseIOEnableRunClean                  := true,
+      ReleaseIO.releaseIOEnableRunTests                  := true,
+      ReleaseIO.releaseIOEnableTagging                   := true,
+      ReleaseIO.releaseIOEnablePublish                   := true,
+      ReleaseIO.releaseIOEnablePush                      := true,
+      ReleaseIO.releaseIOAfterCleanCheckHooks            := Seq.empty,
+      ReleaseIO.releaseIOBeforeVersionResolutionHooks    := Seq.empty,
+      ReleaseIO.releaseIOAfterVersionResolutionHooks     := Seq.empty,
+      ReleaseIO.releaseIOBeforeReleaseVersionWriteHooks  := Seq.empty,
+      ReleaseIO.releaseIOAfterReleaseVersionWriteHooks   := Seq.empty,
+      ReleaseIO.releaseIOBeforeReleaseCommitHooks        := Seq.empty,
+      ReleaseIO.releaseIOAfterReleaseCommitHooks         := Seq.empty,
+      ReleaseIO.releaseIOBeforeTagHooks                  := Seq.empty,
+      ReleaseIO.releaseIOAfterTagHooks                   := Seq.empty,
+      ReleaseIO.releaseIOBeforePublishHooks              := Seq.empty,
+      ReleaseIO.releaseIOAfterPublishHooks               := Seq.empty,
+      ReleaseIO.releaseIOBeforeNextVersionWriteHooks     := Seq.empty,
+      ReleaseIO.releaseIOAfterNextVersionWriteHooks      := Seq.empty,
+      ReleaseIO.releaseIOBeforeNextCommitHooks           := Seq.empty,
+      ReleaseIO.releaseIOAfterNextCommitHooks            := Seq.empty,
+      ReleaseIO.releaseIOBeforePushHooks                 := Seq.empty,
+      ReleaseIO.releaseIOAfterPushHooks                  := Seq.empty
     )
 
   private def releaseContext(state: sbt.State): ReleaseContext =

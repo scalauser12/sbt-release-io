@@ -1,8 +1,8 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoReleaseSteps
-import sbt.Project
 import sbt.State
 
 /** Compiles semantic monorepo hook settings into the existing monorepo engine. */
@@ -16,7 +16,7 @@ private[monorepo] object MonorepoHookCompiler {
   private val PublishProject: ProjectGate = (ctx, _) => !ctx.skipPublish
 
   def resolve(state: State): MonorepoHookConfiguration = {
-    val extracted = Project.extract(state)
+    val extracted = SbtRuntime.extracted(state)
 
     MonorepoHookConfiguration(
       enableSnapshotDependenciesCheck =

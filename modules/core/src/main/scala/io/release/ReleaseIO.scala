@@ -271,15 +271,13 @@ object ReleaseIO extends ReleaseIO {
       "Hooks that run after the clean-working-dir check phase"
     )
 
-  private[release] lazy val _releaseIOBeforeVersionResolutionHooks
-      : SettingKey[Seq[ReleaseHookIO]] =
+  private[release] lazy val _releaseIOBeforeVersionResolutionHooks: SettingKey[Seq[ReleaseHookIO]] =
     SettingKey[Seq[ReleaseHookIO]](
       "releaseIOBeforeVersionResolutionHooks",
       "Hooks that run before version resolution"
     )
 
-  private[release] lazy val _releaseIOAfterVersionResolutionHooks
-      : SettingKey[Seq[ReleaseHookIO]] =
+  private[release] lazy val _releaseIOAfterVersionResolutionHooks: SettingKey[Seq[ReleaseHookIO]] =
     SettingKey[Seq[ReleaseHookIO]](
       "releaseIOAfterVersionResolutionHooks",
       "Hooks that run after version resolution"
@@ -299,8 +297,7 @@ object ReleaseIO extends ReleaseIO {
       "Hooks that run after writing the release version"
     )
 
-  private[release] lazy val _releaseIOBeforeReleaseCommitHooks
-      : SettingKey[Seq[ReleaseHookIO]] =
+  private[release] lazy val _releaseIOBeforeReleaseCommitHooks: SettingKey[Seq[ReleaseHookIO]] =
     SettingKey[Seq[ReleaseHookIO]](
       "releaseIOBeforeReleaseCommitHooks",
       "Hooks that run before committing the release version"
@@ -336,15 +333,13 @@ object ReleaseIO extends ReleaseIO {
       "Hooks that run after publish"
     )
 
-  private[release] lazy val _releaseIOBeforeNextVersionWriteHooks
-      : SettingKey[Seq[ReleaseHookIO]] =
+  private[release] lazy val _releaseIOBeforeNextVersionWriteHooks: SettingKey[Seq[ReleaseHookIO]] =
     SettingKey[Seq[ReleaseHookIO]](
       "releaseIOBeforeNextVersionWriteHooks",
       "Hooks that run before writing the next version"
     )
 
-  private[release] lazy val _releaseIOAfterNextVersionWriteHooks
-      : SettingKey[Seq[ReleaseHookIO]] =
+  private[release] lazy val _releaseIOAfterNextVersionWriteHooks: SettingKey[Seq[ReleaseHookIO]] =
     SettingKey[Seq[ReleaseHookIO]](
       "releaseIOAfterNextVersionWriteHooks",
       "Hooks that run after writing the next version"

@@ -42,7 +42,7 @@ checkGitTag := {
 val checkPublished = taskKey[Unit]("Check that publish produced files")
 checkPublished := {
   val repo           = baseDirectory.value / "target" / "test-repo"
-  val publishedFiles = (repo ** "*").get.filter(_.isFile)
+  val publishedFiles = (repo ** "*").get().filter(_.isFile)
   assert(repo.exists, s"Expected publish repo at ${repo.getAbsolutePath}")
   assert(publishedFiles.nonEmpty, s"Expected published files under ${repo.getAbsolutePath}")
 }
