@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestSupport
+import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.Project
@@ -53,8 +54,51 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       } yield {
         assert(log.contains("Legacy raw process mode enabled"))
         assert(
-          log.contains("Hook/policy settings are ignored while legacy raw process mode is active.")
+          log.contains(
+            "Hook/policy compilation is bypassed while legacy raw process mode is active."
+          )
         )
+      }
+    }
+  }
+
+  test("resolveProcessMode - keep the default plugin on compiled hook mode") {
+    val settings: Seq[Setting[?]] = Seq(
+      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks +=
+        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+    )
+
+    stateResource("monorepo-plugin-compiled-hooks", MonorepoReleasePlugin, settings).use { loaded =>
+      resolveProcessMode(MonorepoReleasePlugin, loaded.state).map { processMode =>
+        assertEquals(legacyMode(processMode), false)
+        assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
+      }
+    }
+  }
+
+  test(
+    "resolveProcessMode - do not evaluate hook settings while legacy raw process mode is active"
+  ) {
+    val rawProcess                = Seq(
+      MonorepoReleaseSteps.initializeVcs,
+      MonorepoReleaseSteps.resolveReleaseOrder,
+      MonorepoReleaseSteps.detectOrSelectProjects
+    )
+    val settings: Seq[Setting[?]] = Seq(
+      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks := throwingHookSeq("hook boom")
+    )
+
+    stateResource(
+      "monorepo-plugin-legacy-throwing-hooks",
+      MonorepoReleasePlugin,
+      Seq(MonorepoReleaseIO.releaseIOMonorepoProcess := rawProcess)
+    ).use { loaded =>
+      val updatedState =
+        SbtRuntime.extracted(loaded.state).appendWithSession(settings, loaded.state)
+
+      resolveProcessMode(MonorepoReleasePlugin, updatedState).map { processMode =>
+        assertEquals(legacyMode(processMode), true)
+        assertEquals(checkStepNames(processMode), rawProcess.map(_.name))
       }
     }
   }
@@ -73,6 +117,21 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolveProcessMode - treat inherited process hook overrides as legacy mode") {
+    stateResource("monorepo-plugin-legacy-inherited-override", InheritedProcessPlugin).use {
+      loaded =>
+        resolveProcessMode(InheritedProcessPlugin, loaded.state).map { processMode =>
+          assertEquals(legacyMode(processMode), true)
+          assert(
+            legacyReasons(processMode)
+              .contains(
+                "plugin overrides `monorepoReleaseProcess` or `monorepoReleaseCheckProcess`"
+              )
+          )
+        }
+    }
+  }
+
   private object OverriddenProcessPlugin extends MonorepoReleasePluginLike[Unit] {
     override def trigger = noTrigger
 
@@ -86,6 +145,34 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
     override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
       super.monorepoReleaseCheckProcess(state)
   }
+
+  private abstract class BaseProcessPlugin extends MonorepoReleasePluginLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseMonorepoLegacyInherited"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
+      super.monorepoReleaseProcess(state)
+
+    override protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
+      super.monorepoReleaseCheckProcess(state)
+  }
+
+  private object InheritedProcessPlugin extends BaseProcessPlugin
+
+  private def throwingHookSeq(message: String): Seq[MonorepoGlobalHookIO] =
+    new scala.collection.immutable.Seq[MonorepoGlobalHookIO] {
+      override def iterator: Iterator[MonorepoGlobalHookIO] =
+        throw new RuntimeException(message)
+
+      override def apply(idx: Int): MonorepoGlobalHookIO =
+        throw new RuntimeException(message)
+
+      override def length: Int =
+        throw new RuntimeException(message)
+    }
 
   private final case class LoadedState(
       dir: File,

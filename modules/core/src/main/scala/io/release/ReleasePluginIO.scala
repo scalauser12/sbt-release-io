@@ -248,15 +248,38 @@ trait ReleasePluginIOLike[T]
       releaseSteps: Seq[T => ReleaseStepIO],
       checkSteps: Seq[ReleaseStepIO],
       legacyMode: Boolean,
-      legacyReasons: Seq[String],
-      hookConfiguration: CoreHookConfiguration
+      legacyReasons: Seq[String]
   )
 
-  private def declaresProcessHookOverride(methodName: String): Boolean =
+  private def builtInPluginClass: Class[?] = ReleasePluginIO.getClass
+
+  private def declaresProcessHook(methodName: String): Boolean =
     this.getClass.getDeclaredMethods.exists { method =>
       method.getName == methodName &&
       method.getParameterTypes.toList == List(classOf[State])
     }
+
+  // Scala emits concrete forwarders for trait defaults on plugin objects, so reflective
+  // method inspection cannot reliably distinguish inherited defaults from real overrides.
+  // Treating custom plugin classes and custom plugin superclasses as legacy mode is
+  // conservative, but it avoids silently dropping inherited custom process wiring.
+  private def usesCustomProcessHooks: Boolean = {
+    val customPluginClass = this.getClass != builtInPluginClass && (
+      declaresProcessHook("releaseProcess") || declaresProcessHook("releaseCheckProcess")
+    )
+
+    customPluginClass || inheritsCustomProcessHooks
+  }
+
+  private def inheritsCustomProcessHooks: Boolean = {
+    @scala.annotation.tailrec
+    def loop(clazz: Class[?]): Boolean =
+      if (clazz == null || clazz == classOf[AutoPlugin] || clazz == classOf[Object]) false
+      else if (classOf[ReleasePluginIOLike[?]].isAssignableFrom(clazz)) true
+      else loop(clazz.getSuperclass)
+
+    loop(this.getClass.getSuperclass)
+  }
 
   @nowarn("cat=deprecation")
   private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
@@ -265,13 +288,9 @@ trait ReleasePluginIOLike[T]
       val configuredRaw          = extracted.get(ReleaseIO._releaseIOProcess)
       val configuredCheck        = releaseCheckProcess(state)
       val configuredRelease      = releaseProcess(state)
-      val hookConfiguration      = ReleaseHookCompiler.resolve(state)
       val rawProcessChanged      = configuredRaw != ReleaseSteps.defaults
       val checkProcessChanged    = configuredCheck != configuredRaw
-      val processHooksOverridden =
-        this.getClass != ReleasePluginIO.getClass &&
-          (declaresProcessHookOverride("releaseProcess") ||
-            declaresProcessHookOverride("releaseCheckProcess"))
+      val processHooksOverridden = usesCustomProcessHooks
       val releaseProcessChanged  =
         configuredRelease.length != configuredRaw.length
       val legacyReasons          =
@@ -288,15 +307,24 @@ trait ReleasePluginIOLike[T]
           else None
         ).flatten
       val legacyMode             = legacyReasons.nonEmpty
-      val compiled               = ReleaseHookCompiler.compile(state)
 
-      ResolvedProcessMode(
-        releaseSteps = if (legacyMode) configuredRelease else liftSteps(compiled),
-        checkSteps = if (legacyMode) configuredCheck else compiled,
-        legacyMode = legacyMode,
-        legacyReasons = legacyReasons,
-        hookConfiguration = hookConfiguration
-      )
+      if (legacyMode)
+        ResolvedProcessMode(
+          releaseSteps = configuredRelease,
+          checkSteps = configuredCheck,
+          legacyMode = true,
+          legacyReasons = legacyReasons
+        )
+      else {
+        val compiled = ReleaseHookCompiler.compile(state)
+
+        ResolvedProcessMode(
+          releaseSteps = liftSteps(compiled),
+          checkSteps = compiled,
+          legacyMode = false,
+          legacyReasons = legacyReasons
+        )
+      }
     }
 
   private def logLegacyModeWarning(
@@ -314,10 +342,9 @@ trait ReleasePluginIOLike[T]
           s"${ReleaseLogPrefixes.Core} Prefer `releaseIOEnable*` policies and `releaseIO*Hooks` settings. " +
             "See docs/core/customization.md#hook-based-customization."
         )
-        if (processMode.hookConfiguration.hasCustomizations)
-          state.log.warn(
-            s"${ReleaseLogPrefixes.Core} Hook/policy settings are ignored while legacy raw process mode is active."
-          )
+        state.log.warn(
+          s"${ReleaseLogPrefixes.Core} Hook/policy compilation is bypassed while legacy raw process mode is active."
+        )
       }
 
   private final class CoreCommandInputs(

@@ -2,6 +2,7 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.internal.SbtRuntime
 import io.release.steps.ReleaseSteps
 import munit.CatsEffectSuite
 import sbt.Project
@@ -45,8 +46,46 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
       } yield {
         assert(log.contains("Legacy raw process mode enabled"))
         assert(
-          log.contains("Hook/policy settings are ignored while legacy raw process mode is active.")
+          log.contains(
+            "Hook/policy compilation is bypassed while legacy raw process mode is active."
+          )
         )
+      }
+    }
+  }
+
+  test("resolveProcessMode - keep the default plugin on compiled hook mode") {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+    )
+
+    stateResource("release-plugin-compiled-hooks", ReleasePluginIO, settings).use { loaded =>
+      resolveProcessMode(ReleasePluginIO, loaded.state).map { processMode =>
+        assertEquals(legacyMode(processMode), false)
+        assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
+      }
+    }
+  }
+
+  test(
+    "resolveProcessMode - do not evaluate hook settings while legacy raw process mode is active"
+  ) {
+    val rawProcess                = Seq(ReleaseSteps.initializeVcs, ReleaseSteps.inquireVersions)
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks := throwingHookSeq("hook boom")
+    )
+
+    stateResource(
+      "release-plugin-legacy-throwing-hooks",
+      ReleasePluginIO,
+      Seq(ReleaseIO.releaseIOProcess := rawProcess)
+    ).use { loaded =>
+      val updatedState =
+        SbtRuntime.extracted(loaded.state).appendWithSession(settings, loaded.state)
+
+      resolveProcessMode(ReleasePluginIO, updatedState).map { processMode =>
+        assertEquals(legacyMode(processMode), true)
+        assertEquals(checkStepNames(processMode), rawProcess.map(_.name))
       }
     }
   }
@@ -63,6 +102,19 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolveProcessMode - treat inherited process hook overrides as legacy mode") {
+    stateResource("release-plugin-legacy-inherited-override", InheritedProcessPlugin).use {
+      loaded =>
+        resolveProcessMode(InheritedProcessPlugin, loaded.state).map { processMode =>
+          assertEquals(legacyMode(processMode), true)
+          assert(
+            legacyReasons(processMode)
+              .contains("plugin overrides `releaseProcess` or `releaseCheckProcess`")
+          )
+        }
+    }
+  }
+
   private object OverriddenProcessPlugin extends ReleasePluginIOLike[Unit] {
     override def trigger = noTrigger
 
@@ -74,6 +126,32 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
     override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
       super.releaseCheckProcess(state)
   }
+
+  private abstract class BaseProcessPlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
+      super.releaseProcess(state)
+
+    override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
+      super.releaseCheckProcess(state)
+  }
+
+  private object InheritedProcessPlugin extends BaseProcessPlugin
+
+  private def throwingHookSeq(message: String): Seq[ReleaseHookIO] =
+    new scala.collection.immutable.Seq[ReleaseHookIO] {
+      override def iterator: Iterator[ReleaseHookIO] =
+        throw new RuntimeException(message)
+
+      override def apply(idx: Int): ReleaseHookIO =
+        throw new RuntimeException(message)
+
+      override def length: Int =
+        throw new RuntimeException(message)
+    }
 
   private final case class LoadedState(
       dir: File,

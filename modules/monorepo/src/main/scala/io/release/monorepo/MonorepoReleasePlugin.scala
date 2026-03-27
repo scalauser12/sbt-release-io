@@ -161,15 +161,39 @@ trait MonorepoReleasePluginLike[T]
       releaseSteps: Seq[T => MonorepoStepIO],
       checkSteps: Seq[MonorepoStepIO],
       legacyMode: Boolean,
-      legacyReasons: Seq[String],
-      hookConfiguration: MonorepoHookConfiguration
+      legacyReasons: Seq[String]
   )
 
-  private def declaresProcessHookOverride(methodName: String): Boolean =
+  private def builtInPluginClass: Class[?] = MonorepoReleasePlugin.getClass
+
+  private def declaresProcessHook(methodName: String): Boolean =
     this.getClass.getDeclaredMethods.exists { method =>
       method.getName == methodName &&
       method.getParameterTypes.toList == List(classOf[State])
     }
+
+  // Scala emits concrete forwarders for trait defaults on plugin objects, so reflective
+  // method inspection cannot reliably distinguish inherited defaults from real overrides.
+  // Treating custom plugin classes and custom plugin superclasses as legacy mode is
+  // conservative, but it avoids silently dropping inherited custom process wiring.
+  private def usesCustomProcessHooks: Boolean = {
+    val customPluginClass = this.getClass != builtInPluginClass && (
+      declaresProcessHook("monorepoReleaseProcess") ||
+        declaresProcessHook("monorepoReleaseCheckProcess")
+    )
+
+    customPluginClass || inheritsCustomProcessHooks
+  }
+
+  private def inheritsCustomProcessHooks: Boolean = {
+    @scala.annotation.tailrec
+    def loop(clazz: Class[?]): Boolean =
+      if (clazz == null || clazz == classOf[AutoPlugin] || clazz == classOf[Object]) false
+      else if (classOf[MonorepoReleasePluginLike[?]].isAssignableFrom(clazz)) true
+      else loop(clazz.getSuperclass)
+
+    loop(this.getClass.getSuperclass)
+  }
 
   @nowarn("cat=deprecation")
   private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
@@ -178,13 +202,9 @@ trait MonorepoReleasePluginLike[T]
       val configuredRaw          = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
       val configuredCheck        = monorepoReleaseCheckProcess(state)
       val configuredRelease      = monorepoReleaseProcess(state)
-      val hookConfiguration      = MonorepoHookCompiler.resolve(state)
       val rawProcessChanged      = configuredRaw != MonorepoReleaseSteps.defaults
       val checkProcessChanged    = configuredCheck != configuredRaw
-      val processHooksOverridden =
-        this.getClass != MonorepoReleasePlugin.getClass &&
-          (declaresProcessHookOverride("monorepoReleaseProcess") ||
-            declaresProcessHookOverride("monorepoReleaseCheckProcess"))
+      val processHooksOverridden = usesCustomProcessHooks
       val releaseProcessChanged  = configuredRelease.length != configuredRaw.length
       val legacyReasons          = Seq(
         if (rawProcessChanged) Some("`releaseIOMonorepoProcess` differs from defaults") else None,
@@ -201,15 +221,24 @@ trait MonorepoReleasePluginLike[T]
         else None
       ).flatten
       val legacyMode             = legacyReasons.nonEmpty
-      val compiled               = MonorepoHookCompiler.compile(state)
 
-      ResolvedProcessMode(
-        releaseSteps = if (legacyMode) configuredRelease else liftSteps(compiled),
-        checkSteps = if (legacyMode) configuredCheck else compiled,
-        legacyMode = legacyMode,
-        legacyReasons = legacyReasons,
-        hookConfiguration = hookConfiguration
-      )
+      if (legacyMode)
+        ResolvedProcessMode(
+          releaseSteps = configuredRelease,
+          checkSteps = configuredCheck,
+          legacyMode = true,
+          legacyReasons = legacyReasons
+        )
+      else {
+        val compiled = MonorepoHookCompiler.compile(state)
+
+        ResolvedProcessMode(
+          releaseSteps = liftSteps(compiled),
+          checkSteps = compiled,
+          legacyMode = false,
+          legacyReasons = legacyReasons
+        )
+      }
     }
 
   private def logLegacyModeWarning(
@@ -227,10 +256,9 @@ trait MonorepoReleasePluginLike[T]
           s"${ReleaseLogPrefixes.Monorepo} Prefer `releaseIOMonorepoEnable*` policies and " +
             "`releaseIOMonorepo*Hooks` settings. See docs/monorepo/customization.md#hook-based-customization."
         )
-        if (processMode.hookConfiguration.hasCustomizations)
-          state.log.warn(
-            s"${ReleaseLogPrefixes.Monorepo} Hook/policy settings are ignored while legacy raw process mode is active."
-          )
+        state.log.warn(
+          s"${ReleaseLogPrefixes.Monorepo} Hook/policy compilation is bypassed while legacy raw process mode is active."
+        )
       }
 
   private def prepareCommand(
