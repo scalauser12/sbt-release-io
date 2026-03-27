@@ -22,6 +22,14 @@ private[release] object ReleaseComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Core
 
+  private[release] def attachSuppressed(
+      original: Throwable,
+      suppressed: Throwable
+  ): Throwable = {
+    original.addSuppressed(suppressed)
+    original
+  }
+
   /** Compose a sequence of steps into a two-phase IO program.
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.
@@ -105,7 +113,17 @@ private[release] object ReleaseComposer {
         }
 
       def restoreOnError(currentCtx: ReleaseContext, err: Throwable): IO[ReleaseContext] =
-        restoreEntry(currentCtx).attempt *> IO.raiseError(err)
+        restoreEntry(currentCtx).attempt.flatMap {
+          case Right(_)         => IO.raiseError(err)
+          case Left(restoreErr) =>
+            IO.blocking {
+              currentCtx.state.log.error(
+                s"$LogPrefix Failed to restore the entry Scala version after a cross-build failure: " +
+                  s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
+              )
+              attachSuppressed(err, restoreErr)
+            } *> IO.raiseError(err)
+        }
 
       def runIteration(
           currentCtx: ReleaseContext,

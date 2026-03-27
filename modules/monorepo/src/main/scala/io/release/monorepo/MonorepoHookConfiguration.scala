@@ -3,6 +3,7 @@ package io.release.monorepo
 /** Monorepo hook/policy settings resolved from a single sbt state snapshot. */
 private[monorepo] final case class MonorepoHookConfiguration(
     enableSnapshotDependenciesCheck: Boolean,
+    enableRunClean: Boolean,
     enableRunTests: Boolean,
     enableTagging: Boolean,
     enablePublish: Boolean,
@@ -29,6 +30,7 @@ private[monorepo] final case class MonorepoHookConfiguration(
 
   def hasCustomizations: Boolean =
     !enableSnapshotDependenciesCheck ||
+      !enableRunClean ||
       !enableRunTests ||
       !enableTagging ||
       !enablePublish ||

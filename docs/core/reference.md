@@ -22,6 +22,7 @@ All release settings use the `releaseIO` prefix:
 | `releaseIOVcsSign`                | `Boolean`                      | `false`                                  | GPG-sign tags and commits                                                     |
 | `releaseIOVcsSignOff`             | `Boolean`                      | `false`                                  | Add `Signed-off-by` to commits                                              |
 | `releaseIOIgnoreUntrackedFiles`   | `Boolean`                      | `false`                                  | Ignore untracked files in clean check                                         |
+| `releaseIOVcsRemoteCheckTimeout`  | `FiniteDuration`               | `60.seconds`                             | Timeout for the remote reachability check (`git fetch`) before push           |
 | `releaseIOPublishArtifactsAction` | `Unit`                         | `publish`                                | Task that performs the publish                                                |
 | `releaseIOPublishArtifactsChecks` | `Boolean`                      | `true`                                   | Validate `publishTo`/`skip` before publish                                    |
 | `releaseIOSnapshotDependencies`   | `Seq[ModuleID]`                | auto-resolved                            | SNAPSHOT deps for validation                                                  |
@@ -30,8 +31,10 @@ All release settings use the `releaseIO` prefix:
 ## Hook / policy settings
 
 These settings participate in the compiled hook-based flow when the raw process is left
-alone. If `releaseIOProcess`, `releaseProcess`, or `releaseCheckProcess` are customized,
-the plugin stays in legacy raw-process mode and ignores these keys.
+alone. If `releaseIOProcess` or `releaseCheckProcess` are customized, both `run` and
+`check` stay in legacy raw-process mode and ignore these keys. If only `releaseProcess`
+is customized, the real release run switches to legacy mode while `check` stays on the
+plain configured process until `releaseCheckProcess` is also customized.
 
 | Setting                                  | Type                 | Default      | Description                                                        |
 | ---------------------------------------- | -------------------- | ------------ | ------------------------------------------------------------------ |

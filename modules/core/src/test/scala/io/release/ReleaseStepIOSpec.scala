@@ -98,6 +98,17 @@ class ReleaseStepIOSpec extends CatsEffectSuite {
     }
   }
 
+  test("attachSuppressed - keep the original failure primary and record the restore failure") {
+    IO {
+      val original = new RuntimeException("boom")
+      val restore  = new IllegalStateException("restore failed")
+      val combined = ReleaseComposer.attachSuppressed(original, restore)
+
+      assertEquals(combined, original)
+      assertEquals(combined.getSuppressed.toSeq, Seq(restore))
+    }
+  }
+
   test("compose - detect FailureCommand sentinel and skip subsequent executes") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>

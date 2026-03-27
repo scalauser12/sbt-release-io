@@ -203,6 +203,10 @@ raw-process mode for that custom command.
 configured `releaseIOProcess` through the protected `releaseCheckProcess(state)` hook, so normal
 release behavior is unchanged while preflight stays free of custom resource acquisition.
 
+If a custom plugin only changes `releaseProcess`, the real release run switches to legacy
+raw-process mode after the resource-backed steps are materialized. `check` stays on the plain
+configured process until `releaseCheckProcess` is also customized.
+
 If you want custom steps to participate in `check`, override `releaseCheckProcess` with
 resource-free preflight equivalents:
 

@@ -5,6 +5,8 @@ import io.release.vcs.Vcs
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
+import scala.concurrent.duration.*
+
 /** Shared VCS operations used by both core and monorepo release steps.
   *
   * Methods that can operate polymorphically (e.g. [[detectAndInit]]) accept a
@@ -13,6 +15,8 @@ import sbt.{internal as _, *}
   * so callers can map results into their own context type.
   */
 private[release] object VcsOps {
+
+  private[release] val DefaultRemoteCheckTimeout: FiniteDuration = 60.seconds
 
   /** Detect VCS at the project base and return the context with the VCS adapter. */
   def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] =
@@ -128,23 +132,44 @@ private[release] object VcsOps {
       interactive: Boolean,
       useDefaults: Boolean,
       vcs: Vcs,
+      logPrefix: String,
       log: Option[String => Unit] = None
   ): IO[Unit] =
     for {
-      remote         <- vcs.trackingRemote
-      _              <- log.fold(IO.unit)(f => IO.blocking(f(remote)))
-      remoteExitCode <- vcs.checkRemote(remote)
-      _              <-
-        if (remoteExitCode == 0) IO.unit
-        else
-          steps.StepHelpers.confirmContinue(
-            state,
-            interactive,
-            useDefaults,
-            prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-            defaultYes = false,
-            abortMessage = "Aborting the release due to remote check failure."
-          )
+      remote      <- vcs.trackingRemote
+      _           <- log.fold(IO.unit)(f => IO.blocking(f(remote)))
+      timeout     <- IO
+                       .blocking(
+                         Project.extract(state).getOpt(ReleaseIO.releaseIOVcsRemoteCheckTimeout)
+                       )
+                       .map(_.getOrElse(DefaultRemoteCheckTimeout))
+      remoteCheck <- vcs.checkRemote(remote).map(Option(_)).timeoutTo(timeout, IO.pure(None))
+      _           <- remoteCheck match {
+                       case Some(0) => IO.unit
+                       case Some(_) =>
+                         steps.StepHelpers.confirmContinue(
+                           state,
+                           interactive,
+                           useDefaults,
+                           prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                           defaultYes = false,
+                           abortMessage = "Aborting the release due to remote check failure."
+                         )
+                       case None    =>
+                         IO.blocking {
+                           state.log.warn(
+                             s"$logPrefix Remote check timed out after $timeout while fetching '$remote'."
+                           )
+                         } *>
+                           steps.StepHelpers.confirmContinue(
+                             state,
+                             interactive,
+                             useDefaults,
+                             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                             defaultYes = false,
+                             abortMessage = "Aborting the release due to remote check failure."
+                           )
+                     }
     } yield ()
 
   /** Validate that a tracking branch exists and the local branch is not behind remote.
@@ -196,9 +221,10 @@ private[release] object VcsOps {
       interactive: Boolean,
       useDefaults: Boolean,
       vcs: Vcs,
+      logPrefix: String,
       remoteCheckLog: Option[String => Unit]
   )(doPush: IO[T], onDeclinePush: IO[T]): IO[T] =
-    validatePushRemote(state, interactive, useDefaults, vcs, remoteCheckLog) *>
+    validatePushRemote(state, interactive, useDefaults, vcs, logPrefix, remoteCheckLog) *>
       (if (!interactive) doPush
        else {
          val decisionIO =

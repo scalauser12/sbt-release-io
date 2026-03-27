@@ -4,6 +4,8 @@ import cats.effect.IO
 import io.release.version.Version
 import sbt.{internal as _, *}
 
+import scala.concurrent.duration.FiniteDuration
+
 /** Shared setting keys for release-io plugins.
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
   * mix in or import from here.
@@ -157,6 +159,10 @@ trait ReleaseIO {
 
   /** When `true`, untracked files do not cause the clean-working-dir check to fail. */
   val releaseIOIgnoreUntrackedFiles: SettingKey[Boolean] = ReleaseIO._releaseIOIgnoreUntrackedFiles
+
+  /** Timeout for the remote reachability check (`git fetch`) used before push. */
+  val releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
+    ReleaseIO._releaseIOVcsRemoteCheckTimeout
 
   /** The current version at evaluation time. Useful as a dependency for tag/commit message tasks
     * so they pick up the version set by `setReleaseVersion` via `appendWithSession`.
@@ -407,6 +413,12 @@ object ReleaseIO extends ReleaseIO {
     SettingKey[Boolean](
       "releaseIOIgnoreUntrackedFiles",
       "Whether untracked files are ignored during clean working dir check"
+    )
+
+  private[release] lazy val _releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
+    SettingKey[FiniteDuration](
+      "releaseIOVcsRemoteCheckTimeout",
+      "Timeout for the remote reachability check performed before push"
     )
 
   @transient

@@ -24,6 +24,9 @@ releaseIOSkipPublish := true
 // Enable interactive prompts (disabled by default)
 releaseIOInteractive := true
 
+// Fail the remote reachability check if it hangs for too long
+releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(30).seconds
+
 // Custom version file reader (default parses `[ThisBuild /] version := "x.y.z"`)
 releaseIOReadVersion := (file =>
   IO.blocking(sbt.IO.read(file).trim)

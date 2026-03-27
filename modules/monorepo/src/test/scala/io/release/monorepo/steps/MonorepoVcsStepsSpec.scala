@@ -166,8 +166,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   private val brokenRemoteContextResource: Resource[IO, MonorepoContext] =
     tempDirResource.evalMap { repo =>
       TestSupport.initRepoWithBrokenRemote(repo).map { vcs =>
+        val state = loadedState(repo, Seq(rootProject(repo)))
+
         MonorepoContext(
-          state = TestSupport.dummyState(repo),
+          state = state,
           vcs = Some(vcs),
           interactive = false
         )

@@ -41,7 +41,12 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
                        )
         _            = assertEquals(checkStepNames(processMode), rawProcess.map(_.name))
         _            = assert(!checkStepNames(processMode).exists(_.startsWith("before-tag:")))
-        _           <- logLegacyModeWarning(ReleasePluginIO, loaded.state, processMode)
+        _           <- logLegacyModeWarning(
+                         ReleasePluginIO,
+                         loaded.state,
+                         legacyMode(processMode),
+                         legacyReasons(processMode)
+                       )
         log         <- IO.blocking(loaded.consoleBuffer.toString("UTF-8"))
       } yield {
         assert(log.contains("Legacy raw process mode enabled"))
@@ -152,6 +157,100 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "resolveProcessMode - keep same-length custom release-process wiring on compiled check mode"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+    )
+
+    stateResource(
+      "release-plugin-same-length-check",
+      SameLengthReleaseProcessPlugin,
+      settings
+    ).use { loaded =>
+      resolveProcessMode(SameLengthReleaseProcessPlugin, loaded.state).map { processMode =>
+        assertEquals(legacyMode(processMode), false)
+        assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
+      }
+    }
+  }
+
+  test(
+    "resolveReleaseRun - treat same-length custom release-process wiring as legacy on the run path"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+    )
+
+    stateResource(
+      "release-plugin-same-length-run",
+      SameLengthReleaseProcessPlugin,
+      settings
+    ).use { loaded =>
+      for {
+        processMode <- resolveProcessMode(SameLengthReleaseProcessPlugin, loaded.state)
+        runProcess  <- resolveReleaseRun(SameLengthReleaseProcessPlugin, loaded.state, processMode)
+      } yield {
+        assertEquals(legacyMode(runProcess), true)
+        assert(
+          legacyReasons(runProcess)
+            .contains("`releaseProcess` differs from the configured raw process")
+        )
+        assert(runStepNames(runProcess).contains("custom-release-replacement"))
+        assert(!runStepNames(runProcess).exists(_.startsWith("before-tag:")))
+      }
+    }
+  }
+
+  test(
+    "resolveProcessMode - keep same-name custom release-process wiring on compiled check mode"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+    )
+
+    stateResource(
+      "release-plugin-same-name-check",
+      SameNameReleaseProcessPlugin,
+      settings
+    ).use { loaded =>
+      resolveProcessMode(SameNameReleaseProcessPlugin, loaded.state).map { processMode =>
+        assertEquals(legacyMode(processMode), false)
+        assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
+      }
+    }
+  }
+
+  test(
+    "resolveReleaseRun - treat same-name custom release-process wiring as legacy on the run path"
+  ) {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+    )
+
+    stateResource(
+      "release-plugin-same-name-run",
+      SameNameReleaseProcessPlugin,
+      settings
+    ).use { loaded =>
+      for {
+        processMode <- resolveProcessMode(SameNameReleaseProcessPlugin, loaded.state)
+        runProcess  <- resolveReleaseRun(SameNameReleaseProcessPlugin, loaded.state, processMode)
+      } yield {
+        val rawSteps = SbtRuntime.extracted(loaded.state).get(ReleaseIO.releaseIOProcess)
+        assertEquals(legacyMode(runProcess), true)
+        assert(
+          legacyReasons(runProcess)
+            .contains("`releaseProcess` differs from the configured raw process")
+        )
+        assertEquals(runStepNames(runProcess).toList, rawSteps.map(_.name).toList)
+        assertNotEquals(runSteps(runProcess), rawSteps)
+        assert(!runStepNames(runProcess).exists(_.startsWith("before-tag:")))
+      }
+    }
+  }
+
   private object HookFriendlyPlugin extends ReleasePluginIOLike[Unit] {
     override def trigger = noTrigger
 
@@ -198,6 +297,34 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
           .executeAction(_ => _ => IO.unit)
   }
 
+  private object SameLengthReleaseProcessPlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseLegacySameLength"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
+      super.releaseProcess(state).dropRight(1) :+
+        ReleaseStepIO
+          .resourceStep[Unit]("custom-release-replacement")
+          .executeAction(_ => _ => IO.unit)
+  }
+
+  private object SameNameReleaseProcessPlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseLegacySameName"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def releaseProcess(state: State): Seq[Unit => ReleaseStepIO] =
+      super.releaseProcess(state).dropRight(1) :+
+        ReleaseStepIO
+          .resourceStep[Unit](ReleaseSteps.defaults.last.name)
+          .executeAction(_ => _ => IO.unit)
+  }
+
   private def throwingHookSeq(message: String): Seq[ReleaseHookIO] =
     new scala.collection.immutable.Seq[ReleaseHookIO] {
       override def iterator: Iterator[ReleaseHookIO] =
@@ -210,11 +337,20 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
         throw new RuntimeException(message)
     }
 
-  private final case class LoadedState(
-      dir: File,
-      state: State,
-      consoleBuffer: ByteArrayOutputStream
+  private final class LoadedState(
+      val dir: File,
+      val state: State,
+      val consoleBuffer: ByteArrayOutputStream
   )
+
+  private object LoadedState {
+    def apply(
+        dir: File,
+        state: State,
+        consoleBuffer: ByteArrayOutputStream
+    ): LoadedState =
+      new LoadedState(dir, state, consoleBuffer)
+  }
 
   private def stateResource(
       prefix: String,
@@ -265,6 +401,7 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
       ReleaseIO.releaseIOEnableTagging                   := true,
       ReleaseIO.releaseIOEnablePublish                   := true,
       ReleaseIO.releaseIOEnablePush                      := true,
+      ReleaseIO.releaseIOVcsRemoteCheckTimeout           := scala.concurrent.duration.DurationInt(60).seconds,
       ReleaseIO.releaseIOAfterCleanCheckHooks            := Seq.empty,
       ReleaseIO.releaseIOBeforeVersionResolutionHooks    := Seq.empty,
       ReleaseIO.releaseIOAfterVersionResolutionHooks     := Seq.empty,
@@ -290,12 +427,32 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
   ): IO[AnyRef] =
     invokeHiddenIO[AnyRef](plugin, "resolveProcessMode", state)
 
-  private def logLegacyModeWarning(
+  private def resolveReleaseRun(
       plugin: ReleasePluginIOLike[Unit],
       state: State,
       processMode: AnyRef
+  ): IO[AnyRef] =
+    invokeHiddenIO[AnyRef](
+      plugin,
+      "resolveReleaseRun",
+      state,
+      processMode,
+      scala.runtime.BoxedUnit.UNIT
+    )
+
+  private def logLegacyModeWarning(
+      plugin: ReleasePluginIOLike[Unit],
+      state: State,
+      legacyMode: Boolean,
+      legacyReasons: Seq[String]
   ): IO[Unit] =
-    invokeHiddenIO[Unit](plugin, "logLegacyModeWarning", state, processMode)
+    invokeHiddenIO[Unit](
+      plugin,
+      "logLegacyModeWarning",
+      state,
+      Boolean.box(legacyMode),
+      legacyReasons.asInstanceOf[AnyRef]
+    )
 
   private def legacyMode(processMode: AnyRef): Boolean =
     invokeGetter[Boolean](processMode, "legacyMode")
@@ -308,6 +465,12 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
 
   private def releaseStepNames(processMode: AnyRef): Seq[String] =
     invokeGetter[Seq[Unit => ReleaseStepIO]](processMode, "releaseSteps").map(_(()).name)
+
+  private def runStepNames(processMode: AnyRef): Seq[String] =
+    invokeGetter[Seq[ReleaseStepIO]](processMode, "steps").map(_.name)
+
+  private def runSteps(processMode: AnyRef): Seq[ReleaseStepIO] =
+    invokeGetter[Seq[ReleaseStepIO]](processMode, "steps")
 
   private def invokeGetter[A](target: AnyRef, methodName: String): A = {
     val method = findMethod(target.getClass, _.endsWith(methodName), 0)

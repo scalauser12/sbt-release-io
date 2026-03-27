@@ -53,6 +53,7 @@ For the common customization cases, prefer the semantic hook/policy settings ove
 | -------------- | ------------------------- |
 | Remove `push-changes` | `releaseIOMonorepoEnablePush := false` |
 | Remove `publish-artifacts` | `releaseIOMonorepoEnablePublish := false` |
+| Remove `run-clean` | `releaseIOMonorepoEnableRunClean := false` |
 | Remove `run-tests` | `releaseIOMonorepoEnableRunTests := false` |
 | Insert logic before or after project selection | `releaseIOMonorepoBeforeSelectionHooks` / `releaseIOMonorepoAfterSelectionHooks` |
 | Insert logic before or after per-project phases | `releaseIOMonorepoBefore*Hooks` / `releaseIOMonorepoAfter*Hooks` |
@@ -296,6 +297,10 @@ raw-process mode for that custom command.
 configured `releaseIOMonorepoProcess` through the protected
 `monorepoReleaseCheckProcess(state)` hook, so normal release behavior stays unchanged while
 preflight avoids custom resource acquisition.
+
+If a custom plugin only changes `monorepoReleaseProcess`, the real release run switches to legacy
+raw-process mode after the resource-backed steps are materialized. `check` stays on the plain
+configured process until `monorepoReleaseCheckProcess` is also customized.
 
 If you want custom monorepo steps to participate in `check`, override that hook with
 resource-free preflight equivalents:

@@ -228,6 +228,7 @@ private[monorepo] object MonorepoVcsSteps {
           ctx.interactive,
           ctx.useDefaults,
           vcs,
+          ReleaseLogPrefixes.Monorepo,
           remoteCheckLog = Some(r =>
             ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] ...")
           )

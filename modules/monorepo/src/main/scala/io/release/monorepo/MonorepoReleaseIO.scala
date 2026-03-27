@@ -43,6 +43,9 @@ trait MonorepoReleaseIO {
   val releaseIOMonorepoEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
     _releaseIOMonorepoEnableSnapshotDependenciesCheck
 
+  /** When false, omits the `run-clean` phase from the compiled hook process. */
+  val releaseIOMonorepoEnableRunClean: SettingKey[Boolean] = _releaseIOMonorepoEnableRunClean
+
   /** When false, omits the `run-tests` phase from the compiled hook process. */
   val releaseIOMonorepoEnableRunTests: SettingKey[Boolean] =
     _releaseIOMonorepoEnableRunTests
@@ -280,6 +283,7 @@ trait MonorepoReleaseIO {
     releaseIOMonorepoSkipTests                       := false,
     releaseIOMonorepoSkipPublish                     := false,
     releaseIOMonorepoEnableSnapshotDependenciesCheck := true,
+    releaseIOMonorepoEnableRunClean                  := true,
     releaseIOMonorepoEnableRunTests                  := true,
     releaseIOMonorepoEnableTagging                   := true,
     releaseIOMonorepoEnablePublish                   := true,
@@ -359,6 +363,12 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Boolean](
       "releaseIOMonorepoEnableSnapshotDependenciesCheck",
       "Whether to include snapshot dependency validation in the compiled hook process"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoEnableRunClean: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOMonorepoEnableRunClean",
+      "Whether to include the clean phase in the compiled hook process"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoEnableRunTests: SettingKey[Boolean] =

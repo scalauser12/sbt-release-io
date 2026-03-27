@@ -130,7 +130,7 @@ object TestSupport {
     tempDirResource(prefix).evalMap { repo =>
       initRepoWithBrokenRemote(repo).map { vcs =>
         ReleaseContext(
-          state = dummyState(repo),
+          state = gitRootState(repo),
           vcs = Some(vcs),
           interactive = interactive
         )

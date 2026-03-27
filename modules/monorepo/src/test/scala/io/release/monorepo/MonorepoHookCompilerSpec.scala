@@ -30,6 +30,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
   ) {
     val settings: Seq[Setting[?]] = Seq(
       MonorepoReleaseIO.releaseIOMonorepoEnableSnapshotDependenciesCheck := false,
+      MonorepoReleaseIO.releaseIOMonorepoEnableRunClean                  := false,
       MonorepoReleaseIO.releaseIOMonorepoEnableRunTests                  := false,
       MonorepoReleaseIO.releaseIOMonorepoEnablePublish                   := false,
       MonorepoReleaseIO.releaseIOMonorepoEnablePush                      := false,
@@ -69,7 +70,6 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
             "before-version-resolution:before-version",
             "inquire-versions",
             "after-version-resolution:after-version",
-            "run-clean",
             "set-release-version",
             "commit-release-versions",
             "before-tag:before-tag",
@@ -168,6 +168,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
   private def hookSettingsDefaults: Seq[Setting[?]] =
     Seq(
       MonorepoReleaseIO.releaseIOMonorepoEnableSnapshotDependenciesCheck := true,
+      MonorepoReleaseIO.releaseIOMonorepoEnableRunClean                  := true,
       MonorepoReleaseIO.releaseIOMonorepoEnableRunTests                  := true,
       MonorepoReleaseIO.releaseIOMonorepoEnableTagging                   := true,
       MonorepoReleaseIO.releaseIOMonorepoEnablePublish                   := true,

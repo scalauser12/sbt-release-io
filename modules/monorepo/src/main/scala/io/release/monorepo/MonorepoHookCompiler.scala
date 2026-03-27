@@ -21,6 +21,7 @@ private[monorepo] object MonorepoHookCompiler {
     MonorepoHookConfiguration(
       enableSnapshotDependenciesCheck =
         extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableSnapshotDependenciesCheck),
+      enableRunClean = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableRunClean),
       enableRunTests = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableRunTests),
       enableTagging = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableTagging),
       enablePublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnablePublish),
@@ -82,7 +83,7 @@ private[monorepo] object MonorepoHookCompiler {
         AlwaysProject,
         MonorepoReleaseSteps.inquireVersions.enableCrossBuild
       ) ++
-      Seq(MonorepoReleaseSteps.runClean) ++
+      optionalStep(hooks.enableRunClean)(MonorepoReleaseSteps.runClean) ++
       optionalStep(hooks.enableRunTests)(MonorepoReleaseSteps.runTests) ++
       compileProjectHooks(
         "before-release-version-write",

@@ -205,6 +205,7 @@ private[release] object VcsSteps {
           ctx.interactive,
           ctx.useDefaults,
           vcs,
+          ReleaseLogPrefixes.Core,
           remoteCheckLog =
             Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))
         )(

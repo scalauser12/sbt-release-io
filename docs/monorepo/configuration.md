@@ -16,6 +16,7 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 | `releaseIOMonorepoSkipTests` | `Boolean` | `false` | Skip tests |
 | `releaseIOMonorepoSkipPublish` | `Boolean` | `false` | Skip publish |
 | `releaseIOMonorepoInteractive` | `Boolean` | `false` | When true, `inquire-versions` prompts interactively. `with-defaults` overrides to false; CLI version overrides bypass prompts for those projects. |
+| `releaseIOVcsRemoteCheckTimeout` | `FiniteDuration` | `60.seconds` | Timeout for the shared remote reachability check (`git fetch`) before push |
 | `releaseIOMonorepoPublishArtifactsChecks` | `Boolean` | `true` | When false, skips the check that each project has `publishTo` configured or `publish / skip := true` |
 | `releaseIOMonorepoCommitMessage` | `String => String` | `summary => s"Setting release versions: $summary"` | Commit message formatter for release version commits. Receives the version summary (e.g. "core 1.0.0, api 2.0.0"). |
 | `releaseIOMonorepoNextCommitMessage` | `String => String` | `summary => s"Setting next versions: $summary"` | Commit message formatter for next version commits. Receives the version summary. |
@@ -23,13 +24,16 @@ single root-project file. Always configure the `releaseIOMonorepo*` variant when
 ## Hook / policy settings
 
 These settings participate in the compiled hook-based flow when the raw process is left
-alone. If `releaseIOMonorepoProcess`, `monorepoReleaseProcess`, or
-`monorepoReleaseCheckProcess` are customized, the plugin stays in legacy raw-process
-mode and ignores these keys.
+alone. If `releaseIOMonorepoProcess` or `monorepoReleaseCheckProcess` are customized,
+both `run` and `check` stay in legacy raw-process mode and ignore these keys. If only
+`monorepoReleaseProcess` is customized, the real release run switches to legacy mode
+while `check` stays on the plain configured process until
+`monorepoReleaseCheckProcess` is also customized.
 
 | Setting | Type | Default | Description |
 |-----|------|---------|-------------|
 | `releaseIOMonorepoEnableSnapshotDependenciesCheck` | `Boolean` | `true` | Include `check-snapshot-dependencies` in the compiled process |
+| `releaseIOMonorepoEnableRunClean` | `Boolean` | `true` | Include `run-clean` in the compiled process |
 | `releaseIOMonorepoEnableRunTests` | `Boolean` | `true` | Include `run-tests` in the compiled process |
 | `releaseIOMonorepoEnableTagging` | `Boolean` | `true` | Include `tag-releases` in the compiled process |
 | `releaseIOMonorepoEnablePublish` | `Boolean` | `true` | Include `publish-artifacts` in the compiled process |
@@ -93,5 +97,6 @@ releaseIOMonorepoSharedPaths := Seq.empty
 ```scala
 releaseIOMonorepoSkipTests  := true
 releaseIOMonorepoCrossBuild := true
+releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(30).seconds
 releaseIOMonorepoTagName    := ((name, ver) => s"release/$name/$ver")
 ```

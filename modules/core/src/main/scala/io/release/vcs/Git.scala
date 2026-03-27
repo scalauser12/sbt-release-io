@@ -55,19 +55,27 @@ class Git(val baseDir: File) extends Vcs {
       else IO.pure(result)
     }
 
+  private def runSingleLine(args: String*)(context: => String): IO[String] =
+    runLines(args*)(context).flatMap {
+      case head +: _ => IO.pure(head)
+      case _         =>
+        IO.raiseError(
+          new IllegalStateException(s"$context succeeded but returned no output")
+        )
+    }
+
   // ── Queries ──────────────────────────────────────────────────────────
 
   def currentHash: IO[String] =
-    runLines("rev-parse", "HEAD")("git rev-parse HEAD").map(_.head)
+    runSingleLine("rev-parse", "HEAD")("git rev-parse HEAD")
 
   def currentBranch: IO[String] =
-    runLines("symbolic-ref", "HEAD")("git symbolic-ref HEAD")
-      .map(_.head.stripPrefix("refs/heads/"))
+    runSingleLine("symbolic-ref", "HEAD")("git symbolic-ref HEAD")
+      .map(_.stripPrefix("refs/heads/"))
 
   def trackingRemote: IO[String] =
     currentBranch.flatMap { branch =>
-      runLines("config", s"branch.$branch.remote")(s"git config branch.$branch.remote")
-        .map(_.head)
+      runSingleLine("config", s"branch.$branch.remote")(s"git config branch.$branch.remote")
     }
 
   def hasUpstream: IO[Boolean] =
@@ -83,8 +91,8 @@ class Git(val baseDir: File) extends Vcs {
       info            <- branchInfo
       (branch, remote) = info
       upstream        <-
-        runLines("config", s"branch.$branch.merge")(s"git config branch.$branch.merge")
-          .map(_.head.stripPrefix("refs/heads/"))
+        runSingleLine("config", s"branch.$branch.merge")(s"git config branch.$branch.merge")
+          .map(_.stripPrefix("refs/heads/"))
       behind          <-
         runLines("rev-list", s"$branch..$remote/$upstream")("git rev-list")
           .map(_.nonEmpty)
@@ -151,9 +159,9 @@ class Git(val baseDir: File) extends Vcs {
     for {
       info            <- branchInfo
       (branch, remote) = info
-      upstream        <- runLines("config", s"branch.$branch.merge")(
+      upstream        <- runSingleLine("config", s"branch.$branch.merge")(
                            s"git config branch.$branch.merge"
-                         ).map(_.head.stripPrefix("refs/heads/"))
+                         ).map(_.stripPrefix("refs/heads/"))
       _               <- runCmd("push", "--follow-tags", remote, s"$branch:$upstream")(
                            "git push --follow-tags"
                          )
