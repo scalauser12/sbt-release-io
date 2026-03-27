@@ -1,0 +1,37 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt core/version.sbt api/version.sbt core/src/main/scala/Core.scala api/src/main/scala/Api.scala project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Explicit selection should preflight a single project without mutating the repo
+> expectExplicitCheckSuccess
+
+# Unknown override targets should point users at the new help flow
+> expectUnknownOverrideFailure
+
+# Existing tags should fail deterministically in use-defaults mode
+$ exec git tag core/v0.1.0
+> expectTagCollisionFailure
+$ exec git tag -d core/v0.1.0
+
+# Missing version files should still leave the repository unchanged
+$ exec rm core/version.sbt
+> expectMissingVersionFileFailure
+$ exec git checkout -- core/version.sbt
+
+# With all projects already tagged and no new commits, change detection should report nothing to release
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
+$ exec sh -c 'printf "version := \"0.2.0-SNAPSHOT\"\n" > core/version.sbt'
+$ exec sh -c 'printf "version := \"0.2.0-SNAPSHOT\"\n" > api/version.sbt'
+$ exec git add core/version.sbt api/version.sbt
+$ exec git commit -m "Prepare next snapshot"
+> expectZeroChangedProjectsFailure
+
+# A new commit in core should make detect-changes mode succeed for core only
+$ exec sh -c 'printf "object Core { val value = 2 }\n" > core/src/main/scala/Core.scala'
+$ exec git add core/src/main/scala/Core.scala
+$ exec git commit -m "Update core"
+> expectDetectChangesCheckSuccess

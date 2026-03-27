@@ -1,0 +1,9 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Help should be discoverable, stable, and non-mutating
+> expectReleaseHelp
