@@ -2,10 +2,13 @@
 
 This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
-The top `v0.7.0` section is the current unreleased draft. This file is the
-canonical release history for the repository.
+This file is the canonical release history for the repository.
 
-## Unreleased / Upcoming: v0.7.0
+## v0.7.0
+
+Published: 2026-03-28  
+GitHub release:
+[v0.7.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.7.0)
 
 `v0.7.0` is the first release that makes hook-based customization the preferred
 extension model for both `sbt-release-io` and `sbt-release-io-monorepo`, while
