@@ -277,26 +277,60 @@ Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project
 
 ### Customizing the release process (legacy raw-process mode)
 
-Filter, insert, or replace steps in `build.sbt`. Use `insertStepBefore` / `insertStepAfter` to add steps at specific positions by name (matching the `step.name` strings in the [default steps table](concepts.md#default-release-steps)).
+Use `releaseIOMonorepoProcess` only when you need to change the setup order or replace the
+pipeline entirely. Disabling built-in phases and adding behavior around supported lifecycle
+points should use `releaseIOMonorepoEnable*` and `releaseIOMonorepo*Hooks`, not
+`releaseIOMonorepoProcess`.
+
+Use `insertStepBefore` / `insertStepAfter` to add steps at specific positions by name (matching
+the `step.name` strings in the [default steps table](concepts.md#default-release-steps)). For
+example, rewrite the project set in `State` before `resolve-release-order` runs:
 
 ```scala
-// Filter out steps
-releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(_.name == "push-changes")
+import sbt.*
+import sbt.Keys.*
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoStepIO
 
-// Add a step at a specific position
-releaseIOMonorepoProcess := insertStepBefore(releaseIOMonorepoProcess.value, "tag-releases")(
-  Seq(checkBranch)
-)
+val selectOnlyCore = MonorepoStepIO
+  .global("select-only-core")
+  .execute(ctx =>
+    IO.blocking {
+      val extracted    = Project.extract(ctx.state)
+      val root         = extracted.get(baseDirectory)
+      val updatedState = extracted.appendWithSession(
+        Seq(releaseIOMonorepoProjects := Seq(ProjectRef(root, "core"))),
+        ctx.state
+      )
+      ctx.withState(updatedState)
+    }
+  )
 
-// Replace the entire process (step vals from MonorepoReleaseSteps)
+releaseIOMonorepoProcess :=
+  insertStepBefore(releaseIOMonorepoProcess.value, "resolve-release-order")(
+    Seq(selectOnlyCore)
+  )
+```
+
+Or replace the entire process when you want a genuinely different pipeline:
+
+```scala
 import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.*
 
 releaseIOMonorepoProcess := Seq(
-  initializeVcs, checkCleanWorkingDir, resolveReleaseOrder,
-  detectOrSelectProjects, checkSnapshotDependencies, inquireVersions,
+  initializeVcs,
+  checkCleanWorkingDir,
+  resolveReleaseOrder,
+  detectOrSelectProjects,
+  checkSnapshotDependencies,
+  inquireVersions,
   // runClean, runTests, and publishArtifacts omitted — tag-only release
-  setReleaseVersions, commitReleaseVersions, tagReleases,
-  setNextVersions, commitNextVersions, pushChanges
+  setReleaseVersions,
+  commitReleaseVersions,
+  tagReleases,
+  setNextVersions,
+  commitNextVersions,
+  pushChanges
 )
 ```
 
@@ -412,28 +446,6 @@ In `build.sbt`, use `insertStepAfter` / `insertStepBefore` to position plain ste
 - Built-in **validate** functions after `detect-or-select-projects` run against the selected snapshot.
 - Custom `PerProject` steps keep using `ctx.projects` until you replace that snapshot yourself.
 
-Example: rewrite the project set via `State` so built-in steps see the change:
-
-```scala
-// Inside a MonorepoReleasePluginLike[Unit] plugin (use Unit when no shared resource is needed)
-private val selectOnlyCore = MonorepoStepIO
-  .global("select-only-core")
-  .execute(ctx =>
-    IO.blocking {
-      val extracted    = Project.extract(ctx.state)
-      val root         = extracted.get(baseDirectory)
-      val updatedState = extracted.appendWithSession(
-        Seq(releaseIOMonorepoProjects := Seq(ProjectRef(root, "core"))),
-        ctx.state
-      )
-      ctx.withState(updatedState)
-    }
-  )
-
-override protected def monorepoReleaseProcess(state: State): Seq[Unit => MonorepoStepIO] =
-  insertBefore(Project.extract(state).get(releaseIOMonorepoProcess), "resolve-release-order")(
-    Seq((_: Unit) => selectOnlyCore)
-  )
-```
-
-To filter the project set for later custom `PerProject` steps without touching `State`, use `ctx.withProjects(...)` instead.
+The `selectOnlyCore` example above shows how rewriting `State` before `resolve-release-order`
+changes what the built-in steps see. To filter the project set for later custom `PerProject`
+steps without touching `State`, use `ctx.withProjects(...)` instead.

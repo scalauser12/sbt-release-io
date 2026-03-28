@@ -21,50 +21,42 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 
-Example: compressing an already-built release archive and uploading it to an internal artifact
-service after `publishArtifacts`:
+Example: if you want the standard `publish-artifacts` phase to run first and then upload an
+already-built release archive to an internal artifact service, prefer an `afterPublish` hook:
 
 ```scala
 import _root_.cats.effect.IO
 import fs2.compression.Compression
 import fs2.io.file.{Files, Path}
-import _root_.io.release.ReleaseStepIO
+import _root_.io.release.{ReleaseContext, ReleaseHookIO}
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.{Method, Request, Uri}
 
-val uploadArchive: ReleaseStepIO = ReleaseStepIO.step("upload-archive")
-  .execute(ctx =>
-    ctx.releaseVersion match {
-      case Some(version) =>
-        val archivePath = Path(s"target/myproject-$version.tar")
-        val uploadUri   =
-          Uri.unsafeFromString(
-            s"https://artifacts.example.com/releases/myproject-$version.tar.gz"
-          )
-        val body        = Files[IO].readAll(archivePath).through(Compression[IO].gzip())
-        val request     = Request[IO](Method.PUT, uploadUri).withBodyStream(body)
+def uploadArchive(ctx: ReleaseContext): IO[Unit] =
+  ctx.releaseVersion match {
+    case Some(version) =>
+      val archivePath = Path(s"target/myproject-$version.tar")
+      val uploadUri   =
+        Uri.unsafeFromString(
+          s"https://artifacts.example.com/releases/myproject-$version.tar.gz"
+        )
+      val body        = Files[IO].readAll(archivePath).through(Compression[IO].gzip())
+      val request     = Request[IO](Method.PUT, uploadUri).withBodyStream(body)
 
-        EmberClientBuilder.default[IO].build.use(client =>
-          client.expectOr[Unit](request)(response =>
-            response.as[String].map(errorBody =>
-              new RuntimeException(s"Artifact upload failed (${response.status}): $errorBody")
-            )
+      EmberClientBuilder.default[IO].build.use(client =>
+        client.expectOr[Unit](request)(response =>
+          response.as[String].map(errorBody =>
+            new RuntimeException(s"Artifact upload failed (${response.status}): $errorBody")
           )
-        ).as(ctx)
+        )
+      )
 
-      case None =>
-        IO.raiseError(new RuntimeException("releaseVersion is not set"))
-    }
-  )
+    case None =>
+      IO.raiseError(new RuntimeException("releaseVersion is not set"))
+  }
+
+releaseIOAfterPublishHooks += ReleaseHookIO.action("upload-archive")(uploadArchive)
 ```
 
-If the standard publish phase should still run first, prefer an `afterPublish` hook instead of
-rewriting the step list:
-
-```scala
-import _root_.io.release.ReleaseHookIO
-
-releaseIOAfterPublishHooks += ReleaseHookIO.io("upload-archive")(ctx =>
-  uploadArchive.execute(ctx)
-)
-```
+Use `ReleaseStepIO` instead when you are intentionally customizing the raw process or building
+reusable custom steps outside the hook lifecycle.
