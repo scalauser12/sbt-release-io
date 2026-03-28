@@ -9,6 +9,15 @@ $ exec git commit -m "Initial commit"
 $ absent resource-acquired
 $ absent step-used-resource
 $ absent resource-released
+$ absent check-hook-ran
+
+# Check mode should use the resource-free check hook instead of acquiring the main resource
+> releaseCustom check with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+$ absent resource-acquired
+$ absent step-used-resource
+$ absent resource-released
+$ exists check-hook-ran
+$ delete check-hook-ran
 
 # Run release
 > releaseCustom with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT

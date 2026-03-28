@@ -1,11 +1,24 @@
 package io.release
 
-import cats.effect.{IO, Ref}
-import io.release.TestAssertions.{assertFailure, assertIllegalStateMessage}
+import cats.effect.IO
+import cats.effect.Ref
+import io.release.TestAssertions.assertFailure
+import io.release.TestAssertions.assertIllegalStateMessage
+import io.release.internal.ReleaseLogPrefixes
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
+import sbt.Project
+import sbt.Setting
+import sbt.State
+import sbt.internal.util.AttributeMap
+import sbt.internal.util.ConsoleOut
+import sbt.internal.util.GlobalLogging
+import sbt.internal.util.MainAppender
 
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.PrintStream
+import scala.concurrent.duration.*
 
 class VcsOpsSpec extends CatsEffectSuite {
   private val fixturePrefix = "vcs-ops-spec"
@@ -229,24 +242,79 @@ class VcsOpsSpec extends CatsEffectSuite {
 
   test("validatePushRemote - succeed when the tracking remote is reachable") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val state = VcsOpsSpec.bufferedState(dir).state
       VcsOps
         .validatePushRemote(
-          TestSupport.dummyState(dir),
+          state,
           interactive = false,
           useDefaults = false,
-          new StubVcs(dir, checkRemote0 = IO.pure(0))
+          new StubVcs(dir, checkRemote0 = IO.pure(0)),
+          ReleaseLogPrefixes.Core
         )
+    }
+  }
+
+  test("releaseIOVcsRemoteCheckTimeout - default fallback is 60 seconds") {
+    IO(assertEquals(VcsOps.DefaultRemoteCheckTimeout, 60.seconds))
+  }
+
+  test("validatePushRemote - use the configured remote-check timeout") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val logged = VcsOpsSpec.bufferedState(
+        dir,
+        Seq(ReleaseIO.releaseIOVcsRemoteCheckTimeout := 5.millis)
+      )
+
+      assertIllegalStateMessage(
+        VcsOps
+          .validatePushRemote(
+            logged.state,
+            interactive = false,
+            useDefaults = false,
+            new StubVcs(dir, checkRemote0 = IO.never),
+            ReleaseLogPrefixes.Monorepo
+          )
+          .timeout(1.second),
+        "Aborting the release due to remote check failure."
+      ) *> IO.blocking {
+        val log = logged.consoleBuffer.toString("UTF-8")
+        assert(log.contains(s"${ReleaseLogPrefixes.Monorepo} Remote check timed out after"))
+      }
+    }
+  }
+
+  test("validatePushRemote - surface timeout lookup failures instead of falling back") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
+        assertFailure[RuntimeException, Unit](
+          VcsOps.validatePushRemote(
+            TestSupport.dummyState(dir),
+            interactive = false,
+            useDefaults = false,
+            new StubVcs(dir, recordedCalls0 = Some(calls)),
+            ReleaseLogPrefixes.Core
+          )
+        )(err => assert(err.getMessage.contains("Session not initialized"))) *>
+          calls.get.map { seen =>
+            assert(!seen.exists {
+              case StubVcsCall.CheckRemote(_) => true
+              case _                          => false
+            })
+          }
+      }
     }
   }
 
   test("validatePushRemote - abort in non-interactive mode when the remote check fails") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val state = VcsOpsSpec.bufferedState(dir).state
       assertIllegalStateMessage(
         VcsOps.validatePushRemote(
-          TestSupport.dummyState(dir),
+          state,
           interactive = false,
           useDefaults = false,
-          new StubVcs(dir, checkRemote0 = IO.pure(1))
+          new StubVcs(dir, checkRemote0 = IO.pure(1)),
+          ReleaseLogPrefixes.Core
         ),
         "Aborting the release due to remote check failure."
       )
@@ -298,12 +366,13 @@ class VcsOpsSpec extends CatsEffectSuite {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
         vcs         = new StubVcs(dir)
-        state       = TestSupport.dummyState(dir)
+        state       = VcsOpsSpec.bufferedState(dir).state
         _          <- VcsOps.interactivePushAfterRemote(
                         state,
                         interactive = false,
                         useDefaults = false,
                         vcs,
+                        ReleaseLogPrefixes.Core,
                         remoteCheckLog = None
                       )(
                         doPush = pushed.set(true),
@@ -320,7 +389,7 @@ class VcsOpsSpec extends CatsEffectSuite {
 
   test("interactivePushAfterRemote - interactive with useDefaults runs doPush") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
-      val state = TestSupport.dummyState(dir)
+      val state = VcsOpsSpec.bufferedState(dir).state
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
@@ -330,6 +399,7 @@ class VcsOpsSpec extends CatsEffectSuite {
                         interactive = true,
                         useDefaults = true,
                         vcs,
+                        ReleaseLogPrefixes.Core,
                         remoteCheckLog = None
                       )(
                         doPush = pushed.set(true),
@@ -397,6 +467,50 @@ private final class StubVcs(
 
   override def pushChanges: IO[Unit] =
     record(StubVcsCall.PushChanges) *> pushChanges0
+}
+
+private object VcsOpsSpec {
+  final case class BufferedState(
+      state: State,
+      consoleBuffer: ByteArrayOutputStream
+  )
+
+  def bufferedState(
+      dir: File,
+      rootSettings: Seq[Setting[?]] = Nil
+  ): BufferedState = {
+    val logFile       = new File(dir, "sbt-test.log")
+    val consoleBuffer = new ByteArrayOutputStream()
+    val consoleOut    = ConsoleOut.printStreamOut(new PrintStream(consoleBuffer))
+    val globalLogging =
+      GlobalLogging.initial(
+        MainAppender.globalDefault(consoleOut),
+        logFile,
+        consoleOut
+      )
+    val baseState     = State(
+      configuration = TestSupport.dummyAppConfiguration(dir),
+      definedCommands = Nil,
+      exitHooks = Set.empty,
+      onFailure = None,
+      remainingCommands = Nil,
+      history = State.newHistory,
+      attributes = AttributeMap.empty,
+      globalLogging = globalLogging,
+      currentCommand = None,
+      next = State.Continue
+    )
+
+    BufferedState(
+      state = sbt.TestBuildState(
+        baseState = baseState,
+        baseDir = dir,
+        projects = Seq(Project("root", dir).settings(rootSettings*)),
+        currentProjectId = Some("root")
+      ),
+      consoleBuffer = consoleBuffer
+    )
+  }
 }
 
 private sealed trait StubVcsCall

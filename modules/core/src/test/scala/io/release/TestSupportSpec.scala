@@ -4,7 +4,8 @@ import cats.effect.IO
 import munit.CatsEffectSuite
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, LinkOption}
+import java.nio.file.Files
+import java.nio.file.LinkOption
 
 class TestSupportSpec extends CatsEffectSuite {
 

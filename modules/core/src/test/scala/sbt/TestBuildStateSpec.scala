@@ -1,11 +1,11 @@
 package sbt
 
-import cats.effect.{IO as CEIO, Resource}
+import _root_.io.release.TestSupport
+import cats.effect.IO as CEIO
+import cats.effect.Resource
 import munit.CatsEffectSuite
 
-import _root_.io.release.TestSupport
-
-import java.io.{File as JFile}
+import java.io.File as JFile
 import java.nio.charset.StandardCharsets
 
 class TestBuildStateSpec extends CatsEffectSuite {

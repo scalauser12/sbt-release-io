@@ -2,6 +2,8 @@ package io.release.internal
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import cats.syntax.all.*
+import io.release.ReleaseCtx
 import io.release.steps.StepHelpers
 import sbt.State
 
@@ -12,12 +14,29 @@ import scala.util.control.NonFatal
   */
 private[release] object ReleaseCommandRunner {
 
-  /** `logPrefix` is typically [[io.release.internal.ReleaseLogPrefixes.Core]] or `.Monorepo`. */
-  def runSync(initialState: State, logPrefix: String)(program: IO[State]): State =
+  /** `logPrefix` is typically [[io.release.internal.ReleaseLogPrefixes.Core]] or `.Monorepo`.
+    * `failureState` is the state returned and logged if `program` throws before it can produce a
+    * normal `State` value.
+    */
+  def runSync(failureState: State, logPrefix: String)(program: IO[State]): State =
     try program.unsafeRunSync()
     catch {
       case NonFatal(e) =>
-        initialState.log.error(s"$logPrefix Release failed: ${StepHelpers.errorMessage(e)}")
-        initialState.fail
+        failureState.log.error(s"$logPrefix Release failed: ${StepHelpers.errorMessage(e)}")
+        failureState.fail
+    }
+
+  /** Log a sequence of lines with a shared prefix. Used by help and check output. */
+  def logLines(state: State, prefix: String, lines: Seq[String]): IO[Unit] =
+    lines.toList.traverse_(line => IO.blocking(state.log.info(s"$prefix $line")))
+
+  /** Map a finished release context to the appropriate sbt `State`. */
+  def handleReleaseResult[C <: ReleaseCtx[C]](ctx: C, prefix: String): IO[State] =
+    if (ctx.failed) {
+      val cause =
+        ctx.failureCause.map(e => StepHelpers.errorMessage(e)).getOrElse("unknown error")
+      IO.blocking(ctx.state.log.error(s"$prefix Release failed: $cause")).as(ctx.state.fail)
+    } else {
+      IO.blocking(ctx.state.log.info(s"$prefix Release completed successfully!")).as(ctx.state)
     }
 }

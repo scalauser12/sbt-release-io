@@ -1,9 +1,14 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
-import sbt.{ClasspathDependency, LocalProject, Project, ProjectRef, classpathDependency}
+import sbt.ClasspathDependency
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.classpathDependency
 
 import java.io.File
 
@@ -81,27 +86,6 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
           assertEquals(result.selectionMode, SelectionMode.DetectChanges)
           assertEquals(result.projects.map(_.name), Seq("api", "consumer"))
         }
-    }
-  }
-
-  test("resolve - force all projects in global-version mode when a global override is provided") {
-    resolverFixtureResource(
-      prefix = "monorepo-selection-global-override",
-      rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion := true
-      )
-    ).use { fixture =>
-      val plan = MonorepoSpecSupport.releasePlan(
-        selectionMode = SelectionMode.DetectChanges,
-        globalReleaseVersion = Some("2.0.0"),
-        globalNextVersion = Some("2.1.0-SNAPSHOT")
-      )
-
-      MonorepoSelectionResolver.resolve(fixture.context(Seq.empty), plan).map { result =>
-        assertEquals(result.selectionMode, SelectionMode.DetectChanges)
-        assertEquals(result.projects.map(_.name), Seq("core", "api", "consumer"))
-        assert(result.projects.forall(_.versions.contains("2.0.0" -> "2.1.0-SNAPSHOT")))
-      }
     }
   }
 

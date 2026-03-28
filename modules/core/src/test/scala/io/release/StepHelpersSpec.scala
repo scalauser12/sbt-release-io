@@ -1,11 +1,13 @@
 package io.release
 
 import cats.effect.IO
-import io.release.TestAssertions.{assertFailure, assertIllegalStateMessage}
+import io.release.TestAssertions.assertFailure
+import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.steps.StepHelpers
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.{AttributeKey, ModuleID}
+import sbt.AttributeKey
+import sbt.ModuleID
 
 import scala.sys.process.Process
 
@@ -152,7 +154,14 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.parseVersionInput - raise IllegalArgumentException for invalid versions") {
     assertFailure[IllegalArgumentException, String](
       StepHelpers.parseVersionInput("not-a-version", default = "ignored")
-    )(err => assertEquals(err.getMessage, "Invalid version format: 'not-a-version'"))
+    ) { err =>
+      assertEquals(
+        err.getMessage,
+        "Invalid version format: 'not-a-version'. " +
+          "Use values like '1.2.3' or '1.2.4-SNAPSHOT'. " +
+          "See the command help for examples."
+      )
+    }
   }
 
   test(

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/sbt-release-io-sbt2.XXXXXX")"
+
+cleanup() {
+  rm -rf "$tmp_dir"
+}
+
+trap cleanup EXIT
+
+rsync -a \
+  --exclude='.git/' \
+  --exclude='.idea/' \
+  --exclude='.metals/' \
+  --exclude='.bloop/' \
+  --exclude='.bsp/' \
+  --exclude='.vscode/' \
+  --exclude='.agents/' \
+  --exclude='.codex/' \
+  --exclude='.cursor/' \
+  --exclude='.mcp.json' \
+  --exclude='target/' \
+  --exclude='metals.sbt' \
+  "$repo_root/" "$tmp_dir/"
+
+export GIT_CONFIG_GLOBAL="$tmp_dir/.gitconfig"
+git config --global init.defaultBranch main >/dev/null 2>&1 || true
+
+cd "$tmp_dir"
+
+exec env \
+  SBT_OPTS="${SBT_OPTS:-} -Dsbt.global.base=$tmp_dir/.sbt-global" \
+  sbt -Dsbt.version=2.0.0-RC9 "$@"

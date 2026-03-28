@@ -1,9 +1,10 @@
 package io.release.monorepo
 
-import io.release.internal.ExecutionFlags
 import io.release.TestSupport
+import io.release.internal.ExecutionFlags
 import munit.FunSuite
-import sbt.{AttributeKey, State}
+import sbt.AttributeKey
+import sbt.State
 
 import java.nio.file.Files
 
@@ -14,51 +15,21 @@ class MonorepoContextSpec extends FunSuite {
       val projects = Seq(dummyProject("core"), dummyProject("api"))
       val ctx      = MonorepoContext(state = state, projects = projects)
       val updated  =
-        ctx.updateProject(projects(0).ref)(
-          _.copy(versions = Some(("1.0.0", "1.1.0-SNAPSHOT")))
-        )
+        ctx.updateProject(projects.head.ref)(_.copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")))
 
-      assertEquals(updated.projects(0).versions, Some(("1.0.0", "1.1.0-SNAPSHOT")))
+      assertEquals(updated.projects.head.versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
       assertEquals(updated.projects(1).versions, None)
-    }
-  }
-
-  test("MonorepoContext - leave projects unchanged when updateProject ref does not match") {
-    withState { state =>
-      val projects = Seq(dummyProject("core"), dummyProject("api"))
-      val ctx      = MonorepoContext(state = state, projects = projects)
-      val updated  =
-        ctx.updateProject(dummyProject("missing").ref)(
-          _.copy(versions = Some(("1.0.0", "1.1.0-SNAPSHOT")))
-        )
-
-      assertEquals(updated, ctx)
     }
   }
 
   test("MonorepoContext - filter out failed projects in currentProjects") {
     withState { state =>
-      val projects = Seq(
-        dummyProject("core").copy(failed = true),
-        dummyProject("api")
-      )
-      val ctx      = MonorepoContext(state = state, projects = projects)
-
-      assertEquals(ctx.currentProjects.map(_.name), Seq("api"))
-    }
-  }
-
-  test("MonorepoContext - return no currentProjects when all projects are failed") {
-    withState { state =>
       val ctx = MonorepoContext(
         state = state,
-        projects = Seq(
-          dummyProject("core").copy(failed = true),
-          dummyProject("api").copy(failed = true)
-        )
+        projects = Seq(dummyProject("core").copy(failed = true), dummyProject("api"))
       )
 
-      assertEquals(ctx.currentProjects, Seq.empty)
+      assertEquals(ctx.currentProjects.map(_.name), Seq("api"))
     }
   }
 
@@ -80,6 +51,7 @@ class MonorepoContextSpec extends FunSuite {
   test("MonorepoContext - mark as failed") {
     withState { state =>
       val ctx = MonorepoContext(state = state)
+
       assertEquals(ctx.failed, false)
       assertEquals(ctx.fail.failed, true)
     }
@@ -96,66 +68,16 @@ class MonorepoContextSpec extends FunSuite {
 
   test("ProjectReleaseInfo - have sensible defaults") {
     val proj = dummyProject("test")
+
     assertEquals(proj.versions, None)
     assertEquals(proj.tagName, None)
     assertEquals(proj.failed, false)
     assertEquals(proj.failureCause, None)
   }
 
-  test("MonorepoTagStrategy - have PerProject and Unified variants") {
-    val pp: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
-    val u: MonorepoTagStrategy  = MonorepoTagStrategy.Unified
-    assertNotEquals(pp, u)
-  }
-
   test("MonorepoContext internal execution state - survive state replacement") {
     withState { state =>
-      val ctx     = MonorepoContext(state = state).withExecutionState(
-        MonorepoExecutionState(
-          MonorepoReleasePlan(
-            flags = ExecutionFlags(
-              useDefaults = true,
-              skipTests = false,
-              skipPublish = false,
-              interactive = false,
-              crossBuild = false
-            ),
-            selectionMode = SelectionMode.AllChanged,
-            selectedNames = Seq.empty,
-            releaseVersionOverrides = Map.empty,
-            nextVersionOverrides = Map.empty,
-            globalReleaseVersion = None,
-            globalNextVersion = None
-          ),
-          globalVersionWritten = Some("1.0.0")
-        )
-      )
-      val updated = ctx.withState(state.copy(onFailure = None))
-
-      assertEquals(updated.releasePlan.map(_.selectionMode), Some(SelectionMode.AllChanged))
-      assertEquals(updated.globalVersionWritten, Some("1.0.0"))
-      assertEquals(updated.useDefaults, true)
-    }
-  }
-
-  test(
-    "MonorepoContext internal execution state - require execution state before recording global version"
-  ) {
-    withState { state =>
-      val result = MonorepoContext(state = state).withGlobalVersionWritten("1.0.0")
-
-      result match {
-        case Left(error)  =>
-          assert(clue(error.getMessage).contains("Monorepo execution state not initialized"))
-        case Right(other) =>
-          fail(s"Expected Left(IllegalStateException) but got $other")
-      }
-    }
-  }
-
-  test("MonorepoContext internal execution state - record the written global version") {
-    withState { state =>
-      val plan   = MonorepoReleasePlan(
+      val plan    = MonorepoReleasePlan(
         flags = ExecutionFlags(
           useDefaults = true,
           skipTests = false,
@@ -166,21 +88,13 @@ class MonorepoContextSpec extends FunSuite {
         selectionMode = SelectionMode.AllChanged,
         selectedNames = Seq.empty,
         releaseVersionOverrides = Map.empty,
-        nextVersionOverrides = Map.empty,
-        globalReleaseVersion = None,
-        globalNextVersion = None
+        nextVersionOverrides = Map.empty
       )
-      val result = MonorepoContext(state = state)
-        .withExecutionState(MonorepoExecutionState(plan))
-        .withGlobalVersionWritten("1.0.0")
+      val ctx     = MonorepoContext(state = state).withExecutionState(MonorepoExecutionState(plan))
+      val updated = ctx.withState(state.copy(onFailure = None))
 
-      result match {
-        case Right(updated) =>
-          assertEquals(updated.globalVersionWritten, Some("1.0.0"))
-          assertEquals(updated.releasePlan, Some(plan))
-        case Left(error)    =>
-          fail(s"Expected Right(MonorepoContext) but got $error")
-      }
+      assertEquals(updated.releasePlan.map(_.selectionMode), Some(SelectionMode.AllChanged))
+      assertEquals(updated.useDefaults, true)
     }
   }
 

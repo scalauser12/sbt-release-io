@@ -1,7 +1,7 @@
 package sbt
 
 import sbt.internal.*
-import sbt.nio.{Settings as NioSettings}
+import sbt.nio.Settings as NioSettings
 
 /** Test-only adapter over sbt loader internals. Expect to update it when bumping sbt.
   * Behavioral coverage lives in `sbt.TestBuildStateSpec`, and CI compiles/tests this on both
@@ -13,7 +13,7 @@ object TestBuildState {
       baseState: State,
       baseDir: File,
       projects: Seq[Project],
-      buildSettings: Seq[Setting[_]] = Nil,
+      buildSettings: Seq[Setting[?]] = Nil,
       currentProjectId: Option[String] = None
   ): State = {
     require(projects.nonEmpty, "Synthetic test states require at least one project.")
@@ -72,7 +72,7 @@ object TestBuildState {
       Load.finalTransforms(
         Load.buildConfigurations(loaded, Load.getRootProject(units), inject)
       )
-    implicit val showKey: sbt.util.Show[Def.ScopedKey[_]] =
+    implicit val showKey: sbt.util.Show[Def.ScopedKey[?]] =
       Project.showLoadingKey(loaded)
     val (compiledMap, data)                               =
       Def.makeWithCompiledMap(settings)(delegates, scopeLocal, showKey)

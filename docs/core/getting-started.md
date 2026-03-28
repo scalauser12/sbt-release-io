@@ -16,37 +16,61 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
 ```
 
 The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom version formats](configuration.md#custom-version-formats).
 
 ## Usage
 
-Run the release process:
+Start by inspecting the built-in command help:
 
 ```bash
-sbt releaseIO
+sbt "releaseIO help"
 ```
 
-With command-line options:
+Run a preflight to validate the release setup without side effects:
 
 ```bash
-# Use default answers for all prompts
-sbt "releaseIO with-defaults"
+sbt "releaseIO check with-defaults"
+```
 
+`check` resolves versions and tag names, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+
+Run the release (versions computed from `version.sbt`):
+
+```bash
+sbt "releaseIO with-defaults"
+```
+
+`with-defaults` strips `-SNAPSHOT` to produce the release version (e.g. `0.1.0-SNAPSHOT` → `0.1.0`) and bumps the last component for the next snapshot (→ `0.2.0-SNAPSHOT`). Override with `release-version` / `next-version`. If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
+
+Or specify versions explicitly:
+
+```bash
+sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+```
+
+Additional command-line options:
+
+```bash
 # Skip tests
-sbt "releaseIO skip-tests"
+sbt "releaseIO with-defaults skip-tests"
 
 # Enable cross-building
-sbt "releaseIO cross"
+sbt "releaseIO with-defaults cross"
 
-# Specify versions
-sbt "releaseIO release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+# Auto-answer the tag-exists prompt
+sbt "releaseIO with-defaults default-tag-exists-answer o"
 
-# Combine options
-sbt "releaseIO with-defaults skip-tests release-version 1.0.0"
+# Preflight with explicit versions
+sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
+
+For the full list of CLI flags and subcommands, see [Settings reference — CLI](reference.md#cli).
+
+For a concrete hook-first rehearsal that keeps the built-in process intact while disabling remote
+phases and adding lifecycle hooks, see [Hook-first walkthrough](hook-first-walkthrough.md).
 
 ## Default release steps
 
@@ -67,3 +91,18 @@ The default release process includes:
 13. **push-changes** - Push commits and tags to remote
 
 These names are the stable built-in insertion points for `insertAfter` and `insertBefore`.
+
+## What to read next
+
+- Safe local rehearsal with hooks and policy keys:
+  [Hook-first walkthrough](hook-first-walkthrough.md)
+- Starter `build.sbt` patterns and common configuration recipes:
+  [Configuration](configuration.md)
+- Full settings and CLI catalog:
+  [Settings reference](reference.md)
+- Hooks, custom steps, custom plugins, and migration from raw-process edits:
+  [Customization](customization.md)
+- Validate/execute semantics and execution model details:
+  [Concepts](concepts.md)
+- Rollback and recovery after a failed release:
+  [Operations](operations.md)

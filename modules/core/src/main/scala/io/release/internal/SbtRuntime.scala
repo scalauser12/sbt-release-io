@@ -4,7 +4,10 @@ import cats.effect.IO
 import io.release.CrossBuildSupport
 import sbt.{internal as _, *}
 
-/** Thin wrappers over sbt state/extraction APIs used by built-in release code. */
+/** Thin wrappers over sbt state/extraction APIs used by built-in release code.
+  * All methods in this object perform blocking sbt operations;
+  * callers must wrap calls in `IO.blocking`.
+  */
 private[release] object SbtRuntime {
 
   private val FailureCommand = SbtCompat.FailureCommand

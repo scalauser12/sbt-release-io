@@ -1,0 +1,16 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src/test/scala/FailingTest.scala
+$ exec git commit -m "Initial commit"
+
+# Disabled tests/publish/push should let the release succeed without publish hooks firing
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify skipped publish phases did not invoke lifecycle hooks
+> checkNoPublishHooks
+
+# Verify the release still completed and tagged
+> checkGitTag
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt

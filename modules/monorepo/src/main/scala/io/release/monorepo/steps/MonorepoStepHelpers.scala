@@ -1,8 +1,11 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
+import io.release.internal.ExecutionEngine
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import io.release.monorepo.*
+import io.release.steps.StepHelpers.errorMessage
 
 import scala.util.control.NonFatal
 
@@ -47,17 +50,19 @@ private[monorepo] object MonorepoStepHelpers {
           if (currentCtx.failed || latestProj.failed) IO.pure(currentCtx)
           else
             action(currentCtx, latestProj)
-              .map(detectProjectFailureCommand(_, latestProj))
-              .handleErrorWith { case NonFatal(err) =>
-                IO.blocking(
-                  currentCtx.state.log.error(
-                    s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
+              .flatMap(detectProjectFailureCommand(_, latestProj))
+              .handleErrorWith {
+                case NonFatal(err) =>
+                  IO.blocking(
+                    currentCtx.state.log.error(
+                      s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
+                    )
+                  ) *> IO.pure(
+                    currentCtx.updateProject(latestProj.ref)(
+                      _.copy(failed = true, failureCause = Some(err))
+                    )
                   )
-                ) *> IO.pure(
-                  currentCtx.updateProject(latestProj.ref)(
-                    _.copy(failed = true, failureCause = Some(err))
-                  )
-                )
+                case fatal         => IO.raiseError(fatal)
               }
         }
       }
@@ -79,7 +84,7 @@ private[monorepo] object MonorepoStepHelpers {
   private[monorepo] def detectProjectFailureCommand(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): MonorepoContext =
+  ): IO[MonorepoContext] =
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val failure = new IllegalStateException(
         s"${project.name}: sbt task reported failure via FailureCommand"
@@ -88,12 +93,10 @@ private[monorepo] object MonorepoStepHelpers {
       val result  = ExecutionEngine
         .armOnFailure(ctx.withState(cleaned))
         .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
-      result.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
-      result
-    } else ctx
-
-  private def errorMessage(err: Throwable): String =
-    Option(err.getMessage).getOrElse(err.getClass.getSimpleName)
+      IO.blocking(
+        result.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
+      ).as(result)
+    } else IO.pure(ctx)
 
   // ── Logging ───────────────────────────────────────────────────────────
 

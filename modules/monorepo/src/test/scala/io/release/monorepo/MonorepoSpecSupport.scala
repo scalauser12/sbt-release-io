@@ -1,11 +1,17 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.TestSupport
-import io.release.internal.{ExecutionFlags, SbtRuntime}
+import io.release.internal.ExecutionFlags
+import io.release.internal.SbtRuntime
 import io.release.vcs.Vcs
 import munit.Assertions.fail
-import sbt.{Def, LocalProject, Project, ProjectRef, State}
+import sbt.Def
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.State
 
 import java.io.File
 
@@ -56,8 +62,7 @@ object MonorepoSpecSupport {
         vcs: Option[Vcs] = None,
         interactive: Boolean = false,
         skipTests: Boolean = false,
-        skipPublish: Boolean = false,
-        tagStrategy: MonorepoTagStrategy = MonorepoTagStrategy.PerProject
+        skipPublish: Boolean = false
     ): MonorepoContext =
       MonorepoContext(
         state = state,
@@ -65,8 +70,7 @@ object MonorepoSpecSupport {
         projects = selectedProjectIds.map(id => projectInfo(id, versions = versionsById.get(id))),
         skipTests = skipTests,
         skipPublish = skipPublish,
-        interactive = interactive,
-        tagStrategy = tagStrategy
+        interactive = interactive
       )
   }
 
@@ -84,8 +88,7 @@ object MonorepoSpecSupport {
       selectedNames: Seq[String] = Nil,
       releaseVersionOverrides: Map[String, String] = Map.empty,
       nextVersionOverrides: Map[String, String] = Map.empty,
-      globalReleaseVersion: Option[String] = None,
-      globalNextVersion: Option[String] = None
+      commandName: String = "releaseIOMonorepo"
   ): MonorepoReleasePlan =
     MonorepoReleasePlan(
       flags = flags,
@@ -93,21 +96,11 @@ object MonorepoSpecSupport {
       selectedNames = selectedNames,
       releaseVersionOverrides = releaseVersionOverrides,
       nextVersionOverrides = nextVersionOverrides,
-      globalReleaseVersion = globalReleaseVersion,
-      globalNextVersion = globalNextVersion
+      commandName = commandName
     )
 
-  def withPlan(
-      ctx: MonorepoContext,
-      plan: MonorepoReleasePlan,
-      globalVersionWritten: Option[String] = None
-  ): MonorepoContext =
-    ctx.withExecutionState(
-      MonorepoExecutionState(
-        plan = plan,
-        globalVersionWritten = globalVersionWritten
-      )
-    )
+  def withPlan(ctx: MonorepoContext, plan: MonorepoReleasePlan): MonorepoContext =
+    ctx.withExecutionState(MonorepoExecutionState(plan))
 
   def loadedFixtureResource(
       prefix: String
@@ -161,4 +154,13 @@ object MonorepoSpecSupport {
         ) ++ settings
       )*
     )
+
+  def requireProjectFailures(
+      cause: Option[Throwable]
+  ): MonorepoProjectFailures =
+    cause match {
+      case Some(aggregate: MonorepoProjectFailures) => aggregate
+      case other                                    =>
+        fail(s"Expected MonorepoProjectFailures but got $other")
+    }
 }

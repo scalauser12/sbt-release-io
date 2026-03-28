@@ -5,8 +5,7 @@ The plugin detects which projects have changed since their last release tag usin
 ## How it works
 
 1. For each project, find the most recent matching tag:
-   - **PerProject** strategy: pattern `<projectName>/v*` (e.g., `core/v*`)
-   - **Unified** strategy: pattern `v*`
+   - Pattern `<projectName>/v*` (e.g., `core/v*`)
 2. If no tag exists, the project is treated as changed (first release).
 3. Run `git diff --name-only <tag>..HEAD -- <projectDir>`.
 4. Filter out version files and any files in `releaseIOMonorepoDetectChangesExcludes`.

@@ -1,10 +1,18 @@
 package io.release.steps
 
-import cats.effect.{IO, Resource}
-import io.release.{ReleaseContext, TestAssertions, TestSupport}
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.ReleaseContext
+import io.release.TestAssertions
+import io.release.TestSupport
+import io.release.internal.CoreExecutionState
+import io.release.internal.CoreReleasePlan
+import io.release.internal.ExecutionFlags
 import munit.CatsEffectSuite
 
-import java.io.{ByteArrayInputStream, File, InputStream}
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
 
@@ -122,6 +130,134 @@ class VcsStepsSpec extends CatsEffectSuite {
             ),
             "Tag [v1.0.0] already exists. Aborting release!"
           )
+        }
+    }
+  }
+
+  test("preflightTag - fail deterministically in non-interactive mode when the tag exists") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
+          VcsSteps.preflightTag(
+            ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+          )
+        ) { err =>
+          assert(err.getMessage.contains("Current settings would abort in non-interactive mode"))
+          assert(err.getMessage.contains("releaseIO help"))
+        }
+    }
+  }
+
+  test("preflightTag - report keep behavior when the configured default answer is keep") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+      val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+        .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        .withExecutionState(
+          CoreExecutionState(
+            CoreReleasePlan(
+              flags = ExecutionFlags(
+                useDefaults = false,
+                skipTests = false,
+                skipPublish = false,
+                interactive = false,
+                crossBuild = false
+              ),
+              releaseVersionOverride = None,
+              nextVersionOverride = None,
+              tagDefault = Some("k")
+            )
+          )
+        )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        VcsSteps.preflightTag(ctx).map { outcome =>
+          assertEquals(outcome.tagName, "v1.0.0")
+          assertEquals(outcome.status, "exists; release will keep the existing tag")
+        }
+    }
+  }
+
+  test("preflightTag - report interactive prompt behavior when the tag exists") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        VcsSteps
+          .preflightTag(
+            ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+          )
+          .map { outcome =>
+            assertEquals(outcome.tagName, "v1.0.0")
+            assertEquals(
+              outcome.status,
+              "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+            )
+          }
+    }
+  }
+
+  test("preflightTag - use the configured command name in tag conflict guidance") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+      val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+        .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        .withExecutionState(
+          CoreExecutionState(
+            CoreReleasePlan(
+              flags = ExecutionFlags(
+                useDefaults = false,
+                skipTests = false,
+                skipPublish = false,
+                interactive = false,
+                crossBuild = false
+              ),
+              releaseVersionOverride = None,
+              nextVersionOverride = None,
+              tagDefault = None,
+              commandName = "releaseCustom"
+            )
+          )
+        )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
+          VcsSteps.preflightTag(ctx)
+        ) { err =>
+          assert(err.getMessage.contains("releaseCustom help"))
+          assert(!err.getMessage.contains("releaseIO help"))
         }
     }
   }

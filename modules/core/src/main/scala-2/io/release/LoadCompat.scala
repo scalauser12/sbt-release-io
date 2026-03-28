@@ -1,7 +1,8 @@
 package io.release
 
 import sbt.Def.ScopedKey
-import sbt.Keys.{resolvedScoped, streams}
+import sbt.Keys.resolvedScoped
+import sbt.Keys.streams
 import sbt.internal.*
 import sbt.{internal as _, *}
 

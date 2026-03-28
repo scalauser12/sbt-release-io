@@ -9,6 +9,15 @@ $ exec git commit -m "Initial commit"
 $ absent resource-acquired
 $ absent step-used-resource
 $ absent resource-released
+$ absent check-hook-ran
+
+# Check mode should use the resource-free check hook instead of acquiring the main resource
+> customRelease check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+$ absent resource-acquired
+$ absent step-used-resource
+$ absent resource-released
+$ exists check-hook-ran
+$ delete check-hook-ran
 
 # Run custom command (not releaseIOMonorepo — uses CustomReleasePlugin's "customRelease")
 > customRelease core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT

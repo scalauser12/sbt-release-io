@@ -10,16 +10,15 @@
 | 4 | `detect-or-select-projects` | Global | Run change detection or use explicit CLI selection |
 | 5 | `check-snapshot-dependencies` | PerProject | Validation-only step that fails if any SNAPSHOT dependencies are found (cross-build) |
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
-| 7 | `validate-versions` | Global | Fail if global-version mode is active but versions are inconsistent |
-| 8 | `run-clean` | PerProject | Clean selected project outputs; sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide |
-| 9 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
-| 10 | `set-release-version` | PerProject | Write release version to `version.sbt` |
-| 11 | `commit-release-versions` | Global | Single commit staging all version files |
-| 12 | `tag-releases` | Global | Create per-project or unified tags |
-| 13 | `publish-artifacts` | PerProject | Publish the selected project's artifacts (cross-build enabled, skippable) |
-| 14 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
-| 15 | `commit-next-versions` | Global | Single commit staging all version files |
-| 16 | `push-changes` | Global | Push branch + tags to tracking remote |
+| 7 | `run-clean` | PerProject | Clean selected project outputs; sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide |
+| 8 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
+| 9 | `set-release-version` | PerProject | Write release version to `version.sbt` |
+| 10 | `commit-release-versions` | Global | Single commit staging all version files |
+| 11 | `tag-releases` | Global | Create per-project release tags |
+| 12 | `publish-artifacts` | PerProject | Publish the selected project's artifacts (cross-build enabled, skippable) |
+| 13 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
+| 14 | `commit-next-versions` | Global | Single commit staging all version files |
+| 15 | `push-changes` | Global | Push branch + tags to tracking remote |
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order. Only selected projects participate — child projects that weren't selected or discovered by change detection are skipped.
 

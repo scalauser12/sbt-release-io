@@ -1,0 +1,43 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Check mode should validate both global and per-project hooks without acquiring the resource
+> customResourceHooks check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+$ absent resource-acquired
+$ absent resource-released
+$ exists plain-global-validate.marker
+$ exists resource-global-validate.marker
+$ exists core/plain-after-tag-validate.marker
+$ exists core/resource-after-tag-validate.marker
+$ absent plain-global-execute.marker
+$ absent resource-global-execute.marker
+$ absent core/plain-after-tag-execute.marker
+$ absent core/resource-after-tag-execute.marker
+> checkGlobalValidateOrder
+> checkProjectValidateOrder
+
+# Reset generated markers and logs before the real release run
+$ exec rm -f global-validate-order.log project-validate-order.log global-execute-order.log project-execute-order.log plain-global-validate.marker resource-global-validate.marker plain-global-execute.marker resource-global-execute.marker resource-acquired resource-released core/plain-after-tag-validate.marker core/resource-after-tag-validate.marker core/plain-after-tag-execute.marker core/resource-after-tag-execute.marker
+
+# Run the real release through the custom-plugin hook path
+> customResourceHooks core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+$ exists resource-acquired
+$ exists resource-released
+$ exists plain-global-validate.marker
+$ exists resource-global-validate.marker
+$ exists plain-global-execute.marker
+$ exists resource-global-execute.marker
+$ exists core/plain-after-tag-validate.marker
+$ exists core/resource-after-tag-validate.marker
+$ exists core/plain-after-tag-execute.marker
+$ exists core/resource-after-tag-execute.marker
+> checkGlobalValidateOrder
+> checkProjectValidateOrder
+> checkGlobalExecuteOrder
+> checkProjectExecuteOrder
+> checkTag
+> checkCoreVersion

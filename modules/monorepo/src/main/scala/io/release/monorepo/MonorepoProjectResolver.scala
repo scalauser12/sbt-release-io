@@ -14,20 +14,27 @@ private[monorepo] object MonorepoProjectResolver {
       val projectRefs = extracted.get(MonorepoReleaseIO.releaseIOMonorepoProjects)
 
       projectRefs.map { ref =>
-        val baseDir = (ref / baseDirectory).get(extracted.structure.data).getOrElse {
-          throw new IllegalStateException(
-            s"Cannot resolve baseDirectory for project '${ref.project}'. " +
+        val baseDir = (ref / baseDirectory).get(extracted.structure.data)
+        (ref, baseDir, MonorepoVersionFiles.resolve(runtime, ref))
+      }
+    }.flatMap { entries =>
+      val missing = entries.collect { case (ref, None, _) => ref.project }
+      if (missing.nonEmpty)
+        IO.raiseError(
+          new IllegalStateException(
+            s"Cannot resolve baseDirectory for project(s): ${missing.mkString(", ")}. " +
               "Ensure the project is correctly defined in the build."
           )
-        }
-
-        ProjectReleaseInfo(
-          ref = ref,
-          name = ref.project,
-          baseDir = baseDir,
-          versionFile = MonorepoVersionFiles.resolve(runtime, ref)
         )
-      }
+      else
+        IO.pure(entries.collect { case (ref, Some(base), vf) =>
+          ProjectReleaseInfo(
+            ref = ref,
+            name = ref.project,
+            baseDir = base,
+            versionFile = vf
+          )
+        })
     }
 
   def resolveOrdered(state: State): IO[Seq[ProjectReleaseInfo]] =
@@ -60,16 +67,11 @@ private[monorepo] object MonorepoProjectResolver {
 
   def applyVersionOverrides(
       projects: Seq[ProjectReleaseInfo],
-      plan: MonorepoReleasePlan,
-      useGlobalVersion: Boolean
+      plan: MonorepoReleasePlan
   ): Seq[ProjectReleaseInfo] =
     projects.map { project =>
-      val releaseOverride =
-        if (useGlobalVersion) plan.globalReleaseVersion
-        else plan.releaseVersionOverrides.get(project.name)
-      val nextOverride    =
-        if (useGlobalVersion) plan.globalNextVersion
-        else plan.nextVersionOverrides.get(project.name)
+      val releaseOverride = plan.releaseVersionOverrides.get(project.name)
+      val nextOverride    = plan.nextVersionOverrides.get(project.name)
 
       if (releaseOverride.isEmpty && nextOverride.isEmpty) project
       else {

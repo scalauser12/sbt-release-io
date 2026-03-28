@@ -1,11 +1,9 @@
 package io.release.monorepo
 
-import cats.effect.IO
-import io.release.TestAssertions.assertFailure
 import io.release.internal.ExecutionFlags
-import munit.CatsEffectSuite
+import munit.FunSuite
 
-class MonorepoReleasePlanSpec extends CatsEffectSuite {
+class MonorepoReleasePlanSpec extends FunSuite {
 
   test("validateOverrideInputs - reject invalid release-version pair format") {
     val result = MonorepoReleasePlan.validateOverrideInputs(
@@ -41,57 +39,16 @@ class MonorepoReleasePlanSpec extends CatsEffectSuite {
     assertLeftContains(result, "Duplicate per-project next-version overrides")
   }
 
-  test("validateOverrideInputs - reject multiple global release-version overrides") {
-    val result = MonorepoReleasePlan.validateOverrideInputs(
-      baseInputs.copy(globalReleaseVersions = Seq("1.0.0", "1.1.0"))
-    )
-
-    assertLeftContains(
-      result,
-      "Multiple global release-version overrides provided. Only one is allowed"
-    )
-  }
-
-  test("validateOverrideInputs - reject multiple global next-version overrides") {
-    val result = MonorepoReleasePlan.validateOverrideInputs(
-      baseInputs.copy(globalNextVersions = Seq("1.1.0-SNAPSHOT", "1.2.0-SNAPSHOT"))
-    )
-
-    assertLeftContains(
-      result,
-      "Multiple global next-version overrides provided. Only one is allowed"
-    )
-  }
-
-  test("validateOverrideInputs - reject mixing global and per-project overrides") {
-    val result = MonorepoReleasePlan.validateOverrideInputs(
-      baseInputs.copy(
-        globalReleaseVersions = Seq("1.0.0"),
-        nextVersionPairs = Seq("core" -> "1.1.0-SNAPSHOT")
-      )
-    )
-
-    assertLeftContains(
-      result,
-      "Cannot mix global version overrides with per-project version overrides"
-    )
-  }
-
   test("validateOverrideInputs - reject explicit project selection combined with all-changed") {
     val result = MonorepoReleasePlan.validateOverrideInputs(
       baseInputs.copy(allChanged = true, selectedNames = Seq("core"))
     )
 
-    assertLeftContains(
-      result,
-      "Cannot combine 'all-changed' with explicit project selection"
-    )
+    assertLeftContains(result, "Cannot combine 'all-changed' with explicit project selection")
   }
 
   test("validateOverrideInputs - derive the explicit selection mode from validated inputs") {
-    val plan = validatedPlan(
-      baseInputs.copy(selectedNames = Seq("core"))
-    )
+    val plan = validatedPlan(baseInputs.copy(selectedNames = Seq("core")))
 
     assertEquals(plan.selectionMode, SelectionMode.ExplicitSelection)
   }
@@ -108,32 +65,22 @@ class MonorepoReleasePlanSpec extends CatsEffectSuite {
     assertEquals(plan.selectionMode, SelectionMode.DetectChanges)
   }
 
-  test("validateOverrideInputs - allow global overrides at startup") {
+  test("validateOverrideInputs - preserve validated per-project overrides") {
     val plan = validatedPlan(
-      baseInputs.copy(globalReleaseVersions = Seq("1.0.0"))
+      baseInputs.copy(
+        releaseVersionPairs = Seq("core" -> "1.0.0"),
+        nextVersionPairs = Seq("core" -> "1.1.0-SNAPSHOT")
+      )
     )
 
-    assertEquals(plan.globalReleaseVersion, Some("1.0.0"))
+    assertEquals(plan.releaseVersionOverrides, Map("core" -> "1.0.0"))
+    assertEquals(plan.nextVersionOverrides, Map("core" -> "1.1.0-SNAPSHOT"))
   }
 
-  test("enforceGlobalVersionAllOrNothing - fail when subset in global version mode") {
-    assertFailure[IllegalStateException, Seq[ProjectReleaseInfo]](
-      MonorepoReleasePlan.enforceGlobalVersionAllOrNothing(
-        allProjects = allProjects,
-        changedProjects = allProjects.take(1),
-        useGlobalVersion = true
-      )
-    )(err => assert(err.getMessage.contains("Global version mode is active")))
-  }
+  test("validateOverrideInputs - preserve the configured command name") {
+    val plan = validatedPlan(baseInputs.copy(commandName = "releaseMonorepoCustom"))
 
-  test("enforceGlobalVersionAllOrNothing - allow unchanged selection outside global mode") {
-    MonorepoReleasePlan
-      .enforceGlobalVersionAllOrNothing(
-        allProjects = allProjects,
-        changedProjects = allProjects.take(1),
-        useGlobalVersion = false
-      )
-      .map(result => assertEquals(result, allProjects.take(1)))
+    assertEquals(plan.commandName, "releaseMonorepoCustom")
   }
 
   private val baseInputs = MonorepoReleasePlan.Inputs(
@@ -148,13 +95,7 @@ class MonorepoReleasePlanSpec extends CatsEffectSuite {
     selectedNames = Nil,
     releaseVersionPairs = Nil,
     nextVersionPairs = Nil,
-    globalReleaseVersions = Nil,
-    globalNextVersions = Nil
-  )
-
-  private val allProjects = Seq(
-    project("core"),
-    project("api")
+    commandName = "releaseIOMonorepo"
   )
 
   private def validatedPlan(inputs: MonorepoReleasePlan.Inputs): MonorepoReleasePlan =
@@ -166,13 +107,9 @@ class MonorepoReleasePlanSpec extends CatsEffectSuite {
   private def assertLeftContains(
       result: Either[String, MonorepoReleasePlan],
       expected: String
-  ): Unit = {
+  ): Unit =
     result match {
       case Left(message) => assert(message.contains(expected))
       case Right(plan)   => fail(s"Expected validation failure containing '$expected' but got $plan")
     }
-  }
-
-  private def project(name: String): ProjectReleaseInfo =
-    MonorepoTestSupport.dummyProject(name)
 }

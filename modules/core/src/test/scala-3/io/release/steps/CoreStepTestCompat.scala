@@ -2,6 +2,7 @@ package io.release.steps
 
 import io.release.{ReleaseIO, ReleaseIOCompat}
 import sjsonnew.BasicJsonProtocol
+import sbt.Keys.*
 import sbt.{Def, Setting, State, *}
 import sbt.protocol.testing.codec.TestResultFormats
 
@@ -39,3 +40,9 @@ private[steps] object CoreStepTestCompat:
         )
       }
       .value
+
+  def throwingPublishToSetting: Setting[?] =
+    publishTo := { throw new RuntimeException("publishTo eval error"); None }
+
+  def throwingPublishSkipSetting: Setting[?] =
+    publish / skip := { throw new RuntimeException("publish/skip eval error"); false }

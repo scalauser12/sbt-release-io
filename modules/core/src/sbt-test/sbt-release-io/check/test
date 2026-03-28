@@ -1,0 +1,29 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt tracked.txt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Successful preflight should summarize the release plan without writing anything
+> expectCheckSuccess
+
+# Invalid CLI versions should fail without changing commits, tags, or version files
+> expectCheckInvalidVersionFailure
+
+# Dirty tracked files should fail the non-mutating preflight
+$ exec sh -c 'printf "dirty\n" > tracked.txt'
+> expectCheckDirtyWorkingTreeFailure
+$ exec git checkout -- tracked.txt
+
+# Missing publishTo should fail while leaving the repository unchanged
+> expectCheckMissingPublishToFailure
+
+# Existing tags should fail deterministically in use-defaults mode
+$ exec git tag v0.1.0
+> expectCheckTagCollisionFailure
+$ exec git tag -d v0.1.0
+
+# Missing version files should still produce the new onboarding guidance
+$ exec rm version.sbt
+> expectCheckMissingVersionFileFailure

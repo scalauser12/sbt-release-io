@@ -1,8 +1,8 @@
 package io.release
 
-import io.release.internal.{CoreExecutionState, ExecutionFlags}
+import io.release.internal.CoreExecutionState
+import io.release.internal.ExecutionFlags
 import io.release.vcs.Vcs
-import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}
 
 /** Immutable context threaded through each release step during validation and execution.

@@ -1,20 +1,36 @@
 package io.release.steps
 
 import cats.effect.IO
-import cats.syntax.flatMap.*
-import io.release.ReleaseIO.{releaseIOTagComment, releaseIOTagName, releaseIOVcsSign}
-import io.release.internal.{ReleaseLogPrefixes, SbtRuntime, TagPlan}
+import io.release.ReleaseContext
+import io.release.ReleaseIO.releaseIOTagComment
+import io.release.ReleaseIO.releaseIOTagName
+import io.release.ReleaseIO.releaseIOReadVersion
+import io.release.ReleaseIO.releaseIOVcsSign
+import io.release.ReleaseIO.releaseIOUseGlobalVersion
+import io.release.ReleaseIO.releaseIOVersionFile
+import io.release.ReleaseIO.releaseIOVersionFileContents
+import io.release.ReleaseStepIO
+import io.release.VcsOps
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
+import io.release.internal.TagPlan
+import io.release.internal.VersionPlan
 import io.release.steps.StepHelpers.*
+import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
-import io.release.{ReleaseContext, ReleaseStepIO, VcsOps}
 import sbt.Keys.*
 import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
 
-import java.io.EOFException
-
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
+
+  private val DefaultCommandName = "releaseIO"
+
+  private[release] final case class PreflightTagOutcome(
+      tagName: String,
+      status: String
+  )
 
   val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
     VcsOps.detectAndInit(ctx)
@@ -57,7 +73,27 @@ private[release] object VcsSteps {
     }
   }
 
+  private def versionSessionSettings(state: State): Seq[Setting[?]] = {
+    val extracted        = SbtRuntime.extracted(state)
+    val maybeVersionPlan = for {
+      versionFile         <- extracted.getOpt(releaseIOVersionFile)
+      readVersion         <- extracted.getOpt(releaseIOReadVersion)
+      versionFileContents <- extracted.getOpt(releaseIOVersionFileContents)
+      useGlobalVersion    <- extracted.getOpt(releaseIOUseGlobalVersion)
+    } yield VersionPlan(
+      versionFile = versionFile,
+      readVersion = readVersion,
+      versionFileContents = versionFileContents,
+      releaseVersionOverride = None,
+      nextVersionOverride = None,
+      useGlobalVersion = useGlobalVersion
+    )
+
+    maybeVersionPlan.fold(Seq.empty[Setting[?]])(VersionSteps.sessionSettings)
+  }
+
   private def resolveTagPlan(ctx: ReleaseContext): TagPlan = {
+    val versionSettings  = versionSessionSettings(ctx.state)
     val (s1, tagName)    = SbtRuntime.runTask(ctx.state, releaseIOTagName)
     val (s2, tagComment) = SbtRuntime.runTask(s1, releaseIOTagComment)
     TagPlan(
@@ -65,15 +101,47 @@ private[release] object VcsSteps {
       tagName = tagName,
       tagComment = tagComment,
       sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
-      defaultAnswer = ctx.executionState.flatMap(_.plan.tagDefault)
+      defaultAnswer = ctx.executionState.flatMap(_.plan.tagDefault),
+      versionSessionSettings = versionSettings
     )
   }
 
-  private def applyTagToState(ctx: ReleaseContext, tagName: String): ReleaseContext =
+  private[release] def preflightTag(ctx: ReleaseContext): IO[PreflightTagOutcome] =
+    preparePreflightContext(ctx).flatMap { preflightCtx =>
+      IO.blocking(resolveTagPlan(preflightCtx)).flatMap { params =>
+        val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
+        detectedVcs.flatMap(vcs => resolveTagPreflight(vcs, params, preflightCtx))
+      }
+    }
+
+  private def preparePreflightContext(ctx: ReleaseContext): IO[ReleaseContext] =
+    ctx.releaseVersion match {
+      case None             => IO.pure(ctx)
+      case Some(releaseVer) =>
+        IO.blocking {
+          val versionSettings =
+            // Tag-name resolution only needs the release version visible through sbt settings.
+            // Set both scopes so preflight works even in minimal/custom test states that do not
+            // define the full version-file configuration.
+            Seq(ThisBuild / version := releaseVer, version := releaseVer)
+          val preflightState  = SbtRuntime.appendWithSession(
+            ctx.state,
+            versionSettings
+          )
+
+          ctx.withState(preflightState)
+        }
+    }
+
+  private def applyTagToState(
+      ctx: ReleaseContext,
+      params: TagPlan,
+      tagName: String
+  ): ReleaseContext =
     ctx.withState(
       SbtRuntime.appendWithSession(
         ctx.state,
-        VersionSteps.sessionSettings(ctx.state) ++
+        params.versionSessionSettings ++
           Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
       )
     )
@@ -82,73 +150,44 @@ private[release] object VcsSteps {
       vcs: Vcs,
       params: TagPlan,
       ctx: ReleaseContext
-  ): IO[ReleaseContext] = {
-    val useDefaults = ctx.useDefaults
+  ): IO[ReleaseContext] =
+    TagConflictResolver
+      .resolveConflict(
+        vcs,
+        TagConflictResolver.TagParams(
+          tagName = params.tagName,
+          tagComment = params.tagComment,
+          sign = params.sign,
+          interactive = ctx.interactive,
+          useDefaults = ctx.useDefaults,
+          defaultAnswer = params.defaultAnswer,
+          logPrefix = ReleaseLogPrefixes.Core,
+          label = ""
+        ),
+        ctx.state
+      )
+      .map(result => applyTagToState(ctx, params, result.tagName))
 
-    params.tailRecM[IO, ReleaseContext] { currentParams =>
-      val TagPlan(_, tagName, tagComment, sign, defaultAnswer) = currentParams
-      for {
-        exists <- vcs.existsTag(tagName)
-        result <- if (!exists)
-                    (vcs.tag(tagName, tagComment, sign) *>
-                      IO.blocking(applyTagToState(ctx, tagName))).map(Right(_))
-                  else {
-                    val effectiveAnswer: IO[String] = defaultAnswer match {
-                      case Some(ans)                => IO.pure(ans)
-                      case None if useDefaults      =>
-                        IO.blocking(
-                          ctx.state.log.warn(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Aborting (use-defaults mode)."
-                          )
-                        ).as("a")
-                      case None if !ctx.interactive =>
-                        IO.raiseError(
-                          new IllegalStateException(
-                            s"Tag [$tagName] already exists. Aborting release in non-interactive mode."
-                          )
-                        )
-                      case None                     =>
-                        IO.print(
-                          s"Tag [$tagName] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-                        ) *> IO.readLine
-                          .map(raw => Option(raw).getOrElse(""))
-                          .handleError { case _: EOFException =>
-                            ""
-                          }
-                    }
+  private def resolveTagPreflight(
+      vcs: Vcs,
+      params: TagPlan,
+      ctx: ReleaseContext
+  ): IO[PreflightTagOutcome] = {
+    val commandName = ctx.executionState.map(_.plan.commandName).getOrElse(DefaultCommandName)
 
-                    effectiveAnswer.flatMap {
-                      case "a" | "A" | "" =>
-                        IO.raiseError(
-                          new IllegalStateException(
-                            s"Tag [$tagName] already exists. Aborting release!"
-                          )
-                        )
-                      case "k" | "K"      =>
-                        IO.blocking {
-                          ctx.state.log.warn(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Keeping existing tag."
-                          )
-                          Right(applyTagToState(ctx, tagName))
-                        }
-                      case "o" | "O"      =>
-                        IO.blocking(
-                          ctx.state.log.warn(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] already exists. Overwriting."
-                          )
-                        ) *>
-                          vcs.tag(tagName, tagComment, sign, force = true) *>
-                          IO.blocking(Right(applyTagToState(ctx, tagName)))
-                      case newTagName     =>
-                        IO.blocking(
-                          ctx.state.log.info(
-                            s"${ReleaseLogPrefixes.Core} Tag [$tagName] exists. Trying tag [$newTagName]."
-                          )
-                        ).as(Left(currentParams.copy(tagName = newTagName, defaultAnswer = None)))
-                    }
-                  }
-      } yield result
-    }
+    TagConflictResolver
+      .preflightConflict(
+        vcs,
+        TagConflictResolver.PreflightParams(
+          tagName = params.tagName,
+          interactive = ctx.interactive,
+          useDefaults = ctx.useDefaults,
+          defaultAnswer = params.defaultAnswer,
+          commandName = commandName,
+          label = ""
+        )
+      )
+      .map(o => PreflightTagOutcome(o.tagName, o.status))
   }
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
@@ -166,6 +205,7 @@ private[release] object VcsSteps {
           ctx.interactive,
           ctx.useDefaults,
           vcs,
+          ReleaseLogPrefixes.Core,
           remoteCheckLog =
             Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))
         )(

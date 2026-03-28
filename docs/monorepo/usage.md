@@ -3,8 +3,29 @@
 ## Command
 
 ```
-sbt releaseIOMonorepo [project...] [flags] [version overrides]
+sbt "releaseIOMonorepo [help | check] [selectors] [flags] [version overrides]"
 ```
+
+## Subcommands
+
+| Subcommand | Effect |
+|------------|--------|
+| _(none)_ | Run the full release |
+| `help` | Print usage, flags, examples, and docs links |
+| `check` | Run a preflight with no release side effects: resolve projects, versions, and tags, run step validations, and print a summary — without writing version files, creating commits or tags, publishing, or pushing |
+
+`help` and `check` are reserved only as the first token after `releaseIOMonorepo`. If a subproject collides with a subcommand or CLI keyword, select it with `project <id>`.
+
+## Selection
+
+Use selectors to choose projects:
+
+```
+<project>
+project <project>
+```
+
+Bare project ids work for ordinary names. Use `project <id>` to force project selection when an id collides with a CLI keyword or subcommand such as `help`, `check`, `cross`, `with-defaults`, `all-changed`, `release-version`, or `next-version`.
 
 ## Flags
 
@@ -24,15 +45,6 @@ release-version <project>=<version>
 next-version <project>=<version>
 ```
 
-In global version mode, use global overrides (without `project=`) to apply the same version to all projects:
-
-```
-release-version <version>
-next-version <version>
-```
-
-Per-project overrides are not allowed in global version mode. Global overrides are not allowed in non-global mode.
-
 ## Examples
 
 ```bash
@@ -42,11 +54,11 @@ sbt "releaseIOMonorepo with-defaults"
 # Release only core and api
 sbt "releaseIOMonorepo core api with-defaults"
 
+# Select a keyword-like project id explicitly
+sbt "releaseIOMonorepo project cross with-defaults"
+
 # Pin versions per project
 sbt "releaseIOMonorepo with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
-
-# Pin versions globally (global version mode only)
-sbt "releaseIOMonorepo with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 
 # Release all projects regardless of changes
 sbt "releaseIOMonorepo all-changed with-defaults"

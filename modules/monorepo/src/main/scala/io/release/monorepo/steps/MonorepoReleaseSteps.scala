@@ -14,7 +14,6 @@ object MonorepoReleaseSteps {
   val inquireVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.inquireVersions
   val setReleaseVersions: MonorepoStepIO.PerProject = MonorepoVersionSteps.setReleaseVersions
   val setNextVersions: MonorepoStepIO.PerProject    = MonorepoVersionSteps.setNextVersions
-  val validateVersions: MonorepoStepIO.Global       = MonorepoVersionSteps.validateVersions
   val commitReleaseVersions: MonorepoStepIO.Global  =
     MonorepoVersionSteps.commitReleaseVersions
   val commitNextVersions: MonorepoStepIO.Global     = MonorepoVersionSteps.commitNextVersions
@@ -41,57 +40,28 @@ object MonorepoReleaseSteps {
     name = MonorepoComposer.SelectionBoundary,
     isSelectionBoundary = true,
     execute = ctx =>
-      IO.fromOption(ctx.releasePlan)(
-        new IllegalStateException("Monorepo release plan not initialized")
-      ).flatMap { plan =>
-        MonorepoSelectionResolver.resolve(ctx, plan).flatMap { result =>
-          val selectedInfos = result.projects
-          val message       = result.selectionMode match {
-            case SelectionMode.ExplicitSelection =>
-              s"Releasing explicitly selected projects: ${selectedInfos.map(_.name).mkString(", ")}"
-            case SelectionMode.AllChanged        =>
-              s"Releasing all projects: ${selectedInfos.map(_.name).mkString(", ")}"
-            case SelectionMode.DetectChanges     =>
-              s"Releasing projects: ${selectedInfos.map(_.name).mkString(", ")}"
-          }
-
-          if (selectedInfos.isEmpty) {
-            val errorMessage =
-              result.selectionMode match {
-                case SelectionMode.DetectChanges =>
-                  "No projects have changed since their last release tag. " +
-                    "Check the per-project log output above for last-known tags. " +
-                    "To release all projects regardless, re-run with the `all-changed` flag."
-                case _                           => "No projects configured. Nothing to release."
-              }
-            IO.raiseError(new IllegalStateException(errorMessage))
-          } else {
-            logInfo(ctx, message).as(
-              ctx.withProjects(selectedInfos).copy(tagStrategy = result.tagStrategy)
-            )
-          }
-        }
+      MonorepoPreparation.selectProjects(ctx).flatMap { selected =>
+        logInfo(
+          ctx,
+          MonorepoPreparation.selectionMessage(
+            selected.context.currentProjects,
+            selected.selectionMode
+          )
+        ).as(selected.context)
       }
   )
 
   val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "tag-releases",
-    execute = ctx =>
-      IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
-        settings.tagStrategy match {
-          case MonorepoTagStrategy.Unified    =>
-            MonorepoVcsSteps.tagReleasesUnified
-              .execute(ctx.copy(tagStrategy = settings.tagStrategy))
-          case MonorepoTagStrategy.PerProject =>
-            val pp = MonorepoVcsSteps.tagReleasesPerProject
-            runPerProject(
-              ctx.copy(tagStrategy = settings.tagStrategy),
-              (currentCtx, project) =>
-                logInfo(currentCtx, s"${pp.name} [${project.name}]") *>
-                  pp.execute(currentCtx, project)
-            )
-        }
-      }
+    execute = ctx => {
+      val step = MonorepoVcsSteps.tagReleasesPerProject
+      runPerProject(
+        ctx,
+        (currentCtx, project) =>
+          logInfo(currentCtx, s"${step.name} [${project.name}]") *>
+            step.execute(currentCtx, project)
+      )
+    }
   )
 
   val defaults: Seq[MonorepoStepIO] = Seq(
@@ -101,7 +71,6 @@ object MonorepoReleaseSteps {
     detectOrSelectProjects,
     checkSnapshotDependencies,
     inquireVersions,
-    validateVersions,
     runClean,
     runTests,
     setReleaseVersions,

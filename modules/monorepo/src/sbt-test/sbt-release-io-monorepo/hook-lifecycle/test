@@ -1,0 +1,12 @@
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+> checkHookMarkers
+> checkPublished
+> checkGitTag
+$ exec grep -q "0.2.0-SNAPSHOT" core/version.sbt

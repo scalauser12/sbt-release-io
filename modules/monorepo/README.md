@@ -2,18 +2,20 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
 
-A monorepo release plugin for sbt, extending [sbt-release-io](../../docs/core/README.md) with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and tagging strategies.
+A monorepo release plugin for sbt, extending [sbt-release-io](../../docs/core/README.md) with per-project version files, git-based change detection, topological ordering, per-project failure isolation, and per-project tags.
 
 ## Features
 
-Per-project steps, change detection, validate-then-execute phases, per-project or unified tags, optional global `version.sbt`, cross-build, and `MonorepoReleasePluginLike[T]` for shared resources.
+Per-project steps, hook-based lifecycle customization, change detection,
+validate-then-execute phases, per-project tags, cross-build, and
+`MonorepoReleasePluginLike[T]` for shared resources.
 
 ## Quick start
 
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.0")
 ```
 
 `build.sbt` (root):
@@ -24,17 +26,27 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-Each subproject needs `version.sbt` with `version := "0.1.0-SNAPSHOT"` (unless using global version mode — see docs).
+Each subproject needs `version.sbt` with `version := "0.1.0-SNAPSHOT"`.
+
+First command:
 
 ```bash
-sbt "releaseIOMonorepo with-defaults"
+sbt "releaseIOMonorepo check with-defaults"
 ```
 
-## Documentation
+Preferred customization keeps the built-in process intact and uses
+`releaseIOMonorepoEnable*` policies plus `releaseIOMonorepo*Hooks`. Raw
+`releaseIOMonorepoProcess` editing remains available as a legacy advanced path.
 
-Full guide: **[Documentation](../../docs/monorepo/README.md)** (usage, walkthrough, configuration, change detection, customization).
+## Read next
 
-Core plugin (shared settings): [docs/core/README.md](../../docs/core/README.md). Index: [docs/README.md](../../docs/README.md).
+- [Monorepo getting started](../../docs/monorepo/getting-started.md) for install, first `help` / `check` / `run`, and the main navigation path
+- [First release walkthrough](../../docs/monorepo/walkthrough.md) for an end-to-end setup from scratch
+- [Selective release walkthrough](../../docs/monorepo/selective-release-walkthrough.md) for hook-first change detection, downstream inclusion, and explicit selectors
+- [Monorepo configuration](../../docs/monorepo/configuration.md) for the grouped settings surface and [Monorepo usage](../../docs/monorepo/usage.md) for CLI syntax
+- [Monorepo customization](../../docs/monorepo/customization.md) for hooks, custom steps, custom plugins, and migration from raw-process edits
+- [Monorepo operations](../../docs/monorepo/operations.md) for rollback and recovery
+- [Docs index](../../docs/README.md) and [core plugin docs](../../docs/core/README.md) for shared concepts and settings
 
 Demo repos: [scala-monorepo-demo](https://github.com/scalauser12/scala-monorepo-demo), [files-monorepo-demo](https://github.com/scalauser12/files-monorepo-demo).
 

@@ -1,7 +1,9 @@
 package io.release.monorepo.steps
 
 import io.release.ReleaseIOCompat
-import sbt.{Setting, *}
+import sbt.*
+import sbt.Keys.*
+import sbt.Setting
 
 import java.io.File
 
@@ -26,11 +28,6 @@ private[monorepo] object MonorepoStepTestCompat {
       }
       .value
 
-  def successfulCleanTaskSetting(marker: File): Setting[?] =
-    Global / Keys.clean := {
-      sbt.IO.write(marker, "ran")
-    }
-
   def failureCommandCleanTaskSetting(marker: File): Setting[?] =
     Global / Keys.clean := Def
       .task {
@@ -43,4 +40,7 @@ private[monorepo] object MonorepoStepTestCompat {
         )
       }
       .value
+
+  def throwingPublishSkipSetting: Setting[?] =
+    publish / skip := { throw new RuntimeException("publish/skip eval error"); false }
 }

@@ -9,37 +9,49 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 
 ## Documentation
 
-User guides and reference: **[docs/README.md](docs/README.md)** (core and monorepo topics with cross-links).
+Start with the plugin-specific onboarding guides:
+
+- Single-project builds: [docs/core/getting-started.md](docs/core/getting-started.md)
+- Monorepos: [docs/monorepo/getting-started.md](docs/monorepo/getting-started.md)
+- Full docs index: [docs/README.md](docs/README.md)
 
 ## Modules
 
 | Module | Artifact | README | Description |
 |--------|----------|--------|-------------|
 | [core](modules/core/README.md) | `sbt-release-io` | [docs/core](docs/core/README.md) | IO-based release plugin for single-project builds. Independent codebase porting sbt-release onto cats-effect IO with `Resource` lifecycle, cross-build validation, and typed context threading. |
-| [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | [docs/monorepo](docs/monorepo/README.md) | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and tagging strategies. |
+| [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | [docs/monorepo](docs/monorepo/README.md) | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and per-project tags. |
 
 ## Quick Start
 
 ### Single project
 
-In `project/plugins.sbt`:
+Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
 ```
 
-No `enablePlugins` needed — the core plugin activates automatically.
+The plugin activates automatically. Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`.
+
+First command:
 
 ```bash
-sbt "releaseIO with-defaults"
+sbt "releaseIO check with-defaults"
 ```
+
+Read next:
+
+- [Core getting started](docs/core/getting-started.md)
+- [Core hook-first walkthrough](docs/core/hook-first-walkthrough.md)
+- [Core customization](docs/core/customization.md)
 
 ### Monorepo
 
-In `project/plugins.sbt`:
+Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.6.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.0")
 ```
 
 In `build.sbt`:
@@ -50,11 +62,29 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-Each subproject needs a `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
+By default, each subproject needs its own `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
+
+First command:
 
 ```bash
-sbt "releaseIOMonorepo with-defaults"
+sbt "releaseIOMonorepo check with-defaults"
 ```
+
+Read next:
+
+- [Monorepo getting started](docs/monorepo/getting-started.md)
+- [Selective release walkthrough](docs/monorepo/selective-release-walkthrough.md)
+- [Monorepo customization](docs/monorepo/customization.md)
+
+For routine customization, prefer the hook/policy settings (`releaseIOEnable*`,
+`releaseIO*Hooks`, `releaseIOMonorepoEnable*`, `releaseIOMonorepo*Hooks`) and leave the built-in
+process intact. Raw `releaseIOProcess` / `releaseIOMonorepoProcess` editing remains supported as a
+legacy advanced path.
+
+For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
+[docs/monorepo/recipes.md](docs/monorepo/recipes.md). For rollback and recovery, see
+[docs/core/operations.md](docs/core/operations.md) and
+[docs/monorepo/operations.md](docs/monorepo/operations.md).
 
 ## Build & Test
 
@@ -63,6 +93,9 @@ sbt compile              # compile both modules
 sbt test                 # run unit tests (MUnit)
 sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2 / Scala 3 (version defined as Sbt2Version in build.sbt)
 sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2 / Scala 3
+./bin/sbt2-clean test    # same sbt 2 test lane from a clean tracked snapshot (ignores local Metals/Bloop files)
+./bin/sbt2-clean core/scripted
+./bin/sbt2-clean monorepo/scripted
 sbt scripted             # run all scripted integration tests
 sbt core/test            # core unit tests only
 sbt monorepo/test        # monorepo unit tests only
@@ -71,6 +104,10 @@ sbt scalafmtSbt          # format .sbt and project/*.scala build files
 sbt scalafmtCheckAll     # verify Scala source formatting
 sbt scalafmtSbtCheck     # verify sbt/build file formatting
 ```
+
+Use `./bin/sbt2-clean ...` for local sbt 2 verification if your checkout has generated IDE files such
+as `project/metals.sbt` or `.bloop/`. CI runs on a clean checkout and can use plain
+`sbt -Dsbt.version=2.0.0-RC9 ...`.
 
 ## Compatibility
 

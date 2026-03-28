@@ -30,4 +30,15 @@ object CustomPlugin extends ReleasePluginIOLike[java.io.File] {
           }
       )
     )
+
+  override protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
+    Project.extract(state).get(releaseIOProcess) :+
+      ReleaseStepIO
+        .step("check-hook")
+        .withValidation(_ =>
+          IO.blocking {
+            sbt.IO.touch(new java.io.File(System.getProperty("user.dir"), "check-hook-ran"))
+          }
+        )
+        .validateOnly
 }

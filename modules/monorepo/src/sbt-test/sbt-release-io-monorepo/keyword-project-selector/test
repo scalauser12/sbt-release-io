@@ -1,0 +1,12 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release the keyword-like project id using the explicit selector
+> releaseIOMonorepo project cross with-defaults release-version cross=0.1.0 next-version cross=0.2.0-SNAPSHOT
+
+# Verify only the cross project was released
+> checkKeywordProjectRelease

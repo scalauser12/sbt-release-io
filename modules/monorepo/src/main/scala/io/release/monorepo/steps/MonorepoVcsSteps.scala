@@ -6,14 +6,23 @@ import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.monorepo.steps.MonorepoVcsCommitHelpers.validateVersionConsistency
-import io.release.steps.StepHelpers.{askYesNo, required, runProcess, useDefaults}
+import io.release.steps.StepHelpers.required
+import io.release.steps.StepHelpers.runProcess
+import io.release.steps.StepHelpers.useDefaults
+import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 
 import scala.sys.process.Process
 
 /** VCS-related monorepo release steps. */
 private[monorepo] object MonorepoVcsSteps {
+
+  private val DefaultCommandName = "releaseIOMonorepo"
+
+  private[monorepo] final case class PreflightTagOutcome(
+      rendered: String,
+      status: String
+  )
 
   private final case class GitPushTarget(
       remote: String,
@@ -84,40 +93,57 @@ private[monorepo] object MonorepoVcsSteps {
       sign: Boolean,
       label: String
   ): IO[Unit] =
-    vcs.existsTag(tagName).flatMap {
-      case false => vcs.tag(tagName, comment, sign = sign)
-      case true  =>
-        if (useDefaults(ctx) || !ctx.interactive) {
-          val mode = if (useDefaults(ctx)) "use-defaults mode" else "non-interactive mode"
-          IO.blocking(
-            ctx.state.log.warn(
-              s"${ReleaseLogPrefixes.Monorepo} Tag [$tagName] already exists for $label. " +
-                s"Aborting ($mode)."
-            )
-          ) *> IO.raiseError(
-            new IllegalStateException(
-              s"Tag [$tagName] already exists for $label. Aborting in $mode."
-            )
-          )
-        } else
-          askYesNo(
-            s"Tag [$tagName] already exists for $label! Overwrite? (y/n) [n] ",
-            defaultYes = false
-          )
-            .flatMap {
-              case true  =>
-                IO.blocking(
-                  ctx.state.log.warn(
-                    s"${ReleaseLogPrefixes.Monorepo} Tag [$tagName] already exists. Overwriting."
-                  )
-                ) *> vcs.tag(tagName, comment, sign = sign, force = true)
-              case false =>
-                IO.raiseError(
-                  new IllegalStateException(
-                    s"Tag [$tagName] already exists for $label. Aborting."
-                  )
-                )
-            }
+    TagConflictResolver
+      .resolveConflict(
+        vcs,
+        TagConflictResolver.TagParams(
+          tagName = tagName,
+          tagComment = comment,
+          sign = sign,
+          interactive = ctx.interactive,
+          useDefaults = useDefaults(ctx),
+          defaultAnswer = None,
+          logPrefix = ReleaseLogPrefixes.Monorepo,
+          label = label
+        ),
+        ctx.state
+      )
+      .void
+
+  private def preflightCreateTag(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      rendered: String,
+      label: String
+  ): IO[PreflightTagOutcome] = {
+    val commandName = ctx.releasePlan.map(_.commandName).getOrElse(DefaultCommandName)
+
+    TagConflictResolver
+      .preflightConflict(
+        vcs,
+        TagConflictResolver.PreflightParams(
+          tagName = rendered,
+          interactive = ctx.interactive,
+          useDefaults = useDefaults(ctx),
+          defaultAnswer = None,
+          commandName = commandName,
+          label = label
+        )
+      )
+      .map(o => PreflightTagOutcome(o.tagName, o.status))
+  }
+
+  private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
+    required(ctx.vcs, "VCS not initialized") { vcs =>
+      IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
+        ctx.currentProjects.toList.traverse { project =>
+          required(project.versions, s"Versions not set for ${project.name}") {
+            case (releaseVer, _) =>
+              val rendered = settings.perProjectTagName(project.name, releaseVer)
+              preflightCreateTag(ctx, vcs, rendered, project.name)
+          }
+        }
+      }
     }
 
   private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
@@ -145,43 +171,6 @@ private[monorepo] object MonorepoVcsSteps {
           }
         }
     )
-
-  private[monorepo] val tagReleasesUnified: MonorepoStepIO.Global = MonorepoStepIO.Global(
-    name = "tag-release",
-    execute = ctx =>
-      required(ctx.vcs, "VCS not initialized") { vcs =>
-        validateVersionConsistency(
-          ctx.currentProjects,
-          { case (releaseVer, _) => releaseVer },
-          "Unified tag requires all projects to share the same release version. " +
-            "Use per-project tag strategy or align versions"
-        ) *> {
-          ctx.currentProjects.flatMap(_.versions).headOption match {
-            case None           =>
-              IO.raiseError(new IllegalStateException("No release versions set for any project"))
-            case Some((rel, _)) =>
-              IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
-                val tagName = settings.unifiedTagName(rel)
-                val summary =
-                  versionSummary(ctx, { case (releaseVer, _) => releaseVer })
-                createTag(
-                  ctx,
-                  vcs,
-                  tagName,
-                  settings.unifiedTagComment(summary),
-                  settings.sign,
-                  "release"
-                ) *>
-                  logInfo(ctx, s"Tagged release as $tagName").as(
-                    ctx.currentProjects.foldLeft(ctx) { (c, p) =>
-                      c.updateProject(p.ref)(_.copy(tagName = Some(tagName)))
-                    }
-                  )
-              }
-          }
-        }
-      }
-  )
 
   private def gitPush(ctx: MonorepoContext, vcs: Vcs): IO[MonorepoContext] = {
     val tags = ctx.currentProjects.flatMap(_.tagName).distinct
@@ -239,6 +228,7 @@ private[monorepo] object MonorepoVcsSteps {
           ctx.interactive,
           ctx.useDefaults,
           vcs,
+          ReleaseLogPrefixes.Monorepo,
           remoteCheckLog = Some(r =>
             ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] ...")
           )

@@ -48,44 +48,15 @@ git push origin main
 
 > **Note:** Published artifacts cannot be retracted from most repositories. Publish a corrected patch release instead.
 
-## Migrating custom steps
+## Related docs
 
-If you are updating a custom plugin or build from an older release:
-
-- rename `check` to `validate`
-- rename `action` to `execute`
-- replace `globalStep(...)`, `perProjectStep(...)`, `globalStepAction(...)`, and `perProjectStepAction(...)` convenience methods from `MonorepoReleaseIO` with the canonical `MonorepoStepIO.global(...).execute` / `.executeAction` and `MonorepoStepIO.perProject(...).execute` / `.executeAction` builder API
-- replace `resourceGlobalStep(...)`, `resourcePerProjectStep(...)`, and all `resource*` factory method variants with the `MonorepoStepIO` builder API (`MonorepoStepIO.globalResource[T](name)`, `MonorepoStepIO.perProjectResource[T](name)`)
-- replace `withAttr` / `attr` string keys with typed metadata via `withMetadata`, `metadata`, and `AttributeKey[A]`
-
-## Compatibility
-
-- **sbt**: 1.12.3 and 2.0.0-RC9
-- **Scala**: 2.12.21 and 3.8.1
-- **cats-effect**: 3.7.0
-- **VCS**: Git only
-- **Requires**: `sbt-release-io` (core plugin)
-
-## Testing
-
-Run monorepo unit tests:
-
-```bash
-sbt monorepo/test
-```
-
-Run monorepo scripted integration tests:
-
-```bash
-sbt "monorepo/scripted"
-```
-
-Run a specific scripted test:
-
-```bash
-sbt "monorepo/scripted sbt-release-io-monorepo/simple-monorepo"
-```
-
-See `modules/monorepo/src/sbt-test/README.md` for test documentation.
-
-For contributing, see [../CONTRIBUTING.md](../CONTRIBUTING.md).
+- Custom-step and custom-plugin migration:
+  [Customization](customization.md)
+- Execution model, failure isolation, and ordering:
+  [Concepts](concepts.md)
+- Repository build, test, and compatibility information:
+  [../../README.md](../../README.md)
+- Scripted test inventory:
+  [../../modules/monorepo/src/sbt-test/README.md](../../modules/monorepo/src/sbt-test/README.md)
+- Contributing:
+  [../CONTRIBUTING.md](../CONTRIBUTING.md)

@@ -58,12 +58,14 @@ private[release] object ExecutionEngine {
       f: C => IO[C]
   ): C => IO[C] =
     (ctx: C) =>
-      f(ctx).handleErrorWith { case NonFatal(err) =>
-        IO.blocking(
-          ctx.state.log.error(
-            s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
-          )
-        ) *> IO.pure(ctx.failWith(err))
+      f(ctx).handleErrorWith {
+        case NonFatal(err) =>
+          IO.blocking(
+            ctx.state.log.error(
+              s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
+            )
+          ) *> IO.pure(ctx.failWith(err))
+        case fatal         => IO.raiseError(fatal)
       }
 
   def runActionPhase[C <: ReleaseCtx[C]](

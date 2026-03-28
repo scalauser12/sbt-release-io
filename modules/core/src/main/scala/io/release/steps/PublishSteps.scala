@@ -1,15 +1,17 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.{releaseIOPublishArtifactsAction, releaseIOPublishArtifactsChecks}
-import io.release.internal.{
-  PublishValidation,
-  ReleaseLogPrefixes,
-  SbtRuntime,
-  SnapshotDependencyTasks
-}
+import io.release.CleanCompat
+import io.release.ReleaseContext
+import io.release.ReleaseIO.releaseIOPublishArtifactsAction
+import io.release.ReleaseIO.releaseIOPublishArtifactsChecks
+import io.release.ReleaseIOCompat
+import io.release.ReleaseStepIO
+import io.release.internal.PublishValidation
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
+import io.release.internal.SnapshotDependencyTasks
 import io.release.steps.StepHelpers.*
-import io.release.{CleanCompat, ReleaseContext, ReleaseIOCompat, ReleaseStepIO}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -66,7 +68,8 @@ private[release] object PublishSteps {
             for {
               missing <- IO.blocking {
                            val extracted = SbtRuntime.extracted(ctx.state)
-                           val allRefs   = transitiveAggregates(extracted)
+                           val allRefs   =
+                             effectiveAggregates(extracted, releaseIOPublishArtifactsAction)
                            allRefs
                              .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
                              .filter(r => checkPublishToMissing(extracted, r, ctx.state))
@@ -129,19 +132,40 @@ private[release] object PublishSteps {
       ctx.withState(cleaned).failWith(new IllegalStateException(failureMessage))
     } else ctx.withState(newState)
 
-  private def transitiveAggregates(extracted: Extracted): Seq[ProjectRef] = {
-    val units                                                            = extracted.structure.units
-    def resolve(ref: ProjectRef): Seq[ProjectRef]                        = {
-      val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
-      project.map(_.aggregate).getOrElse(Seq.empty)
-    }
-    def loop(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
-      if (visited.contains(ref)) Seq.empty
-      else {
-        val direct = resolve(ref)
-        direct.flatMap(agg => agg +: loop(agg, visited + ref))
+  /** Resolve the projects that `runAggregated` will actually execute for the publish task.
+    * Checks `aggregationEnabled` at each level so the expansion matches sbt's
+    * `runAggregated` behavior when an intermediate project sets `aggregate := false`.
+    */
+  private def effectiveAggregates[A](
+      extracted: Extracted,
+      taskKey: TaskKey[A]
+  ): Seq[ProjectRef] = {
+    val data    = extracted.structure.data
+    val rootKey = (extracted.currentRef / taskKey).scopedKey
+    val enabled = sbt.internal.Aggregation.aggregationEnabled(rootKey, data)
+    if (!enabled) Seq(extracted.currentRef)
+    else {
+      val units                                           = extracted.structure.units
+      def resolve(ref: ProjectRef): Seq[ProjectRef]       = {
+        val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
+        project.map(_.aggregate).getOrElse(Seq.empty)
       }
-    (extracted.currentRef +: loop(extracted.currentRef, Set.empty)).distinct
+      def aggregationEnabledFor(ref: ProjectRef): Boolean =
+        sbt.internal.Aggregation.aggregationEnabled((ref / taskKey).scopedKey, data)
+      def loop(
+          refs: Seq[ProjectRef],
+          visited: Set[ProjectRef]
+      ): (Seq[ProjectRef], Set[ProjectRef])               =
+        refs.foldLeft((Seq.empty[ProjectRef], visited)) { case ((acc, vis), ref) =>
+          if (vis.contains(ref)) (acc, vis)
+          else if (!aggregationEnabledFor(ref)) (acc :+ ref, vis + ref)
+          else {
+            val (childAcc, childVis) = loop(resolve(ref), vis + ref)
+            (acc ++ (ref +: childAcc), childVis)
+          }
+        }
+      extracted.currentRef +: loop(resolve(extracted.currentRef), Set(extracted.currentRef))._1
+    }
   }
 
   private def checkPublishSkip(

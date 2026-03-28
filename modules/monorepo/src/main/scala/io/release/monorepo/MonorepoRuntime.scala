@@ -7,7 +7,6 @@ import sbt.{internal as _, *}
 private[monorepo] final case class MonorepoRuntime(
     state: State,
     extracted: Extracted,
-    useGlobalVersion: Boolean,
     readVersion: File => IO[String],
     versionFileContents: (File, String) => IO[String]
 )
@@ -21,7 +20,6 @@ private[monorepo] object MonorepoRuntime {
     MonorepoRuntime(
       state = state,
       extracted = extracted,
-      useGlobalVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoUseGlobalVersion),
       readVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoReadVersion),
       versionFileContents = extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersionFileContents)
     )

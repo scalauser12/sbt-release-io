@@ -1,11 +1,14 @@
 package io.release.steps
 
 import cats.effect.IO
-import io.release.{ReleaseContext, ReleaseCtx}
+import io.release.ReleaseContext
+import io.release.ReleaseCtx
 import io.release.vcs.Vcs
 import io.release.version.Version
+import sbt.EvaluateTask
+import sbt.Incomplete
+import sbt.Result
 import sbt.internal.Aggregation.KeyValue
-import sbt.{EvaluateTask, Incomplete, Result}
 
 import scala.sys.process.*
 
@@ -95,7 +98,10 @@ private[release] object StepHelpers {
     if (input.isEmpty) IO.pure(default)
     else
       IO.fromOption(Version(input).map(_.render))(
-        new IllegalArgumentException(s"Invalid version format: '$input'")
+        new IllegalArgumentException(
+          s"Invalid version format: '$input'. " +
+            "Use values like '1.2.3' or '1.2.4-SNAPSHOT'. See the command help for examples."
+        )
       )
   }
 

@@ -3,7 +3,9 @@ package io.release.vcs
 import cats.effect.IO
 
 import java.io.File
-import scala.sys.process.{Process, ProcessBuilder, ProcessLogger}
+import scala.sys.process.Process
+import scala.sys.process.ProcessBuilder
+import scala.sys.process.ProcessLogger
 
 /** Git implementation of [[Vcs]] with all operations wrapped in `IO.blocking`. */
 class Git(val baseDir: File) extends Vcs {
@@ -53,17 +55,27 @@ class Git(val baseDir: File) extends Vcs {
       else IO.pure(result)
     }
 
+  private def runSingleLine(args: String*)(context: => String): IO[String] =
+    runLines(args*)(context).flatMap {
+      case head +: _ => IO.pure(head)
+      case _         =>
+        IO.raiseError(
+          new IllegalStateException(s"$context succeeded but returned no output")
+        )
+    }
+
   // ── Queries ──────────────────────────────────────────────────────────
 
   def currentHash: IO[String] =
-    IO.blocking(cmd("rev-parse", "HEAD").!!.trim)
+    runSingleLine("rev-parse", "HEAD")("git rev-parse HEAD")
 
   def currentBranch: IO[String] =
-    IO.blocking(cmd("symbolic-ref", "HEAD").!!.trim.stripPrefix("refs/heads/"))
+    runSingleLine("symbolic-ref", "HEAD")("git symbolic-ref HEAD")
+      .map(_.stripPrefix("refs/heads/"))
 
   def trackingRemote: IO[String] =
     currentBranch.flatMap { branch =>
-      IO.blocking(cmd("config", s"branch.$branch.remote").!!.trim)
+      runSingleLine("config", s"branch.$branch.remote")(s"git config branch.$branch.remote")
     }
 
   def hasUpstream: IO[Boolean] =
@@ -79,9 +91,11 @@ class Git(val baseDir: File) extends Vcs {
       info            <- branchInfo
       (branch, remote) = info
       upstream        <-
-        IO.blocking(cmd("config", s"branch.$branch.merge").!!.trim.stripPrefix("refs/heads/"))
+        runSingleLine("config", s"branch.$branch.merge")(s"git config branch.$branch.merge")
+          .map(_.stripPrefix("refs/heads/"))
       behind          <-
-        IO.blocking(cmd("rev-list", s"$branch..$remote/$upstream").!!(devnull).trim.nonEmpty)
+        runLines("rev-list", s"$branch..$remote/$upstream")("git rev-list")
+          .map(_.nonEmpty)
     } yield behind
 
   def existsTag(name: String): IO[Boolean] =
@@ -145,9 +159,9 @@ class Git(val baseDir: File) extends Vcs {
     for {
       info            <- branchInfo
       (branch, remote) = info
-      upstream        <- IO.blocking(
-                           cmd("config", s"branch.$branch.merge").!!.trim.stripPrefix("refs/heads/")
-                         )
+      upstream        <- runSingleLine("config", s"branch.$branch.merge")(
+                           s"git config branch.$branch.merge"
+                         ).map(_.stripPrefix("refs/heads/"))
       _               <- runCmd("push", "--follow-tags", remote, s"$branch:$upstream")(
                            "git push --follow-tags"
                          )

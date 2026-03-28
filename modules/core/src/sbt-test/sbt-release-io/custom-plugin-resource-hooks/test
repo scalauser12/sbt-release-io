@@ -1,0 +1,32 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt project/CustomPlugin.scala
+$ exec git commit -m "Initial commit"
+
+# Check mode should validate both plain and resource-aware hooks without acquiring the resource
+> releaseResourceHooks check with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+$ absent resource-acquired
+$ absent resource-released
+$ exists plain-validate.marker
+$ exists resource-validate.marker
+$ absent plain-execute.marker
+$ absent resource-execute.marker
+> checkValidateOrder
+
+# Reset generated markers and logs before the real release run
+$ exec rm -f validate-order.log execute-order.log plain-validate.marker resource-validate.marker plain-execute.marker resource-execute.marker resource-acquired resource-released
+
+# Run the real release through the custom-plugin hook path
+> releaseResourceHooks with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+$ exists resource-acquired
+$ exists resource-released
+$ exists plain-validate.marker
+$ exists resource-validate.marker
+$ exists plain-execute.marker
+$ exists resource-execute.marker
+> checkValidateOrder
+> checkExecuteOrder
+> checkGitTag
+> checkNextVersion

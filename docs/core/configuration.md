@@ -1,27 +1,40 @@
 # Configuration (core)
 
-## Configuration
+Use this page for starter `build.sbt` patterns and common configuration recipes. For the
+exhaustive settings and CLI catalog, see [Settings reference](reference.md). For a worked
+hook-first tutorial, see [Hook-first walkthrough](hook-first-walkthrough.md).
+
+## Starter configuration
 
 In `build.sbt`:
 
 ```scala
 import _root_.cats.effect.IO
-import _root_.io.release.steps.ReleaseSteps
+import _root_.io.release.ReleaseHookIO
 
-// Use default release steps (recommended)
-releaseIOProcess := ReleaseSteps.defaults
+// Keep the built-in process and disable phases semantically
+releaseIOEnablePush    := false
+releaseIOEnablePublish := false
 
-// Or customize the release process (see [Customization](customization.md))
-releaseIOProcess := releaseIOProcess.value.filterNot(_.name == "push-changes")
+// Add lifecycle hooks around the remaining phases
+releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-audit")(ctx =>
+  IO.blocking {
+    val version = ctx.releaseVersion.getOrElse("unknown")
+    ctx.state.log.info(s"[release-io] Auditing tag inputs for $version")
+  }
+)
 
 // Enable cross-building by default
 releaseIOCrossBuild := true
 
-// Skip publish during release
+// Runtime flag: keep the publish step available, but skip it when the release runs
 releaseIOSkipPublish := true
 
 // Enable interactive prompts (disabled by default)
 releaseIOInteractive := true
+
+// Fail the remote reachability check if it hangs for too long
+releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(30).seconds
 
 // Custom version file reader (default parses `[ThisBuild /] version := "x.y.z"`)
 releaseIOReadVersion := (file =>
@@ -33,6 +46,10 @@ releaseIOVersionFileContents := ((_, version) =>
   IO.pure(s"$version\n")
 )
 ```
+
+`releaseIOEnablePublish := false` removes publish from the compiled hook-first lifecycle
+entirely, including `beforePublish` / `afterPublish` hooks. `releaseIOSkipPublish := true`
+keeps the phase in the process shape but skips the publish action at execution time.
 
 ## Custom version formats
 

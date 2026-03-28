@@ -1,7 +1,14 @@
 package io.release.examples
 
-import cats.effect.{IO, Resource}
-import io.release.{ReleaseContext, ReleasePluginIOLike, ReleaseStepIO}
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.ReleaseContext
+import io.release.ReleaseHookIO
+import io.release.ReleaseIO
+import io.release.ReleasePluginIOLike
+import io.release.ReleaseResourceHookIO
+import io.release.ReleaseResourceHooks
+import io.release.ReleaseStepIO
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.ReleaseSteps
 import sbt.*
@@ -10,13 +17,15 @@ import sbt.Keys.thisProject
 import scala.util.control.NonFatal
 
 /**
- * Examples showing how to create custom release steps and compose them
- * with the built-in steps.
+ * Examples showing both the preferred hook/policy customization path and the legacy raw-step
+ * escape hatch.
  *
  * '''How to read this file (recommended path):'''
- *  1. Start with `firstCustomProcess` for a working setup with one custom step.
- *  2. Browse the individual step examples to learn each API pattern.
- *  3. Use `MyReleasePlugin` for advanced resource-aware customization.
+ *  1. Start with `firstHookSettings` for a working hook-based setup.
+ *  2. Move to `customHookSettings` for a richer policy + lifecycle example.
+ *  3. Browse the individual step examples and `legacyCustomProcess` only if you need the
+ *     advanced legacy raw-process API.
+ *  4. Use `MyReleasePlugin` for advanced resource-aware customization.
  *
  * Note: plugin objects like `MyReleasePlugin` must live in `project/MyReleasePlugin.scala`
  * to be discovered by sbt. The object below is an example to copy there.
@@ -25,18 +34,141 @@ object CustomStepExamples {
 
   private val releaseCompletedKey = AttributeKey[Boolean]("releaseCompleted")
 
-  // ── Getting started ──────────────────────────────────────────────────
+  // ── Hook-first customization (preferred) ────────────────────────────
 
-  /** First customization: prepend one custom step and keep the default flow.
+  /** First customization: keep the compiled built-ins, disable push, and add one lifecycle hook.
+    *
+    * Usage in build.sbt:
+    * {{{
+    * import io.release.ReleasePluginIO.autoImport._
+    * import io.release.ReleaseHookIO
+    * import io.release.examples.CustomStepExamples
+    *
+    * lazy val root = (project in file("."))
+    *   .settings(CustomStepExamples.firstHookSettings)
+    * }}}
+    *
+    * Run with: `sbt "releaseIO with-defaults"`
+    */
+  lazy val firstHookSettings: Seq[Setting[?]] = Seq(
+    ReleaseIO.releaseIOEnablePush := false,
+    ReleaseIO.releaseIOBeforeTagHooks += printBannerHook
+  )
+
+  /** A richer hook-based setup with policy toggles and a few semantic lifecycle hooks.
     *
     * Usage in build.sbt:
     * {{{
     * import io.release.ReleasePluginIO.autoImport._
     * import io.release.examples.CustomStepExamples
-    * releaseIOProcess := CustomStepExamples.firstCustomProcess
-    * }}}
     *
-    * Run with: `sbt "releaseIO with-defaults"`
+    * lazy val root = (project in file("."))
+    *   .settings(CustomStepExamples.customHookSettings)
+    * }}}
+    */
+  lazy val customHookSettings: Seq[Setting[?]] = Seq(
+    ReleaseIO.releaseIOEnablePush := false,
+    ReleaseIO.releaseIOAfterCleanCheckHooks += validateBranchHook,
+    ReleaseIO.releaseIOAfterVersionResolutionHooks += generateChangelogHook,
+    ReleaseIO.releaseIOAfterTagHooks += optionalNotifyHook,
+    ReleaseIO.releaseIOAfterNextCommitHooks += markReleaseDoneHook
+  )
+
+  /** Recommended template for a safe local rehearsal with the compiled built-ins intact.
+    *
+    * This disables push, publish, and run-clean, then adds one validation-oriented hook after
+    * the clean-working-dir check and one lifecycle hook before tagging.
+    *
+    * {{{
+    * lazy val root = (project in file("."))
+    *   .settings(CustomStepExamples.rehearsalSettings)
+    *
+    * // Rehearse the planned release without side effects
+    * // sbt "releaseIO check with-defaults"
+    *
+    * // Rehearse with explicit versions
+    * // sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+    * }}}
+    */
+  lazy val rehearsalSettings: Seq[Setting[?]] = Seq(
+    ReleaseIO.releaseIOEnablePush     := false,
+    ReleaseIO.releaseIOEnablePublish  := false,
+    ReleaseIO.releaseIOEnableRunClean := false,
+    ReleaseIO.releaseIOAfterCleanCheckHooks += validateBranchHook,
+    ReleaseIO.releaseIOBeforeTagHooks += printBannerHook
+  )
+
+  val printBannerHook: ReleaseHookIO = ReleaseHookIO.action("print-banner")(_ =>
+    IO.println("=" * 60) *>
+      IO.println("  RELEASE IN PROGRESS") *>
+      IO.println("=" * 60)
+  )
+
+  val validateBranchHook: ReleaseHookIO = ReleaseHookIO.io("validate-branch")(ctx =>
+    ctx.vcs match {
+      case Some(vcs) =>
+        vcs.currentBranch.flatMap(branch =>
+          if (branch == "main" || branch == "master")
+            IO.pure(ctx)
+          else
+            IO.raiseError(
+              new RuntimeException(
+                s"Releases must be done from main/master, but current branch is '$branch'"
+              )
+            )
+        )
+      case None      =>
+        IO.raiseError(new RuntimeException("VCS not initialized"))
+    }
+  )
+
+  /** Hook variant of the changelog example. Attach after version resolution or before
+    * writing the release version so `ctx.releaseVersion` is already available.
+    */
+  val generateChangelogHook: ReleaseHookIO =
+    ReleaseHookIO.action("generate-changelog")(ctx =>
+      ctx.versions match {
+        case Some((releaseVer, _)) =>
+          IO.blocking {
+            val baseDir  = Project.extract(ctx.state).get(thisProject).base
+            val file     = new java.io.File(baseDir, "CHANGELOG.md")
+            val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
+            val existing =
+              if (file.exists())
+                scala.util.Using(scala.io.Source.fromFile(file))(_.mkString).get
+              else "# Changelog\n"
+            java.nio.file.Files.write(file.toPath, (existing + entry).getBytes("UTF-8"))
+          } *>
+            IO.println(s"${ReleaseLogPrefixes.Core} Updated CHANGELOG.md for $releaseVer")
+        case None                  =>
+          IO.raiseError(new RuntimeException("Versions not set"))
+      }
+    )
+
+  val optionalNotifyHook: ReleaseHookIO = ReleaseHookIO.action("optional-notify")(ctx =>
+    IO.blocking {
+      val version = ctx.releaseVersion.getOrElse("unknown")
+      ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Notifying release of $version...")
+    }.handleErrorWith {
+      case NonFatal(err) =>
+        IO.blocking(
+          ctx.state.log.warn(
+            s"${ReleaseLogPrefixes.Core} Notification failed: ${err.getMessage}, continuing..."
+          )
+        )
+      case fatal         => IO.raiseError(fatal)
+    }
+  )
+
+  val markReleaseDoneHook: ReleaseHookIO =
+    ReleaseHookIO.io("mark-done")(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
+
+  // ── Legacy raw-process customization (advanced) ─────────────────────
+
+  /** Legacy example: prepend one custom raw step and keep the default flow.
+    *
+    * Prefer [[firstHookSettings]] for routine customization. Keep this pattern for advanced
+    * cases that truly need raw process editing.
     */
   lazy val firstCustomProcess: Seq[ReleaseStepIO] = Seq(printBanner) ++ ReleaseSteps.defaults
 
@@ -168,21 +300,23 @@ object CustomStepExamples {
 
   // ── Composing a custom release process ───────────────────────────────
 
-  /**
-   * Example: a custom release process that adds a banner, validates the branch,
+  /** Legacy example: a custom release process that adds a banner, validates the branch,
    * generates a changelog, and skips push.
+    *
+   * Prefer [[customHookSettings]] for routine lifecycle customization. Keep this pattern
+   * for advanced cases that need full raw-step control.
    *
    * Usage in build.sbt:
    * {{{
    * import io.release.ReleasePluginIO.autoImport._
    * import io.release.examples.CustomStepExamples
    *
-   * releaseIOProcess := CustomStepExamples.customProcess
+   * releaseIOProcess := CustomStepExamples.legacyCustomProcess
    * }}}
    *
    * Run with: `sbt "releaseIO with-defaults"`
    */
-  val customProcess: Seq[ReleaseStepIO] = Seq(
+  val legacyCustomProcess: Seq[ReleaseStepIO] = Seq(
     printBanner,
     ReleaseSteps.initializeVcs,
     validateBranch,
@@ -237,12 +371,12 @@ trait HttpClient {
 }
 
 /**
- * Example: a custom release plugin that acquires an HTTP client once
- * and uses it in resource-aware steps at non-adjacent positions.
+ * Advanced/custom-plugin example: acquire an HTTP client once and use it in
+ * resource-aware hooks while staying on compiled hook mode.
  *
- * Extend `ReleasePluginIOLike[T]` instead of setting `releaseIOProcess` directly when your
- * release steps need a shared resource (e.g., HTTP client, database connection) that is
- * acquired once and released automatically at the end.
+ * Prefer hook/policy settings for routine customization. Extend `ReleasePluginIOLike[T]`
+ * when your release flow needs a shared resource (e.g., HTTP client, database connection)
+ * that is acquired once and released automatically at the end.
  *
  * Copy this object to `project/MyReleasePlugin.scala` in your build so sbt can discover it.
  * In that file, prefer `_root_.` imports (for example `_root_.io.release...`) because
@@ -281,68 +415,50 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
       }
     )(c => IO(c.close()))
 
-  override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-    Seq(
-      // Plain steps — lifted automatically via the implicit conversion
-      ReleaseSteps.initializeVcs,
-      ReleaseSteps.checkCleanWorkingDir,
-
-      // 1st resource step — validate branch via API (raises error or succeeds)
-      ReleaseStepIO
-        .resourceStep[HttpClient]("validate-branch")
-        .executeAction(client =>
-          ctx =>
-            IO.blocking(client.get("/allowed-branches").split(",").toSet)
-              .flatMap(allowed =>
-                ctx.vcs match {
-                  case Some(vcs) =>
-                    vcs.currentBranch.flatMap(branch =>
-                      if (!allowed.contains(branch))
-                        IO.raiseError(
-                          new RuntimeException(s"Branch '$branch' is not allowed for release")
-                        )
-                      else IO.unit
+  private val validateBranch: ReleaseResourceHookIO[HttpClient] =
+    ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client =>
+      ctx =>
+        IO.blocking(client.get("/allowed-branches").split(",").toSet)
+          .flatMap(allowed =>
+            ctx.vcs match {
+              case Some(vcs) =>
+                vcs.currentBranch.flatMap(branch =>
+                  if (!allowed.contains(branch))
+                    IO.raiseError(
+                      new RuntimeException(s"Branch '$branch' is not allowed for release")
                     )
-                  case None      =>
-                    IO.raiseError(new RuntimeException("VCS not initialized"))
-                }
-              )
-        ),
-
-      ReleaseSteps.checkSnapshotDependencies,
-      ReleaseSteps.inquireVersions,
-      ReleaseSteps.runClean,
-      ReleaseSteps.runTests,
-      ReleaseSteps.setReleaseVersion,
-      ReleaseSteps.commitReleaseVersion,
-      ReleaseSteps.tagRelease,
-
-      // 2nd resource step — notify Slack after tagging (side-effect only, context unchanged)
-      ReleaseStepIO
-        .resourceStep[HttpClient]("notify-slack")
-        .executeAction(client =>
-          ctx =>
-            IO.blocking {
-              val version = ctx.releaseVersion.getOrElse("unknown")
-              client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+                  else IO.pure(ctx)
+                )
+              case None      =>
+                IO.raiseError(new RuntimeException("VCS not initialized"))
             }
-        ),
+          )
+    )
 
-      ReleaseSteps.publishArtifacts,
+  private val notifySlack: ReleaseResourceHookIO[HttpClient] =
+    ReleaseResourceHookIO.action[HttpClient]("notify-slack")(client =>
+      ctx =>
+        IO.blocking {
+          val version = ctx.releaseVersion.getOrElse("unknown")
+          client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+        }
+    )
 
-      // 3rd resource step — verify the published artifact (side-effect only, context unchanged)
-      ReleaseStepIO
-        .resourceStep[HttpClient]("verify-publish")
-        .executeAction(client =>
-          ctx =>
-            IO.blocking {
-              val version = ctx.releaseVersion.getOrElse("unknown")
-              client.get(s"/artifacts/$version")
-            }.void
-        ),
+  private val verifyPublish: ReleaseResourceHookIO[HttpClient] =
+    ReleaseResourceHookIO.action[HttpClient]("verify-publish")(client =>
+      ctx =>
+        IO.blocking {
+          val version = ctx.releaseVersion.getOrElse("unknown")
+          client.get(s"/artifacts/$version")
+        }.void
+    )
 
-      ReleaseSteps.setNextVersion,
-      ReleaseSteps.commitNextVersion,
-      ReleaseSteps.pushChanges
+  override protected def releaseResourceHooks(
+      state: State
+  ): ReleaseResourceHooks[HttpClient] =
+    ReleaseResourceHooks(
+      beforeVersionResolutionHooks = Seq(validateBranch),
+      afterTagHooks = Seq(notifySlack),
+      afterPublishHooks = Seq(verifyPublish)
     )
 }

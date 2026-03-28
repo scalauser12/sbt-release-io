@@ -19,7 +19,8 @@ private[release] final case class TagPlan(
     tagName: String,
     tagComment: String,
     sign: Boolean,
-    defaultAnswer: Option[String]
+    defaultAnswer: Option[String],
+    versionSessionSettings: Seq[Setting[?]]
 )
 
 /** Typed startup plan for the core release command. */
@@ -27,7 +28,8 @@ private[release] final case class CoreReleasePlan(
     flags: ExecutionFlags,
     releaseVersionOverride: Option[String],
     nextVersionOverride: Option[String],
-    tagDefault: Option[String]
+    tagDefault: Option[String],
+    commandName: String = "releaseIO"
 )
 
 /** Builds the typed execution plan for the core release command. */
@@ -41,7 +43,8 @@ private[release] object CoreReleasePlan {
       crossBuild: Boolean,
       releaseVersionOverride: Option[String],
       nextVersionOverride: Option[String],
-      tagDefault: Option[String]
+      tagDefault: Option[String],
+      commandName: String = "releaseIO"
   )
 
   def build(inputs: Inputs): CoreReleasePlan = {
@@ -56,7 +59,8 @@ private[release] object CoreReleasePlan {
       flags = flags,
       releaseVersionOverride = inputs.releaseVersionOverride,
       nextVersionOverride = inputs.nextVersionOverride,
-      tagDefault = inputs.tagDefault
+      tagDefault = inputs.tagDefault,
+      commandName = inputs.commandName
     )
   }
 }

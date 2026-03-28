@@ -4,8 +4,7 @@ import sbt.AttributeKey
 
 /** Internal runtime metadata threaded through [[MonorepoContext]]. */
 private[monorepo] final case class MonorepoExecutionState(
-    plan: MonorepoReleasePlan,
-    globalVersionWritten: Option[String] = None
+    plan: MonorepoReleasePlan
 )
 
 private[monorepo] object MonorepoExecutionState {

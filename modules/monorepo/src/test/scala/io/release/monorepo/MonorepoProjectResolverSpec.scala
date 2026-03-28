@@ -44,38 +44,28 @@ class MonorepoProjectResolverSpec extends FunSuite {
   test("applyVersionOverrides - return empty output for empty projects") {
     val result = MonorepoProjectResolver.applyVersionOverrides(
       Seq.empty,
-      plan(selectionMode = SelectionMode.DetectChanges),
-      useGlobalVersion = false
+      plan(selectionMode = SelectionMode.DetectChanges)
     )
 
     assertEquals(result, Seq.empty)
   }
 
-  test("applyVersionOverrides - apply per-project overrides in non-global mode") {
-    val plan   = MonorepoReleasePlan(
-      flags = defaultFlags,
-      selectionMode = SelectionMode.ExplicitSelection,
-      selectedNames = Seq("core"),
-      releaseVersionOverrides = Map("core" -> "1.0.0"),
-      nextVersionOverrides = Map("core" -> "1.1.0-SNAPSHOT"),
-      globalReleaseVersion = None,
-      globalNextVersion = None
-    )
+  test("applyVersionOverrides - apply per-project overrides") {
     val result = MonorepoProjectResolver.applyVersionOverrides(
       Seq(project("core"), project("api")),
-      plan,
-      useGlobalVersion = false
+      plan(
+        selectionMode = SelectionMode.ExplicitSelection,
+        selectedNames = Seq("core"),
+        releaseVersionOverrides = Map("core" -> "1.0.0"),
+        nextVersionOverrides = Map("core" -> "1.1.0-SNAPSHOT")
+      )
     )
-    val core   = result.find(_.name == "core").get
-    val api    = result.find(_.name == "api").get
 
-    assertEquals(core.versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
-    assertEquals(api.versions, None)
+    assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+    assertEquals(projectNamed(result, "api").versions, None)
   }
 
-  test(
-    "applyVersionOverrides - preserve the current next version when only release is overridden"
-  ) {
+  test("applyVersionOverrides - preserve current next version when only release is overridden") {
     val result = MonorepoProjectResolver.applyVersionOverrides(
       Seq(
         project("core", versions = Some("0.9.0" -> "1.0.0-SNAPSHOT")),
@@ -84,17 +74,14 @@ class MonorepoProjectResolverSpec extends FunSuite {
       plan(
         selectionMode = SelectionMode.ExplicitSelection,
         releaseVersionOverrides = Map("core" -> "1.0.0")
-      ),
-      useGlobalVersion = false
+      )
     )
 
     assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.0.0-SNAPSHOT"))
     assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
   }
 
-  test(
-    "applyVersionOverrides - preserve the current release version when only next is overridden"
-  ) {
+  test("applyVersionOverrides - preserve current release version when only next is overridden") {
     val result = MonorepoProjectResolver.applyVersionOverrides(
       Seq(
         project("core", versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
@@ -103,73 +90,11 @@ class MonorepoProjectResolverSpec extends FunSuite {
       plan(
         selectionMode = SelectionMode.ExplicitSelection,
         nextVersionOverrides = Map("core" -> "1.2.0-SNAPSHOT")
-      ),
-      useGlobalVersion = false
+      )
     )
 
     assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.2.0-SNAPSHOT"))
     assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
-  }
-
-  test("applyVersionOverrides - apply global overrides to every project in global mode") {
-    val plan   = MonorepoReleasePlan(
-      flags = defaultFlags,
-      selectionMode = SelectionMode.AllChanged,
-      selectedNames = Nil,
-      releaseVersionOverrides = Map.empty,
-      nextVersionOverrides = Map.empty,
-      globalReleaseVersion = Some("2.0.0"),
-      globalNextVersion = Some("2.1.0-SNAPSHOT")
-    )
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(project("core"), project("api")),
-      plan,
-      useGlobalVersion = true
-    )
-
-    assert(
-      result
-        .map(_.versions)
-        .forall(_ == Some("2.0.0" -> "2.1.0-SNAPSHOT"))
-    )
-  }
-
-  test(
-    "applyVersionOverrides - preserve the current next version for global release-only overrides"
-  ) {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(
-        project("core", versions = Some("0.9.0" -> "1.0.0-SNAPSHOT")),
-        project("api", versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
-      ),
-      plan(
-        selectionMode = SelectionMode.AllChanged,
-        globalReleaseVersion = Some("2.0.0")
-      ),
-      useGlobalVersion = true
-    )
-
-    assertEquals(projectNamed(result, "core").versions, Some("2.0.0" -> "1.0.0-SNAPSHOT"))
-    assertEquals(projectNamed(result, "api").versions, Some("2.0.0" -> "0.5.0-SNAPSHOT"))
-  }
-
-  test(
-    "applyVersionOverrides - preserve the current release version for global next-only overrides"
-  ) {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(
-        project("core", versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
-        project("api", versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
-      ),
-      plan(
-        selectionMode = SelectionMode.AllChanged,
-        globalNextVersion = Some("2.1.0-SNAPSHOT")
-      ),
-      useGlobalVersion = true
-    )
-
-    assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "2.1.0-SNAPSHOT"))
-    assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "2.1.0-SNAPSHOT"))
   }
 
   private val defaultFlags = ExecutionFlags(
@@ -184,18 +109,14 @@ class MonorepoProjectResolverSpec extends FunSuite {
       selectionMode: SelectionMode,
       selectedNames: Seq[String] = Nil,
       releaseVersionOverrides: Map[String, String] = Map.empty,
-      nextVersionOverrides: Map[String, String] = Map.empty,
-      globalReleaseVersion: Option[String] = None,
-      globalNextVersion: Option[String] = None
+      nextVersionOverrides: Map[String, String] = Map.empty
   ): MonorepoReleasePlan =
     MonorepoReleasePlan(
       flags = defaultFlags,
       selectionMode = selectionMode,
       selectedNames = selectedNames,
       releaseVersionOverrides = releaseVersionOverrides,
-      nextVersionOverrides = nextVersionOverrides,
-      globalReleaseVersion = globalReleaseVersion,
-      globalNextVersion = globalNextVersion
+      nextVersionOverrides = nextVersionOverrides
     )
 
   private def project(

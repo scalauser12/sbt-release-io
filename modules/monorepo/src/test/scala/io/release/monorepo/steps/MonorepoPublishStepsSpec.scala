@@ -1,17 +1,16 @@
 package io.release.monorepo.steps
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
+import cats.effect.Resource
 import io.release.ReleaseIO
-import io.release.internal.PublishValidation
-import io.release.monorepo.{
-  MonorepoProjectFailures,
-  MonorepoReleaseIO,
-  MonorepoSpecSupport,
-  MonorepoStepIO
-}
 import io.release.TestAssertions.assertFailure
+import io.release.internal.PublishValidation
+import io.release.monorepo.MonorepoProjectFailures
+import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.MonorepoStepIO
 import munit.CatsEffectSuite
-import sbt.{Project, Resolver, *}
+import sbt.*
 
 import java.io.File
 
@@ -358,14 +357,208 @@ class MonorepoPublishStepsSpec extends CatsEffectSuite {
       }
   }
 
+  // ── publishArtifacts.validate success path ───────────────────────────
+
+  test(
+    "publishArtifacts.validate - pass when publishTo is set and publish not skipped"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-validate-pass") { dir =>
+        val coreBase = new File(dir, "core")
+        coreBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core"),
+            settings = Seq(
+              MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks := true
+            )
+          ),
+          MonorepoSpecSupport.versionedProject(
+            "core",
+            coreBase,
+            settings = Seq(
+              sbt.Keys.publish / sbt.Keys.skip := false,
+              sbt.Keys.publishTo               := Some(Resolver.file("local-test", dir))
+            )
+          )
+        )
+      }
+      .use { fixture =>
+        val ctx     = fixture.context(Seq("core"))
+        val project = fixture.projectInfo("core")
+
+        MonorepoPublishSteps.publishArtifacts.validate(ctx, project)
+      }
+  }
+
+  // ── checkSnapshotDependencies gaps ──────────────────────────────────
+
+  test("checkSnapshotDependencies.validate - pass when no snapshot dependencies") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-no-snapshots") { dir =>
+        val coreBase = new File(dir, "core")
+        coreBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core")),
+          MonorepoSpecSupport.versionedProject(
+            "core",
+            coreBase,
+            settings = Seq(
+              ReleaseIO.releaseIOSnapshotDependencies := Seq.empty[ModuleID]
+            )
+          )
+        )
+      }
+      .use { fixture =>
+        val ctx     = fixture.context(Seq("core"))
+        val project = fixture.projectInfo("core")
+
+        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project)
+      }
+  }
+
+  test("checkSnapshotDependencies.execute - return context unchanged") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-snap-exec") { dir =>
+        val coreBase = new File(dir, "core")
+        coreBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core")),
+          MonorepoSpecSupport.versionedProject("core", coreBase)
+        )
+      }
+      .use { fixture =>
+        val ctx     = fixture.context(Seq("core"))
+        val project = fixture.projectInfo("core")
+
+        MonorepoPublishSteps.checkSnapshotDependencies.execute(ctx, project).map { result =>
+          assert(result eq ctx)
+        }
+      }
+  }
+
+  // ── runClean success path ───────────────────────────────────────────
+
+  test("runClean.execute - succeed when clean reports no failure") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-clean-ok") { dir =>
+        val coreBase = new File(dir, "core")
+        coreBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core")),
+          MonorepoSpecSupport.versionedProject("core", coreBase)
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture.context(Seq("core"))
+
+        MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map { result =>
+          assert(!result.failed)
+        }
+      }
+  }
+
+  // ── evaluateProjectTask error recovery ──────────────────────────────
+
+  test(
+    "publishArtifacts.execute - wrap NonFatal evaluation error in IllegalStateException"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-eval-error") { dir =>
+        val coreBase = new File(dir, "core")
+        coreBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core"),
+            settings = Seq(
+              MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks := false
+            )
+          ),
+          MonorepoSpecSupport.versionedProject(
+            "core",
+            coreBase,
+            settings = Seq(MonorepoStepTestCompat.throwingPublishSkipSetting)
+          )
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture.context(Seq("core"))
+
+        MonorepoStepIO.compose(Seq(MonorepoPublishSteps.publishArtifacts))(ctx).map { result =>
+          assert(result.failed)
+          val aggregate = requireProjectFailures(result.failureCause)
+          assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+          assert(
+            aggregate.failures.head.cause.exists(
+              _.isInstanceOf[IllegalStateException]
+            )
+          )
+          assert(
+            aggregate.failures.head.cause.exists(
+              _.getMessage.contains("Failed to evaluate publish / skip for core")
+            )
+          )
+        }
+      }
+  }
+
+  // ── runPerProjectInternal exception isolation ───────────────────────
+
+  test(
+    "per-project execution - isolate NonFatal exception and mark project failed"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-exception-isolation") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("api", apiBase)
+        )
+      }
+      .use { fixture =>
+        val ctx = fixture.context(Seq("core", "api"))
+
+        val throwingStep = MonorepoStepIO.PerProject(
+          name = "throwing-step",
+          execute =
+            (_, project) => IO.raiseError(new RuntimeException(s"${project.name} action blew up"))
+        )
+
+        MonorepoStepIO.compose(Seq(throwingStep))(ctx).map { result =>
+          assert(result.failed)
+          val aggregate = requireProjectFailures(result.failureCause)
+          // Both projects fail — handleErrorWith isolates each error individually,
+          // the fold continues because global ctx.failed is not set until propagateFailures
+          assertEquals(aggregate.failures.map(_.projectName), Seq("core", "api"))
+          assert(
+            aggregate.failures.head.cause.exists(
+              _.getMessage.contains("core action blew up")
+            )
+          )
+          assert(
+            aggregate.failures.last.cause.exists(
+              _.getMessage.contains("api action blew up")
+            )
+          )
+        }
+      }
+  }
+
   private def requireProjectFailures(
       cause: Option[Throwable]
   ): MonorepoProjectFailures =
-    cause match {
-      case Some(aggregate) if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
-        classOf[MonorepoProjectFailures].cast(aggregate)
-      case other                                                                     =>
-        fail(s"Expected MonorepoProjectFailures but got $other")
-    }
+    MonorepoSpecSupport.requireProjectFailures(cause)
 
 }

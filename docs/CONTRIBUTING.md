@@ -8,5 +8,7 @@ Contributions are welcome. Please ensure:
 4. Add tests for new features
 
 Core scripted tests: `sbt "core/scripted …"`. Monorepo: `sbt "monorepo/scripted …"`.
+For local sbt 2 verification from an IDE checkout, prefer `./bin/sbt2-clean test`,
+`./bin/sbt2-clean core/scripted`, and `./bin/sbt2-clean monorepo/scripted`.
 
 See `modules/core/src/sbt-test/README.md` and `modules/monorepo/src/sbt-test/README.md` for scripted test layout.

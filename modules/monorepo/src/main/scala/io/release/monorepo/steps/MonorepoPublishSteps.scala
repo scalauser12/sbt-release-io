@@ -1,13 +1,16 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
+import io.release.CleanCompat
 import io.release.ReleaseIO.releaseIOPublishArtifactsAction
-import io.release.internal.{PublishValidation, ReleaseLogPrefixes, SnapshotDependencyTasks}
+import io.release.ReleaseIOCompat
+import io.release.internal.PublishValidation
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SnapshotDependencyTasks
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers
-import io.release.{CleanCompat, ReleaseIOCompat}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -22,9 +25,7 @@ private[monorepo] object MonorepoPublishSteps {
 
   private def runProjectTask[A](
       ctx: MonorepoContext,
-      project: ProjectReleaseInfo,
-      key: TaskKey[A],
-      taskLabel: String
+      key: TaskKey[A]
   ): IO[MonorepoContext] =
     IO.blocking {
       val extracted     = Project.extract(ctx.state)
@@ -110,12 +111,7 @@ private[monorepo] object MonorepoPublishSteps {
       if (ctx.skipTests)
         logInfo(ctx, s"Skipping tests for ${project.name}").as(ctx)
       else
-        runProjectTask(
-          ctx,
-          project,
-          project.ref / Test / ReleaseIOCompat.testKey,
-          s"${project.name} / Test / ${ReleaseIOCompat.testKey.key.label}"
-        ),
+        runProjectTask(ctx, project.ref / Test / ReleaseIOCompat.testKey),
     enableCrossBuild = true
   )
 
@@ -130,12 +126,7 @@ private[monorepo] object MonorepoPublishSteps {
           if (skipped)
             logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
           else
-            runProjectTask(
-              ctx,
-              project,
-              project.ref / releaseIOPublishArtifactsAction,
-              s"${project.name} / ${releaseIOPublishArtifactsAction.key.label}"
-            )
+            runProjectTask(ctx, project.ref / releaseIOPublishArtifactsAction)
         },
     validate = (ctx, project) =>
       if (ctx.skipPublish) IO.unit

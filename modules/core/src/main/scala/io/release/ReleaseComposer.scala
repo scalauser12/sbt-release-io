@@ -1,7 +1,9 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.{ExecutionEngine, ReleaseLogPrefixes, SbtRuntime}
+import io.release.internal.ExecutionEngine
+import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -20,6 +22,14 @@ private[release] object ReleaseComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Core
 
+  private[release] def attachSuppressed(
+      original: Throwable,
+      suppressed: Throwable
+  ): Throwable = {
+    original.addSuppressed(suppressed)
+    original
+  }
+
   /** Compose a sequence of steps into a two-phase IO program.
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.
@@ -28,17 +38,7 @@ private[release] object ReleaseComposer {
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] = {
 
-    val validationPhase: IO[Unit] = ExecutionEngine.runValidations(
-      logPrefix = LogPrefix,
-      validations = steps.map { step =>
-        val wrappedValidation =
-          if (step.enableCrossBuild && crossBuild)
-            (ctx: ReleaseContext) => runCrossBuild(c => step.validate(c).as(c))(ctx).void
-          else step.validate
-        ExecutionEngine.ValidationStep(step.name, wrappedValidation)
-      },
-      initialCtx = initialCtx
-    )
+    val validationPhase: IO[Unit] = runValidationPhase(steps, crossBuild, initialCtx)
 
     val startCtx = ExecutionEngine.armOnFailure(initialCtx)
 
@@ -65,6 +65,31 @@ private[release] object ReleaseComposer {
     } yield result.context
   }
 
+  /** Run only the validation phase for the given steps.
+    * Used by preflight checks to reuse the exact validation wiring without executing actions.
+    */
+  def validateOnly(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
+      initialCtx: ReleaseContext
+  ): IO[Unit] =
+    runValidationPhase(steps, crossBuild, initialCtx)
+
+  private def runValidationPhase(
+      steps: Seq[ReleaseStepIO],
+      crossBuild: Boolean,
+      initialCtx: ReleaseContext
+  ): IO[Unit] =
+    ExecutionEngine.runValidations(
+      logPrefix = LogPrefix,
+      validations = steps.map { step =>
+        val wrappedValidation =
+          if (step.enableCrossBuild && crossBuild)
+            (ctx: ReleaseContext) => runCrossBuild(c => step.validate(c).as(c))(ctx).void
+          else step.validate
+        ExecutionEngine.ValidationStep(step.name, wrappedValidation)
+      },
+      initialCtx = initialCtx
+    )
+
   /** Run a step function across all crossScalaVersions using proper project reload. */
   private def runCrossBuild(
       action: ReleaseContext => IO[ReleaseContext]
@@ -88,7 +113,17 @@ private[release] object ReleaseComposer {
         }
 
       def restoreOnError(currentCtx: ReleaseContext, err: Throwable): IO[ReleaseContext] =
-        restoreEntry(currentCtx).attempt *> IO.raiseError(err)
+        restoreEntry(currentCtx).attempt.flatMap {
+          case Right(_)         => IO.raiseError(err)
+          case Left(restoreErr) =>
+            IO.blocking {
+              currentCtx.state.log.error(
+                s"$LogPrefix Failed to restore the entry Scala version after a cross-build failure: " +
+                  s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
+              )
+              attachSuppressed(err, restoreErr)
+            } *> IO.raiseError(err)
+        }
 
       def runIteration(
           currentCtx: ReleaseContext,

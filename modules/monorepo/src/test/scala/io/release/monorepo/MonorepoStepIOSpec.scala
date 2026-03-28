@@ -1,13 +1,21 @@
 package io.release.monorepo
 
-import cats.effect.{IO, Ref, Resource}
+import cats.effect.IO
+import cats.effect.Ref
+import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.internal.{SbtCompat, SbtRuntime}
-import io.release.monorepo.steps.{MonorepoPublishSteps, MonorepoStepTestCompat}
+import io.release.internal.SbtCompat
+import io.release.internal.SbtRuntime
+import io.release.monorepo.steps.MonorepoPublishSteps
+import io.release.monorepo.steps.MonorepoStepTestCompat
 import munit.CatsEffectSuite
+import sbt.AttributeKey
 import sbt.Keys.*
-import sbt.{AttributeKey, LocalProject, Project, ProjectRef, State}
+import sbt.LocalProject
+import sbt.Project
+import sbt.ProjectRef
+import sbt.State
 
 import java.io.File
 import java.nio.file.Files
@@ -101,6 +109,52 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
             assertEquals(
               obs,
               List("setup", "validate-a:api", "validate-b:api", "execute-a:api", "execute-b:api")
+            )
+          }
+      }
+    }
+  }
+
+  test("compose - preserve custom process order around the selection boundary") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        val core = dummyProject("core")
+        val api  = dummyProject("api")
+        val pCtx = ctx.withProjects(Seq(core, api))
+
+        val setup       = MonorepoStepIO.Global(
+          name = "custom-setup",
+          validate = _ => log.update(_ :+ "validate-setup"),
+          execute = c => log.update(_ :+ "execute-setup").as(c)
+        )
+        val boundary    = MonorepoStepIO
+          .global("detect-or-select-projects")
+          .withSelectionBoundary
+          .execute(c => log.update(_ :+ "select").as(c.withProjects(Seq(api))))
+        val afterPer    = MonorepoStepIO.PerProject(
+          name = "custom-project",
+          validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
+          execute = (c, project) => log.update(_ :+ s"execute-project:${project.name}").as(c)
+        )
+        val afterGlobal = MonorepoStepIO.Global(
+          name = "custom-global",
+          validate = _ => log.update(_ :+ "validate-global"),
+          execute = c => log.update(_ :+ "execute-global").as(c)
+        )
+
+        MonorepoStepIO.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx) *>
+          log.get.map { obs =>
+            assertEquals(
+              obs,
+              List(
+                "validate-setup",
+                "execute-setup",
+                "select",
+                "validate-project:api",
+                "validate-global",
+                "execute-project:api",
+                "execute-global"
+              )
             )
           }
       }
@@ -738,12 +792,7 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
   private def requireProjectFailures(
       cause: Option[Throwable]
   ): MonorepoProjectFailures =
-    cause match {
-      case Some(aggregate) if classOf[MonorepoProjectFailures].isInstance(aggregate) =>
-        classOf[MonorepoProjectFailures].cast(aggregate)
-      case other                                                                     =>
-        fail(s"Expected MonorepoProjectFailures but got $other")
-    }
+    MonorepoSpecSupport.requireProjectFailures(cause)
 
   private def loadedContextWithProjectsResource(
       prefix: String
