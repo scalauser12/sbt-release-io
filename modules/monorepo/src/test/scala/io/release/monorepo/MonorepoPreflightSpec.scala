@@ -158,6 +158,47 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
     }
   }
 
+  test("check - bootstrap built-in initialize-vcs for custom no-boundary validations") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(MonorepoReleaseSteps.initializeVcs, requiresVcsValidationStep)
+        )
+        .map { summary =>
+          assertEquals(
+            summary.selectionMode,
+            MonorepoPreflight.Evaluation.NotEvaluated(
+              "detect-or-select-projects not in check process"
+            )
+          )
+          assertEquals(summary.projects.map(_.name), Seq("core"))
+          assertEquals(
+            summary.projects.map(_.versions),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("inquire-versions not in check process"))
+          )
+          assertEquals(
+            summary.projects.map(_.tag),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("tag-releases not in check process"))
+          )
+        }
+    }
+  }
+
+  test(
+    "check - fail custom no-boundary validations that require VCS when initialize-vcs is absent"
+  ) {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      assertFailure[IllegalStateException, MonorepoPreflight.Summary](
+        MonorepoPreflight.check(session, Seq(requiresVcsValidationStep))
+      )(err => assert(err.getMessage.contains("expected preflight VCS context")))
+    }
+  }
+
   test("renderProjects - fail on inconsistent project and tag outcome counts") {
     val projects = Seq(
       MonorepoTestSupport.dummyProject("core").copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
@@ -227,4 +268,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
         (repo, ctx, versionFile)
       }
     }
+
+  private val requiresVcsValidationStep: MonorepoStepIO.Global =
+    MonorepoStepIO
+      .global("requires-vcs")
+      .withValidation(ctx =>
+        IO.raiseUnless(ctx.vcs.nonEmpty)(
+          new IllegalStateException("expected preflight VCS context")
+        )
+      )
+      .validateOnly
 }

@@ -11,6 +11,7 @@ import io.release.monorepo.steps.MonorepoVcsSteps
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
 
+  private val InitializeVcsStep          = "initialize-vcs"
   private val DetectOrSelectProjectsStep = "detect-or-select-projects"
   private val InquireVersionsStep        = "inquire-versions"
   private val TagReleasesStep            = "tag-releases"
@@ -19,6 +20,7 @@ private[monorepo] object MonorepoPreflight {
       stepNames: Seq[String],
       pushConfigured: Boolean,
       publishConfigured: Boolean,
+      shouldBootstrapVcs: Boolean,
       shouldResolveSelection: Boolean,
       shouldResolveVersions: Boolean,
       shouldPreflightTags: Boolean
@@ -26,15 +28,21 @@ private[monorepo] object MonorepoPreflight {
 
   private object CheckSteps {
     def apply(steps: Seq[MonorepoStepIO]): CheckSteps = {
-      val stepNames = steps.map(_.name)
+      val stepNames              = steps.map(_.name)
+      val shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep)
+      val shouldResolveVersions  = stepNames.contains(InquireVersionsStep)
+      val shouldPreflightTags    = stepNames.contains(TagReleasesStep)
 
       CheckSteps(
         stepNames = stepNames,
         pushConfigured = stepNames.contains("push-changes"),
         publishConfigured = stepNames.contains("publish-artifacts"),
-        shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep),
-        shouldResolveVersions = stepNames.contains(InquireVersionsStep),
-        shouldPreflightTags = stepNames.contains(TagReleasesStep)
+        shouldBootstrapVcs = stepNames.contains(InitializeVcsStep) ||
+          shouldResolveSelection ||
+          (shouldPreflightTags && shouldResolveVersions),
+        shouldResolveSelection = shouldResolveSelection,
+        shouldResolveVersions = shouldResolveVersions,
+        shouldPreflightTags = shouldPreflightTags
       )
     }
   }
@@ -160,10 +168,9 @@ private[monorepo] object MonorepoPreflight {
       ctx: MonorepoContext,
       checkSteps: CheckSteps
   ): IO[MonorepoContext] =
-    if (
-      checkSteps.shouldResolveSelection ||
-      (checkSteps.shouldPreflightTags && checkSteps.shouldResolveVersions)
-    )
+    // Check mode does not replay arbitrary setup executes, so bootstrap only the built-in
+    // VCS context that later validations and summaries are allowed to depend on.
+    if (checkSteps.shouldBootstrapVcs)
       VcsOps.detectAndInit(ctx)
     else IO.pure(ctx)
 
