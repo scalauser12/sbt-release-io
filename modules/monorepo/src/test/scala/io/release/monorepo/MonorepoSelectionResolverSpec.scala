@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.TestSupport
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
 import sbt.ClasspathDependency
@@ -154,6 +155,45 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
         MonorepoSelectionResolver.resolve(fixture.context(Seq.empty), plan)
       )(err => assert(err.getMessage.contains("Unknown projects in version overrides: missing")))
     }
+  }
+
+  test("validateResolvedProjects - reject duplicate live project names before selection") {
+    Resource
+      .both(
+        TestSupport.tempDirResource("monorepo-selection-duplicate-a"),
+        TestSupport.tempDirResource("monorepo-selection-duplicate-b")
+      )
+      .use { case (dirA, dirB) =>
+        IO {
+          val duplicateA = ProjectReleaseInfo(
+            ref = ProjectRef(dirA.toURI, "shared"),
+            name = "shared",
+            baseDir = dirA,
+            versionFile = new File(dirA, "version.sbt")
+          )
+          val duplicateB = ProjectReleaseInfo(
+            ref = ProjectRef(dirB.toURI, "shared"),
+            name = "shared",
+            baseDir = dirB,
+            versionFile = new File(dirB, "version.sbt")
+          )
+
+          MonorepoSelectionResolver
+            .validateResolvedProjects(
+              Seq(duplicateA, duplicateB),
+              MonorepoSpecSupport.releasePlan()
+            ) match {
+            case Left(message) =>
+              assert(message.contains("Duplicate configured monorepo project ids"))
+              assert(message.contains("shared"))
+              assert(message.contains(dirA.getAbsolutePath))
+              assert(message.contains(dirB.getAbsolutePath))
+              assert(message.contains("releaseIOMonorepoProjects"))
+            case Right(value)  =>
+              fail(s"Expected duplicate project-name validation to fail but got: $value")
+          }
+        }
+      }
   }
 
   private def resolverFixtureResource(

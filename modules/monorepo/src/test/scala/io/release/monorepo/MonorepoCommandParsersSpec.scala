@@ -133,6 +133,22 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
     }
   }
 
+  test("build - reject duplicate project ids instead of silently deduplicating them") {
+    val parser = MonorepoCommandParsers.build(Seq("core", "api", "core"))
+
+    assertEquals(ParserImpl.parse(" help", parser), Right(Seq("help")))
+    assert(ParserImpl.parse(" core", parser).isLeft)
+
+    MonorepoCommandParsers.validateProjectNames(Seq("core", "api", "core")) match {
+      case Left(message) =>
+        assert(message.contains("Duplicate configured monorepo project ids"))
+        assert(message.contains("core"))
+        assert(message.contains("releaseIOMonorepoProjects"))
+      case Right(tokens) =>
+        fail(s"Expected duplicate project-name validation to fail but got: $tokens")
+    }
+  }
+
   test("build - expose project-name completion from live project ids") {
     fixtureResource.use { fixture =>
       IO {

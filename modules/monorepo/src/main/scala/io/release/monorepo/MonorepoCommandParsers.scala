@@ -17,10 +17,11 @@ private[monorepo] object MonorepoCommandParsers {
 
   private type Tokens = Seq[String]
 
-  def build(projectNames: Seq[String]): Parser[Tokens] = {
-    val normalized = normalizeProjectNames(projectNames)
-    helpParser | checkParser(normalized) | runParser(normalized)
-  }
+  def build(projectNames: Seq[String]): Parser[Tokens] =
+    validateProjectNames(projectNames) match {
+      case Right(normalized) => helpParser | checkParser(normalized) | runParser(normalized)
+      case Left(message)     => helpParser | sbt.complete.DefaultParsers.failure(message)
+    }
 
   def buildFromState(state: State, commandName: String): Parser[Tokens] =
     resolveProjectNames(state, commandName) match {
@@ -34,11 +35,24 @@ private[monorepo] object MonorepoCommandParsers {
         .extract(state)
         .get(MonorepoReleaseIO.releaseIOMonorepoProjects)
         .map(_.project)
-        .distinct
-        .sorted
     }.toEither.left.map { err =>
       s"Failed to resolve releaseIOMonorepoProjects while building the $commandName parser: ${errorMessage(err)}"
-    }
+    }.flatMap(validateProjectNames)
+
+  private[monorepo] def validateProjectNames(projectNames: Seq[String]): Either[String, Seq[String]] = {
+    val duplicates = projectNames.groupBy(identity).collect {
+      case (name, refs) if refs.length > 1 => name
+    }.toSeq.sorted
+
+    if (duplicates.isEmpty) Right(normalizeProjectNames(projectNames))
+    else
+      Left(
+        "Duplicate configured monorepo project ids in releaseIOMonorepoProjects: " +
+          s"${duplicates.mkString(", ")}. " +
+          "Monorepo selectors and project=version overrides are name-based, " +
+          "so releaseIOMonorepoProjects must contain unique ref.project values."
+      )
+  }
 
   private def helpParser: Parser[Tokens] =
     (Space ~> token("help")).map(_ => Seq("help"))
@@ -52,7 +66,7 @@ private[monorepo] object MonorepoCommandParsers {
     (Space ~> argParser(projectNames)).*.map(_.flatten)
 
   private def normalizeProjectNames(projectNames: Seq[String]): Seq[String] =
-    projectNames.distinct.sorted
+    projectNames.sorted
 
   private def argParser(projectNames: Seq[String]): Parser[Tokens] = {
     val projectNameParser     = namedProjectParser(projectNames)

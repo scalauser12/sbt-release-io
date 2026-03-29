@@ -32,6 +32,11 @@ private[monorepo] object MonorepoSelectionResolver {
       sharedPaths: Seq[String]
   )
 
+  private final case class DuplicateProjectName(
+      name: String,
+      projects: Seq[ProjectReleaseInfo]
+  )
+
   /** Shared error message for the "no projects selected" case.
     *
     * Used by [[MonorepoPreparation.selectProjects]], which is shared by both the
@@ -215,10 +220,11 @@ private[monorepo] object MonorepoSelectionResolver {
       }
     }
 
-  private def validateResolvedProjects(
+  private[monorepo] def validateResolvedProjects(
       allProjects: Seq[ProjectReleaseInfo],
       plan: MonorepoReleasePlan
   ): Either[String, MonorepoReleasePlan] = {
+    val duplicateNames = findDuplicateProjectNames(allProjects)
     val validNames        = allProjects.map(_.name).toSet
     val invalidOverrides  =
       (plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet) -- validNames
@@ -228,6 +234,10 @@ private[monorepo] object MonorepoSelectionResolver {
       if (condition) Left(msg) else Right(())
 
     for {
+      _ <- failWhen(
+             duplicateNames.nonEmpty,
+             duplicateProjectNamesMessage(duplicateNames)
+           )
       _ <- failWhen(
              invalidOverrides.nonEmpty,
              "Unknown projects in version overrides: " +
@@ -242,6 +252,38 @@ private[monorepo] object MonorepoSelectionResolver {
            )
     } yield plan
   }
+
+  private def findDuplicateProjectNames(
+      projects: Seq[ProjectReleaseInfo]
+  ): Seq[DuplicateProjectName] =
+    projects
+      .groupBy(_.name)
+      .collect { case (name, matching) if matching.length > 1 =>
+        DuplicateProjectName(name, matching.sortBy(projectIdentity))
+      }
+      .toSeq
+      .sortBy(_.name)
+
+  private def duplicateProjectNamesMessage(
+      duplicates: Seq[DuplicateProjectName]
+  ): String = {
+    val duplicateNames = duplicates.map(_.name).mkString(", ")
+    val details        = duplicates
+      .map { duplicate =>
+        val locations = duplicate.projects.map(projectIdentity).mkString(", ")
+        s"${duplicate.name} -> $locations"
+      }
+      .mkString("; ")
+
+    "Duplicate configured monorepo project ids in releaseIOMonorepoProjects: " +
+      s"$duplicateNames. " +
+      s"Conflicting live projects: $details. " +
+      "Monorepo selectors and project=version overrides are name-based, " +
+      "so releaseIOMonorepoProjects must contain unique ref.project values."
+  }
+
+  private def projectIdentity(project: ProjectReleaseInfo): String =
+    s"${project.baseDir.getAbsolutePath} [${project.ref.build}#${project.ref.project}]"
 
   private def validateUnusedOverrides(
       selectedProjects: Seq[ProjectReleaseInfo],
