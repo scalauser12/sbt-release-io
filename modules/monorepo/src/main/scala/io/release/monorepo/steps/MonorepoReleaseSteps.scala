@@ -50,18 +50,38 @@ object MonorepoReleaseSteps {
       }
   )
 
-  val tagReleases: MonorepoStepIO.Global = MonorepoStepIO.Global(
-    name = "tag-releases",
-    execute = ctx => {
-      val step = MonorepoVcsSteps.tagReleasesPerProject
-      runPerProject(
-        ctx,
-        (currentCtx, project) =>
-          logInfo(currentCtx, s"${step.name} [${project.name}]") *>
-            step.execute(currentCtx, project)
-      )
-    }
-  )
+  // `tag-releases` remains a Global compatibility facade, but delegate through the
+  // per-project helpers so wrapped steps keep their validation and optional cross-build behavior.
+  private[monorepo] def compatibilityGlobalStep(
+      name: String,
+      step: MonorepoStepIO.PerProject
+  ): MonorepoStepIO.Global = {
+    def crossBuildEnabled(ctx: MonorepoContext): Boolean =
+      ctx.executionFlags.exists(_.crossBuild)
+
+    MonorepoStepIO.Global(
+      name = name,
+      validate = ctx =>
+        MonorepoCrossBuild.validatePerProjectWithCrossBuild(
+          ctx,
+          step.validate,
+          crossBuildEnabled(ctx),
+          step.enableCrossBuild
+        ),
+      execute = ctx =>
+        MonorepoCrossBuild.runPerProjectWithCrossBuild(
+          ctx,
+          (currentCtx, project) =>
+            logInfo(currentCtx, s"${step.name} [${project.name}]") *>
+              step.execute(currentCtx, project),
+          crossBuildEnabled(ctx),
+          step.enableCrossBuild
+        )
+    )
+  }
+
+  val tagReleases: MonorepoStepIO.Global =
+    compatibilityGlobalStep("tag-releases", MonorepoVcsSteps.tagReleasesPerProject)
 
   val defaults: Seq[MonorepoStepIO] = Seq(
     initializeVcs,

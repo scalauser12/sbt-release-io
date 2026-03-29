@@ -8,6 +8,7 @@ import io.release.TestSupport
 import io.release.internal.SbtCompat
 import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoPublishSteps
+import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.monorepo.steps.MonorepoStepTestCompat
 import munit.CatsEffectSuite
 import sbt.AttributeKey
@@ -371,6 +372,73 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
           assertEquals(corePlain, List(TestSupport.CurrentScalaVersion))
           assertEquals(apiPlain, List(TestSupport.CurrentScalaVersion))
           assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+        }
+      }
+    }
+  }
+
+  test(
+    "compose - compatibility global wrapper delegates wrapped per-project validation and cross-build execution"
+  ) {
+    loadedContextWithProjectsResource("monorepo-step-compatibility-wrapper") { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      LoadedMonorepoFixture(
+        projects = Seq(
+          Project("root", dir)
+            .aggregate(LocalProject("core"))
+            .settings(
+              scalaVersion := TestSupport.CurrentScalaVersion
+            ),
+          Project("core", coreBase).settings(
+            scalaVersion       := TestSupport.CurrentScalaVersion,
+            crossScalaVersions := Seq(
+              TestSupport.CurrentScalaVersion,
+              TestSupport.alternateScalaVersion
+            )
+          )
+        ),
+        selectedProjectIds = Seq("core")
+      )
+    }.use { baseCtx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val wrappedStep = MonorepoStepIO.PerProject(
+          name = "wrapped-tag-release",
+          validate = (ctx, project) =>
+            scalaVersionOf(ctx.state)
+              .flatMap(version => observed.update(_ :+ s"validate:${project.name}:$version")),
+          execute = (ctx, project) =>
+            scalaVersionOf(ctx.state)
+              .flatMap(version => observed.update(_ :+ s"execute:${project.name}:$version"))
+              .as(ctx),
+          enableCrossBuild = true
+        )
+        val wrapper     = MonorepoReleaseSteps.compatibilityGlobalStep("tag-releases", wrappedStep)
+        val ctx         = MonorepoSpecSupport.withPlan(
+          baseCtx,
+          MonorepoSpecSupport.releasePlan(
+            selectionMode = SelectionMode.AllChanged,
+            flags = MonorepoSpecSupport.defaultFlags.copy(crossBuild = true)
+          )
+        )
+
+        MonorepoStepIO.compose(Seq(wrapper))(ctx).flatMap { result =>
+          for {
+            events          <- observed.get
+            restoredVersion <- scalaVersionOf(result.state)
+          } yield {
+            assertEquals(
+              events,
+              List(
+                s"validate:core:${TestSupport.CurrentScalaVersion}",
+                s"validate:core:${TestSupport.alternateScalaVersion}",
+                s"execute:core:${TestSupport.CurrentScalaVersion}",
+                s"execute:core:${TestSupport.alternateScalaVersion}"
+              )
+            )
+            assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+          }
         }
       }
     }
