@@ -224,7 +224,7 @@ private[monorepo] object MonorepoSelectionResolver {
       allProjects: Seq[ProjectReleaseInfo],
       plan: MonorepoReleasePlan
   ): Either[String, MonorepoReleasePlan] = {
-    val duplicateNames = findDuplicateProjectNames(allProjects)
+    val duplicateNames    = findDuplicateProjectNames(allProjects)
     val validNames        = allProjects.map(_.name).toSet
     val invalidOverrides  =
       (plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet) -- validNames
@@ -258,8 +258,9 @@ private[monorepo] object MonorepoSelectionResolver {
   ): Seq[DuplicateProjectName] =
     projects
       .groupBy(_.name)
-      .collect { case (name, matching) if matching.length > 1 =>
-        DuplicateProjectName(name, matching.sortBy(projectIdentity))
+      .collect {
+        case (name, matching) if matching.length > 1 =>
+          DuplicateProjectName(name, matching.sortBy(projectIdentity))
       }
       .toSeq
       .sortBy(_.name)

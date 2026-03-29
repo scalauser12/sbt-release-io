@@ -203,7 +203,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       TestAssertions.assertFailure[IllegalStateException, Unit](
         MonorepoVcsSteps.pushChanges.validate(MonorepoContext(state = state))
       ) { err =>
-        assertEquals(err.getMessage, "VCS not initialized. Ensure initializeVcs runs before this step.")
+        assertEquals(
+          err.getMessage,
+          "VCS not initialized. Ensure initializeVcs runs before this step."
+        )
       }
     }
   }
@@ -213,7 +216,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
         MonorepoVcsSteps.pushChanges.execute(MonorepoContext(state = state))
       ) { err =>
-        assertEquals(err.getMessage, "VCS not initialized. Ensure initializeVcs runs before this step.")
+        assertEquals(
+          err.getMessage,
+          "VCS not initialized. Ensure initializeVcs runs before this step."
+        )
       }
     }
   }

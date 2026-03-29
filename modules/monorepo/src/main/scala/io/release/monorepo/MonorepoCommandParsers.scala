@@ -35,14 +35,22 @@ private[monorepo] object MonorepoCommandParsers {
         .extract(state)
         .get(MonorepoReleaseIO.releaseIOMonorepoProjects)
         .map(_.project)
-    }.toEither.left.map { err =>
-      s"Failed to resolve releaseIOMonorepoProjects while building the $commandName parser: ${errorMessage(err)}"
-    }.flatMap(validateProjectNames)
+    }.toEither.left
+      .map { err =>
+        s"Failed to resolve releaseIOMonorepoProjects while building the $commandName parser: ${errorMessage(err)}"
+      }
+      .flatMap(validateProjectNames)
 
-  private[monorepo] def validateProjectNames(projectNames: Seq[String]): Either[String, Seq[String]] = {
-    val duplicates = projectNames.groupBy(identity).collect {
-      case (name, refs) if refs.length > 1 => name
-    }.toSeq.sorted
+  private[monorepo] def validateProjectNames(
+      projectNames: Seq[String]
+  ): Either[String, Seq[String]] = {
+    val duplicates = projectNames
+      .groupBy(identity)
+      .collect {
+        case (name, refs) if refs.length > 1 => name
+      }
+      .toSeq
+      .sorted
 
     if (duplicates.isEmpty) Right(normalizeProjectNames(projectNames))
     else
