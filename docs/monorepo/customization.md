@@ -292,6 +292,8 @@ pipeline entirely. Disabling built-in phases and adding behavior around supporte
 points should use `releaseIOMonorepoEnable*` and `releaseIOMonorepo*Hooks`, not
 `releaseIOMonorepoProcess`.
 
+> **Migration note:** `MonorepoReleaseSteps.tagReleases` is deprecated as a Global compatibility facade. For explicit process wiring, use `MonorepoReleaseSteps.tagReleasesPerProject`. If you only need to add behavior around tagging, prefer `releaseIOMonorepoEnableTagging` and the before/after tag hooks instead of raw process editing.
+
 Use `insertStepBefore` / `insertStepAfter` to add steps at specific positions by name (matching
 the `step.name` strings in the [default steps table](concepts.md#default-release-steps)). For
 example, rewrite the project set in `State` before `resolve-release-order` runs:
@@ -337,7 +339,7 @@ releaseIOMonorepoProcess := Seq(
   // runClean, runTests, and publishArtifacts omitted — tag-only release
   setReleaseVersions,
   commitReleaseVersions,
-  tagReleases,
+  tagReleasesPerProject,
   setNextVersions,
   commitNextVersions,
   pushChanges

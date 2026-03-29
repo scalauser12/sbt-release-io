@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
+import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
@@ -115,6 +116,13 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       .execute(ctx => IO.pure(ctx))
 
     assert(step.asInstanceOf[MonorepoStepIO.Global].isSelectionBoundary)
+  }
+
+  test("built-in tag release migration surface exposes both Global and PerProject forms") {
+    assertEquals(MonorepoReleaseSteps.tagReleases.name, "tag-releases")
+    assertEquals(MonorepoReleaseSteps.tagReleasesPerProject.name, "tag-releases")
+    assert(MonorepoReleaseSteps.tagReleases.isInstanceOf[MonorepoStepIO.Global])
+    assert(MonorepoReleaseSteps.tagReleasesPerProject.isInstanceOf[MonorepoStepIO.PerProject])
   }
 
   test("globalResource produces T => MonorepoStepIO") {

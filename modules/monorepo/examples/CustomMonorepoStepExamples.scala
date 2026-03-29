@@ -266,7 +266,7 @@ object CustomMonorepoStepExamples {
     MonorepoReleaseSteps.runTests,
     MonorepoReleaseSteps.setReleaseVersions,
     MonorepoReleaseSteps.commitReleaseVersions,
-    MonorepoReleaseSteps.tagReleases,
+    MonorepoReleaseSteps.tagReleasesPerProject,
     MonorepoReleaseSteps.publishArtifacts,
     MonorepoReleaseSteps.setNextVersions,
     MonorepoReleaseSteps.commitNextVersions,

@@ -110,7 +110,7 @@ private[monorepo] object MonorepoHookCompiler {
       // ── Tagging ────────────────────────────────────────────────────
       optionalSteps(hooks.enableTagging) {
         compileProjectHooks("before-tag", hooks.beforeTagHooks, AlwaysProject, crossBuild = false) ++
-          Seq(MonorepoReleaseSteps.tagReleases) ++
+          Seq(MonorepoReleaseSteps.tagReleasesGlobalFacade) ++
           compileProjectHooks("after-tag", hooks.afterTagHooks, AlwaysProject, crossBuild = false)
       } ++
       // ── Publish ────────────────────────────────────────────────────

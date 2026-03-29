@@ -80,8 +80,28 @@ object MonorepoReleaseSteps {
     )
   }
 
-  val tagReleases: MonorepoStepIO.Global =
+  private[monorepo] val tagReleasesGlobalFacade: MonorepoStepIO.Global =
     compatibilityGlobalStep("tag-releases", MonorepoVcsSteps.tagReleasesPerProject)
+
+  /** Per-project tagging step for explicit process wiring.
+    *
+    * Prefer this symbol when you intentionally edit `releaseIOMonorepoProcess`. The lifecycle
+    * phase name stays `tag-releases`, so before/after tag hooks and preflight behavior continue
+    * to align with the built-in tagging phase.
+    */
+  val tagReleasesPerProject: MonorepoStepIO.PerProject =
+    MonorepoVcsSteps.tagReleasesPerProject.copy(name = "tag-releases")
+
+  /** Legacy global compatibility facade over per-project tagging.
+    *
+    * Prefer [[tagReleasesPerProject]] for explicit process wiring, or hook-based tagging controls
+    * when you only need to add behavior around the built-in lifecycle point.
+    */
+  @deprecated(
+    "Use `tagReleasesPerProject` for explicit process wiring, or prefer hook-based tagging controls; `tagReleases` remains a Global compatibility facade and will become `PerProject` in the next breaking release.",
+    "0.7.1"
+  )
+  val tagReleases: MonorepoStepIO.Global = tagReleasesGlobalFacade
 
   val defaults: Seq[MonorepoStepIO] = Seq(
     initializeVcs,
@@ -94,7 +114,7 @@ object MonorepoReleaseSteps {
     runTests,
     setReleaseVersions,
     commitReleaseVersions,
-    tagReleases,
+    tagReleasesGlobalFacade,
     publishArtifacts,
     setNextVersions,
     commitNextVersions,

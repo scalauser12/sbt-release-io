@@ -22,6 +22,8 @@
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order. Only selected projects participate — child projects that weren't selected or discovered by change detection are skipped.
 
+> **Migration note:** `MonorepoReleaseSteps.tagReleases` is currently a deprecated Global compatibility facade over the per-project tagging implementation. For explicit process wiring, prefer `MonorepoReleaseSteps.tagReleasesPerProject`. The lifecycle phase name remains `tag-releases`.
+
 ## Execution model
 
 ### Validate / Execute Model

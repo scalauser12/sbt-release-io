@@ -389,7 +389,7 @@ class MonorepoStepIOSpec extends CatsEffectSuite {
           Project("root", dir)
             .aggregate(LocalProject("core"))
             .settings(
-              scalaVersion := TestSupport.CurrentScalaVersion
+              scalaVersion     := TestSupport.CurrentScalaVersion
             ),
           Project("core", coreBase).settings(
             scalaVersion       := TestSupport.CurrentScalaVersion,
