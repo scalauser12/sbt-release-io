@@ -12,6 +12,7 @@ import munit.CatsEffectSuite
 
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
@@ -130,6 +131,35 @@ class VcsStepsSpec extends CatsEffectSuite {
             ),
             "Tag [v1.0.0] already exists. Aborting release!"
           )
+        }
+    }
+  }
+
+  test("tagRelease.execute - propagate non-EOF input failures when the tag already exists") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      val brokenInput = new InputStream {
+        override def read(): Int =
+          throw new IOException("broken stdin")
+      }
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        withSystemInput(brokenInput) {
+          TestAssertions.assertFailure[IOException, ReleaseContext](
+            VcsSteps.tagRelease.execute(
+              ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
+            )
+          ) { err =>
+            assertEquals(err.getMessage, "broken stdin")
+          }
         }
     }
   }
@@ -267,17 +297,20 @@ class VcsStepsSpec extends CatsEffectSuite {
   private def withInput[A](input: String)(io: IO[A]): IO[A] = {
     val bytes = input.getBytes(StandardCharsets.UTF_8)
 
+    withSystemInput(new ByteArrayInputStream(bytes))(io)
+  }
+
+  private def withSystemInput[A](input: InputStream)(io: IO[A]): IO[A] =
     Resource
       .make {
         IO.blocking {
           stdinLock.acquire()
           val original = System.in
-          System.setIn(new ByteArrayInputStream(bytes))
+          System.setIn(input)
           original
         }
       }(restoreInput)
       .use(_ => io)
-  }
 
   private def restoreInput(original: InputStream): IO[Unit] =
     IO.blocking {

@@ -44,6 +44,13 @@ lazy val commonSettings = Seq(
     "-feature",
     "-unchecked"
   ),
+  // Scala 3 `-Wunused:imports` spams false positives on `import sbt.{internal as _, *}`.
+  scalacOptions ++= {
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, 12)) => Seq("-Ywarn-unused-import")
+      case _             => Nil
+    }
+  },
   scriptedLaunchOpts            := {
     scriptedLaunchOpts.value ++
       Seq("-Xmx1024M", "-Dplugin.version=" + version.value) ++

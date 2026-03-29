@@ -1,7 +1,6 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import cats.syntax.all.*
 import io.release.VcsOps
 import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionEngine
@@ -15,6 +14,30 @@ private[monorepo] object MonorepoPreflight {
   private val DetectOrSelectProjectsStep = "detect-or-select-projects"
   private val InquireVersionsStep        = "inquire-versions"
   private val TagReleasesStep            = "tag-releases"
+
+  private final case class CheckSteps(
+      stepNames: Seq[String],
+      pushConfigured: Boolean,
+      publishConfigured: Boolean,
+      shouldResolveSelection: Boolean,
+      shouldResolveVersions: Boolean,
+      shouldPreflightTags: Boolean
+  )
+
+  private object CheckSteps {
+    def apply(steps: Seq[MonorepoStepIO]): CheckSteps = {
+      val stepNames = steps.map(_.name)
+
+      CheckSteps(
+        stepNames = stepNames,
+        pushConfigured = stepNames.contains("push-changes"),
+        publishConfigured = stepNames.contains("publish-artifacts"),
+        shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep),
+        shouldResolveVersions = stepNames.contains(InquireVersionsStep),
+        shouldPreflightTags = stepNames.contains(TagReleasesStep)
+      )
+    }
+  }
 
   sealed trait Evaluation[+A]
   object Evaluation {
@@ -99,37 +122,50 @@ private[monorepo] object MonorepoPreflight {
       session: MonorepoPreparedSession,
       steps: Seq[MonorepoStepIO]
   ): IO[Summary] = {
-    val initialCtx             = session.context
-    val stepNames              = steps.map(_.name)
-    val pushConfigured         = stepNames.contains("push-changes")
-    val publishConfigured      = stepNames.contains("publish-artifacts")
-    val shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep)
-    val shouldResolveVersions  = stepNames.contains(InquireVersionsStep)
-    val shouldPreflightTags    = stepNames.contains(TagReleasesStep)
+    val checkSteps = CheckSteps(steps)
 
     for {
-      baseCtx      <- if (shouldResolveSelection || (shouldPreflightTags && shouldResolveVersions))
-                        VcsOps.detectAndInit(initialCtx)
-                      else IO.pure(initialCtx)
-      selected     <- resolveSelection(baseCtx, session.plan, shouldResolveSelection)
-      withVersions <- resolveVersionSnapshot(selected.context, shouldResolveVersions)
-      tagOutcomes  <- resolveTagSnapshot(withVersions, shouldPreflightTags, shouldResolveVersions)
+      baseCtx      <- resolveBaseContext(session.context, checkSteps)
+      selected     <- resolveSelection(baseCtx, session.plan, checkSteps.shouldResolveSelection)
+      withVersions <- resolveVersionSnapshot(selected.context, checkSteps.shouldResolveVersions)
+      tagOutcomes  <-
+        resolveTagSnapshot(
+          withVersions,
+          checkSteps.shouldPreflightTags,
+          checkSteps.shouldResolveVersions
+        )
       _            <- validateOnly(steps, session.flags.crossBuild)(withVersions)
-      projects     <- renderProjects(withVersions.currentProjects, shouldResolveVersions, tagOutcomes)
+      projects     <-
+        renderProjects(
+          withVersions.currentProjects,
+          checkSteps.shouldResolveVersions,
+          tagOutcomes
+        )
       summary       = Summary(
                         selectionMode = selected.selectionMode,
                         projects = projects,
                         crossBuildEnabled = session.flags.crossBuild,
                         publishSummary = CheckModeOutput.publishStatus(
-                          publishConfigured = publishConfigured,
+                          publishConfigured = checkSteps.publishConfigured,
                           skipPublish = withVersions.skipPublish,
                           skippedMessage = "skipped via releaseIOMonorepoSkipPublish := true"
                         ),
-                        pushSummary = CheckModeOutput.pushStatus(pushConfigured),
-                        stepNames = stepNames
+                        pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
+                        stepNames = checkSteps.stepNames
                       )
     } yield summary
   }
+
+  private def resolveBaseContext(
+      ctx: MonorepoContext,
+      checkSteps: CheckSteps
+  ): IO[MonorepoContext] =
+    if (
+      checkSteps.shouldResolveSelection ||
+      (checkSteps.shouldPreflightTags && checkSteps.shouldResolveVersions)
+    )
+      VcsOps.detectAndInit(ctx)
+    else IO.pure(ctx)
 
   private def resolveSelection(
       ctx: MonorepoContext,
@@ -139,8 +175,8 @@ private[monorepo] object MonorepoPreflight {
     if (!shouldResolveSelection)
       IO.pure(
         SelectionSnapshot(
-          context = ctx,
-          selectionMode = Evaluation.NotEvaluated("detect-or-select-projects not in check process")
+          ctx,
+          Evaluation.NotEvaluated("detect-or-select-projects not in check process")
         )
       )
     else
@@ -186,22 +222,8 @@ private[monorepo] object MonorepoPreflight {
       projects: Seq[ProjectReleaseInfo],
       builtInVersionsResolved: Boolean,
       tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]
-  ): IO[Seq[ProjectSummary]] =
-    resolveProjectTags(projects, tagOutcomes).map { resolvedTags =>
-      projects.zip(resolvedTags).map { case (project, tagEvaluation) =>
-        ProjectSummary(
-          name = project.name,
-          versions = renderProjectVersions(project, builtInVersionsResolved),
-          tag = tagEvaluation
-        )
-      }
-    }
-
-  private def resolveProjectTags(
-      projects: Seq[ProjectReleaseInfo],
-      tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]
-  ): IO[Seq[Evaluation[ProjectTag]]] =
-    tagOutcomes match {
+  ): IO[Seq[ProjectSummary]] = {
+    val tagEvaluations: IO[Seq[Evaluation[ProjectTag]]] = tagOutcomes match {
       case Evaluation.NotEvaluated(reason) =>
         IO.pure(projects.map(_ => Evaluation.NotEvaluated(reason)))
       case Evaluation.Resolved(outcomes)   =>
@@ -213,10 +235,21 @@ private[monorepo] object MonorepoPreflight {
             )
           )
         else
-          IO.pure(projects.zip(outcomes).map { case (_, tagOutcome) =>
-            Evaluation.Resolved(ProjectTag(tagOutcome.rendered, tagOutcome.status))
+          IO.pure(projects.zip(outcomes).map { case (_, o) =>
+            Evaluation.Resolved(ProjectTag(o.rendered, o.status))
           })
     }
+
+    tagEvaluations.map { resolvedTags =>
+      projects.zip(resolvedTags).map { case (project, tagEval) =>
+        ProjectSummary(
+          name = project.name,
+          versions = renderProjectVersions(project, builtInVersionsResolved),
+          tag = tagEval
+        )
+      }
+    }
+  }
 
   private def renderProjectVersions(
       project: ProjectReleaseInfo,
@@ -240,21 +273,14 @@ private[monorepo] object MonorepoPreflight {
     }
 
   private def renderProject(project: ProjectSummary): String = {
-    val versionText =
-      project.versions match {
-        case Evaluation.Resolved(ProjectVersions(releaseVersion, nextVersion)) =>
-          s"release $releaseVersion, next $nextVersion"
-        case Evaluation.NotEvaluated(reason)                                   =>
-          s"release not evaluated ($reason), next not evaluated ($reason)"
-      }
-    val tagText     =
-      project.tag match {
-        case Evaluation.Resolved(ProjectTag(tagName, tagStatus)) =>
-          s"tag $tagName ($tagStatus)"
-        case Evaluation.NotEvaluated(reason)                     =>
-          s"tag not evaluated ($reason)"
-      }
-
+    val versionText = project.versions match {
+      case Evaluation.Resolved(v)     => s"release ${v.releaseVersion}, next ${v.nextVersion}"
+      case Evaluation.NotEvaluated(r) => s"release not evaluated ($r), next not evaluated ($r)"
+    }
+    val tagText     = project.tag match {
+      case Evaluation.Resolved(t)     => s"tag ${t.tagName} (${t.tagStatus})"
+      case Evaluation.NotEvaluated(r) => s"tag not evaluated ($r)"
+    }
     s"    - ${project.name}: $versionText, $tagText"
   }
 }

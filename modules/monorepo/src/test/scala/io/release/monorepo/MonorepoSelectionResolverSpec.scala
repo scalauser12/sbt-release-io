@@ -6,7 +6,6 @@ import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
 import sbt.ClasspathDependency
 import sbt.LocalProject
-import sbt.Project
 import sbt.ProjectRef
 import sbt.classpathDependency
 

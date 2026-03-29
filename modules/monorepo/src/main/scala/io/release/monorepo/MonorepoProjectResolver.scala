@@ -52,16 +52,16 @@ private[monorepo] object MonorepoProjectResolver {
     val currentByRef = current.map(p => p.ref -> p).toMap
 
     resolved.map { project =>
-      currentByRef.get(project.ref) match {
-        case Some(existing) =>
+      currentByRef
+        .get(project.ref)
+        .fold(project)(existing =>
           project.copy(
             versions = existing.versions,
             tagName = existing.tagName,
             failed = existing.failed,
             failureCause = existing.failureCause
           )
-        case None           => project
-      }
+        )
     }
   }
 
@@ -76,9 +76,9 @@ private[monorepo] object MonorepoProjectResolver {
       if (releaseOverride.isEmpty && nextOverride.isEmpty) project
       else {
         val (currentRelease, currentNext) = project.versions.getOrElse(("", ""))
-        val release                       = releaseOverride.getOrElse(currentRelease)
-        val next                          = nextOverride.getOrElse(currentNext)
-        project.copy(versions = Some((release, next)))
+        project.copy(versions =
+          Some((releaseOverride.getOrElse(currentRelease), nextOverride.getOrElse(currentNext)))
+        )
       }
     }
 }

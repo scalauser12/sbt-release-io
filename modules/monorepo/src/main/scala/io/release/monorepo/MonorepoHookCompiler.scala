@@ -8,12 +8,11 @@ import sbt.State
 /** Compiles semantic monorepo hook settings into the existing monorepo engine. */
 private[monorepo] object MonorepoHookCompiler {
 
-  private type GlobalGate  = MonorepoContext => Boolean
-  private type ProjectGate = (MonorepoContext, ProjectReleaseInfo) => Boolean
-
-  private val AlwaysGlobal: GlobalGate    = _ => true
-  private val AlwaysProject: ProjectGate  = (_, _) => true
-  private val PublishProject: ProjectGate = (ctx, _) => !ctx.skipPublish
+  private val AlwaysGlobal: MonorepoContext => Boolean                         = _ => true
+  private val AlwaysProject: (MonorepoContext, ProjectReleaseInfo) => Boolean  =
+    (_, _) => true
+  private val PublishProject: (MonorepoContext, ProjectReleaseInfo) => Boolean =
+    (ctx, _) => !ctx.skipPublish
 
   def resolve(state: State): MonorepoHookConfiguration = {
     val extracted = SbtRuntime.extracted(state)
@@ -59,18 +58,21 @@ private[monorepo] object MonorepoHookCompiler {
   def compile(state: State): Seq[MonorepoStepIO] =
     compile(resolve(state))
 
+  // scalafmt: { maxColumn = 120 }
   def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoStepIO] =
+    // ── Setup ────────────────────────────────────────────────────────
     Seq(
       MonorepoReleaseSteps.initializeVcs,
       MonorepoReleaseSteps.checkCleanWorkingDir,
       MonorepoReleaseSteps.resolveReleaseOrder
     ) ++
+      // ── Selection ──────────────────────────────────────────────────
       compileGlobalHooks("before-selection", hooks.beforeSelectionHooks, AlwaysGlobal) ++
       Seq(MonorepoReleaseSteps.detectOrSelectProjects) ++
       compileGlobalHooks("after-selection", hooks.afterSelectionHooks, AlwaysGlobal) ++
-      optionalStep(hooks.enableSnapshotDependenciesCheck)(
-        MonorepoReleaseSteps.checkSnapshotDependencies
-      ) ++
+      // ── Snapshot dependencies ──────────────────────────────────────
+      optionalStep(hooks.enableSnapshotDependenciesCheck)(MonorepoReleaseSteps.checkSnapshotDependencies) ++
+      // ── Version resolution ─────────────────────────────────────────
       compileProjectHooks(
         "before-version-resolution",
         hooks.beforeVersionResolutionHooks,
@@ -84,8 +86,10 @@ private[monorepo] object MonorepoHookCompiler {
         AlwaysProject,
         MonorepoReleaseSteps.inquireVersions.enableCrossBuild
       ) ++
+      // ── Clean & test ───────────────────────────────────────────────
       optionalStep(hooks.enableRunClean)(MonorepoReleaseSteps.runClean) ++
       optionalStep(hooks.enableRunTests)(MonorepoReleaseSteps.runTests) ++
+      // ── Release version write ──────────────────────────────────────
       compileProjectHooks(
         "before-release-version-write",
         hooks.beforeReleaseVersionWriteHooks,
@@ -99,32 +103,17 @@ private[monorepo] object MonorepoHookCompiler {
         AlwaysProject,
         MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
       ) ++
-      compileGlobalHooks(
-        "before-release-commit",
-        hooks.beforeReleaseCommitHooks,
-        AlwaysGlobal
-      ) ++
+      // ── Release commit ─────────────────────────────────────────────
+      compileGlobalHooks("before-release-commit", hooks.beforeReleaseCommitHooks, AlwaysGlobal) ++
       Seq(MonorepoReleaseSteps.commitReleaseVersions) ++
-      compileGlobalHooks(
-        "after-release-commit",
-        hooks.afterReleaseCommitHooks,
-        AlwaysGlobal
-      ) ++
+      compileGlobalHooks("after-release-commit", hooks.afterReleaseCommitHooks, AlwaysGlobal) ++
+      // ── Tagging ────────────────────────────────────────────────────
       optionalSteps(hooks.enableTagging) {
-        compileProjectHooks(
-          "before-tag",
-          hooks.beforeTagHooks,
-          AlwaysProject,
-          crossBuild = false
-        ) ++
+        compileProjectHooks("before-tag", hooks.beforeTagHooks, AlwaysProject, crossBuild = false) ++
           Seq(MonorepoReleaseSteps.tagReleases) ++
-          compileProjectHooks(
-            "after-tag",
-            hooks.afterTagHooks,
-            AlwaysProject,
-            crossBuild = false
-          )
+          compileProjectHooks("after-tag", hooks.afterTagHooks, AlwaysProject, crossBuild = false)
       } ++
+      // ── Publish ────────────────────────────────────────────────────
       optionalSteps(hooks.enablePublish) {
         compileProjectHooks(
           "before-publish",
@@ -140,6 +129,7 @@ private[monorepo] object MonorepoHookCompiler {
             MonorepoReleaseSteps.publishArtifacts.enableCrossBuild
           )
       } ++
+      // ── Next version write ─────────────────────────────────────────
       compileProjectHooks(
         "before-next-version-write",
         hooks.beforeNextVersionWriteHooks,
@@ -153,22 +143,17 @@ private[monorepo] object MonorepoHookCompiler {
         AlwaysProject,
         MonorepoReleaseSteps.setNextVersions.enableCrossBuild
       ) ++
-      compileGlobalHooks(
-        "before-next-commit",
-        hooks.beforeNextCommitHooks,
-        AlwaysGlobal
-      ) ++
+      // ── Next commit ────────────────────────────────────────────────
+      compileGlobalHooks("before-next-commit", hooks.beforeNextCommitHooks, AlwaysGlobal) ++
       Seq(MonorepoReleaseSteps.commitNextVersions) ++
-      compileGlobalHooks(
-        "after-next-commit",
-        hooks.afterNextCommitHooks,
-        AlwaysGlobal
-      ) ++
+      compileGlobalHooks("after-next-commit", hooks.afterNextCommitHooks, AlwaysGlobal) ++
+      // ── Push ───────────────────────────────────────────────────────
       optionalSteps(hooks.enablePush) {
         compileGlobalHooks("before-push", hooks.beforePushHooks, AlwaysGlobal) ++
           Seq(MonorepoReleaseSteps.pushChanges) ++
           compileGlobalHooks("after-push", hooks.afterPushHooks, AlwaysGlobal)
       }
+  // scalafmt: { maxColumn = 100 }
 
   private def optionalStep(enabled: Boolean)(step: => MonorepoStepIO): Seq[MonorepoStepIO] =
     if (enabled) Seq(step) else Seq.empty
@@ -179,7 +164,7 @@ private[monorepo] object MonorepoHookCompiler {
   private def compileGlobalHooks(
       phase: String,
       hooks: Seq[MonorepoGlobalHookIO],
-      gate: GlobalGate
+      gate: MonorepoContext => Boolean
   ): Seq[MonorepoStepIO] =
     hooks.map { hook =>
       MonorepoStepIO.Global(
@@ -192,7 +177,7 @@ private[monorepo] object MonorepoHookCompiler {
   private def compileProjectHooks(
       phase: String,
       hooks: Seq[MonorepoProjectHookIO],
-      gate: ProjectGate,
+      gate: (MonorepoContext, ProjectReleaseInfo) => Boolean,
       crossBuild: Boolean
   ): Seq[MonorepoStepIO] =
     hooks.map { hook =>

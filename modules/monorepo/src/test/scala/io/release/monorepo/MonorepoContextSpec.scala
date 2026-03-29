@@ -90,7 +90,7 @@ class MonorepoContextSpec extends FunSuite {
         releaseVersionOverrides = Map.empty,
         nextVersionOverrides = Map.empty
       )
-      val ctx     = MonorepoContext(state = state).withExecutionState(MonorepoExecutionState(plan))
+      val ctx     = MonorepoContext(state = state).withReleasePlan(plan)
       val updated = ctx.withState(state.copy(onFailure = None))
 
       assertEquals(updated.releasePlan.map(_.selectionMode), Some(SelectionMode.AllChanged))

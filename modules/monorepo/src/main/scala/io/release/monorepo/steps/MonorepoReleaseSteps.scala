@@ -1,6 +1,5 @@
 package io.release.monorepo.steps
 
-import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 

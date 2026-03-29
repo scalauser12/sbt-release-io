@@ -186,7 +186,10 @@ private[release] object TagConflictResolver {
             "Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
         ) *> IO.readLine
           .map(raw => Option(raw).getOrElse(""))
-          .handleError { case _: EOFException => "" }
+          .handleErrorWith {
+            case _: EOFException => IO.pure("")
+            case err             => IO.raiseError(err)
+          }
     }
 
     effectiveAnswer.map {

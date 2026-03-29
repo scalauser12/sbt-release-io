@@ -2,26 +2,17 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.internal.CheckModeOutput
-import io.release.internal.CoreHookConfiguration
-import io.release.internal.CorePreflight
-import io.release.internal.CoreExecutionState
-import io.release.internal.CoreReleasePlan
-import io.release.internal.ReleaseCommandParsers
+import io.release.internal.CoreCommandExecution
 import io.release.internal.ReleaseCli
-import io.release.internal.ReleaseCommandRunner
-import io.release.internal.ReleaseHookCompiler
+import io.release.internal.ReleaseCommandParsers
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.ReleaseSteps
 import io.release.steps.StepHelpers
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt.Keys.*
-import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
-
-import scala.annotation.nowarn
 
 /** Base trait for resource-parameterized release plugins. Each release step is a function
   * `T => ReleaseStepIO` where `T` is a resource acquired once for the entire release process.
@@ -260,329 +251,21 @@ trait ReleasePluginIOLike[T]
     )
   }
 
-  private def logLines(state: State, lines: Seq[String]): IO[Unit] =
-    ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)
-
-  private val ReleaseProcessLegacyReason =
-    "`releaseProcess` differs from the configured raw process"
-
-  private final class ResolvedProcessMode(
-      val releaseSteps: Seq[T => ReleaseStepIO],
-      val checkSteps: Seq[ReleaseStepIO],
-      val legacyMode: Boolean,
-      val legacyReasons: Seq[String]
-  )
-
-  private object ResolvedProcessMode {
-    def apply(
-        releaseSteps: Seq[T => ReleaseStepIO],
-        checkSteps: Seq[ReleaseStepIO],
-        legacyMode: Boolean,
-        legacyReasons: Seq[String]
-    ): ResolvedProcessMode =
-      new ResolvedProcessMode(releaseSteps, checkSteps, legacyMode, legacyReasons)
-  }
-
-  private final class ResolvedReleaseRun(
-      val steps: Seq[ReleaseStepIO],
-      val legacyMode: Boolean,
-      val legacyReasons: Seq[String]
-  )
-
-  private object ResolvedReleaseRun {
-    def apply(
-        steps: Seq[ReleaseStepIO],
-        legacyMode: Boolean,
-        legacyReasons: Seq[String]
-    ): ResolvedReleaseRun =
-      new ResolvedReleaseRun(steps, legacyMode, legacyReasons)
-  }
-
-  @nowarn("cat=deprecation")
-  private def resolveProcessMode(state: State): IO[ResolvedProcessMode] =
-    IO.blocking {
-      val extracted             = Project.extract(state)
-      val configuredRaw         = extracted.get(ReleaseIO._releaseIOProcess)
-      val configuredCheck       = releaseCheckProcess(state)
-      val configuredRelease     = releaseProcess(state)
-      val rawProcessChanged     = configuredRaw != ReleaseSteps.defaults
-      val checkProcessChanged   = configuredCheck != configuredRaw
-      val releaseProcessChanged =
-        configuredRelease.length != configuredRaw.length
-      val legacyReasons         =
-        Seq(
-          if (rawProcessChanged) Some("`releaseIOProcess` differs from defaults") else None,
-          if (checkProcessChanged)
-            Some("`releaseCheckProcess` differs from the configured raw process")
-          else None,
-          if (releaseProcessChanged)
-            Some("`releaseProcess` differs from the configured raw process")
-          else None
-        ).flatten
-      val legacyMode            = legacyReasons.nonEmpty
-
-      if (legacyMode)
-        ResolvedProcessMode(
-          releaseSteps = configuredRelease,
-          checkSteps = configuredCheck,
-          legacyMode = true,
-          legacyReasons = legacyReasons
-        )
-      else {
-        val compiled = ReleaseHookCompiler.compile(
-          mergeHookConfiguration(
-            ReleaseHookCompiler.resolve(state),
-            releaseResourceHooks(state),
-            maybeResource = None
-          )
-        )
-
-        ResolvedProcessMode(
-          releaseSteps = liftSteps(compiled),
-          checkSteps = compiled,
-          legacyMode = false,
-          legacyReasons = legacyReasons
-        )
-      }
-    }
-
-  @nowarn("cat=deprecation")
-  private def resolveReleaseRun(
-      state: State,
-      processMode: ResolvedProcessMode,
-      resourceValue: T
-  ): IO[ResolvedReleaseRun] =
-    if (processMode.legacyMode)
-      IO.pure(
-        ResolvedReleaseRun(
-          steps = processMode.releaseSteps.map(_(resourceValue)),
-          legacyMode = true,
-          legacyReasons = processMode.legacyReasons
-        )
-      )
-    else
-      IO.blocking {
-        val extracted         = Project.extract(state)
-        val configuredRaw     = extracted.get(ReleaseIO._releaseIOProcess)
-        val configuredRelease = releaseProcess(state).map(_(resourceValue))
-        val releaseChanged    = configuredRelease != configuredRaw
-
-        if (releaseChanged)
-          ResolvedReleaseRun(
-            steps = configuredRelease,
-            legacyMode = true,
-            legacyReasons = Seq(ReleaseProcessLegacyReason)
-          )
-        else
-          ResolvedReleaseRun(
-            steps = ReleaseHookCompiler.compile(
-              mergeHookConfiguration(
-                ReleaseHookCompiler.resolve(state),
-                releaseResourceHooks(state),
-                maybeResource = Some(resourceValue)
-              )
-            ),
-            legacyMode = false,
-            legacyReasons = Seq.empty
-          )
-      }
-
-  private def mergeHookConfiguration(
-      plainHooks: CoreHookConfiguration,
-      resourceHooks: ReleaseResourceHooks[T],
-      maybeResource: Option[T]
-  ): CoreHookConfiguration =
-    CoreHookConfiguration(
-      enableSnapshotDependenciesCheck = plainHooks.enableSnapshotDependenciesCheck,
-      enableRunClean = plainHooks.enableRunClean,
-      enableRunTests = plainHooks.enableRunTests,
-      enableTagging = plainHooks.enableTagging,
-      enablePublish = plainHooks.enablePublish,
-      enablePush = plainHooks.enablePush,
-      afterCleanCheckHooks = plainHooks.afterCleanCheckHooks ++ materializeHooks(
-        resourceHooks.afterCleanCheckHooks,
-        maybeResource
-      ),
-      beforeVersionResolutionHooks = plainHooks.beforeVersionResolutionHooks ++ materializeHooks(
-        resourceHooks.beforeVersionResolutionHooks,
-        maybeResource
-      ),
-      afterVersionResolutionHooks = plainHooks.afterVersionResolutionHooks ++ materializeHooks(
-        resourceHooks.afterVersionResolutionHooks,
-        maybeResource
-      ),
-      beforeReleaseVersionWriteHooks =
-        plainHooks.beforeReleaseVersionWriteHooks ++ materializeHooks(
-          resourceHooks.beforeReleaseVersionWriteHooks,
-          maybeResource
-        ),
-      afterReleaseVersionWriteHooks = plainHooks.afterReleaseVersionWriteHooks ++ materializeHooks(
-        resourceHooks.afterReleaseVersionWriteHooks,
-        maybeResource
-      ),
-      beforeReleaseCommitHooks = plainHooks.beforeReleaseCommitHooks ++ materializeHooks(
-        resourceHooks.beforeReleaseCommitHooks,
-        maybeResource
-      ),
-      afterReleaseCommitHooks = plainHooks.afterReleaseCommitHooks ++ materializeHooks(
-        resourceHooks.afterReleaseCommitHooks,
-        maybeResource
-      ),
-      beforeTagHooks =
-        plainHooks.beforeTagHooks ++ materializeHooks(resourceHooks.beforeTagHooks, maybeResource),
-      afterTagHooks =
-        plainHooks.afterTagHooks ++ materializeHooks(resourceHooks.afterTagHooks, maybeResource),
-      beforePublishHooks = plainHooks.beforePublishHooks ++ materializeHooks(
-        resourceHooks.beforePublishHooks,
-        maybeResource
-      ),
-      afterPublishHooks = plainHooks.afterPublishHooks ++ materializeHooks(
-        resourceHooks.afterPublishHooks,
-        maybeResource
-      ),
-      beforeNextVersionWriteHooks = plainHooks.beforeNextVersionWriteHooks ++ materializeHooks(
-        resourceHooks.beforeNextVersionWriteHooks,
-        maybeResource
-      ),
-      afterNextVersionWriteHooks = plainHooks.afterNextVersionWriteHooks ++ materializeHooks(
-        resourceHooks.afterNextVersionWriteHooks,
-        maybeResource
-      ),
-      beforeNextCommitHooks = plainHooks.beforeNextCommitHooks ++ materializeHooks(
-        resourceHooks.beforeNextCommitHooks,
-        maybeResource
-      ),
-      afterNextCommitHooks = plainHooks.afterNextCommitHooks ++ materializeHooks(
-        resourceHooks.afterNextCommitHooks,
-        maybeResource
-      ),
-      beforePushHooks = plainHooks.beforePushHooks ++ materializeHooks(
-        resourceHooks.beforePushHooks,
-        maybeResource
-      ),
-      afterPushHooks =
-        plainHooks.afterPushHooks ++ materializeHooks(resourceHooks.afterPushHooks, maybeResource)
+  @scala.annotation.nowarn("cat=deprecation")
+  private[release] final def commandRuntime: CoreCommandExecution.CommandRuntime[T] =
+    CoreCommandExecution.CommandRuntime(
+      commandName = commandName,
+      resource = resource,
+      resolveResourceHooks = state => releaseResourceHooks(state),
+      resolveReleaseProcess = state => releaseProcess(state),
+      resolveCheckProcess = state => releaseCheckProcess(state),
+      resolveCrossBuildEnabled = state => crossBuildEnabled(state),
+      resolveSkipPublishEnabled = state => skipPublishEnabled(state),
+      resolveInteractiveEnabled = state => interactiveEnabled(state),
+      initialContext = (state, skipTests, skipPublish, interactive) =>
+        this.initialContext(state, skipTests, skipPublish, interactive),
+      liftSteps = steps => this.liftSteps(steps)
     )
-
-  private def materializeHooks(
-      hooks: Seq[ReleaseResourceHookIO[T]],
-      maybeResource: Option[T]
-  ): Seq[ReleaseHookIO] =
-    hooks.map { hook =>
-      ReleaseHookIO(
-        name = hook.name,
-        execute = ctx =>
-          maybeResource.fold(IO.pure(ctx))(resourceValue => hook.execute(resourceValue)(ctx)),
-        validate = hook.validate
-      )
-    }
-
-  private def logLegacyModeWarning(
-      state: State,
-      legacyMode: Boolean,
-      legacyReasons: Seq[String]
-  ): IO[Unit] =
-    if (!legacyMode) IO.unit
-    else
-      IO.blocking {
-        val reasons = legacyReasons.mkString("; ")
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Legacy raw process mode enabled: $reasons"
-        )
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Prefer `releaseIOEnable*` policies and `releaseIO*Hooks` settings. " +
-            "See docs/core/customization.md#hook-based-customization."
-        )
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Hook/policy compilation is bypassed while legacy raw process mode is active."
-        )
-      }
-
-  private final class CoreCommandInputs(
-      val cleanState: State,
-      val skipTests: Boolean,
-      val skipPublish: Boolean,
-      val interactive: Boolean,
-      val crossEnabled: Boolean,
-      val plan: CoreReleasePlan
-  )
-
-  private def buildCommandInputs(
-      state: State,
-      args: Seq[ReleaseCli.Arg],
-      warnOnDuplicates: Boolean
-  ): CoreCommandInputs = {
-    import ReleaseCli.Arg.*
-
-    val useDefaults   = args.contains(WithDefaults)
-    val skipTests     = args.contains(SkipTests)
-    val crossFromArgs = args.contains(CrossBuild)
-    val crossEnabled  = crossBuildEnabled(state) || crossFromArgs
-    val skipPublish   = skipPublishEnabled(state)
-    val interactive   = interactiveEnabled(state)
-
-    val releaseVersionArg = args.collectFirst { case ReleaseVersion(v) => v }
-    val nextVersionArg    = args.collectFirst { case NextVersion(v) => v }
-    val tagDefaultArg     = args.collectFirst { case TagDefault(v) => v }
-
-    def warnIfRepeated(
-        argName: String,
-        selected: Option[String],
-        matches: ReleaseCli.Arg => Boolean
-    ): Unit =
-      if (warnOnDuplicates && args.count(matches) > 1)
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
-        )
-
-    warnIfRepeated(
-      "release-version",
-      releaseVersionArg,
-      {
-        case ReleaseVersion(_) => true
-        case _                 => false
-      }
-    )
-    warnIfRepeated(
-      "next-version",
-      nextVersionArg,
-      {
-        case NextVersion(_) => true
-        case _              => false
-      }
-    )
-    warnIfRepeated(
-      "default-tag-exists-answer",
-      tagDefaultArg,
-      {
-        case TagDefault(_) => true
-        case _             => false
-      }
-    )
-
-    val cleanState = state.remove(ReleaseKeys.versions)
-
-    new CoreCommandInputs(
-      cleanState = cleanState,
-      skipTests = skipTests,
-      skipPublish = skipPublish,
-      interactive = interactive,
-      crossEnabled = crossEnabled,
-      plan = CoreReleasePlan.build(
-        CoreReleasePlan.Inputs(
-          useDefaults = useDefaults,
-          skipTests = skipTests,
-          skipPublish = skipPublish,
-          interactive = interactive,
-          crossBuild = crossEnabled,
-          releaseVersionOverride = releaseVersionArg,
-          nextVersionOverride = nextVersionArg,
-          tagDefault = tagDefaultArg,
-          commandName = commandName
-        )
-      )
-    )
-  }
 
   private def handleReleaseIO(state: State, tokens: Seq[String]): State =
     ReleaseCli.parse(tokens, commandName) match {
@@ -597,91 +280,17 @@ trait ReleasePluginIOLike[T]
         }
     }
 
-  protected def doReleaseHelp(state: State): State = {
-    val program = logLines(state, CorePreflight.helpLines(commandName))
-    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program.as(state))
-  }
+  protected def doReleaseHelp(state: State): State =
+    CoreCommandExecution.doHelp(state, commandName)
 
   /** Execute the release process: parse arguments, acquire the resource, run all steps.
     * Override [[commandName]] to change the command that invokes this method.
     */
-  protected def doReleaseIO(state: State, args: Seq[ReleaseCli.Arg]): State = {
-    val inputs  = buildCommandInputs(state, args, warnOnDuplicates = true)
-    val program = for {
-      process  <- resolveProcessMode(inputs.cleanState)
-      finalCtx <- resource
-                    .use { t =>
-                      for {
-                        runProcess <- resolveReleaseRun(inputs.cleanState, process, t)
-                        _          <- logLegacyModeWarning(
-                                        inputs.cleanState,
-                                        runProcess.legacyMode,
-                                        runProcess.legacyReasons
-                                      )
-                        _          <- IO.blocking {
-                                        inputs.cleanState.log.info(
-                                          s"${ReleaseLogPrefixes.Core} Starting release process..."
-                                        )
-                                        inputs.cleanState.log.info(
-                                          s"${ReleaseLogPrefixes.Core} ${runProcess.steps.length} steps to execute"
-                                        )
-                                        if (inputs.crossEnabled)
-                                          inputs.cleanState.log.info(
-                                            s"${ReleaseLogPrefixes.Core} Cross-build enabled"
-                                          )
-                                      }
-                        initialCtx <- initialContext(
-                                        inputs.cleanState,
-                                        inputs.skipTests,
-                                        inputs.skipPublish,
-                                        inputs.interactive
-                                      )
-                        finalCtx   <- ReleaseStepIO.compose(runProcess.steps, inputs.crossEnabled)(
-                                        initialCtx.withExecutionState(CoreExecutionState(inputs.plan))
-                                      )
-                      } yield finalCtx
-                    }
-      result   <- ReleaseCommandRunner
-                    .handleReleaseResult(finalCtx, ReleaseLogPrefixes.Core)
-    } yield result
+  protected def doReleaseIO(state: State, args: Seq[ReleaseCli.Arg]): State =
+    CoreCommandExecution.doRelease(state, args, commandRuntime)
 
-    // unsafeRunSync() blocks the sbt command thread — unavoidable at the sbt plugin boundary.
-    ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
-  }
-
-  protected def doReleaseCheck(state: State, args: Seq[ReleaseCli.Arg]): State = {
-    val inputs = buildCommandInputs(state, args, warnOnDuplicates = false)
-
-    val program = for {
-      process <- resolveProcessMode(inputs.cleanState)
-      _       <- logLegacyModeWarning(
-                   inputs.cleanState,
-                   process.legacyMode,
-                   process.legacyReasons
-                 )
-      _       <- CheckModeOutput.logCheckStart(
-                   inputs.cleanState,
-                   ReleaseLogPrefixes.Core,
-                   process.checkSteps.length
-                 )
-      summary <- initialContext(
-                   inputs.cleanState,
-                   inputs.skipTests,
-                   inputs.skipPublish,
-                   inputs.interactive
-                 ).flatMap { initialCtx =>
-                   CorePreflight.check(
-                     initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
-                     process.checkSteps,
-                     inputs.crossEnabled
-                   )
-                 }
-      _       <- logLines(inputs.cleanState, CorePreflight.renderSummary(summary))
-      _       <- CheckModeOutput.logCheckPassed(inputs.cleanState, ReleaseLogPrefixes.Core)
-    } yield inputs.cleanState
-
-    ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
-  }
+  protected def doReleaseCheck(state: State, args: Seq[ReleaseCli.Arg]): State =
+    CoreCommandExecution.doCheck(state, args, commandRuntime)
 }
 
 /** Default release plugin using `Unit` as the resource type (no external resource needed).

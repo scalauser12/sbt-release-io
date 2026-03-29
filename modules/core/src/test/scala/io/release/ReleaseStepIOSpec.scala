@@ -12,13 +12,10 @@ import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.Def
 import sbt.Def.*
-import sbt.InputKey
 import sbt.Keys
 import sbt.LocalProject
 import sbt.Project
-import sbt.ProjectRef
 import sbt.State
-import sbt.TaskKey
 import sbt.inputKey
 import sbt.taskKey
 

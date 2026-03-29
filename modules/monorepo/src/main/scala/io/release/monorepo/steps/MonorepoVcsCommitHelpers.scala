@@ -15,39 +15,13 @@ import sbt.{internal as _, *}
 /** VCS commit helpers for monorepo release steps. */
 private[monorepo] object MonorepoVcsCommitHelpers {
 
-  // ── Runtime resolution ────────────────────────────────────────────────
-
-  private[steps] def extractRuntime(ctx: MonorepoContext): IO[MonorepoRuntime] =
-    IO.blocking(MonorepoRuntime.fromState(ctx.state))
-
-  private[steps] def resolveVersionFile(
-      runtime: MonorepoRuntime,
-      project: ProjectReleaseInfo
-  ): File =
-    MonorepoVersionFiles.resolve(runtime, project.ref)
-
-  private[steps] def resolveVersionFile(
-      ctx: MonorepoContext,
-      project: ProjectReleaseInfo
-  ): IO[File] =
-    MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).map(_.versionFile)
-
-  // ── VCS path resolution ───────────────────────────────────────────────
-
-  /** Resolve version file paths relative to VCS root for all non-failed projects. */
-  private[steps] def resolveRelativePaths(
-      ctx: MonorepoContext,
-      vcs: Vcs
-  ): IO[Seq[(ProjectReleaseInfo, String)]] =
-    extractRuntime(ctx).flatMap(resolveRelativePaths(ctx, vcs, _))
-
   private def resolveRelativePaths(
       ctx: MonorepoContext,
       vcs: Vcs,
       runtime: MonorepoRuntime
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
     ctx.currentProjects.toList.traverse { project =>
-      val versionFile = resolveVersionFile(runtime, project)
+      val versionFile = MonorepoVersionFiles.resolve(runtime, project.ref)
       VcsOps.relativizeToBase(vcs, versionFile).map(rel => (project, rel))
     }
 
@@ -61,14 +35,12 @@ private[monorepo] object MonorepoVcsCommitHelpers {
       sign: Boolean,
       signOff: Boolean
   ): IO[MonorepoContext] =
-    for {
-      trackedStatus <- VcsOps.trackedStatus(vcs)
-      result        <- if (trackedStatus.nonEmpty)
-                         vcs.commit(msg, sign, signOff) *>
-                           logInfo(ctx, s"Committed: $msg").as(ctx)
-                       else
-                         IO.pure(ctx)
-    } yield result
+    VcsOps.trackedStatus(vcs).flatMap { trackedStatus =>
+      if (trackedStatus.nonEmpty)
+        vcs.commit(msg, sign, signOff) *> logInfo(ctx, s"Committed: $msg").as(ctx)
+      else
+        IO.pure(ctx)
+    }
 
   /** Stage and commit version files for all non-failed projects. */
   def commitVersions(
@@ -78,7 +50,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
   ): IO[MonorepoContext] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       for {
-        runtime                      <- extractRuntime(ctx)
+        runtime                      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
         paths                        <- resolveRelativePaths(ctx, vcs, runtime)
         settings                     <- IO.blocking {
                                           (

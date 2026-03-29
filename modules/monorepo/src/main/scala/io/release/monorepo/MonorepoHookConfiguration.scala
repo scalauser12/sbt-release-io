@@ -55,4 +55,38 @@ private[monorepo] final case class MonorepoHookConfiguration(
         beforePushHooks,
         afterPushHooks
       ).exists(_.nonEmpty)
+
+  def mergeWith(other: MonorepoHookConfiguration): MonorepoHookConfiguration =
+    MonorepoHookConfiguration(
+      enableSnapshotDependenciesCheck =
+        enableSnapshotDependenciesCheck && other.enableSnapshotDependenciesCheck,
+      enableRunClean = enableRunClean && other.enableRunClean,
+      enableRunTests = enableRunTests && other.enableRunTests,
+      enableTagging = enableTagging && other.enableTagging,
+      enablePublish = enablePublish && other.enablePublish,
+      enablePush = enablePush && other.enablePush,
+      beforeSelectionHooks = beforeSelectionHooks ++ other.beforeSelectionHooks,
+      afterSelectionHooks = afterSelectionHooks ++ other.afterSelectionHooks,
+      beforeVersionResolutionHooks =
+        beforeVersionResolutionHooks ++ other.beforeVersionResolutionHooks,
+      afterVersionResolutionHooks =
+        afterVersionResolutionHooks ++ other.afterVersionResolutionHooks,
+      beforeReleaseVersionWriteHooks =
+        beforeReleaseVersionWriteHooks ++ other.beforeReleaseVersionWriteHooks,
+      afterReleaseVersionWriteHooks =
+        afterReleaseVersionWriteHooks ++ other.afterReleaseVersionWriteHooks,
+      beforeReleaseCommitHooks = beforeReleaseCommitHooks ++ other.beforeReleaseCommitHooks,
+      afterReleaseCommitHooks = afterReleaseCommitHooks ++ other.afterReleaseCommitHooks,
+      beforeTagHooks = beforeTagHooks ++ other.beforeTagHooks,
+      afterTagHooks = afterTagHooks ++ other.afterTagHooks,
+      beforePublishHooks = beforePublishHooks ++ other.beforePublishHooks,
+      afterPublishHooks = afterPublishHooks ++ other.afterPublishHooks,
+      beforeNextVersionWriteHooks =
+        beforeNextVersionWriteHooks ++ other.beforeNextVersionWriteHooks,
+      afterNextVersionWriteHooks = afterNextVersionWriteHooks ++ other.afterNextVersionWriteHooks,
+      beforeNextCommitHooks = beforeNextCommitHooks ++ other.beforeNextCommitHooks,
+      afterNextCommitHooks = afterNextCommitHooks ++ other.afterNextCommitHooks,
+      beforePushHooks = beforePushHooks ++ other.beforePushHooks,
+      afterPushHooks = afterPushHooks ++ other.afterPushHooks
+    )
 }

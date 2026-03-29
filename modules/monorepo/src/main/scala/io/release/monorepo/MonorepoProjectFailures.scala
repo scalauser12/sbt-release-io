@@ -20,21 +20,15 @@ final class MonorepoProjectFailures(
       MonorepoProjectFailures.message(failures)
     ) {
 
-  failures.flatMap(_.cause).headOption.foreach(initCause)
-  failures.flatMap(_.cause).drop(1).foreach(addSuppressed)
+  private val causes = failures.flatMap(_.cause)
+  causes.headOption.foreach(initCause)
+  causes.drop(1).foreach(addSuppressed)
 }
 
 object MonorepoProjectFailures {
 
   private def message(failures: Seq[MonorepoProjectFailure]): String = {
-    val rendered = failures.map { failure =>
-      failure.cause match {
-        case Some(err) =>
-          s"${failure.projectName}: ${errorMessage(err)}"
-        case None      => s"${failure.projectName}: failed"
-      }
-    }
-
+    val rendered = failures.map(f => s"${f.projectName}: ${f.cause.fold("failed")(errorMessage)}")
     s"Per-project release failures:\n${rendered.map("  " + _).mkString("\n")}"
   }
 }

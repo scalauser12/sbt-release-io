@@ -14,13 +14,8 @@ private[monorepo] object MonorepoVersionFiles {
       versionFileContents: (File, String) => IO[String]
   )
 
-  // ── File resolution ──────────────────────────────────────────────────
-
-  private def resolveConfiguredVersionFile(runtime: MonorepoRuntime, ref: ProjectRef): File =
-    runtime.extracted.get(MR.releaseIOMonorepoVersionFile)(ref, runtime.state)
-
   def resolve(runtime: MonorepoRuntime, ref: ProjectRef): File =
-    resolveConfiguredVersionFile(runtime, ref)
+    runtime.extracted.get(MR.releaseIOMonorepoVersionFile)(ref, runtime.state)
 
   def resolve(state: State, ref: ProjectRef): File =
     resolve(MonorepoRuntime.fromState(state), ref)

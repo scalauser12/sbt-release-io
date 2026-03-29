@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.CoreHookConfiguration
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -66,4 +67,47 @@ case class ReleaseResourceHooks[T](
 
 object ReleaseResourceHooks {
   def empty[T]: ReleaseResourceHooks[T] = ReleaseResourceHooks[T]()
+
+  /** Convert resource-aware hooks into plain hooks by optionally binding the resource value.
+    * Boolean policies default to `true` so the result is neutral when merged via
+    * [[CoreHookConfiguration.mergeWith]].
+    */
+  private[release] def materialize[T](
+      hooks: ReleaseResourceHooks[T],
+      maybeResource: Option[T]
+  ): CoreHookConfiguration = {
+    def plainHook(hook: ReleaseResourceHookIO[T]): ReleaseHookIO =
+      ReleaseHookIO(
+        name = hook.name,
+        execute = ctx =>
+          maybeResource.fold(IO.pure(ctx))(resourceValue => hook.execute(resourceValue)(ctx)),
+        validate = hook.validate
+      )
+
+    CoreHookConfiguration(
+      enableSnapshotDependenciesCheck = true,
+      enableRunClean = true,
+      enableRunTests = true,
+      enableTagging = true,
+      enablePublish = true,
+      enablePush = true,
+      afterCleanCheckHooks = hooks.afterCleanCheckHooks.map(plainHook),
+      beforeVersionResolutionHooks = hooks.beforeVersionResolutionHooks.map(plainHook),
+      afterVersionResolutionHooks = hooks.afterVersionResolutionHooks.map(plainHook),
+      beforeReleaseVersionWriteHooks = hooks.beforeReleaseVersionWriteHooks.map(plainHook),
+      afterReleaseVersionWriteHooks = hooks.afterReleaseVersionWriteHooks.map(plainHook),
+      beforeReleaseCommitHooks = hooks.beforeReleaseCommitHooks.map(plainHook),
+      afterReleaseCommitHooks = hooks.afterReleaseCommitHooks.map(plainHook),
+      beforeTagHooks = hooks.beforeTagHooks.map(plainHook),
+      afterTagHooks = hooks.afterTagHooks.map(plainHook),
+      beforePublishHooks = hooks.beforePublishHooks.map(plainHook),
+      afterPublishHooks = hooks.afterPublishHooks.map(plainHook),
+      beforeNextVersionWriteHooks = hooks.beforeNextVersionWriteHooks.map(plainHook),
+      afterNextVersionWriteHooks = hooks.afterNextVersionWriteHooks.map(plainHook),
+      beforeNextCommitHooks = hooks.beforeNextCommitHooks.map(plainHook),
+      afterNextCommitHooks = hooks.afterNextCommitHooks.map(plainHook),
+      beforePushHooks = hooks.beforePushHooks.map(plainHook),
+      afterPushHooks = hooks.afterPushHooks.map(plainHook)
+    )
+  }
 }

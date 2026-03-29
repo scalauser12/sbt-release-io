@@ -5,7 +5,6 @@ import cats.effect.Ref
 import io.release.TestSupport
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
-import sbt.Project
 import sbt.Setting
 
 import java.io.File

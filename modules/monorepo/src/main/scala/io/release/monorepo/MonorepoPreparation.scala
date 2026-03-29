@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.monorepo.steps.MonorepoVersionSteps
+import io.release.monorepo.steps.MonorepoVersionWorkflow
 
 /** Shared preparation helpers used by both monorepo `run` and `check`.
   *
@@ -58,16 +58,11 @@ private[monorepo] object MonorepoPreparation {
   ): IO[MonorepoContext] =
     ctx.currentProjects.toList.foldLeft(IO.pure(ctx)) { (ioCtx, project) =>
       ioCtx.flatMap { currentCtx =>
-        MonorepoVersionSteps
+        MonorepoVersionWorkflow
           .resolveProjectVersions(currentCtx, project, allowPrompts = allowPrompts)
-          .map { resolved =>
-            currentCtx.updateProject(project.ref)(
-              _.copy(
-                versionFile = resolved.versionFile,
-                versions = Some(resolved.releaseVersion -> resolved.nextVersion)
-              )
-            )
-          }
+          .map(resolved =>
+            MonorepoVersionWorkflow.withResolvedVersions(currentCtx, project.ref, resolved)
+          )
       }
     }
 

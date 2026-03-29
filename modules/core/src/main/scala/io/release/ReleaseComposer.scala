@@ -125,6 +125,18 @@ private[release] object ReleaseComposer {
             } *> IO.raiseError(err)
         }
 
+      def restoreAfterCompletion(currentCtx: ReleaseContext): IO[ReleaseContext] =
+        restoreEntry(currentCtx).attempt.flatMap {
+          case Right(restoredCtx) => IO.pure(restoredCtx)
+          case Left(restoreErr)   =>
+            IO.blocking {
+              currentCtx.state.log.error(
+                s"$LogPrefix Failed to restore the entry Scala version after cross-build completion: " +
+                  s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
+              )
+            } *> IO.raiseError(restoreErr)
+        }
+
       def runIteration(
           currentCtx: ReleaseContext,
           version: String,
@@ -150,7 +162,7 @@ private[release] object ReleaseComposer {
           ctx,
           crossVersions.head,
           s"$LogPrefix Cross-building with Scala ${crossVersions.head}"
-        ).flatMap(restoreEntry)
+        ).flatMap(restoreAfterCompletion)
       else {
         val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
           ioCtx.flatMap { currentCtx =>
@@ -165,7 +177,7 @@ private[release] object ReleaseComposer {
         }
 
         finalIO
-          .flatMap(restoreEntry)
+          .flatMap(restoreAfterCompletion)
       }
     }
   }

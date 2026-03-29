@@ -26,6 +26,11 @@ private[monorepo] final case class MonorepoReleasePlan(
 
 private[monorepo] object MonorepoReleasePlan {
 
+  val metadataKey: sbt.AttributeKey[MonorepoReleasePlan] =
+    sbt.AttributeKey[MonorepoReleasePlan](
+      "releaseIOInternalMonorepoExecutionState"
+    )
+
   // ── Planning types ─────────────────────────────────────────────────
 
   final case class Inputs(

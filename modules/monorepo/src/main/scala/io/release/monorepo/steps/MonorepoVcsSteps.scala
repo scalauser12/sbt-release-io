@@ -92,7 +92,7 @@ private[monorepo] object MonorepoVcsSteps {
       comment: String,
       sign: Boolean,
       label: String
-  ): IO[Unit] =
+  ): IO[String] =
     TagConflictResolver
       .resolveConflict(
         vcs,
@@ -108,7 +108,7 @@ private[monorepo] object MonorepoVcsSteps {
         ),
         ctx.state
       )
-      .void
+      .map(_.tagName)
 
   private def preflightCreateTag(
       ctx: MonorepoContext,
@@ -156,17 +156,18 @@ private[monorepo] object MonorepoVcsSteps {
               // Resolved per-project: tag name/comment depend on releaseIORuntimeVersion
               // which varies by project.
               IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
-                val tagName = settings.perProjectTagName(project.name, releaseVer)
+                val initialTagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
                   ctx,
                   vcs,
-                  tagName,
+                  initialTagName,
                   settings.tagComment(project.name, releaseVer),
                   settings.sign,
                   project.name
-                ) *>
-                  logInfo(ctx, s"Tagged ${project.name} as $tagName")
-                    .as(ctx.updateProject(project.ref)(_.copy(tagName = Some(tagName))))
+                ).flatMap { resolvedTagName =>
+                  logInfo(ctx, s"Tagged ${project.name} as $resolvedTagName")
+                    .as(ctx.updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName))))
+                }
               }
           }
         }

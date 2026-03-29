@@ -96,4 +96,59 @@ case class MonorepoResourceHooks[T](
 
 object MonorepoResourceHooks {
   def empty[T]: MonorepoResourceHooks[T] = MonorepoResourceHooks[T]()
+
+  /** Convert resource-aware hooks into plain hooks by binding the resource value.
+    * Boolean policies default to `true` so they are neutral when merged via
+    * [[MonorepoHookConfiguration.mergeWith]].
+    */
+  private[monorepo] def materialize[T](
+      hooks: MonorepoResourceHooks[T],
+      maybeResource: Option[T]
+  ): MonorepoHookConfiguration = {
+    def globalHook(
+        hook: MonorepoGlobalResourceHookIO[T]
+    ): MonorepoGlobalHookIO =
+      MonorepoGlobalHookIO(
+        name = hook.name,
+        execute = ctx => maybeResource.fold(IO.pure(ctx))(r => hook.execute(r)(ctx)),
+        validate = hook.validate
+      )
+
+    def projectHook(
+        hook: MonorepoProjectResourceHookIO[T]
+    ): MonorepoProjectHookIO =
+      MonorepoProjectHookIO(
+        name = hook.name,
+        execute =
+          (ctx, project) => maybeResource.fold(IO.pure(ctx))(r => hook.execute(r)(ctx, project)),
+        validate = hook.validate
+      )
+
+    MonorepoHookConfiguration(
+      enableSnapshotDependenciesCheck = true,
+      enableRunClean = true,
+      enableRunTests = true,
+      enableTagging = true,
+      enablePublish = true,
+      enablePush = true,
+      beforeSelectionHooks = hooks.beforeSelectionHooks.map(globalHook),
+      afterSelectionHooks = hooks.afterSelectionHooks.map(globalHook),
+      beforeVersionResolutionHooks = hooks.beforeVersionResolutionHooks.map(projectHook),
+      afterVersionResolutionHooks = hooks.afterVersionResolutionHooks.map(projectHook),
+      beforeReleaseVersionWriteHooks = hooks.beforeReleaseVersionWriteHooks.map(projectHook),
+      afterReleaseVersionWriteHooks = hooks.afterReleaseVersionWriteHooks.map(projectHook),
+      beforeReleaseCommitHooks = hooks.beforeReleaseCommitHooks.map(globalHook),
+      afterReleaseCommitHooks = hooks.afterReleaseCommitHooks.map(globalHook),
+      beforeTagHooks = hooks.beforeTagHooks.map(projectHook),
+      afterTagHooks = hooks.afterTagHooks.map(projectHook),
+      beforePublishHooks = hooks.beforePublishHooks.map(projectHook),
+      afterPublishHooks = hooks.afterPublishHooks.map(projectHook),
+      beforeNextVersionWriteHooks = hooks.beforeNextVersionWriteHooks.map(projectHook),
+      afterNextVersionWriteHooks = hooks.afterNextVersionWriteHooks.map(projectHook),
+      beforeNextCommitHooks = hooks.beforeNextCommitHooks.map(globalHook),
+      afterNextCommitHooks = hooks.afterNextCommitHooks.map(globalHook),
+      beforePushHooks = hooks.beforePushHooks.map(globalHook),
+      afterPushHooks = hooks.afterPushHooks.map(globalHook)
+    )
+  }
 }

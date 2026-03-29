@@ -100,7 +100,7 @@ object MonorepoSpecSupport {
     )
 
   def withPlan(ctx: MonorepoContext, plan: MonorepoReleasePlan): MonorepoContext =
-    ctx.withExecutionState(MonorepoExecutionState(plan))
+    ctx.withReleasePlan(plan)
 
   def loadedFixtureResource(
       prefix: String

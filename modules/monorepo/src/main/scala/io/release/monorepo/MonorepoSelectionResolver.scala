@@ -18,6 +18,20 @@ private[monorepo] object MonorepoSelectionResolver {
       selectionMode: SelectionMode
   )
 
+  private final case class ResolvedSelectionInputs(
+      orderedProjects: Seq[ProjectReleaseInfo],
+      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
+      plan: MonorepoReleasePlan
+  )
+
+  private final case class DetectionSettings(
+      detectChanges: Boolean,
+      includeDownstream: Boolean,
+      customDetector: Option[(ProjectRef, File, State) => IO[Boolean]],
+      userExcludes: Seq[File],
+      sharedPaths: Seq[String]
+  )
+
   /** Shared error message for the "no projects selected" case.
     *
     * Used by [[MonorepoPreparation.selectProjects]], which is shared by both the
@@ -41,38 +55,74 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[SelectionResult] =
     for {
-      tagSettings              <- IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state))
-      liveOrdered              <- MonorepoProjectResolver.resolveOrdered(ctx.state)
-      ordered                   = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
-      validated                <-
-        IO.fromEither(
-          validateResolvedProjects(ordered, plan).left.map(new IllegalStateException(_))
-        )
-      selectionResult          <- plan.selectionMode match {
-                                    case SelectionMode.ExplicitSelection =>
-                                      IO.pure(
-                                        (
-                                          ordered.filter(p => validated.selectedNames.contains(p.name)),
-                                          SelectionMode.ExplicitSelection
-                                        )
-                                      )
-                                    case SelectionMode.AllChanged        =>
-                                      IO.pure((ordered, SelectionMode.AllChanged))
-                                    case SelectionMode.DetectChanges     =>
-                                      resolveDetectChanges(ctx, ordered, tagSettings, validated)
-                                  }
-      (selected, effectiveMode) = selectionResult
-      _                        <- if (
-                                    effectiveMode == SelectionMode.ExplicitSelection ||
-                                    effectiveMode == SelectionMode.DetectChanges
-                                  )
-                                    validateUnusedOverrides(selected, validated)
-                                  else IO.unit
-      withVersions              = MonorepoProjectResolver.applyVersionOverrides(selected, validated)
+      inputs          <- resolveSelectionInputs(ctx, plan)
+      selectionResult <- selectProjects(ctx, inputs)
+      _               <- validateSelectedOverrides(selectionResult, inputs.plan)
+      withVersions     = MonorepoProjectResolver.applyVersionOverrides(
+                           selectionResult.projects,
+                           inputs.plan
+                         )
     } yield SelectionResult(
       projects = withVersions,
-      selectionMode = effectiveMode
+      selectionMode = selectionResult.selectionMode
     )
+
+  private def resolveSelectionInputs(
+      ctx: MonorepoContext,
+      plan: MonorepoReleasePlan
+  ): IO[ResolvedSelectionInputs] =
+    for {
+      tagSettings    <- IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state))
+      liveOrdered    <- MonorepoProjectResolver.resolveOrdered(ctx.state)
+      orderedProjects = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
+      validatedPlan  <-
+        IO.fromEither(
+          validateResolvedProjects(orderedProjects, plan).left.map(new IllegalStateException(_))
+        )
+    } yield ResolvedSelectionInputs(orderedProjects, tagSettings, validatedPlan)
+
+  private def selectProjects(
+      ctx: MonorepoContext,
+      inputs: ResolvedSelectionInputs
+  ): IO[SelectionResult] =
+    inputs.plan.selectionMode match {
+      case SelectionMode.ExplicitSelection =>
+        IO.pure(
+          SelectionResult(
+            projects = inputs.orderedProjects.filter(project =>
+              inputs.plan.selectedNames.contains(project.name)
+            ),
+            selectionMode = SelectionMode.ExplicitSelection
+          )
+        )
+      case SelectionMode.AllChanged        =>
+        IO.pure(
+          SelectionResult(
+            projects = inputs.orderedProjects,
+            selectionMode = SelectionMode.AllChanged
+          )
+        )
+      case SelectionMode.DetectChanges     =>
+        resolveDetectChanges(
+          ctx,
+          inputs.orderedProjects,
+          inputs.tagSettings,
+          inputs.plan
+        ).map { case (projects, selectionMode) =>
+          SelectionResult(projects = projects, selectionMode = selectionMode)
+        }
+    }
+
+  private def validateSelectedOverrides(
+      selectionResult: SelectionResult,
+      plan: MonorepoReleasePlan
+  ): IO[Unit] =
+    if (
+      selectionResult.selectionMode == SelectionMode.ExplicitSelection ||
+      selectionResult.selectionMode == SelectionMode.DetectChanges
+    )
+      validateUnusedOverrides(selectionResult.projects, plan)
+    else IO.unit
 
   // ── Detection helpers ───────────────────────────────────────────────
 
@@ -86,22 +136,6 @@ private[monorepo] object MonorepoSelectionResolver {
       .flatMap { case (detected, mode) =>
         forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
       }
-
-  private final case class DetectionSettings(
-      detectChanges: Boolean,
-      includeDownstream: Boolean,
-      customDetector: Option[(ProjectRef, File, State) => IO[Boolean]]
-  )
-
-  private def resolveDetectionSettings(state: State): DetectionSettings = {
-    val runtime = MonorepoRuntime.fromState(state)
-    DetectionSettings(
-      detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges),
-      includeDownstream =
-        runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream),
-      customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector)
-    )
-  }
 
   private def detectSelectedProjects(
       ctx: MonorepoContext,
@@ -117,18 +151,16 @@ private[monorepo] object MonorepoSelectionResolver {
         case Some(detector) =>
           detectWithCustomDetector(ctx, orderedProjects, detector)
         case None           =>
-          val runtime      = MonorepoRuntime.fromState(ctx.state)
-          val userExcludes =
-            runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes)
-          val sharedPaths  = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
-          IO.fromOption(ctx.vcs)(new IllegalStateException("VCS not initialized")).flatMap { vcs =>
+          IO.fromOption(ctx.vcs)(
+            new IllegalStateException("VCS not initialized")
+          ).flatMap { vcs =>
             ChangeDetection.detectChangedProjects(
               vcs,
               orderedProjects,
               tagSettings.perProjectTagName,
               ctx.state,
-              userExcludes,
-              sharedPaths
+              settings.userExcludes,
+              settings.sharedPaths
             )
           }
       }
@@ -140,6 +172,20 @@ private[monorepo] object MonorepoSelectionResolver {
             .map((_, SelectionMode.DetectChanges))
         }
     }
+  }
+
+  private def resolveDetectionSettings(state: State): DetectionSettings = {
+    val runtime = MonorepoRuntime.fromState(state)
+
+    DetectionSettings(
+      detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges),
+      includeDownstream =
+        runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream),
+      customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector),
+      userExcludes =
+        runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes),
+      sharedPaths = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
+    )
   }
 
   /** Expand a set of detected-changed projects to include all transitive downstream dependents. */

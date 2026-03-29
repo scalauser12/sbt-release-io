@@ -16,6 +16,33 @@ private[release] object CorePreflight {
   private val InquireVersionsStep = "inquire-versions"
   private val TagReleaseStep      = "tag-release"
 
+  private final case class CheckSteps(
+      stepNames: Seq[String],
+      pushConfigured: Boolean,
+      publishConfigured: Boolean,
+      shouldResolveVersions: Boolean,
+      shouldPreflightTag: Boolean
+  )
+
+  private object CheckSteps {
+    def apply(steps: Seq[ReleaseStepIO]): CheckSteps = {
+      val stepNames = steps.map(_.name)
+
+      CheckSteps(
+        stepNames = stepNames,
+        pushConfigured = stepNames.contains("push-changes"),
+        publishConfigured = stepNames.contains("publish-artifacts"),
+        shouldResolveVersions = stepNames.contains(InquireVersionsStep),
+        shouldPreflightTag = stepNames.contains(TagReleaseStep)
+      )
+    }
+  }
+
+  private final case class VersionSnapshot(
+      context: ReleaseContext,
+      summary: VersionsSummary
+  )
+
   sealed trait VersionsSummary
   object VersionsSummary {
     final case class Resolved(
@@ -98,71 +125,62 @@ private[release] object CorePreflight {
       steps: Seq[ReleaseStepIO],
       crossBuild: Boolean
   ): IO[Summary] = {
-    val stepNames             = steps.map(_.name)
-    val pushConfigured        = stepNames.contains("push-changes")
-    val publishConfigured     = stepNames.contains("publish-artifacts")
-    val shouldResolveVersions = stepNames.contains(InquireVersionsStep)
-    val shouldPreflightTag    = stepNames.contains(TagReleaseStep)
+    val checkSteps = CheckSteps(steps)
 
     for {
-      versions   <- resolveVersionsSummary(initialCtx, shouldResolveVersions)
-      enriched    = enrichWithResolvedVersions(initialCtx, versions)
-      tagOutcome <- resolveTagSummary(enriched, versions, shouldPreflightTag)
-      _          <- ReleaseComposer.validateOnly(steps, crossBuild)(enriched)
-      summary     = Summary(
-                      versions = versions,
-                      tag = tagOutcome,
-                      crossBuildEnabled = crossBuild,
-                      publishSummary = CheckModeOutput.publishStatus(
-                        publishConfigured = publishConfigured,
-                        skipPublish = enriched.skipPublish,
-                        skippedMessage = "skipped via releaseIOSkipPublish := true"
-                      ),
-                      pushSummary = CheckModeOutput.pushStatus(pushConfigured),
-                      stepNames = stepNames
-                    )
+      versionSnapshot <- resolveVersionSnapshot(initialCtx, checkSteps)
+      tagSummary      <- resolveTagSummary(versionSnapshot, checkSteps)
+      _               <- ReleaseComposer.validateOnly(steps, crossBuild)(versionSnapshot.context)
+      summary          = Summary(
+                           versions = versionSnapshot.summary,
+                           tag = tagSummary,
+                           crossBuildEnabled = crossBuild,
+                           publishSummary = CheckModeOutput.publishStatus(
+                             publishConfigured = checkSteps.publishConfigured,
+                             skipPublish = versionSnapshot.context.skipPublish,
+                             skippedMessage = "skipped via releaseIOSkipPublish := true"
+                           ),
+                           pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
+                           stepNames = checkSteps.stepNames
+                         )
     } yield summary
   }
 
-  private def resolveVersionsSummary(
+  private def resolveVersionSnapshot(
       ctx: ReleaseContext,
-      shouldResolveVersions: Boolean
-  ): IO[VersionsSummary] =
-    if (!shouldResolveVersions)
-      IO.pure(VersionsSummary.NotEvaluated("inquire-versions not in check process"))
+      checkSteps: CheckSteps
+  ): IO[VersionSnapshot] =
+    if (!checkSteps.shouldResolveVersions)
+      IO.pure(
+        VersionSnapshot(
+          context = ctx,
+          summary = VersionsSummary.NotEvaluated("inquire-versions not in check process")
+        )
+      )
     else
       VersionSteps.resolveVersions(ctx, allowPrompts = false).map { resolved =>
-        VersionsSummary.Resolved(
-          versionFile = resolved.versionFile,
-          currentVersion = resolved.currentVersion,
-          releaseVersion = resolved.releaseVersion,
-          nextVersion = resolved.nextVersion
+        VersionSnapshot(
+          context = ctx.withVersions(resolved.releaseVersion, resolved.nextVersion),
+          summary = VersionsSummary.Resolved(
+            versionFile = resolved.versionFile,
+            currentVersion = resolved.currentVersion,
+            releaseVersion = resolved.releaseVersion,
+            nextVersion = resolved.nextVersion
+          )
         )
       }
 
-  private def enrichWithResolvedVersions(
-      ctx: ReleaseContext,
-      versions: VersionsSummary
-  ): ReleaseContext =
-    versions match {
-      case VersionsSummary.Resolved(_, _, releaseVersion, nextVersion) =>
-        ctx.withVersions(releaseVersion, nextVersion)
-      case _: VersionsSummary.NotEvaluated                             =>
-        ctx
-    }
-
   private def resolveTagSummary(
-      ctx: ReleaseContext,
-      versions: VersionsSummary,
-      shouldPreflightTag: Boolean
+      snapshot: VersionSnapshot,
+      checkSteps: CheckSteps
   ): IO[TagSummary] =
-    if (!shouldPreflightTag)
+    if (!checkSteps.shouldPreflightTag)
       IO.pure(TagSummary.NotEvaluated("tag-release not in check process"))
     else
-      versions match {
+      snapshot.summary match {
         case _: VersionsSummary.Resolved     =>
           VcsSteps
-            .preflightTag(ctx)
+            .preflightTag(snapshot.context)
             .map(outcome => TagSummary.Resolved(outcome.tagName, outcome.status))
         case _: VersionsSummary.NotEvaluated =>
           IO.pure(TagSummary.NotEvaluated("tag depends on runtime/custom version setup"))

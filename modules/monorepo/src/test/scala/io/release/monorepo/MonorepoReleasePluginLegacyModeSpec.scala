@@ -18,9 +18,7 @@ import sbt.internal.util.MainAppender
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
-import java.lang.reflect.Method
 import scala.annotation.nowarn
-import scala.annotation.tailrec
 
 import sbt.ProjectRef
 
@@ -43,21 +41,17 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
     stateResource("monorepo-plugin-legacy-raw", MonorepoReleasePlugin, settings).use { loaded =>
       for {
         processMode <- resolveProcessMode(MonorepoReleasePlugin, loaded.state)
-        _            = assertEquals(legacyMode(processMode), true)
+        _            = assertEquals(checkLegacyMode(processMode), true)
+        _            = assertEquals(releaseLegacyMode(processMode), true)
         _            = assert(
-                         legacyReasons(processMode)
+                         checkLegacyReasons(processMode)
                            .contains("`releaseIOMonorepoProcess` differs from defaults")
                        )
         _            = assertEquals(checkStepNames(processMode), rawProcess.map(_.name))
         _            = assert(
                          !checkStepNames(processMode).exists(_.startsWith("before-selection:"))
                        )
-        _           <- logLegacyModeWarning(
-                         MonorepoReleasePlugin,
-                         loaded.state,
-                         legacyMode(processMode),
-                         legacyReasons(processMode)
-                       )
+        _           <- logLegacyModeWarning(loaded.state, processMode.checkLegacy)
         log         <- IO.blocking(loaded.consoleBuffer.toString("UTF-8"))
       } yield {
         assert(log.contains("Legacy raw process mode enabled"))
@@ -78,7 +72,8 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
 
     stateResource("monorepo-plugin-compiled-hooks", MonorepoReleasePlugin, settings).use { loaded =>
       resolveProcessMode(MonorepoReleasePlugin, loaded.state).map { processMode =>
-        assertEquals(legacyMode(processMode), false)
+        assertEquals(checkLegacyMode(processMode), false)
+        assertEquals(releaseLegacyMode(processMode), false)
         assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
       }
     }
@@ -105,7 +100,7 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
 
         for {
           processMode <- resolveProcessMode(plugin, loaded.state)
-          _            = assertEquals(legacyMode(processMode), false)
+          _            = assertEquals(checkLegacyMode(processMode), false)
           _            = assert(
                            checkStepNames(processMode).contains("after-selection:plain-after-selection")
                          )
@@ -151,7 +146,7 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
 
         for {
           processMode <- resolveProcessMode(plugin, loaded.state)
-          _            = assertEquals(legacyMode(processMode), false)
+          _            = assertEquals(releaseLegacyMode(processMode), false)
           _           <- plugin.resource.use { _ =>
                            for {
                              runProcess <- resolveReleaseRun(plugin, loaded.state, processMode)
@@ -199,7 +194,7 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       stateResource("monorepo-plugin-resource-disabled-phase", plugin, settings).use { loaded =>
         for {
           processMode <- resolveProcessMode(plugin, loaded.state)
-          _            = assertEquals(legacyMode(processMode), false)
+          _            = assertEquals(releaseLegacyMode(processMode), false)
           _            = assert(!checkStepNames(processMode).exists(_.startsWith("after-tag:")))
           _           <- plugin.resource.use { _ =>
                            resolveReleaseRun(plugin, loaded.state, processMode).map { runProcess =>
@@ -225,7 +220,8 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       stateResource("monorepo-plugin-resource-legacy-bypass", plugin, settings).use { loaded =>
         resolveProcessMode(plugin, loaded.state).flatMap { processMode =>
           for {
-            _      <- IO(assertEquals(legacyMode(processMode), true))
+            _      <- IO(assertEquals(checkLegacyMode(processMode), true))
+            _      <- IO(assertEquals(releaseLegacyMode(processMode), true))
             _      <- IO(assertEquals(checkStepNames(processMode), rawProcess.map(_.name)))
             _      <-
               IO(
@@ -251,7 +247,8 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
     stateResource("monorepo-plugin-custom-compiled-hooks", HookFriendlyPlugin, settings).use {
       loaded =>
         resolveProcessMode(HookFriendlyPlugin, loaded.state).map { processMode =>
-          assertEquals(legacyMode(processMode), false)
+          assertEquals(checkLegacyMode(processMode), false)
+          assertEquals(releaseLegacyMode(processMode), false)
           assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
         }
     }
@@ -271,7 +268,8 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       settings
     ).use { loaded =>
       resolveProcessMode(InheritedHookFriendlyPlugin, loaded.state).map { processMode =>
-        assertEquals(legacyMode(processMode), false)
+        assertEquals(checkLegacyMode(processMode), false)
+        assertEquals(releaseLegacyMode(processMode), false)
         assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
       }
     }
@@ -298,7 +296,8 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
         SbtRuntime.extracted(loaded.state).appendWithSession(settings, loaded.state)
 
       resolveProcessMode(MonorepoReleasePlugin, updatedState).map { processMode =>
-        assertEquals(legacyMode(processMode), true)
+        assertEquals(checkLegacyMode(processMode), true)
+        assertEquals(releaseLegacyMode(processMode), true)
         assertEquals(checkStepNames(processMode), rawProcess.map(_.name))
       }
     }
@@ -307,9 +306,10 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
   test("resolveProcessMode - treat custom check-process wiring as legacy mode") {
     stateResource("monorepo-plugin-legacy-check-process", CustomCheckProcessPlugin).use { loaded =>
       resolveProcessMode(CustomCheckProcessPlugin, loaded.state).map { processMode =>
-        assertEquals(legacyMode(processMode), true)
+        assertEquals(checkLegacyMode(processMode), true)
+        assertEquals(releaseLegacyMode(processMode), false)
         assert(
-          legacyReasons(processMode)
+          checkLegacyReasons(processMode)
             .contains(
               "`monorepoReleaseCheckProcess` differs from the configured raw process"
             )
@@ -319,13 +319,36 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolveReleaseRun - keep custom check-process wiring on compiled hook mode") {
+    val settings: Seq[Setting[?]] = Seq(
+      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks +=
+        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+    )
+
+    stateResource("monorepo-plugin-check-process-run", CustomCheckProcessPlugin, settings).use {
+      loaded =>
+        for {
+          processMode <- resolveProcessMode(CustomCheckProcessPlugin, loaded.state)
+          runProcess  <- resolveReleaseRun(CustomCheckProcessPlugin, loaded.state, processMode)
+        } yield {
+          assertEquals(checkLegacyMode(processMode), true)
+          assertEquals(releaseLegacyMode(processMode), false)
+          assert(checkStepNames(processMode).contains("custom-check-preflight"))
+          assertEquals(legacyMode(runProcess), false)
+          assert(runStepNames(runProcess).contains("before-selection:before-selection-hook"))
+          assert(!runStepNames(runProcess).contains("custom-check-preflight"))
+        }
+    }
+  }
+
   test("resolveProcessMode - treat custom release-process wiring as legacy mode") {
     stateResource("monorepo-plugin-legacy-release-process", CustomReleaseProcessPlugin).use {
       loaded =>
         resolveProcessMode(CustomReleaseProcessPlugin, loaded.state).map { processMode =>
-          assertEquals(legacyMode(processMode), true)
+          assertEquals(checkLegacyMode(processMode), false)
+          assertEquals(releaseLegacyMode(processMode), true)
           assert(
-            legacyReasons(processMode)
+            releaseLegacyReasons(processMode)
               .contains(
                 "`monorepoReleaseProcess` differs from the configured raw process"
               )
@@ -349,7 +372,8 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       settings
     ).use { loaded =>
       resolveProcessMode(SameLengthReleaseProcessPlugin, loaded.state).map { processMode =>
-        assertEquals(legacyMode(processMode), false)
+        assertEquals(checkLegacyMode(processMode), false)
+        assertEquals(releaseLegacyMode(processMode), false)
         assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
       }
     }
@@ -397,7 +421,8 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       settings
     ).use { loaded =>
       resolveProcessMode(SameNameReleaseProcessPlugin, loaded.state).map { processMode =>
-        assertEquals(legacyMode(processMode), false)
+        assertEquals(checkLegacyMode(processMode), false)
+        assertEquals(releaseLegacyMode(processMode), false)
         assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
       }
     }
@@ -651,56 +676,77 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
   private def resolveProcessMode(
       plugin: MonorepoReleasePluginLike[Unit],
       state: State
-  ): IO[AnyRef] =
-    invokeHiddenIO[AnyRef](plugin, "resolveProcessMode", state)
+  ): IO[MonorepoCommandExecution.ResolvedProcessMode[Unit]] =
+    MonorepoCommandExecution.resolveProcessMode(state, plugin.commandRuntime)
 
   private def resolveReleaseRun(
       plugin: MonorepoReleasePluginLike[Unit],
       state: State,
-      processMode: AnyRef
-  ): IO[AnyRef] =
-    invokeHiddenIO[AnyRef](
-      plugin,
-      "resolveReleaseRun",
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): IO[MonorepoCommandExecution.ResolvedReleaseRun] =
+    MonorepoCommandExecution.resolveReleaseRun(
       state,
       processMode,
-      scala.runtime.BoxedUnit.UNIT
+      (),
+      plugin.commandRuntime
     )
 
   private def logLegacyModeWarning(
-      plugin: MonorepoReleasePluginLike[Unit],
       state: State,
-      legacyMode: Boolean,
-      legacyReasons: Seq[String]
+      result: MonorepoCommandExecution.LegacyResult
   ): IO[Unit] =
-    invokeHiddenIO[Unit](
-      plugin,
-      "logLegacyModeWarning",
-      state,
-      Boolean.box(legacyMode),
-      legacyReasons.asInstanceOf[AnyRef]
-    )
+    MonorepoCommandExecution.logLegacyModeWarning(state, result)
 
-  private def legacyMode(processMode: AnyRef): Boolean =
-    invokeGetter[Boolean](processMode, "legacyMode")
+  private def legacyMode(result: MonorepoCommandExecution.LegacyResult): Boolean =
+    result.legacyMode
 
-  private def legacyReasons(processMode: AnyRef): Seq[String] =
-    invokeGetter[Seq[String]](processMode, "legacyReasons")
+  private def legacyReasons(result: MonorepoCommandExecution.LegacyResult): Seq[String] =
+    result.legacyReasons
 
-  private def checkStepNames(processMode: AnyRef): Seq[String] =
-    invokeGetter[Seq[MonorepoStepIO]](processMode, "checkSteps").map(_.name)
+  private def checkLegacyMode(
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): Boolean =
+    legacyMode(processMode.checkLegacy)
 
-  private def checkSteps(processMode: AnyRef): Seq[MonorepoStepIO] =
-    invokeGetter[Seq[MonorepoStepIO]](processMode, "checkSteps")
+  private def checkLegacyReasons(
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): Seq[String] =
+    legacyReasons(processMode.checkLegacy)
 
-  private def releaseStepNames(processMode: AnyRef): Seq[String] =
-    invokeGetter[Seq[Unit => MonorepoStepIO]](processMode, "releaseSteps").map(_(()).name)
+  private def releaseLegacyMode(
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): Boolean =
+    legacyMode(processMode.releaseLegacy)
 
-  private def runStepNames(processMode: AnyRef): Seq[String] =
-    invokeGetter[Seq[MonorepoStepIO]](processMode, "steps").map(_.name)
+  private def releaseLegacyReasons(
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): Seq[String] =
+    legacyReasons(processMode.releaseLegacy)
 
-  private def runSteps(processMode: AnyRef): Seq[MonorepoStepIO] =
-    invokeGetter[Seq[MonorepoStepIO]](processMode, "steps")
+  private def checkStepNames(
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): Seq[String] =
+    processMode.checkSteps.map(_.name)
+
+  private def checkSteps(
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): Seq[MonorepoStepIO] =
+    processMode.checkSteps
+
+  private def releaseStepNames(
+      processMode: MonorepoCommandExecution.ResolvedProcessMode[Unit]
+  ): Seq[String] =
+    processMode.releaseSteps.map(_(()).name)
+
+  private def runStepNames(
+      runProcess: MonorepoCommandExecution.ResolvedReleaseRun
+  ): Seq[String] =
+    runProcess.steps.map(_.name)
+
+  private def runSteps(
+      runProcess: MonorepoCommandExecution.ResolvedReleaseRun
+  ): Seq[MonorepoStepIO] =
+    runProcess.steps
 
   private def sampleProject(loaded: LoadedState): ProjectReleaseInfo =
     ProjectReleaseInfo(
@@ -747,45 +793,4 @@ class MonorepoReleasePluginLegacyModeSpec extends CatsEffectSuite {
       project: ProjectReleaseInfo
   ): IO[Unit] =
     runMonorepoCheckSteps(steps, ctx, project)
-
-  private def invokeGetter[A](target: AnyRef, methodName: String): A = {
-    val method = findMethod(target.getClass, _.endsWith(methodName), 0)
-    method.invoke(target).asInstanceOf[A]
-  }
-
-  private def invokeHiddenIO[A](target: AnyRef, nameFragment: String, args: AnyRef*): IO[A] = {
-    val method = findMethod(target.getClass, _.endsWith(nameFragment), args.length)
-    method.invoke(target, args*).asInstanceOf[IO[A]]
-  }
-
-  private def findMethod(
-      clazz: Class[?],
-      nameMatches: String => Boolean,
-      arity: Int
-  ): Method = {
-    @tailrec
-    def loop(pending: List[Class[?]], seen: Set[Class[?]]): Option[Method] =
-      pending match {
-        case Nil                        => None
-        case head :: tail if seen(head) =>
-          loop(tail, seen)
-        case head :: tail               =>
-          head.getDeclaredMethods.find(method =>
-            nameMatches(method.getName) && method.getParameterCount == arity
-          ) match {
-            case some @ Some(method) =>
-              method.setAccessible(true)
-              some
-            case None                =>
-              loop(
-                head.getInterfaces.toList ++ Option(head.getSuperclass).toList ++ tail,
-                seen + head
-              )
-          }
-      }
-
-    loop(List(clazz), Set.empty).getOrElse {
-      fail(s"Expected method with arity $arity on ${clazz.getName}")
-    }
-  }
 }

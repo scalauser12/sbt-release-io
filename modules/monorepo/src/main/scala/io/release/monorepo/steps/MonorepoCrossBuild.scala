@@ -116,7 +116,7 @@ private[monorepo] object MonorepoCrossBuild {
           s"$LogPrefix Cross-building ${project.name} with Scala ${crossVersions.head}"
         }
         .flatMap(detectFailure)
-        .flatMap(switcher.restoreEntry)
+        .flatMap(switcher.restoreAfterCompletion)
     else
       crossVersions.toList
         .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
@@ -132,7 +132,7 @@ private[monorepo] object MonorepoCrossBuild {
                 .flatMap(detectFailure)
           }
         }
-        .flatMap(switcher.restoreEntry)
+        .flatMap(switcher.restoreAfterCompletion)
   }
 
   /** Encapsulates Scala version switching and restoration for a single cross-build run. */
@@ -148,6 +148,18 @@ private[monorepo] object MonorepoCrossBuild {
       entryVersion match {
         case Some(ver) => switchTo(ver)(ctx)
         case None      => IO.pure(ctx)
+      }
+
+    def restoreAfterCompletion(ctx: MonorepoContext): IO[MonorepoContext] =
+      restoreEntry(ctx).attempt.flatMap {
+        case Right(restoredCtx) => IO.pure(restoredCtx)
+        case Left(restoreErr)   =>
+          IO.blocking {
+            ctx.state.log.error(
+              s"$LogPrefix Failed to restore the entry Scala version after cross-building " +
+                s"${project.name}: ${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
+            )
+          } *> IO.raiseError(restoreErr)
       }
 
     def runIteration(

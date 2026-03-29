@@ -13,7 +13,6 @@ import io.release.monorepo.MonorepoResourceHooks
 import io.release.monorepo.MonorepoStepIO
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import sbt.*
-import sbt.Keys.*
 
 import scala.annotation.nowarn
 

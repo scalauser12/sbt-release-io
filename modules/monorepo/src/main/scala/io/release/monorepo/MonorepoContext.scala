@@ -106,27 +106,19 @@ case class MonorepoContext(
   def withoutMetadata[A](key: AttributeKey[A]): MonorepoContext =
     copy(metadataBag = metadataBag.remove(key))
 
-  private[monorepo] def executionState: Option[MonorepoExecutionState] =
-    metadata(MonorepoExecutionState.key)
-
-  private[monorepo] def withExecutionState(
-      state: MonorepoExecutionState
-  ): MonorepoContext =
-    withMetadata(MonorepoExecutionState.key, state)
-
   /** The monorepo release plan is internal runtime metadata, kept separate from user metadata. */
   private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
-    executionState.map(_.plan)
+    metadata(MonorepoReleasePlan.metadataKey)
 
   /** Seed internal execution state during initialization.
     * Replaces any prior execution-state payload.
     * Built-in flow calls this once before step execution begins.
     */
   private[monorepo] def withReleasePlan(plan: MonorepoReleasePlan): MonorepoContext =
-    withExecutionState(MonorepoExecutionState(plan))
+    withMetadata(MonorepoReleasePlan.metadataKey, plan)
 
   private[release] def executionFlags: Option[ExecutionFlags] =
-    executionState.map(_.plan.flags)
+    releasePlan.map(_.flags)
 
   def fail: MonorepoContext                       = copy(failed = true)
   def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))

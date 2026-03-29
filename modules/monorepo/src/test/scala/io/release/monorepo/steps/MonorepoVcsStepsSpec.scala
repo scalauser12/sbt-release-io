@@ -102,6 +102,46 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   }
 
   test(
+    "tagReleasesPerProject.execute - retry with a new tag name in interactive mode and store it"
+  ) {
+    perProjectTagContextResource.use { case (repo, project, baseCtx) =>
+      val ctx = withFlags(baseCtx.copy(interactive = true), useDefaults = false)
+
+      for {
+        _              <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
+        originalTagRev <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim
+                          )
+        _              <- IO.blocking {
+                            sbt.IO.write(new File(repo, "file.txt"), "updated")
+                            TestSupport.commitAll(repo, "Second commit")
+                          }
+        result         <- withInput("core-v1.0.1\n") {
+                            MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+                          }
+        oldTags        <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.0"))
+        newTags        <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.1"))
+        oldTagRev      <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim
+                          )
+        newTagRev      <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.1").trim
+                          )
+        headRev        <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+      } yield {
+        assertEquals(oldTags.trim, "core-v1.0.0")
+        assertEquals(newTags.trim, "core-v1.0.1")
+        assertEquals(oldTagRev, originalTagRev)
+        assertEquals(newTagRev, headRev)
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(result.projects, "core").tagName,
+          Some("core-v1.0.1")
+        )
+      }
+    }
+  }
+
+  test(
     "tagReleasesPerProject.execute - abort in interactive mode when overwrite is declined"
   ) {
     perProjectTagContextResource.use { case (repo, project, baseCtx) =>
