@@ -172,6 +172,10 @@ metadata stays package-private. Custom steps should use `ctx.withMetadata` / `ct
 for their own shared data and should treat `metadataBag` as extension space, not as the main
 built-in plan channel.
 
+Treat `ctx.state` and `ctx.projects` as related but separate views of the release. Built-in sbt
+settings and tasks read from `state`; later custom per-project logic reads the threaded project
+snapshot. If a step changes both worlds, update both intentionally.
+
 **`ProjectReleaseInfo`** — per-project metadata available in `PerProject` steps:
 
 | Field / Method | Type | Description |
@@ -274,6 +278,12 @@ val logStep = MonorepoStepIO
 Optional builder methods: `.withValidation(...)`, `.withCrossBuild` (per-project only). Every builder chain ends with one of three terminal methods: `.execute(f)` runs `f` and returns the modified context, `.executeAction(f)` runs `f` for side effects and passes context through unchanged, `.validateOnly` creates a validation-only step with no execute logic. Resource-aware builders (`globalResource`, `perProjectResource`) are covered in [Custom plugins](#custom-plugins).
 
 > **Selection boundary**: The built-in `detect-or-select-projects` step splits the release into a setup segment and a main segment. Steps before the boundary run validate-then-execute sequentially; steps after it run all validations first, then all executions.
+
+> **Author checklist**
+> - Use `ctx.withState(...)` when later built-in sbt settings or tasks should see the change.
+> - Use `ctx.updateProject(...)` or `ctx.withProjects(...)` when later custom per-project logic should see the change.
+> - If a step changes both the sbt view and the threaded project snapshot, update both deliberately.
+> - If a later validation must observe the result of an earlier execute, move that work before `detect-or-select-projects` or keep the dependent check and action in the same step.
 
 ### Customizing the release process (legacy raw-process mode)
 
@@ -392,6 +402,8 @@ object MyReleasePlugin extends MonorepoReleasePluginLike[HttpClient] {
 functions during `check`, but the shared plugin resource is acquired only during the real release
 run.
 
+> **Check vs run:** Treat `check` as a preflight, not as a full dry-run of resource-backed execution. It validates resource-aware hooks without acquiring `T`, so anything that depends on the live shared resource still runs only during the real release.
+
 If a supported lifecycle point is enough, prefer `monorepoResourceHooks` over direct
 `monorepoReleaseProcess` editing. Override `monorepoReleaseProcess` /
 `monorepoReleaseCheckProcess` only when you truly need custom step ordering or a custom pipeline;
@@ -449,3 +461,11 @@ In `build.sbt`, use `insertStepAfter` / `insertStepBefore` to position plain ste
 The `selectOnlyCore` example above shows how rewriting `State` before `resolve-release-order`
 changes what the built-in steps see. To filter the project set for later custom `PerProject`
 steps without touching `State`, use `ctx.withProjects(...)` instead.
+
+Wrong expectation: insert a custom step after `detect-or-select-projects`, let one main-segment
+execute rewrite `ctx.projects`, and expect a later main-segment validation to observe that rewrite.
+That cannot work because main validations all run before main executions.
+
+Correct placement: do the rewrite before `detect-or-select-projects` if later built-in selection
+or validation should see it, or combine the dependent validation and action into a single custom
+step if they must stay together after selection.

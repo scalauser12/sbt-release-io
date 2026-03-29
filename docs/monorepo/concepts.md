@@ -27,8 +27,10 @@
 ### Validate / Execute Model
 
 1. **Setup segment**: Steps up to and including `detect-or-select-projects` run validate-then-execute sequentially. Custom steps inserted here can read state or perform checks before project selection is finalized.
-2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup.
+2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup. In this main segment, later step validation cannot depend on earlier step execution because all main-step validation finishes before any main-step execution begins.
 3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Task-level failures are detected between steps.
+
+Author implication: if a custom step needs strict validate -> execute ordering relative to later checks, place it in the setup segment or fold the dependent check and action into the same step.
 
 ### Per-project failure isolation
 
@@ -64,3 +66,7 @@ A **Global** step failure immediately marks the context as failed and skips all 
 ### Topological ordering
 
 Projects are sorted by inter-project dependencies using Kahn's algorithm. Dependencies are always released before dependents.
+
+### Cross-build scope
+
+Cross-build runs per project, not as one global build-wide loop. For a cross-built per-project step, the runtime iterates that selected project across its own `crossScalaVersions` before moving on to the next project in release order.

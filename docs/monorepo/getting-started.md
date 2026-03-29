@@ -4,7 +4,7 @@
 
 - **Per-project release steps**: Steps run once per subproject in topological (dependency) order
 - **Change detection**: Git-based [change detection](change-detection.md) of which projects changed since the last release tag, with pluggable custom detectors
-- **Per-project failure isolation**: A failing project is marked failed without aborting the current step's remaining projects; subsequent steps are skipped entirely
+- **Per-project failure isolation**: A failing project is marked failed without aborting the current step's remaining projects; once that step finishes, later steps are skipped entirely for the whole release (see [Concepts](concepts.md))
 - **Two-phase execution**: All checks run before any actions, so failures are caught before version files or tags are modified
 - **Per-project tags**: Each released project gets its own tag (for example `core/v1.0.0`)
 - **Cross-build support**: Steps like test and publish run once per `crossScalaVersions` entry
@@ -56,6 +56,8 @@ sbt "releaseIOMonorepo check with-defaults"
 
 `check` resolves the selected projects, computes versions and tags, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
+For resource-aware custom plugins, `check` stays resource-free: it runs resource-aware `validate` logic, but it does not acquire the shared plugin resource or execute resource-backed actions. See [Customization](customization.md) for the execution-model details.
+
 Run the release (changed projects detected automatically, versions computed from each subproject's `version.sbt`):
 
 ```bash
@@ -63,6 +65,8 @@ sbt "releaseIOMonorepo with-defaults"
 ```
 
 Change detection compares each project's files against its last release tag — projects with no prior tag are always included. For details, see [Change detection](change-detection.md). If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
+
+When a per-project step fails, the remaining projects in that same step still finish before the release stops. Later steps are then skipped globally. See [Concepts](concepts.md) for the full failure-propagation rules.
 
 Or select projects and specify versions explicitly:
 
