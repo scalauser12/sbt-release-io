@@ -18,6 +18,7 @@ import scala.sys.process.Process
 private[monorepo] object MonorepoVcsSteps {
 
   private val DefaultCommandName = "releaseIOMonorepo"
+  private val MissingVcsMessage  = "VCS not initialized. Ensure initializeVcs runs before this step."
 
   private[monorepo] final case class PreflightTagOutcome(
       rendered: String,
@@ -215,11 +216,11 @@ private[monorepo] object MonorepoVcsSteps {
   val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "push-changes",
     validate = ctx =>
-      ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
+      required(ctx.vcs, MissingVcsMessage) { vcs =>
         VcsOps.validatePushReadiness(ctx.state, ctx.interactive, ctx.useDefaults, vcs)
       },
     execute = ctx =>
-      required(ctx.vcs, "VCS not initialized") { vcs =>
+      required(ctx.vcs, MissingVcsMessage) { vcs =>
         val doPush = vcs.commandName match {
           case "git" => gitPush(ctx, vcs)
           case _     => vcs.pushChanges.as(ctx)
