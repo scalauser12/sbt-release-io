@@ -306,7 +306,7 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
   }
 
   test(
-    "resolveProcessMode - keep same-length custom release-process wiring on compiled check mode"
+    "resolveProcessMode - treat same-length custom release-process wiring as legacy for release while keeping compiled check mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
       ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
@@ -319,7 +319,11 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
     ).use { loaded =>
       resolveProcessMode(SameLengthReleaseProcessPlugin, loaded.state).map { processMode =>
         assertEquals(checkLegacyMode(processMode), false)
-        assertEquals(releaseLegacyMode(processMode), false)
+        assertEquals(releaseLegacyMode(processMode), true)
+        assert(
+          releaseLegacyReasons(processMode)
+            .contains("`releaseProcess` differs from the configured raw process")
+        )
         assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
       }
     }
@@ -353,7 +357,7 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
   }
 
   test(
-    "resolveProcessMode - keep same-name custom release-process wiring on compiled check mode"
+    "resolveProcessMode - treat same-name custom release-process wiring as legacy for release while keeping compiled check mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
       ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
@@ -366,7 +370,11 @@ class ReleasePluginIOLegacyModeSpec extends CatsEffectSuite {
     ).use { loaded =>
       resolveProcessMode(SameNameReleaseProcessPlugin, loaded.state).map { processMode =>
         assertEquals(checkLegacyMode(processMode), false)
-        assertEquals(releaseLegacyMode(processMode), false)
+        assertEquals(releaseLegacyMode(processMode), true)
+        assert(
+          releaseLegacyReasons(processMode)
+            .contains("`releaseProcess` differs from the configured raw process")
+        )
         assert(checkStepNames(processMode).exists(_ == "before-tag:before-tag-hook"))
       }
     }

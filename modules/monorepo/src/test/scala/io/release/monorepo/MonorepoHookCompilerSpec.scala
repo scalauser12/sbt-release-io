@@ -16,10 +16,23 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
   ) {
     hookFixtureResource("monorepo-hook-compiler-defaults").use { fixture =>
       IO {
-        assertEquals(
-          MonorepoHookCompiler.compile(fixture.state).map(_.name),
-          MonorepoReleaseSteps.defaults.map(_.name)
-        )
+        assertEquals(MonorepoHookCompiler.compile(fixture.state), MonorepoReleaseSteps.defaults)
+      }
+    }
+  }
+
+  test("compile - use the per-project tagging step in the canonical lifecycle") {
+    hookFixtureResource("monorepo-hook-compiler-tag-step").use { fixture =>
+      IO {
+        val tagStep = MonorepoHookCompiler
+          .compile(fixture.state)
+          .collectFirst {
+            case step: MonorepoStepIO.PerProject if step.name == "tag-releases" =>
+              step
+          }
+          .getOrElse(fail("Expected canonical tag-releases step"))
+
+        assertEquals(tagStep, MonorepoReleaseSteps.tagReleasesPerProject)
       }
     }
   }

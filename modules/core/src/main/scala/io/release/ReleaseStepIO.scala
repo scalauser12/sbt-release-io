@@ -27,6 +27,21 @@ case class ReleaseStepIO(
 
 object ReleaseStepIO {
 
+  private[release] sealed trait ResourceStepFn[T] extends (T => ReleaseStepIO) {
+    def name: String
+    def enableCrossBuild: Boolean
+  }
+
+  private final case class ResourceStepFnImpl[T](
+      name: String,
+      validateFn: T => ReleaseContext => IO[Unit],
+      executeFn: T => ReleaseContext => IO[ReleaseContext],
+      enableCrossBuild: Boolean
+  ) extends ResourceStepFn[T] {
+    override def apply(resource: T): ReleaseStepIO =
+      ReleaseStepIO(name, executeFn(resource), validateFn(resource), enableCrossBuild)
+  }
+
   /** Create a step that transforms the context purely. */
   def pure(name: String)(f: ReleaseContext => ReleaseContext): ReleaseStepIO =
     ReleaseStepIO(name, ctx => IO(f(ctx)))
@@ -150,13 +165,28 @@ object ReleaseStepIO {
       new ResourceStepBuilder[T](name, validateFn, true)
 
     def execute(f: T => ReleaseContext => IO[ReleaseContext]): T => ReleaseStepIO =
-      t => ReleaseStepIO(name, f(t), validateFn(t), crossBuild)
+      ResourceStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = f,
+        enableCrossBuild = crossBuild
+      )
 
     def executeAction(f: T => ReleaseContext => IO[Unit]): T => ReleaseStepIO =
-      t => ReleaseStepIO(name, ctx => f(t)(ctx).as(ctx), validateFn(t), crossBuild)
+      ResourceStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = t => ctx => f(t)(ctx).as(ctx),
+        enableCrossBuild = crossBuild
+      )
 
     def validateOnly: T => ReleaseStepIO =
-      t => ReleaseStepIO(name, ctx => IO.pure(ctx), validateFn(t), crossBuild)
+      ResourceStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = _ => ctx => IO.pure(ctx),
+        enableCrossBuild = crossBuild
+      )
   }
 
   /** Compose a sequence of steps into a two-phase IO program.

@@ -2,6 +2,21 @@ package io.release
 
 import scala.language.implicitConversions
 
+private[release] object PluginLikeSupport {
+
+  private[release] sealed trait LiftedStepFn[StepType, T] extends (T => StepType) {
+    def step: StepType
+  }
+
+  private final case class LiftedStepImpl[StepType, T](step: StepType)
+      extends LiftedStepFn[StepType, T] {
+    override def apply(resource: T): StepType = step
+  }
+
+  def liftStep[StepType, T](step: StepType): T => StepType =
+    LiftedStepImpl(step)
+}
+
 /** Shared resource-aware step composition helpers used by both [[ReleasePluginIOLike]]
   * and the monorepo `MonorepoReleasePluginLike`.
   *
@@ -14,7 +29,7 @@ private[release] trait PluginLikeSupport[StepType, T] {
   protected def stepName(step: StepType): String
 
   protected implicit def liftStep(step: StepType): T => StepType =
-    (_: T) => step
+    PluginLikeSupport.liftStep(step)
 
   protected def liftSteps(steps: Seq[StepType]): Seq[T => StepType] =
     steps.map(liftStep)

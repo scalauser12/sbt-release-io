@@ -20,6 +20,44 @@ sealed trait MonorepoStepIO {
 
 object MonorepoStepIO {
 
+  private[release] sealed trait ResourceStepFn[T] extends (T => MonorepoStepIO) {
+    def name: String
+    def scope: ResourceStepFn.Scope
+  }
+
+  private[release] object ResourceStepFn {
+    sealed trait Scope
+
+    object Scope {
+      final case class Global(isSelectionBoundary: Boolean) extends Scope
+      final case class PerProject(enableCrossBuild: Boolean) extends Scope
+    }
+  }
+
+  private final case class ResourceGlobalStepFnImpl[T](
+      name: String,
+      validateFn: T => MonorepoContext => IO[Unit],
+      executeFn: T => MonorepoContext => IO[MonorepoContext],
+      isSelectionBoundary: Boolean
+  ) extends ResourceStepFn[T] {
+    override val scope: ResourceStepFn.Scope = ResourceStepFn.Scope.Global(isSelectionBoundary)
+
+    override def apply(resource: T): MonorepoStepIO =
+      Global(name, executeFn(resource), validateFn(resource), isSelectionBoundary)
+  }
+
+  private final case class ResourcePerProjectStepFnImpl[T](
+      name: String,
+      validateFn: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
+      executeFn: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
+      enableCrossBuild: Boolean
+  ) extends ResourceStepFn[T] {
+    override val scope: ResourceStepFn.Scope = ResourceStepFn.Scope.PerProject(enableCrossBuild)
+
+    override def apply(resource: T): MonorepoStepIO =
+      PerProject(name, executeFn(resource), validateFn(resource), enableCrossBuild)
+  }
+
   /** A step that runs once globally (e.g., check clean working dir, push changes).
     *
     * @param isSelectionBoundary Internal flag — marks this step as the boundary between
@@ -126,13 +164,28 @@ object MonorepoStepIO {
       new ResourceGlobalBuilder[T](name, validateFn, true)
 
     def execute(f: T => MonorepoContext => IO[MonorepoContext]): T => MonorepoStepIO =
-      t => Global(name, f(t), validateFn(t), selectionBoundary)
+      ResourceGlobalStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = f,
+        isSelectionBoundary = selectionBoundary
+      )
 
     def executeAction(f: T => MonorepoContext => IO[Unit]): T => MonorepoStepIO =
-      t => Global(name, ctx => f(t)(ctx).as(ctx), validateFn(t), selectionBoundary)
+      ResourceGlobalStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = t => ctx => f(t)(ctx).as(ctx),
+        isSelectionBoundary = selectionBoundary
+      )
 
     def validateOnly: T => MonorepoStepIO =
-      t => Global(name, ctx => IO.pure(ctx), validateFn(t), selectionBoundary)
+      ResourceGlobalStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = _ => ctx => IO.pure(ctx),
+        isSelectionBoundary = selectionBoundary
+      )
   }
 
   /** Fluent builder for resource-aware per-project steps. */
@@ -153,15 +206,30 @@ object MonorepoStepIO {
     def execute(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
     ): T => MonorepoStepIO =
-      t => PerProject(name, f(t), validateFn(t), crossBuild)
+      ResourcePerProjectStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = f,
+        enableCrossBuild = crossBuild
+      )
 
     def executeAction(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): T => MonorepoStepIO =
-      t => PerProject(name, (ctx, proj) => f(t)(ctx, proj).as(ctx), validateFn(t), crossBuild)
+      ResourcePerProjectStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = t => (ctx, proj) => f(t)(ctx, proj).as(ctx),
+        enableCrossBuild = crossBuild
+      )
 
     def validateOnly: T => MonorepoStepIO =
-      t => PerProject(name, (ctx, _) => IO.pure(ctx), validateFn(t), crossBuild)
+      ResourcePerProjectStepFnImpl(
+        name = name,
+        validateFn = validateFn,
+        executeFn = _ => (ctx, _) => IO.pure(ctx),
+        enableCrossBuild = crossBuild
+      )
   }
 
   /** Compose a sequence of monorepo steps into a two-phase IO program.

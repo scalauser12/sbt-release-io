@@ -103,21 +103,5 @@ object MonorepoReleaseSteps {
   )
   val tagReleases: MonorepoStepIO.Global = tagReleasesGlobalFacade
 
-  val defaults: Seq[MonorepoStepIO] = Seq(
-    initializeVcs,
-    checkCleanWorkingDir,
-    resolveReleaseOrder,
-    detectOrSelectProjects,
-    checkSnapshotDependencies,
-    inquireVersions,
-    runClean,
-    runTests,
-    setReleaseVersions,
-    commitReleaseVersions,
-    tagReleasesGlobalFacade,
-    publishArtifacts,
-    setNextVersions,
-    commitNextVersions,
-    pushChanges
-  )
+  val defaults: Seq[MonorepoStepIO] = MonorepoLifecycle.defaults
 }

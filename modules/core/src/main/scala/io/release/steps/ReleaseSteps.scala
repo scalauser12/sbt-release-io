@@ -2,6 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseStepIO
+import io.release.internal.CoreLifecycle
 
 import java.io.File
 
@@ -46,19 +47,5 @@ object ReleaseSteps {
   // ── Default step sequences ────────────────────────────────────────────
 
   /** Default ordered sequence of all release steps using IO-native implementations. */
-  val defaults: Seq[ReleaseStepIO] = Seq(
-    initializeVcs,
-    checkCleanWorkingDir,
-    checkSnapshotDependencies,
-    inquireVersions,
-    runClean,
-    runTests,
-    setReleaseVersion,
-    commitReleaseVersion,
-    tagRelease,
-    publishArtifacts,
-    setNextVersion,
-    commitNextVersion,
-    pushChanges
-  )
+  val defaults: Seq[ReleaseStepIO] = CoreLifecycle.defaults
 }

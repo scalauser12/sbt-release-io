@@ -123,6 +123,8 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     assertEquals(MonorepoReleaseSteps.tagReleasesPerProject.name, "tag-releases")
     assert(MonorepoReleaseSteps.tagReleases.isInstanceOf[MonorepoStepIO.Global])
     assert(MonorepoReleaseSteps.tagReleasesPerProject.isInstanceOf[MonorepoStepIO.PerProject])
+    assert(MonorepoReleaseSteps.defaults.contains(MonorepoReleaseSteps.tagReleasesPerProject))
+    assert(!MonorepoReleaseSteps.defaults.contains(MonorepoReleaseSteps.tagReleases))
   }
 
   test("globalResource produces T => MonorepoStepIO") {

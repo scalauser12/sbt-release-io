@@ -7,7 +7,6 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
-import io.release.monorepo.steps.MonorepoReleaseSteps
 import sbt.{internal as _, *}
 
 import scala.annotation.nowarn
@@ -102,8 +101,14 @@ private[monorepo] object MonorepoCommandExecution {
       val configuredRaw         = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
       val configuredCheck       = runtime.resolveCheckProcess(state)
       val configuredRelease     = runtime.resolveReleaseProcess(state)
-      val rawProcessChanged     = configuredRaw != MonorepoReleaseSteps.defaults
-      val checkProcessChanged   = configuredCheck != configuredRaw
+      val rawSignature          = MonorepoLifecycle.signature(configuredRaw)
+      val checkSignature        = MonorepoLifecycle.signature(configuredCheck)
+      val rawReleaseSignature   = MonorepoLifecycle.releaseBuilderSignature(
+        runtime.liftSteps(configuredRaw)
+      )
+      val releaseSignature      = MonorepoLifecycle.releaseBuilderSignature(configuredRelease)
+      val rawProcessChanged     = rawSignature != MonorepoLifecycle.defaultSignature
+      val checkProcessChanged   = checkSignature != rawSignature
       val checkLegacy           = legacyStatus(
         whenTrue(rawProcessChanged, "`releaseIOMonorepoProcess` differs from defaults"),
         whenTrue(
@@ -111,8 +116,7 @@ private[monorepo] object MonorepoCommandExecution {
           "`monorepoReleaseCheckProcess` differs from the configured raw process"
         )
       )
-      val releaseProcessChanged =
-        configuredRelease.length != configuredRaw.length
+      val releaseProcessChanged = releaseSignature != rawReleaseSignature
       val releaseLegacy         = legacyStatus(
         whenTrue(rawProcessChanged, "`releaseIOMonorepoProcess` differs from defaults"),
         whenTrue(
@@ -159,7 +163,9 @@ private[monorepo] object MonorepoCommandExecution {
         val extracted         = Project.extract(state)
         val configuredRaw     = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
         val configuredRelease = runtime.resolveReleaseProcess(state).map(_(resourceValue))
-        val releaseChanged    = configuredRelease != configuredRaw
+        val releaseChanged    =
+          MonorepoLifecycle.signature(configuredRelease) !=
+            MonorepoLifecycle.signature(configuredRaw)
 
         if (releaseChanged)
           ResolvedReleaseRun(

@@ -18,10 +18,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
   ) {
     hookStateResource("release-hook-compiler-defaults").use { state =>
       IO {
-        assertEquals(
-          ReleaseHookCompiler.compile(state).map(_.name),
-          ReleaseSteps.defaults.map(_.name)
-        )
+        assertEquals(ReleaseHookCompiler.compile(state), ReleaseSteps.defaults)
       }
     }
   }

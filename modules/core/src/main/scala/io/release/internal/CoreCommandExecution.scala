@@ -7,7 +7,6 @@ import io.release.ReleaseIO
 import io.release.ReleaseKeys
 import io.release.ReleaseResourceHooks
 import io.release.ReleaseStepIO
-import io.release.steps.ReleaseSteps
 import sbt.{internal as _, *}
 
 import scala.annotation.nowarn
@@ -104,8 +103,14 @@ private[release] object CoreCommandExecution {
       val configuredRaw         = extracted.get(ReleaseIO._releaseIOProcess)
       val configuredCheck       = runtime.resolveCheckProcess(state)
       val configuredRelease     = runtime.resolveReleaseProcess(state)
-      val rawProcessChanged     = configuredRaw != ReleaseSteps.defaults
-      val checkProcessChanged   = configuredCheck != configuredRaw
+      val rawSignature          = CoreLifecycle.signature(configuredRaw)
+      val checkSignature        = CoreLifecycle.signature(configuredCheck)
+      val rawReleaseSignature   = CoreLifecycle.releaseBuilderSignature(
+        runtime.liftSteps(configuredRaw)
+      )
+      val releaseSignature      = CoreLifecycle.releaseBuilderSignature(configuredRelease)
+      val rawProcessChanged     = rawSignature != CoreLifecycle.defaultSignature
+      val checkProcessChanged   = checkSignature != rawSignature
       val checkLegacy           = legacyStatus(
         whenTrue(rawProcessChanged, "`releaseIOProcess` differs from defaults"),
         whenTrue(
@@ -113,8 +118,7 @@ private[release] object CoreCommandExecution {
           "`releaseCheckProcess` differs from the configured raw process"
         )
       )
-      val releaseProcessChanged =
-        configuredRelease.length != configuredRaw.length
+      val releaseProcessChanged = releaseSignature != rawReleaseSignature
       val releaseLegacy         = legacyStatus(
         whenTrue(rawProcessChanged, "`releaseIOProcess` differs from defaults"),
         whenTrue(
@@ -161,7 +165,8 @@ private[release] object CoreCommandExecution {
         val extracted         = Project.extract(state)
         val configuredRaw     = extracted.get(ReleaseIO._releaseIOProcess)
         val configuredRelease = runtime.resolveReleaseProcess(state).map(_(resourceValue))
-        val releaseChanged    = configuredRelease != configuredRaw
+        val releaseChanged    =
+          CoreLifecycle.signature(configuredRelease) != CoreLifecycle.signature(configuredRaw)
 
         if (releaseChanged)
           ResolvedReleaseRun(
