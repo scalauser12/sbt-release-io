@@ -80,7 +80,11 @@ private[monorepo] object MonorepoVersionWorkflow {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     versionsPairOrFail(project).flatMap { case (releaseVersion, _) =>
-      writeProjectVersion(ctx, project, releaseVersion)
+      ensureVersionFilesValidated(
+        ctx,
+        _.hasReleaseVersionFilesValidated,
+        _.markReleaseVersionFilesValidated
+      ).flatMap(writeProjectVersion(_, project, releaseVersion))
     }
 
   def writeNextVersion(
@@ -88,7 +92,11 @@ private[monorepo] object MonorepoVersionWorkflow {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     versionsPairOrFail(project).flatMap { case (_, nextVersion) =>
-      writeProjectVersion(ctx, project, nextVersion)
+      ensureVersionFilesValidated(
+        ctx,
+        _.hasNextVersionFilesValidated,
+        _.markNextVersionFilesValidated
+      ).flatMap(writeProjectVersion(_, project, nextVersion))
     }
 
   def withResolvedVersions(
@@ -182,7 +190,7 @@ private[monorepo] object MonorepoVersionWorkflow {
     }
 
   /** Fail fast when any configured monorepo projects resolve to the same physical version file.
-    * Runs at write time (inside `writeProjectVersion`) so it sees the current state after any
+    * Runs once at the start of each version-write phase so it sees the current state after any
     * late-bound steps that may have mutated `releaseIOMonorepoVersionFile`. Checks all projects
     * from `releaseIOMonorepoProjects`, not just the selected subset, so that a partial release
     * still detects a shared file that would be mutated for unreleased siblings.
@@ -214,6 +222,17 @@ private[monorepo] object MonorepoVersionWorkflow {
     }
   }
 
+  private def ensureVersionFilesValidated(
+      ctx: MonorepoContext,
+      alreadyValidated: MonorepoContext => Boolean,
+      markValidated: MonorepoContext => MonorepoContext
+  ): IO[MonorepoContext] =
+    if (alreadyValidated(ctx)) IO.pure(ctx)
+    else
+      IO.blocking(MonorepoRuntime.fromState(ctx.state)).flatMap { runtime =>
+        validateDistinctVersionFiles(runtime).as(markValidated(ctx))
+      }
+
   private def writeProjectVersion(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
@@ -221,7 +240,6 @@ private[monorepo] object MonorepoVersionWorkflow {
   ): IO[MonorepoContext] =
     for {
       runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-      _            <- validateDistinctVersionFiles(runtime)
       versionInputs = MonorepoVersionFiles.resolveInputs(runtime, project.ref)
       preserved     = MonorepoVersionFiles.sessionSettings(runtime)
       versionFile   = versionInputs.versionFile

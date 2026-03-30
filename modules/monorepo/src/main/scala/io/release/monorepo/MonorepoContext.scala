@@ -110,6 +110,18 @@ case class MonorepoContext(
   private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
     metadata(MonorepoReleasePlan.metadataKey)
 
+  private[monorepo] def hasReleaseVersionFilesValidated: Boolean =
+    metadata(MonorepoContext.releaseVersionFilesValidatedKey).nonEmpty
+
+  private[monorepo] def markReleaseVersionFilesValidated: MonorepoContext =
+    withMetadata(MonorepoContext.releaseVersionFilesValidatedKey, ())
+
+  private[monorepo] def hasNextVersionFilesValidated: Boolean =
+    metadata(MonorepoContext.nextVersionFilesValidatedKey).nonEmpty
+
+  private[monorepo] def markNextVersionFilesValidated: MonorepoContext =
+    withMetadata(MonorepoContext.nextVersionFilesValidatedKey, ())
+
   /** Seed internal execution state during initialization.
     * Replaces any prior execution-state payload.
     * Built-in flow calls this once before step execution begins.
@@ -122,4 +134,13 @@ case class MonorepoContext(
 
   def fail: MonorepoContext                       = copy(failed = true)
   def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))
+}
+
+private[monorepo] object MonorepoContext {
+
+  private val releaseVersionFilesValidatedKey: AttributeKey[Unit] =
+    AttributeKey[Unit]("releaseIOInternalMonorepoReleaseVersionFilesValidated")
+
+  private val nextVersionFilesValidatedKey: AttributeKey[Unit] =
+    AttributeKey[Unit]("releaseIOInternalMonorepoNextVersionFilesValidated")
 }

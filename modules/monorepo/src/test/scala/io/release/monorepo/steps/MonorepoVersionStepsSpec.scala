@@ -8,11 +8,13 @@ import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.MonorepoStepIO
 import io.release.monorepo.SelectionMode
 import io.release.monorepo.steps.MonorepoVersionStepsSpec.VersionFixture
 import munit.CatsEffectSuite
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
@@ -122,6 +124,59 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
           )
           assert(err.getMessage.contains("core"))
           assert(err.getMessage.contains("api"))
+        }
+      }
+  }
+
+  test("setReleaseVersions.execute - validate distinct version files once per write phase") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-write-phase") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+        sbt.IO.write(new File(coreBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(apiBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("api", apiBase)
+        )
+      }
+      .use { fixture =>
+        val resolverCalls = new AtomicInteger(0)
+        val countingState = SbtRuntime.appendWithSession(
+          fixture.state,
+          Seq(
+            MonorepoReleaseIO.releaseIOMonorepoVersionFile := { (ref: sbt.ProjectRef, _: sbt.State) =>
+              resolverCalls.incrementAndGet()
+              new File(new File(fixture.dir, ref.project), "version.sbt")
+            }
+          )
+        )
+        val ctx          = fixture
+          .context(
+            Seq("core", "api"),
+            versionsById = Map(
+              "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+              "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
+            )
+          )
+          .withState(countingState)
+
+        MonorepoStepIO.compose(Seq(MonorepoVersionSteps.setReleaseVersions))(ctx).flatMap { _ =>
+          IO.blocking {
+            assertEquals(resolverCalls.get(), 4)
+            assertEquals(
+              sbt.IO.read(new File(new File(fixture.dir, "core"), "version.sbt")),
+              """version := "1.0.0"""" + "\n"
+            )
+            assertEquals(
+              sbt.IO.read(new File(new File(fixture.dir, "api"), "version.sbt")),
+              """version := "2.0.0"""" + "\n"
+            )
+          }
         }
       }
   }

@@ -13,8 +13,10 @@ import java.io.File
 /** Preflight support for `releaseIO check` and command help text without release side effects. */
 private[release] object CorePreflight {
 
-  private val InquireVersionsStep = "inquire-versions"
-  private val TagReleaseStep      = "tag-release"
+  private val InquireVersionsStep  = ReleaseSteps.inquireVersions.name
+  private val TagReleaseStep       = ReleaseSteps.tagRelease.name
+  private val PushChangesStep      = ReleaseSteps.pushChanges.name
+  private val PublishArtifactsStep = ReleaseSteps.publishArtifacts.name
 
   private final case class CheckSteps(
       stepNames: Seq[String],
@@ -30,8 +32,8 @@ private[release] object CorePreflight {
 
       CheckSteps(
         stepNames = stepNames,
-        pushConfigured = stepNames.contains("push-changes"),
-        publishConfigured = stepNames.contains("publish-artifacts"),
+        pushConfigured = stepNames.contains(PushChangesStep),
+        publishConfigured = stepNames.contains(PublishArtifactsStep),
         shouldResolveVersions = stepNames.contains(InquireVersionsStep),
         shouldPreflightTag = stepNames.contains(TagReleaseStep)
       )
@@ -154,7 +156,7 @@ private[release] object CorePreflight {
       IO.pure(
         VersionSnapshot(
           context = ctx,
-          summary = VersionsSummary.NotEvaluated("inquire-versions not in check process")
+          summary = VersionsSummary.NotEvaluated(s"$InquireVersionsStep not in check process")
         )
       )
     else
@@ -175,7 +177,7 @@ private[release] object CorePreflight {
       checkSteps: CheckSteps
   ): IO[TagSummary] =
     if (!checkSteps.shouldPreflightTag)
-      IO.pure(TagSummary.NotEvaluated("tag-release not in check process"))
+      IO.pure(TagSummary.NotEvaluated(s"$TagReleaseStep not in check process"))
     else
       snapshot.summary match {
         case _: VersionsSummary.Resolved     =>

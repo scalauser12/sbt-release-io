@@ -149,7 +149,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
     MonorepoStepIO.PerProject(
-      name = "tag-release",
+      name = "tag-releases",
       execute = (ctx, project) =>
         required(ctx.vcs, "VCS not initialized") { vcs =>
           required(project.versions, s"Versions not set for ${project.name}") {

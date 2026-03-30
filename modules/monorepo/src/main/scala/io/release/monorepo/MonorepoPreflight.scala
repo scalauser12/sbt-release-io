@@ -6,15 +6,17 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionEngine
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ReleaseLogPrefixes
-import io.release.monorepo.steps.MonorepoVcsSteps
+import io.release.monorepo.steps.{MonorepoReleaseSteps, MonorepoVcsSteps}
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
 
-  private val InitializeVcsStep          = "initialize-vcs"
-  private val DetectOrSelectProjectsStep = "detect-or-select-projects"
-  private val InquireVersionsStep        = "inquire-versions"
-  private val TagReleasesStep            = "tag-releases"
+  private val InitializeVcsStep          = MonorepoReleaseSteps.initializeVcs.name
+  private val DetectOrSelectProjectsStep = MonorepoComposer.SelectionBoundary
+  private val InquireVersionsStep        = MonorepoReleaseSteps.inquireVersions.name
+  private val TagReleasesStep            = MonorepoReleaseSteps.tagReleasesPerProject.name
+  private val PushChangesStep            = MonorepoReleaseSteps.pushChanges.name
+  private val PublishArtifactsStep       = MonorepoReleaseSteps.publishArtifacts.name
 
   private final case class CheckSteps(
       stepNames: Seq[String],
@@ -35,8 +37,8 @@ private[monorepo] object MonorepoPreflight {
 
       CheckSteps(
         stepNames = stepNames,
-        pushConfigured = stepNames.contains("push-changes"),
-        publishConfigured = stepNames.contains("publish-artifacts"),
+        pushConfigured = stepNames.contains(PushChangesStep),
+        publishConfigured = stepNames.contains(PublishArtifactsStep),
         shouldBootstrapVcs = stepNames.contains(InitializeVcsStep) ||
           shouldResolveSelection ||
           (shouldPreflightTags && shouldResolveVersions),
@@ -183,7 +185,7 @@ private[monorepo] object MonorepoPreflight {
       IO.pure(
         SelectionSnapshot(
           ctx,
-          Evaluation.NotEvaluated("detect-or-select-projects not in check process")
+          Evaluation.NotEvaluated(s"$DetectOrSelectProjectsStep not in check process")
         )
       )
     else
@@ -209,7 +211,7 @@ private[monorepo] object MonorepoPreflight {
       builtInVersionsResolved: Boolean
   ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
     if (!shouldPreflightTags)
-      IO.pure(Evaluation.NotEvaluated("tag-releases not in check process"))
+      IO.pure(Evaluation.NotEvaluated(s"$TagReleasesStep not in check process"))
     else if (!builtInVersionsResolved)
       IO.pure(Evaluation.NotEvaluated("tags depend on runtime/custom version setup"))
     else
@@ -268,7 +270,7 @@ private[monorepo] object MonorepoPreflight {
       case _ if builtInVersionsResolved                                                           =>
         Evaluation.NotEvaluated("versions were not resolved for this project")
       case _                                                                                      =>
-        Evaluation.NotEvaluated("inquire-versions not in check process")
+        Evaluation.NotEvaluated(s"$InquireVersionsStep not in check process")
     }
 
   private def renderSelectionMode(mode: Evaluation[SelectionMode]): String =

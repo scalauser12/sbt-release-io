@@ -85,12 +85,12 @@ object MonorepoReleaseSteps {
 
   /** Per-project tagging step for explicit process wiring.
     *
-    * Prefer this symbol when you intentionally edit `releaseIOMonorepoProcess`. The lifecycle
-    * phase name stays `tag-releases`, so before/after tag hooks and preflight behavior continue
+    * Prefer this symbol when you intentionally edit `releaseIOMonorepoProcess`. It already uses
+    * the `tag-releases` lifecycle name, so before/after tag hooks and preflight behavior continue
     * to align with the built-in tagging phase.
     */
   val tagReleasesPerProject: MonorepoStepIO.PerProject =
-    MonorepoVcsSteps.tagReleasesPerProject.copy(name = "tag-releases")
+    MonorepoVcsSteps.tagReleasesPerProject
 
   /** Legacy global compatibility facade over per-project tagging.
     *
