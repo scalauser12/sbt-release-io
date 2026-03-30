@@ -21,7 +21,6 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.Semaphore
 
 @scala.annotation.nowarn("cat=deprecation")
 class MonorepoVcsStepsSpec extends CatsEffectSuite {
@@ -259,7 +258,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   private val tempDirResource: Resource[IO, File] =
     TestSupport.tempDirResource("monorepo-vcs-steps-spec")
 
-  private val stdinLock = new Semaphore(1)
+  private val stdinLock = TestSupport.stdinLock
 
   private val brokenRemoteContextResource: Resource[IO, MonorepoContext] =
     tempDirResource.evalMap { repo =>

@@ -26,6 +26,12 @@ import scala.sys.process.Process
 /** Shared test fixtures for constructing minimal sbt `State` instances and test repositories. */
 object TestSupport {
 
+  /** Global lock for tests that redirect `System.in` via `System.setIn`.
+    * All test classes that mutate stdin must acquire this lock to prevent
+    * concurrent tests from reading each other's redirected input.
+    */
+  val stdinLock = new java.util.concurrent.Semaphore(1)
+
   val CurrentScalaVersion: String = scala.util.Properties.versionNumberString
   val Scala212TestVersion: String = "2.12.21"
   val Scala213TestVersion: String = "2.13.12"

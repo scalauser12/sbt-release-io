@@ -29,7 +29,7 @@ object MonorepoStepIO {
     sealed trait Scope
 
     object Scope {
-      final case class Global(isSelectionBoundary: Boolean) extends Scope
+      final case class Global(isSelectionBoundary: Boolean)  extends Scope
       final case class PerProject(enableCrossBuild: Boolean) extends Scope
     }
   }

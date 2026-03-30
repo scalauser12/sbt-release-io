@@ -149,13 +149,14 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val countingState = SbtRuntime.appendWithSession(
           fixture.state,
           Seq(
-            MonorepoReleaseIO.releaseIOMonorepoVersionFile := { (ref: sbt.ProjectRef, _: sbt.State) =>
-              resolverCalls.incrementAndGet()
-              new File(new File(fixture.dir, ref.project), "version.sbt")
+            MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
+              (ref: sbt.ProjectRef, _: sbt.State) =>
+                resolverCalls.incrementAndGet()
+                new File(new File(fixture.dir, ref.project), "version.sbt")
             }
           )
         )
-        val ctx          = fixture
+        val ctx           = fixture
           .context(
             Seq("core", "api"),
             versionsById = Map(

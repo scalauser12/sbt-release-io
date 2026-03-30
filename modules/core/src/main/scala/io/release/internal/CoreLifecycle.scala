@@ -13,9 +13,9 @@ private[release] object CoreLifecycle {
   sealed trait ProcessToken
 
   object ProcessToken {
-    final case class BuiltIn(phaseId: String) extends ProcessToken
+    final case class BuiltIn(phaseId: String)                        extends ProcessToken
     final case class Custom(name: String, enableCrossBuild: Boolean) extends ProcessToken
-    final case class OpaqueReleaseBuilder(className: String) extends ProcessToken
+    final case class OpaqueReleaseBuilder(className: String)         extends ProcessToken
   }
 
   private type Gate = ReleaseContext => Boolean

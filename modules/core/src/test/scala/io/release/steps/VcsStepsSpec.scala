@@ -15,7 +15,6 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.Semaphore
 
 class VcsStepsSpec extends CatsEffectSuite {
   private val fixturePrefix = "vcs-steps-spec"
@@ -292,8 +291,6 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
-  private val stdinLock = new Semaphore(1)
-
   private def withInput[A](input: String)(io: IO[A]): IO[A] = {
     val bytes = input.getBytes(StandardCharsets.UTF_8)
 
@@ -304,7 +301,7 @@ class VcsStepsSpec extends CatsEffectSuite {
     Resource
       .make {
         IO.blocking {
-          stdinLock.acquire()
+          TestSupport.stdinLock.acquire()
           val original = System.in
           System.setIn(input)
           original
@@ -315,6 +312,6 @@ class VcsStepsSpec extends CatsEffectSuite {
   private def restoreInput(original: InputStream): IO[Unit] =
     IO.blocking {
       System.setIn(original)
-      stdinLock.release()
+      TestSupport.stdinLock.release()
     }
 }

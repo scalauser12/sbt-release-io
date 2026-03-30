@@ -12,10 +12,10 @@ private[monorepo] object MonorepoLifecycle {
   sealed trait ProcessToken
 
   object ProcessToken {
-    final case class BuiltIn(phaseId: String) extends ProcessToken
-    final case class GlobalCustom(name: String, isSelectionBoundary: Boolean) extends ProcessToken
+    final case class BuiltIn(phaseId: String)                                  extends ProcessToken
+    final case class GlobalCustom(name: String, isSelectionBoundary: Boolean)  extends ProcessToken
     final case class PerProjectCustom(name: String, enableCrossBuild: Boolean) extends ProcessToken
-    final case class OpaqueReleaseBuilder(className: String) extends ProcessToken
+    final case class OpaqueReleaseBuilder(className: String)                   extends ProcessToken
   }
 
   private val AlwaysGlobal: MonorepoContext => Boolean                         = _ => true
@@ -192,7 +192,7 @@ private[monorepo] object MonorepoLifecycle {
         stepToken(lifted.step.asInstanceOf[MonorepoStepIO])
       case resource: ResourceStepFn[?]                  =>
         resource.scope match {
-          case Scope.Global(isSelectionBoundary) =>
+          case Scope.Global(isSelectionBoundary)  =>
             ProcessToken.GlobalCustom(resource.name, isSelectionBoundary)
           case Scope.PerProject(enableCrossBuild) =>
             ProcessToken.PerProjectCustom(resource.name, enableCrossBuild)
@@ -209,7 +209,7 @@ private[monorepo] object MonorepoLifecycle {
       }
       .getOrElse {
         step match {
-          case global: MonorepoStepIO.Global     =>
+          case global: MonorepoStepIO.Global      =>
             ProcessToken.GlobalCustom(global.name, global.isSelectionBoundary)
           case project: MonorepoStepIO.PerProject =>
             ProcessToken.PerProjectCustom(project.name, project.enableCrossBuild)
