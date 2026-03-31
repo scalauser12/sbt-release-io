@@ -1,6 +1,7 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
+import io.release.ReleaseIO
 import io.release.ReleaseIO.releaseIONextVersion
 import io.release.ReleaseIO.releaseIOVersion
 import io.release.internal.DecisionResolver
@@ -246,6 +247,8 @@ private[monorepo] object MonorepoVersionWorkflow {
       runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
       versionInputs = MonorepoVersionFiles.resolveInputs(runtime, project.ref)
       preserved     = MonorepoVersionFiles.sessionSettings(runtime)
+      preservedManifestMetadata =
+        ReleaseIO.existingReleaseManifestSettings(ctx.state, ctx.currentProjects.map(_.ref))
       versionFile   = versionInputs.versionFile
       contents     <- versionInputs.versionFileContents(versionFile, versionValue)
       _            <- IO.blocking {
@@ -257,7 +260,9 @@ private[monorepo] object MonorepoVersionWorkflow {
       newState     <- IO.blocking {
                         SbtRuntime.appendWithSession(
                           ctx.state,
-                          preserved ++ Seq(project.ref / version := versionValue)
+                          preserved ++ preservedManifestMetadata ++ Seq(
+                            project.ref / version := versionValue
+                          )
                         )
                       }
       updated       = ctx

@@ -32,13 +32,23 @@ private[monorepo] object MonorepoVersionSteps {
   val commitReleaseVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-release-versions",
     execute = ctx =>
-      commitVersions(ctx, MR.releaseIOMonorepoCommitMessage, { case (releaseVer, _) => releaseVer })
+      commitVersions(
+        ctx,
+        MR.releaseIOMonorepoCommitMessage,
+        { case (releaseVer, _) => releaseVer },
+        persistReleaseHash = true
+      )
   )
 
   /** Single commit for all next version files. */
   val commitNextVersions: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "commit-next-versions",
     execute = ctx =>
-      commitVersions(ctx, MR.releaseIOMonorepoNextCommitMessage, { case (_, nextVer) => nextVer })
+      commitVersions(
+        ctx,
+        MR.releaseIOMonorepoNextCommitMessage,
+        { case (_, nextVer) => nextVer },
+        persistReleaseHash = false
+      )
   )
 }

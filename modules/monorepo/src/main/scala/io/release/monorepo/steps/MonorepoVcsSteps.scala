@@ -170,19 +170,16 @@ private[monorepo] object MonorepoVcsSteps {
                   settings.sign,
                   project.name
                 ).flatMap { case (updatedCtx, resolvedTagName) =>
-                  val persistedTagSettings = updatedCtx.currentProjects
-                    .filterNot(_.ref == project.ref)
-                    .flatMap(existingProject =>
-                      existingProject.tagName.toSeq.flatMap(existingTag =>
-                        ReleaseIO.releaseManifestTagSettings(existingProject.ref, existingTag)
-                      )
-                    )
+                  val preservedManifestMetadata = ReleaseIO.existingReleaseManifestSettings(
+                    updatedCtx.state,
+                    updatedCtx.currentProjects.map(_.ref)
+                  )
                   for {
                     _        <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
                     newState <- IO.blocking {
                                   SbtRuntime.appendWithSession(
                                     updatedCtx.state,
-                                    persistedTagSettings ++ ReleaseIO.releaseManifestTagSettings(
+                                    preservedManifestMetadata ++ ReleaseIO.releaseManifestTagSettings(
                                       project.ref,
                                       resolvedTagName
                                     )

@@ -59,6 +59,13 @@ private[monorepo] object MonorepoPublishSteps {
       s"Failed to evaluate publish / skip for ${project.name}"
     )
 
+  private[monorepo] def shouldRunPublishHooks(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Boolean] =
+    if (ctx.skipPublish) IO.pure(false)
+    else evaluatePublishSkip(ctx, project).map(!_)
+
   private def evaluatePublishTarget(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
@@ -98,9 +105,15 @@ private[monorepo] object MonorepoPublishSteps {
                 }
             }
           updatedCtx         <- IO.blocking {
+                                  val preservedManifestMetadata =
+                                    ReleaseIO.existingReleaseManifestSettings(
+                                      ctx.state,
+                                      ctx.currentProjects.map(_.ref)
+                                    )
                                   val newState = SbtRuntime.appendWithSession(
                                     ctx.state,
-                                    Seq(project.ref / version := releaseVersion) ++
+                                    preservedManifestMetadata ++
+                                      Seq(project.ref / version := releaseVersion) ++
                                       fallbackHash.toSeq.flatMap(hash =>
                                         ReleaseIO.releaseManifestHashSettings(
                                           Seq(project.ref),

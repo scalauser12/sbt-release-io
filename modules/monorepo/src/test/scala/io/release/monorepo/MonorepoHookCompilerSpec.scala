@@ -5,6 +5,7 @@ import cats.effect.Ref
 import io.release.TestSupport
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
+import sbt.Keys.*
 import sbt.Setting
 
 import java.io.File
@@ -138,8 +139,15 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
           }
 
         val skippedCtx = fixture.context(selectedProjectIds = Seq("core"), skipPublish = true)
-        val enabledCtx = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
-        val project    = fixture.projectInfo("core")
+        val publishSkippedState = TestSupport.appendSessionSettings(
+          fixture.state,
+          Seq(fixture.refsById("core") / publish / skip := true)
+        )
+        val publishSkippedCtx   = fixture
+          .context(selectedProjectIds = Seq("core"), skipPublish = false)
+          .withState(publishSkippedState)
+        val enabledCtx          = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
+        val project             = fixture.projectInfo("core")
 
         def runPublishHooks(ctx: MonorepoContext): IO[Unit] =
           publishHookSteps
@@ -154,6 +162,9 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
           _       <- runPublishHooks(skippedCtx)
           skipped <- observed.get
           _        = assertEquals(skipped, Nil)
+          _       <- runPublishHooks(publishSkippedCtx)
+          projectSkipped <- observed.get
+          _        = assertEquals(projectSkipped, Nil)
           _       <- runPublishHooks(enabledCtx)
           events  <- observed.get
         } yield assertEquals(
@@ -184,7 +195,11 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
           projectIds = Seq("core"),
           settings = hookSettingsDefaults ++ rootSettings
         ),
-        MonorepoSpecSupport.versionedProject("core", coreBase)
+        MonorepoSpecSupport.versionedProject(
+          "core",
+          coreBase,
+          settings = Seq(publish / skip := false)
+        )
       )
     }
 

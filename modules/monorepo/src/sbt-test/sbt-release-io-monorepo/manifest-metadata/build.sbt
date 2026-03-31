@@ -1,6 +1,8 @@
 import scala.collection.JavaConverters.*
 import scala.sys.process.*
 import java.util.jar.JarFile
+import _root_.cats.effect.IO as CatsIO
+import _root_.io.release.monorepo.MonorepoGlobalHookIO
 import sbt.Keys.*
 import sbt.PackageOption
 
@@ -20,7 +22,11 @@ lazy val api = (project in file("api"))
   )
 
 val checkPublishedMetadata = taskKey[Unit]("Check manifest metadata on published jars")
+val checkVisibleMetadata   = taskKey[Unit]("Check manifest metadata visible after commit-next-versions")
 val checkSessionCleaned    = taskKey[Unit]("Check release metadata is cleaned from the sbt session")
+
+def visibleMetadataFile(projectName: String): File =
+  file("target") / s"visible-release-metadata-$projectName.txt"
 
 def packageManifestEntries(options: Seq[PackageOption]): Map[String, String] =
   options.flatMap {
@@ -62,6 +68,26 @@ lazy val root = (project in file("."))
     name                          := "manifest-metadata-monorepo",
     scalaVersion                  := "2.12.18",
     releaseIOMonorepoEnablePush   := false,
+    releaseIOMonorepoAfterNextCommitHooks := Seq(
+      MonorepoGlobalHookIO.action("record-visible-release-metadata") { ctx =>
+        CatsIO.blocking {
+          val extracted = Project.extract(ctx.state)
+
+          List("core", "api").foreach { projectName =>
+            val (_, options) = extracted.runTask(LocalProject(projectName) / packageOptions, ctx.state)
+            val entries      = packageManifestEntries(options)
+
+            IO.write(
+              visibleMetadataFile(projectName),
+              Seq(
+                s"hash=${entries.getOrElse("Vcs-Release-Hash", "")}",
+                s"tag=${entries.getOrElse("Vcs-Release-Tag", "")}"
+              ).mkString("", "\n", "\n")
+            )
+          }
+        }
+      }
+    ),
     releaseIOIgnoreUntrackedFiles := true,
     checkPublishedMetadata        := {
       val coreReleaseHash = "git rev-parse core/v0.1.0^{commit}".!!.trim
@@ -87,6 +113,37 @@ lazy val root = (project in file("."))
         assert(
           manifest.get("Vcs-Release-Tag").contains(expectedTag),
           s"Expected Vcs-Release-Tag=$expectedTag in ${jar.getAbsolutePath} but got ${manifest.get("Vcs-Release-Tag")}"
+        )
+      }
+    },
+    checkVisibleMetadata          := {
+      val releaseHash = "git rev-parse core/v0.1.0^{commit}".!!.trim
+      val nextHash    = "git rev-parse HEAD".!!.trim
+
+      assert(
+        releaseHash != nextHash,
+        s"Expected HEAD after the release to differ from the tagged release commit, but both were $releaseHash"
+      )
+
+      val expectedTags = Map(
+        "core" -> "core/v0.1.0",
+        "api"  -> "api/v0.1.0"
+      )
+
+      expectedTags.foreach { case (projectName, expectedTag) =>
+        val entries = IO.readLines(visibleMetadataFile(projectName)).collect {
+          case line if line.contains("=") =>
+            val Array(key, value) = line.split("=", 2)
+            key -> value
+        }.toMap
+
+        assert(
+          entries.get("hash").contains(releaseHash),
+          s"Expected late visible hash $releaseHash for $projectName but got ${entries.get("hash")}"
+        )
+        assert(
+          entries.get("tag").contains(expectedTag),
+          s"Expected late visible tag $expectedTag for $projectName but got ${entries.get("tag")}"
         )
       }
     },

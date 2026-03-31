@@ -48,7 +48,8 @@ private[monorepo] object MonorepoVcsCommitHelpers {
   def commitVersions(
       ctx: MonorepoContext,
       msgFormatterKey: SettingKey[String => String],
-      selector: ((String, String)) => String
+      selector: ((String, String)) => String,
+      persistReleaseHash: Boolean
   ): IO[MonorepoContext] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       for {
@@ -75,17 +76,33 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                               )
                                             }
                                         }
-        currentHash                  <- vcs.currentHash
-        updatedResult                <- IO.blocking {
-                                          val newState = SbtRuntime.appendWithSession(
-                                            result.state,
-                                            ReleaseIO.releaseManifestHashSettings(
-                                              result.currentProjects.map(_.ref),
-                                              currentHash
-                                            )
-                                          )
-                                          result.withState(newState)
-                                        }
-      } yield updatedResult
+        preservedManifestMetadata     = ReleaseIO.existingReleaseManifestSettings(
+                                          result.state,
+                                          result.currentProjects.map(_.ref)
+                                        )
+        finalResult                  <-
+          if (persistReleaseHash)
+            vcs.currentHash.flatMap { currentHash =>
+              IO.blocking {
+                val newState = SbtRuntime.appendWithSession(
+                  result.state,
+                  preservedManifestMetadata ++
+                  ReleaseIO.releaseManifestHashSettings(
+                    result.currentProjects.map(_.ref),
+                    currentHash
+                  )
+                )
+                result.withState(newState)
+              }
+            }
+          else
+            IO.blocking {
+              val newState = SbtRuntime.appendWithSession(
+                result.state,
+                preservedManifestMetadata
+              )
+              result.withState(newState)
+            }
+      } yield finalResult
     }
 }

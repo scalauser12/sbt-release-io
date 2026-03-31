@@ -10,4 +10,5 @@ $ exec git commit -m "Initial commit"
 
 # Verify manifest metadata on the published jars and that the sbt session was cleaned
 > checkPublishedMetadata
+> checkVisibleMetadata
 > checkSessionCleaned

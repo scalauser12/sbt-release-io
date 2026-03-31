@@ -6,6 +6,7 @@ import io.release.ReleaseIO
 import io.release.TestSupport
 import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoVcsCommitHelpers
+import io.release.monorepo.steps.MonorepoVersionSteps
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
@@ -36,7 +37,8 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         result     <- MonorepoVcsCommitHelpers.commitVersions(
                         ctx,
                         MonorepoReleaseIO.releaseIOMonorepoCommitMessage,
-                        { case (releaseVer, _) => releaseVer }
+                        { case (releaseVer, _) => releaseVer },
+                        persistReleaseHash = true
                       )
         currentHash <- vcs.currentHash
       } yield {
@@ -68,7 +70,8 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         result     <- MonorepoVcsCommitHelpers.commitVersions(
                         ctx,
                         MonorepoReleaseIO.releaseIOMonorepoCommitMessage,
-                        { case (releaseVer, _) => releaseVer }
+                        { case (releaseVer, _) => releaseVer },
+                        persistReleaseHash = true
                       )
         afterHash  <- vcs.currentHash
       } yield {
@@ -80,6 +83,42 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         assertEquals(
           manifestAttributes(result.state, fixture.refsById("api")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> beforeHash)
+        )
+      }
+    }
+  }
+
+  test("commitNextVersions - preserve the existing release hash metadata") {
+    gitFixtureResource.use { case (fixture, vcs) =>
+      val coreVersionFile = new File(new File(fixture.dir, "core"), "version.sbt")
+      val apiVersionFile  = new File(new File(fixture.dir, "api"), "version.sbt")
+      val ctx             = fixture.context(
+        selectedProjectIds = Seq("core", "api"),
+        versionsById = Map(
+          "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+          "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
+        ),
+        vcs = Some(vcs)
+      )
+
+      for {
+        _                  <- writeVersion(coreVersionFile, "1.0.0")
+        _                  <- writeVersion(apiVersionFile, "2.0.0")
+        afterReleaseCommit <- MonorepoVersionSteps.commitReleaseVersions.execute(ctx)
+        releaseHash        <- vcs.currentHash
+        _                  <- writeVersion(coreVersionFile, "1.1.0-SNAPSHOT")
+        _                  <- writeVersion(apiVersionFile, "2.1.0-SNAPSHOT")
+        afterNextCommit    <- MonorepoVersionSteps.commitNextVersions.execute(afterReleaseCommit)
+        nextHash           <- vcs.currentHash
+      } yield {
+        assertNotEquals(nextHash, releaseHash)
+        assertEquals(
+          manifestAttributes(afterNextCommit.state, fixture.refsById("core")),
+          Set("Existing" -> "kept", "Vcs-Release-Hash" -> releaseHash)
+        )
+        assertEquals(
+          manifestAttributes(afterNextCommit.state, fixture.refsById("api")),
+          Set("Existing" -> "kept", "Vcs-Release-Hash" -> releaseHash)
         )
       }
     }

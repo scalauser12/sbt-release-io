@@ -575,6 +575,21 @@ object ReleaseIO extends ReleaseIO {
   ): Seq[Setting[?]] =
     releaseManifestMetadataSettings(projectRef, releaseTag = Some(releaseTag))
 
+  private[release] def existingReleaseManifestSettings(
+      state: State,
+      projectRefs: Seq[ProjectRef]
+  ): Seq[Setting[?]] = {
+    val extracted = SbtRuntime.extracted(state)
+
+    projectRefs.distinct.flatMap { ref =>
+      releaseManifestMetadataSettings(
+        ref,
+        releaseHash = extracted.getOpt(ref / releaseIOInternalReleaseHash).flatten,
+        releaseTag = extracted.getOpt(ref / releaseIOInternalReleaseTag).flatten
+      )
+    }
+  }
+
   private[release] def clearReleaseManifestMetadata(state: State): State =
     clearReleaseManifestMetadata(state, Nil)
 

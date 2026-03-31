@@ -13,3 +13,4 @@ $ exec git commit -m "Initial commit"
 # Verify the release completed successfully
 > checkGitTags
 > checkCoreVersion
+> checkPublishHooksSkipped

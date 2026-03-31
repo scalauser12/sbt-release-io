@@ -85,6 +85,41 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagReleasesPerProject.execute - preserve the existing release hash metadata") {
+    twoProjectTagContextResource.use { case (_, coreProject, apiProject, ctx) =>
+      val seededState = TestSupport.appendSessionSettings(
+        ctx.state,
+        ReleaseIO.releaseManifestHashSettings(
+          Seq(coreProject.ref, apiProject.ref),
+          "release-hash"
+        )
+      )
+      val seededCtx   = ctx.withState(seededState)
+
+      for {
+        afterCore <- MonorepoVcsSteps.tagReleasesPerProject.execute(seededCtx, coreProject)
+        afterApi  <- MonorepoVcsSteps.tagReleasesPerProject.execute(afterCore, apiProject)
+      } yield {
+        assertEquals(
+          manifestAttributes(afterCore.state, coreProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash", "Vcs-Release-Tag" -> "core-v1.0.0")
+        )
+        assertEquals(
+          manifestAttributes(afterCore.state, apiProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash")
+        )
+        assertEquals(
+          manifestAttributes(afterApi.state, coreProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash", "Vcs-Release-Tag" -> "core-v1.0.0")
+        )
+        assertEquals(
+          manifestAttributes(afterApi.state, apiProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash", "Vcs-Release-Tag" -> "api-v2.0.0")
+        )
+      }
+    }
+  }
+
   test(
     "tagReleasesPerProject.execute - abort in non-interactive mode when the tag already exists"
   ) {

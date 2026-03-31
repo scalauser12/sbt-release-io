@@ -1,16 +1,17 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.monorepo.steps.MonorepoReleaseSteps
+import io.release.monorepo.steps.{MonorepoPublishSteps, MonorepoReleaseSteps}
 
 /** Canonical monorepo lifecycle order and hook compilation. */
 private[monorepo] object MonorepoLifecycle {
 
+  private type ProjectGate = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]
+
   private val AlwaysGlobal: MonorepoContext => Boolean                         = _ => true
-  private val AlwaysProject: (MonorepoContext, ProjectReleaseInfo) => Boolean  =
-    (_, _) => true
-  private val PublishProject: (MonorepoContext, ProjectReleaseInfo) => Boolean =
-    (ctx, _) => !ctx.skipPublish
+  private val AlwaysProject: ProjectGate                                       = (_, _) => IO.pure(true)
+  private val PublishProject: ProjectGate                                      =
+    MonorepoPublishSteps.shouldRunPublishHooks
 
   private sealed trait Phase {
     def rawSteps: Seq[MonorepoStepIO]
@@ -44,7 +45,7 @@ private[monorepo] object MonorepoLifecycle {
   private final case class ProjectHookPhase(
       phase: String,
       resolveHooks: MonorepoHookConfiguration => Seq[MonorepoProjectHookIO],
-      gate: (MonorepoContext, ProjectReleaseInfo) => Boolean,
+      gate: ProjectGate,
       crossBuild: Boolean,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   ) extends Phase {
@@ -184,18 +185,22 @@ private[monorepo] object MonorepoLifecycle {
   private def compileProjectHooks(
       phase: String,
       hooks: Seq[MonorepoProjectHookIO],
-      gate: (MonorepoContext, ProjectReleaseInfo) => Boolean,
+      gate: ProjectGate,
       crossBuild: Boolean
   ): Seq[MonorepoStepIO] =
     hooks.map { hook =>
       MonorepoStepIO.PerProject(
         name = s"$phase:${hook.name}",
         execute = (ctx, project) =>
-          if (gate(ctx, project)) hook.execute(ctx, project)
-          else IO.pure(ctx),
+          gate(ctx, project).flatMap {
+            case true  => hook.execute(ctx, project)
+            case false => IO.pure(ctx)
+          },
         validate = (ctx, project) =>
-          if (gate(ctx, project)) hook.validate(ctx, project)
-          else IO.unit,
+          gate(ctx, project).flatMap {
+            case true  => hook.validate(ctx, project)
+            case false => IO.unit
+          },
         enableCrossBuild = crossBuild
       )
     }
