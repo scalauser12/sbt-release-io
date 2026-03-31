@@ -129,17 +129,18 @@ private[release] object ReleaseVersionWorkflow {
   def commitNextVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (_, nextVersion) =>
       for {
-        versionPlan  <- IO.blocking(resolveVersionPlan(ctx))
-        commitResult <-
+        versionPlan           <- IO.blocking(resolveVersionPlan(ctx))
+        commitResult          <-
           commitVersionNative(ctx, releaseIONextCommitMessage, versionPlan.versionFile)
-        finalCtx     <- IO.blocking {
-                          val newState = SbtRuntime.appendWithSession(
-                            commitResult._1.state,
-                            sessionSettings(versionPlan) ++
-                              versionValueSettings(versionPlan, nextVersion)
-                          )
-                          commitResult._1.withState(newState)
-                        }
+        (resultCtx, _)         = commitResult
+        finalCtx              <- IO.blocking {
+                                   val newState = SbtRuntime.appendWithSession(
+                                     resultCtx.state,
+                                     sessionSettings(versionPlan) ++
+                                       versionValueSettings(versionPlan, nextVersion)
+                                   )
+                                   resultCtx.withState(newState)
+                                 }
       } yield finalCtx
     }
 

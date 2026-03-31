@@ -66,14 +66,21 @@ private[release] object PublishSteps {
           case false => IO.unit
           case true  =>
             for {
-              missing <- IO.blocking {
-                           val extracted = SbtRuntime.extracted(ctx.state)
-                           val allRefs   =
-                             effectiveAggregates(extracted, releaseIOPublishArtifactsAction)
-                           allRefs
-                             .filterNot(r => checkPublishSkip(extracted, r, ctx.state))
-                             .filter(r => checkPublishToMissing(extracted, r, ctx.state))
-                         }
+              allRefs  <- IO.blocking {
+                            val extracted = SbtRuntime.extracted(ctx.state)
+                            effectiveAggregates(extracted, releaseIOPublishArtifactsAction)
+                          }
+              missing  <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
+                            ioAcc.flatMap { acc =>
+                              checkPublishSkip(ref, ctx.state).flatMap { skipped =>
+                                if (skipped) IO.pure(acc)
+                                else
+                                  checkPublishToMissing(ref, ctx.state).map { missing =>
+                                    if (missing) acc :+ ref else acc
+                                  }
+                              }
+                            }
+                          }
               result  <- {
                 val names = missing.map(_.project)
                 PublishValidation.requirePublishTarget(names.mkString(", "))(
@@ -169,32 +176,38 @@ private[release] object PublishSteps {
   }
 
   private def checkPublishSkip(
-      extracted: Extracted,
       ref: ProjectRef,
       state: State
-  ): Boolean =
-    try extracted.runTask(ref / publish / Keys.skip, state)._2
-    catch {
-      case NonFatal(e) =>
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for ${ref.project}: " +
-            s"${errorMessage(e)}. Assuming skip = false."
-        )
-        false
+  ): IO[Boolean] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+
+      try extracted.runTask(ref / publish / Keys.skip, state)._2
+      catch {
+        case NonFatal(e) =>
+          state.log.warn(
+            s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for ${ref.project}: " +
+              s"${errorMessage(e)}. Assuming skip = false."
+          )
+          false
+      }
     }
 
   private def checkPublishToMissing(
-      extracted: Extracted,
       ref: ProjectRef,
       state: State
-  ): Boolean =
-    try extracted.runTask(ref / publishTo, state)._2.isEmpty
-    catch {
-      case NonFatal(e) =>
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Failed to evaluate publishTo for ${ref.project}: " +
-            s"${errorMessage(e)}. Assuming publishTo is missing."
-        )
-        true
+  ): IO[Boolean] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+
+      try extracted.runTask(ref / publishTo, state)._2.isEmpty
+      catch {
+        case NonFatal(e) =>
+          state.log.warn(
+            s"${ReleaseLogPrefixes.Core} Failed to evaluate publishTo for ${ref.project}: " +
+              s"${errorMessage(e)}. Assuming publishTo is missing."
+          )
+          true
+      }
     }
 }
