@@ -10,9 +10,8 @@ lazy val root = (project in file("."))
   .settings(
     name := "empty-override-value-test",
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
 
     releaseIOIgnoreUntrackedFiles := true
   )

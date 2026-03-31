@@ -1,61 +1,38 @@
 import scala.sys.process.*
-import _root_.io.release.monorepo.MonorepoStepIO
-
-val releaseTestTask = taskKey[Unit]("Fixture-local test task used by the monorepo release step")
 
 lazy val core = (project in file("core"))
   .settings(
-    name            := "core",
-    scalaVersion    := "2.12.18",
-    // If tests run, this writes a marker file proving tests were NOT skipped
-    releaseTestTask := {
-      val marker = baseDirectory.value / "marker" / "tests-ran"
-      IO.write(marker, "core tests ran")
-    }
+    name                                   := "core",
+    scalaVersion                           := "2.12.18",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    testFrameworks += new TestFramework("munit.Framework"),
+    Test / fork                            := true,
+    Test / javaOptions += s"-Dproject.base=${baseDirectory.value.getAbsolutePath}"
   )
 
 lazy val api = (project in file("api"))
   .dependsOn(core)
   .settings(
-    name            := "api",
-    scalaVersion    := "2.12.18",
-    releaseTestTask := {
-      val marker = baseDirectory.value / "marker" / "tests-ran"
-      IO.write(marker, "api tests ran")
-    }
+    name                                   := "api",
+    scalaVersion                           := "2.12.18",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    testFrameworks += new TestFramework("munit.Framework"),
+    Test / fork                            := true,
+    Test / javaOptions += s"-Dproject.base=${baseDirectory.value.getAbsolutePath}"
   )
 
-val checkAll        = taskKey[Unit]("Run all verification checks")
-val runReleaseTests = MonorepoStepIO.PerProject(
-  name = "run-tests",
-  execute = (ctx, project) =>
-    if (ctx.skipTests)
-      _root_.cats.effect.IO.pure(ctx)
-    else
-      _root_.cats.effect.IO.blocking {
-        val extracted = sbt.Project.extract(ctx.state)
-        val newState  = extracted.runAggregated(project.ref / releaseTestTask, ctx.state)
-        ctx.withState(newState)
-      }
-)
+val checkAll = taskKey[Unit]("Run all verification checks")
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name := "skip-tests-setting-test",
-
-    // Skip tests via the SETTING (not the CLI flag)
-    releaseIOMonorepoSkipTests := true,
-
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value
-      .map(step => if (step.name == "run-tests") runReleaseTests else step)
-      .filterNot(step => step.name == "push-changes" || step.name == "publish-artifacts"),
-
-    releaseIOIgnoreUntrackedFiles := true,
-
-    checkAll := {
-      // Verify tests did NOT run (no marker files should exist)
+    name                           := "skip-tests-setting-test",
+    releaseIOMonorepoSkipTests     := true,
+    releaseIOIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
+    checkAll                       := {
       val coreMarker = file("core/marker/tests-ran")
       assert(
         !coreMarker.exists(),
@@ -68,7 +45,6 @@ lazy val root = (project in file("."))
         s"api tests should have been skipped but marker exists at $apiMarker"
       )
 
-      // Verify release still completed (tags exist)
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")
       assert(
@@ -76,7 +52,6 @@ lazy val root = (project in file("."))
         s"Expected tags [api/v0.1.0, core/v0.1.0] but got [${tags.mkString(", ")}]"
       )
 
-      // Verify next versions
       val coreVer = IO.read(file("core/version.sbt"))
       assert(
         coreVer.contains("0.2.0-SNAPSHOT"),

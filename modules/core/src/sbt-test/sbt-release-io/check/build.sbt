@@ -124,7 +124,7 @@ def assertNestedRun(
 name         := "check-test"
 scalaVersion := "2.12.18"
 
-releaseIOProcess := releaseIOProcess.value.filterNot(_.name == "push-changes")
+releaseIOEnablePush := false
 releaseIOIgnoreUntrackedFiles := true
 publishTo := Some(Resolver.file("test-repo", target.value / "repo"))
 

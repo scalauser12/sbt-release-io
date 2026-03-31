@@ -13,10 +13,10 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "dirty-working-dir-test",
-    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts" ||
-      step.name == "run-clean" || step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     // Key: set to false so untracked files trigger the error
     releaseIOIgnoreUntrackedFiles := false,
     checkFailureArtifacts         := {

@@ -36,9 +36,8 @@ releaseIOVersionFileContents := { (f: File, ver: String) =>
 
 releaseIOIgnoreUntrackedFiles := true
 
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 val checkVersionProps =
   taskKey[Unit]("Verify version.properties has custom format with next version")

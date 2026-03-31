@@ -24,12 +24,10 @@ lazy val root = (project in file("."))
     // Disable shared path detection
     releaseIOMonorepoSharedPaths := Seq.empty,
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" ||
-      step.name == "publish-artifacts" ||
-      step.name == "run-clean" ||
-      step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

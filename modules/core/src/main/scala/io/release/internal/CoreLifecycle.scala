@@ -1,22 +1,13 @@
 package io.release.internal
 
 import cats.effect.IO
-import io.release.PluginLikeSupport
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseStepIO
 import io.release.steps.ReleaseSteps
 
-/** Canonical core lifecycle order, hook compilation, and process signatures. */
+/** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
-
-  sealed trait ProcessToken
-
-  object ProcessToken {
-    final case class BuiltIn(phaseId: String)                        extends ProcessToken
-    final case class Custom(name: String, enableCrossBuild: Boolean) extends ProcessToken
-    final case class OpaqueReleaseBuilder(className: String)         extends ProcessToken
-  }
 
   private type Gate = ReleaseContext => Boolean
 
@@ -162,35 +153,8 @@ private[release] object CoreLifecycle {
   val defaults: Seq[ReleaseStepIO] =
     phases.flatMap(_.rawSteps)
 
-  val defaultSignature: Seq[ProcessToken] =
-    signature(defaults)
-
   def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO] =
     phases.flatMap(_.compile(hooks))
-
-  def signature(steps: Seq[ReleaseStepIO]): Seq[ProcessToken] =
-    steps.map(stepToken)
-
-  def releaseBuilderSignature[T](steps: Seq[T => ReleaseStepIO]): Seq[ProcessToken] =
-    steps.map {
-      case lifted: PluginLikeSupport.LiftedStepFn[?, ?] =>
-        stepToken(lifted.step.asInstanceOf[ReleaseStepIO])
-      case resource: ReleaseStepIO.ResourceStepFn[?]    =>
-        ProcessToken.Custom(resource.name, resource.enableCrossBuild)
-      case other                                        =>
-        ProcessToken.OpaqueReleaseBuilder(other.getClass.getName)
-    }
-
-  private def stepToken(step: ReleaseStepIO): ProcessToken =
-    builtInPhases
-      .collectFirst {
-        case phase if sameRef(step, phase.step) =>
-          ProcessToken.BuiltIn(phase.id)
-      }
-      .getOrElse(ProcessToken.Custom(step.name, step.enableCrossBuild))
-
-  private def sameRef(left: AnyRef, right: AnyRef): Boolean =
-    left eq right
 
   private def compileHooks(
       phase: String,

@@ -25,9 +25,7 @@ lazy val root = (project in file("."))
     // Skip publish — bypasses publishTo validation in check phase
     releaseIOMonorepoSkipPublish  := true,
     // Keep publish-artifacts in process (only filter push-changes)
-    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes"
-    },
+    releaseIOMonorepoEnablePush := false,
     releaseIOIgnoreUntrackedFiles := true,
     checkAll                      := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

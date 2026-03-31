@@ -82,7 +82,9 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       val ctx         = promptContext(baseCtx, interactive = false, useDefaults = false)
       val step1       = ReleaseStepIO
         .step("seed-validation-metadata")
-        .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "seeded")))
+        .withValidationContext(currentCtx =>
+          IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
+        )
         .validateOnly
       val step2       = ReleaseStepIO(
         name = "observe-validation-metadata",
@@ -110,7 +112,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       val firstStep  = ReleaseStepIO
         .step("first-validation-prompt")
         .withValidationContext { currentCtx =>
-          StepHelpers.askYesNo(currentCtx, "First validation prompt (y/n)? [n] ", defaultYes = false)
+          StepHelpers
+            .askYesNo(currentCtx, "First validation prompt (y/n)? [n] ", defaultYes = false)
             .map { case (nextCtx, answer) =>
               nextCtx.withMetadata(answersKey, List(answer))
             }
@@ -119,7 +122,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       val secondStep = ReleaseStepIO
         .step("second-validation-prompt")
         .withValidationContext { currentCtx =>
-          StepHelpers.askYesNo(currentCtx, "Second validation prompt (y/n)? [y] ", defaultYes = true)
+          StepHelpers
+            .askYesNo(currentCtx, "Second validation prompt (y/n)? [y] ", defaultYes = true)
             .map { case (nextCtx, answer) =>
               val answers = nextCtx.metadata(answersKey).getOrElse(Nil) :+ answer
               nextCtx.withMetadata(answersKey, answers)
@@ -143,7 +147,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       val firstStep     = ReleaseStepIO
         .step("validation-prompt")
         .withValidationContext { currentCtx =>
-          StepHelpers.askYesNo(currentCtx, "Validation prompt (y/n)? [n] ", defaultYes = false)
+          StepHelpers
+            .askYesNo(currentCtx, "Validation prompt (y/n)? [n] ", defaultYes = false)
             .map { case (nextCtx, answer) =>
               nextCtx.withMetadata(validationKey, answer)
             }
@@ -155,7 +160,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           if (currentCtx.metadata(validationKey).contains(true)) IO.unit
           else IO.raiseError(new RuntimeException("execute validation did not see prior answer")),
         execute = currentCtx =>
-          StepHelpers.askYesNo(currentCtx, "Execution prompt (y/n)? [y] ", defaultYes = true)
+          StepHelpers
+            .askYesNo(currentCtx, "Execution prompt (y/n)? [y] ", defaultYes = true)
             .map { case (nextCtx, answer) =>
               nextCtx.withMetadata(executionKey, answer)
             }
@@ -259,20 +265,22 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       interactive: Boolean,
       useDefaults: Boolean
   ): ReleaseContext =
-    ctx.copy(interactive = interactive).withExecutionState(
-      CoreExecutionState(
-        CoreReleasePlan(
-          flags = ExecutionFlags(
-            useDefaults = useDefaults,
-            skipTests = false,
-            skipPublish = false,
-            interactive = interactive,
-            crossBuild = false
-          ),
-          releaseVersionOverride = None,
-          nextVersionOverride = None,
-          decisionDefaults = ReleaseDecisionDefaults.empty
+    ctx
+      .copy(interactive = interactive)
+      .withExecutionState(
+        CoreExecutionState(
+          CoreReleasePlan(
+            flags = ExecutionFlags(
+              useDefaults = useDefaults,
+              skipTests = false,
+              skipPublish = false,
+              interactive = interactive,
+              crossBuild = false
+            ),
+            releaseVersionOverride = None,
+            nextVersionOverride = None,
+            decisionDefaults = ReleaseDecisionDefaults.empty
+          )
         )
       )
-    )
 }

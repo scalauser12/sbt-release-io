@@ -1,5 +1,5 @@
 import scala.sys.process.*
-import _root_.io.release.monorepo.MonorepoStepIO
+import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 lazy val core = (project in file("core"))
   .settings(
@@ -21,17 +21,14 @@ lazy val api = (project in file("api"))
     scalaVersion := "2.12.18"
   )
 
-val checkAll        = taskKey[Unit]("Run all verification checks")
-val recordOrderStep = MonorepoStepIO.PerProject(
-  name = "record-order",
-  execute = (ctx, project) =>
-    _root_.cats.effect.IO.blocking {
-      val writer = new java.io.FileWriter(file("order.txt"), true)
-      writer.write(project.name + "\n")
-      writer.close()
-      ctx
-    }
-)
+val checkAll = taskKey[Unit]("Run all verification checks")
+val recordOrderHook = MonorepoProjectHookIO.action("record-order") { (_, project) =>
+  _root_.cats.effect.IO.blocking {
+    val writer = new java.io.FileWriter(file("order.txt"), true)
+    writer.write(project.name + "\n")
+    writer.close()
+  }
+}
 
 lazy val root = (project in file("."))
   .aggregate(core, middle, api)
@@ -39,26 +36,12 @@ lazy val root = (project in file("."))
   .settings(
     name := "topological-order-test",
 
-    // Insert record-order step right after resolve-release-order,
-    // and remove push/publish/clean/test steps
-    releaseIOMonorepoProcess := {
-      val defaultSteps = releaseIOMonorepoProcess.value
-      val filtered     = defaultSteps.filterNot { step =>
-        step.name == "push-changes" ||
-        step.name == "publish-artifacts" ||
-        step.name == "run-clean" ||
-        step.name == "run-tests"
-      }
-      val idx          = filtered.indexWhere(_.name == "resolve-release-order")
-      if (idx >= 0) {
-        val (before, after) = filtered.splitAt(idx + 1)
-        before ++ Seq(recordOrderStep) ++ after
-      } else {
-        filtered :+ recordOrderStep
-      }
-    },
-
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoBeforeTagHooks := Seq(recordOrderHook),
+    releaseIOIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoEnablePublish  := false,
+    releaseIOMonorepoEnablePush     := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
 
     checkAll := {
       // Check execution order

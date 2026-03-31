@@ -29,12 +29,10 @@ lazy val root = (project in file("."))
     releaseIOMonorepoDetectChanges     := true,
     releaseIOMonorepoIncludeDownstream := true,
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" ||
-      step.name == "publish-artifacts" ||
-      step.name == "run-clean" ||
-      step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

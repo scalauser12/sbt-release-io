@@ -1,34 +1,11 @@
-import _root_.io.release.ReleaseStepIO
-import _root_.io.release.steps.ReleaseSteps
 import sbt.IO
 
 name         := "command-line-version-numbers"
 scalaVersion := "2.12.18"
 
-publishTo := Some(Resolver.file("file", new File(".")))
-
 releaseIOIgnoreUntrackedFiles := true
-
-val writeCompileMarker = taskKey[Unit]("Write a marker proving the release test step ran")
-writeCompileMarker := {
-  val markerDir = baseDirectory.value / "marker"
-  val marker    = markerDir / "compile-ran"
-  IO.createDirectory(markerDir)
-  IO.touch(marker)
-}
-
-releaseIOProcess := Seq(
-  ReleaseSteps.initializeVcs,
-  ReleaseSteps.checkSnapshotDependencies,
-  ReleaseSteps.inquireVersions,
-  ReleaseSteps.runTests,
-  ReleaseStepIO.fromTask(writeCompileMarker),
-  ReleaseSteps.setReleaseVersion,
-  ReleaseSteps.commitReleaseVersion,
-  ReleaseSteps.publishArtifacts,
-  ReleaseSteps.setNextVersion,
-  ReleaseSteps.commitNextVersion
-)
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 val checkContentsOfVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")

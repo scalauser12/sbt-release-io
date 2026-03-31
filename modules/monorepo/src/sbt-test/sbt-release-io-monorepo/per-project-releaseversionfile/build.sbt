@@ -71,10 +71,10 @@ lazy val root = (project in file("."))
         _root_.cats.effect.IO.pure(s"""version := "$ver"\n""")
     },
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts" ||
-      step.name == "run-clean" || step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

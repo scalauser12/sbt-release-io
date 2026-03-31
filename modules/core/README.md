@@ -28,14 +28,14 @@ sbt "releaseIO check with-defaults"
 ```
 
 Preferred customization keeps the built-in process intact and uses `releaseIOEnable*` policies plus
-`releaseIO*Hooks`. Raw `releaseIOProcess` editing remains available as a legacy advanced path.
+`releaseIO*Hooks`.
 
 ## Read next
 
 - [Core getting started](../../docs/core/getting-started.md) for install, first `help` / `check` / `run`, and the default built-in steps
 - [Core hook-first walkthrough](../../docs/core/hook-first-walkthrough.md) for a safe local rehearsal that keeps the built-in process intact
 - [Core configuration](../../docs/core/configuration.md) for starter `build.sbt` patterns, and [Core reference](../../docs/core/reference.md) for the full settings and CLI catalog
-- [Core customization](../../docs/core/customization.md) for hooks, custom steps, custom plugins, and migration from raw-process edits
+- [Core customization](../../docs/core/customization.md) for hooks, resource-aware custom plugins, and migration guidance
 - [Core operations](../../docs/core/operations.md) for rollback and recovery
 - [Docs index](../../docs/README.md) for the full documentation tree
 

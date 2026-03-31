@@ -14,15 +14,13 @@
 | 8 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
 | 9 | `set-release-version` | PerProject | Write release version to `version.sbt` |
 | 10 | `commit-release-versions` | Global | Single commit staging all version files |
-| 11 | `tag-releases` | Global | Create per-project release tags |
+| 11 | `tag-releases` | PerProject | Create per-project release tags |
 | 12 | `publish-artifacts` | PerProject | Publish the selected project's artifacts (cross-build enabled, skippable) |
 | 13 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
 | 14 | `commit-next-versions` | Global | Single commit staging all version files |
 | 15 | `push-changes` | Global | Push branch + tags to tracking remote |
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order. Only selected projects participate — child projects that weren't selected or discovered by change detection are skipped.
-
-> **Migration note:** `MonorepoReleaseSteps.tagReleases` is currently a deprecated Global compatibility facade over the per-project tagging implementation. For explicit process wiring, prefer `MonorepoReleaseSteps.tagReleasesPerProject`. The lifecycle phase name remains `tag-releases`.
 
 ## Execution model
 

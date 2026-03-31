@@ -20,9 +20,8 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name := "keyword-project-selector-test",
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
     releaseIOIgnoreUntrackedFiles := true,
     checkKeywordProjectRelease := {
       val coreContents  = IO.read(file("core/version.sbt"))

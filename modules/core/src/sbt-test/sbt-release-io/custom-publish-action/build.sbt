@@ -12,11 +12,9 @@ releaseIOPublishArtifactsAction := {
 releaseIOPublishArtifactsChecks := false
 
 // Keep publish-artifacts; filter out push-changes, run-clean, run-tests
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" ||
-  step.name == "run-clean" ||
-  step.name == "run-tests"
-}
+releaseIOEnablePush           := false
+releaseIOEnableRunClean       := false
+releaseIOEnableRunTests       := false
 
 releaseIOIgnoreUntrackedFiles := true
 

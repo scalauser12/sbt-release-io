@@ -100,7 +100,7 @@ These names are the stable built-in insertion points for `insertAfter` and `inse
   [Configuration](configuration.md)
 - Full settings and CLI catalog:
   [Settings reference](reference.md)
-- Hooks, custom steps, custom plugins, and migration from raw-process edits:
+- Hooks, resource-aware custom plugins, and migration guidance:
   [Customization](customization.md)
 - Validate/execute semantics and execution model details:
   [Concepts](concepts.md)

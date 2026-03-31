@@ -19,13 +19,10 @@ lazy val root = (project in file("."))
 
     releaseIOPublishArtifactsChecks := false,
 
-    releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-      step.name == "push-changes" ||
-      step.name == "run-clean" ||
-      step.name == "run-tests"
-    },
-
-    releaseIOIgnoreUntrackedFiles := true
+    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOEnablePush           := false,
+    releaseIOEnableRunClean       := false,
+    releaseIOEnableRunTests       := false
   )
 
 val checkPublished = taskKey[Unit]("Verify child publish ran despite root skip")

@@ -1,5 +1,3 @@
-import _root_.io.release.steps.ReleaseSteps
-
 lazy val root = (project in file("."))
   .aggregate(libA, libB)
   .settings(
@@ -7,13 +5,9 @@ lazy val root = (project in file("."))
     scalaVersion                  := "2.12.18",
     publishTo                     := Some(Resolver.file("file", new File("."))),
     releaseIOIgnoreUntrackedFiles := true,
-    releaseIOProcess              := Seq(
-      ReleaseSteps.initializeVcs,
-      ReleaseSteps.inquireVersions,
-      ReleaseSteps.setReleaseVersion,
-      ReleaseSteps.publishArtifacts,
-      ReleaseSteps.setNextVersion
-    )
+    releaseIOEnablePush           := false,
+    releaseIOEnableRunClean       := false,
+    releaseIOEnableRunTests       := false
   )
 
 // Sub-project with publishTo configured

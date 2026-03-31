@@ -176,8 +176,8 @@ private[release] object VcsOps {
       vcs: Vcs
   ): IO[C] =
     for {
-      hasUp  <- vcs.hasUpstream
-      _      <-
+      hasUp     <- vcs.hasUpstream
+      _         <-
         if (hasUp) IO.unit
         else
           vcs.currentBranch.flatMap { branch =>
@@ -191,7 +191,7 @@ private[release] object VcsOps {
       // Best-effort check using local tracking refs (no fetch).
       // On any error (missing refs, corrupted repo, etc.), conservatively treat as not behind
       // and let the actual push surface the real failure.
-      behind <- vcs.isBehindRemote.handleError(_ => false)
+      behind    <- vcs.isBehindRemote.handleError(_ => false)
       resultCtx <-
         if (!behind) IO.pure(ctx)
         else

@@ -21,7 +21,7 @@ sealed trait MonorepoStepIO {
 
 object MonorepoStepIO {
 
-  private type GlobalThreadedValidation = MonorepoContext => IO[MonorepoContext]
+  private type GlobalThreadedValidation     = MonorepoContext => IO[MonorepoContext]
   private type PerProjectThreadedValidation =
     (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
 

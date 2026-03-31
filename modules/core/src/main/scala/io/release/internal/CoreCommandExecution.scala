@@ -3,13 +3,10 @@ package io.release.internal
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseContext
-import io.release.ReleaseIO
 import io.release.ReleaseKeys
 import io.release.ReleaseResourceHooks
 import io.release.ReleaseStepIO
 import sbt.{internal as _, *}
-
-import scala.annotation.nowarn
 
 /** Internal runtime helpers for core command planning and execution.
   *
@@ -22,13 +19,10 @@ private[release] object CoreCommandExecution {
       commandName: String,
       resource: Resource[IO, T],
       resolveResourceHooks: State => ReleaseResourceHooks[T],
-      resolveReleaseProcess: State => Seq[T => ReleaseStepIO],
-      resolveCheckProcess: State => Seq[ReleaseStepIO],
       resolveCrossBuildEnabled: State => Boolean,
       resolveSkipPublishEnabled: State => Boolean,
       resolveInteractiveEnabled: State => Boolean,
-      initialContext: (State, Boolean, Boolean, Boolean) => IO[ReleaseContext],
-      liftSteps: Seq[ReleaseStepIO] => Seq[T => ReleaseStepIO]
+      initialContext: (State, Boolean, Boolean, Boolean) => IO[ReleaseContext]
   )
 
   final case class CoreCommandInputs(
@@ -40,31 +34,13 @@ private[release] object CoreCommandExecution {
       plan: CoreReleasePlan
   )
 
-  sealed trait LegacyResult {
-    def legacyMode: Boolean
-    def legacyReasons: Seq[String]
-  }
-
-  final case class LegacyStatus(
-      legacyMode: Boolean,
-      legacyReasons: Seq[String]
-  ) extends LegacyResult
-
-  final case class ResolvedProcessMode[T](
-      releaseSteps: Seq[T => ReleaseStepIO],
-      checkSteps: Seq[ReleaseStepIO],
-      checkLegacy: LegacyStatus,
-      releaseLegacy: LegacyStatus
+  final case class ResolvedProcessMode(
+      checkSteps: Seq[ReleaseStepIO]
   )
 
   final case class ResolvedReleaseRun(
-      steps: Seq[ReleaseStepIO],
-      legacyMode: Boolean,
-      legacyReasons: Seq[String]
-  ) extends LegacyResult
-
-  private val ReleaseProcessLegacyReason =
-    "`releaseProcess` differs from the configured raw process"
+      steps: Seq[ReleaseStepIO]
+  )
 
   def doHelp(state: State, commandName: String): State = {
     val program = logLines(state, CorePreflight.helpLines(commandName))
@@ -105,117 +81,38 @@ private[release] object CoreCommandExecution {
     ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
   }
 
-  @nowarn("cat=deprecation")
   def resolveProcessMode[T](
       state: State,
       runtime: CommandRuntime[T]
-  ): IO[ResolvedProcessMode[T]] =
-    IO.blocking {
-      val extracted             = Project.extract(state)
-      val configuredRaw         = extracted.get(ReleaseIO._releaseIOProcess)
-      val configuredCheck       = runtime.resolveCheckProcess(state)
-      val configuredRelease     = runtime.resolveReleaseProcess(state)
-      val rawSignature          = CoreLifecycle.signature(configuredRaw)
-      val checkSignature        = CoreLifecycle.signature(configuredCheck)
-      val rawReleaseSignature   = CoreLifecycle.releaseBuilderSignature(
-        runtime.liftSteps(configuredRaw)
-      )
-      val releaseSignature      = CoreLifecycle.releaseBuilderSignature(configuredRelease)
-      val rawProcessChanged     = rawSignature != CoreLifecycle.defaultSignature
-      val checkProcessChanged   = checkSignature != rawSignature
-      val checkLegacy           = legacyStatus(
-        whenTrue(rawProcessChanged, "`releaseIOProcess` differs from defaults"),
-        whenTrue(
-          checkProcessChanged,
-          "`releaseCheckProcess` differs from the configured raw process"
-        )
-      )
-      val releaseProcessChanged = releaseSignature != rawReleaseSignature
-      val releaseLegacy         = legacyStatus(
-        whenTrue(rawProcessChanged, "`releaseIOProcess` differs from defaults"),
-        whenTrue(
-          releaseProcessChanged,
-          "`releaseProcess` differs from the configured raw process"
-        )
-      )
-      val compiledCheckSteps    =
-        if (checkLegacy.legacyMode) configuredCheck
-        else
-          ReleaseHookCompiler.compile(
-            mergeHookConfiguration(
-              ReleaseHookCompiler.resolve(state),
-              runtime.resolveResourceHooks(state),
-              maybeResource = None
-            )
-          )
-
+  ): IO[ResolvedProcessMode] =
+    IO.blocking(
       ResolvedProcessMode(
-        releaseSteps = configuredRelease,
-        checkSteps = compiledCheckSteps,
-        checkLegacy = checkLegacy,
-        releaseLegacy = releaseLegacy
+        checkSteps = ReleaseHookCompiler.compile(
+          mergeHookConfiguration(
+            ReleaseHookCompiler.resolve(state),
+            runtime.resolveResourceHooks(state),
+            maybeResource = None
+          )
+        )
       )
-    }
+    )
 
-  @nowarn("cat=deprecation")
   def resolveReleaseRun[T](
       state: State,
-      processMode: ResolvedProcessMode[T],
       resourceValue: T,
       runtime: CommandRuntime[T]
   ): IO[ResolvedReleaseRun] =
-    if (processMode.releaseLegacy.legacyMode)
-      IO.pure(
-        ResolvedReleaseRun(
-          steps = processMode.releaseSteps.map(_(resourceValue)),
-          legacyMode = true,
-          legacyReasons = processMode.releaseLegacy.legacyReasons
+    IO.blocking(
+      ResolvedReleaseRun(
+        steps = ReleaseHookCompiler.compile(
+          mergeHookConfiguration(
+            ReleaseHookCompiler.resolve(state),
+            runtime.resolveResourceHooks(state),
+            maybeResource = Some(resourceValue)
+          )
         )
       )
-    else
-      IO.blocking {
-        val extracted         = Project.extract(state)
-        val configuredRaw     = extracted.get(ReleaseIO._releaseIOProcess)
-        val configuredRelease = runtime.resolveReleaseProcess(state).map(_(resourceValue))
-        val releaseChanged    =
-          CoreLifecycle.signature(configuredRelease) != CoreLifecycle.signature(configuredRaw)
-
-        if (releaseChanged)
-          ResolvedReleaseRun(
-            steps = configuredRelease,
-            legacyMode = true,
-            legacyReasons = Seq(ReleaseProcessLegacyReason)
-          )
-        else
-          ResolvedReleaseRun(
-            steps = ReleaseHookCompiler.compile(
-              mergeHookConfiguration(
-                ReleaseHookCompiler.resolve(state),
-                runtime.resolveResourceHooks(state),
-                maybeResource = Some(resourceValue)
-              )
-            ),
-            legacyMode = false,
-            legacyReasons = Seq.empty
-          )
-      }
-
-  def logLegacyModeWarning(state: State, result: LegacyResult): IO[Unit] =
-    if (!result.legacyMode) IO.unit
-    else
-      IO.blocking {
-        val reasons = result.legacyReasons.mkString("; ")
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Legacy raw process mode enabled: $reasons"
-        )
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Prefer `releaseIOEnable*` policies and `releaseIO*Hooks` settings. " +
-            "See docs/core/customization.md#hook-based-customization."
-        )
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Core} Hook/policy compilation is bypassed while legacy raw process mode is active."
-        )
-      }
+    )
 
   private def buildCommandInputs[T](
       state: State,
@@ -289,8 +186,8 @@ private[release] object CoreCommandExecution {
       pushMatches.size
     )
 
-    val cleanState = state.remove(ReleaseKeys.versions)
-    val settings   = ReleaseDecisionDefaults.fromState(cleanState)
+    val cleanState  = state.remove(ReleaseKeys.versions)
+    val settings    = ReleaseDecisionDefaults.fromState(cleanState)
     val cliDefaults = ReleaseDecisionDefaults(
       tagExistsAnswer = tagDefaultArg,
       snapshotDependenciesAnswer = snapshotDefault,
@@ -332,13 +229,7 @@ private[release] object CoreCommandExecution {
       process  <- resolveProcessMode(inputs.cleanState, runtime)
       finalCtx <- runtime.resource.use { resourceValue =>
                     for {
-                      runProcess <- resolveReleaseRun(
-                                      inputs.cleanState,
-                                      process,
-                                      resourceValue,
-                                      runtime
-                                    )
-                      _          <- logLegacyModeWarning(inputs.cleanState, runProcess)
+                      runProcess <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
                       _          <- IO.blocking(
                                       logReleaseStart(
                                         inputs.cleanState,
@@ -372,7 +263,6 @@ private[release] object CoreCommandExecution {
   ): IO[State] =
     for {
       process <- resolveProcessMode(inputs.cleanState, runtime)
-      _       <- logLegacyModeWarning(inputs.cleanState, process.checkLegacy)
       _       <- CheckModeOutput.logCheckStart(
                    inputs.cleanState,
                    ReleaseLogPrefixes.Core,
@@ -402,18 +292,6 @@ private[release] object CoreCommandExecution {
       maybeResource: Option[T]
   ): CoreHookConfiguration =
     plainHooks.mergeWith(ReleaseResourceHooks.materialize(resourceHooks, maybeResource))
-
-  private def legacyStatus(reasons: Option[String]*): LegacyStatus = {
-    val resolved = reasons.flatten
-
-    LegacyStatus(
-      legacyMode = resolved.nonEmpty,
-      legacyReasons = resolved
-    )
-  }
-
-  private def whenTrue(condition: Boolean, value: String): Option[String] =
-    if (condition) Some(value) else None
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)

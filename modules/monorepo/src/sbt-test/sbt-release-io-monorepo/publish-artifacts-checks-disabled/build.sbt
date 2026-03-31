@@ -23,9 +23,9 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPublishArtifactsChecks := false,
 
     // Keep publish-artifacts step in process so its validation phase runs
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "run-clean" || step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

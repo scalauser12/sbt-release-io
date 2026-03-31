@@ -54,7 +54,7 @@ private[release] object DecisionResolver {
             if (continue) IO.pure(nextCtx)
             else IO.raiseError(new IllegalStateException(abortMessage))
           }
-      }
+    }
 
   def handleSnapshotDependencies[C <: ReleaseCtx[C]](
       ctx: C,
@@ -119,7 +119,7 @@ private[release] object DecisionResolver {
                   )
                 ) *> onDeclinePush(nextCtx)
             }
-      }
+    }
 
   def resolveTagAnswer[C <: ReleaseCtx[C]](
       ctx: C,

@@ -9,8 +9,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "cli-parse-errors-test",
-    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
     releaseIOIgnoreUntrackedFiles := true
   )

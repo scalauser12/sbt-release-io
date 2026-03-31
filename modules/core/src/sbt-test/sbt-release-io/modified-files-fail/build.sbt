@@ -4,9 +4,8 @@ import sbt.IO
 name         := "modified-files-fail-test"
 scalaVersion := "2.12.18"
 
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 val checkNoGitTags = taskKey[Unit]("Check that no git tags were created")
 checkNoGitTags := {

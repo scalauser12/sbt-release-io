@@ -4,9 +4,8 @@ import sbt.IO
 name         := "invalid-version-input-test"
 scalaVersion := "2.12.18"
 
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 releaseIOIgnoreUntrackedFiles := true
 

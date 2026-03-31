@@ -23,9 +23,9 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "selection-aware-validation-test",
-    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "run-clean" || step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     releaseIOIgnoreUntrackedFiles := true,
     checkSelectionAwareValidation := {
       val tags        = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList

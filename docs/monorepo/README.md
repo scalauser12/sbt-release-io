@@ -31,7 +31,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
 ## Customize
 
 - [Customization](customization.md)
-  Hook-first customization, custom steps, builder APIs, custom plugins, and legacy raw-process mode.
+  Hook-first customization, resource-aware custom plugins, and migration guidance.
 
 ## Operate
 

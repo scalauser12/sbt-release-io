@@ -213,11 +213,11 @@ private[release] object VcsSteps {
           doPush = currentCtx => vcs.pushChanges.as(currentCtx),
           onDeclinePush = currentCtx =>
             IO
-            .blocking(
-              currentCtx.state.log.warn(
-                s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+              .blocking(
+                currentCtx.state.log.warn(
+                  s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+                )
               )
-            )
               .as(currentCtx)
         )
       }

@@ -1,268 +1,83 @@
 # Scripted Tests for sbt-release-io
 
-This directory contains scripted tests for the sbt-release-io plugin. These tests verify that the plugin works correctly in real-world scenarios.
+This directory contains scripted integration tests for the core `releaseIO` command.
 
-## Test Structure
+Each scenario lives under `sbt-release-io/<test-name>/` and typically contains:
 
-Each test is located in `sbt-release-io/<test-name>/` and contains:
+- `build.sbt`
+- `version.sbt` or another version file used by the fixture
+- `project/plugins.sbt`
+- `test`
 
-- `build.sbt` - Project configuration for the test
-- `version.sbt` - Version file that the plugin will modify
-- `project/plugins.sbt` - Loads the sbt-release-io plugin
-- `test` - Test script with commands to execute
+## Supported coverage
 
-## Available Tests
+The scripted suite now covers only the supported extension surface:
 
-### check-phase
-- Verifies that validation-phase failures prevent step execution
+- policy keys such as `releaseIOEnable*`, `releaseIOSkipPublish`, and `releaseIOIgnoreUntrackedFiles`
+- plain lifecycle hooks such as `releaseIOBeforeTagHooks`
+- resource-aware hooks via `releaseResourceHooks`
 
-### command-line-version-numbers
-- Specifies release and next versions via `release-version` / `next-version` args
-- Verifies both versions are written to `version.sbt` at the correct points
+Legacy step-list editing fixtures were retired. New scripted tests should use lifecycle hooks and policy keys only.
 
-### cross
-- Tests cross-building with multiple Scala versions via the `cross` flag
-- Verifies both 2.13 and 2.12 builds occur only when cross is enabled
+## Coverage areas
 
-### cross-build-setting
-- Tests `releaseIOCrossBuild := true` setting (not the CLI flag)
-- Verifies both Scala versions are built when cross-build is enabled via setting
+- Core flow and CLI: `simple`, `help`, `check`, `with-defaults`, `interactive-with-defaults`, `command-line-version-numbers`
+- Hook and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`
+- Versioning and tags: `custom-tag`, `custom-version-format`, `global-version-false`, `invalid-version-input`, `version-bump`, `tag-default`
+- Cross-build behavior: `cross`, `cross-build-setting`
+- Test and clean phases: `run-clean`, `fail-test`, `run-tests-aggregate-fail`, `skip-tests`
+- Publish and push flow: `publish-to-check`, `publish-skip`, `publish-skip-root`, `skip-publish-setting`, `publish-multi-project`, `publish-nested-aggregate`, `push-changes`, `custom-publish-action`
+- Repository hygiene: `modified-files-fail`, `untracked-files`, `untracked-files-fail`, `vcs-signoff`
+- Version-file and dependency edge cases: `missing-version-file`, `snapshot-deps`, `snapshot-deps-test-scope`, `snapshot-deps-cross`, `empty-commit`, `empty-commit-noop`
 
-### custom-tag
-- Tests custom tag naming via the `releaseTagName` setting
-- Uses `runtimeVersion` to create dynamic tag names
+## Running tests
 
-### custom-version-format
-- Tests `releaseIOVersionFile`, `releaseIOReadVersion`, and `releaseIOVersionFileContents` settings
-- Uses a `.properties` file format instead of default `version.sbt`
-- Verifies custom format preserved in both working directory and git tag commits
+Run all scripted tests:
 
-### custom-plugin
-- Tests `ReleasePluginIOLike` resource lifecycle (acquire → use → release)
-- Verifies marker files prove the resource was acquired, used by a step, and released
-- Verifies release side effects: default tag creation and next-version write
-
-### custom-plugin-resource-hooks
-- Tests `ReleasePluginIOLike.releaseResourceHooks` on the compiled hook path
-- Verifies `check` validates both plain and resource-aware hooks without acquiring the resource
-- Verifies `run` acquires/releases the resource and executes plain hooks before resource-aware hooks in the same lifecycle point
-
-### defaults-with-after
-- Tests `insertAfter` inserts a custom step at the correct position
-- Custom plugin inserts step after `check-clean-working-dir`
-
-### defaults-with-before
-- Tests `insertBefore` inserts a custom step at the correct position
-- Custom plugin inserts step before `tag-release`
-
-### empty-commit
-- Version file already at release version
-- Verifies no-op commit is handled gracefully
-
-### empty-commit-noop
-- Verifies release flow when version file transitions SNAPSHOT → release → next SNAPSHOT
-- Documents commit step behavior when status is empty (no-op)
-
-### exit-code
-- Verifies exit codes from `releaseIO` (0 for success, 1 for failure)
-- Tests both `fromCommand` and `fromCommandAndRemaining` step factories
-
-### fail-test
-- Verifies that failing tests abort the release before later steps execute
-- Checks that a marker file is not created when tests fail
-
-### hook-disabled-phases
-- Tests `releaseIOEnableRunTests`, `releaseIOEnablePublish`, and `releaseIOEnablePush`
-- Verifies disabled phases are omitted and publish hooks do not fire when publish is disabled
-
-### hook-late-bound-settings
-- Tests hook-based late-bound `releaseIOVersionFile` / `releaseIOTagName` changes
-- Verifies before-version-resolution and before-tag hooks are evaluated from live state
-
-### hook-lifecycle
-- Tests semantic lifecycle hooks around tagging and publishing
-- Verifies before/after tag and publish hooks run without raw process customization
-
-### global-version-false
-- Tests `releaseUseGlobalVersion := false`
-- Verifies `version.sbt` uses `version :=` instead of `ThisBuild / version :=`
-
-### invalid-version-input
-- Verifies that invalid CLI version strings (e.g. `banana`) are rejected by `parseVersionInput`
-- Tests both invalid `release-version` and invalid `next-version`
-- Verifies no commits, tags, or version file changes occur on failure
-
-### interactive-with-defaults
-- Enables `releaseIOInteractive := true`
-- Verifies `with-defaults` runs in interactive mode without blocking prompts
-
-### modified-files-fail
-- Verifies that unstaged modified tracked files block the release (check-clean-working-dir)
-- Verifies no commits, tags, or version file changes occur on failure
-
-### publish-multi-project
-- Multi-project build with mixed publish configurations
-- Root and libA have `publishTo`, libB uses `publish / skip := true` (no `publishTo` needed)
-
-### publish-nested-aggregate
-- Validates `publishArtifacts` preflight catches missing `publishTo` on transitive (nested) aggregates
-- Root -> libA -> libB where libB lacks publishTo; release should fail at validation
-
-### publish-skip
-- Tests that `publish / skip := true` bypasses the `publishTo` check
-- Release succeeds without `publishTo` configured
-
-### publish-to-check
-- Verifies that a missing `publishTo` setting fails at check phase
-- Verifies the failure happens before any commit, tag, or `version.sbt` mutation
-
-### run-clean
-- Verifies the default release flow executes `runClean` before tests
-- Asserts files created under `target/` are removed during release
-
-### run-tests-aggregate-fail
-- Verifies that failing tests in aggregated sub-projects abort the release
-- Multi-project setup with one passing and one failing test
-
-### resource-step-action
-- Tests `ReleaseStepIO.resourceStep[T]` builder with `executeAction` and `withValidation` in a custom plugin
-- Verifies that action variants (`IO[Unit]` execute) pass context through correctly
-- Verifies both validate and execute phases run for the action-with-validation variant
-
-### resource-step-with-check
-- Tests `ReleaseStepIO.resourceStep[T]` builder with `withValidation` and `execute` in a custom plugin
-- Verifies both validate and execute phases run for resource-aware steps
-
-### simple
-- Tests the basic release workflow end-to-end
-- Verifies version changes, git commits, and tags are created
-
-### skip-publish-setting
-- Tests `releaseIOSkipPublish := true` setting (not `publish / skip`)
-- Verifies release succeeds without `publishTo` configured when skip-publish is enabled via setting
-
-### skip-tests
-- Verifies that the `skip-tests` flag allows release despite failing tests
-- Tests both the negative case (failure) and positive case (success with flag)
-
-### step-command-and-remaining
-- Tests `ReleaseStepIO.fromCommandAndRemaining` in `releaseIOProcess`
-- Verifies command execution and drain logic
-
-### snapshot-deps
-- Project with a SNAPSHOT dependency
-- Verifies release fails with appropriate error before any commit, tag, or `version.sbt` mutation
-
-### snapshot-deps-test-scope
-- Project with a Test-scoped SNAPSHOT dependency
-- Verifies release fails at `check-snapshot-dependencies` even when the SNAPSHOT is test-only
-
-### snapshot-deps-cross
-- Cross-build project where only one Scala version has a SNAPSHOT dependency
-- Verifies `cross` release fails when any version has snapshot dependencies before any commit, tag, or `version.sbt` mutation
-
-### tag-default
-- Tests tag name conflict handling with multiple scenarios
-- Covers abort, overwrite, keep, and custom tag name resolution
-
-### tasks-as-steps
-- Tests `ReleaseStepIO.fromTask`, `fromTaskAggregated`, `fromInputTask`, and `fromCommand`
-- Verifies tasks, input tasks, and commands all execute correctly as release steps
-
-### untracked-files
-- Tests `releaseIOIgnoreUntrackedFiles := true`
-- Creates untracked files and verifies release succeeds when the setting is enabled
-
-### untracked-files-fail
-- Tests default `releaseIOIgnoreUntrackedFiles` behavior (false)
-- Verifies untracked files block the release before any commit, tag, or `version.sbt` mutation
-
-### vcs-signoff
-- Tests `releaseIOVcsSignOff := true`
-- Verifies release commits include the `Signed-off-by:` trailer
-- Verifies the initial (non-release) commit does not have the trailer
-
-### version-bump
-- Tests different version bump strategies: Next, NextStable, Bugfix, Minor, Major
-- Verifies qualifier stripping and snapshot suffix behavior for each
-
-### with-defaults
-- Tests release with and without the `with-defaults` flag
-- Verifies `releaseIOVersionBump` setting is honored across multiple scenarios
-
-## Running Tests
-
-Run all tests:
 ```bash
-sbt scripted
+./bin/sbt2-clean core/scripted
 ```
 
-Run a specific test:
+Run a specific scenario:
+
 ```bash
-sbt "scripted sbt-release-io/simple"
+./bin/sbt2-clean "core/scripted sbt-release-io/simple"
 ```
 
-Run multiple specific tests:
+Run multiple scenarios:
+
 ```bash
-sbt "scripted sbt-release-io/simple sbt-release-io/snapshot-deps"
+./bin/sbt2-clean "core/scripted sbt-release-io/simple sbt-release-io/snapshot-deps"
 ```
 
-## Test Script Syntax
+## Script syntax
 
-### Commands
+- `# comment` comments a line
+- `> command` runs an sbt command and expects success
+- `-> command` runs an sbt command and expects failure
+- `$ command` runs a file operation and expects success
+- `$- command` runs a file operation and expects failure
 
-- `#` - Comment
-- `> task` - Run sbt task, expect success
-- `-> task` - Run sbt task, expect failure
-- `$ command` - Run file operation, expect success
-- `$- command` - Run file operation, expect failure
+Common file operations:
 
-### Common File Operations
+- `$ exists path`
+- `$ absent path`
+- `$ touch path`
+- `$ delete path`
+- `$ exec command`
+- `$ pause`
 
-- `$ exists path/to/file` - Verify file exists
-- `$ absent path/to/file` - Verify file doesn't exist
-- `$ touch path/to/file` - Create or update file
-- `$ delete path/to/file` - Delete file
-- `$ exec command` - Execute shell command
-- `$ pause` - Pause test for debugging (press Enter to continue)
+## Writing new tests
 
-### Example Test Script
+1. Create `src/sbt-test/sbt-release-io/<test-name>/`
+2. Add `build.sbt`, `version.sbt`, `project/plugins.sbt`, and `test`
+3. Prefer lifecycle hooks or policy keys over any custom step wiring
+4. Use marker files under `baseDirectory.value / "marker"` for assertions that need build-side effects
+5. Run `./bin/sbt2-clean "core/scripted sbt-release-io/<test-name>"`
 
-```
-# Initialize git
-$ exec git init
-$ exec git config user.email "test@example.com"
-$ exec git config user.name "Test User"
-$ exec git add .
-$ exec git commit -m "Initial"
+## Debugging tips
 
-# Run release
-> releaseIO with-defaults release-version 0.1.0
-
-# Verify results
-$ exists version.sbt
-$ exec git tag | grep -q "v0.1.0"
-```
-
-## Writing New Tests
-
-1. Create directory: `src/sbt-test/sbt-release-io/<test-name>/`
-2. Add `build.sbt`, `version.sbt`, `project/plugins.sbt`
-3. Write test script in `test` file
-4. Run with `sbt "scripted sbt-release-io/<test-name>"`
-
-## Debugging Tests
-
-- Set `scriptedBufferLog := false` in build.sbt to see real-time output
-- Use `$ pause` in test scripts to inspect state
-- Test directories are in `target/sbt-test/sbt-release-io/<test-name>/`
-- Prefer explicit marker files under `baseDirectory.value / "marker"` over build output paths, since sbt 1 and sbt 2 lay out compiled artifacts differently
-
-## Tips
-
-- Tests run in isolated temporary directories
-- Each test starts with a clean slate
-- Git must be configured (`user.email`, `user.name`) in tests
-- Plugin is published locally before tests run
-- Use marker files for scripted assertions instead of `target/scala-*` or `target/out/...` paths
-- Tests can be slow (each is a full sbt session)
+- Set `scriptedBufferLog := false` in the fixture `build.sbt` for live output
+- Use `$ pause` to inspect fixture state mid-run
+- Scripted working directories live under `target/sbt-test/sbt-release-io/<test-name>/`
+- Prefer marker files over `target/scala-*` or `target/out/...` paths because sbt 1 and sbt 2 lay out artifacts differently

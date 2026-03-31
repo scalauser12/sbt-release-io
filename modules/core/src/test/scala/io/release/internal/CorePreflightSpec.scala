@@ -5,9 +5,8 @@ import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
 import io.release.TestSupport
-import io.release.internal.ReleaseDecisionDefaults
-import io.release.steps.VersionSteps
 import io.release.steps.VcsSteps
+import io.release.steps.VersionSteps
 import munit.CatsEffectSuite
 import sbt.Project
 

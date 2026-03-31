@@ -15,11 +15,9 @@ lazy val root = (project in file("."))
     name := "push-changes-tracking-remote-test",
 
     // Keep push-changes enabled; skip unrelated heavy steps for speed.
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "publish-artifacts" ||
-      step.name == "run-clean" ||
-      step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

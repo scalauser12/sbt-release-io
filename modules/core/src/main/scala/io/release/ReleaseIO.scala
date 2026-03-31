@@ -19,20 +19,6 @@ trait ReleaseIO {
 
   // ── Setting keys (delegated to singleton in companion object) ───────────
 
-  /** The ordered sequence of release steps to execute. Defaults to [[steps.ReleaseSteps.defaults]].
-    * Resource-aware steps should be added by overriding `releaseProcess` in a
-    * [[ReleasePluginIOLike]] subclass, where the resource type `T` is known at compile time.
-    *
-    * This remains the legacy raw-process customization surface during the hook/policy
-    * migration. Prefer `releaseIOEnable*` and `releaseIO*Hooks` when the default plugin
-    * can express the desired behavior.
-    */
-  @deprecated(
-    "Use `releaseIOEnable*` policies, `releaseIO*Hooks`, or a custom `ReleasePluginIOLike` resource plugin; raw `releaseIOProcess` editing is legacy mode.",
-    "0.7.0"
-  )
-  val releaseIOProcess: SettingKey[Seq[ReleaseStepIO]] = ReleaseIO._releaseIOProcess
-
   /** When `true`, steps with `enableCrossBuild = true` are executed once per `crossScalaVersions`.
     * Can also be enabled via the `cross` command-line argument to `releaseIO`.
     */
@@ -243,12 +229,6 @@ object ReleaseIO extends ReleaseIO {
   // Canonical key definitions — created exactly once, shared across all mix-ins.
   // Use explicit SettingKey constructors (not the settingKey macro) to decouple
   // the key name from the val name.
-  private[release] lazy val _releaseIOProcess: SettingKey[Seq[ReleaseStepIO]] =
-    SettingKey[Seq[ReleaseStepIO]](
-      "releaseIOProcess",
-      "The sequence of IO release steps to execute"
-    )
-
   private[release] lazy val _releaseIOCrossBuild: SettingKey[Boolean] =
     SettingKey[Boolean]("releaseIOCrossBuild", "Whether to enable cross-building during release")
 
@@ -274,15 +254,13 @@ object ReleaseIO extends ReleaseIO {
       "Default decision for continuing when SNAPSHOT dependencies are detected"
     )
 
-  private[release] lazy val _releaseIODefaultRemoteCheckFailureAnswer
-      : SettingKey[Option[Boolean]] =
+  private[release] lazy val _releaseIODefaultRemoteCheckFailureAnswer: SettingKey[Option[Boolean]] =
     SettingKey[Option[Boolean]](
       "releaseIODefaultRemoteCheckFailureAnswer",
       "Default decision for continuing after a remote-check failure"
     )
 
-  private[release] lazy val _releaseIODefaultUpstreamBehindAnswer
-      : SettingKey[Option[Boolean]] =
+  private[release] lazy val _releaseIODefaultUpstreamBehindAnswer: SettingKey[Option[Boolean]] =
     SettingKey[Option[Boolean]](
       "releaseIODefaultUpstreamBehindAnswer",
       "Default decision for continuing when the local branch is behind upstream"

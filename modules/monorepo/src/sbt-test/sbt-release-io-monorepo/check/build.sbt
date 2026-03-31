@@ -142,9 +142,8 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name := "check-monorepo-test",
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
     releaseIOIgnoreUntrackedFiles := true,
     expectExplicitCheckSuccess := {
       assertNestedRun(

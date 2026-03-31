@@ -22,10 +22,10 @@ lazy val root = (project in file("."))
     name                           := "detect-changes-disabled-test",
     // Disable change detection — all projects should be released regardless of changes
     releaseIOMonorepoDetectChanges := false,
-    releaseIOMonorepoProcess       := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts" ||
-      step.name == "run-clean" || step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePublish  := false,
+    releaseIOMonorepoEnablePush     := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     releaseIOIgnoreUntrackedFiles  := true,
     // Consolidated verification task
     checkAll                       := {

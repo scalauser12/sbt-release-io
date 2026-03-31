@@ -1,11 +1,17 @@
-# Custom steps and plugins (core)
+# Customization (core)
+
+## Supported customization model
+
+Core release customization is hook-first:
+
+- `releaseIOEnable*` turns built-in phases on or off
+- `releaseIO*Hooks` adds behavior around supported lifecycle points
+- `ReleasePluginIOLike.releaseResourceHooks` lets custom plugins use one shared resource
+
+Legacy raw-process step-list editing was removed. If you previously customized the release
+by editing the step sequence directly, migrate to hooks and policies instead.
 
 ## Hook-based customization
-
-The default `ReleasePluginIO` now supports semantic lifecycle hooks and phase policies
-without requiring raw `releaseIOProcess` surgery. When the built-in process is left
-intact, the plugin compiles `releaseIOEnable*` and `releaseIO*Hooks` settings into the
-internal engine so `releaseIO` and `releaseIO check` stay aligned.
 
 ```scala
 import sbt.*
@@ -22,49 +28,40 @@ def markerHook(marker: String): ReleaseHookIO =
   }
 
 releaseIOEnablePush := false
+releaseIOEnablePublish := false
 releaseIOBeforeTagHooks += markerHook("before-tag")
 releaseIOAfterTagHooks += markerHook("after-tag")
-releaseIOEnablePublish := false
 ```
 
 Hook semantics:
 
-- `beforeX` / `afterX` hooks run only when phase `X` actually runs
-- Disabled or skipped phases do not fire their normal hooks
-- Hooks extend release behavior, but they do not control phase ordering or batching
-- `releaseIO check` validates the same compiled lifecycle shape that `releaseIO` executes
+- `beforeX` / `afterX` hooks run only when phase `X` is present in the compiled lifecycle
+- disabled phases do not run their hooks
+- `releaseIO check` validates the same lifecycle shape that `releaseIO` executes
+- hooks extend behavior, but they do not change phase ordering
 
-### Legacy raw-process mode
+## Migration guide
 
-`releaseIOProcess`, `ReleasePluginIOLike.releaseProcess`, and
-`ReleasePluginIOLike.releaseCheckProcess` remain supported during the migration window,
-but they are now the legacy raw-process API. When any of those are customized, the plugin
-stays in legacy mode and ignores the hook/policy settings above.
-
-### Migration from raw-process customization
-
-For the common customization cases, prefer the semantic hook/policy settings over direct
-`releaseIOProcess` surgery:
-
-| Legacy pattern | Hook / policy replacement |
-| -------------- | ------------------------- |
+| Old intent | New hook/policy surface |
+| ---------- | ----------------------- |
 | Remove `push-changes` | `releaseIOEnablePush := false` |
 | Remove `publish-artifacts` | `releaseIOEnablePublish := false` |
-| Remove `run-tests` / `run-clean` | `releaseIOEnableRunTests := false` / `releaseIOEnableRunClean := false` |
-| Insert logic before or after a built-in phase | `releaseIOBefore*Hooks` / `releaseIOAfter*Hooks` |
-| Keep the built-in process but add extra behavior | Hook settings |
-| Replace the full step order or use resource-backed custom plugin wiring | Legacy raw-process mode |
+| Remove `run-tests` or `run-clean` | `releaseIOEnableRunTests := false` / `releaseIOEnableRunClean := false` |
+| Insert logic before tagging | `releaseIOBeforeTagHooks += ...` |
+| Insert logic after tagging | `releaseIOAfterTagHooks += ...` |
+| Insert logic around version resolution | `releaseIOBeforeVersionResolutionHooks` / `releaseIOAfterVersionResolutionHooks` |
+| Insert logic around publish | `releaseIOBeforePublishHooks` / `releaseIOAfterPublishHooks` |
 
 ### Copy/paste replacements
 
-Disable push and publish without touching the step list:
+Disable push and publish:
 
 ```scala
 releaseIOEnablePush := false
 releaseIOEnablePublish := false
 ```
 
-Replace “insert a marker step before tagging” with a lifecycle hook:
+Replace a "run this before tagging" custom step with a lifecycle hook:
 
 ```scala
 import _root_.cats.effect.IO
@@ -78,7 +75,7 @@ releaseIOBeforeTagHooks += ReleaseHookIO.action("write-release-marker") { ctx =>
 }
 ```
 
-Keep the built-in process and add a notification after tagging:
+Add a notification after tagging:
 
 ```scala
 import _root_.cats.effect.IO
@@ -92,398 +89,71 @@ releaseIOAfterTagHooks += ReleaseHookIO.action("notify-tagged") { ctx =>
 }
 ```
 
-### Migrating older custom step APIs
+## Custom plugins with shared resources
 
-If you are updating a custom plugin or build from an older release:
-
-- rename `step.check` to `step.validate`
-- rename `step.action` to `step.execute`
-- replace `stepTask(...)`, `stepTaskAggregated(...)`, `stepInputTask(...)`, `stepCommand(...)`,
-  and `stepCommandAndRemaining(...)` from `ReleaseIO` with the canonical
-  `ReleaseStepIO.fromTask(...)`, `fromTaskAggregated(...)`, `fromInputTask(...)`,
-  `fromCommand(...)`, and `fromCommandAndRemaining(...)` APIs
-- replace `resourceStep(...)`, `resourceStepAction(...)`, `resourceStepWithCheck(...)`,
-  `resourceStepWithValidation(...)`, and `resourceStepActionWithValidation(...)` factory methods
-  with the `ReleaseStepIO.resourceStep[T](name)` builder API
-- replace string attributes with typed metadata via `ctx.withMetadata`, `ctx.metadata`, and
-  `AttributeKey[A]`
-
-## Custom steps
-
-Define your own steps using the `ReleaseStepIO.step(name)` builder and add them to the release process alongside the built-in ones (see [Resource-aware steps](#resource-aware-steps-builder-api) for the full builder method reference):
-
-```scala
-import _root_.cats.effect.IO
-import _root_.io.release.{ReleaseContext, ReleaseStepIO}
-
-// Log the planned release version
-val printVersion = ReleaseStepIO.step("print-version")
-  .executeAction(ctx =>
-    IO.blocking(ctx.state.log.info(s"[release] Releasing ${ctx.releaseVersion.getOrElse("unknown")}"))
-  )
-
-// Validation-only step — fails if not on main
-val checkBranch = ReleaseStepIO.step("check-branch")
-  .withValidation(ctx =>
-    ctx.vcs match {
-      case Some(vcs) =>
-        vcs.currentBranch.flatMap(branch =>
-          if (branch == "main") IO.unit
-          else IO.raiseError(new RuntimeException(s"Must release from main, not $branch"))
-        )
-      case None =>
-        IO.raiseError(new RuntimeException("VCS not initialized"))
-    }
-  )
-  .validateOnly
-```
-
-**`ReleaseContext`** — immutable context threaded through all steps:
-
-| Field / Method                              | Type                       | Description                                                |
-| ------------------------------------------- | -------------------------- | ---------------------------------------------------------- |
-| `state`                                     | `State`                    | Current sbt state                                          |
-| `versions`                                  | `Option[(String, String)]` | `(releaseVersion, nextVersion)`, set by `inquire-versions` |
-| `releaseVersion`                            | `Option[String]`           | Shorthand for `versions.map(_._1)`                         |
-| `nextVersion`                               | `Option[String]`           | Shorthand for `versions.map(_._2)`                         |
-| `vcs`                                       | `Option[Vcs]`              | Git adapter, set by `initialize-vcs`                       |
-| `skipTests` / `skipPublish` / `interactive` | `Boolean`                  | Execution flags                                            |
-| `failed`                                    | `Boolean`                  | Whether the release has failed                             |
-| `failureCause`                              | `Option[Throwable]`        | Throwable captured on failure                              |
-| `withState(s)`                              | `ReleaseContext`           | Replace sbt state                                          |
-| `withVersions(release, next)`               | `ReleaseContext`           | Set version pair                                           |
-| `withVcs(v)`                                | `ReleaseContext`           | Set or replace VCS adapter                                 |
-| `metadata[A](key)`                          | `Option[A]`                | Read typed inter-step metadata                             |
-| `withMetadata[A](key, value)`               | `ReleaseContext`           | Store typed inter-step metadata                            |
-| `withoutMetadata[A](key)`                   | `ReleaseContext`           | Remove a metadata entry                                    |
-| `fail`                                      | `ReleaseContext`           | Mark release as failed                                     |
-| `failWith(cause)`                           | `ReleaseContext`           | Mark release as failed with a cause                        |
-
-The built-in implementation also threads startup-only command data internally (for example,
-`with-defaults` and CLI version overrides), but that runtime metadata is package-private.
-For custom steps, treat `ctx.withMetadata` / `ctx.metadata` as your extension space. The only
-intentional mirror onto `sbt.State` is the release version pair, which sbt tasks use to
-compute live tag names and commit messages.
-
-### Creating steps from sbt tasks and commands
-
-Wrap existing sbt tasks, input tasks, or commands as release steps by calling the
-canonical `ReleaseStepIO` factory methods directly:
-
-```scala
-releaseIOProcess := Seq(
-  ReleaseSteps.initializeVcs,
-  ReleaseSteps.checkCleanWorkingDir,
-  ReleaseSteps.inquireVersions,
-  // Run a TaskKey as a release step
-  ReleaseStepIO.fromTask(myCustomTask),
-  // Run a TaskKey with cross-building enabled
-  ReleaseStepIO.fromTask(myCustomTask, enableCrossBuild = true),
-  // Run an InputKey with arguments
-  ReleaseStepIO.fromInputTask(myInputTask, args = "arg1 arg2"),
-  // Run a TaskKey aggregated across subprojects
-  ReleaseStepIO.fromTaskAggregated(test),
-  // Run an sbt command string
-  ReleaseStepIO.fromCommand("publishLocal"),
-  // Run a command that enqueues sub-commands (e.g. +publish)
-  ReleaseStepIO.fromCommandAndRemaining("+publish"),
-  ReleaseSteps.pushChanges
-)
-```
-
-The supported step-construction surface is `ReleaseStepIO`: use `step(...)` /
-`resourceStep(...)` for builder-style definitions, `fromTask` / `fromInputTask` /
-`fromTaskAggregated` / `fromCommand` / `fromCommandAndRemaining` for wrapping existing sbt
-entry points, and `pure` for non-effectful context transformations.
-
-## Custom plugins
-
-If your release process needs a shared resource — an HTTP client, a database connection, a temporary directory — you can create a custom plugin that extends `ReleasePluginIOLike[T]`. The resource is acquired once before all steps run and released after they complete (or on failure), following the cats-effect `Resource` pattern.
-
-Custom plugins still participate in the compiled hook/policy flow by default. Legacy raw-process
-mode starts only when the plugin materially changes the effective process, for example by
-returning extra steps from `releaseProcess` or `releaseCheckProcess`. Merely defining a custom
-plugin or overriding unrelated members such as `commandName` or `resource` does not bypass hooks.
-
-### Creating the plugin
-
-Custom plugins must be defined in `project/*.scala` (not `build.sbt`) because sbt discovers `AutoPlugin` classes during meta-build compilation.
-
-> **Important:** In `project/*.scala` files, `io.release` is shadowed by sbt's `sbt.io` package. Always use `_root_.io.release` and `_root_.cats.effect` imports.
-
-Here is a plugin that manages an HTTP client and keeps that custom behavior on compiled hook mode:
+Use `ReleasePluginIOLike[T]` when release behavior needs one shared resource, such as an
+HTTP client. The supported extension point is `releaseResourceHooks`.
 
 ```scala
 // project/MyReleasePlugin.scala
 import sbt.*
-import sbt.Keys.*
-import _root_.io.release.*
-import _root_.io.release.ReleaseIO.*
 import _root_.cats.effect.{IO, Resource}
+import _root_.io.release.*
 
 object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
-  // Use noTrigger to coexist with the default ReleasePluginIO
   override def trigger = noTrigger
+  override protected def commandName = "releaseWithClient"
 
-  // Use a distinct command name to avoid colliding with the default `releaseIO`
-  override protected def commandName: String = "releaseWithClient"
-
-  // Acquire the resource before steps run, release it after
   override def resource: Resource[IO, HttpClient] =
-    Resource.make(IO.blocking {
-      val c = new HttpClient("https://api.example.com")
-      c.connect()
-      c
-    })(c => IO.blocking(c.close()))
+    Resource.make(IO.blocking(new HttpClient("https://api.example.com")))(client =>
+      IO.blocking(client.close())
+    )
 
-  private val validateBranch = ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client =>
-    ctx =>
-      IO.blocking(client.get("/allowed-branches").split(",").toSet).flatMap(allowed =>
+  private val validateBranch =
+    ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client => ctx =>
+      IO.blocking(client.allowedBranches()).flatMap { allowed =>
         ctx.vcs match {
           case Some(vcs) =>
-            vcs.currentBranch.flatMap(branch =>
+            vcs.currentBranch.flatMap { branch =>
               if (allowed(branch)) IO.pure(ctx)
               else IO.raiseError(new RuntimeException(s"Branch '$branch' not allowed"))
-            )
-          case None      => IO.raiseError(new RuntimeException("VCS not initialized"))
+            }
+          case None =>
+            IO.raiseError(new RuntimeException("VCS not initialized"))
         }
-      )
-  )
+      }
+    )
 
-  private val notifyApi = ReleaseResourceHookIO.action[HttpClient]("notify-api")(client =>
-    ctx =>
-      IO.blocking(
-        client.post("/releases", s"""{"version": "${ctx.releaseVersion.getOrElse("")}"}""")
-      )
-  )
+  private val notifyApi =
+    ReleaseResourceHookIO.action[HttpClient]("notify-api")(client => ctx =>
+      IO.blocking(client.notifyRelease(ctx.releaseVersion.getOrElse("unknown")))
+    )
 
-  override protected def releaseResourceHooks(
-      state: State
-  ): ReleaseResourceHooks[HttpClient] =
+  override protected def releaseResourceHooks(state: State): ReleaseResourceHooks[HttpClient] =
     ReleaseResourceHooks(
-      beforeVersionResolutionHooks = Seq(validateBranch),
+      afterCleanCheckHooks = Seq(validateBranch),
       afterTagHooks = Seq(notifyApi)
     )
 }
 ```
 
-`releaseWithClient check ...` still stays resource-free. Resource-aware hooks contribute their
-`validate` function during `check`, but the plugin resource is acquired only for the real release
-run, where both validation and execute logic are active.
+Notes:
 
-If a supported lifecycle point is enough, prefer `releaseResourceHooks` over direct
-`releaseProcess` editing. Override `releaseProcess` / `releaseCheckProcess` only when you truly
-need custom step ordering or a fully custom pipeline; that path still uses legacy raw-process
-mode.
+- `check` validates resource-aware hooks without acquiring the resource
+- `run` acquires the resource once, executes compiled hooks, then releases it
+- custom plugins should not define `object autoImport`; reuse the keys from `ReleasePluginIO`
 
-> **Tag preflight and custom version resolution:** `check` preflights tag availability only when `inquire-versions` is in the configured process. If you replace `inquire-versions` with custom version resolution, `check` reports tag status as "not evaluated (tags depend on runtime/custom version setup)" because it cannot compute the tag name without the built-in version step. The real release will still create tags normally.
+## Older API renames
 
-### Configuring in build.sbt
+When updating older builds or plugins:
 
-Enable the plugin and configure the release process as usual:
+- rename `step.check` to `step.validate`
+- rename `step.action` to `step.execute`
+- replace older convenience factories with `ReleaseHookIO`, `ReleaseResourceHookIO`, and
+  the current `ReleaseStepIO` builder/factory APIs where needed internally
 
-```scala
-// build.sbt
-enablePlugins(MyReleasePlugin)
+## Lower-level step types
 
-// Keep the default process and configure it semantically
-releaseIOEnablePush := false
-
-releaseIOCrossBuild := true
-```
-
-Run the release with your custom command name:
-
-```bash
-sbt "releaseWithClient with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
-```
-
-The command accepts the same arguments as `releaseIO` (`with-defaults`, `skip-tests`, `cross`, `release-version`, `next-version`, `default-tag-exists-answer`).
-
-### Resource-aware steps (builder API)
-
-Use the `ReleaseStepIO.resourceStep[T]` builder to create steps that receive an acquired resource:
-
-```scala
-private val DeploySessionId = AttributeKey[String]("deploy-session-id")
-
-// Resource step that modifies the context (stores deployment metadata for later steps)
-val startDeploy: HttpClient => ReleaseStepIO = ReleaseStepIO
-  .resourceStep[HttpClient]("start-deploy")
-  .execute(client => ctx =>
-    ctx.releaseVersion match {
-      case Some(version) =>
-        IO.blocking(client.post("/deploys/start", version)).map(sessionId =>
-          ctx.withMetadata(DeploySessionId, sessionId)
-        )
-      case None          =>
-        IO.raiseError(new RuntimeException("releaseVersion is not set"))
-    }
-  )
-
-// Resource step that consumes metadata from an earlier custom step
-val finalizeDeploy: HttpClient => ReleaseStepIO = ReleaseStepIO
-  .resourceStep[HttpClient]("finalize-deploy")
-  .executeAction(client => ctx =>
-    ctx.releaseVersion match {
-      case Some(version) =>
-        ctx.metadata[String](DeploySessionId) match {
-          case Some(sessionId) =>
-            IO.blocking(client.post(s"/deploys/$sessionId/finalize", version))
-          case None            =>
-            IO.raiseError(new RuntimeException("deploy-session-id metadata is missing"))
-        }
-      case None          =>
-        IO.raiseError(new RuntimeException("releaseVersion is not set"))
-    }
-  )
-
-// Validation-only resource step (checks connectivity, no execute logic)
-val checkApi: HttpClient => ReleaseStepIO = ReleaseStepIO
-  .resourceStep[HttpClient]("check-api")
-  .withValidation(client => _ => IO.blocking(client.get("/health")).void)
-  .validateOnly
-```
-
-Builder methods: `.withValidation(...)`, `.withCrossBuild`. Every chain ends with a terminal: `.execute(f)` runs `f` and returns the modified context, `.executeAction(f)` runs `f` for side effects and passes context through unchanged, `.validateOnly` creates a validation-only step with no execute logic.
-
-If your behavior is simply before or after a supported built-in phase, use
-`releaseResourceHooks` instead of editing `releaseProcess`. For example, work immediately after
-`set-release-version` belongs in `afterReleaseVersionWriteHooks`.
-
-Use these in `releaseProcess` when you need exact placement that the lifecycle hooks cannot
-express. For example, run `startDeploy` immediately after `run-tests` so deployment orchestration
-starts only after tests pass but before any version files are changed:
-
-```scala
-override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-  insertAfter(Project.extract(state).get(releaseIOProcess), "run-tests")(
-    Seq(startDeploy)
-  )
-```
-
-### Inserting steps at specific positions (legacy raw-process mode)
-
-`liftSteps` lifts plain `ReleaseStepIO` steps into resource-compatible `T => ReleaseStepIO`
-functions; `insertAfter` and `insertBefore` splice custom resource steps into the configured
-defaults at exact step names:
-
-```scala
-override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-  insertBefore(Project.extract(state).get(releaseIOProcess), "check-clean-working-dir")(
-    Seq(checkApi)
-  )
-```
-
-`insertAfter` and `insertBefore` match the exact `step.name` strings shown in the [default steps table](getting-started.md#default-release-steps).
-
-### Fully custom release process
-
-Override `releaseProcess` directly to build the step sequence from scratch instead of
-appending to the defaults. Plain steps (from `ReleaseSteps`) and resource-aware steps
-can be mixed freely — an implicit conversion lifts plain steps into resource-ignoring functions.
-
-This is legacy raw-process mode. Prefer the hook/policy API above when it can express the
-desired behavior, and keep direct process construction for advanced cases that truly need
-step-level control.
-
-```scala
-// project/MyReleasePlugin.scala
-import sbt.*
-import sbt.Keys.*
-import _root_.io.release.*
-import _root_.io.release.steps.ReleaseSteps
-import _root_.cats.effect.{IO, Resource}
-
-object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
-  override def trigger               = noTrigger
-  override protected def commandName = "myRelease"
-  override def resource: Resource[IO, HttpClient] =
-    Resource.make(IO.blocking(new HttpClient()))(c => IO.blocking(c.close()))
-
-  // --- resource-aware steps using the builder API ---
-
-  private val validateBranch: HttpClient => ReleaseStepIO =
-    ReleaseStepIO.resourceStep[HttpClient]("validate-branch")
-      .withValidation(client => ctx =>
-        IO.blocking(client.get("/allowed-branches")).flatMap(branches =>
-          ctx.vcs match {
-            case Some(vcs) =>
-              vcs.currentBranch.flatMap(branch =>
-                if (branches.contains(branch)) IO.unit
-                else IO.raiseError(new RuntimeException(s"Branch '$branch' not allowed"))
-              )
-            case None => IO.raiseError(new RuntimeException("VCS not initialized"))
-          }
-        )
-      )
-      .validateOnly
-
-  private val DeploySessionId = AttributeKey[String]("deploy-session-id")
-
-  private val startDeploy: HttpClient => ReleaseStepIO =
-    ReleaseStepIO.resourceStep[HttpClient]("start-deploy")
-      .execute(client => ctx =>
-        ctx.releaseVersion match {
-          case Some(version) =>
-            IO.blocking(client.post("/deploys/start", version)).map(sessionId =>
-              ctx.withMetadata(DeploySessionId, sessionId)
-            )
-          case None          =>
-            IO.raiseError(new RuntimeException("releaseVersion is not set"))
-        }
-      )
-
-  private val finalizeDeploy: HttpClient => ReleaseStepIO =
-    ReleaseStepIO.resourceStep[HttpClient]("finalize-deploy")
-      .executeAction(client => ctx =>
-        ctx.releaseVersion match {
-          case Some(version) =>
-            ctx.metadata[String](DeploySessionId) match {
-              case Some(sessionId) =>
-                IO.blocking(client.post(s"/deploys/$sessionId/finalize", version))
-              case None            =>
-                IO.raiseError(new RuntimeException("deploy-session-id metadata is missing"))
-            }
-          case None          =>
-            IO.raiseError(new RuntimeException("releaseVersion is not set"))
-        }
-      )
-
-  // --- release pipeline ---
-
-  override protected def releaseProcess(state: State): Seq[HttpClient => ReleaseStepIO] =
-    Seq(
-      // Plain steps — lifted automatically via the implicit conversion
-      ReleaseSteps.initializeVcs,
-      validateBranch,                   // fail fast before any mutations
-      ReleaseSteps.checkCleanWorkingDir,
-      ReleaseSteps.checkSnapshotDependencies,
-      ReleaseSteps.inquireVersions,
-      ReleaseSteps.runClean,
-      ReleaseSteps.runTests,
-      ReleaseSteps.setReleaseVersion,
-      startDeploy,                      // create deployment state after the version write
-      ReleaseSteps.commitReleaseVersion,
-      ReleaseSteps.tagRelease,
-      ReleaseSteps.publishArtifacts,
-      finalizeDeploy,                   // consume stored deployment state after publish
-      ReleaseSteps.setNextVersion,
-      ReleaseSteps.commitNextVersion
-      // pushChanges omitted — CI pushes on success
-    )
-}
-```
-
-This bypasses the `releaseIOProcess` setting entirely — the step list is hard-coded
-in the plugin. Use `liftSteps`, `insertAfter`, or `insertBefore` (shown above)
-if you want to keep the setting-based defaults and only add extra steps.
-
-### Key design points
-
-| Concern                            | Approach                                                                                                                                                        |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Coexisting with default plugin** | Use `trigger = noTrigger` + `enablePlugins(...)` in `build.sbt`, and override `commandName` to avoid duplicate command registration                             |
-| **Adding resource steps**          | Prefer `releaseResourceHooks` for supported lifecycle points; use `releaseProcess` with `insertAfter` / `insertBefore` or an explicit `Seq(...)` only for custom placement |
-| **Setting keys**                   | All `releaseIO`* setting keys are singletons — they work regardless of which plugin exports them                                                                |
-| **Do not add autoImport**          | Do not define `object autoImport` in custom plugins — it causes ambiguous references with `ReleasePluginIO` (e.g. `reference to releaseIOProcess is ambiguous`) |
+`ReleaseStepIO` still exists as the lower-level step type used by built-ins, tests, and
+internal composition. It is no longer the supported build-facing customization path for
+changing the default release pipeline. Prefer hooks and policies in `build.sbt`.

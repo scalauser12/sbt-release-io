@@ -7,17 +7,12 @@ import io.release.monorepo.MonorepoGlobalResourceHookIO
 import io.release.monorepo.MonorepoProjectHookIO
 import io.release.monorepo.MonorepoProjectResourceHookIO
 import io.release.monorepo.MonorepoReleaseIO
-import io.release.monorepo.MonorepoReleaseIO.insertStepAfter
 import io.release.monorepo.MonorepoReleasePluginLike
 import io.release.monorepo.MonorepoResourceHooks
 import io.release.monorepo.MonorepoStepIO
-import io.release.monorepo.steps.MonorepoReleaseSteps
 import sbt.*
 
-import scala.annotation.nowarn
-
-/** Examples showing both the preferred hook/policy monorepo customization path and the
-  * legacy raw-step escape hatch.
+/** Examples showing the supported hook/policy monorepo customization path.
   *
   * Monorepo steps come in two flavors:
   *   - '''Global''' — runs once for the entire release (e.g., VCS checks, push)
@@ -26,12 +21,11 @@ import scala.annotation.nowarn
   * '''How to read this file (recommended path):'''
   *   1. Start with `firstHookSettings` for an immediate hook-based setup.
   *   2. Move to `customHookSettings` for a richer global/per-project example.
-  *   3. Read `legacyCustomProcess` only if you need the advanced raw-process API.
-  *   4. See `MyMonorepoRelease` for advanced resource-aware customization.
+  *   3. See `MyMonorepoRelease` for advanced resource-aware customization.
   *
   * Plugin objects like `MyMonorepoRelease` must live in `project/` (as `.scala` files)
   * to be discovered by sbt. The objects below are examples to copy there.
-  */
+ */
 object CustomMonorepoStepExamples {
 
   private val releaseCompletedKey = AttributeKey[Boolean]("releaseCompleted")
@@ -149,22 +143,6 @@ object CustomMonorepoStepExamples {
       IO.pure(ctx.withMetadata(releaseCompletedKey, true))
     )
 
-  // ── Legacy raw-process customization (advanced) ─────────────────────
-
-  /** Minimal non-trivial legacy example: insert a custom step after project selection while
-    * keeping the default flow.
-    *
-    * This demonstrates the smallest raw-process change that materially alters behavior:
-    * the built-in selection step still runs, but a custom summary step is inserted immediately
-    * after `detect-or-select-projects`.
-    *
-    * Prefer [[firstHookSettings]] for routine customization. Keep this pattern for advanced
-    * cases that need raw process editing.
-    */
-  @nowarn("cat=deprecation")
-  lazy val minimalLegacyProcess: Seq[MonorepoStepIO] =
-    insertStepAfter(MonorepoReleaseSteps.defaults, "detect-or-select-projects")(Seq(printSummary))
-
   // --- Global step: print a release summary ---
 
   val printSummary: MonorepoStepIO = MonorepoStepIO
@@ -237,42 +215,6 @@ object CustomMonorepoStepExamples {
     .global("mark-done")
     .execute(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
 
-  // --- Composing a custom release process ---
-
-  /** Legacy example: a custom release process with summary, branch validation, changelogs,
-    * and no push.
-    *
-    * Prefer [[customHookSettings]] for routine lifecycle customization. Keep this pattern
-    * for advanced cases that need full raw-step control.
-    *
-    * {{{
-    * releaseIOMonorepoProcess := CustomMonorepoStepExamples.legacyCustomProcess
-    * }}}
-    *
-    * Run with: `sbt "releaseIOMonorepo with-defaults"`
-    */
-  val legacyCustomProcess: Seq[MonorepoStepIO] = Seq(
-    MonorepoReleaseSteps.initializeVcs,
-    validateBranch,
-    MonorepoReleaseSteps.checkCleanWorkingDir,
-    MonorepoReleaseSteps.resolveReleaseOrder,
-    MonorepoReleaseSteps.detectOrSelectProjects,
-    printSummary,
-    MonorepoReleaseSteps.checkSnapshotDependencies,
-    MonorepoReleaseSteps.inquireVersions,
-    checkReadmeExists,
-    generateChangelog,
-    MonorepoReleaseSteps.runClean,
-    MonorepoReleaseSteps.runTests,
-    MonorepoReleaseSteps.setReleaseVersions,
-    MonorepoReleaseSteps.commitReleaseVersions,
-    MonorepoReleaseSteps.tagReleasesPerProject,
-    MonorepoReleaseSteps.publishArtifacts,
-    MonorepoReleaseSteps.setNextVersions,
-    MonorepoReleaseSteps.commitNextVersions,
-    markReleaseDone
-    // Note: pushChanges intentionally omitted — push manually after verifying
-  )
 }
 
 // ══════════════════════════════════════════════════════════════════════

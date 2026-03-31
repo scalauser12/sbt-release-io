@@ -24,10 +24,10 @@ lazy val root = (project in file("."))
     releaseIOMonorepoChangeDetector := Some { (ref: ProjectRef, _: File, _: State) =>
       _root_.cats.effect.IO.pure(ref.project == "core")
     },
-    releaseIOMonorepoProcess        := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts" ||
-      step.name == "run-clean" || step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePublish  := false,
+    releaseIOMonorepoEnablePush     := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     releaseIOIgnoreUntrackedFiles   := true,
     checkAll                        := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

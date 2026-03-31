@@ -1,22 +1,10 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.PluginLikeSupport
-import io.release.monorepo.MonorepoStepIO.ResourceStepFn
-import io.release.monorepo.MonorepoStepIO.ResourceStepFn.Scope
 import io.release.monorepo.steps.MonorepoReleaseSteps
 
-/** Canonical monorepo lifecycle order, hook compilation, and process signatures. */
+/** Canonical monorepo lifecycle order and hook compilation. */
 private[monorepo] object MonorepoLifecycle {
-
-  sealed trait ProcessToken
-
-  object ProcessToken {
-    final case class BuiltIn(phaseId: String)                                  extends ProcessToken
-    final case class GlobalCustom(name: String, isSelectionBoundary: Boolean)  extends ProcessToken
-    final case class PerProjectCustom(name: String, enableCrossBuild: Boolean) extends ProcessToken
-    final case class OpaqueReleaseBuilder(className: String)                   extends ProcessToken
-  }
 
   private val AlwaysGlobal: MonorepoContext => Boolean                         = _ => true
   private val AlwaysProject: (MonorepoContext, ProjectReleaseInfo) => Boolean  =
@@ -177,47 +165,8 @@ private[monorepo] object MonorepoLifecycle {
   val defaults: Seq[MonorepoStepIO] =
     phases.flatMap(_.rawSteps)
 
-  val defaultSignature: Seq[ProcessToken] =
-    signature(defaults)
-
   def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoStepIO] =
     phases.flatMap(_.compile(hooks))
-
-  def signature(steps: Seq[MonorepoStepIO]): Seq[ProcessToken] =
-    steps.map(stepToken)
-
-  def releaseBuilderSignature[T](steps: Seq[T => MonorepoStepIO]): Seq[ProcessToken] =
-    steps.map {
-      case lifted: PluginLikeSupport.LiftedStepFn[?, ?] =>
-        stepToken(lifted.step.asInstanceOf[MonorepoStepIO])
-      case resource: ResourceStepFn[?]                  =>
-        resource.scope match {
-          case Scope.Global(isSelectionBoundary)  =>
-            ProcessToken.GlobalCustom(resource.name, isSelectionBoundary)
-          case Scope.PerProject(enableCrossBuild) =>
-            ProcessToken.PerProjectCustom(resource.name, enableCrossBuild)
-        }
-      case other                                        =>
-        ProcessToken.OpaqueReleaseBuilder(other.getClass.getName)
-    }
-
-  private def stepToken(step: MonorepoStepIO): ProcessToken =
-    builtInPhases
-      .collectFirst {
-        case phase if sameRef(step, phase.step) =>
-          ProcessToken.BuiltIn(phase.id)
-      }
-      .getOrElse {
-        step match {
-          case global: MonorepoStepIO.Global      =>
-            ProcessToken.GlobalCustom(global.name, global.isSelectionBoundary)
-          case project: MonorepoStepIO.PerProject =>
-            ProcessToken.PerProjectCustom(project.name, project.enableCrossBuild)
-        }
-      }
-
-  private def sameRef(left: AnyRef, right: AnyRef): Boolean =
-    left eq right
 
   private def compileGlobalHooks(
       phase: String,

@@ -2,7 +2,6 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIOVersionFile
-import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.steps.VersionSteps
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -12,7 +11,7 @@ import sbt.{internal as _, *}
   * Keys are singletons defined in the companion object so multiple plugins
   * can safely mix in this trait without creating duplicate key instances.
   * Step construction is handled by [[MonorepoStepIO]]; this trait keeps the
-  * build-facing settings surface and process helpers such as insertion utilities.
+  * build-facing settings surface for hook and policy customization.
   */
 trait MonorepoReleaseIO {
   import MonorepoReleaseIO.*
@@ -21,21 +20,6 @@ trait MonorepoReleaseIO {
 
   /** Which subprojects participate in monorepo releases. Default: all transitively aggregated projects. */
   val releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] = _releaseIOMonorepoProjects
-
-  /** The ordered sequence of monorepo release steps.
-    * Resource-aware steps should be added by overriding `monorepoReleaseProcess` in a
-    * [[MonorepoReleasePluginLike]] subclass, where the resource type `T` is known at compile time.
-    *
-    * This remains the legacy raw-process customization surface during the hook/policy
-    * migration. Prefer `releaseIOMonorepoEnable*` and `releaseIOMonorepo*Hooks` when the
-    * default plugin can express the desired behavior.
-    */
-  @deprecated(
-    "Use `releaseIOMonorepoEnable*` policies, `releaseIOMonorepo*Hooks`, or a custom `MonorepoReleasePluginLike` resource plugin; raw `releaseIOMonorepoProcess` editing is legacy mode.",
-    "0.7.0"
-  )
-  val releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] =
-    _releaseIOMonorepoProcess
 
   // ── Hook / policy settings ────────────────────────────────────────────
 
@@ -229,56 +213,9 @@ trait MonorepoReleaseIO {
   val releaseIOMonorepoNextCommitMessage: SettingKey[String => String] =
     _releaseIOMonorepoNextCommitMessage
 
-  // ── Process manipulation helpers ──────────────────────────────────
-
-  /** Insert extra steps after the first occurrence of the named step.
-    * Throws `IllegalArgumentException` if the step name is not found.
-    *
-    * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
-    * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
-    */
-  @deprecated(
-    "Prefer `releaseIOMonorepo*Hooks` and `releaseIOMonorepoEnable*`; step insertion is legacy raw-process customization.",
-    "0.7.0"
-  )
-  def insertStepAfter(steps: Seq[MonorepoStepIO], afterStep: String)(
-      extra: Seq[MonorepoStepIO]
-  ): Seq[MonorepoStepIO] = {
-    val idx             = steps.indexWhere(_.name == afterStep)
-    if (idx < 0)
-      throw new IllegalArgumentException(
-        s"Step '$afterStep' not found. Available: ${steps.map(_.name).mkString(", ")}"
-      )
-    val (before, after) = steps.splitAt(idx + 1)
-    before ++ extra ++ after
-  }
-
-  /** Insert extra steps before the first occurrence of the named step.
-    * Throws `IllegalArgumentException` if the step name is not found.
-    *
-    * Unlike the `protected` helpers in `PluginLikeSupport`, these operate on
-    * plain `Seq[MonorepoStepIO]` and are usable from `build.sbt`.
-    */
-  @deprecated(
-    "Prefer `releaseIOMonorepo*Hooks` and `releaseIOMonorepoEnable*`; step insertion is legacy raw-process customization.",
-    "0.7.0"
-  )
-  def insertStepBefore(steps: Seq[MonorepoStepIO], beforeStep: String)(
-      extra: Seq[MonorepoStepIO]
-  ): Seq[MonorepoStepIO] = {
-    val idx             = steps.indexWhere(_.name == beforeStep)
-    if (idx < 0)
-      throw new IllegalArgumentException(
-        s"Step '$beforeStep' not found. Available: ${steps.map(_.name).mkString(", ")}"
-      )
-    val (before, after) = steps.splitAt(idx)
-    before ++ extra ++ after
-  }
-
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO._releaseIOMonorepoProcess      := MonorepoReleaseSteps.defaults,
     releaseIOMonorepoCrossBuild                      := false,
     releaseIOMonorepoSkipTests                       := false,
     releaseIOMonorepoSkipPublish                     := false,
@@ -350,12 +287,6 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Seq[ProjectRef]](
       "releaseIOMonorepoProjects",
       "Which subprojects participate in monorepo releases"
-    )
-
-  private[monorepo] lazy val _releaseIOMonorepoProcess: SettingKey[Seq[MonorepoStepIO]] =
-    SettingKey[Seq[MonorepoStepIO]](
-      "releaseIOMonorepoProcess",
-      "The ordered sequence of monorepo release steps"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoEnableSnapshotDependenciesCheck

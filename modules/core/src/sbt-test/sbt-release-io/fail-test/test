@@ -5,11 +5,5 @@ $ exec git config user.name "Test User"
 $ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src/test/scala/FailTest.scala
 $ exec git commit -m "Initial commit"
 
-# Delete marker file if it exists
-$ delete marker-file
-
 # Try to release - should fail due to failing test and emit an attributed diagnostic
 > expectReleaseFailure
-
-# Verify marker file was NOT created (because release failed before reaching createFile step)
-$ absent marker-file

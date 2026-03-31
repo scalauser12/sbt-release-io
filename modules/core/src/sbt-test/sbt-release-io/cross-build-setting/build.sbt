@@ -1,6 +1,8 @@
 import scala.sys.process.*
 import sbt.IO
-import _root_.io.release.ReleaseStepIO
+import sbt.*
+import sbt.Keys.*
+import _root_.io.release.ReleaseHookIO
 
 val Scala213 = "2.13.12"
 val Scala212 = "2.12.18"
@@ -14,30 +16,25 @@ crossScalaVersions := Seq(Scala213, Scala212)
 // Enable cross-build via the setting (not the CLI flag)
 releaseIOCrossBuild := true
 
-val writeCrossMarker = ReleaseStepIO(
-  name = "write-cross-marker",
-  execute = ctx =>
-    _root_.cats.effect.IO.blocking {
-      val extracted = Project.extract(ctx.state)
-      val markerDir = extracted.get(baseDirectory) / "marker"
-      val sv        = extracted.get(scalaVersion)
-      val marker    = markerDir / s"built-$sv"
-      IO.createDirectory(markerDir)
-      IO.touch(marker)
-      IO.append(markerDir / "invocations.txt", sv + "\n")
-      ctx
-    },
-  enableCrossBuild = true
-)
+libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
+testFrameworks += new TestFramework("munit.Framework")
 
-releaseIOProcess := releaseIOProcess.value
-  .filterNot(step => step.name == "push-changes" || step.name == "publish-artifacts")
-  .flatMap { step =>
-    if (step.name == "run-tests") Seq(step, writeCrossMarker)
-    else Seq(step)
-  }
+releaseIOEnablePush    := false
 
 releaseIOIgnoreUntrackedFiles := true
+publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
+
+val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
+  _root_.cats.effect.IO.blocking {
+    val base = Project.extract(ctx.state).get(baseDirectory)
+    val sv   = Project.extract(ctx.state).get(scalaVersion)
+    IO.createDirectory(base / "marker")
+    IO.touch(base / "marker" / s"built-$sv")
+    IO.append(base / "marker" / "invocations.txt", sv + "\n")
+  }
+}
+
+releaseIOBeforePublishHooks := Seq(crossBuildMarkerHook)
 
 val checkCrossBuildInvocations =
   taskKey[Unit]("Verify cross-build ran exactly once per configured Scala version")
@@ -71,6 +68,14 @@ checkGitTag := {
   val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
   assert(tags.length == 1, s"Expected 1 git tag but found ${tags.length}: ${tags.mkString(", ")}")
   assert(tags.head == "v0.1.0", s"Expected git tag v0.1.0 but found ${tags.head}")
+}
+
+val checkPublished = taskKey[Unit]("Check that publish produced files")
+checkPublished := {
+  val repo           = baseDirectory.value / "target" / "test-repo"
+  val publishedFiles = (repo ** "*").get().filter(_.isFile)
+  assert(repo.exists, s"Expected publish repo at ${repo.getAbsolutePath}")
+  assert(publishedFiles.nonEmpty, s"Expected published files under ${repo.getAbsolutePath}")
 }
 
 val checkNextVersion =

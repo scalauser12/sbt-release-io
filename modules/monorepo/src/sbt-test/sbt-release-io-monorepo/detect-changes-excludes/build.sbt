@@ -22,13 +22,10 @@ lazy val root = (project in file("."))
     releaseIOMonorepoDetectChanges         := true,
     releaseIOMonorepoDetectChangesExcludes := Seq((core / baseDirectory).value / "CHANGELOG.md"),
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" ||
-      step.name == "publish-artifacts" ||
-      step.name == "run-clean" ||
-      step.name == "run-tests" ||
-      step.name == "check-clean-working-dir"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

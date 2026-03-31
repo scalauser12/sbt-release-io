@@ -20,9 +20,8 @@ lazy val root = (project in file("."))
     name := "simple-monorepo-test",
 
     // Skip push and publish in tests
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
 
     // Ignore untracked files in tests
     releaseIOIgnoreUntrackedFiles := true,

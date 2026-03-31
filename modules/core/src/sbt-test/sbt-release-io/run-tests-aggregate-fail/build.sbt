@@ -1,6 +1,4 @@
 import sbt.IO
-import _root_.io.release.ReleaseStepIO
-import _root_.io.release.steps.ReleaseSteps
 
 lazy val root = (project in file("."))
   .aggregate(sub)
@@ -18,17 +16,6 @@ lazy val sub  = (project in file("sub"))
     testFrameworks += new TestFramework("munit.Framework")
   )
 
-val createFile = ReleaseStepIO.io("create-file") { ctx =>
-  _root_.cats.effect.IO {
-    IO.touch(file("marker-file"))
-    ctx
-  }
-}
-
-releaseIOProcess := Seq(
-  ReleaseSteps.initializeVcs,
-  ReleaseSteps.runTests,
-  createFile
-)
-
 releaseIOIgnoreUntrackedFiles := true
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false

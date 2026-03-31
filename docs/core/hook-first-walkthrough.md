@@ -99,5 +99,5 @@ With push and publish disabled, this creates only local version-file changes, co
 ## 8. Where to go next
 
 - For the full setting surface, see [Configuration](configuration.md) and [Settings reference](reference.md).
-- For migration from raw-process customization, see [Customization](customization.md).
+- For hook and resource-hook customization, see [Customization](customization.md).
 - For more local rehearsal and CI-oriented patterns, see [Recipes](recipes.md).

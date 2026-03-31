@@ -104,7 +104,7 @@ For the full list of CLI flags, subcommands, version override syntax, and select
   [Usage](usage.md)
 - Grouped settings surface and shared core knobs:
   [Configuration](configuration.md)
-- Hooks, custom steps, custom plugins, and migration from raw-process edits:
+- Hooks, resource-aware custom plugins, and migration guidance:
   [Customization](customization.md)
 - Execution model, failure isolation, and ordering:
   [Concepts](concepts.md)

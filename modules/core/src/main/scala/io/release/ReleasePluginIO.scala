@@ -32,18 +32,13 @@ import sbt.{internal as _, *}
   *
   * '''Do not add `object autoImport`''' to custom plugins. When both [[ReleasePluginIO]]
   * and a custom plugin define autoImport, the build gets ambiguous references
-  * (e.g. `reference to releaseIOProcess is ambiguous`). [[ReleasePluginIO]] is
+  * (e.g. `reference to releaseIOBeforeTagHooks is ambiguous`). [[ReleasePluginIO]] is
   * auto-enabled via `allRequirements`, so its keys are already in scope when
   * the custom plugin is enabled.
   */
-trait ReleasePluginIOLike[T]
-    extends AutoPlugin
-    with ReleaseIO
-    with PluginLikeSupport[ReleaseStepIO, T] {
+trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
 
   override def requires: Plugins = sbt.plugins.JvmPlugin
-
-  protected def stepName(step: ReleaseStepIO): String = step.name
 
   /** The resource acquired once for the entire release process and passed to each step. */
   def resource: Resource[IO, T]
@@ -57,43 +52,6 @@ trait ReleasePluginIOLike[T]
     */
   protected def releaseResourceHooks(state: State): ReleaseResourceHooks[T] =
     ReleaseResourceHooks.empty
-
-  /** The release steps. Reads plain steps from the `releaseIOProcess` setting and lifts
-    * each into a resource-ignoring function. Override only when you need legacy raw-process
-    * customization beyond what hooks and resource-aware hooks can express.
-    *
-    * Hooks and policies are the preferred customization path. Changing the effective release
-    * process returned from this method switches the real release run into legacy raw-process
-    * mode, where the hook/policy settings are ignored and the custom process wiring remains
-    * authoritative. `check` stays on the plain configured process unless [[releaseCheckProcess]]
-    * is also customized. Merely defining a custom plugin or overriding unrelated members such as
-    * [[commandName]] or [[resource]] does not.
-    */
-  @deprecated(
-    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; changing the effective process returned from `releaseProcess` switches the real release run into legacy raw-process mode.",
-    "0.7.0"
-  )
-  protected def releaseProcess(state: State): Seq[T => ReleaseStepIO] =
-    liftSteps(Project.extract(state).get(releaseIOProcess))
-
-  /** Resource-free steps used by `check`.
-    *
-    * Defaults to the plain configured `releaseIOProcess` so `check` avoids acquiring the plugin
-    * resource. Prefer [[releaseResourceHooks]] when the built-in lifecycle points are sufficient.
-    * Override this only to add legacy raw-process preflight equivalents for custom step wiring.
-    *
-    * Hooks and policies are the preferred customization path. Changing the effective preflight
-    * process returned from this method switches `check` into legacy raw-process mode, where the
-    * hook/policy settings are ignored and the custom process wiring remains authoritative.
-    * Merely defining a custom plugin or overriding unrelated members such as [[commandName]] or
-    * [[resource]] does not.
-    */
-  @deprecated(
-    "Prefer `releaseIOEnable*` policies and `releaseIO*Hooks`; changing the effective process returned from `releaseCheckProcess` switches `check` into legacy raw-process mode.",
-    "0.7.0"
-  )
-  protected def releaseCheckProcess(state: State): Seq[ReleaseStepIO] =
-    Project.extract(state).get(releaseIOProcess)
 
   /** Whether cross-building is enabled (before command-line args are applied).
     * Defaults to reading from the `releaseIOCrossBuild` setting.
@@ -118,58 +76,57 @@ trait ReleasePluginIOLike[T]
 
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] = Seq(
-    ReleaseIO._releaseIOProcess              := ReleaseSteps.defaults,
-    releaseIOCrossBuild                      := false,
-    releaseIOSkipPublish                     := false,
-    releaseIOInteractive                     := false,
-    releaseIODefaultTagExistsAnswer          := None,
+    releaseIOCrossBuild                        := false,
+    releaseIOSkipPublish                       := false,
+    releaseIOInteractive                       := false,
+    releaseIODefaultTagExistsAnswer            := None,
     releaseIODefaultSnapshotDependenciesAnswer := None,
-    releaseIODefaultRemoteCheckFailureAnswer := None,
-    releaseIODefaultUpstreamBehindAnswer     := None,
-    releaseIODefaultPushAnswer               := None,
-    releaseIOEnableSnapshotDependenciesCheck := true,
-    releaseIOEnableRunClean                  := true,
-    releaseIOEnableRunTests                  := true,
-    releaseIOEnableTagging                   := true,
-    releaseIOEnablePublish                   := true,
-    releaseIOEnablePush                      := true,
-    releaseIOAfterCleanCheckHooks            := Seq.empty,
-    releaseIOBeforeVersionResolutionHooks    := Seq.empty,
-    releaseIOAfterVersionResolutionHooks     := Seq.empty,
-    releaseIOBeforeReleaseVersionWriteHooks  := Seq.empty,
-    releaseIOAfterReleaseVersionWriteHooks   := Seq.empty,
-    releaseIOBeforeReleaseCommitHooks        := Seq.empty,
-    releaseIOAfterReleaseCommitHooks         := Seq.empty,
-    releaseIOBeforeTagHooks                  := Seq.empty,
-    releaseIOAfterTagHooks                   := Seq.empty,
-    releaseIOBeforePublishHooks              := Seq.empty,
-    releaseIOAfterPublishHooks               := Seq.empty,
-    releaseIOBeforeNextVersionWriteHooks     := Seq.empty,
-    releaseIOAfterNextVersionWriteHooks      := Seq.empty,
-    releaseIOBeforeNextCommitHooks           := Seq.empty,
-    releaseIOAfterNextCommitHooks            := Seq.empty,
-    releaseIOBeforePushHooks                 := Seq.empty,
-    releaseIOAfterPushHooks                  := Seq.empty,
-    releaseIOReadVersion                     := ReleaseSteps.defaultReadVersion,
-    releaseIOVersionFileContents             := ReleaseSteps.defaultWriteVersion(
+    releaseIODefaultRemoteCheckFailureAnswer   := None,
+    releaseIODefaultUpstreamBehindAnswer       := None,
+    releaseIODefaultPushAnswer                 := None,
+    releaseIOEnableSnapshotDependenciesCheck   := true,
+    releaseIOEnableRunClean                    := true,
+    releaseIOEnableRunTests                    := true,
+    releaseIOEnableTagging                     := true,
+    releaseIOEnablePublish                     := true,
+    releaseIOEnablePush                        := true,
+    releaseIOAfterCleanCheckHooks              := Seq.empty,
+    releaseIOBeforeVersionResolutionHooks      := Seq.empty,
+    releaseIOAfterVersionResolutionHooks       := Seq.empty,
+    releaseIOBeforeReleaseVersionWriteHooks    := Seq.empty,
+    releaseIOAfterReleaseVersionWriteHooks     := Seq.empty,
+    releaseIOBeforeReleaseCommitHooks          := Seq.empty,
+    releaseIOAfterReleaseCommitHooks           := Seq.empty,
+    releaseIOBeforeTagHooks                    := Seq.empty,
+    releaseIOAfterTagHooks                     := Seq.empty,
+    releaseIOBeforePublishHooks                := Seq.empty,
+    releaseIOAfterPublishHooks                 := Seq.empty,
+    releaseIOBeforeNextVersionWriteHooks       := Seq.empty,
+    releaseIOAfterNextVersionWriteHooks        := Seq.empty,
+    releaseIOBeforeNextCommitHooks             := Seq.empty,
+    releaseIOAfterNextCommitHooks              := Seq.empty,
+    releaseIOBeforePushHooks                   := Seq.empty,
+    releaseIOAfterPushHooks                    := Seq.empty,
+    releaseIOReadVersion                       := ReleaseSteps.defaultReadVersion,
+    releaseIOVersionFileContents               := ReleaseSteps.defaultWriteVersion(
       releaseIOUseGlobalVersion.value
     ),
-    releaseIOVersionFile                     := baseDirectory.value / "version.sbt",
-    releaseIOUseGlobalVersion                := true,
-    releaseIOVcsSign                         := false,
-    releaseIOVcsSignOff                      := false,
-    releaseIOIgnoreUntrackedFiles            := false,
-    releaseIOVcsRemoteCheckTimeout           := scala.concurrent.duration.DurationInt(60).seconds,
-    releaseIORuntimeVersion                  := {
+    releaseIOVersionFile                       := baseDirectory.value / "version.sbt",
+    releaseIOUseGlobalVersion                  := true,
+    releaseIOVcsSign                           := false,
+    releaseIOVcsSignOff                        := false,
+    releaseIOIgnoreUntrackedFiles              := false,
+    releaseIOVcsRemoteCheckTimeout             := scala.concurrent.duration.DurationInt(60).seconds,
+    releaseIORuntimeVersion                    := {
       if (releaseIOUseGlobalVersion.value) (ThisBuild / Keys.version).value
       else Keys.version.value
     },
-    releaseIOTagName                         := s"v${releaseIORuntimeVersion.value}",
-    releaseIOTagComment                      := s"Releasing ${releaseIORuntimeVersion.value}",
-    releaseIOCommitMessage                   := s"Setting version to ${releaseIORuntimeVersion.value}",
-    releaseIONextCommitMessage               := s"Setting version to ${releaseIORuntimeVersion.value}",
-    releaseIOVersionBump                     := Version.Bump.default,
-    releaseIOVersion                         := {
+    releaseIOTagName                           := s"v${releaseIORuntimeVersion.value}",
+    releaseIOTagComment                        := s"Releasing ${releaseIORuntimeVersion.value}",
+    releaseIOCommitMessage                     := s"Setting version to ${releaseIORuntimeVersion.value}",
+    releaseIONextCommitMessage                 := s"Setting version to ${releaseIORuntimeVersion.value}",
+    releaseIOVersionBump                       := Version.Bump.default,
+    releaseIOVersion                           := {
       val bump = releaseIOVersionBump.value
       ver =>
         Version(ver)
@@ -188,7 +145,7 @@ trait ReleasePluginIOLike[T]
             throw new IllegalArgumentException(s"Cannot parse version: $ver")
           )
     },
-    releaseIONextVersion                     := {
+    releaseIONextVersion                       := {
       val bump = releaseIOVersionBump.value
       ver =>
         Version(ver)
@@ -198,8 +155,8 @@ trait ReleasePluginIOLike[T]
           )
     },
     ReleaseIOCompat.snapshotDependenciesSetting,
-    releaseIOPublishArtifactsChecks          := true,
-    releaseIOPublishArtifactsAction          := publish.value
+    releaseIOPublishArtifactsChecks            := true,
+    releaseIOPublishArtifactsAction            := publish.value
   )
 
   override lazy val projectSettings: Seq[Setting[?]] =
@@ -262,14 +219,11 @@ trait ReleasePluginIOLike[T]
       commandName = commandName,
       resource = resource,
       resolveResourceHooks = state => releaseResourceHooks(state),
-      resolveReleaseProcess = state => releaseProcess(state),
-      resolveCheckProcess = state => releaseCheckProcess(state),
       resolveCrossBuildEnabled = state => crossBuildEnabled(state),
       resolveSkipPublishEnabled = state => skipPublishEnabled(state),
       resolveInteractiveEnabled = state => interactiveEnabled(state),
       initialContext = (state, skipTests, skipPublish, interactive) =>
-        this.initialContext(state, skipTests, skipPublish, interactive),
-      liftSteps = steps => this.liftSteps(steps)
+        this.initialContext(state, skipTests, skipPublish, interactive)
     )
 
   private def handleReleaseIO(state: State, tokens: Seq[String]): State =

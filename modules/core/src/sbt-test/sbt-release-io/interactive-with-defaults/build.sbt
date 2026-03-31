@@ -7,9 +7,8 @@ releaseIOIgnoreUntrackedFiles := true
 releaseIOInteractive          := true
 
 // Skip push/publish in scripted environment.
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish := false
+releaseIOEnablePush    := false
 
 val checkContentsOfVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")

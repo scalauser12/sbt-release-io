@@ -44,9 +44,8 @@ lazy val root = (project in file("."))
   .settings(
     name := "run-clean-monorepo-test",
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

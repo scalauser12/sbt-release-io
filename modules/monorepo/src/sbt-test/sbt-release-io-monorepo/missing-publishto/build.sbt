@@ -15,9 +15,9 @@ lazy val root = (project in file("."))
   .settings(
     name                          := "missing-publishto-test",
     // Keep publish-artifacts in process (only filter push-changes)
-    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "run-clean" || step.name == "run-tests"
-    },
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     releaseIOIgnoreUntrackedFiles := true,
     checkNoCommits                := {
       val count = "git log --oneline".!!.trim.split("\n").length

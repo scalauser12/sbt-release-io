@@ -7,9 +7,8 @@ scalaVersion := "2.12.18"
 releaseIOTagName := s"release-${version.value}"
 
 // Skip push and publish steps in tests
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 releaseIOIgnoreUntrackedFiles := true
 

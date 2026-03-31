@@ -223,26 +223,30 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       Ref.of[IO, List[String]](Nil).flatMap { events =>
         val forward = MonorepoStepIO
           .globalResource[String]("global-resource-forward")
-          .withValidation(resource => currentCtx =>
-            events.update(
-              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
-            )
+          .withValidation(resource =>
+            currentCtx =>
+              events.update(
+                _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
           )
-          .withValidationContext(resource => currentCtx =>
-            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          .withValidationContext(resource =>
+            currentCtx =>
+              events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
           )
           .validateOnly("demo")
           .asInstanceOf[MonorepoStepIO.Global]
 
         val reverse = MonorepoStepIO
           .globalResource[String]("global-resource-reverse")
-          .withValidationContext(resource => currentCtx =>
-            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          .withValidationContext(resource =>
+            currentCtx =>
+              events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
           )
-          .withValidation(resource => currentCtx =>
-            events.update(
-              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
-            )
+          .withValidation(resource =>
+            currentCtx =>
+              events.update(
+                _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
           )
           .validateOnly("demo")
           .asInstanceOf[MonorepoStepIO.Global]
@@ -269,30 +273,34 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       Ref.of[IO, List[String]](Nil).flatMap { events =>
         val forward = MonorepoStepIO
           .perProjectResource[String]("per-project-resource-forward")
-          .withValidation(resource => (currentCtx, currentProject) =>
-            events.update(
-              _ :+ s"validate:$resource:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
-            )
+          .withValidation(resource =>
+            (currentCtx, currentProject) =>
+              events.update(
+                _ :+ s"validate:$resource:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
           )
-          .withValidationContext(resource => (currentCtx, currentProject) =>
-            events
-              .update(_ :+ s"context:$resource:${currentProject.name}")
-              .as(currentCtx.withMetadata(key, "ok"))
+          .withValidationContext(resource =>
+            (currentCtx, currentProject) =>
+              events
+                .update(_ :+ s"context:$resource:${currentProject.name}")
+                .as(currentCtx.withMetadata(key, "ok"))
           )
           .validateOnly("demo")
           .asInstanceOf[MonorepoStepIO.PerProject]
 
         val reverse = MonorepoStepIO
           .perProjectResource[String]("per-project-resource-reverse")
-          .withValidationContext(resource => (currentCtx, currentProject) =>
-            events
-              .update(_ :+ s"context:$resource:${currentProject.name}")
-              .as(currentCtx.withMetadata(key, "ok"))
+          .withValidationContext(resource =>
+            (currentCtx, currentProject) =>
+              events
+                .update(_ :+ s"context:$resource:${currentProject.name}")
+                .as(currentCtx.withMetadata(key, "ok"))
           )
-          .withValidation(resource => (currentCtx, currentProject) =>
-            events.update(
-              _ :+ s"validate:$resource:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
-            )
+          .withValidation(resource =>
+            (currentCtx, currentProject) =>
+              events.update(
+                _ :+ s"validate:$resource:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
           )
           .validateOnly("demo")
           .asInstanceOf[MonorepoStepIO.PerProject]
@@ -357,13 +365,10 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     assert(step.asInstanceOf[MonorepoStepIO.Global].isSelectionBoundary)
   }
 
-  test("built-in tag release migration surface exposes both Global and PerProject forms") {
-    assertEquals(MonorepoReleaseSteps.tagReleases.name, "tag-releases")
+  test("built-in tag release surface exposes the per-project tagging step") {
     assertEquals(MonorepoReleaseSteps.tagReleasesPerProject.name, "tag-releases")
-    assert(MonorepoReleaseSteps.tagReleases.isInstanceOf[MonorepoStepIO.Global])
     assert(MonorepoReleaseSteps.tagReleasesPerProject.isInstanceOf[MonorepoStepIO.PerProject])
     assert(MonorepoReleaseSteps.defaults.contains(MonorepoReleaseSteps.tagReleasesPerProject))
-    assert(!MonorepoReleaseSteps.defaults.contains(MonorepoReleaseSteps.tagReleases))
   }
 
   test("globalResource produces T => MonorepoStepIO") {
@@ -508,38 +513,6 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
         }
       }
     }
-  }
-
-  private val steps = Seq(
-    MonorepoStepIO.global("step-a").execute(ctx => IO.pure(ctx)),
-    MonorepoStepIO.global("step-b").execute(ctx => IO.pure(ctx)),
-    MonorepoStepIO.global("step-c").execute(ctx => IO.pure(ctx))
-  )
-
-  private val extra = Seq(MonorepoStepIO.global("extra").execute(ctx => IO.pure(ctx)))
-
-  test("insertStepAfter inserts after the named step") {
-    val result = releaseIO.insertStepAfter(steps, "step-a")(extra)
-    assertEquals(result.map(_.name), Seq("step-a", "extra", "step-b", "step-c"))
-  }
-
-  test("insertStepBefore inserts before the named step") {
-    val result = releaseIO.insertStepBefore(steps, "step-c")(extra)
-    assertEquals(result.map(_.name), Seq("step-a", "step-b", "extra", "step-c"))
-  }
-
-  test("insertStepAfter throws on missing step name") {
-    val e = intercept[IllegalArgumentException] {
-      releaseIO.insertStepAfter(steps, "nonexistent")(extra)
-    }
-    assert(e.getMessage.contains("Step 'nonexistent' not found"))
-  }
-
-  test("insertStepBefore throws on missing step name") {
-    val e = intercept[IllegalArgumentException] {
-      releaseIO.insertStepBefore(steps, "nonexistent")(extra)
-    }
-    assert(e.getMessage.contains("Step 'nonexistent' not found"))
   }
 
   private def dummyProject(name: String): ProjectReleaseInfo =

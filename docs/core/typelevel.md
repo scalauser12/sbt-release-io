@@ -58,5 +58,5 @@ def uploadArchive(ctx: ReleaseContext): IO[Unit] =
 releaseIOAfterPublishHooks += ReleaseHookIO.action("upload-archive")(uploadArchive)
 ```
 
-Use `ReleaseStepIO` instead when you are intentionally customizing the raw process or building
-reusable custom steps outside the hook lifecycle.
+Use `ReleaseStepIO` only for lower-level internal composition or reusable helper code around
+hooks. The supported build-facing customization path remains hook-based.

@@ -5,9 +5,8 @@ scalaVersion := "2.12.18"
 
 releaseIOVcsSignOff := true
 
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 releaseIOIgnoreUntrackedFiles := true
 

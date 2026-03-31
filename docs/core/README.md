@@ -25,7 +25,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 ## Customize
 
 - [Customization](customization.md)
-  Hook-first customization, migration from raw-process edits, custom steps, and custom plugins.
+  Hook-first customization, resource-aware custom plugins, and migration guidance.
 
 ## Operate
 

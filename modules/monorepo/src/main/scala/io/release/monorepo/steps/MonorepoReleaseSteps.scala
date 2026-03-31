@@ -50,59 +50,9 @@ object MonorepoReleaseSteps {
       }
   )
 
-  // `tag-releases` remains a Global compatibility facade, but delegate through the
-  // per-project helpers so wrapped steps keep their validation and optional cross-build behavior.
-  private[monorepo] def compatibilityGlobalStep(
-      name: String,
-      step: MonorepoStepIO.PerProject
-  ): MonorepoStepIO.Global = {
-    def crossBuildEnabled(ctx: MonorepoContext): Boolean =
-      ctx.executionFlags.exists(_.crossBuild)
-
-    MonorepoStepIO.buildGlobal(
-      name = name,
-      validateWithContext = Some(ctx =>
-        MonorepoCrossBuild.validatePerProjectWithCrossBuild(
-          ctx,
-          step.threadedValidation,
-          crossBuildEnabled(ctx),
-          step.enableCrossBuild
-        )
-      ),
-      execute = ctx =>
-        MonorepoCrossBuild.runPerProjectWithCrossBuild(
-          ctx,
-          (currentCtx, project) =>
-            logInfo(currentCtx, s"${step.name} [${project.name}]") *>
-              step.execute(currentCtx, project),
-          crossBuildEnabled(ctx),
-          step.enableCrossBuild
-        )
-    )
-  }
-
-  private[monorepo] val tagReleasesGlobalFacade: MonorepoStepIO.Global =
-    compatibilityGlobalStep("tag-releases", MonorepoVcsSteps.tagReleasesPerProject)
-
-  /** Per-project tagging step for explicit process wiring.
-    *
-    * Prefer this symbol when you intentionally edit `releaseIOMonorepoProcess`. It already uses
-    * the `tag-releases` lifecycle name, so before/after tag hooks and preflight behavior continue
-    * to align with the built-in tagging phase.
-    */
+  /** Per-project tagging step aligned with the `tag-releases` lifecycle phase. */
   val tagReleasesPerProject: MonorepoStepIO.PerProject =
     MonorepoVcsSteps.tagReleasesPerProject
-
-  /** Legacy global compatibility facade over per-project tagging.
-    *
-    * Prefer [[tagReleasesPerProject]] for explicit process wiring, or hook-based tagging controls
-    * when you only need to add behavior around the built-in lifecycle point.
-    */
-  @deprecated(
-    "Use `tagReleasesPerProject` for explicit process wiring, or prefer hook-based tagging controls; `tagReleases` remains a Global compatibility facade and will become `PerProject` in the next breaking release.",
-    "0.7.1"
-  )
-  val tagReleases: MonorepoStepIO.Global = tagReleasesGlobalFacade
 
   val defaults: Seq[MonorepoStepIO] = MonorepoLifecycle.defaults
 }

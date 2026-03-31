@@ -11,4 +11,5 @@ $ exec git commit -m "Initial commit"
 # Verify both Scala versions were built exactly once and the release completed
 > checkCrossBuildInvocations
 > checkGitTag
+> checkPublished
 > checkNextVersion

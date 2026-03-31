@@ -6,9 +6,8 @@ scalaVersion := "2.12.18"
 releaseIOIgnoreUntrackedFiles := true
 
 // Skip push and publish in tests
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 val checkTagExists = inputKey[Unit]("Assert that a git tag exists")
 checkTagExists := {

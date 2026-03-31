@@ -357,17 +357,19 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep - chaining withValidation then withValidationContext composes in order") {
     TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val key                             = sbt.AttributeKey[String]("resource-builder-order-forward")
+      val key = sbt.AttributeKey[String]("resource-builder-order-forward")
       Ref.of[IO, List[String]](Nil).flatMap { events =>
         val stepFn: String => ReleaseStepIO = ReleaseStepIO
           .resourceStep[String]("res-chain-forward")
-          .withValidation(resource => currentCtx =>
-            events.update(
-              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
-            )
+          .withValidation(resource =>
+            currentCtx =>
+              events.update(
+                _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
           )
-          .withValidationContext(resource => currentCtx =>
-            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          .withValidationContext(resource =>
+            currentCtx =>
+              events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
           )
           .validateOnly
 
@@ -383,17 +385,19 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep - chaining withValidationContext then withValidation composes in order") {
     TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val key                             = sbt.AttributeKey[String]("resource-builder-order-reverse")
+      val key = sbt.AttributeKey[String]("resource-builder-order-reverse")
       Ref.of[IO, List[String]](Nil).flatMap { events =>
         val stepFn: String => ReleaseStepIO = ReleaseStepIO
           .resourceStep[String]("res-chain-reverse")
-          .withValidationContext(resource => currentCtx =>
-            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          .withValidationContext(resource =>
+            currentCtx =>
+              events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
           )
-          .withValidation(resource => currentCtx =>
-            events.update(
-              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
-            )
+          .withValidation(resource =>
+            currentCtx =>
+              events.update(
+                _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
           )
           .validateOnly
 

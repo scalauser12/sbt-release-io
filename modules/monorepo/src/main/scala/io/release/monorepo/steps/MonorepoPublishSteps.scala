@@ -11,7 +11,6 @@ import io.release.internal.SnapshotDependencyTasks
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -89,7 +88,8 @@ private[monorepo] object MonorepoPublishSteps {
             ReleaseLogPrefixes.Monorepo,
             context = s" in ${project.name}"
           )
-      } yield updatedCtx),
+      } yield updatedCtx
+    ),
     enableCrossBuild = true
   )
 

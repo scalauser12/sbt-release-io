@@ -54,7 +54,7 @@ lazy val root = (project in file("."))
 
     releaseIOMonorepoDetectChanges := false,
 
-    releaseIOMonorepoProcess := releaseIOMonorepoProcess.value.filterNot(_.name == "push-changes"),
+    releaseIOMonorepoEnablePush := false,
 
     releaseIOIgnoreUntrackedFiles := true,
 

@@ -6,9 +6,8 @@ scalaVersion := "2.12.18"
 releaseIOUseGlobalVersion     := false
 releaseIOIgnoreUntrackedFiles := true
 
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 val checkVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")

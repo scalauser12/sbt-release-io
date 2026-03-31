@@ -24,20 +24,11 @@ lazy val root = (project in file("."))
     releaseIOMonorepoVersionFile := { (_: ProjectRef, _: sbt.State) =>
       baseDirectory.value / "version.sbt"
     },
-    // Strip the process to only the steps needed to reach the guard.
-    // This isolates the test from unrelated failures in clean/test/publish/push.
-    releaseIOMonorepoProcess := {
-      val keep = Set(
-        "initialize-vcs",
-        "check-clean-working-dir",
-        "resolve-release-order",
-        "detect-or-select-projects",
-        "inquire-versions",
-        "set-release-version"
-      )
-      releaseIOMonorepoProcess.value.filter(step => keep.contains(step.name))
-    },
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoEnablePublish  := false,
+    releaseIOMonorepoEnablePush     := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     checkUnchanged := {
       val versionContents = IO.read(baseDirectory.value / "version.sbt")
       assert(

@@ -7,9 +7,8 @@ libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
 // Skip push and publish steps in tests
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 releaseIOIgnoreUntrackedFiles := true
 

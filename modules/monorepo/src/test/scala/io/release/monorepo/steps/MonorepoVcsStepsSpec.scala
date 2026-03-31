@@ -19,7 +19,6 @@ import sbt.State
 
 import java.io.File
 
-@scala.annotation.nowarn("cat=deprecation")
 class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   test("initializeVcs.execute - detect Git from the loaded project base") {
@@ -57,37 +56,6 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         assertEquals(result.vcs.map(_.commandName), Some("git"))
       }
     }
-  }
-
-  test("public tagReleasesPerProject alias matches the legacy tagReleases facade behavior") {
-    val facadeRun = perProjectTagContextResource.use { case (repo, _, ctx) =>
-      MonorepoReleaseSteps.tagReleases.execute(ctx).flatMap { result =>
-        IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.0")).map { tags =>
-          (
-            tags.trim,
-            MonorepoSpecSupport.projectNamed(result.projects, "core").tagName,
-            result.vcs.map(_.commandName)
-          )
-        }
-      }
-    }
-
-    val perProjectRun = perProjectTagContextResource.use { case (repo, project, ctx) =>
-      MonorepoReleaseSteps.tagReleasesPerProject.execute(ctx, project).flatMap { result =>
-        IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.0")).map { tags =>
-          (
-            tags.trim,
-            MonorepoSpecSupport.projectNamed(result.projects, "core").tagName,
-            result.vcs.map(_.commandName)
-          )
-        }
-      }
-    }
-
-    for {
-      facade     <- facadeRun
-      perProject <- perProjectRun
-    } yield assertEquals(facade, perProject)
   }
 
   test(

@@ -21,18 +21,18 @@ private[monorepo] object MonorepoCli {
 
   sealed trait Arg
   object Arg {
-    case object WithDefaults                                      extends Arg
-    case object SkipTests                                         extends Arg
-    case object CrossBuild                                        extends Arg
-    case object AllChanged                                        extends Arg
-    case class SelectProject(name: String)                        extends Arg
-    case class ReleaseVersion(project: String, version: String)   extends Arg
-    case class NextVersion(project: String, version: String)      extends Arg
-    case class TagDefault(value: String)                          extends Arg
-    case class SnapshotDependenciesDefault(value: Boolean)        extends Arg
-    case class RemoteCheckFailureDefault(value: Boolean)          extends Arg
-    case class UpstreamBehindDefault(value: Boolean)              extends Arg
-    case class PushDefault(value: Boolean)                        extends Arg
+    case object WithDefaults                                    extends Arg
+    case object SkipTests                                       extends Arg
+    case object CrossBuild                                      extends Arg
+    case object AllChanged                                      extends Arg
+    case class SelectProject(name: String)                      extends Arg
+    case class ReleaseVersion(project: String, version: String) extends Arg
+    case class NextVersion(project: String, version: String)    extends Arg
+    case class TagDefault(value: String)                        extends Arg
+    case class SnapshotDependenciesDefault(value: Boolean)      extends Arg
+    case class RemoteCheckFailureDefault(value: Boolean)        extends Arg
+    case class UpstreamBehindDefault(value: Boolean)            extends Arg
+    case class PushDefault(value: Boolean)                      extends Arg
   }
 
   final case class Parsed(mode: CommandMode, args: Seq[Arg])
@@ -87,67 +87,67 @@ private[monorepo] object MonorepoCli {
 
     def loop(rest: List[String], acc: List[Arg]): Either[String, Seq[Arg]] =
       rest match {
-        case Nil                                => Right(acc.reverse)
-        case "project" :: value :: tail         => loop(tail, SelectProject(value) :: acc)
-        case "with-defaults" :: tail            => loop(tail, WithDefaults :: acc)
-        case "skip-tests" :: tail               => loop(tail, SkipTests :: acc)
-        case "cross" :: tail                    => loop(tail, CrossBuild :: acc)
-        case "all-changed" :: tail              => loop(tail, AllChanged :: acc)
-        case "default-tag-exists-answer" :: value :: tail =>
+        case Nil                                                     => Right(acc.reverse)
+        case "project" :: value :: tail                              => loop(tail, SelectProject(value) :: acc)
+        case "with-defaults" :: tail                                 => loop(tail, WithDefaults :: acc)
+        case "skip-tests" :: tail                                    => loop(tail, SkipTests :: acc)
+        case "cross" :: tail                                         => loop(tail, CrossBuild :: acc)
+        case "all-changed" :: tail                                   => loop(tail, AllChanged :: acc)
+        case "default-tag-exists-answer" :: value :: tail            =>
           loop(tail, TagDefault(value) :: acc)
         case "default-snapshot-dependencies-answer" :: value :: tail =>
           parseYesNo("default-snapshot-dependencies-answer", value)
             .flatMap(parsed => loop(tail, SnapshotDependenciesDefault(parsed) :: acc))
-        case "default-remote-check-failure-answer" :: value :: tail =>
+        case "default-remote-check-failure-answer" :: value :: tail  =>
           parseYesNo("default-remote-check-failure-answer", value)
             .flatMap(parsed => loop(tail, RemoteCheckFailureDefault(parsed) :: acc))
-        case "default-upstream-behind-answer" :: value :: tail =>
+        case "default-upstream-behind-answer" :: value :: tail       =>
           parseYesNo("default-upstream-behind-answer", value)
             .flatMap(parsed => loop(tail, UpstreamBehindDefault(parsed) :: acc))
-        case "default-push-answer" :: value :: tail =>
+        case "default-push-answer" :: value :: tail                  =>
           parseYesNo("default-push-answer", value)
             .flatMap(parsed => loop(tail, PushDefault(parsed) :: acc))
-        case "release-version" :: value :: tail =>
+        case "release-version" :: value :: tail                      =>
           parseVersionArg(value, "release-version")(ReleaseVersion.apply)
             .flatMap(arg => loop(tail, arg :: acc))
-        case "next-version" :: value :: tail    =>
+        case "next-version" :: value :: tail                         =>
           parseVersionArg(value, "next-version")(NextVersion.apply)
             .flatMap(arg => loop(tail, arg :: acc))
-        case "release-version" :: Nil           =>
+        case "release-version" :: Nil                                =>
           Left(
             s"Missing value after 'release-version'. See '$commandName help' for usage."
           )
-        case "next-version" :: Nil              =>
+        case "next-version" :: Nil                                   =>
           Left(
             s"Missing value after 'next-version'. See '$commandName help' for usage."
           )
-        case "default-tag-exists-answer" :: Nil =>
+        case "default-tag-exists-answer" :: Nil                      =>
           Left(
             s"Missing value after 'default-tag-exists-answer'. See '$commandName help' for usage."
           )
-        case "default-snapshot-dependencies-answer" :: Nil =>
+        case "default-snapshot-dependencies-answer" :: Nil           =>
           Left(
             s"Missing value after 'default-snapshot-dependencies-answer'. See '$commandName help' for usage."
           )
-        case "default-remote-check-failure-answer" :: Nil =>
+        case "default-remote-check-failure-answer" :: Nil            =>
           Left(
             s"Missing value after 'default-remote-check-failure-answer'. See '$commandName help' for usage."
           )
-        case "default-upstream-behind-answer" :: Nil =>
+        case "default-upstream-behind-answer" :: Nil                 =>
           Left(
             s"Missing value after 'default-upstream-behind-answer'. See '$commandName help' for usage."
           )
-        case "default-push-answer" :: Nil       =>
+        case "default-push-answer" :: Nil                            =>
           Left(
             s"Missing value after 'default-push-answer'. See '$commandName help' for usage."
           )
-        case "project" :: Nil                   =>
+        case "project" :: Nil                                        =>
           Left(
             s"Missing value after 'project'. See '$commandName help' for usage."
           )
         // Catch-all: token was admitted by MonorepoCommandParsers as a known project name.
         // Direct callers (tests, tooling) must pre-validate tokens; see class Scaladoc.
-        case project :: tail                    =>
+        case project :: tail                                         =>
           loop(tail, SelectProject(project) :: acc)
       }
 

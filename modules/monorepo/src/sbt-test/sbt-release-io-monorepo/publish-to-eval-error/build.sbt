@@ -50,16 +50,12 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "publish-to-eval-error-test",
-    releaseIOMonorepoProcess      := {
-      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.{
-        detectOrSelectProjects,
-        publishArtifacts
-      }
-
-      Seq(detectOrSelectProjects, publishArtifacts)
-    },
-    releaseIOIgnoreUntrackedFiles := true,
+    name                           := "publish-to-eval-error-test",
+    releaseIOIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoEnableSnapshotDependenciesCheck := false,
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     expectPublishToEvalFailure    := {
       val sbtVersionProp     = sbtVersion.value
       val pluginVersionProp  =
@@ -84,11 +80,11 @@ lazy val root = (project in file("."))
       assert(exitCode != 0, "Expected nested sbt release command to fail")
       assert(
         output.contains("Failed to evaluate publishTo for core"),
-        "Expected wrapped publishTo evaluation failure message"
+        s"Expected wrapped publishTo evaluation failure message. Output was:\n$output"
       )
       assert(
         output.contains("publishTo exploded"),
-        "Expected original publishTo error message"
+        s"Expected original publishTo error message. Output was:\n$output"
       )
     },
     checkNoReleaseChanges         := {

@@ -5,9 +5,8 @@ name         := "untracked-files-fail-test"
 scalaVersion := "2.12.18"
 
 // Default releaseIOIgnoreUntrackedFiles is false — untracked files should block release
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes" || step.name == "publish-artifacts"
-}
+releaseIOEnablePublish        := false
+releaseIOEnablePush           := false
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {

@@ -1,16 +1,15 @@
 import scala.sys.process.*
-import _root_.io.release.monorepo.MonorepoStepIO
+import _root_.io.release.monorepo.MonorepoProjectHookIO
 
-val Scala213           = "2.13.12"
-val Scala212           = "2.12.18"
-val markerScalaVersion = taskKey[String]("Current scalaVersion used by the marker step")
+val Scala213 = "2.13.12"
+val Scala212 = "2.12.18"
 
 lazy val core = (project in file("core"))
   .settings(
     name               := "core",
     scalaVersion       := Scala213,
     crossScalaVersions := Seq(Scala213, Scala212),
-    markerScalaVersion := scalaVersion.value
+    publishTo          := Some(Resolver.file("test-repo", file("repo")))
   )
 
 lazy val api = (project in file("api"))
@@ -18,24 +17,21 @@ lazy val api = (project in file("api"))
     name               := "api",
     scalaVersion       := Scala212,
     crossScalaVersions := Seq.empty,
-    markerScalaVersion := scalaVersion.value
+    publishTo          := Some(Resolver.file("test-repo", file("repo")))
   )
 
 val checkFailureArtifacts =
   taskKey[Unit]("Verify empty crossScalaVersions fails release before api marker/tag/commit steps")
-val crossBuildMarkerStep  = MonorepoStepIO.PerProject(
-  name = "write-cross-markers",
-  execute = (ctx, project) =>
-    _root_.cats.effect.IO.blocking {
-      val extracted      = sbt.Project.extract(ctx.state)
-      val (newState, sv) = extracted.runTask(project.ref / markerScalaVersion, ctx.state)
-      val markerDir      = project.baseDir / "marker"
-      IO.touch(markerDir / s"built-$sv")
-      IO.append(markerDir / "invocations.txt", sv + "\n")
-      ctx.withState(newState)
-    },
-  enableCrossBuild = true
-)
+val crossBuildMarkerHook = MonorepoProjectHookIO.action("write-cross-markers") { (ctx, project) =>
+  _root_.cats.effect.IO.blocking {
+    val extracted = sbt.Project.extract(ctx.state)
+    val sv        = extracted.get(project.ref / scalaVersion)
+    val markerDir = project.baseDir / "marker"
+    IO.createDirectory(markerDir)
+    IO.touch(markerDir / s"built-$sv")
+    IO.append(markerDir / "invocations.txt", sv + "\n")
+  }
+}
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
@@ -43,24 +39,11 @@ lazy val root = (project in file("."))
   .settings(
     name := "cross-build-empty-cross-test",
 
-    releaseIOMonorepoProcess := {
-      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.*
-
-      Seq(
-        initializeVcs,
-        resolveReleaseOrder,
-        detectOrSelectProjects,
-        inquireVersions,
-        crossBuildMarkerStep,
-        setReleaseVersions,
-        commitReleaseVersions,
-        tagReleases,
-        setNextVersions,
-        commitNextVersions
-      )
-    },
-
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoBeforePublishHooks := Seq(crossBuildMarkerHook),
+    releaseIOIgnoreUntrackedFiles       := true,
+    releaseIOMonorepoEnablePush         := false,
+    releaseIOMonorepoEnableRunClean     := false,
+    releaseIOMonorepoEnableRunTests     := false,
 
     checkFailureArtifacts := {
       val coreBase         = file("core/marker")

@@ -10,8 +10,6 @@ import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
 import sbt.{internal as _, *}
 
-import scala.annotation.nowarn
-
 /** Internal runtime helpers for monorepo command planning and execution.
   *
   * Public plugin extension points stay on [[MonorepoReleasePluginLike]]; this object owns the
@@ -22,10 +20,7 @@ private[monorepo] object MonorepoCommandExecution {
   final case class CommandRuntime[T](
       commandName: String,
       resource: Resource[IO, T],
-      resolveResourceHooks: State => MonorepoResourceHooks[T],
-      resolveReleaseProcess: State => Seq[T => MonorepoStepIO],
-      resolveCheckProcess: State => Seq[MonorepoStepIO],
-      liftSteps: Seq[MonorepoStepIO] => Seq[T => MonorepoStepIO]
+      resolveResourceHooks: State => MonorepoResourceHooks[T]
   )
 
   final case class ReleaseFlags(
@@ -43,31 +38,13 @@ private[monorepo] object MonorepoCommandExecution {
       plan: MonorepoReleasePlan
   )
 
-  sealed trait LegacyResult {
-    def legacyMode: Boolean
-    def legacyReasons: Seq[String]
-  }
-
-  final case class LegacyStatus(
-      legacyMode: Boolean,
-      legacyReasons: Seq[String]
-  ) extends LegacyResult
-
-  final case class ResolvedProcessMode[T](
-      releaseSteps: Seq[T => MonorepoStepIO],
-      checkSteps: Seq[MonorepoStepIO],
-      checkLegacy: LegacyStatus,
-      releaseLegacy: LegacyStatus
+  final case class ResolvedProcessMode(
+      checkSteps: Seq[MonorepoStepIO]
   )
 
   final case class ResolvedReleaseRun(
-      steps: Seq[MonorepoStepIO],
-      legacyMode: Boolean,
-      legacyReasons: Seq[String]
-  ) extends LegacyResult
-
-  private val ReleaseProcessLegacyReason =
-    "`monorepoReleaseProcess` differs from the configured raw process"
+      steps: Seq[MonorepoStepIO]
+  )
 
   def doHelp(state: State, commandName: String): State = {
     val program = logLines(state, MonorepoPreflight.helpLines(commandName))
@@ -92,119 +69,39 @@ private[monorepo] object MonorepoCommandExecution {
       runPlannedCheck(command, session, runtime)
     }
 
-  @nowarn("cat=deprecation")
   def resolveProcessMode[T](
       state: State,
       runtime: CommandRuntime[T]
-  ): IO[ResolvedProcessMode[T]] =
-    IO.blocking {
-      val extracted             = Project.extract(state)
-      val configuredRaw         = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
-      val configuredCheck       = runtime.resolveCheckProcess(state)
-      val configuredRelease     = runtime.resolveReleaseProcess(state)
-      val rawSignature          = MonorepoLifecycle.signature(configuredRaw)
-      val checkSignature        = MonorepoLifecycle.signature(configuredCheck)
-      val rawReleaseSignature   = MonorepoLifecycle.releaseBuilderSignature(
-        runtime.liftSteps(configuredRaw)
-      )
-      val releaseSignature      = MonorepoLifecycle.releaseBuilderSignature(configuredRelease)
-      val rawProcessChanged     = rawSignature != MonorepoLifecycle.defaultSignature
-      val checkProcessChanged   = checkSignature != rawSignature
-      val checkLegacy           = legacyStatus(
-        whenTrue(rawProcessChanged, "`releaseIOMonorepoProcess` differs from defaults"),
-        whenTrue(
-          checkProcessChanged,
-          "`monorepoReleaseCheckProcess` differs from the configured raw process"
-        )
-      )
-      val releaseProcessChanged = releaseSignature != rawReleaseSignature
-      val releaseLegacy         = legacyStatus(
-        whenTrue(rawProcessChanged, "`releaseIOMonorepoProcess` differs from defaults"),
-        whenTrue(
-          releaseProcessChanged,
-          "`monorepoReleaseProcess` differs from the configured raw process"
-        )
-      )
-      val compiledCheckSteps    =
-        if (checkLegacy.legacyMode) configuredCheck
-        else
-          MonorepoHookCompiler.compile(
-            MonorepoHookCompiler
-              .resolve(state)
-              .mergeWith(
-                MonorepoResourceHooks.materialize(runtime.resolveResourceHooks(state), None)
-              )
-          )
-
+  ): IO[ResolvedProcessMode] =
+    IO.blocking(
       ResolvedProcessMode(
-        releaseSteps = configuredRelease,
-        checkSteps = compiledCheckSteps,
-        checkLegacy = checkLegacy,
-        releaseLegacy = releaseLegacy
+        checkSteps = MonorepoHookCompiler.compile(
+          MonorepoHookCompiler
+            .resolve(state)
+            .mergeWith(
+              MonorepoResourceHooks.materialize(runtime.resolveResourceHooks(state), None)
+            )
+        )
       )
-    }
+    )
 
-  @nowarn("cat=deprecation")
   def resolveReleaseRun[T](
       state: State,
-      processMode: ResolvedProcessMode[T],
       resourceValue: T,
       runtime: CommandRuntime[T]
   ): IO[ResolvedReleaseRun] =
-    if (processMode.releaseLegacy.legacyMode)
-      IO.pure(
-        ResolvedReleaseRun(
-          steps = processMode.releaseSteps.map(_(resourceValue)),
-          legacyMode = true,
-          legacyReasons = processMode.releaseLegacy.legacyReasons
+    IO.blocking(
+      ResolvedReleaseRun(
+        steps = MonorepoHookCompiler.compile(
+          MonorepoHookCompiler
+            .resolve(state)
+            .mergeWith(
+              MonorepoResourceHooks
+                .materialize(runtime.resolveResourceHooks(state), Some(resourceValue))
+            )
         )
       )
-    else
-      IO.blocking {
-        val extracted         = Project.extract(state)
-        val configuredRaw     = extracted.get(MonorepoReleaseIO._releaseIOMonorepoProcess)
-        val configuredRelease = runtime.resolveReleaseProcess(state).map(_(resourceValue))
-        val releaseChanged    =
-          MonorepoLifecycle.signature(configuredRelease) !=
-            MonorepoLifecycle.signature(configuredRaw)
-
-        if (releaseChanged)
-          ResolvedReleaseRun(
-            steps = configuredRelease,
-            legacyMode = true,
-            legacyReasons = Seq(ReleaseProcessLegacyReason)
-          )
-        else
-          ResolvedReleaseRun(
-            steps = MonorepoHookCompiler.compile(
-              MonorepoHookCompiler
-                .resolve(state)
-                .mergeWith(
-                  MonorepoResourceHooks
-                    .materialize(runtime.resolveResourceHooks(state), Some(resourceValue))
-                )
-            ),
-            legacyMode = false,
-            legacyReasons = Seq.empty
-          )
-      }
-
-  def logLegacyModeWarning(state: State, result: LegacyResult): IO[Unit] =
-    if (!result.legacyMode) IO.unit
-    else
-      IO.blocking {
-        val reasons = result.legacyReasons.mkString("; ")
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Monorepo} Legacy raw process mode enabled: $reasons"
-        )
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Monorepo} Prefer `releaseIOMonorepoEnable*` policies and " +
-            "`releaseIOMonorepo*Hooks` settings. See docs/monorepo/customization.md#hook-based-customization."
-        )
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Monorepo} Hook/policy compilation is bypassed while legacy raw process mode is active."
-        )
-      }
+    )
 
   private def parseFlags(
       args: Seq[MonorepoCli.Arg],
@@ -302,13 +199,7 @@ private[monorepo] object MonorepoCommandExecution {
       process  <- resolveProcessMode(session.cleanState, runtime)
       finalCtx <- runtime.resource.use { resourceValue =>
                     for {
-                      runProcess <- resolveReleaseRun(
-                                      session.cleanState,
-                                      process,
-                                      resourceValue,
-                                      runtime
-                                    )
-                      _          <- logLegacyModeWarning(session.cleanState, runProcess)
+                      runProcess <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
                       _          <- IO.blocking(
                                       logReleaseStart(
                                         session.cleanState,
@@ -334,7 +225,6 @@ private[monorepo] object MonorepoCommandExecution {
   ): IO[State] =
     for {
       process <- resolveProcessMode(session.cleanState, runtime)
-      _       <- logLegacyModeWarning(session.cleanState, process.checkLegacy)
       _       <- CheckModeOutput.logCheckStart(
                    session.cleanState,
                    ReleaseLogPrefixes.Monorepo,
@@ -362,18 +252,6 @@ private[monorepo] object MonorepoCommandExecution {
     if (flags.skipTests) state.log.info(s"${ReleaseLogPrefixes.Monorepo} Tests will be skipped")
     if (flags.skipPublish) state.log.info(s"${ReleaseLogPrefixes.Monorepo} Publish will be skipped")
   }
-
-  private def legacyStatus(reasons: Option[String]*): LegacyStatus = {
-    val resolved = reasons.flatten
-
-    LegacyStatus(
-      legacyMode = resolved.nonEmpty,
-      legacyReasons = resolved
-    )
-  }
-
-  private def whenTrue(condition: Boolean, value: String): Option[String] =
-    if (condition) Some(value) else None
 
   private def resolveDecisionDefaults(
       state: State,

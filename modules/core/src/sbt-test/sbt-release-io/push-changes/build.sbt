@@ -4,11 +4,9 @@ name         := "push-changes-test"
 scalaVersion := "2.12.18"
 
 // Keep push-changes; filter out publish-artifacts, run-clean, run-tests
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "publish-artifacts" ||
-  step.name == "run-clean" ||
-  step.name == "run-tests"
-}
+releaseIOEnablePublish        := false
+releaseIOEnableRunClean       := false
+releaseIOEnableRunTests       := false
 
 releaseIOIgnoreUntrackedFiles := true
 

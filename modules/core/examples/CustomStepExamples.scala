@@ -10,21 +10,18 @@ import io.release.ReleaseResourceHookIO
 import io.release.ReleaseResourceHooks
 import io.release.ReleaseStepIO
 import io.release.internal.ReleaseLogPrefixes
-import io.release.steps.ReleaseSteps
 import sbt.*
 import sbt.Keys.thisProject
 
 import scala.util.control.NonFatal
 
 /**
- * Examples showing both the preferred hook/policy customization path and the legacy raw-step
- * escape hatch.
+ * Examples showing the supported hook/policy customization path.
  *
  * '''How to read this file (recommended path):'''
  *  1. Start with `firstHookSettings` for a working hook-based setup.
  *  2. Move to `customHookSettings` for a richer policy + lifecycle example.
- *  3. Browse the individual step examples and `legacyCustomProcess` only if you need the
- *     advanced legacy raw-process API.
+ *  3. Browse the individual step examples for lower-level internal building blocks.
  *  4. Use `MyReleasePlugin` for advanced resource-aware customization.
  *
  * Note: plugin objects like `MyReleasePlugin` must live in `project/MyReleasePlugin.scala`
@@ -163,15 +160,6 @@ object CustomStepExamples {
   val markReleaseDoneHook: ReleaseHookIO =
     ReleaseHookIO.io("mark-done")(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
 
-  // ── Legacy raw-process customization (advanced) ─────────────────────
-
-  /** Legacy example: prepend one custom raw step and keep the default flow.
-    *
-    * Prefer [[firstHookSettings]] for routine customization. Keep this pattern for advanced
-    * cases that truly need raw process editing.
-    */
-  lazy val firstCustomProcess: Seq[ReleaseStepIO] = Seq(printBanner) ++ ReleaseSteps.defaults
-
   // ── Individual step examples ─────────────────────────────────────────
 
   /** Custom step using `ReleaseStepIO.io` with pure console output. */
@@ -296,46 +284,6 @@ object CustomStepExamples {
         ctx
       },
     enableCrossBuild = true
-  )
-
-  // ── Composing a custom release process ───────────────────────────────
-
-  /** Legacy example: a custom release process that adds a banner, validates the branch,
-   * generates a changelog, and skips push.
-    *
-   * Prefer [[customHookSettings]] for routine lifecycle customization. Keep this pattern
-   * for advanced cases that need full raw-step control.
-   *
-   * Usage in build.sbt:
-   * {{{
-   * import io.release.ReleasePluginIO.autoImport._
-   * import io.release.examples.CustomStepExamples
-   *
-   * releaseIOProcess := CustomStepExamples.legacyCustomProcess
-   * }}}
-   *
-   * Run with: `sbt "releaseIO with-defaults"`
-   */
-  val legacyCustomProcess: Seq[ReleaseStepIO] = Seq(
-    printBanner,
-    ReleaseSteps.initializeVcs,
-    validateBranch,
-    ReleaseSteps.checkCleanWorkingDir,
-    ReleaseSteps.checkSnapshotDependencies,
-    ReleaseSteps.inquireVersions,
-    generateChangelog,
-    ReleaseSteps.runClean,
-    ReleaseSteps.runTests, // or crossBuildTest for per-Scala-version runs
-    ReleaseSteps.setReleaseVersion,
-    addReleaseManifestEntry,
-    ReleaseSteps.commitReleaseVersion,
-    ReleaseSteps.tagRelease,
-    optionalNotify,
-    ReleaseSteps.publishArtifacts,
-    ReleaseSteps.setNextVersion,
-    ReleaseSteps.commitNextVersion,
-    markReleaseDone
-    // Note: pushChanges intentionally omitted — push manually after verifying
   )
 
   // ── Utilities ────────────────────────────────────────────────────────

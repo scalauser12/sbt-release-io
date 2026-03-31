@@ -8,7 +8,6 @@ import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
-import io.release.steps.StepHelpers.parseVersionInput
 import sbt.Keys.*
 import sbt.{internal as _, *}
 

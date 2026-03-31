@@ -1,7 +1,6 @@
 package io.release.internal
 
 import cats.effect.IO
-import cats.syntax.all.*
 import io.release.ReleaseCtx
 import io.release.steps.StepHelpers
 
@@ -63,7 +62,7 @@ private[release] object ExecutionEngine {
           ctx.state.log.error(
             s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
           )
-        ) *> IO.pure(ctx.failWith(err))
+        ).flatMap(_ => IO.pure(ctx.failWith(err)))
       }
 
   def runActionPhase[C <: ReleaseCtx[C]](

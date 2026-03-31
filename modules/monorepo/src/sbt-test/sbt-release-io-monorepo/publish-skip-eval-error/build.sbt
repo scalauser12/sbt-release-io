@@ -50,16 +50,12 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "publish-skip-eval-error-test",
-    releaseIOMonorepoProcess      := {
-      import _root_.io.release.monorepo.steps.MonorepoReleaseSteps.{
-        detectOrSelectProjects,
-        publishArtifacts
-      }
-
-      Seq(detectOrSelectProjects, publishArtifacts)
-    },
-    releaseIOIgnoreUntrackedFiles := true,
+    name                           := "publish-skip-eval-error-test",
+    releaseIOIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoEnableSnapshotDependenciesCheck := false,
+    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoEnableRunClean := false,
+    releaseIOMonorepoEnableRunTests := false,
     expectPublishSkipEvalFailure  := {
       val sbtVersionProp     = sbtVersion.value
       val pluginVersionProp  =

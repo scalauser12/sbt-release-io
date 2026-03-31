@@ -169,7 +169,9 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       val metadataKey = sbt.AttributeKey[String]("validation-metadata")
       val step1       = MonorepoStepIO
         .global("seed-validation-metadata")
-        .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "seeded")))
+        .withValidationContext(currentCtx =>
+          IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
+        )
         .validateOnly
       val step2       = MonorepoStepIO.Global(
         name = "observe-validation-metadata",

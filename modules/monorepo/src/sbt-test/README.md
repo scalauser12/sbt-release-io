@@ -1,45 +1,55 @@
 # Scripted Tests for sbt-release-io-monorepo
 
-This directory contains scripted integration tests for the per-project monorepo release model.
+This directory contains scripted integration tests for the per-project monorepo `releaseIOMonorepo` command.
 
 Each scenario lives under `sbt-release-io-monorepo/<test-name>/` and typically contains:
 
 - `build.sbt`
-- per-project `version.sbt` files (or a custom per-project version-file format)
+- per-project `version.sbt` files or another per-project version format
 - `project/plugins.sbt`
 - `test`
 
+## Supported coverage
+
+The monorepo scripted suite covers only the supported customization surface:
+
+- policy keys such as `releaseIOMonorepoEnable*`, `releaseIOMonorepoSkipPublish`, and `releaseIOIgnoreUntrackedFiles`
+- global and per-project lifecycle hooks
+- resource-aware hooks via `monorepoResourceHooks`
+
+Legacy process-editing fixtures are no longer part of the scripted suite.
+
 ## Coverage areas
 
-- Project selection: `change-detection`, `all-changed`, `cli-all-changed-with-selection`, `cli-unused-overrides`, `keyword-project-selector`, `zero-changed-projects`
-- Change-detection extensions: `change-detection-downstream`, `custom-change-detector`, `custom-detector-error`, `custom-detector-uses-basedir`, `detect-changes-disabled`, `detect-changes-excludes`, `shared-paths-*`
-- CLI and help: `help`, `check`, `check-without-builtins`, `cli-override-forces-detection`, `cli-parse-errors`, `empty-override-value`, `invalid-override`, `keyword-project-selector`
-- Version files and custom formats: `custom-version-format`, `late-bound-version-settings`, `per-project-releaseversionfile`, `version-file-change-detection`
-- Hook-based lifecycle and policies: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`
-- Tagging: `custom-tag-name`, `tag-exists-error`
-- Dependency ordering and aggregation: `diamond-dependency`, `topological-order`, `transitive-aggregates`, `nested-parent-exclusion`, `root-project-*`
-- Cross-build behavior: `cross-build-setting`, `cross-build-heterogeneous`, `cross-build-empty-cross`, `cross-build-restore`
-- Publish and push flow: `missing-publishto`, `publish-*`, `push-*`, `skip-publish`, `skip-tests`, `vcs-signoff`
-- Custom plugin and step composition: `custom-plugin`, `custom-plugin-resource-hooks`, `custom-projects-setting`, `insert-step`, `late-bound-*`
+- Core flow and CLI: `simple-monorepo`, `help`, `check`, `interactive-monorepo`, `release-version-only`, `next-version-only`, `cli-*`, `invalid-override`, `empty-override-value`, `keyword-project-selector`
+- Hook and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`, `custom-projects-setting`
+- Project selection and change detection: `change-detection`, `all-changed`, `change-detection-downstream`, `cli-all-changed-with-selection`, `cli-unused-overrides`, `detect-changes-disabled`, `detect-changes-excludes`, `first-release-detection`, `shared-paths-*`, `root-project-*`, `zero-changed-projects`
+- Change-detection extensions: `custom-change-detector`, `custom-detector-error`, `custom-detector-uses-basedir`
+- Version files and tags: `custom-version-format`, `per-project-releaseversionfile`, `version-file-change-detection`, `custom-tag-name`, `tag-exists-error`
+- Dependency ordering and cross-build: `diamond-dependency`, `topological-order`, `transitive-aggregates`, `nested-parent-exclusion`, `cross-build-setting`, `cross-build-heterogeneous`, `cross-build-empty-cross`, `cross-build-restore`
+- Publish, push, and validation flow: `missing-publishto`, `missing-version-file`, `snapshot-dependencies`, `publish-artifacts-checks-disabled`, `publish-skip-bypass`, `publish-skip-eval-error`, `publish-to-eval-error`, `push-behind-remote`, `push-changes-tracking-remote`, `selection-aware-validation`, `skip-publish`, `skip-tests`, `skip-tests-setting`, `vcs-signoff`
+- Project test and failure handling: `per-project-failure`, `dirty-working-dir`, `empty-commit-monorepo`, `run-clean`
 
 ## Migration note
 
-Global version mode and unified tag strategy were removed. The scripted suite now covers only:
+Global version mode and unified tag strategy were removed. The surviving suite covers only per-project version files, per-project `project=version` CLI overrides, and per-project tags.
 
-- per-project version files
-- per-project `project=version` CLI overrides
-- per-project tags
+## Running tests
 
-## Coverage after removal
+Run the monorepo scripted suite:
 
-The surviving scripted suite still covers the remaining monorepo surface in grouped scenario families:
+```bash
+./bin/sbt2-clean monorepo/scripted
+```
 
-- per-project tagging: `custom-tag-name`, `tag-exists-error`, `interactive-monorepo`
-- per-project version files and formats: `per-project-releaseversionfile`, `custom-version-format`, `version-file-change-detection`
-- per-project change detection: `change-detection`, `shared-paths-*`, `first-release-detection`, `root-project-*`
-- CLI/help/check behavior: `help`, `check`, `check-without-builtins`, `cli-*`, `invalid-override`, `empty-override-value`, `keyword-project-selector`
+Run a specific scenario:
 
-## Custom plugin coverage
+```bash
+./bin/sbt2-clean "monorepo/scripted sbt-release-io-monorepo/simple-monorepo"
+```
 
-- `custom-plugin` covers resource-backed legacy raw-process customization through `monorepoReleaseProcess`
-- `custom-plugin-resource-hooks` covers resource-aware hooks on compiled hook mode, including both global and per-project lifecycle hooks
+Run multiple scenarios:
+
+```bash
+./bin/sbt2-clean "monorepo/scripted sbt-release-io-monorepo/simple-monorepo sbt-release-io-monorepo/tag-exists-error"
+```

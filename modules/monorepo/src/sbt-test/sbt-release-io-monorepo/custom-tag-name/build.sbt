@@ -24,9 +24,8 @@ lazy val root = (project in file("."))
     releaseIOMonorepoTagName      := { (name: String, ver: String) =>
       s"release/$name/$ver"
     },
-    releaseIOMonorepoProcess      := releaseIOMonorepoProcess.value.filterNot { step =>
-      step.name == "push-changes" || step.name == "publish-artifacts"
-    },
+    releaseIOMonorepoEnablePublish := false,
+    releaseIOMonorepoEnablePush    := false,
     releaseIOIgnoreUntrackedFiles := true,
     checkAll                      := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

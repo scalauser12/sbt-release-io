@@ -6,6 +6,4 @@ publish / skip := true
 
 releaseIOIgnoreUntrackedFiles := true
 
-releaseIOProcess := releaseIOProcess.value.filterNot { step =>
-  step.name == "push-changes"
-}
+releaseIOEnablePush := false

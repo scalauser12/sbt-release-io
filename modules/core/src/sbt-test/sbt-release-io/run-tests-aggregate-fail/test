@@ -5,11 +5,8 @@ $ exec git config user.name "Test User"
 $ exec git add .gitignore build.sbt version.sbt project/plugins.sbt src/test/scala/PassSpec.scala sub/src/test/scala/FailSpec.scala
 $ exec git commit -m "Initial commit"
 
-# Delete marker file if it exists
-$ delete marker-file
-
 # Try to release - should fail because sub-project test fails
 -> releaseIO
-
-# Verify marker file was NOT created (release was aborted by sub-project's failing test)
-$ absent marker-file
+$ exec sh -c 'git rev-list --count HEAD | grep -qx 1'
+$ exec sh -c 'test -z "$(git tag --list)"'
+$ exec grep -q 'version := "0.1.0-SNAPSHOT"' version.sbt

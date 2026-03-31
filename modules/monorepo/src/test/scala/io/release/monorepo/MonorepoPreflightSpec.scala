@@ -88,7 +88,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
                              MonorepoReleaseSteps.checkCleanWorkingDir,
                              MonorepoReleaseSteps.detectOrSelectProjects,
                              MonorepoReleaseSteps.inquireVersions,
-                             MonorepoReleaseSteps.tagReleasesGlobalFacade
+                             MonorepoReleaseSteps.tagReleasesPerProject
                            )
                          )
         afterVersion  <- IO.blocking(sbt.IO.read(versionFile))

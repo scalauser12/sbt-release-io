@@ -2,7 +2,6 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.PluginLikeSupport
 import io.release.ReleasePluginIO
 import io.release.internal.ReleaseLogPrefixes
 import sbt.Keys.*
@@ -29,18 +28,13 @@ import sbt.{internal as _, *}
   *
   * '''Do not add `object autoImport`''' to custom plugins. When both [[MonorepoReleasePlugin]]
   * and a custom plugin define autoImport, the build gets ambiguous references
-  * (e.g. `reference to releaseIOMonorepoProcess is ambiguous`). [[MonorepoReleasePlugin]] is
+  * (e.g. `reference to releaseIOMonorepoBeforeTagHooks is ambiguous`). [[MonorepoReleasePlugin]] is
   * on the classpath (same JAR) and sbt imports its autoImport into build.sbt automatically,
   * so you only need `enablePlugins(CustomReleasePlugin)`.
   */
-trait MonorepoReleasePluginLike[T]
-    extends AutoPlugin
-    with MonorepoReleaseIO
-    with PluginLikeSupport[MonorepoStepIO, T] {
+trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
 
   override def requires: Plugins = ReleasePluginIO
-
-  protected def stepName(step: MonorepoStepIO): String = step.name
 
   /** The resource acquired once for the entire monorepo release process and passed to each step. */
   def resource: Resource[IO, T]
@@ -54,28 +48,6 @@ trait MonorepoReleasePluginLike[T]
     */
   protected def monorepoResourceHooks(state: State): MonorepoResourceHooks[T] =
     MonorepoResourceHooks.empty
-
-  /** Override release step wiring; overrides force legacy raw-process mode for `run`.
-    * Prefer `releaseIOMonorepoEnable*` and `releaseIOMonorepo*Hooks`; see
-    * `docs/monorepo/customization.md` (Hook-based customization).
-    */
-  @deprecated(
-    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; changing the effective process returned from `monorepoReleaseProcess` switches the real release run into legacy raw-process mode.",
-    "0.7.0"
-  )
-  protected def monorepoReleaseProcess(state: State): Seq[T => MonorepoStepIO] =
-    liftSteps(Project.extract(state).get(releaseIOMonorepoProcess))
-
-  /** Override check-only steps; overrides force legacy raw-process mode for `check`.
-    * Prefer `releaseIOMonorepoEnable*` and `releaseIOMonorepo*Hooks`; see
-    * `docs/monorepo/customization.md` (Hook-based customization).
-    */
-  @deprecated(
-    "Prefer `releaseIOMonorepoEnable*` policies and `releaseIOMonorepo*Hooks`; changing the effective process returned from `monorepoReleaseCheckProcess` switches `check` into legacy raw-process mode.",
-    "0.7.0"
-  )
-  protected def monorepoReleaseCheckProcess(state: State): Seq[MonorepoStepIO] =
-    Project.extract(state).get(releaseIOMonorepoProcess)
 
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
@@ -102,10 +74,7 @@ trait MonorepoReleasePluginLike[T]
     MonorepoCommandExecution.CommandRuntime(
       commandName = commandName,
       resource = resource,
-      resolveResourceHooks = state => monorepoResourceHooks(state),
-      resolveReleaseProcess = state => monorepoReleaseProcess(state),
-      resolveCheckProcess = state => monorepoReleaseCheckProcess(state),
-      liftSteps = steps => this.liftSteps(steps)
+      resolveResourceHooks = state => monorepoResourceHooks(state)
     )
 
   private def handleMonorepoRelease(state: State, tokens: Seq[String]): State =
