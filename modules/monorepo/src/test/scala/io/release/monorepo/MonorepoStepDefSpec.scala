@@ -70,6 +70,247 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     }
   }
 
+  test("withValidationContext wires threaded validation function on Global") {
+    contextResource.use { ctx =>
+      val key  = AttributeKey[String]("global-validation-context")
+      val step = MonorepoStepIO
+        .global("validated-context")
+        .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(key, "ok")))
+        .validateOnly
+
+      step.threadedValidation(ctx).map(result => assertEquals(result.metadata(key), Some("ok")))
+    }
+  }
+
+  test("withValidationContext public validate runs threaded validation on Global") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO
+          .global("validated-context-public")
+          .withValidationContext(currentCtx => events.update(_ :+ "global-context").as(currentCtx))
+          .validateOnly
+
+        step.validate(ctx) *> events.get.map(obs => assertEquals(obs, List("global-context")))
+      }
+    }
+  }
+
+  test("withValidationContext wires threaded validation function on PerProject") {
+    contextResource.use { ctx =>
+      val key     = AttributeKey[String]("project-validation-context")
+      val project = dummyProject("core")
+      val step    = MonorepoStepIO
+        .perProject("validated-pp-context")
+        .withValidationContext((currentCtx, currentProject) =>
+          IO.pure(currentCtx.withMetadata(key, currentProject.name))
+        )
+        .validateOnly
+
+      step.threadedValidation(ctx, project).map { result =>
+        assertEquals(result.metadata(key), Some("core"))
+      }
+    }
+  }
+
+  test("PerProject.validate function value runs threaded validation from builder") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val project = dummyProject("core")
+        val step    = MonorepoStepIO
+          .perProject("validated-pp-field")
+          .withValidationContext((currentCtx, currentProject) =>
+            events.update(_ :+ s"context:${currentProject.name}").as(currentCtx)
+          )
+          .validateOnly
+
+        val validate = step.validate
+        validate(ctx, project) *> events.get.map(obs => assertEquals(obs, List("context:core")))
+      }
+    }
+  }
+
+  test("Global builder chaining preserves order across validation types") {
+    contextResource.use { ctx =>
+      val key = AttributeKey[String]("global-builder-order")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val forward = MonorepoStepIO
+          .global("global-forward")
+          .withValidation(currentCtx =>
+            events.update(_ :+ s"validate:${currentCtx.metadata(key).getOrElse("missing")}")
+          )
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .validateOnly
+
+        val reverse = MonorepoStepIO
+          .global("global-reverse")
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .withValidation(currentCtx =>
+            events.update(_ :+ s"validate:${currentCtx.metadata(key).getOrElse("missing")}")
+          )
+          .validateOnly
+
+        for {
+          _ <- forward.threadedValidation(ctx)
+          a <- events.get
+          _ <- events.set(Nil)
+          _ <- reverse.threadedValidation(ctx)
+          b <- events.get
+        } yield {
+          assertEquals(a, List("validate:missing", "context"))
+          assertEquals(b, List("context", "validate:ok"))
+        }
+      }
+    }
+  }
+
+  test("PerProject builder chaining preserves order across validation types") {
+    contextResource.use { ctx =>
+      val key     = AttributeKey[String]("per-project-builder-order")
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val forward = MonorepoStepIO
+          .perProject("pp-forward")
+          .withValidation((currentCtx, currentProject) =>
+            events.update(
+              _ :+ s"validate:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .withValidationContext((currentCtx, currentProject) =>
+            events
+              .update(_ :+ s"context:${currentProject.name}")
+              .as(currentCtx.withMetadata(key, "ok"))
+          )
+          .validateOnly
+
+        val reverse = MonorepoStepIO
+          .perProject("pp-reverse")
+          .withValidationContext((currentCtx, currentProject) =>
+            events
+              .update(_ :+ s"context:${currentProject.name}")
+              .as(currentCtx.withMetadata(key, "ok"))
+          )
+          .withValidation((currentCtx, currentProject) =>
+            events.update(
+              _ :+ s"validate:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .validateOnly
+
+        for {
+          _ <- forward.threadedValidation(ctx, project)
+          a <- events.get
+          _ <- events.set(Nil)
+          _ <- reverse.threadedValidation(ctx, project)
+          b <- events.get
+        } yield {
+          assertEquals(a, List("validate:core:missing", "context:core"))
+          assertEquals(b, List("context:core", "validate:core:ok"))
+        }
+      }
+    }
+  }
+
+  test("globalResource builder chaining preserves order across validation types") {
+    contextResource.use { ctx =>
+      val key = AttributeKey[String]("global-resource-builder-order")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val forward = MonorepoStepIO
+          .globalResource[String]("global-resource-forward")
+          .withValidation(resource => currentCtx =>
+            events.update(
+              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .withValidationContext(resource => currentCtx =>
+            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .validateOnly("demo")
+          .asInstanceOf[MonorepoStepIO.Global]
+
+        val reverse = MonorepoStepIO
+          .globalResource[String]("global-resource-reverse")
+          .withValidationContext(resource => currentCtx =>
+            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .withValidation(resource => currentCtx =>
+            events.update(
+              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .validateOnly("demo")
+          .asInstanceOf[MonorepoStepIO.Global]
+
+        for {
+          _ <- forward.threadedValidation(ctx)
+          a <- events.get
+          _ <- events.set(Nil)
+          _ <- reverse.threadedValidation(ctx)
+          b <- events.get
+        } yield {
+          assertEquals(a, List("validate:demo:missing", "context:demo"))
+          assertEquals(b, List("context:demo", "validate:demo:ok"))
+        }
+      }
+    }
+  }
+
+  test("perProjectResource builder chaining preserves order across validation types") {
+    contextResource.use { ctx =>
+      val key     = AttributeKey[String]("per-project-resource-builder-order")
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val forward = MonorepoStepIO
+          .perProjectResource[String]("per-project-resource-forward")
+          .withValidation(resource => (currentCtx, currentProject) =>
+            events.update(
+              _ :+ s"validate:$resource:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .withValidationContext(resource => (currentCtx, currentProject) =>
+            events
+              .update(_ :+ s"context:$resource:${currentProject.name}")
+              .as(currentCtx.withMetadata(key, "ok"))
+          )
+          .validateOnly("demo")
+          .asInstanceOf[MonorepoStepIO.PerProject]
+
+        val reverse = MonorepoStepIO
+          .perProjectResource[String]("per-project-resource-reverse")
+          .withValidationContext(resource => (currentCtx, currentProject) =>
+            events
+              .update(_ :+ s"context:$resource:${currentProject.name}")
+              .as(currentCtx.withMetadata(key, "ok"))
+          )
+          .withValidation(resource => (currentCtx, currentProject) =>
+            events.update(
+              _ :+ s"validate:$resource:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .validateOnly("demo")
+          .asInstanceOf[MonorepoStepIO.PerProject]
+
+        for {
+          _ <- forward.threadedValidation(ctx, project)
+          a <- events.get
+          _ <- events.set(Nil)
+          _ <- reverse.threadedValidation(ctx, project)
+          b <- events.get
+        } yield {
+          assertEquals(a, List("validate:demo:core:missing", "context:demo:core"))
+          assertEquals(b, List("context:demo:core", "validate:demo:core:ok"))
+        }
+      }
+    }
+  }
+
   test("executeAction wraps IO[Unit] correctly for Global") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>

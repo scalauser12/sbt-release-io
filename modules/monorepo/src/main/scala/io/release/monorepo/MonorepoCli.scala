@@ -21,13 +21,18 @@ private[monorepo] object MonorepoCli {
 
   sealed trait Arg
   object Arg {
-    case object WithDefaults                                    extends Arg
-    case object SkipTests                                       extends Arg
-    case object CrossBuild                                      extends Arg
-    case object AllChanged                                      extends Arg
-    case class SelectProject(name: String)                      extends Arg
-    case class ReleaseVersion(project: String, version: String) extends Arg
-    case class NextVersion(project: String, version: String)    extends Arg
+    case object WithDefaults                                      extends Arg
+    case object SkipTests                                         extends Arg
+    case object CrossBuild                                        extends Arg
+    case object AllChanged                                        extends Arg
+    case class SelectProject(name: String)                        extends Arg
+    case class ReleaseVersion(project: String, version: String)   extends Arg
+    case class NextVersion(project: String, version: String)      extends Arg
+    case class TagDefault(value: String)                          extends Arg
+    case class SnapshotDependenciesDefault(value: Boolean)        extends Arg
+    case class RemoteCheckFailureDefault(value: Boolean)          extends Arg
+    case class UpstreamBehindDefault(value: Boolean)              extends Arg
+    case class PushDefault(value: Boolean)                        extends Arg
   }
 
   final case class Parsed(mode: CommandMode, args: Seq[Arg])
@@ -55,6 +60,19 @@ private[monorepo] object MonorepoCli {
   private def parseArgs(tokens: Seq[String], commandName: String): Either[String, Seq[Arg]] = {
     import Arg.*
 
+    def parseYesNo(
+        flagName: String,
+        value: String
+    ): Either[String, Boolean] =
+      value.trim.toLowerCase match {
+        case "y" => Right(true)
+        case "n" => Right(false)
+        case _   =>
+          Left(
+            s"Invalid value '$value' for '$flagName'. Expected 'y' or 'n'. See '$commandName help' for usage."
+          )
+      }
+
     def parseVersionArg(value: String, kind: String)(
         build: (String, String) => Arg
     ): Either[String, Arg] = {
@@ -75,6 +93,20 @@ private[monorepo] object MonorepoCli {
         case "skip-tests" :: tail               => loop(tail, SkipTests :: acc)
         case "cross" :: tail                    => loop(tail, CrossBuild :: acc)
         case "all-changed" :: tail              => loop(tail, AllChanged :: acc)
+        case "default-tag-exists-answer" :: value :: tail =>
+          loop(tail, TagDefault(value) :: acc)
+        case "default-snapshot-dependencies-answer" :: value :: tail =>
+          parseYesNo("default-snapshot-dependencies-answer", value)
+            .flatMap(parsed => loop(tail, SnapshotDependenciesDefault(parsed) :: acc))
+        case "default-remote-check-failure-answer" :: value :: tail =>
+          parseYesNo("default-remote-check-failure-answer", value)
+            .flatMap(parsed => loop(tail, RemoteCheckFailureDefault(parsed) :: acc))
+        case "default-upstream-behind-answer" :: value :: tail =>
+          parseYesNo("default-upstream-behind-answer", value)
+            .flatMap(parsed => loop(tail, UpstreamBehindDefault(parsed) :: acc))
+        case "default-push-answer" :: value :: tail =>
+          parseYesNo("default-push-answer", value)
+            .flatMap(parsed => loop(tail, PushDefault(parsed) :: acc))
         case "release-version" :: value :: tail =>
           parseVersionArg(value, "release-version")(ReleaseVersion.apply)
             .flatMap(arg => loop(tail, arg :: acc))
@@ -88,6 +120,26 @@ private[monorepo] object MonorepoCli {
         case "next-version" :: Nil              =>
           Left(
             s"Missing value after 'next-version'. See '$commandName help' for usage."
+          )
+        case "default-tag-exists-answer" :: Nil =>
+          Left(
+            s"Missing value after 'default-tag-exists-answer'. See '$commandName help' for usage."
+          )
+        case "default-snapshot-dependencies-answer" :: Nil =>
+          Left(
+            s"Missing value after 'default-snapshot-dependencies-answer'. See '$commandName help' for usage."
+          )
+        case "default-remote-check-failure-answer" :: Nil =>
+          Left(
+            s"Missing value after 'default-remote-check-failure-answer'. See '$commandName help' for usage."
+          )
+        case "default-upstream-behind-answer" :: Nil =>
+          Left(
+            s"Missing value after 'default-upstream-behind-answer'. See '$commandName help' for usage."
+          )
+        case "default-push-answer" :: Nil       =>
+          Left(
+            s"Missing value after 'default-push-answer'. See '$commandName help' for usage."
           )
         case "project" :: Nil                   =>
           Left(

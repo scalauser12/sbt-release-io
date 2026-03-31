@@ -28,6 +28,25 @@ class ReleaseCommandParsersSpec extends FunSuite {
     )
   }
 
+  test("build - parse typed decision-default args") {
+    val result = ParserImpl.parse(
+      " default-snapshot-dependencies-answer y default-push-answer n",
+      parser
+    )
+
+    assertEquals(
+      result,
+      Right(
+        Seq(
+          "default-snapshot-dependencies-answer",
+          "y",
+          "default-push-answer",
+          "n"
+        )
+      )
+    )
+  }
+
   test("build - reject trailing tokens after help") {
     val result = ParserImpl.parse(" help extra tokens", parser)
 

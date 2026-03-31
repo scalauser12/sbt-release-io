@@ -3,6 +3,7 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIONextVersion
 import io.release.ReleaseIO.releaseIOVersion
+import io.release.internal.DecisionResolver
 import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
@@ -65,13 +66,14 @@ private[monorepo] object MonorepoVersionWorkflow {
             )
         }
       case _                                                                                      =>
-        resolveProjectVersions(ctx, project, allowPrompts = true).flatMap { resolved =>
-          logInfo(
-            ctx,
-            s"${project.name}: ${resolved.currentVersion} -> " +
-              s"${resolved.releaseVersion} " +
-              s"(next: ${resolved.nextVersion})"
-          ).as(withResolvedVersions(ctx, project.ref, resolved))
+        resolveProjectVersions(ctx, project, allowPrompts = true).flatMap {
+          case (updatedCtx, resolved) =>
+            logInfo(
+              updatedCtx,
+              s"${project.name}: ${resolved.currentVersion} -> " +
+                s"${resolved.releaseVersion} " +
+                s"(next: ${resolved.nextVersion})"
+            ).as(withResolvedVersions(updatedCtx, project.ref, resolved))
         }
     }
 
@@ -115,7 +117,7 @@ private[monorepo] object MonorepoVersionWorkflow {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
       allowPrompts: Boolean
-  ): IO[ResolvedProjectVersions] =
+  ): IO[(MonorepoContext, ResolvedProjectVersions)] =
     for {
       versionInputs                                 <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
       _                                             <- ensureVersionFileExists(
@@ -148,27 +150,30 @@ private[monorepo] object MonorepoVersionWorkflow {
                                                          )
                                                        }
       (suggestedRelease, nextVersionFn, useDefaults) = data
-      releaseVersion                                <- promptOrDefault(
+      releaseData                                   <- promptOrDefault(
+                                                         ctx,
                                                          project.releaseVersion.filter(_.nonEmpty),
                                                          suggestedRelease,
                                                          s"Release version for ${project.name}",
-                                                         ctx.interactive,
                                                          useDefaults,
                                                          allowPrompts = allowPrompts
                                                        )
-      nextVersion                                   <- promptOrDefault(
+      nextData                                      <- promptOrDefault(
+                                                         releaseData._1,
                                                          project.nextVersion.filter(_.nonEmpty),
-                                                         nextVersionFn(releaseVersion),
+                                                         nextVersionFn(releaseData._2),
                                                          s"Next version for ${project.name}",
-                                                         ctx.interactive,
                                                          useDefaults,
                                                          allowPrompts = allowPrompts
                                                        )
-    } yield ResolvedProjectVersions(
-      versionFile = versionInputs.versionFile,
-      currentVersion = currentVersion,
-      releaseVersion = releaseVersion,
-      nextVersion = nextVersion
+    } yield (
+      nextData._1,
+      ResolvedProjectVersions(
+        versionFile = versionInputs.versionFile,
+        currentVersion = currentVersion,
+        releaseVersion = releaseData._2,
+        nextVersion = nextData._2
+      )
     )
 
   private def versionsPairOrFail(
@@ -267,21 +272,21 @@ private[monorepo] object MonorepoVersionWorkflow {
 
   /** Resolve a version from an override, a default, or an interactive prompt. */
   private def promptOrDefault(
+      ctx: MonorepoContext,
       override_ : Option[String],
       suggested: String,
       label: String,
-      interactive: Boolean,
       useDefaults: Boolean,
       allowPrompts: Boolean
-  ): IO[String] =
-    override_.filter(_.nonEmpty) match {
-      case Some(versionValue) => parseVersionInput(versionValue, versionValue)
-      case None               =>
-        if (!interactive || useDefaults || !allowPrompts) IO.pure(suggested)
-        else
-          IO.print(s"$label [$suggested] : ") *>
-            StepHelpers.readRequiredLine(label).flatMap(parseVersionInput(_, suggested))
-    }
+  ): IO[(MonorepoContext, String)] =
+    DecisionResolver.resolveVersionInput(
+      ctx,
+      override_ = override_.filter(_.nonEmpty),
+      suggested = suggested,
+      prompt = s"$label [$suggested] : ",
+      promptContext = label,
+      allowPrompts = allowPrompts && !useDefaults
+    )
 
   private def missingVersionFileMessage(
       project: ProjectReleaseInfo,

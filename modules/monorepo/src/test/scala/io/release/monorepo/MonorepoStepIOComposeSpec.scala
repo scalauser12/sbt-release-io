@@ -164,6 +164,33 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 
+  test("compose - thread validateWithContext results into later validation and execute") {
+    contextResource.use { ctx =>
+      val metadataKey = sbt.AttributeKey[String]("validation-metadata")
+      val step1       = MonorepoStepIO
+        .global("seed-validation-metadata")
+        .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "seeded")))
+        .validateOnly
+      val step2       = MonorepoStepIO.Global(
+        name = "observe-validation-metadata",
+        execute = currentCtx =>
+          if (currentCtx.metadata(metadataKey).contains("observed")) IO.pure(currentCtx)
+          else
+            IO.raiseError(new RuntimeException("execute did not observe validation metadata")),
+        validateWithContext = Some { currentCtx =>
+          if (currentCtx.metadata(metadataKey).contains("seeded"))
+            IO.pure(currentCtx.withMetadata(metadataKey, "observed"))
+          else
+            IO.raiseError(new RuntimeException("later validation did not observe prior metadata"))
+        }
+      )
+
+      MonorepoStepIO.compose(Seq(step1, step2))(ctx).map { result =>
+        assertEquals(result.metadata(metadataKey), Some("observed"))
+      }
+    }
+  }
+
   test("compose - mark entire release as failed when a global execute fails") {
     contextResource.use { ctx =>
       val step = MonorepoStepIO.Global(

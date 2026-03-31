@@ -5,7 +5,9 @@ import cats.effect.Ref
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.SbtCompat
+import io.release.steps.StepHelpers
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
@@ -70,6 +72,100 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       ReleaseStepIO.compose(Seq(ReleaseStepIO.io("noop")(IO.pure)), crossBuild = false)(ctx).map {
         result =>
           assertEquals(result.state.onFailure, None)
+      }
+    }
+  }
+
+  test("compose - thread validateWithContext results into later validation and execute") {
+    contextResource.use { baseCtx =>
+      val metadataKey = AttributeKey[String]("validation-metadata")
+      val ctx         = promptContext(baseCtx, interactive = false, useDefaults = false)
+      val step1       = ReleaseStepIO
+        .step("seed-validation-metadata")
+        .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "seeded")))
+        .validateOnly
+      val step2       = ReleaseStepIO(
+        name = "observe-validation-metadata",
+        execute = currentCtx =>
+          if (currentCtx.metadata(metadataKey).contains("observed")) IO.pure(currentCtx)
+          else IO.raiseError(new RuntimeException("execute did not observe validation metadata")),
+        validateWithContext = Some { currentCtx =>
+          if (currentCtx.metadata(metadataKey).contains("seeded"))
+            IO.pure(currentCtx.withMetadata(metadataKey, "observed"))
+          else
+            IO.raiseError(new RuntimeException("later validation did not observe prior metadata"))
+        }
+      )
+
+      ReleaseStepIO.compose(Seq(step1, step2), crossBuild = false)(ctx).map { result =>
+        assertEquals(result.metadata(metadataKey), Some("observed"))
+      }
+    }
+  }
+
+  test("compose - preserve CRLF prompt state across validation prompts") {
+    contextResource.use { baseCtx =>
+      val answersKey = AttributeKey[List[Boolean]]("validation-answers")
+      val ctx        = promptContext(baseCtx, interactive = true, useDefaults = false)
+      val firstStep  = ReleaseStepIO
+        .step("first-validation-prompt")
+        .withValidationContext { currentCtx =>
+          StepHelpers.askYesNo(currentCtx, "First validation prompt (y/n)? [n] ", defaultYes = false)
+            .map { case (nextCtx, answer) =>
+              nextCtx.withMetadata(answersKey, List(answer))
+            }
+        }
+        .validateOnly
+      val secondStep = ReleaseStepIO
+        .step("second-validation-prompt")
+        .withValidationContext { currentCtx =>
+          StepHelpers.askYesNo(currentCtx, "Second validation prompt (y/n)? [y] ", defaultYes = true)
+            .map { case (nextCtx, answer) =>
+              val answers = nextCtx.metadata(answersKey).getOrElse(Nil) :+ answer
+              nextCtx.withMetadata(answersKey, answers)
+            }
+        }
+        .validateOnly
+
+      TestSupport.withInput("y\r\nn\r\n") {
+        ReleaseStepIO.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
+          assertEquals(result.metadata(answersKey), Some(List(true, false)))
+        }
+      }
+    }
+  }
+
+  test("compose - preserve CRLF prompt state from validation into execution") {
+    contextResource.use { baseCtx =>
+      val validationKey = AttributeKey[Boolean]("validation-answer")
+      val executionKey  = AttributeKey[Boolean]("execution-answer")
+      val ctx           = promptContext(baseCtx, interactive = true, useDefaults = false)
+      val firstStep     = ReleaseStepIO
+        .step("validation-prompt")
+        .withValidationContext { currentCtx =>
+          StepHelpers.askYesNo(currentCtx, "Validation prompt (y/n)? [n] ", defaultYes = false)
+            .map { case (nextCtx, answer) =>
+              nextCtx.withMetadata(validationKey, answer)
+            }
+        }
+        .validateOnly
+      val secondStep    = ReleaseStepIO(
+        name = "execution-prompt",
+        validate = currentCtx =>
+          if (currentCtx.metadata(validationKey).contains(true)) IO.unit
+          else IO.raiseError(new RuntimeException("execute validation did not see prior answer")),
+        execute = currentCtx =>
+          StepHelpers.askYesNo(currentCtx, "Execution prompt (y/n)? [y] ", defaultYes = true)
+            .map { case (nextCtx, answer) =>
+              nextCtx.withMetadata(executionKey, answer)
+            }
+      )
+
+      TestSupport.withInput("y\r\nn\r\n") {
+        ReleaseStepIO.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
+          assertEquals(result.metadata(validationKey), Some(true))
+          assertEquals(result.metadata(executionKey), Some(false))
+        }
       }
     }
   }
@@ -143,15 +239,40 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           ),
           releaseVersionOverride = Some("1.0.0"),
           nextVersionOverride = Some("1.0.1-SNAPSHOT"),
-          tagDefault = Some("k")
+          decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
         )
         val updated = ctx
           .withExecutionState(CoreExecutionState(plan))
           .withState(ctx.state.copy(onFailure = None))
 
-        assertEquals(updated.executionState.map(_.plan.tagDefault), Some(Some("k")))
+        assertEquals(
+          updated.executionState.map(_.plan.decisionDefaults.tagExistsAnswer),
+          Some(Some("k"))
+        )
         assertEquals(updated.useDefaults, true)
       }
     }
   }
+
+  private def promptContext(
+      ctx: ReleaseContext,
+      interactive: Boolean,
+      useDefaults: Boolean
+  ): ReleaseContext =
+    ctx.copy(interactive = interactive).withExecutionState(
+      CoreExecutionState(
+        CoreReleasePlan(
+          flags = ExecutionFlags(
+            useDefaults = useDefaults,
+            skipTests = false,
+            skipPublish = false,
+            interactive = interactive,
+            crossBuild = false
+          ),
+          releaseVersionOverride = None,
+          nextVersionOverride = None,
+          decisionDefaults = ReleaseDecisionDefaults.empty
+        )
+      )
+    )
 }

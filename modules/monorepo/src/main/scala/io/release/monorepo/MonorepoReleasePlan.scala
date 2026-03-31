@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ReleaseLogPrefixes
 import sbt.State
 
@@ -21,6 +22,7 @@ private[monorepo] final case class MonorepoReleasePlan(
     selectedNames: Seq[String],
     releaseVersionOverrides: Map[String, String],
     nextVersionOverrides: Map[String, String],
+    decisionDefaults: ReleaseDecisionDefaults,
     commandName: String = "releaseIOMonorepo"
 )
 
@@ -39,6 +41,7 @@ private[monorepo] object MonorepoReleasePlan {
       selectedNames: Seq[String],
       releaseVersionPairs: Seq[(String, String)],
       nextVersionPairs: Seq[(String, String)],
+      decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty,
       commandName: String = "releaseIOMonorepo"
   )
 
@@ -99,6 +102,7 @@ private[monorepo] object MonorepoReleasePlan {
         selectedNames = inputs.selectedNames,
         releaseVersionOverrides = releaseVersionOverrides,
         nextVersionOverrides = nextVersionOverrides,
+        decisionDefaults = inputs.decisionDefaults,
         commandName = inputs.commandName
       )
     }

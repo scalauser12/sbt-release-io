@@ -3,11 +3,16 @@ package io.release
 import cats.effect.IO
 import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
+import io.release.internal.CoreExecutionState
+import io.release.internal.CoreReleasePlan
+import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.steps.StepHelpers
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.ModuleID
+import sbt.State
 
 import java.io.File
 import scala.sys.process.Process
@@ -96,9 +101,7 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       assertIllegalStateMessage(
         StepHelpers.confirmContinue(
-          state,
-          interactive = false,
-          useDefaults = false,
+          promptContext(state, interactive = false, useDefaults = false),
           prompt = "Continue?",
           defaultYes = true,
           abortMessage = "aborted"
@@ -114,9 +117,7 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       StepHelpers
         .confirmContinue(
-          state,
-          interactive = true,
-          useDefaults = true,
+          promptContext(state, interactive = true, useDefaults = true),
           prompt = "Continue?",
           defaultYes = true,
           abortMessage = "aborted"
@@ -128,9 +129,7 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       assertIllegalStateMessage(
         StepHelpers.confirmContinue(
-          state,
-          interactive = true,
-          useDefaults = true,
+          promptContext(state, interactive = true, useDefaults = true),
           prompt = "Continue?",
           defaultYes = false,
           abortMessage = "aborted"
@@ -168,13 +167,11 @@ class StepHelpersSpec extends CatsEffectSuite {
   test(
     "StepHelpers.handleSnapshotDependencies - do nothing when there are no snapshot dependencies"
   ) {
-    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       StepHelpers
         .handleSnapshotDependencies(
+          ctx,
           deps = Nil,
-          state = state,
-          interactive = false,
-          useDefaults = false,
           logPrefix = "[test]"
         )
     }
@@ -184,13 +181,11 @@ class StepHelpersSpec extends CatsEffectSuite {
     "StepHelpers.handleSnapshotDependencies - raise with dependency coordinates in non-interactive mode"
   ) {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      assertFailure[IllegalStateException, Unit](
+      assertFailure[IllegalStateException, ReleaseContext](
         StepHelpers
           .handleSnapshotDependencies(
+            promptContext(state, interactive = false, useDefaults = false),
             deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
-            state = state,
-            interactive = false,
-            useDefaults = false,
             logPrefix = "[test]",
             context = " while validating"
           )
@@ -223,65 +218,113 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readLine - return consecutive lines from the same redirected stdin") {
-    TestSupport.withInput("first\nsecond\n") {
-      for {
-        line1 <- StepHelpers.readLine()
-        line2 <- StepHelpers.readLine()
-      } yield {
-        assertEquals(line1, "first")
-        assertEquals(line2, "second")
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      TestSupport.withInput("first\nsecond\n") {
+        for {
+          first  <- StepHelpers.readLine(ctx)
+          second <- StepHelpers.readLine(first._1)
+        } yield {
+          assertEquals(first._2, Some("first"))
+          assertEquals(second._2, Some("second"))
+        }
       }
     }
   }
 
   test("StepHelpers.readLine - leave later bytes available to direct System.in consumers") {
-    TestSupport.withInput("first\nsecond\n") {
-      for {
-        line        <- StepHelpers.readLine()
-        nextByte    <- IO.blocking(System.in.read())
-        trailingRaw <- IO.blocking(scala.io.Source.fromInputStream(System.in).mkString)
-      } yield {
-        assertEquals(line, "first")
-        assertEquals(nextByte, 's'.toInt)
-        assertEquals(trailingRaw, "econd\n")
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      TestSupport.withInput("first\nsecond\n") {
+        for {
+          line        <- StepHelpers.readLine(ctx)
+          nextByte    <- IO.blocking(System.in.read())
+          trailingRaw <- IO.blocking(scala.io.Source.fromInputStream(System.in).mkString)
+        } yield {
+          assertEquals(line._2, Some("first"))
+          assertEquals(nextByte, 's'.toInt)
+          assertEquals(trailingRaw, "econd\n")
+        }
       }
     }
   }
 
   test("StepHelpers.readLine - split CRLF input into logical lines") {
-    TestSupport.withInput("first\r\nsecond\r\n") {
-      for {
-        line1 <- StepHelpers.readLine()
-        line2 <- StepHelpers.readLine()
-        eof   <- StepHelpers.readLine()
-      } yield {
-        assertEquals(line1, "first")
-        assertEquals(line2, "second")
-        assertEquals(eof, null)
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      TestSupport.withInput("first\r\nsecond\r\n") {
+        for {
+          first  <- StepHelpers.readLine(ctx)
+          second <- StepHelpers.readLine(first._1)
+          eof    <- StepHelpers.readLine(second._1)
+        } yield {
+          assertEquals(first._2, Some("first"))
+          assertEquals(second._2, Some("second"))
+          assertEquals(eof._2, None)
+        }
       }
     }
   }
 
   test("StepHelpers.readLine - return the partial final line before EOF") {
-    TestSupport.withInput("partial-without-newline") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      TestSupport.withInput("partial-without-newline") {
+        for {
+          line <- StepHelpers.readLine(ctx)
+          eof  <- StepHelpers.readLine(line._1)
+        } yield {
+          assertEquals(line._2, Some("partial-without-newline"))
+          assertEquals(eof._2, None)
+        }
+      }
+    }
+  }
+
+  test("StepHelpers.readLine - reset CRLF carry-over when System.in identity changes") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       for {
-        line <- StepHelpers.readLine()
-        eof  <- StepHelpers.readLine()
+        first  <- TestSupport.withInput("first\r") {
+                    StepHelpers.readLine(ctx)
+                  }
+        second <- TestSupport.withInput("\nsecond\n") {
+                    StepHelpers.readLine(first._1)
+                  }
       } yield {
-        assertEquals(line, "partial-without-newline")
-        assertEquals(eof, null)
+        assertEquals(first._2, Some("first"))
+        assertEquals(second._2, Some(""))
       }
     }
   }
 
   test("StepHelpers.readRequiredLine - fail fast when redirected stdin reaches EOF") {
-    TestSupport.withInput("") {
-      assertIllegalStateMessage(
-        StepHelpers.readRequiredLine("Release version"),
-        "Standard input closed while waiting for Release version."
-      )
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      TestSupport.withInput("") {
+        assertIllegalStateMessage(
+          StepHelpers.readRequiredLine(ctx, "Release version"),
+          "Standard input closed while waiting for Release version."
+        )
+      }
     }
   }
+
+  private def promptContext(
+      state: State,
+      interactive: Boolean,
+      useDefaults: Boolean
+  ): ReleaseContext =
+    ReleaseContext(state = state, interactive = interactive).withExecutionState(
+      CoreExecutionState(
+        CoreReleasePlan(
+          flags = ExecutionFlags(
+            useDefaults = useDefaults,
+            skipTests = false,
+            skipPublish = false,
+            interactive = interactive,
+            crossBuild = false
+          ),
+          releaseVersionOverride = None,
+          nextVersionOverride = None,
+          decisionDefaults = ReleaseDecisionDefaults.empty
+        )
+      )
+    )
 
   private def stubVcs(base: File): Vcs =
     new Vcs {

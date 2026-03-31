@@ -12,7 +12,7 @@ import io.release.monorepo.steps.MonorepoCrossBuild
   */
 private[monorepo] final case class MonorepoProcessStep(
     name: String,
-    validate: MonorepoContext => IO[Unit],
+    validate: MonorepoContext => IO[MonorepoContext],
     execute: MonorepoContext => IO[MonorepoContext],
     enableCrossBuild: Boolean,
     isSelectionBoundary: Boolean
@@ -43,7 +43,7 @@ private[monorepo] object MonorepoProcessStep {
       case global: MonorepoStepIO.Global =>
         MonorepoProcessStep(
           name = global.name,
-          validate = global.validate,
+          validate = global.threadedValidation,
           execute = ExecutionEngine.withErrorRecovery[MonorepoContext](LogPrefix) { currentCtx =>
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${global.name}")) *>
               global.execute(currentCtx)
@@ -58,7 +58,7 @@ private[monorepo] object MonorepoProcessStep {
           validate = ctx =>
             MonorepoCrossBuild.validatePerProjectWithCrossBuild(
               ctx,
-              perProject.validate,
+              perProject.threadedValidation,
               crossBuild,
               perProject.enableCrossBuild
             ),

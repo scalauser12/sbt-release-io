@@ -76,7 +76,13 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State = {
-    val inputs  = buildCommandInputs(state, args, warnOnDuplicates = true, runtime)
+    val inputs  = buildCommandInputs(
+      state,
+      args,
+      warnOnDuplicates = true,
+      interactiveEnabled = runtime.resolveInteractiveEnabled(state),
+      runtime
+    )
     val program = runPlannedRelease(inputs, runtime)
 
     ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
@@ -87,7 +93,13 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State = {
-    val inputs  = buildCommandInputs(state, args, warnOnDuplicates = false, runtime)
+    val inputs  = buildCommandInputs(
+      state,
+      args,
+      warnOnDuplicates = false,
+      interactiveEnabled = false,
+      runtime
+    )
     val program = runPlannedCheck(inputs, runtime)
 
     ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
@@ -209,57 +221,83 @@ private[release] object CoreCommandExecution {
       state: State,
       args: Seq[ReleaseCli.Arg],
       warnOnDuplicates: Boolean,
+      interactiveEnabled: Boolean,
       runtime: CommandRuntime[T]
   ): CoreCommandInputs = {
     import ReleaseCli.Arg.*
+
+    def lastArg[A](extract: PartialFunction[ReleaseCli.Arg, A]): Option[A] =
+      args.collect(extract).lastOption
+
+    def allArgs[A](extract: PartialFunction[ReleaseCli.Arg, A]): Seq[A] =
+      args.collect(extract)
 
     val useDefaults   = args.contains(WithDefaults)
     val skipTests     = args.contains(SkipTests)
     val crossFromArgs = args.contains(CrossBuild)
     val crossEnabled  = runtime.resolveCrossBuildEnabled(state) || crossFromArgs
     val skipPublish   = runtime.resolveSkipPublishEnabled(state)
-    val interactive   = runtime.resolveInteractiveEnabled(state)
+    val interactive   = interactiveEnabled
 
-    val releaseVersionArg = args.collectFirst { case ReleaseVersion(value) => value }
-    val nextVersionArg    = args.collectFirst { case NextVersion(value) => value }
-    val tagDefaultArg     = args.collectFirst { case TagDefault(value) => value }
+    val releaseVersionMatches = allArgs { case ReleaseVersion(value) => value }
+    val nextVersionMatches    = allArgs { case NextVersion(value) => value }
+    val tagDefaultMatches     = allArgs { case TagDefault(value) => value }
+    val snapshotMatches       = allArgs { case SnapshotDependenciesDefault(value) => value }
+    val remoteMatches         = allArgs { case RemoteCheckFailureDefault(value) => value }
+    val upstreamMatches       = allArgs { case UpstreamBehindDefault(value) => value }
+    val pushMatches           = allArgs { case PushDefault(value) => value }
+
+    val releaseVersionArg = releaseVersionMatches.lastOption
+    val nextVersionArg    = nextVersionMatches.lastOption
+    val tagDefaultArg     = tagDefaultMatches.lastOption
+    val snapshotDefault   = snapshotMatches.lastOption
+    val remoteDefault     = remoteMatches.lastOption
+    val upstreamDefault   = upstreamMatches.lastOption
+    val pushDefault       = pushMatches.lastOption
 
     def warnIfRepeated(
         argName: String,
         selected: Option[String],
-        matches: ReleaseCli.Arg => Boolean
+        count: Int
     ): Unit =
-      if (warnOnDuplicates && args.count(matches) > 1)
+      if (warnOnDuplicates && count > 1)
         state.log.warn(
           s"${ReleaseLogPrefixes.Core} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
         )
 
+    warnIfRepeated("release-version", releaseVersionArg, releaseVersionMatches.size)
+    warnIfRepeated("next-version", nextVersionArg, nextVersionMatches.size)
+    warnIfRepeated("default-tag-exists-answer", tagDefaultArg, tagDefaultMatches.size)
     warnIfRepeated(
-      "release-version",
-      releaseVersionArg,
-      {
-        case ReleaseVersion(_) => true
-        case _                 => false
-      }
+      "default-snapshot-dependencies-answer",
+      snapshotDefault.map(renderYesNo),
+      snapshotMatches.size
     )
     warnIfRepeated(
-      "next-version",
-      nextVersionArg,
-      {
-        case NextVersion(_) => true
-        case _              => false
-      }
+      "default-remote-check-failure-answer",
+      remoteDefault.map(renderYesNo),
+      remoteMatches.size
     )
     warnIfRepeated(
-      "default-tag-exists-answer",
-      tagDefaultArg,
-      {
-        case TagDefault(_) => true
-        case _             => false
-      }
+      "default-upstream-behind-answer",
+      upstreamDefault.map(renderYesNo),
+      upstreamMatches.size
+    )
+    warnIfRepeated(
+      "default-push-answer",
+      pushDefault.map(renderYesNo),
+      pushMatches.size
     )
 
     val cleanState = state.remove(ReleaseKeys.versions)
+    val settings   = ReleaseDecisionDefaults.fromState(cleanState)
+    val cliDefaults = ReleaseDecisionDefaults(
+      tagExistsAnswer = tagDefaultArg,
+      snapshotDependenciesAnswer = snapshotDefault,
+      remoteCheckFailureAnswer = remoteDefault,
+      upstreamBehindAnswer = upstreamDefault,
+      pushAnswer = pushDefault
+    )
 
     CoreCommandInputs(
       cleanState = cleanState,
@@ -276,12 +314,15 @@ private[release] object CoreCommandExecution {
           crossBuild = crossEnabled,
           releaseVersionOverride = releaseVersionArg,
           nextVersionOverride = nextVersionArg,
-          tagDefault = tagDefaultArg,
+          decisionDefaults = ReleaseDecisionDefaults.merge(cliDefaults, settings),
           commandName = runtime.commandName
         )
       )
     )
   }
+
+  private def renderYesNo(value: Boolean): String =
+    if (value) "y" else "n"
 
   private def runPlannedRelease[T](
       inputs: CoreCommandInputs,

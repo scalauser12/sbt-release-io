@@ -54,6 +54,40 @@ class PublishStepsSpec extends CatsEffectSuite {
 
   // ── publishArtifacts.validate ───────────────────────────────────────
 
+  test("checkSnapshotDependencies.validate - fail on snapshot dependencies") {
+    loadedContextResource(s"$fixturePrefix-snapshots") { _ =>
+      () -> Seq(
+        ReleaseIO.releaseIOSnapshotDependencies := Seq(
+          "org.example" % "dep" % "1.0.0-SNAPSHOT"
+        )
+      )
+    }.use { case (ctx, _) =>
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.checkSnapshotDependencies.validate(ctx)
+      ) { err =>
+        assert(err.getMessage.contains("Snapshot dependencies found"))
+        assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
+      }
+    }
+  }
+
+  test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
+    loadedContextResource(s"$fixturePrefix-snapshots-field") { _ =>
+      () -> Seq(
+        ReleaseIO.releaseIOSnapshotDependencies := Seq(
+          "org.example" % "dep" % "1.0.0-SNAPSHOT"
+        )
+      )
+    }.use { case (ctx, _) =>
+      val validate = PublishSteps.checkSnapshotDependencies.validate
+
+      assertFailure[IllegalStateException, Unit](validate(ctx)) { err =>
+        assert(err.getMessage.contains("Snapshot dependencies found"))
+        assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
+      }
+    }
+  }
+
   test("publishArtifacts.validate - short-circuit when publishArtifactsChecks is false") {
     loadedContextResource(s"$fixturePrefix-val-off") { _ =>
       () -> Seq(ReleaseIO.releaseIOPublishArtifactsChecks := false)

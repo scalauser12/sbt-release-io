@@ -3,6 +3,7 @@ package io.release.steps
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseIO.*
+import io.release.internal.DecisionResolver
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
@@ -82,19 +83,19 @@ private[release] object ReleaseVersionWorkflow {
     IO.blocking(resolveVersionPlan(ctx).versionFile).flatMap(ensureVersionFileExists)
 
   def inquireVersions(ctx: ReleaseContext): IO[ReleaseContext] =
-    resolveVersions(ctx, allowPrompts = true).flatMap { resolved =>
+    resolveVersions(ctx, allowPrompts = true).flatMap { case (updatedCtx, resolved) =>
       IO.blocking {
-        ctx.state.log.info(
+        updatedCtx.state.log.info(
           s"${ReleaseLogPrefixes.Core} Current version : ${resolved.currentVersion}"
         )
-        ctx.state.log.info(
+        updatedCtx.state.log.info(
           s"${ReleaseLogPrefixes.Core} Release version : ${resolved.releaseVersion}"
         )
-        ctx.state.log.info(
+        updatedCtx.state.log.info(
           s"${ReleaseLogPrefixes.Core} Next version    : ${resolved.nextVersion}"
         )
 
-        ctx.withVersions(resolved.releaseVersion, resolved.nextVersion)
+        updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion)
       }
     }
 
@@ -150,7 +151,7 @@ private[release] object ReleaseVersionWorkflow {
   private[release] def resolveVersions(
       ctx: ReleaseContext,
       allowPrompts: Boolean
-  ): IO[ResolvedVersions] =
+  ): IO[(ReleaseContext, ResolvedVersions)] =
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx))
       _           <- ensureVersionFileExists(versionPlan.versionFile)
@@ -169,13 +170,16 @@ private[release] object ReleaseVersionWorkflow {
                          useDefaults = useDefaults(ctx)
                        )
                      }
-      releaseVer  <- resolveReleaseVersion(data, ctx.interactive, allowPrompts)
-      nextVer     <- resolveNextVersion(data, releaseVer, ctx.interactive, allowPrompts)
-    } yield ResolvedVersions(
-      versionFile = versionPlan.versionFile,
-      currentVersion = currentVer,
-      releaseVersion = releaseVer,
-      nextVersion = nextVer
+      releaseData <- resolveReleaseVersion(ctx, data, allowPrompts)
+      nextData    <- resolveNextVersion(releaseData._1, data, releaseData._2, allowPrompts)
+    } yield (
+      nextData._1,
+      ResolvedVersions(
+        versionFile = versionPlan.versionFile,
+        currentVersion = currentVer,
+        releaseVersion = releaseData._2,
+        nextVersion = nextData._2
+      )
     )
 
   private[release] def resolveVersionPlan(
@@ -195,51 +199,36 @@ private[release] object ReleaseVersionWorkflow {
     )
   }
 
-  private def readVersionPrompt(
-      prompt: String,
-      promptContext: String,
-      defaultVersion: String
-  ): IO[String] =
-    IO.print(prompt) *>
-      StepHelpers.readRequiredLine(promptContext).flatMap(parseVersionInput(_, defaultVersion))
-
   private def resolveReleaseVersion(
+      ctx: ReleaseContext,
       data: InquireData,
-      interactive: Boolean,
       allowPrompts: Boolean
-  ): IO[String] =
-    data.releaseVersionArg match {
-      case Some(versionValue)                                        =>
-        parseVersionInput(versionValue, versionValue)
-      case None if !interactive || data.useDefaults || !allowPrompts =>
-        IO.pure(data.suggestedRelease)
-      case None                                                      =>
-        IO.blocking(data.state.log.info("Press enter to use the default value")) *>
-          readVersionPrompt(
-            prompt = s"Release version [${data.suggestedRelease}] : ",
-            promptContext = "Release version",
-            defaultVersion = data.suggestedRelease
-          )
-    }
+  ): IO[(ReleaseContext, String)] =
+    DecisionResolver.resolveVersionInput(
+      ctx,
+      override_ = data.releaseVersionArg,
+      suggested = data.suggestedRelease,
+      prompt = s"Release version [${data.suggestedRelease}] : ",
+      promptContext = "Release version",
+      allowPrompts = allowPrompts,
+      beforePrompt = IO.blocking(data.state.log.info("Press enter to use the default value"))
+    )
 
   private def resolveNextVersion(
+      ctx: ReleaseContext,
       data: InquireData,
       releaseVersion: String,
-      interactive: Boolean,
       allowPrompts: Boolean
-  ): IO[String] =
-    data.nextVersionArg match {
-      case Some(versionValue) => parseVersionInput(versionValue, versionValue)
-      case None               =>
-        IO(data.nextVersionFn(releaseVersion)).flatMap { suggestedNext =>
-          if (!interactive || data.useDefaults || !allowPrompts) IO.pure(suggestedNext)
-          else
-            readVersionPrompt(
-              prompt = s"Next version [$suggestedNext] : ",
-              promptContext = "Next version",
-              defaultVersion = suggestedNext
-            )
-        }
+  ): IO[(ReleaseContext, String)] =
+    IO(data.nextVersionFn(releaseVersion)).flatMap { suggestedNext =>
+      DecisionResolver.resolveVersionInput(
+        ctx,
+        override_ = data.nextVersionArg,
+        suggested = suggestedNext,
+        prompt = s"Next version [$suggestedNext] : ",
+        promptContext = "Next version",
+        allowPrompts = allowPrompts
+      )
     }
 
   private def ensureVersionFileExists(versionFile: File): IO[Unit] =

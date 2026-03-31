@@ -60,9 +60,9 @@ private[monorepo] object MonorepoPreparation {
       ioCtx.flatMap { currentCtx =>
         MonorepoVersionWorkflow
           .resolveProjectVersions(currentCtx, project, allowPrompts = allowPrompts)
-          .map(resolved =>
-            MonorepoVersionWorkflow.withResolvedVersions(currentCtx, project.ref, resolved)
-          )
+          .map { case (updatedCtx, resolved) =>
+            MonorepoVersionWorkflow.withResolvedVersions(updatedCtx, project.ref, resolved)
+          }
       }
     }
 

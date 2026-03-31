@@ -5,6 +5,7 @@ import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
 import io.release.TestSupport
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.steps.VersionSteps
 import io.release.steps.VcsSteps
 import munit.CatsEffectSuite
@@ -66,6 +67,10 @@ class CorePreflightSpec extends CatsEffectSuite {
         )
       )
     )
+    assert(lines.exists(_.contains("default-snapshot-dependencies-answer <y|n>")))
+    assert(lines.exists(_.contains("default-remote-check-failure-answer <y|n>")))
+    assert(lines.exists(_.contains("default-upstream-behind-answer <y|n>")))
+    assert(lines.exists(_.contains("default-push-answer <y|n>")))
     assert(lines.exists(_.contains(HelpDocsLinks.CoreReadme)))
   }
 
@@ -237,7 +242,7 @@ class CorePreflightSpec extends CatsEffectSuite {
                 crossBuild = false,
                 releaseVersionOverride = None,
                 nextVersionOverride = None,
-                tagDefault = None,
+                decisionDefaults = ReleaseDecisionDefaults.empty,
                 commandName = "releaseIO"
               )
             )
@@ -302,7 +307,7 @@ class CorePreflightSpec extends CatsEffectSuite {
             crossBuild = false,
             releaseVersionOverride = None,
             nextVersionOverride = None,
-            tagDefault = None,
+            decisionDefaults = ReleaseDecisionDefaults.empty,
             commandName = "releaseIO"
           )
         )

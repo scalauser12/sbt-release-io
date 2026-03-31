@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import io.release.TestSupport
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import munit.FunSuite
 import sbt.AttributeKey
 import sbt.State
@@ -107,7 +108,8 @@ class MonorepoContextSpec extends FunSuite {
         selectionMode = SelectionMode.AllChanged,
         selectedNames = Seq.empty,
         releaseVersionOverrides = Map.empty,
-        nextVersionOverrides = Map.empty
+        nextVersionOverrides = Map.empty,
+        decisionDefaults = ReleaseDecisionDefaults.empty
       )
       val ctx     = MonorepoContext(state = state).withReleasePlan(plan)
       val updated = ctx.withState(state.copy(onFailure = None))

@@ -88,7 +88,7 @@ private[release] object VersionSteps {
   private[release] def resolveVersions(
       ctx: ReleaseContext,
       allowPrompts: Boolean
-  ): IO[ResolvedVersions] =
+  ): IO[(ReleaseContext, ResolvedVersions)] =
     ReleaseVersionWorkflow.resolveVersions(ctx, allowPrompts)
 
   private[release] def resolveVersionPlan(

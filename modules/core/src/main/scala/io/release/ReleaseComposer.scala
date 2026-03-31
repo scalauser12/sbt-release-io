@@ -9,9 +9,9 @@ import sbt.{internal as _, *}
 
 /** Orchestrates the two-phase execution model for [[ReleaseStepIO]] sequences.
   *
-  * '''Phase 1 — Validation:''' Each step's `validate` runs against the initial context.
-  * Validation is non-threading: it may fail the release, but it does not update the shared
-  * release context. Cross-build wrapping is applied so validations run for each Scala version.
+  * '''Phase 1 — Validation:''' Each step's validation runs before execution and may thread
+  * updated internal runtime metadata through the shared release context. Cross-build wrapping is
+  * applied so validations run for each Scala version.
   *
   * '''Phase 2 — Execution:''' Steps run sequentially with `onFailure` armed for
   * `FailureCommand` detection. Between every step, `failureCheck` inspects
@@ -37,11 +37,6 @@ private[release] object ReleaseComposer {
   def compose(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] = {
-
-    val validationPhase: IO[Unit] = runValidationPhase(steps, crossBuild, initialCtx)
-
-    val startCtx = ExecutionEngine.armOnFailure(initialCtx)
-
     val wrappedActions = steps.map { step =>
       val baseAction = (ctx: ReleaseContext) =>
         IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *> step.execute(
@@ -60,8 +55,11 @@ private[release] object ReleaseComposer {
     }
 
     for {
-      _      <- validationPhase
-      result <- ExecutionEngine.runActions(wrappedActions, startCtx)
+      validatedCtx <- runValidationPhase(steps, crossBuild, initialCtx)
+      result       <- ExecutionEngine.runActions(
+                        wrappedActions,
+                        ExecutionEngine.armOnFailure(validatedCtx)
+                      )
     } yield result.context
   }
 
@@ -70,21 +68,21 @@ private[release] object ReleaseComposer {
     */
   def validateOnly(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
       initialCtx: ReleaseContext
-  ): IO[Unit] =
+  ): IO[ReleaseContext] =
     runValidationPhase(steps, crossBuild, initialCtx)
 
   private def runValidationPhase(
       steps: Seq[ReleaseStepIO],
       crossBuild: Boolean,
       initialCtx: ReleaseContext
-  ): IO[Unit] =
+  ): IO[ReleaseContext] =
     ExecutionEngine.runValidations(
       logPrefix = LogPrefix,
       validations = steps.map { step =>
         val wrappedValidation =
           if (step.enableCrossBuild && crossBuild)
-            (ctx: ReleaseContext) => runCrossBuild(c => step.validate(c).as(c))(ctx).void
-          else step.validate
+            (ctx: ReleaseContext) => runCrossBuild(step.threadedValidation)(ctx)
+          else step.threadedValidation
         ExecutionEngine.ValidationStep(step.name, wrappedValidation)
       },
       initialCtx = initialCtx

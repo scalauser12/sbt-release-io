@@ -1,8 +1,8 @@
 package io.release.vcs
 
 import cats.effect.IO
-import io.release.steps.StepHelpers
-import sbt.State
+import io.release.ReleaseCtx
+import io.release.internal.DecisionResolver
 
 /** Shared tag-conflict resolution for core and monorepo release steps.
   *
@@ -45,47 +45,52 @@ private[release] object TagConflictResolver {
     *
     * Returns the final tag name and whether an overwrite occurred.
     */
-  def resolveConflict(vcs: Vcs, params: TagParams, state: State): IO[TagResult] = {
+  def resolveConflict[C <: ReleaseCtx[C]](
+      ctx: C,
+      vcs: Vcs,
+      params: TagParams
+  ): IO[(C, TagResult)] = {
     def loop(
+        currentCtx: C,
         tagName: String,
         defaultAnswer: Option[String]
-    ): IO[TagResult] =
+    ): IO[(C, TagResult)] =
       vcs.existsTag(tagName).flatMap {
         case false =>
           vcs
             .tag(tagName, params.tagComment, params.sign)
-            .as(TagResult(tagName, overwritten = false))
+            .as(currentCtx -> TagResult(tagName, overwritten = false))
         case true  =>
-          resolveAnswer(tagName, defaultAnswer, params, state).flatMap {
-            case ConflictAction.Abort         =>
+          resolveAnswer(currentCtx, tagName, defaultAnswer, params).flatMap {
+            case (nextCtx, ConflictAction.Abort)         =>
               IO.raiseError(
                 new IllegalStateException(s"Tag [$tagName] already exists. Aborting release!")
               )
-            case ConflictAction.Keep          =>
+            case (nextCtx, ConflictAction.Keep)          =>
               IO.blocking(
-                state.log.warn(
+                nextCtx.state.log.warn(
                   s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
                 )
-              ).as(TagResult(tagName, overwritten = false))
-            case ConflictAction.Overwrite     =>
+              ).as(nextCtx -> TagResult(tagName, overwritten = false))
+            case (nextCtx, ConflictAction.Overwrite)     =>
               IO.blocking(
-                state.log.warn(
+                nextCtx.state.log.warn(
                   s"${params.logPrefix} Tag [$tagName] already exists. Overwriting."
                 )
               ) *>
                 vcs
                   .tag(tagName, params.tagComment, params.sign, force = true)
-                  .as(TagResult(tagName, overwritten = true))
-            case ConflictAction.Retry(newTag) =>
+                  .as(nextCtx -> TagResult(tagName, overwritten = true))
+            case (nextCtx, ConflictAction.Retry(newTag)) =>
               IO.blocking(
-                state.log.info(
+                nextCtx.state.log.info(
                   s"${params.logPrefix} Tag [$tagName] exists. Trying tag [$newTag]."
                 )
-              ) *> loop(newTag, defaultAnswer = None)
+              ) *> loop(nextCtx, newTag, defaultAnswer = None)
           }
       }
 
-    loop(params.tagName, params.defaultAnswer)
+    loop(ctx, params.tagName, params.defaultAnswer)
   }
 
   /** Evaluate a tag conflict at preflight time without creating or modifying tags. */
@@ -157,42 +162,29 @@ private[release] object TagConflictResolver {
     final case class Retry(tag: String) extends ConflictAction
   }
 
-  private def resolveAnswer(
+  private def resolveAnswer[C <: ReleaseCtx[C]](
+      ctx: C,
       tagName: String,
       defaultAnswer: Option[String],
-      params: TagParams,
-      state: State
-  ): IO[ConflictAction] = {
-    val effectiveAnswer: IO[String] = defaultAnswer match {
-      case Some(ans)                   => IO.pure(ans)
-      case None if params.useDefaults  =>
-        IO.blocking(
-          state.log.warn(
-            s"${params.logPrefix} Tag [$tagName] already exists${forLabel(params.label)}. " +
-              "Aborting (use-defaults mode)."
-          )
-        ).as("a")
-      case None if !params.interactive =>
-        IO.raiseError(
-          new IllegalStateException(
-            s"Tag [$tagName] already exists${forLabel(params.label)}. " +
-              "Aborting release in non-interactive mode."
-          )
-        )
-      case None                        =>
-        IO.print(
-          s"Tag [$tagName] exists${forLabel(params.label)}! " +
-            "Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-        ) *> StepHelpers
-          .readLine()
-          .map(raw => Option(raw).getOrElse(""))
-    }
+      params: TagParams
+  ): IO[(C, ConflictAction)] = {
+    val effectiveAnswer: IO[(C, String)] =
+      DecisionResolver.resolveTagAnswer(
+        ctx,
+        configuredAnswer = defaultAnswer,
+        tagName = tagName,
+        label = params.label,
+        logPrefix = params.logPrefix
+      )
 
-    effectiveAnswer.map {
-      case "a" | "A" | "" => ConflictAction.Abort
-      case "k" | "K"      => ConflictAction.Keep
-      case "o" | "O"      => ConflictAction.Overwrite
-      case newTag         => ConflictAction.Retry(newTag)
+    effectiveAnswer.map { case (nextCtx, answer) =>
+      val action = answer match {
+        case "a" | "A" | "" => ConflictAction.Abort
+        case "k" | "K"      => ConflictAction.Keep
+        case "o" | "O"      => ConflictAction.Overwrite
+        case newTag         => ConflictAction.Retry(newTag)
+      }
+      (nextCtx, action)
     }
   }
 

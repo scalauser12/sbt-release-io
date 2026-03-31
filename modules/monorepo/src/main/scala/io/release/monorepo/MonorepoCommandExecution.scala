@@ -5,6 +5,7 @@ import cats.effect.Resource
 import io.release.ReleaseKeys
 import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
 import sbt.{internal as _, *}
@@ -78,7 +79,7 @@ private[monorepo] object MonorepoCommandExecution {
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    runMonorepoCommand(state, args, runtime) { (command, session) =>
+    runMonorepoCommand(state, args, runtime, interactiveEnabled = true) { (command, session) =>
       runPlannedRelease(command, session, runtime)
     }
 
@@ -87,7 +88,7 @@ private[monorepo] object MonorepoCommandExecution {
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    runMonorepoCommand(state, args, runtime) { (command, session) =>
+    runMonorepoCommand(state, args, runtime, interactiveEnabled = false) { (command, session) =>
       runPlannedCheck(command, session, runtime)
     }
 
@@ -205,7 +206,11 @@ private[monorepo] object MonorepoCommandExecution {
         )
       }
 
-  private def parseFlags(args: Seq[MonorepoCli.Arg], extracted: Extracted): ReleaseFlags = {
+  private def parseFlags(
+      args: Seq[MonorepoCli.Arg],
+      extracted: Extracted,
+      interactiveEnabled: Boolean
+  ): ReleaseFlags = {
     import MonorepoCli.Arg.*
 
     ReleaseFlags(
@@ -216,13 +221,15 @@ private[monorepo] object MonorepoCommandExecution {
         args.contains(CrossBuild) || extracted.get(MonorepoReleaseIO.releaseIOMonorepoCrossBuild),
       allChanged = args.contains(AllChanged),
       skipPublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoSkipPublish),
-      interactive = extracted.get(MonorepoReleaseIO.releaseIOMonorepoInteractive)
+      interactive =
+        interactiveEnabled && extracted.get(MonorepoReleaseIO.releaseIOMonorepoInteractive)
     )
   }
 
   private def plannerInputs(
       args: Seq[MonorepoCli.Arg],
       flags: ReleaseFlags,
+      defaults: ReleaseDecisionDefaults,
       commandName: String
   ): MonorepoReleasePlan.Inputs = {
     import MonorepoCli.Arg.*
@@ -243,6 +250,7 @@ private[monorepo] object MonorepoCommandExecution {
       nextVersionPairs = args.collect { case NextVersion(project, version) =>
         project -> version
       },
+      decisionDefaults = defaults,
       commandName = commandName
     )
   }
@@ -250,23 +258,31 @@ private[monorepo] object MonorepoCommandExecution {
   private def prepareCommand(
       cleanState: State,
       args: Seq[MonorepoCli.Arg],
+      interactiveEnabled: Boolean,
       commandName: String
   ): IO[Either[State, PlannedCommand]] = {
     val extracted = Project.extract(cleanState)
-    val flags     = parseFlags(args, extracted)
+    val flags     = parseFlags(args, extracted, interactiveEnabled)
+    val defaults  = resolveDecisionDefaults(cleanState, args)
 
     MonorepoReleasePlan
-      .build(cleanState, plannerInputs(args, flags, commandName))
+      .build(cleanState, plannerInputs(args, flags, defaults, commandName))
       .map(_.map(plan => PlannedCommand(cleanState, flags, plan)))
   }
 
   private def runMonorepoCommand[T](
       state: State,
       args: Seq[MonorepoCli.Arg],
-      runtime: CommandRuntime[T]
+      runtime: CommandRuntime[T],
+      interactiveEnabled: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
     val cleanState         = state.remove(ReleaseKeys.versions)
-    val program: IO[State] = prepareCommand(cleanState, args, runtime.commandName).flatMap {
+    val program: IO[State] = prepareCommand(
+      cleanState,
+      args,
+      interactiveEnabled,
+      runtime.commandName
+    ).flatMap {
       case Left(failedState) => IO.pure(failedState)
       case Right(command)    =>
         MonorepoPreparedSession.prepare(command.cleanState, command.plan).flatMap { session =>
@@ -358,4 +374,69 @@ private[monorepo] object MonorepoCommandExecution {
 
   private def whenTrue(condition: Boolean, value: String): Option[String] =
     if (condition) Some(value) else None
+
+  private def resolveDecisionDefaults(
+      state: State,
+      args: Seq[MonorepoCli.Arg]
+  ): ReleaseDecisionDefaults = {
+    import MonorepoCli.Arg.*
+
+    def allArgs[A](extract: PartialFunction[MonorepoCli.Arg, A]): Seq[A] =
+      args.collect(extract)
+
+    def warnIfRepeated(
+        argName: String,
+        selected: Option[String],
+        count: Int
+    ): Unit =
+      if (count > 1)
+        state.log.warn(
+          s"${ReleaseLogPrefixes.Monorepo} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
+        )
+
+    val tagMatches      = allArgs { case TagDefault(value) => value }
+    val snapshotMatches = allArgs { case SnapshotDependenciesDefault(value) => value }
+    val remoteMatches   = allArgs { case RemoteCheckFailureDefault(value) => value }
+    val upstreamMatches = allArgs { case UpstreamBehindDefault(value) => value }
+    val pushMatches     = allArgs { case PushDefault(value) => value }
+
+    val cliDefaults = ReleaseDecisionDefaults(
+      tagExistsAnswer = tagMatches.lastOption,
+      snapshotDependenciesAnswer = snapshotMatches.lastOption,
+      remoteCheckFailureAnswer = remoteMatches.lastOption,
+      upstreamBehindAnswer = upstreamMatches.lastOption,
+      pushAnswer = pushMatches.lastOption
+    )
+
+    warnIfRepeated(
+      "default-tag-exists-answer",
+      cliDefaults.tagExistsAnswer,
+      tagMatches.size
+    )
+    warnIfRepeated(
+      "default-snapshot-dependencies-answer",
+      cliDefaults.snapshotDependenciesAnswer.map(renderYesNo),
+      snapshotMatches.size
+    )
+    warnIfRepeated(
+      "default-remote-check-failure-answer",
+      cliDefaults.remoteCheckFailureAnswer.map(renderYesNo),
+      remoteMatches.size
+    )
+    warnIfRepeated(
+      "default-upstream-behind-answer",
+      cliDefaults.upstreamBehindAnswer.map(renderYesNo),
+      upstreamMatches.size
+    )
+    warnIfRepeated(
+      "default-push-answer",
+      cliDefaults.pushAnswer.map(renderYesNo),
+      pushMatches.size
+    )
+
+    ReleaseDecisionDefaults.merge(cliDefaults, ReleaseDecisionDefaults.fromState(state))
+  }
+
+  private def renderYesNo(value: Boolean): String =
+    if (value) "y" else "n"
 }

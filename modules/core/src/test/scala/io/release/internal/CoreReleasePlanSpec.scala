@@ -13,7 +13,7 @@ class CoreReleasePlanSpec extends FunSuite {
       crossBuild = true,
       releaseVersionOverride = Some("1.2.3"),
       nextVersionOverride = Some("1.2.4-SNAPSHOT"),
-      tagDefault = Some("k"),
+      decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k")),
       commandName = "releaseCustom"
     )
 
@@ -31,7 +31,7 @@ class CoreReleasePlanSpec extends FunSuite {
     )
     assertEquals(plan.releaseVersionOverride, Some("1.2.3"))
     assertEquals(plan.nextVersionOverride, Some("1.2.4-SNAPSHOT"))
-    assertEquals(plan.tagDefault, Some("k"))
+    assertEquals(plan.decisionDefaults.tagExistsAnswer, Some("k"))
     assertEquals(plan.commandName, "releaseCustom")
   }
 
@@ -45,7 +45,7 @@ class CoreReleasePlanSpec extends FunSuite {
         crossBuild = false,
         releaseVersionOverride = None,
         nextVersionOverride = None,
-        tagDefault = None
+        decisionDefaults = ReleaseDecisionDefaults.empty
       )
     )
 
@@ -54,6 +54,6 @@ class CoreReleasePlanSpec extends FunSuite {
     assert(!plan.flags.interactive)
     assert(!plan.flags.useDefaults)
     assert(plan.flags.skipPublish)
-    assertEquals(plan.tagDefault, None)
+    assertEquals(plan.decisionDefaults, ReleaseDecisionDefaults.empty)
   }
 }

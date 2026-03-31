@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.DecisionResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -125,63 +126,55 @@ private[release] object VcsOps {
 
   /** Validate that the tracking remote is reachable. Shared by core and monorepo push steps.
     * @param log optional callback to log the remote name before checking
-    * @param useDefaults startup flag from the threaded release context
     */
-  def validatePushRemote(
-      state: State,
-      interactive: Boolean,
-      useDefaults: Boolean,
+  def validatePushRemote[C <: ReleaseCtx[C]](
+      ctx: C,
       vcs: Vcs,
       logPrefix: String,
       log: Option[String => Unit] = None
-  ): IO[Unit] =
+  ): IO[C] =
     for {
       remote      <- vcs.trackingRemote
       _           <- log.fold(IO.unit)(f => IO.blocking(f(remote)))
       timeout     <- IO
                        .blocking(
-                         Project.extract(state).getOpt(ReleaseIO.releaseIOVcsRemoteCheckTimeout)
+                         Project.extract(ctx.state).getOpt(ReleaseIO.releaseIOVcsRemoteCheckTimeout)
                        )
                        .map(_.getOrElse(DefaultRemoteCheckTimeout))
       remoteCheck <- vcs.checkRemote(remote).map(Option(_)).timeoutTo(timeout, IO.pure(None))
-      _           <- remoteCheck match {
-                       case Some(0) => IO.unit
+      resultCtx   <- remoteCheck match {
+                       case Some(0) => IO.pure(ctx)
                        case Some(_) =>
-                         steps.StepHelpers.confirmContinue(
-                           state,
-                           interactive,
-                           useDefaults,
-                           prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                         DecisionResolver.confirmOrAbort(
+                           ctx,
+                           configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
                            defaultYes = false,
+                           prompt = "Error while checking remote. Still continue (y/n)? [n] ",
                            abortMessage = "Aborting the release due to remote check failure."
                          )
                        case None    =>
                          IO.blocking {
-                           state.log.warn(
+                           ctx.state.log.warn(
                              s"$logPrefix Remote check timed out after $timeout while fetching '$remote'."
                            )
                          } *>
-                           steps.StepHelpers.confirmContinue(
-                             state,
-                             interactive,
-                             useDefaults,
-                             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                           DecisionResolver.confirmOrAbort(
+                             ctx,
+                             configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
                              defaultYes = false,
+                             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
                              abortMessage = "Aborting the release due to remote check failure."
                            )
                      }
-    } yield ()
+    } yield resultCtx
 
   /** Validate that a tracking branch exists and the local branch is not behind remote.
     * Shared by core and monorepo push steps.
-    * `useDefaults` comes from the threaded release context, not `sbt.State`.
     */
-  def validatePushReadiness(
-      state: State,
-      interactive: Boolean,
-      useDefaults: Boolean,
+  def validatePushReadiness[C <: ReleaseCtx[C]](
+      ctx: C,
       vcs: Vcs
-  ): IO[Unit] =
+  ): IO[C] =
     for {
       hasUp  <- vcs.hasUpstream
       _      <-
@@ -199,50 +192,28 @@ private[release] object VcsOps {
       // On any error (missing refs, corrupted repo, etc.), conservatively treat as not behind
       // and let the actual push surface the real failure.
       behind <- vcs.isBehindRemote.handleError(_ => false)
-      _      <-
-        if (!behind) IO.unit
+      resultCtx <-
+        if (!behind) IO.pure(ctx)
         else
-          steps.StepHelpers.confirmContinue(
-            state,
-            interactive,
-            useDefaults,
+          DecisionResolver.confirmOrAbort(
+            ctx,
+            configuredAnswer = ctx.decisionDefaults.upstreamBehindAnswer,
+            defaultYes = false,
             prompt = "The upstream branch has unmerged commits. " +
               "A subsequent push may fail! Continue (y/n)? [n] ",
-            defaultYes = false,
             abortMessage = "Merge the upstream commits and run release again."
           )
-    } yield ()
+    } yield resultCtx
 
   /** After [[validatePushRemote]], optionally prompt before pushing (interactive mode).
-    * `useDefaults` comes from the threaded release context, not `sbt.State`.
     */
-  def interactivePushAfterRemote[T](
-      state: State,
-      interactive: Boolean,
-      useDefaults: Boolean,
+  def interactivePushAfterRemote[C <: ReleaseCtx[C]](
+      ctx: C,
       vcs: Vcs,
       logPrefix: String,
       remoteCheckLog: Option[String => Unit]
-  )(doPush: IO[T], onDeclinePush: IO[T]): IO[T] =
-    validatePushRemote(state, interactive, useDefaults, vcs, logPrefix, remoteCheckLog) *>
-      (if (!interactive) doPush
-       else {
-         val decisionIO =
-           if (useDefaults) IO.pure(Some(true))
-           else
-             steps.StepHelpers.askYesNoOrEof(
-               prompt = "Push changes to the remote repository (y/n)? [y] ",
-               defaultYes = true
-             )
-         decisionIO.flatMap {
-           case Some(true)  => doPush
-           case Some(false) => onDeclinePush
-           case None        =>
-             IO.blocking(
-               state.log.warn(
-                 s"$logPrefix Standard input closed before push confirmation. Skipping push."
-               )
-             ) *> onDeclinePush
-         }
-       })
+  )(doPush: C => IO[C], onDeclinePush: C => IO[C]): IO[C] =
+    validatePushRemote(ctx, vcs, logPrefix, remoteCheckLog).flatMap { validatedCtx =>
+      DecisionResolver.resolvePushDecision(validatedCtx, logPrefix)(doPush, onDeclinePush)
+    }
 }

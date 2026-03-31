@@ -10,7 +10,7 @@ import cats.effect.IO
 case class MonorepoGlobalResourceHookIO[T](
     name: String,
     execute: T => MonorepoContext => IO[MonorepoContext],
-    validate: MonorepoContext => IO[Unit] = _ => IO.unit
+    validate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit
 )
 
 object MonorepoGlobalResourceHookIO {
@@ -32,7 +32,8 @@ object MonorepoGlobalResourceHookIO {
 case class MonorepoProjectResourceHookIO[T](
     name: String,
     execute: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
-    validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] = (_, _) => IO.unit
+    validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+      (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit
 )
 
 object MonorepoProjectResourceHookIO {

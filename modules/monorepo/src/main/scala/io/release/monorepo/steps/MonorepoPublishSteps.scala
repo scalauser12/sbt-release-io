@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.CleanCompat
 import io.release.ReleaseIO.releaseIOPublishArtifactsAction
 import io.release.ReleaseIOCompat
+import io.release.internal.DecisionResolver
 import io.release.internal.PublishValidation
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SnapshotDependencyTasks
@@ -70,27 +71,25 @@ private[monorepo] object MonorepoPublishSteps {
     * (via `.dependsOn()`) are resolved internally by sbt from compiled classes
     * and are not included in `releaseIOSnapshotDependencies`.
     */
-  val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
+  val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.buildPerProject(
     name = "check-snapshot-dependencies",
     // Snapshot checking is purely a pre-flight check; there is no release-time action.
     execute = (ctx, _) => IO.pure(ctx),
-    validate = (ctx, project) =>
+    validateWithContext = Some((ctx, project) =>
       for {
         externalSnapshots <- SnapshotDependencyTasks.projectSnapshotDependencies(
                                ctx.state,
                                project.ref,
                                project.name
                              )
-        _                 <-
-          StepHelpers.handleSnapshotDependencies(
+        updatedCtx        <-
+          DecisionResolver.handleSnapshotDependencies(
+            ctx,
             externalSnapshots,
-            ctx.state,
-            ctx.interactive,
-            ctx.useDefaults,
             ReleaseLogPrefixes.Monorepo,
             context = s" in ${project.name}"
           )
-      } yield (),
+      } yield updatedCtx),
     enableCrossBuild = true
   )
 

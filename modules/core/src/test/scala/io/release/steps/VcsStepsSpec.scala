@@ -7,6 +7,7 @@ import io.release.TestSupport
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import munit.CatsEffectSuite
 
 import java.io.File
@@ -45,6 +46,21 @@ class VcsStepsSpec extends CatsEffectSuite {
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
     TestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
       VcsSteps.pushChanges.validate(ctx)
+    }
+  }
+
+  test("pushChanges.validate function value - fail when VCS was not initialized") {
+    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
+      val validate = VcsSteps.pushChanges.validate
+
+      TestAssertions.assertFailure[IllegalStateException, Unit](
+        validate(ReleaseContext(state = state))
+      ) { err =>
+        assertEquals(
+          err.getMessage,
+          "VCS not initialized. Ensure initializeVcs runs before this step."
+        )
+      }
     }
   }
 
@@ -208,7 +224,7 @@ class VcsStepsSpec extends CatsEffectSuite {
               ),
               releaseVersionOverride = None,
               nextVersionOverride = None,
-              tagDefault = Some("k")
+              decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
             )
           )
         )
@@ -272,7 +288,7 @@ class VcsStepsSpec extends CatsEffectSuite {
               ),
               releaseVersionOverride = None,
               nextVersionOverride = None,
-              tagDefault = None,
+              decisionDefaults = ReleaseDecisionDefaults.empty,
               commandName = "releaseCustom"
             )
           )

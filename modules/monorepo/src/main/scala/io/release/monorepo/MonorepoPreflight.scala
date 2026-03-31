@@ -94,6 +94,17 @@ private[monorepo] object MonorepoPreflight {
       "  - release-version <project>=<version>",
       "  - next-version <project>=<version>",
       "",
+      "Flags:",
+      "  - with-defaults",
+      "  - skip-tests",
+      "  - cross",
+      "  - all-changed",
+      "  - default-tag-exists-answer <o|k|a|<tag-name>>",
+      "  - default-snapshot-dependencies-answer <y|n>",
+      "  - default-remote-check-failure-answer <y|n>",
+      "  - default-upstream-behind-answer <y|n>",
+      "  - default-push-answer <y|n>",
+      "",
       "Constraints:",
       "  - help and check are reserved only as the first token",
       "  - Keyword-like project ids stay selectable through project <id>",
@@ -220,7 +231,7 @@ private[monorepo] object MonorepoPreflight {
   private def validateOnly(
       steps: Seq[MonorepoStepIO],
       crossBuild: Boolean
-  )(ctx: MonorepoContext): IO[Unit] =
+  )(ctx: MonorepoContext): IO[MonorepoContext] =
     ExecutionEngine.runValidations(
       ReleaseLogPrefixes.Monorepo,
       MonorepoProcessStep.normalize(steps, crossBuild).map(_.validationStep),

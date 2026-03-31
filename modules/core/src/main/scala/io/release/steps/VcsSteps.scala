@@ -101,7 +101,7 @@ private[release] object VcsSteps {
       tagName = tagName,
       tagComment = tagComment,
       sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
-      defaultAnswer = ctx.executionState.flatMap(_.plan.tagDefault),
+      defaultAnswer = Some(ctx.decisionDefaults.tagExistsAnswer).flatten,
       versionSessionSettings = versionSettings
     )
   }
@@ -153,6 +153,7 @@ private[release] object VcsSteps {
   ): IO[ReleaseContext] =
     TagConflictResolver
       .resolveConflict(
+        ctx,
         vcs,
         TagConflictResolver.TagParams(
           tagName = params.tagName,
@@ -163,10 +164,11 @@ private[release] object VcsSteps {
           defaultAnswer = params.defaultAnswer,
           logPrefix = ReleaseLogPrefixes.Core,
           label = ""
-        ),
-        ctx.state
+        )
       )
-      .map(result => applyTagToState(ctx, params, result.tagName))
+      .map { case (updatedCtx, result) =>
+        applyTagToState(updatedCtx, params, result.tagName)
+      }
 
   private def resolveTagPreflight(
       vcs: Vcs,
@@ -192,31 +194,31 @@ private[release] object VcsSteps {
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call.
-  val pushChanges: ReleaseStepIO = ReleaseStepIO(
+  val pushChanges: ReleaseStepIO = ReleaseStepIO.build(
     name = "push-changes",
-    validate = ctx =>
+    validateWithContext = Some(ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, ctx.useDefaults, vcs)
-      },
+        VcsOps.validatePushReadiness(ctx, vcs)
+      }
+    ),
     execute = ctx =>
       requireVcs(ctx) { vcs =>
         VcsOps.interactivePushAfterRemote(
-          ctx.state,
-          ctx.interactive,
-          ctx.useDefaults,
+          ctx,
           vcs,
           ReleaseLogPrefixes.Core,
           remoteCheckLog =
             Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))
         )(
-          doPush = vcs.pushChanges.as(ctx),
-          onDeclinePush = IO
+          doPush = currentCtx => vcs.pushChanges.as(currentCtx),
+          onDeclinePush = currentCtx =>
+            IO
             .blocking(
-              ctx.state.log.warn(
+              currentCtx.state.log.warn(
                 s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
               )
             )
-            .as(ctx)
+              .as(currentCtx)
         )
       }
   )

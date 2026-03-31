@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import io.release.ReleaseCtx
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}
@@ -131,6 +132,9 @@ case class MonorepoContext(
 
   private[release] def executionFlags: Option[ExecutionFlags] =
     releasePlan.map(_.flags)
+
+  private[release] def decisionDefaults: ReleaseDecisionDefaults =
+    releasePlan.map(_.decisionDefaults).getOrElse(ReleaseDecisionDefaults.empty)
 
   def fail: MonorepoContext                       = copy(failed = true)
   def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))

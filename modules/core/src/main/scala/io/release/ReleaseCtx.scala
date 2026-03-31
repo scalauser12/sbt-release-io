@@ -1,5 +1,6 @@
 package io.release
 
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ExecutionFlags
 import io.release.vcs.Vcs
 import sbt.AttributeKey
@@ -21,6 +22,7 @@ import sbt.State
 private[release] trait ReleaseCtx[Self] {
   def state: State
   def vcs: Option[Vcs]
+  def interactive: Boolean
   def failed: Boolean
   def failureCause: Option[Throwable]
   def withState(s: State): Self
@@ -38,6 +40,7 @@ private[release] trait ReleaseCtx[Self] {
   // ── Internal runtime metadata ────────────────────────────────────────
 
   private[release] def executionFlags: Option[ExecutionFlags]
+  private[release] def decisionDefaults: ReleaseDecisionDefaults
 
   private[release] def useDefaults: Boolean =
     executionFlags.exists(_.useDefaults)

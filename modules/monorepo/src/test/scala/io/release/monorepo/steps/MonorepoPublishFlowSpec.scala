@@ -29,6 +29,25 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
     }
   }
 
+  test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
+    singleProjectFixtureResource("monorepo-publish-snapshots-field") { _ =>
+      Seq(
+        ReleaseIO.releaseIOSnapshotDependencies := Seq(
+          "org.example" % "dep" % "1.0.0-SNAPSHOT"
+        )
+      )
+    }.use { fixture =>
+      val ctx      = fixture.context(Seq("core"))
+      val project  = fixture.projectInfo("core")
+      val validate = MonorepoPublishSteps.checkSnapshotDependencies.validate
+
+      assertFailure[IllegalStateException, Unit](validate(ctx, project)) { err =>
+        assert(err.getMessage.contains("Snapshot dependencies found in core"))
+        assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
+      }
+    }
+  }
+
   test("runTests.execute - skip project tests when skipTests is enabled") {
     singleProjectFixtureResource("monorepo-publish-skip-tests") { projectBase =>
       Seq(

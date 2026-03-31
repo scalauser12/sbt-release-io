@@ -239,6 +239,21 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("pushChanges.validate function value - fail when VCS was not initialized") {
+    gitRepoWithLoadedStateResource().use { case (_, state) =>
+      val validate = MonorepoVcsSteps.pushChanges.validate
+
+      TestAssertions.assertFailure[IllegalStateException, Unit](
+        validate(MonorepoContext(state = state))
+      ) { err =>
+        assertEquals(
+          err.getMessage,
+          "VCS not initialized. Ensure initializeVcs runs before this step."
+        )
+      }
+    }
+  }
+
   test("pushChanges.execute - fail when VCS was not initialized by initializeVcs") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
       TestAssertions.assertFailure[IllegalStateException, MonorepoContext](

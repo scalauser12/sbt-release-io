@@ -86,7 +86,20 @@ private[monorepo] object MonorepoCommandParsers {
       (token("release-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
         .map(value => Seq("release-version", value)),
       (token("next-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
-        .map(value => Seq("next-version", value))
+        .map(value => Seq("next-version", value)),
+      (token("default-tag-exists-answer") ~> Space ~> token(NotSpace, "o|k|a|<tag-name>"))
+        .map(value => Seq("default-tag-exists-answer", value)),
+      (
+        token("default-snapshot-dependencies-answer") ~> Space ~> token(NotSpace, "y|n")
+      ).map(value => Seq("default-snapshot-dependencies-answer", value)),
+      (
+        token("default-remote-check-failure-answer") ~> Space ~> token(NotSpace, "y|n")
+      ).map(value => Seq("default-remote-check-failure-answer", value)),
+      (
+        token("default-upstream-behind-answer") ~> Space ~> token(NotSpace, "y|n")
+      ).map(value => Seq("default-upstream-behind-answer", value)),
+      (token("default-push-answer") ~> Space ~> token(NotSpace, "y|n"))
+        .map(value => Seq("default-push-answer", value))
     )
     val explicitProjectParser =
       (token("project") ~> Space ~> projectNameParser).map(name => Seq("project", name))

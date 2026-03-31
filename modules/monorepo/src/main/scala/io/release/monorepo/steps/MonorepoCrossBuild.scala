@@ -1,7 +1,6 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import cats.syntax.all.*
 import io.release.ReleaseComposer
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
@@ -50,20 +49,27 @@ private[monorepo] object MonorepoCrossBuild {
     */
   def validatePerProjectWithCrossBuild(
       ctx: MonorepoContext,
-      validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
+      validate: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
       crossBuild: Boolean,
       enableCrossBuild: Boolean
-  ): IO[Unit] =
+  ): IO[MonorepoContext] = {
+    val projects = ctx.currentProjects.toList
+
     if (crossBuild && enableCrossBuild)
-      ctx.currentProjects.toList.traverse_ { project =>
-        runCrossBuildForProject(
-          ctx,
-          project,
-          (innerCtx, _) => validate(innerCtx, project).as(innerCtx)
-        ).void
+      projects.foldLeft(IO.pure(ctx)) { (ioCtx, project) =>
+        ioCtx.flatMap { currentCtx =>
+          runCrossBuildForProject(
+            currentCtx,
+            project,
+            (innerCtx, _) => validate(innerCtx, project)
+          )
+        }
       }
     else
-      ctx.currentProjects.toList.traverse_(validate(ctx, _))
+      projects.foldLeft(IO.pure(ctx)) { (ioCtx, project) =>
+        ioCtx.flatMap(currentCtx => validate(currentCtx, project))
+      }
+  }
 
   /** Cross-build a single project across its `crossScalaVersions`.
     * Reads cross-build settings, validates non-empty, then delegates to

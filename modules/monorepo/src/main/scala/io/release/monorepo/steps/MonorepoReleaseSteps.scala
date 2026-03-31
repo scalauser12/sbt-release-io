@@ -59,15 +59,16 @@ object MonorepoReleaseSteps {
     def crossBuildEnabled(ctx: MonorepoContext): Boolean =
       ctx.executionFlags.exists(_.crossBuild)
 
-    MonorepoStepIO.Global(
+    MonorepoStepIO.buildGlobal(
       name = name,
-      validate = ctx =>
+      validateWithContext = Some(ctx =>
         MonorepoCrossBuild.validatePerProjectWithCrossBuild(
           ctx,
-          step.validate,
+          step.threadedValidation,
           crossBuildEnabled(ctx),
           step.enableCrossBuild
-        ),
+        )
+      ),
       execute = ctx =>
         MonorepoCrossBuild.runPerProjectWithCrossBuild(
           ctx,

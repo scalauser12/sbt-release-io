@@ -28,7 +28,7 @@ private[release] final case class CoreReleasePlan(
     flags: ExecutionFlags,
     releaseVersionOverride: Option[String],
     nextVersionOverride: Option[String],
-    tagDefault: Option[String],
+    decisionDefaults: ReleaseDecisionDefaults,
     commandName: String = "releaseIO"
 )
 
@@ -43,7 +43,7 @@ private[release] object CoreReleasePlan {
       crossBuild: Boolean,
       releaseVersionOverride: Option[String],
       nextVersionOverride: Option[String],
-      tagDefault: Option[String],
+      decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty,
       commandName: String = "releaseIO"
   )
 
@@ -59,7 +59,7 @@ private[release] object CoreReleasePlan {
       flags = flags,
       releaseVersionOverride = inputs.releaseVersionOverride,
       nextVersionOverride = inputs.nextVersionOverride,
-      tagDefault = inputs.tagDefault,
+      decisionDefaults = inputs.decisionDefaults,
       commandName = inputs.commandName
     )
   }

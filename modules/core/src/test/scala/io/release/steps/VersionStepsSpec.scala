@@ -8,6 +8,7 @@ import io.release.TestSupport
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import munit.CatsEffectSuite
 import sbt.Project
 
@@ -212,7 +213,7 @@ class VersionStepsSpec extends CatsEffectSuite {
           )
           val ctx   = promptingContext(state)
 
-          VersionSteps.resolveVersions(ctx, allowPrompts = false).map { resolved =>
+          VersionSteps.resolveVersions(ctx, allowPrompts = false).map { case (_, resolved) =>
             assertEquals(resolved.versionFile.getName, "version.sbt")
             assertEquals(resolved.currentVersion, "0.1.0-SNAPSHOT")
             assertEquals(resolved.releaseVersion, "0.1.0")
@@ -296,7 +297,7 @@ class VersionStepsSpec extends CatsEffectSuite {
           flags = startupFlags,
           releaseVersionOverride = Some(releaseVersion),
           nextVersionOverride = Some(nextVersion),
-          tagDefault = None
+          decisionDefaults = ReleaseDecisionDefaults.empty
         )
       )
     )
@@ -308,7 +309,7 @@ class VersionStepsSpec extends CatsEffectSuite {
           flags = startupFlags.copy(interactive = true),
           releaseVersionOverride = None,
           nextVersionOverride = None,
-          tagDefault = None
+          decisionDefaults = ReleaseDecisionDefaults.empty
         )
       )
     )

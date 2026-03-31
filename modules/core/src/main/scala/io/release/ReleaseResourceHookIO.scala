@@ -19,7 +19,7 @@ import io.release.internal.CoreHookConfiguration
 case class ReleaseResourceHookIO[T](
     name: String,
     execute: T => ReleaseContext => IO[ReleaseContext],
-    validate: ReleaseContext => IO[Unit] = _ => IO.unit
+    validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit
 )
 
 object ReleaseResourceHookIO {

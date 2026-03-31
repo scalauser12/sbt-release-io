@@ -7,6 +7,7 @@ import io.release.ReleaseIO.releaseIOPublishArtifactsAction
 import io.release.ReleaseIO.releaseIOPublishArtifactsChecks
 import io.release.ReleaseIOCompat
 import io.release.ReleaseStepIO
+import io.release.internal.DecisionResolver
 import io.release.internal.PublishValidation
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
@@ -20,23 +21,22 @@ import scala.util.control.NonFatal
 /** Publish, test, and dependency-related release steps. */
 private[release] object PublishSteps {
 
-  val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO(
+  val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO.build(
     name = "check-snapshot-dependencies",
     execute = ctx => IO.pure(ctx),
-    validate = ctx =>
+    validateWithContext = Some(ctx =>
       SnapshotDependencyTasks.aggregatedSnapshotDependencies(ctx.state).flatMap {
         case Left(err)                    =>
-          IO.raiseError[Unit](new IllegalStateException(err))
+          IO.raiseError[ReleaseContext](new IllegalStateException(err))
         case Right(deps) if deps.nonEmpty =>
-          handleSnapshotDependencies(
+          DecisionResolver.handleSnapshotDependencies(
+            ctx,
             deps,
-            ctx.state,
-            ctx.interactive,
-            ctx.useDefaults,
             ReleaseLogPrefixes.Core
           )
-        case Right(_)                     => IO.unit
-      },
+        case Right(_)                     => IO.pure(ctx)
+      }
+    ),
     enableCrossBuild = true
   )
 

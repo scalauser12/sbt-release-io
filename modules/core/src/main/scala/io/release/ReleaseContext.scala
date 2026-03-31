@@ -2,6 +2,7 @@ package io.release
 
 import io.release.internal.CoreExecutionState
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
@@ -71,6 +72,9 @@ case class ReleaseContext(
 
   private[release] def executionFlags: Option[ExecutionFlags] =
     executionState.map(_.plan.flags)
+
+  private[release] def decisionDefaults: ReleaseDecisionDefaults =
+    executionState.map(_.plan.decisionDefaults).getOrElse(ReleaseDecisionDefaults.empty)
 
   def fail: ReleaseContext                       = copy(failed = true)
   def failWith(cause: Throwable): ReleaseContext = copy(failed = true, failureCause = Some(cause))

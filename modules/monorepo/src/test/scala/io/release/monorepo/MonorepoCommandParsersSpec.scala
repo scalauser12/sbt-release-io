@@ -63,6 +63,30 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
     }
   }
 
+  test("build - parse typed decision-default args") {
+    fixtureResource.use { fixture =>
+      IO {
+        val parser = parserFromState(fixture.state)
+        val result = ParserImpl.parse(
+          " default-tag-exists-answer k default-push-answer n",
+          parser
+        )
+
+        assertEquals(
+          result,
+          Right(
+            Seq(
+              "default-tag-exists-answer",
+              "k",
+              "default-push-answer",
+              "n"
+            )
+          )
+        )
+      }
+    }
+  }
+
   test("build - parse explicit project selector for an ordinary project id") {
     val parser = MonorepoCommandParsers.build(Seq("core", "api"))
     val result = ParserImpl.parse(" project core with-defaults", parser)

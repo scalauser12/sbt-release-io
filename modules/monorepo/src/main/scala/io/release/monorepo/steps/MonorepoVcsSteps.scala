@@ -93,9 +93,10 @@ private[monorepo] object MonorepoVcsSteps {
       comment: String,
       sign: Boolean,
       label: String
-  ): IO[String] =
+  ): IO[(MonorepoContext, String)] =
     TagConflictResolver
       .resolveConflict(
+        ctx,
         vcs,
         TagConflictResolver.TagParams(
           tagName = tagName,
@@ -103,13 +104,14 @@ private[monorepo] object MonorepoVcsSteps {
           sign = sign,
           interactive = ctx.interactive,
           useDefaults = useDefaults(ctx),
-          defaultAnswer = None,
+          defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
           logPrefix = ReleaseLogPrefixes.Monorepo,
           label = label
-        ),
-        ctx.state
+        )
       )
-      .map(_.tagName)
+      .map { case (updatedCtx, result) =>
+        (updatedCtx, result.tagName)
+      }
 
   private def preflightCreateTag(
       ctx: MonorepoContext,
@@ -126,7 +128,7 @@ private[monorepo] object MonorepoVcsSteps {
           tagName = rendered,
           interactive = ctx.interactive,
           useDefaults = useDefaults(ctx),
-          defaultAnswer = None,
+          defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
           commandName = commandName,
           label = label
         )
@@ -165,9 +167,11 @@ private[monorepo] object MonorepoVcsSteps {
                   settings.tagComment(project.name, releaseVer),
                   settings.sign,
                   project.name
-                ).flatMap { resolvedTagName =>
-                  logInfo(ctx, s"Tagged ${project.name} as $resolvedTagName")
-                    .as(ctx.updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName))))
+                ).flatMap { case (updatedCtx, resolvedTagName) =>
+                  logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
+                    .as(
+                      updatedCtx.updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
+                    )
                 }
               }
           }
@@ -213,30 +217,30 @@ private[monorepo] object MonorepoVcsSteps {
     * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
     * users should verify their VCS behavior.
     */
-  val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.Global(
+  val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.buildGlobal(
     name = "push-changes",
-    validate = ctx =>
+    validateWithContext = Some(ctx =>
       required(ctx.vcs, MissingVcsMessage) { vcs =>
-        VcsOps.validatePushReadiness(ctx.state, ctx.interactive, ctx.useDefaults, vcs)
-      },
+        VcsOps.validatePushReadiness(ctx, vcs)
+      }
+    ),
     execute = ctx =>
       required(ctx.vcs, MissingVcsMessage) { vcs =>
-        val doPush = vcs.commandName match {
-          case "git" => gitPush(ctx, vcs)
-          case _     => vcs.pushChanges.as(ctx)
-        }
         VcsOps.interactivePushAfterRemote(
-          ctx.state,
-          ctx.interactive,
-          ctx.useDefaults,
+          ctx,
           vcs,
           ReleaseLogPrefixes.Monorepo,
           remoteCheckLog = Some(r =>
             ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] ...")
           )
         )(
-          doPush = doPush,
-          onDeclinePush = logWarn(ctx, "Remember to push the changes yourself!").as(ctx)
+          doPush = currentCtx =>
+            vcs.commandName match {
+              case "git" => gitPush(currentCtx, vcs)
+              case _     => vcs.pushChanges.as(currentCtx)
+            },
+          onDeclinePush = currentCtx =>
+            logWarn(currentCtx, "Remember to push the changes yourself!").as(currentCtx)
         )
       }
   )

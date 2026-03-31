@@ -105,6 +105,49 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
+  test("step.withValidationContext - wires threaded validation function") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key  = sbt.AttributeKey[String]("validation-context")
+      val step = ReleaseStepIO
+        .step("context-validation")
+        .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(key, "ok")))
+        .validateOnly
+
+      step.threadedValidation(ctx).map(result => assertEquals(result.metadata(key), Some("ok")))
+    }
+  }
+
+  test("step.withValidationContext - public validate runs threaded validation") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = ReleaseStepIO
+          .step("context-validation-public")
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "context-validation").as(currentCtx)
+          )
+          .validateOnly
+
+        step.validate(ctx) *> events.get.map(obs => assertEquals(obs, List("context-validation")))
+      }
+    }
+  }
+
+  test("step.validate function value - runs threaded validation from builder") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = ReleaseStepIO
+          .step("context-validation-field")
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "field-validation").as(currentCtx)
+          )
+          .validateOnly
+
+        val validate = step.validate
+        validate(ctx) *> events.get.map(obs => assertEquals(obs, List("field-validation")))
+      }
+    }
+  }
+
   test("step - default validate is a no-op") {
     assertNoOpValidate(
       ReleaseStepIO
@@ -125,6 +168,56 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
         step.validate(ctx) *> validationRan.get.map { ran =>
           assert(step.enableCrossBuild)
           assert(ran)
+        }
+      }
+    }
+  }
+
+  test("step - chaining withValidation then withValidationContext composes in order") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key = sbt.AttributeKey[String]("step-builder-order-forward")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = ReleaseStepIO
+          .step("chain-forward")
+          .withValidation(currentCtx =>
+            events.update(_ :+ s"validate:${currentCtx.metadata(key).getOrElse("missing")}")
+          )
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .validateOnly
+
+        step.threadedValidation(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(obs, List("validate:missing", "context"))
+            assertEquals(result.metadata(key), Some("ok"))
+          }
+        }
+      }
+    }
+  }
+
+  test("step - chaining withValidationContext then withValidation composes in order") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key = sbt.AttributeKey[String]("step-builder-order-reverse")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = ReleaseStepIO
+          .step("chain-reverse")
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .withValidation(currentCtx =>
+            events.update(_ :+ s"validate:${currentCtx.metadata(key).getOrElse("missing")}")
+          )
+          .validateOnly
+
+        step.threadedValidation(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(obs, List("context", "validate:ok"))
+            assertEquals(result.metadata(key), Some("ok"))
+          }
         }
       }
     }
@@ -243,6 +336,74 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
       assertFailure[RuntimeException, Unit](stepFn("oops").validate(ctx))(err =>
         assert(err.getMessage.contains("bad resource: oops"))
       )
+    }
+  }
+
+  test("resourceStep.withValidationContext - wires threaded validation function") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key                             = sbt.AttributeKey[String]("resource-validation-context")
+      val stepFn: String => ReleaseStepIO = ReleaseStepIO
+        .resourceStep[String]("res-context-validation")
+        .withValidationContext(resource =>
+          currentCtx => IO.pure(currentCtx.withMetadata(key, s"ok:$resource"))
+        )
+        .validateOnly
+
+      stepFn("demo").threadedValidation(ctx).map { result =>
+        assertEquals(result.metadata(key), Some("ok:demo"))
+      }
+    }
+  }
+
+  test("resourceStep - chaining withValidation then withValidationContext composes in order") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key                             = sbt.AttributeKey[String]("resource-builder-order-forward")
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val stepFn: String => ReleaseStepIO = ReleaseStepIO
+          .resourceStep[String]("res-chain-forward")
+          .withValidation(resource => currentCtx =>
+            events.update(
+              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .withValidationContext(resource => currentCtx =>
+            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .validateOnly
+
+        stepFn("demo").threadedValidation(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(obs, List("validate:demo:missing", "context:demo"))
+            assertEquals(result.metadata(key), Some("ok"))
+          }
+        }
+      }
+    }
+  }
+
+  test("resourceStep - chaining withValidationContext then withValidation composes in order") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key                             = sbt.AttributeKey[String]("resource-builder-order-reverse")
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val stepFn: String => ReleaseStepIO = ReleaseStepIO
+          .resourceStep[String]("res-chain-reverse")
+          .withValidationContext(resource => currentCtx =>
+            events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .withValidation(resource => currentCtx =>
+            events.update(
+              _ :+ s"validate:$resource:${currentCtx.metadata(key).getOrElse("missing")}"
+            )
+          )
+          .validateOnly
+
+        stepFn("demo").threadedValidation(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(obs, List("context:demo", "validate:demo:ok"))
+            assertEquals(result.metadata(key), Some("ok"))
+          }
+        }
+      }
     }
   }
 

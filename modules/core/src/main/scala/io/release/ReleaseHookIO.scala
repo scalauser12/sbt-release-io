@@ -18,7 +18,7 @@ import cats.effect.IO
 case class ReleaseHookIO(
     name: String,
     execute: ReleaseContext => IO[ReleaseContext],
-    validate: ReleaseContext => IO[Unit] = _ => IO.unit
+    validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit
 )
 
 object ReleaseHookIO {

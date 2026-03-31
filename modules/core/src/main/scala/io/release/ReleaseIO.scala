@@ -44,6 +44,28 @@ trait ReleaseIO {
   /** When `true`, release steps may prompt for confirmation/input (versions, push, etc.). */
   val releaseIOInteractive: SettingKey[Boolean] = ReleaseIO._releaseIOInteractive
 
+  /** Default action when a release tag already exists.
+    * Supported values: `o` (overwrite), `k` (keep), `a` (abort), or a replacement tag name.
+    */
+  val releaseIODefaultTagExistsAnswer: SettingKey[Option[String]] =
+    ReleaseIO._releaseIODefaultTagExistsAnswer
+
+  /** Default decision for continuing when SNAPSHOT dependencies are detected. */
+  val releaseIODefaultSnapshotDependenciesAnswer: SettingKey[Option[Boolean]] =
+    ReleaseIO._releaseIODefaultSnapshotDependenciesAnswer
+
+  /** Default decision for continuing after a remote-check failure before push. */
+  val releaseIODefaultRemoteCheckFailureAnswer: SettingKey[Option[Boolean]] =
+    ReleaseIO._releaseIODefaultRemoteCheckFailureAnswer
+
+  /** Default decision for continuing when the local branch is behind upstream. */
+  val releaseIODefaultUpstreamBehindAnswer: SettingKey[Option[Boolean]] =
+    ReleaseIO._releaseIODefaultUpstreamBehindAnswer
+
+  /** Default decision for whether to push changes at the end of the release. */
+  val releaseIODefaultPushAnswer: SettingKey[Option[Boolean]] =
+    ReleaseIO._releaseIODefaultPushAnswer
+
   /** When `false`, the snapshot-dependency validation phase is omitted from the compiled process. */
   val releaseIOEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
     ReleaseIO._releaseIOEnableSnapshotDependenciesCheck
@@ -237,6 +259,39 @@ object ReleaseIO extends ReleaseIO {
     SettingKey[Boolean](
       "releaseIOInteractive",
       "Whether to enable interactive prompts during release"
+    )
+
+  private[release] lazy val _releaseIODefaultTagExistsAnswer: SettingKey[Option[String]] =
+    SettingKey[Option[String]](
+      "releaseIODefaultTagExistsAnswer",
+      "Default action when a release tag already exists"
+    )
+
+  private[release] lazy val _releaseIODefaultSnapshotDependenciesAnswer
+      : SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultSnapshotDependenciesAnswer",
+      "Default decision for continuing when SNAPSHOT dependencies are detected"
+    )
+
+  private[release] lazy val _releaseIODefaultRemoteCheckFailureAnswer
+      : SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultRemoteCheckFailureAnswer",
+      "Default decision for continuing after a remote-check failure"
+    )
+
+  private[release] lazy val _releaseIODefaultUpstreamBehindAnswer
+      : SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultUpstreamBehindAnswer",
+      "Default decision for continuing when the local branch is behind upstream"
+    )
+
+  private[release] lazy val _releaseIODefaultPushAnswer: SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultPushAnswer",
+      "Default decision for whether to push changes at the end of the release"
     )
 
   private[release] lazy val _releaseIOEnableSnapshotDependenciesCheck: SettingKey[Boolean] =

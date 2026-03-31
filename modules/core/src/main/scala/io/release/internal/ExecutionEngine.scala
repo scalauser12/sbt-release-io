@@ -10,7 +10,7 @@ private[release] object ExecutionEngine {
 
   final case class ValidationStep[C <: ReleaseCtx[C]](
       name: String,
-      run: C => IO[Unit]
+      run: C => IO[C]
   )
 
   final case class ActionStep[C <: ReleaseCtx[C]](
@@ -24,8 +24,10 @@ private[release] object ExecutionEngine {
       logPrefix: String,
       validations: Seq[ValidationStep[C]],
       initialCtx: C
-  ): IO[Unit] =
-    validations.toList.traverse_(step => runValidationStep(logPrefix, step, initialCtx))
+  ): IO[C] =
+    validations.foldLeft(IO.pure(initialCtx)) { (ioCtx, step) =>
+      ioCtx.flatMap(currentCtx => runValidationStep(logPrefix, step, currentCtx))
+    }
 
   def runActions[C <: ReleaseCtx[C]](
       actions: Seq[ActionStep[C]],
@@ -86,8 +88,8 @@ private[release] object ExecutionEngine {
   private def runValidationStep[C <: ReleaseCtx[C]](
       logPrefix: String,
       step: ValidationStep[C],
-      initialCtx: C
-  ): IO[Unit] =
-    IO.blocking(initialCtx.state.log.info(s"$logPrefix Validating step: ${step.name}")) *>
-      step.run(initialCtx)
+      currentCtx: C
+  ): IO[C] =
+    IO.blocking(currentCtx.state.log.info(s"$logPrefix Validating step: ${step.name}")) *>
+      step.run(currentCtx)
 }

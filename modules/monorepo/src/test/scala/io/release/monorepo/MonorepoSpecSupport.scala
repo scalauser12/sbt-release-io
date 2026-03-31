@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestSupport
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.SbtRuntime
 import io.release.vcs.Vcs
 import munit.Assertions.fail
@@ -122,6 +123,7 @@ object MonorepoSpecSupport {
       selectedNames = selectedNames,
       releaseVersionOverrides = releaseVersionOverrides,
       nextVersionOverrides = nextVersionOverrides,
+      decisionDefaults = ReleaseDecisionDefaults.empty,
       commandName = commandName
     )
 

@@ -67,8 +67,15 @@ private[monorepo] object MonorepoComposer {
     val actions = steps.map(_.actionStep)
 
     for {
-      _      <- ExecutionEngine.runValidations(LogPrefix, steps.map(_.validationStep), startCtx)
-      result <- ExecutionEngine.runActions(actions, ExecutionEngine.armOnFailure(startCtx))
+      validatedCtx <- ExecutionEngine.runValidations(
+                        LogPrefix,
+                        steps.map(_.validationStep),
+                        startCtx
+                      )
+      result       <- ExecutionEngine.runActions(
+                        actions,
+                        ExecutionEngine.armOnFailure(validatedCtx)
+                      )
     } yield result.context
   }
 
@@ -81,8 +88,8 @@ private[monorepo] object MonorepoComposer {
         if (currentCtx.failed) IO.pure(currentCtx)
         else {
           for {
-            _       <- step.validate(currentCtx)
-            nextCtx <- runSingleStepAction(step, currentCtx)
+            validatedCtx <- step.validate(currentCtx)
+            nextCtx      <- runSingleStepAction(step, validatedCtx)
           } yield nextCtx
         }
       }

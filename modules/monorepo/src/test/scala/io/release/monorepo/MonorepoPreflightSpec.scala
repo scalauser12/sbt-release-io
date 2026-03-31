@@ -47,6 +47,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
 
     assert(lines.exists(_.contains("release-version <project>=<version>")))
     assert(lines.exists(_.contains("next-version <project>=<version>")))
+    assert(lines.exists(_.contains("default-tag-exists-answer <o|k|a|<tag-name>>")))
+    assert(lines.exists(_.contains("default-snapshot-dependencies-answer <y|n>")))
+    assert(lines.exists(_.contains("default-remote-check-failure-answer <y|n>")))
+    assert(lines.exists(_.contains("default-upstream-behind-answer <y|n>")))
+    assert(lines.exists(_.contains("default-push-answer <y|n>")))
     assert(
       lines.exists(
         _.contains("Use project <id> when a project id collides with a CLI keyword or subcommand")

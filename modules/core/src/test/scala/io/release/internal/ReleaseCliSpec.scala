@@ -69,6 +69,52 @@ class ReleaseCliSpec extends FunSuite {
     )
   }
 
+  test("parse - decode typed decision defaults") {
+    val result = ReleaseCli.parse(
+      Seq(
+        "default-snapshot-dependencies-answer",
+        "y",
+        "default-remote-check-failure-answer",
+        "n",
+        "default-upstream-behind-answer",
+        "y",
+        "default-push-answer",
+        "n"
+      ),
+      "releaseIO"
+    )
+
+    assertEquals(
+      result,
+      Right(
+        ReleaseCli.Parsed(
+          ReleaseCli.CommandMode.Run,
+          Seq(
+            ReleaseCli.Arg.SnapshotDependenciesDefault(true),
+            ReleaseCli.Arg.RemoteCheckFailureDefault(false),
+            ReleaseCli.Arg.UpstreamBehindDefault(true),
+            ReleaseCli.Arg.PushDefault(false)
+          )
+        )
+      )
+    )
+  }
+
+  test("parse - reject invalid typed decision defaults with a usage hint") {
+    val result = ReleaseCli.parse(
+      Seq("default-push-answer", "maybe"),
+      "releaseIO"
+    )
+
+    assertEquals(
+      result,
+      Left(
+        "Invalid value 'maybe' for 'default-push-answer'. Expected 'y' or 'n'. " +
+          "See 'releaseIO help' for usage."
+      )
+    )
+  }
+
   test("parse - fail with a help hint when a value is missing") {
     val result = ReleaseCli.parse(Seq("check", "release-version"), "releaseIO")
 

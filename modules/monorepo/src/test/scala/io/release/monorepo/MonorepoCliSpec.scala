@@ -87,6 +87,49 @@ class MonorepoCliSpec extends FunSuite {
     )
   }
 
+  test("parse - decode typed monorepo decision defaults") {
+    val result = MonorepoCli.parse(
+      Seq(
+        "default-tag-exists-answer",
+        "k",
+        "default-snapshot-dependencies-answer",
+        "y",
+        "default-push-answer",
+        "n"
+      ),
+      "releaseIOMonorepo"
+    )
+
+    assertEquals(
+      result,
+      Right(
+        MonorepoCli.Parsed(
+          MonorepoCli.CommandMode.Run,
+          Seq(
+            MonorepoCli.Arg.TagDefault("k"),
+            MonorepoCli.Arg.SnapshotDependenciesDefault(true),
+            MonorepoCli.Arg.PushDefault(false)
+          )
+        )
+      )
+    )
+  }
+
+  test("parse - reject invalid typed decision defaults with a usage hint") {
+    val result = MonorepoCli.parse(
+      Seq("default-upstream-behind-answer", "later"),
+      "releaseIOMonorepo"
+    )
+
+    assertEquals(
+      result,
+      Left(
+        "Invalid value 'later' for 'default-upstream-behind-answer'. Expected 'y' or 'n'. " +
+          "See 'releaseIOMonorepo help' for usage."
+      )
+    )
+  }
+
   test("parse - reject override values without a project prefix") {
     val result = MonorepoCli.parse(
       Seq("check", "with-defaults", "release-version", "1.0.0"),

@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import munit.FunSuite
 
 class MonorepoProjectResolverSpec extends FunSuite {
@@ -116,7 +117,8 @@ class MonorepoProjectResolverSpec extends FunSuite {
       selectionMode = selectionMode,
       selectedNames = selectedNames,
       releaseVersionOverrides = releaseVersionOverrides,
-      nextVersionOverrides = nextVersionOverrides
+      nextVersionOverrides = nextVersionOverrides,
+      decisionDefaults = ReleaseDecisionDefaults.empty
     )
 
   private def project(

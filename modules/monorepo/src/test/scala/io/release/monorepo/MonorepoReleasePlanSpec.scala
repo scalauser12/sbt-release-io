@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import munit.FunSuite
 
 class MonorepoReleasePlanSpec extends FunSuite {
@@ -95,6 +96,7 @@ class MonorepoReleasePlanSpec extends FunSuite {
     selectedNames = Nil,
     releaseVersionPairs = Nil,
     nextVersionPairs = Nil,
+    decisionDefaults = ReleaseDecisionDefaults.empty,
     commandName = "releaseIOMonorepo"
   )
 

@@ -100,6 +100,10 @@ private[release] object CorePreflight {
       "  - release-version <version>",
       "  - next-version <version>",
       "  - default-tag-exists-answer <o|k|a|<tag-name>>",
+      "  - default-snapshot-dependencies-answer <y|n>",
+      "  - default-remote-check-failure-answer <y|n>",
+      "  - default-upstream-behind-answer <y|n>",
+      "  - default-push-answer <y|n>",
       "",
       "Examples:",
       s"""  - sbt "$commandName with-defaults"""",
@@ -160,9 +164,9 @@ private[release] object CorePreflight {
         )
       )
     else
-      VersionSteps.resolveVersions(ctx, allowPrompts = false).map { resolved =>
+      VersionSteps.resolveVersions(ctx, allowPrompts = false).map { case (updatedCtx, resolved) =>
         VersionSnapshot(
-          context = ctx.withVersions(resolved.releaseVersion, resolved.nextVersion),
+          context = updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion),
           summary = VersionsSummary.Resolved(
             versionFile = resolved.versionFile,
             currentVersion = resolved.currentVersion,
