@@ -16,10 +16,10 @@ import scala.annotation.nowarn
 @nowarn("cat=deprecation")
 trait ReleasePluginIOLegacySpecSupport {
 
-  protected final case class LoadedState(
-      dir: File,
-      state: State,
-      consoleBuffer: ByteArrayOutputStream
+  protected final class LoadedState(
+      val dir: File,
+      val state: State,
+      val consoleBuffer: ByteArrayOutputStream
   )
 
   protected object HookFriendlyPlugin extends ReleasePluginIOLike[Unit] {
@@ -150,7 +150,7 @@ trait ReleasePluginIOLegacySpecSupport {
           currentProjectId = Some("root")
         )
 
-        LoadedState(dir, state, buffered.consoleBuffer)
+        new LoadedState(dir, state, buffered.consoleBuffer)
       }
     }
 

@@ -7,6 +7,9 @@ import io.release.steps.ReleaseSteps
 import munit.CatsEffectSuite
 import sbt.Setting
 
+import scala.annotation.nowarn
+
+@nowarn("cat=deprecation")
 class ReleasePluginIOProcessModeSpec
     extends CatsEffectSuite
     with ReleasePluginIOLegacySpecSupport {

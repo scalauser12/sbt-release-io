@@ -3,7 +3,6 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestSupport
-import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 
 import java.io.File
@@ -30,7 +29,7 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
           IO.blocking(sbt.IO.move(new File(repo, ".git"), new File(repo, ".git-broken")))
             .as((vcs, testEnv(repo)))
         }
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val project = nestedProject(repo, "core")
 
         detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
@@ -61,7 +60,7 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val project = projectInfo(
           repo,
           name = "core",
@@ -103,7 +102,7 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val project = nestedProject(repo, "core")
 
         detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
@@ -136,7 +135,7 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val project = nestedProject(repo, "core")
 
         detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
@@ -180,7 +179,7 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val core = nestedProject(repo, "core")
         val api  = nestedProject(repo, "api")
 
@@ -214,7 +213,7 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val project = nestedProject(repo, "core")
 
         detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq.empty).flatMap { changed =>
@@ -252,7 +251,7 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val core = nestedProject(repo, "core")
         val api  = nestedProject(repo, "api")
 
@@ -267,4 +266,3 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
     }
   }
 }
-

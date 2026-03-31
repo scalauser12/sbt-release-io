@@ -234,6 +234,15 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
+  test("StepHelpers.readRequiredLine - fail fast when redirected stdin reaches EOF") {
+    TestSupport.withInput("") {
+      assertIllegalStateMessage(
+        StepHelpers.readRequiredLine("Release version"),
+        "Standard input closed while waiting for Release version."
+      )
+    }
+  }
+
   private def stubVcs(base: File): Vcs =
     new Vcs {
       override def baseDir: File                                                               = base

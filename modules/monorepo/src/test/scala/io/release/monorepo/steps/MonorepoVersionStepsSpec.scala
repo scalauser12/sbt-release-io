@@ -3,7 +3,9 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseIO.*
+import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestAssertions.assertFailure
+import io.release.TestSupport
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
@@ -55,6 +57,34 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
         assertEquals(updated.versions, Some("0.1.0" -> "0.2.0-SNAPSHOT"))
         assertEquals(updated.versionFile, fixture.versionFile)
+      }
+    }
+  }
+
+  test("inquireVersions.execute - fail when stdin closes before the release version prompt") {
+    fixtureResource.use { fixture =>
+      val ctx     = MonorepoVersionStepsSpec.promptingContext(fixture)
+      val project = fixture.projectInfo("core")
+
+      TestSupport.withInput("") {
+        assertIllegalStateMessage(
+          MonorepoVersionSteps.inquireVersions.execute(ctx, project),
+          "Standard input closed while waiting for Release version for core."
+        )
+      }
+    }
+  }
+
+  test("inquireVersions.execute - fail when stdin closes before the next version prompt") {
+    fixtureResource.use { fixture =>
+      val ctx     = MonorepoVersionStepsSpec.promptingContext(fixture)
+      val project = fixture.projectInfo("core")
+
+      TestSupport.withInput("1.0.0\n") {
+        assertIllegalStateMessage(
+          MonorepoVersionSteps.inquireVersions.execute(ctx, project),
+          "Standard input closed while waiting for Next version for core."
+        )
       }
     }
   }
@@ -238,4 +268,13 @@ private object MonorepoVersionStepsSpec {
 
     def projectInfo(id: String) = loaded.projectInfo(id)
   }
+
+  def promptingContext(fixture: VersionFixture): MonorepoContext =
+    MonorepoSpecSupport.withPlan(
+      fixture.loaded.context(Seq("core"), interactive = true),
+      MonorepoSpecSupport.releasePlan(
+        selectionMode = SelectionMode.ExplicitSelection,
+        flags = MonorepoSpecSupport.defaultFlags.copy(interactive = true)
+      )
+    )
 }

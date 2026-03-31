@@ -210,22 +210,71 @@ class VersionStepsSpec extends CatsEffectSuite {
               )
             )
           )
-          val ctx   = ReleaseContext(state = state, interactive = true).withExecutionState(
-            CoreExecutionState(
-              CoreReleasePlan(
-                flags = startupFlags.copy(interactive = true),
-                releaseVersionOverride = None,
-                nextVersionOverride = None,
-                tagDefault = None
-              )
-            )
-          )
+          val ctx   = promptingContext(state)
 
           VersionSteps.resolveVersions(ctx, allowPrompts = false).map { resolved =>
             assertEquals(resolved.versionFile.getName, "version.sbt")
             assertEquals(resolved.currentVersion, "0.1.0-SNAPSHOT")
             assertEquals(resolved.releaseVersion, "0.1.0")
             assertEquals(resolved.nextVersion, "0.2.0-SNAPSHOT")
+          }
+      }
+    }
+  }
+
+  test("resolveVersions - fail when stdin closes before the release version prompt is answered") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                releaseIOVersionFile         := versionFile,
+                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+                releaseIOVersionFileContents := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOUseGlobalVersion    := true,
+                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
+                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+              )
+            )
+          )
+
+          TestSupport.withInput("") {
+            TestAssertions.assertIllegalStateMessage(
+              VersionSteps.resolveVersions(promptingContext(state), allowPrompts = true),
+              "Standard input closed while waiting for Release version."
+            )
+          }
+      }
+    }
+  }
+
+  test("resolveVersions - fail when stdin closes before the next version prompt is answered") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                releaseIOVersionFile         := versionFile,
+                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+                releaseIOVersionFileContents := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOUseGlobalVersion    := true,
+                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
+                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+              )
+            )
+          )
+
+          TestSupport.withInput("1.0.0\n") {
+            TestAssertions.assertIllegalStateMessage(
+              VersionSteps.resolveVersions(promptingContext(state), allowPrompts = true),
+              "Standard input closed while waiting for Next version."
+            )
           }
       }
     }
@@ -247,6 +296,18 @@ class VersionStepsSpec extends CatsEffectSuite {
           flags = startupFlags,
           releaseVersionOverride = Some(releaseVersion),
           nextVersionOverride = Some(nextVersion),
+          tagDefault = None
+        )
+      )
+    )
+
+  private def promptingContext(state: sbt.State): ReleaseContext =
+    ReleaseContext(state = state, interactive = true).withExecutionState(
+      CoreExecutionState(
+        CoreReleasePlan(
+          flags = startupFlags.copy(interactive = true),
+          releaseVersionOverride = None,
+          nextVersionOverride = None,
           tagDefault = None
         )
       )

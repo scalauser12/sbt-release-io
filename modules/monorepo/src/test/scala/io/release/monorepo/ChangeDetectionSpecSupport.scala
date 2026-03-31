@@ -12,7 +12,10 @@ import java.io.File
 
 trait ChangeDetectionSpecSupport {
 
-  protected final case class TestEnv(state: State, consoleBuffer: ByteArrayOutputStream)
+  protected final class TestEnv(
+      val state: State,
+      val consoleBuffer: ByteArrayOutputStream
+  )
 
   protected val perProjectTagName: (String, String) => String =
     (name, version) => s"$name-v$version"
@@ -69,7 +72,7 @@ trait ChangeDetectionSpecSupport {
 
   protected def testEnv(baseDir: File, logFileName: String = "sbt-test.log"): TestEnv = {
     val buffered = TestSupport.bufferedState(baseDir, new File(baseDir, logFileName))
-    TestEnv(buffered.state, buffered.consoleBuffer)
+    new TestEnv(buffered.state, buffered.consoleBuffer)
   }
 
   protected def readLogs(
@@ -82,4 +85,3 @@ trait ChangeDetectionSpecSupport {
     logs
   }
 }
-

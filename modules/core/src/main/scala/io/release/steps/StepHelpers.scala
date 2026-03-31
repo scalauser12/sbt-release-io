@@ -32,6 +32,16 @@ private[release] object StepHelpers {
   private[release] def readLine(): IO[String] =
     IO.blocking(stdinReaderCache.readLine())
 
+  /** Read a line from standard input and fail fast if stdin closes before input arrives. */
+  private[release] def readRequiredLine(context: String): IO[String] =
+    readLine().flatMap {
+      case null  =>
+        IO.raiseError(
+          new IllegalStateException(s"Standard input closed while waiting for $context.")
+        )
+      case input => IO.pure(input)
+    }
+
   private[this] val stdinReaderCache = new StdinReaderCache
 
   private final class StdinReaderCache {

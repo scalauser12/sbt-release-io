@@ -6,6 +6,9 @@ import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Setting
 
+import scala.annotation.nowarn
+
+@nowarn("cat=deprecation")
 class MonorepoReleasePluginReleaseRunSpec
     extends CatsEffectSuite
     with MonorepoReleasePluginLegacySpecSupport {
@@ -170,4 +173,3 @@ class MonorepoReleasePluginReleaseRunSpec
     }
   }
 }
-

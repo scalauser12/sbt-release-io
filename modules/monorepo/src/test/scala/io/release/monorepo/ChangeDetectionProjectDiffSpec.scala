@@ -2,7 +2,6 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.TestSupport
-import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 
 import java.io.File
@@ -34,7 +33,7 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val core = nestedProject(repo, "core")
         val api  = nestedProject(repo, "api")
 
@@ -79,7 +78,7 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val root = rootProject(repo)
         val core = nestedProject(repo, "core")
 
@@ -171,7 +170,7 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
         repo
       }.flatMap { _ =>
         detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
-      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+      }.flatMap { case (vcs, env) =>
         val project = rootProject(repo)
 
         detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
@@ -184,4 +183,3 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
     }
   }
 }
-

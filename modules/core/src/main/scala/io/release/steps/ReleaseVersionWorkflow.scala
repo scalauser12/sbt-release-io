@@ -195,9 +195,13 @@ private[release] object ReleaseVersionWorkflow {
     )
   }
 
-  private def readVersionPrompt(prompt: String, defaultVersion: String): IO[String] =
+  private def readVersionPrompt(
+      prompt: String,
+      promptContext: String,
+      defaultVersion: String
+  ): IO[String] =
     IO.print(prompt) *>
-      StepHelpers.readLine().flatMap(parseVersionInput(_, defaultVersion))
+      StepHelpers.readRequiredLine(promptContext).flatMap(parseVersionInput(_, defaultVersion))
 
   private def resolveReleaseVersion(
       data: InquireData,
@@ -213,6 +217,7 @@ private[release] object ReleaseVersionWorkflow {
         IO.blocking(data.state.log.info("Press enter to use the default value")) *>
           readVersionPrompt(
             prompt = s"Release version [${data.suggestedRelease}] : ",
+            promptContext = "Release version",
             defaultVersion = data.suggestedRelease
           )
     }
@@ -231,6 +236,7 @@ private[release] object ReleaseVersionWorkflow {
           else
             readVersionPrompt(
               prompt = s"Next version [$suggestedNext] : ",
+              promptContext = "Next version",
               defaultVersion = suggestedNext
             )
         }

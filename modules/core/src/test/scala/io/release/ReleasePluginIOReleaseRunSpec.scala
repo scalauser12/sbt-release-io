@@ -6,6 +6,9 @@ import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Setting
 
+import scala.annotation.nowarn
+
+@nowarn("cat=deprecation")
 class ReleasePluginIOReleaseRunSpec extends CatsEffectSuite with ReleasePluginIOLegacySpecSupport {
 
   test("resolveReleaseRun - execute resource-aware hooks after plain hooks without legacy mode") {

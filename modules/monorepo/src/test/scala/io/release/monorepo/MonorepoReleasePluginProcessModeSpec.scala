@@ -7,6 +7,9 @@ import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.Setting
 
+import scala.annotation.nowarn
+
+@nowarn("cat=deprecation")
 class MonorepoReleasePluginProcessModeSpec
     extends CatsEffectSuite
     with MonorepoReleasePluginLegacySpecSupport {
@@ -291,4 +294,3 @@ class MonorepoReleasePluginProcessModeSpec
     }
   }
 }
-
