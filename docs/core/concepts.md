@@ -36,7 +36,7 @@ commands such as `+publish`. The main difference is the effect model:
 ### What IO adds
 
 - **Resource safety**: `Resource.use` guarantees cleanup for shared resources
-- **Composability**: custom steps and hooks can use normal cats-effect combinators
+- **Composability**: hooks and lower-level internal step helpers can use normal cats-effect combinators
 - **Typed validation boundary**: `validate` returns `IO[Unit]`, so checks cannot mutate the release context
 - **Explicit blocking boundaries**: `IO.blocking` marks shell-outs and sbt task execution
 - **Typed context threading**: `ReleaseContext` carries versions, VCS state, flags, and typed metadata

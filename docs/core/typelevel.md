@@ -1,10 +1,13 @@
 # Using Typelevel libraries in release steps (core)
 
-Since release steps run in `IO`, you can use any library from the Typelevel / FP ecosystem in your custom steps. This is useful when your release process needs to do more than run sbt tasks and git commands — for example, uploading archives to a file repository, calling REST APIs, or streaming data.
+Since release hooks and lower-level release internals run in `IO`, you can use any library from
+the Typelevel / FP ecosystem in your custom release logic. This is useful when your release
+process needs to do more than run sbt tasks and git commands — for example, uploading archives to a
+file repository, calling REST APIs, or streaming data.
 
 **Constraint:** sbt 1 plugins run on Scala 2.12 and sbt 2 plugins run on Scala 3, so you must use library versions published for the Scala version that matches your sbt version.
 
-Some libraries that work well in release steps:
+Some libraries that work well in hook bodies and resource-aware custom plugins:
 
 | Library               | Use case                                          | sbt 1 (Scala 2.12)        | sbt 2 (Scala 3) |
 | --------------------- | ------------------------------------------------- | ------------------------- | --------------- |
@@ -17,7 +20,7 @@ Some libraries that work well in release steps:
 Add the dependency in `project/plugins.sbt` alongside the plugin:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.1")
 libraryDependencies += "org.http4s" %% "http4s-ember-client" % "0.23.30"
 ```
 

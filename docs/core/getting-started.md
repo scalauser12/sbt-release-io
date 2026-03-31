@@ -4,7 +4,7 @@
 
 - **Two-phase release steps**: Each step has a `validate` phase (preflight checks) and an `execute` phase (actions), both running in cats-effect `IO`
 - **Independent codebase**: Ports sbt-release's types, settings, and execution model onto cats-effect IO — no runtime dependency on sbt-release
-- **Flexible step composition**: Create custom release steps using cats-effect IO
+- **Hook-first customization**: Extend the built-in release flow with `releaseIOEnable*` policies and `releaseIO*Hooks`
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
 - **Resource-safe custom plugins**: Acquire shared resources (HTTP clients, temp dirs, etc.) once for the entire release with guaranteed cleanup via `Resource[IO, T]`
@@ -16,7 +16,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.1")
 ```
 
 The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom version formats](configuration.md#custom-version-formats).
@@ -90,7 +90,8 @@ The default release process includes:
 12. **commit-next-version** - Commit version change
 13. **push-changes** - Push commits and tags to remote
 
-These names are the stable built-in insertion points for `insertAfter` and `insertBefore`.
+These names are the stable built-in phase names surfaced by `releaseIO help`, `check`, and the
+hook documentation.
 
 ## What to read next
 

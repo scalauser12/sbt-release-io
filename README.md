@@ -29,7 +29,7 @@ Start with the plugin-specific onboarding guides:
 Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.1")
 ```
 
 The plugin activates automatically. Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`.
@@ -51,7 +51,7 @@ Read next:
 Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.1")
 ```
 
 In `build.sbt`:
@@ -78,8 +78,9 @@ Read next:
 
 For routine customization, prefer the hook/policy settings (`releaseIOEnable*`,
 `releaseIO*Hooks`, `releaseIOMonorepoEnable*`, `releaseIOMonorepo*Hooks`) and leave the built-in
-process intact. Raw `releaseIOProcess` / `releaseIOMonorepoProcess` editing remains supported as a
-legacy advanced path.
+process intact. For shared-resource or advanced integration work, use custom plugins built around
+the hook and resource-hook APIs. Raw process override is no longer part of the supported public
+surface.
 
 For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
 [docs/monorepo/recipes.md](docs/monorepo/recipes.md). For rollback and recovery, see

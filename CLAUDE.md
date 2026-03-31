@@ -14,24 +14,16 @@ sbt core/scripted          # core scripted tests only
 sbt monorepo/scripted      # monorepo scripted tests only
 ```
 
-### Code coverage (scoverage)
-
-Unit tests for `core` and `monorepo`, with an aggregated HTML/XML report at the repo root:
-
-```bash
-sbt clean coverage test coverageAggregate coverageOff
-```
-
-Open `target/scala-2.12/scoverage-report/index.html` (Scala version segment follows the build). Per-module reports: `sbt core/coverageReport`, `sbt monorepo/coverageReport`.
-
 ### Cross-build (sbt 2)
 
 ```bash
 sbt -Dsbt.version=2.0.0-RC9 compile
 sbt -Dsbt.version=2.0.0-RC9 test
+./bin/sbt2-clean test
 ```
 
-**Note:** In sbt 2, `test` is incremental (`testQuick`); use `testFull` for all tests. Rename `metals.sbt` files before running tests with sbt 2.
+**Note:** Use `./bin/sbt2-clean ...` from an IDE-managed checkout when local files such as
+`project/metals.sbt` or `.bloop/` would otherwise affect the sbt 2 lane.
 
 ### Formatting
 
@@ -95,7 +87,7 @@ docs/
 - Scripted tests live under `src/sbt-test/` in each module
 - All blocking operations wrapped in `IO.blocking`
 - Immutable context threading — steps return updated context, no mutable state
-- Hook-based customization preferred over legacy raw process overriding
+- Hook-based customization is the supported build-facing model
 - Always check README examples and `examples/` folders when planning code changes
 
 ## Architecture
@@ -107,9 +99,10 @@ docs/
 
 ### Customization Model
 
-**Preferred — Hook lifecycle:** Policy settings enable/disable phases (`releaseIOEnableRunTests`, `releaseIOEnablePublish`, etc.). Hook settings inject logic at semantic points (`releaseIOBeforeTagHooks`, `releaseIOAfterPublishHooks`, etc.). Compiled into ordered step sequence at startup.
+**Supported — Hook lifecycle:** Policy settings enable/disable phases (`releaseIOEnableRunTests`, `releaseIOEnablePublish`, etc.). Hook settings inject logic at semantic points (`releaseIOBeforeTagHooks`, `releaseIOAfterPublishHooks`, etc.). Compiled into ordered step sequence at startup.
 
-**Legacy — Raw process override:** Direct `releaseIOProcess` override bypasses hooks. Still supported but deprecated; warnings logged.
+**Advanced internals:** Lower-level step types still exist for internals, tests, and custom plugin
+helpers, but build-facing customization should use hooks, policies, and resource hooks.
 
 ### Monorepo Specifics
 

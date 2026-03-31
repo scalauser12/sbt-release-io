@@ -15,7 +15,7 @@ validate-then-execute phases, per-project tags, cross-build, and
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.7.1")
 ```
 
 `build.sbt` (root):
@@ -35,8 +35,8 @@ sbt "releaseIOMonorepo check with-defaults"
 ```
 
 Preferred customization keeps the built-in process intact and uses
-`releaseIOMonorepoEnable*` policies plus `releaseIOMonorepo*Hooks`. Raw
-`releaseIOMonorepoProcess` editing remains available as a legacy advanced path.
+`releaseIOMonorepoEnable*` policies, `releaseIOMonorepo*Hooks`, and resource-aware custom
+plugins. Raw process override is no longer part of the supported public surface.
 
 ## Read next
 
@@ -44,7 +44,7 @@ Preferred customization keeps the built-in process intact and uses
 - [First release walkthrough](../../docs/monorepo/walkthrough.md) for an end-to-end setup from scratch
 - [Selective release walkthrough](../../docs/monorepo/selective-release-walkthrough.md) for hook-first change detection, downstream inclusion, and explicit selectors
 - [Monorepo configuration](../../docs/monorepo/configuration.md) for the grouped settings surface and [Monorepo usage](../../docs/monorepo/usage.md) for CLI syntax
-- [Monorepo customization](../../docs/monorepo/customization.md) for hooks, custom steps, custom plugins, and migration from raw-process edits
+- [Monorepo customization](../../docs/monorepo/customization.md) for hooks, resource-aware custom plugins, and migration guidance
 - [Monorepo operations](../../docs/monorepo/operations.md) for rollback and recovery
 - [Docs index](../../docs/README.md) and [core plugin docs](../../docs/core/README.md) for shared concepts and settings
 

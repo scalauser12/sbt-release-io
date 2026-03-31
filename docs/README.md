@@ -20,9 +20,9 @@
 
 ## Need customization?
 
-- Core hooks, custom steps, and custom plugins:
+- Core hooks and custom plugins:
   [core/customization.md](core/customization.md)
-- Monorepo hooks, step builders, and custom plugins:
+- Monorepo hooks and custom plugins:
   [monorepo/customization.md](monorepo/customization.md)
 - Rehearsal and CI recipes:
   [core/recipes.md](core/recipes.md) and [monorepo/recipes.md](monorepo/recipes.md)

@@ -15,7 +15,7 @@ optional interactive prompts, and configurable version files and VCS behavior.
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.7.1")
 ```
 
 Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin loads automatically
@@ -27,8 +27,8 @@ First command:
 sbt "releaseIO check with-defaults"
 ```
 
-Preferred customization keeps the built-in process intact and uses `releaseIOEnable*` policies plus
-`releaseIO*Hooks`.
+Preferred customization keeps the built-in process intact and uses `releaseIOEnable*` policies,
+`releaseIO*Hooks`, and resource-aware custom plugins when one shared resource is needed.
 
 ## Read next
 
