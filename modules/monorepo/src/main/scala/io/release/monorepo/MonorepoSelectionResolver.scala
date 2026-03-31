@@ -77,7 +77,7 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[ResolvedSelectionInputs] =
     for {
-      tagSettings    <- IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state))
+      tagSettings    <- MonorepoReleaseIO.resolveTagSettings(ctx.state)
       liveOrdered    <- MonorepoProjectResolver.resolveOrdered(ctx.state)
       orderedProjects = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
       validatedPlan  <-
@@ -146,52 +146,52 @@ private[monorepo] object MonorepoSelectionResolver {
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
       tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings
-  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] = {
-    val settings = resolveDetectionSettings(ctx.state)
+  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
+    resolveDetectionSettings(ctx.state).flatMap { settings =>
+      if (!settings.detectChanges)
+        IO.pure((orderedProjects, SelectionMode.AllChanged))
+      else {
+        val detected = settings.customDetector match {
+          case Some(detector) =>
+            detectWithCustomDetector(ctx, orderedProjects, detector)
+          case None           =>
+            IO.fromOption(ctx.vcs)(
+              new IllegalStateException("VCS not initialized")
+            ).flatMap { vcs =>
+              ChangeDetection.detectChangedProjects(
+                vcs,
+                orderedProjects,
+                tagSettings.perProjectTagName,
+                ctx.state,
+                settings.userExcludes,
+                settings.sharedPaths
+              )
+            }
+        }
 
-    if (!settings.detectChanges)
-      IO.pure((orderedProjects, SelectionMode.AllChanged))
-    else {
-      val detected = settings.customDetector match {
-        case Some(detector) =>
-          detectWithCustomDetector(ctx, orderedProjects, detector)
-        case None           =>
-          IO.fromOption(ctx.vcs)(
-            new IllegalStateException("VCS not initialized")
-          ).flatMap { vcs =>
-            ChangeDetection.detectChangedProjects(
-              vcs,
-              orderedProjects,
-              tagSettings.perProjectTagName,
-              ctx.state,
-              settings.userExcludes,
-              settings.sharedPaths
-            )
+        if (!settings.includeDownstream) detected.map((_, SelectionMode.DetectChanges))
+        else
+          detected.flatMap { directlyChanged =>
+            expandToDownstream(ctx, orderedProjects, directlyChanged)
+              .map((_, SelectionMode.DetectChanges))
           }
       }
-
-      if (!settings.includeDownstream) detected.map((_, SelectionMode.DetectChanges))
-      else
-        detected.flatMap { directlyChanged =>
-          expandToDownstream(ctx, orderedProjects, directlyChanged)
-            .map((_, SelectionMode.DetectChanges))
-        }
     }
-  }
 
-  private def resolveDetectionSettings(state: State): DetectionSettings = {
-    val runtime = MonorepoRuntime.fromState(state)
+  private def resolveDetectionSettings(state: State): IO[DetectionSettings] =
+    IO.blocking {
+      val runtime = MonorepoRuntime.fromState(state)
 
-    DetectionSettings(
-      detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges),
-      includeDownstream =
-        runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream),
-      customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector),
-      userExcludes =
-        runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes),
-      sharedPaths = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
-    )
-  }
+      DetectionSettings(
+        detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges),
+        includeDownstream =
+          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream),
+        customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector),
+        userExcludes =
+          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes),
+        sharedPaths = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
+      )
+    }
 
   /** Expand a set of detected-changed projects to include all transitive downstream dependents. */
   private def expandToDownstream(

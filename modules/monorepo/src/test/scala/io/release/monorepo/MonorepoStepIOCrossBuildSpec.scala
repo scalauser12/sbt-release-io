@@ -127,6 +127,53 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
     }
   }
 
+  test("compose - restore the entry state when no entry scalaVersion is defined") {
+    val metadataKey = AttributeKey[String]("cross-build-no-entry-scala-version")
+
+    loadedContextResource("monorepo-step-no-entry-scala-version", Seq("core")) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir).aggregate(LocalProject("core")),
+        Project("core", coreBase).settings(
+          crossScalaVersions := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion
+          )
+        )
+      )
+    }.use { ctx =>
+      val step = MonorepoStepIO.PerProject(
+        name = "cross-step",
+        execute = (c, project) =>
+          appendCurrentScalaVersion(new File(project.baseDir, "no-entry.txt"), c.state)
+            .as(c.withMetadata(metadataKey, "kept")),
+        enableCrossBuild = true
+      )
+
+      scopedScalaVersionOf(ctx.state).flatMap { initialVersion =>
+        MonorepoStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+          val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
+
+          for {
+            restoredVersion <- scopedScalaVersionOf(result.state)
+            versions        <-
+              MonorepoSpecSupport.readNonEmptyLines(new File(project.baseDir, "no-entry.txt"))
+          } yield {
+            assertEquals(initialVersion, None)
+            assertEquals(restoredVersion, None)
+            assertEquals(
+              versions,
+              List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+            )
+            assertEquals(result.metadata(metadataKey), Some("kept"))
+          }
+        }
+      }
+    }
+  }
+
   test("compose - fail validation when cross-build is enabled with empty crossScalaVersions") {
     loadedContextResource("monorepo-step-empty-cross", Seq("core")) { dir =>
       val coreBase = new File(dir, "core")

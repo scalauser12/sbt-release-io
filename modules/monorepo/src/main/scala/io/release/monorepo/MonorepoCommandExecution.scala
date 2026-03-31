@@ -160,15 +160,16 @@ private[monorepo] object MonorepoCommandExecution {
       args: Seq[MonorepoCli.Arg],
       interactiveEnabled: Boolean,
       commandName: String
-  ): IO[Either[State, PlannedCommand]] = {
-    val extracted = Project.extract(cleanState)
-    val flags     = parseFlags(args, extracted, interactiveEnabled)
-    val defaults  = resolveDecisionDefaults(cleanState, args)
-
-    MonorepoReleasePlan
-      .build(cleanState, plannerInputs(args, flags, defaults, commandName))
-      .map(_.map(plan => PlannedCommand(cleanState, flags, plan)))
-  }
+  ): IO[Either[State, PlannedCommand]] =
+    for {
+      extracted <- IO.blocking(Project.extract(cleanState))
+      flags     <- IO.blocking(parseFlags(args, extracted, interactiveEnabled))
+      defaults   = resolveDecisionDefaults(cleanState, args)
+      planned    <- MonorepoReleasePlan.build(
+                      cleanState,
+                      plannerInputs(args, flags, defaults, commandName)
+                    )
+    } yield planned.map(plan => PlannedCommand(cleanState, flags, plan))
 
   private def runMonorepoCommand[T](
       state: State,

@@ -140,7 +140,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
-      IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
+      MonorepoReleaseIO.resolveTagSettings(ctx.state).flatMap { settings =>
         ctx.currentProjects.toList.traverse { project =>
           required(project.versions, s"Versions not set for ${project.name}") {
             case (releaseVer, _) =>
@@ -160,7 +160,7 @@ private[monorepo] object MonorepoVcsSteps {
             case (releaseVer, _) =>
               // Resolved per-project: tag name/comment depend on releaseIORuntimeVersion
               // which varies by project.
-              IO.blocking(MonorepoReleaseIO.resolveTagSettings(ctx.state)).flatMap { settings =>
+              MonorepoReleaseIO.resolveTagSettings(ctx.state).flatMap { settings =>
                 val initialTagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
                   ctx,

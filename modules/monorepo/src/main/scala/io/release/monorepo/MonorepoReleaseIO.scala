@@ -566,12 +566,13 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       sign: Boolean
   )
 
-  private[monorepo] def resolveTagSettings(state: State): ResolvedMonorepoTagSettings = {
-    val extracted = Project.extract(state)
-    ResolvedMonorepoTagSettings(
-      perProjectTagName = extracted.get(releaseIOMonorepoTagName),
-      tagComment = extracted.get(releaseIOMonorepoTagComment),
-      sign = extracted.get(_root_.io.release.ReleaseIO.releaseIOVcsSign)
-    )
-  }
+  private[monorepo] def resolveTagSettings(state: State): IO[ResolvedMonorepoTagSettings] =
+    IO.blocking {
+      val extracted = Project.extract(state)
+      ResolvedMonorepoTagSettings(
+        perProjectTagName = extracted.get(releaseIOMonorepoTagName),
+        tagComment = extracted.get(releaseIOMonorepoTagComment),
+        sign = extracted.get(_root_.io.release.ReleaseIO.releaseIOVcsSign)
+      )
+    }
 }

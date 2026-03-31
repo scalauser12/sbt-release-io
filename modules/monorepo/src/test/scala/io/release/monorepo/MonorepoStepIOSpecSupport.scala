@@ -26,6 +26,14 @@ trait MonorepoStepIOSpecSupport {
   protected def scalaVersionOf(state: State): IO[String] =
     IO.blocking(SbtRuntime.extracted(state).get(scalaVersion))
 
+  protected def scopedScalaVersionOf(state: State): IO[Option[String]] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+      (extracted.currentRef / scalaVersion)
+        .get(extracted.structure.data)
+        .orElse((sbt.GlobalScope / scalaVersion).get(extracted.structure.data))
+    }
+
   protected def appendCurrentScalaVersion(file: File, state: State): IO[Unit] =
     scalaVersionOf(state).flatMap(version => IO.blocking(sbt.IO.append(file, s"$version\n")))
 
