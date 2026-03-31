@@ -105,7 +105,8 @@ case class MonorepoContext(
     copy(metadataBag = metadataBag.put(key, value))
 
   def withoutMetadata[A](key: AttributeKey[A]): MonorepoContext =
-    copy(metadataBag = metadataBag.remove(key))
+    if (metadata(key).isDefined) copy(metadataBag = metadataBag.remove(key))
+    else this
 
   /** The monorepo release plan is internal runtime metadata, kept separate from user metadata. */
   private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =

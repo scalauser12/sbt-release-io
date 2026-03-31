@@ -57,7 +57,8 @@ case class ReleaseContext(
     copy(metadataBag = metadataBag.put(key, value))
 
   def withoutMetadata[A](key: AttributeKey[A]): ReleaseContext =
-    copy(metadataBag = metadataBag.remove(key))
+    if (metadata(key).isDefined) copy(metadataBag = metadataBag.remove(key))
+    else this
 
   def releaseVersion: Option[String] = versions.map(_._1)
   def nextVersion: Option[String]    = versions.map(_._2)
