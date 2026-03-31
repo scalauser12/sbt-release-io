@@ -90,26 +90,6 @@ object ReleaseStepIO {
   ): ReleaseStepIO =
     build(name, execute, validate, enableCrossBuild, validateWithContext)
 
-  private[release] sealed trait ResourceStepFn[T] extends (T => ReleaseStepIO) {
-    def name: String
-    def enableCrossBuild: Boolean
-  }
-
-  private final case class ResourceStepFnImpl[T](
-      name: String,
-      validateWithContextFn: T => Option[ThreadedValidation],
-      executeFn: T => ReleaseContext => IO[ReleaseContext],
-      enableCrossBuild: Boolean
-  ) extends ResourceStepFn[T] {
-    override def apply(resource: T): ReleaseStepIO =
-      build(
-        name,
-        executeFn(resource),
-        enableCrossBuild = enableCrossBuild,
-        validateWithContext = validateWithContextFn(resource)
-      )
-  }
-
   /** Create a step that transforms the context purely. */
   def pure(name: String)(f: ReleaseContext => ReleaseContext): ReleaseStepIO =
     ReleaseStepIO(name, ctx => IO(f(ctx)))
@@ -268,28 +248,31 @@ object ReleaseStepIO {
       new ResourceStepBuilder[T](name, validateWithContextFn, true)
 
     def execute(f: T => ReleaseContext => IO[ReleaseContext]): T => ReleaseStepIO =
-      ResourceStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = f,
-        enableCrossBuild = crossBuild
-      )
+      resource =>
+        build(
+          name = name,
+          execute = f(resource),
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContextFn(resource)
+        )
 
     def executeAction(f: T => ReleaseContext => IO[Unit]): T => ReleaseStepIO =
-      ResourceStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = t => ctx => f(t)(ctx).as(ctx),
-        enableCrossBuild = crossBuild
-      )
+      resource =>
+        build(
+          name = name,
+          execute = ctx => f(resource)(ctx).as(ctx),
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContextFn(resource)
+        )
 
     def validateOnly: T => ReleaseStepIO =
-      ResourceStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = _ => ctx => IO.pure(ctx),
-        enableCrossBuild = crossBuild
-      )
+      resource =>
+        build(
+          name = name,
+          execute = ctx => IO.pure(ctx),
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContextFn(resource)
+        )
   }
 
   /** Compose a sequence of steps into a two-phase IO program.

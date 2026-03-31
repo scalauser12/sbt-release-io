@@ -17,8 +17,6 @@ private[release] object ExecutionEngine {
       run: C => IO[C]
   )
 
-  final case class ExecutionResult[C <: ReleaseCtx[C]](context: C)
-
   def runValidations[C <: ReleaseCtx[C]](
       logPrefix: String,
       validations: Seq[ValidationStep[C]],
@@ -31,7 +29,7 @@ private[release] object ExecutionEngine {
   def runActions[C <: ReleaseCtx[C]](
       actions: Seq[ActionStep[C]],
       startCtx: C
-  ): IO[ExecutionResult[C]] =
+  ): IO[C] =
     runActionPhase(actions)(startCtx)
 
   def armOnFailure[C <: ReleaseCtx[C]](ctx: C): C =
@@ -67,7 +65,7 @@ private[release] object ExecutionEngine {
 
   def runActionPhase[C <: ReleaseCtx[C]](
       actions: Seq[ActionStep[C]]
-  )(startCtx: C): IO[ExecutionResult[C]] = {
+  )(startCtx: C): IO[C] = {
     // After each action, check whether sbt injected a FailureCommand into
     // remainingCommands (e.g. from a failed task). If so, mark the context
     // as failed so subsequent steps are skipped.
@@ -81,7 +79,6 @@ private[release] object ExecutionEngine {
     interleavedSteps
       .foldLeft(IO.pure(startCtx)) { (ioCtx, f) => ioCtx.flatMap(f) }
       .flatMap(stripFailureCommand)
-      .map(ExecutionResult(_))
   }
 
   private def runValidationStep[C <: ReleaseCtx[C]](

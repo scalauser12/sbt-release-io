@@ -72,11 +72,11 @@ private[monorepo] object MonorepoComposer {
                         steps.map(_.validationStep),
                         startCtx
                       )
-      result       <- ExecutionEngine.runActions(
+      resultCtx    <- ExecutionEngine.runActions(
                         actions,
                         ExecutionEngine.armOnFailure(validatedCtx)
                       )
-    } yield result.context
+    } yield resultCtx
   }
 
   private def runSequentialValidateThenExecute(
@@ -105,6 +105,5 @@ private[monorepo] object MonorepoComposer {
 
     ExecutionEngine
       .runActionPhase(actions)(ExecutionEngine.armOnFailure(ctx))
-      .map(_.context)
   }
 }

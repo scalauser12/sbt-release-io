@@ -43,24 +43,21 @@ private[release] object ReleaseComposer {
           ctx
         )
 
-      val crossWrapped =
-        if (step.enableCrossBuild && crossBuild)
-          (ctx: ReleaseContext) => runCrossBuild(baseAction)(ctx)
-        else baseAction
-
       ExecutionEngine.ActionStep(
         step.name,
-        ExecutionEngine.withErrorRecovery(LogPrefix)(crossWrapped)
+        ExecutionEngine.withErrorRecovery(LogPrefix)(
+          wrapWithCrossBuild(step, crossBuild)(baseAction)
+        )
       )
     }
 
     for {
       validatedCtx <- runValidationPhase(steps, crossBuild, initialCtx)
-      result       <- ExecutionEngine.runActions(
+      resultCtx    <- ExecutionEngine.runActions(
                         wrappedActions,
                         ExecutionEngine.armOnFailure(validatedCtx)
                       )
-    } yield result.context
+    } yield resultCtx
   }
 
   /** Run only the validation phase for the given steps.
@@ -79,14 +76,21 @@ private[release] object ReleaseComposer {
     ExecutionEngine.runValidations(
       logPrefix = LogPrefix,
       validations = steps.map { step =>
-        val wrappedValidation =
-          if (step.enableCrossBuild && crossBuild)
-            (ctx: ReleaseContext) => runCrossBuild(step.threadedValidation)(ctx)
-          else step.threadedValidation
-        ExecutionEngine.ValidationStep(step.name, wrappedValidation)
+        ExecutionEngine.ValidationStep(
+          step.name,
+          wrapWithCrossBuild(step, crossBuild)(step.threadedValidation)
+        )
       },
       initialCtx = initialCtx
     )
+
+  private def wrapWithCrossBuild(
+      step: ReleaseStepIO,
+      crossBuild: Boolean
+  )(action: ReleaseContext => IO[ReleaseContext]): ReleaseContext => IO[ReleaseContext] =
+    if (step.enableCrossBuild && crossBuild)
+      (ctx: ReleaseContext) => runCrossBuild(action)(ctx)
+    else action
 
   /** Run a step function across all crossScalaVersions using proper project reload. */
   private def runCrossBuild(
