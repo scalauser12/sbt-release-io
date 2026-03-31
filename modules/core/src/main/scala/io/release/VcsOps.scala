@@ -228,15 +228,21 @@ private[release] object VcsOps {
       (if (!interactive) doPush
        else {
          val decisionIO =
-           if (useDefaults) IO.pure(true)
+           if (useDefaults) IO.pure(Some(true))
            else
-             steps.StepHelpers.askYesNo(
+             steps.StepHelpers.askYesNoOrEof(
                prompt = "Push changes to the remote repository (y/n)? [y] ",
                defaultYes = true
              )
          decisionIO.flatMap {
-           case true  => doPush
-           case false => onDeclinePush
+           case Some(true)  => doPush
+           case Some(false) => onDeclinePush
+           case None        =>
+             IO.blocking(
+               state.log.warn(
+                 s"$logPrefix Standard input closed before push confirmation. Skipping push."
+               )
+             ) *> onDeclinePush
          }
        })
 }

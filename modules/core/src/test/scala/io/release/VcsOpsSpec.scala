@@ -414,6 +414,67 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("interactivePushAfterRemote - blank input keeps the default yes answer") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val state = VcsOpsSpec.bufferedState(dir).state
+      for {
+        pushed     <- Ref[IO].of(false)
+        declined   <- Ref[IO].of(false)
+        vcs         = new StubVcs(dir)
+        _          <- TestSupport.withInput("\n") {
+                        VcsOps.interactivePushAfterRemote(
+                          state,
+                          interactive = true,
+                          useDefaults = false,
+                          vcs,
+                          ReleaseLogPrefixes.Core,
+                          remoteCheckLog = None
+                        )(
+                          doPush = pushed.set(true),
+                          onDeclinePush = declined.set(true)
+                        )
+                      }
+        didPush    <- pushed.get
+        didDecline <- declined.get
+      } yield {
+        assertEquals(didPush, true)
+        assertEquals(didDecline, false)
+      }
+    }
+  }
+
+  test("interactivePushAfterRemote - closed stdin declines push and logs a warning") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val buffered = VcsOpsSpec.bufferedState(dir)
+      for {
+        pushed     <- Ref[IO].of(false)
+        declined   <- Ref[IO].of(false)
+        vcs         = new StubVcs(dir)
+        _          <- TestSupport.withInput("") {
+                        VcsOps.interactivePushAfterRemote(
+                          buffered.state,
+                          interactive = true,
+                          useDefaults = false,
+                          vcs,
+                          ReleaseLogPrefixes.Core,
+                          remoteCheckLog = None
+                        )(
+                          doPush = pushed.set(true),
+                          onDeclinePush = declined.set(true)
+                        )
+                      }
+        didPush    <- pushed.get
+        didDecline <- declined.get
+        log        <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        val warning = s"${ReleaseLogPrefixes.Core} Standard input closed before push confirmation. Skipping push."
+        assertEquals(didPush, false)
+        assertEquals(didDecline, true)
+        assertEquals(log.sliding(warning.length).count(_ == warning), 1)
+      }
+    }
+  }
+
 }
 
 private final class StubVcs(

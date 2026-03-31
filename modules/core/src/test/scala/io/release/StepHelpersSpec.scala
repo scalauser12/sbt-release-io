@@ -234,6 +234,46 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
+  test("StepHelpers.readLine - leave later bytes available to direct System.in consumers") {
+    TestSupport.withInput("first\nsecond\n") {
+      for {
+        line        <- StepHelpers.readLine()
+        nextByte    <- IO.blocking(System.in.read())
+        trailingRaw <- IO.blocking(scala.io.Source.fromInputStream(System.in).mkString)
+      } yield {
+        assertEquals(line, "first")
+        assertEquals(nextByte, 's'.toInt)
+        assertEquals(trailingRaw, "econd\n")
+      }
+    }
+  }
+
+  test("StepHelpers.readLine - split CRLF input into logical lines") {
+    TestSupport.withInput("first\r\nsecond\r\n") {
+      for {
+        line1 <- StepHelpers.readLine()
+        line2 <- StepHelpers.readLine()
+        eof   <- StepHelpers.readLine()
+      } yield {
+        assertEquals(line1, "first")
+        assertEquals(line2, "second")
+        assertEquals(eof, null)
+      }
+    }
+  }
+
+  test("StepHelpers.readLine - return the partial final line before EOF") {
+    TestSupport.withInput("partial-without-newline") {
+      for {
+        line <- StepHelpers.readLine()
+        eof  <- StepHelpers.readLine()
+      } yield {
+        assertEquals(line, "partial-without-newline")
+        assertEquals(eof, null)
+      }
+    }
+  }
+
   test("StepHelpers.readRequiredLine - fail fast when redirected stdin reaches EOF") {
     TestSupport.withInput("") {
       assertIllegalStateMessage(
