@@ -35,6 +35,11 @@ Bare project ids work for ordinary names. Use `project <id>` to force project se
 | `skip-tests` | Skip the `run-tests` step |
 | `cross` | Enable cross-build for steps with `enableCrossBuild = true` |
 | `all-changed` | Override change detection: release all projects |
+| `default-tag-exists-answer <o\|k\|a\|<tag-name>>` | Auto-answer tag-conflict handling |
+| `default-snapshot-dependencies-answer <y\|n>` | Auto-answer snapshot-dependency confirmation |
+| `default-remote-check-failure-answer <y\|n>` | Auto-answer remote-check failure confirmation |
+| `default-upstream-behind-answer <y\|n>` | Auto-answer upstream-behind confirmation |
+| `default-push-answer <y\|n>` | Auto-answer the final push confirmation |
 
 ## Version overrides
 
@@ -68,4 +73,7 @@ sbt "releaseIOMonorepo cross with-defaults"
 
 # Skip tests
 sbt "releaseIOMonorepo skip-tests with-defaults"
+
+# Auto-answer push confirmation
+sbt "releaseIOMonorepo core with-defaults default-push-answer y release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```

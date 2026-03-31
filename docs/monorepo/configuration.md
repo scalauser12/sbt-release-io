@@ -7,6 +7,9 @@ examples, see [Usage](usage.md).
 Settings prefixed `releaseIO` come from the core plugin. Settings prefixed
 `releaseIOMonorepo` are the monorepo-specific layer.
 
+`releaseIOMonorepo` also consumes a small set of shared core `releaseIO*` settings for
+decision defaults during tag-conflict handling and confirmation prompts.
+
 ## Migration note
 
 The supported build-facing customization surface is now hook- and policy-based. Use
@@ -26,6 +29,18 @@ built around `monorepoResourceHooks` instead of legacy step-list editing.
 | `releaseIOMonorepoPublishArtifactsChecks` | `Boolean` | `true` | Validate `publishTo` / `publish / skip` before publish |
 | `releaseIOMonorepoCommitMessage` | `String => String` | summary formatter | Commit message for release-version commits |
 | `releaseIOMonorepoNextCommitMessage` | `String => String` | summary formatter | Commit message for next-version commits |
+
+## Shared decision-default settings
+
+These shared core settings also apply to `releaseIOMonorepo`.
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIODefaultTagExistsAnswer` | `Option[String]` | `None` | Default answer for per-project tag-conflict handling |
+| `releaseIODefaultSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Default answer for snapshot-dependency confirmation |
+| `releaseIODefaultRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Default answer when the shared remote check fails before push |
+| `releaseIODefaultUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Default answer when the local branch is behind upstream |
+| `releaseIODefaultPushAnswer` | `Option[Boolean]` | `None` | Default answer for the final push confirmation |
 
 ## Hook and policy settings
 
