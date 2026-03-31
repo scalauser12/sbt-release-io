@@ -42,6 +42,20 @@ These shared core settings also apply to `releaseIOMonorepo`.
 | `releaseIODefaultUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Default answer when the local branch is behind upstream |
 | `releaseIODefaultPushAnswer` | `Option[Boolean]` | `None` | Default answer for the final push confirmation |
 
+### Example configuration
+
+Use these shared settings when you want `build.sbt` to pre-answer the built-in monorepo
+confirmation and tag-conflict decisions. They do not affect project selection or version
+override syntax.
+
+```scala
+releaseIODefaultTagExistsAnswer := Some("a")
+releaseIODefaultSnapshotDependenciesAnswer := Some(false)
+releaseIODefaultRemoteCheckFailureAnswer := Some(false)
+releaseIODefaultUpstreamBehindAnswer := Some(false)
+releaseIODefaultPushAnswer := Some(true)
+```
+
 ## Hook and policy settings
 
 These settings compile into the built-in monorepo lifecycle for both `releaseIOMonorepo`

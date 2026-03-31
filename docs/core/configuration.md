@@ -51,6 +51,19 @@ releaseIOVersionFileContents := ((_, version) =>
 entirely, including `beforePublish` / `afterPublish` hooks. `releaseIOSkipPublish := true`
 keeps the phase in the process shape but skips the publish action at execution time.
 
+## Example: Persistent decision defaults
+
+Use these shared settings when you want `build.sbt` to pre-answer the built-in
+confirmation and tag-conflict decisions during release runs.
+
+```scala
+releaseIODefaultTagExistsAnswer := Some("a")
+releaseIODefaultSnapshotDependenciesAnswer := Some(false)
+releaseIODefaultRemoteCheckFailureAnswer := Some(false)
+releaseIODefaultUpstreamBehindAnswer := Some(false)
+releaseIODefaultPushAnswer := Some(true)
+```
+
 ## Custom version formats
 
 The default reader and writer assume a `version.sbt` file containing `[ThisBuild /] version := "x.y.z"`. To use a different version file format — for example, in a non-Scala project or a polyglot monorepo — override three settings together:
