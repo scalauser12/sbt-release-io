@@ -160,9 +160,6 @@ private[monorepo] object MonorepoLifecycle {
     )
   )
 
-  private val builtInPhases: Seq[BuiltInPhase] =
-    phases.collect { case phase: BuiltInPhase => phase }
-
   val defaults: Seq[MonorepoStepIO] =
     phases.flatMap(_.rawSteps)
 

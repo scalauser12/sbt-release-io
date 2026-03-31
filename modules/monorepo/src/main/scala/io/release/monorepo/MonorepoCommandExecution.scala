@@ -200,7 +200,6 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      process  <- resolveProcessMode(session.cleanState, runtime)
       finalCtx <- runtime.resource.use { resourceValue =>
                     for {
                       runProcess <- resolveReleaseRun(session.cleanState, resourceValue, runtime)

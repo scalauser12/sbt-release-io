@@ -229,7 +229,6 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      process  <- resolveProcessMode(inputs.cleanState, runtime)
       finalCtx <- runtime.resource.use { resourceValue =>
                     for {
                       runProcess <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
