@@ -47,5 +47,5 @@ object ReleaseSteps {
   // ── Default step sequences ────────────────────────────────────────────
 
   /** Default ordered sequence of all release steps using IO-native implementations. */
-  val defaults: Seq[ReleaseStepIO] = CoreLifecycle.defaults
+  lazy val defaults: Seq[ReleaseStepIO] = CoreLifecycle.defaults
 }

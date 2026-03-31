@@ -54,5 +54,5 @@ object MonorepoReleaseSteps {
   val tagReleasesPerProject: MonorepoStepIO.PerProject =
     MonorepoVcsSteps.tagReleasesPerProject
 
-  val defaults: Seq[MonorepoStepIO] = MonorepoLifecycle.defaults
+  lazy val defaults: Seq[MonorepoStepIO] = MonorepoLifecycle.defaults
 }
