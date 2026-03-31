@@ -4,6 +4,59 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.7.1
+
+Published: 2026-03-31
+GitHub release:
+[v0.7.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.7.1)
+
+`v0.7.1` hardens the release execution path for both `sbt-release-io` and
+`sbt-release-io-monorepo`, with clearer process-mode behavior, stricter
+preflight validation, and improved interactive release flows.
+
+### Improvements
+
+- Refactor core and monorepo release execution around dedicated command
+  execution, lifecycle, and version-workflow helpers for clearer process-mode
+  behavior and release-step composition.
+- Harden monorepo preflight, VCS initialization, project selection, tagging,
+  and per-project error handling so release runs fail earlier and more clearly.
+- Improve interactive release input handling, confirmation prompts, and error
+  reporting across the release workflows.
+- Strengthen version-writing, tag orchestration, and VCS validation paths in
+  both modules while preserving the hook-first customization model introduced
+  in `v0.7.0`.
+
+### Documentation
+
+- Clarify release-process behavior in the monorepo concepts, customization, and
+  getting-started guides.
+- Refresh contributor-facing project guidance in `CLAUDE.md`.
+
+### Tests
+
+- Replace large legacy mode suites with more focused process-mode, release-run,
+  compose, cross-build, hook, publish, and change-detection coverage across
+  core and monorepo.
+- Add targeted coverage for concurrent stdin safety, check-mode output, VCS
+  operations, version workflows, publish failure handling, and shared-path
+  change detection.
+
+### CI & Build
+
+- Update GitHub Actions for Node 24 readiness.
+- Load `sbt-scalafmt` only on sbt 1 so the sbt 2 verification lanes avoid the
+  plugin's mixed Scala 3 / 2.13 dependency graph.
+- Pin `sbt-scoverage` to `2.4.2`, the latest release published for the sbt 2
+  plugin line, so `./bin/sbt2-clean test` resolves a compatible coverage
+  plugin.
+
+### Verification
+
+- sbt 1.12.3: `sbt scalafmtCheckAll scalafmtSbtCheck test core/scripted
+  monorepo/scripted`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test core/scripted monorepo/scripted`
+
 ## v0.7.0
 
 Published: 2026-03-28  
