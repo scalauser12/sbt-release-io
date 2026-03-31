@@ -126,54 +126,6 @@ object MonorepoStepIO {
     )
   }
 
-  private[release] sealed trait ResourceStepFn[T] extends (T => MonorepoStepIO) {
-    def name: String
-    def scope: ResourceStepFn.Scope
-  }
-
-  private[release] object ResourceStepFn {
-    sealed trait Scope
-
-    object Scope {
-      final case class Global(isSelectionBoundary: Boolean)  extends Scope
-      final case class PerProject(enableCrossBuild: Boolean) extends Scope
-    }
-  }
-
-  private final case class ResourceGlobalStepFnImpl[T](
-      name: String,
-      validateWithContextFn: T => Option[GlobalThreadedValidation],
-      executeFn: T => MonorepoContext => IO[MonorepoContext],
-      isSelectionBoundary: Boolean
-  ) extends ResourceStepFn[T] {
-    override val scope: ResourceStepFn.Scope = ResourceStepFn.Scope.Global(isSelectionBoundary)
-
-    override def apply(resource: T): MonorepoStepIO =
-      buildGlobal(
-        name,
-        executeFn(resource),
-        isSelectionBoundary = isSelectionBoundary,
-        validateWithContext = validateWithContextFn(resource)
-      )
-  }
-
-  private final case class ResourcePerProjectStepFnImpl[T](
-      name: String,
-      validateWithContextFn: T => Option[PerProjectThreadedValidation],
-      executeFn: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
-      enableCrossBuild: Boolean
-  ) extends ResourceStepFn[T] {
-    override val scope: ResourceStepFn.Scope = ResourceStepFn.Scope.PerProject(enableCrossBuild)
-
-    override def apply(resource: T): MonorepoStepIO =
-      buildPerProject(
-        name,
-        executeFn(resource),
-        enableCrossBuild = enableCrossBuild,
-        validateWithContext = validateWithContextFn(resource)
-      )
-  }
-
   /** A step that runs once globally (e.g., check clean working dir, push changes).
     *
     * @param isSelectionBoundary Internal flag — marks this step as the boundary between
@@ -386,28 +338,31 @@ object MonorepoStepIO {
       new ResourceGlobalBuilder[T](name, validateWithContextFn, true)
 
     def execute(f: T => MonorepoContext => IO[MonorepoContext]): T => MonorepoStepIO =
-      ResourceGlobalStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = f,
-        isSelectionBoundary = selectionBoundary
-      )
+      resource =>
+        buildGlobal(
+          name = name,
+          execute = f(resource),
+          isSelectionBoundary = selectionBoundary,
+          validateWithContext = validateWithContextFn(resource)
+        )
 
     def executeAction(f: T => MonorepoContext => IO[Unit]): T => MonorepoStepIO =
-      ResourceGlobalStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = t => ctx => f(t)(ctx).as(ctx),
-        isSelectionBoundary = selectionBoundary
-      )
+      resource =>
+        buildGlobal(
+          name = name,
+          execute = ctx => f(resource)(ctx).as(ctx),
+          isSelectionBoundary = selectionBoundary,
+          validateWithContext = validateWithContextFn(resource)
+        )
 
     def validateOnly: T => MonorepoStepIO =
-      ResourceGlobalStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = _ => ctx => IO.pure(ctx),
-        isSelectionBoundary = selectionBoundary
-      )
+      resource =>
+        buildGlobal(
+          name = name,
+          execute = ctx => IO.pure(ctx),
+          isSelectionBoundary = selectionBoundary,
+          validateWithContext = validateWithContextFn(resource)
+        )
   }
 
   /** Fluent builder for resource-aware per-project steps. */
@@ -442,30 +397,33 @@ object MonorepoStepIO {
     def execute(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
     ): T => MonorepoStepIO =
-      ResourcePerProjectStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = f,
-        enableCrossBuild = crossBuild
-      )
+      resource =>
+        buildPerProject(
+          name = name,
+          execute = f(resource),
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContextFn(resource)
+        )
 
     def executeAction(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): T => MonorepoStepIO =
-      ResourcePerProjectStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = t => (ctx, proj) => f(t)(ctx, proj).as(ctx),
-        enableCrossBuild = crossBuild
-      )
+      resource =>
+        buildPerProject(
+          name = name,
+          execute = (ctx, proj) => f(resource)(ctx, proj).as(ctx),
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContextFn(resource)
+        )
 
     def validateOnly: T => MonorepoStepIO =
-      ResourcePerProjectStepFnImpl(
-        name = name,
-        validateWithContextFn = validateWithContextFn,
-        executeFn = _ => (ctx, _) => IO.pure(ctx),
-        enableCrossBuild = crossBuild
-      )
+      resource =>
+        buildPerProject(
+          name = name,
+          execute = (ctx, _) => IO.pure(ctx),
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContextFn(resource)
+        )
   }
 
   /** Compose a sequence of monorepo steps into a two-phase IO program.

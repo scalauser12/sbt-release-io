@@ -14,7 +14,6 @@ import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
-import sbt.Project
 
 import java.io.File
 import java.io.IOException

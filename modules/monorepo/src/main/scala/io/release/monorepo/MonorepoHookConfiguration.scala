@@ -28,34 +28,6 @@ private[monorepo] final case class MonorepoHookConfiguration(
     afterPushHooks: Seq[MonorepoGlobalHookIO]
 ) {
 
-  def hasCustomizations: Boolean =
-    !enableSnapshotDependenciesCheck ||
-      !enableRunClean ||
-      !enableRunTests ||
-      !enableTagging ||
-      !enablePublish ||
-      !enablePush ||
-      Seq(
-        beforeSelectionHooks,
-        afterSelectionHooks,
-        beforeVersionResolutionHooks,
-        afterVersionResolutionHooks,
-        beforeReleaseVersionWriteHooks,
-        afterReleaseVersionWriteHooks,
-        beforeReleaseCommitHooks,
-        afterReleaseCommitHooks,
-        beforeTagHooks,
-        afterTagHooks,
-        beforePublishHooks,
-        afterPublishHooks,
-        beforeNextVersionWriteHooks,
-        afterNextVersionWriteHooks,
-        beforeNextCommitHooks,
-        afterNextCommitHooks,
-        beforePushHooks,
-        afterPushHooks
-      ).exists(_.nonEmpty)
-
   def mergeWith(other: MonorepoHookConfiguration): MonorepoHookConfiguration =
     MonorepoHookConfiguration(
       enableSnapshotDependenciesCheck =

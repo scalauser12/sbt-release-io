@@ -289,44 +289,44 @@ private[monorepo] object MonorepoCommandExecution {
           s"${ReleaseLogPrefixes.Monorepo} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
         )
 
-    val tagMatches      = allArgs { case TagDefault(value) => value }
-    val snapshotMatches = allArgs { case SnapshotDependenciesDefault(value) => value }
-    val remoteMatches   = allArgs { case RemoteCheckFailureDefault(value) => value }
-    val upstreamMatches = allArgs { case UpstreamBehindDefault(value) => value }
-    val pushMatches     = allArgs { case PushDefault(value) => value }
+    def resolveDefault[A](
+        argName: String,
+        extract: PartialFunction[MonorepoCli.Arg, A],
+        render: A => String
+    ): Option[A] = {
+      val matches   = allArgs(extract)
+      val selected  = matches.lastOption
+      val displayed = selected.map(render)
+      warnIfRepeated(argName, displayed, matches.size)
+      selected
+    }
 
     val cliDefaults = ReleaseDecisionDefaults(
-      tagExistsAnswer = tagMatches.lastOption,
-      snapshotDependenciesAnswer = snapshotMatches.lastOption,
-      remoteCheckFailureAnswer = remoteMatches.lastOption,
-      upstreamBehindAnswer = upstreamMatches.lastOption,
-      pushAnswer = pushMatches.lastOption
-    )
-
-    warnIfRepeated(
-      "default-tag-exists-answer",
-      cliDefaults.tagExistsAnswer,
-      tagMatches.size
-    )
-    warnIfRepeated(
-      "default-snapshot-dependencies-answer",
-      cliDefaults.snapshotDependenciesAnswer.map(renderYesNo),
-      snapshotMatches.size
-    )
-    warnIfRepeated(
-      "default-remote-check-failure-answer",
-      cliDefaults.remoteCheckFailureAnswer.map(renderYesNo),
-      remoteMatches.size
-    )
-    warnIfRepeated(
-      "default-upstream-behind-answer",
-      cliDefaults.upstreamBehindAnswer.map(renderYesNo),
-      upstreamMatches.size
-    )
-    warnIfRepeated(
-      "default-push-answer",
-      cliDefaults.pushAnswer.map(renderYesNo),
-      pushMatches.size
+      tagExistsAnswer = resolveDefault(
+        "default-tag-exists-answer",
+        { case TagDefault(value) => value },
+        (value: String) => value
+      ),
+      snapshotDependenciesAnswer = resolveDefault(
+        "default-snapshot-dependencies-answer",
+        { case SnapshotDependenciesDefault(value) => value },
+        renderYesNo
+      ),
+      remoteCheckFailureAnswer = resolveDefault(
+        "default-remote-check-failure-answer",
+        { case RemoteCheckFailureDefault(value) => value },
+        renderYesNo
+      ),
+      upstreamBehindAnswer = resolveDefault(
+        "default-upstream-behind-answer",
+        { case UpstreamBehindDefault(value) => value },
+        renderYesNo
+      ),
+      pushAnswer = resolveDefault(
+        "default-push-answer",
+        { case PushDefault(value) => value },
+        renderYesNo
+      )
     )
 
     ReleaseDecisionDefaults.merge(cliDefaults, ReleaseDecisionDefaults.fromState(state))

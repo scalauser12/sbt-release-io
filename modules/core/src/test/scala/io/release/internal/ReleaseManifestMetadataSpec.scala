@@ -8,7 +8,6 @@ import sbt.Keys.packageOptions
 import sbt.Package.ManifestAttributes
 import sbt.Project
 import sbt.State
-import io.release.internal.SbtRuntime
 
 class ReleaseManifestMetadataSpec extends CatsEffectSuite {
   private val fixturePrefix = "release-manifest-metadata-spec"

@@ -11,7 +11,6 @@ import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
 import sbt.Package.ManifestAttributes
-import sbt.Project
 import sbt.ProjectRef
 import sbt.State
 
