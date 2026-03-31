@@ -2,22 +2,9 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.TestSupport
 import munit.CatsEffectSuite
 
-import java.nio.file.Files
-
 class MonorepoHookIOSpec extends CatsEffectSuite {
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  private def withCtx[A](f: MonorepoContext => IO[A]): IO[A] =
-    IO.blocking(Files.createTempDirectory("monorepo-hook-io-spec").toFile)
-      .bracket(dir =>
-        IO.blocking(TestSupport.dummyState(dir)).flatMap(s => f(MonorepoContext(state = s)))
-      )(dir => IO.blocking(TestSupport.deleteRecursively(dir)))
 
   private def dummyProject(name: String): ProjectReleaseInfo =
     MonorepoTestSupport.dummyProject(name)
@@ -27,14 +14,14 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   // ---------------------------------------------------------------------------
 
   test("MonorepoGlobalHookIO.io - stores the provided name on the hook") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val hook = MonorepoGlobalHookIO.io("my-global-hook")(IO.pure)
       IO(assertEquals(hook.name, "my-global-hook"))
     }
   }
 
   test("MonorepoGlobalHookIO.io - execute delegates to the provided function") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val marker    = MonorepoTestSupport.dummyProject("marker")
       val modifyCtx = (c: MonorepoContext) => IO.pure(c.withProjects(Seq(marker)))
       val hook      = MonorepoGlobalHookIO.io("transform-hook")(modifyCtx)
@@ -46,14 +33,14 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoGlobalHookIO.action - stores the provided name on the hook") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val hook = MonorepoGlobalHookIO.action("my-action-hook")(_ => IO.unit)
       IO(assertEquals(hook.name, "my-action-hook"))
     }
   }
 
   test("MonorepoGlobalHookIO.action - execute runs the effect and returns context unchanged") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val hook = MonorepoGlobalHookIO.action("log-hook")(_ => log.update(_ :+ "ran"))
 
@@ -68,14 +55,14 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoGlobalHookIO.io - default validate is a no-op") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val hook = MonorepoGlobalHookIO.io("validate-noop")(IO.pure)
       hook.validate(ctx).map(_ => assert(true))
     }
   }
 
   test("MonorepoGlobalHookIO.action - default validate is a no-op") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val hook = MonorepoGlobalHookIO.action("validate-noop-action")(_ => IO.unit)
       hook.validate(ctx).map(_ => assert(true))
     }
@@ -91,7 +78,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoProjectHookIO.io - execute delegates to the provided function") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val project   = dummyProject("core")
       val tagged    = project.copy(tagName = Some("core-v1.0.0"))
       val modifyCtx =
@@ -110,7 +97,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoProjectHookIO.action - execute runs the effect and returns context unchanged") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val project = dummyProject("api")
         val hook    =
@@ -127,7 +114,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoProjectHookIO.io - default validate is a no-op") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val project = dummyProject("core")
       val hook    = MonorepoProjectHookIO.io("validate-noop-project")((c, _) => IO.pure(c))
       hook.validate(ctx, project).map(_ => assert(true))
@@ -135,7 +122,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoProjectHookIO.action - default validate is a no-op") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val project = dummyProject("core")
       val hook    = MonorepoProjectHookIO.action("validate-noop-project-action")((_, _) => IO.unit)
       hook.validate(ctx, project).map(_ => assert(true))
@@ -152,7 +139,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoGlobalResourceHookIO.io - execute delegates to the resource function") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val marker = dummyProject("marker")
       val hook   = MonorepoGlobalResourceHookIO.io[String]("resource-io-hook") { resource => c =>
         IO.pure(c.withProjects(Seq(marker.copy(name = resource))))
@@ -171,7 +158,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoGlobalResourceHookIO.action - execute runs effect and returns context unchanged") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val hook = MonorepoGlobalResourceHookIO.action[String]("resource-action") { resource => _ =>
           log.update(_ :+ resource)
@@ -188,7 +175,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoGlobalResourceHookIO.io - default validate is a no-op") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val hook = MonorepoGlobalResourceHookIO.io[String]("resource-validate-noop")(_ => IO.pure)
       hook.validate(ctx).map(_ => assert(true))
     }
@@ -205,7 +192,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoProjectResourceHookIO.io - execute delegates to the resource function") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val project = dummyProject("core")
       val hook    = MonorepoProjectResourceHookIO.io[String]("project-resource-io") {
         resource => (c, p) =>
@@ -227,7 +214,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoProjectResourceHookIO.action - execute runs effect and returns context unchanged") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val project = dummyProject("api")
         val hook    =
@@ -247,7 +234,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoProjectResourceHookIO.io - default validate is a no-op") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val project = dummyProject("core")
       val hook    =
         MonorepoProjectResourceHookIO.io[String]("resource-project-validate-noop") { _ => (c, _) =>
@@ -264,7 +251,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   test(
     "MonorepoResourceHooks.materialize - with Some(resource) global hook calls through to resource function"
   ) {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val resourceHook = MonorepoGlobalResourceHookIO.action[String]("before-selection") {
           resource => _ =>
@@ -286,7 +273,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   test(
     "MonorepoResourceHooks.materialize - with None global hook returns context unchanged without calling resource function"
   ) {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val resourceHook = MonorepoGlobalResourceHookIO.action[String]("before-selection") {
           _ => _ =>
@@ -308,7 +295,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   test(
     "MonorepoResourceHooks.materialize - with Some(resource) per-project hook calls through to resource function"
   ) {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val project      = dummyProject("core")
         val resourceHook =
@@ -331,7 +318,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   test(
     "MonorepoResourceHooks.materialize - with None per-project hook returns context unchanged without calling resource function"
   ) {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val project      = dummyProject("core")
         val resourceHook =
@@ -352,7 +339,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoResourceHooks.materialize - preserves hook names during materialization") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val globalHook  = MonorepoGlobalResourceHookIO.io[String]("named-global-hook")(_ => IO.pure)
       val projectHook =
         MonorepoProjectResourceHookIO.io[String]("named-project-hook")(_ => (c, _) => IO.pure(c))
@@ -371,7 +358,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoResourceHooks.materialize - all boolean policies default to true") {
-    withCtx { _ =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { _ =>
       val config = MonorepoResourceHooks.materialize(MonorepoResourceHooks.empty[String], None)
 
       IO {
@@ -386,7 +373,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoResourceHooks.materialize - preserves validate function from resource hook") {
-    withCtx { ctx =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val resourceHook = MonorepoGlobalResourceHookIO[String](
           name = "hook-with-validate",
@@ -404,7 +391,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test("MonorepoResourceHooks.materialize - empty hooks produce empty hook sequences") {
-    withCtx { _ =>
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { _ =>
       val config = MonorepoResourceHooks.materialize(MonorepoResourceHooks.empty[String], None)
 
       IO {

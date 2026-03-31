@@ -1,0 +1,157 @@
+package io.release
+
+import cats.effect.IO
+import cats.effect.Ref
+import io.release.internal.CoreExecutionState
+import io.release.internal.CoreReleasePlan
+import io.release.internal.ExecutionFlags
+import io.release.internal.SbtCompat
+import munit.CatsEffectSuite
+import sbt.AttributeKey
+
+class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
+
+  test("compose - run validations before executes and fail fast on validation error") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val step1 = ReleaseStepIO(
+          name = "step1",
+          execute = c => observed.update(_ :+ "execute1").as(c),
+          validate = _ => observed.update(_ :+ "validate1")
+        )
+        val step2 = ReleaseStepIO(
+          name = "step2",
+          execute = c => observed.update(_ :+ "execute2").as(c),
+          validate = _ =>
+            observed.update(_ :+ "validate2") *>
+              IO.raiseError(new RuntimeException("validation failed"))
+        )
+
+        ReleaseStepIO.compose(Seq(step1, step2), crossBuild = false)(ctx).attempt.flatMap {
+          result =>
+            observed.get.map { events =>
+              assert(result.isLeft)
+              result.left.foreach {
+                case err: RuntimeException =>
+                  assert(err.getMessage.contains("validation failed"))
+                case other                 =>
+                  fail(s"Expected RuntimeException but got $other")
+              }
+              assertEquals(events, List("validate1", "validate2"))
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - mark the release as failed when an execute throws") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val failing = ReleaseStepIO.io("failing") { _ =>
+          observed.update(_ :+ "execute1") *> IO.raiseError(new RuntimeException("boom"))
+        }
+        val skipped = ReleaseStepIO.io("skipped") { c =>
+          observed.update(_ :+ "execute2").as(c)
+        }
+
+        ReleaseStepIO.compose(Seq(failing, skipped), crossBuild = false)(ctx).flatMap { result =>
+          observed.get.map { events =>
+            assert(result.failed)
+            assert(result.failureCause.isDefined)
+            assertEquals(events, List("execute1"))
+          }
+        }
+      }
+    }
+  }
+
+  test("compose - clear onFailure after successful compose") {
+    contextResource.use { ctx =>
+      ReleaseStepIO.compose(Seq(ReleaseStepIO.io("noop")(IO.pure)), crossBuild = false)(ctx).map {
+        result =>
+          assertEquals(result.state.onFailure, None)
+      }
+    }
+  }
+
+  test("attachSuppressed - keep the original failure primary and record the restore failure") {
+    IO {
+      val original = new RuntimeException("boom")
+      val restore  = new IllegalStateException("restore failed")
+      val combined = ReleaseComposer.attachSuppressed(original, restore)
+
+      assertEquals(combined, original)
+      assertEquals(combined.getSuppressed.toSeq, Seq(restore))
+    }
+  }
+
+  test("compose - detect FailureCommand sentinel and skip subsequent executes") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val injectFailure = ReleaseStepIO.io("inject-failure-command") { c =>
+          observed
+            .update(_ :+ "execute1")
+            .as(c.copy(state = c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)))
+        }
+        val skipped       = ReleaseStepIO.io("skipped") { c =>
+          observed.update(_ :+ "execute2").as(c)
+        }
+
+        ReleaseStepIO.compose(Seq(injectFailure, skipped), crossBuild = false)(ctx).flatMap {
+          result =>
+            observed.get.map { events =>
+              assert(result.failed)
+              assert(result.failureCause.exists(_.getMessage.contains("inject-failure-command")))
+              assertEquals(events, List("execute1"))
+              assertEquals(result.state.remainingCommands, Nil)
+              assertEquals(result.state.onFailure, None)
+            }
+        }
+      }
+    }
+  }
+
+  test("ReleaseContext metadata - store typed values immutably") {
+    contextResource.use { ctx =>
+      IO {
+        val releaseCompleted = AttributeKey[Boolean]("releaseCompleted")
+        val attemptCount     = AttributeKey[Int]("attemptCount")
+        val updated          = ctx
+          .withMetadata(releaseCompleted, true)
+          .withMetadata(attemptCount, 2)
+        val removed          = updated.withoutMetadata(releaseCompleted)
+
+        assertEquals(ctx.metadata(releaseCompleted), None)
+        assertEquals(updated.metadata(releaseCompleted), Some(true))
+        assertEquals(updated.metadata(attemptCount), Some(2))
+        assertEquals(removed.metadata(releaseCompleted), None)
+        assertEquals(removed.metadata(attemptCount), Some(2))
+      }
+    }
+  }
+
+  test("ReleaseContext internal execution state - survive state replacement") {
+    contextResource.use { ctx =>
+      IO {
+        val plan    = CoreReleasePlan(
+          flags = ExecutionFlags(
+            useDefaults = true,
+            skipTests = false,
+            skipPublish = false,
+            interactive = false,
+            crossBuild = false
+          ),
+          releaseVersionOverride = Some("1.0.0"),
+          nextVersionOverride = Some("1.0.1-SNAPSHOT"),
+          tagDefault = Some("k")
+        )
+        val updated = ctx
+          .withExecutionState(CoreExecutionState(plan))
+          .withState(ctx.state.copy(onFailure = None))
+
+        assertEquals(updated.executionState.map(_.plan.tagDefault), Some(Some("k")))
+        assertEquals(updated.useDefaults, true)
+      }
+    }
+  }
+}

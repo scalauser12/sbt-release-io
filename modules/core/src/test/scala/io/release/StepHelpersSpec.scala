@@ -9,9 +9,7 @@ import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.ModuleID
 
-import java.io.ByteArrayInputStream
 import java.io.File
-import java.nio.charset.StandardCharsets
 import scala.sys.process.Process
 
 class StepHelpersSpec extends CatsEffectSuite {
@@ -225,32 +223,15 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readLine - return consecutive lines from the same redirected stdin") {
-    val input = "first\nsecond\n"
-    val bytes = input.getBytes(StandardCharsets.UTF_8)
-
-    cats.effect.Resource
-      .make {
-        IO.blocking {
-          TestSupport.stdinLock.acquire()
-          val original = System.in
-          System.setIn(new ByteArrayInputStream(bytes))
-          original
-        }
-      } { original =>
-        IO.blocking {
-          System.setIn(original)
-          TestSupport.stdinLock.release()
-        }
+    TestSupport.withInput("first\nsecond\n") {
+      for {
+        line1 <- StepHelpers.readLine()
+        line2 <- StepHelpers.readLine()
+      } yield {
+        assertEquals(line1, "first")
+        assertEquals(line2, "second")
       }
-      .use { _ =>
-        for {
-          line1 <- StepHelpers.readLine()
-          line2 <- StepHelpers.readLine()
-        } yield {
-          assertEquals(line1, "first")
-          assertEquals(line2, "second")
-        }
-      }
+    }
   }
 
   private def stubVcs(base: File): Vcs =

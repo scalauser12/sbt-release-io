@@ -17,10 +17,7 @@ import sbt.LocalProject
 import sbt.Project
 import sbt.State
 
-import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.InputStream
-import java.nio.charset.StandardCharsets
 
 @scala.annotation.nowarn("cat=deprecation")
 class MonorepoVcsStepsSpec extends CatsEffectSuite {
@@ -117,7 +114,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                      sbt.IO.write(new File(repo, "file.txt"), "updated")
                      TestSupport.commitAll(repo, "Second commit")
                    }
-        result  <- withInput("o\n") {
+        result  <- TestSupport.withInput("o\n") {
                      MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
                    }
         tagRev  <- IO.blocking(TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim)
@@ -147,7 +144,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                             sbt.IO.write(new File(repo, "file.txt"), "updated")
                             TestSupport.commitAll(repo, "Second commit")
                           }
-        result         <- withInput("core-v1.0.1\n") {
+        result         <- TestSupport.withInput("core-v1.0.1\n") {
                             MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
                           }
         oldTags        <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.0"))
@@ -180,7 +177,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
-          withInput("a\n") {
+          TestSupport.withInput("a\n") {
             MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
           }
         ) { err =>
@@ -257,8 +254,6 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private val tempDirResource: Resource[IO, File] =
     TestSupport.tempDirResource("monorepo-vcs-steps-spec")
-
-  private val stdinLock = TestSupport.stdinLock
 
   private val brokenRemoteContextResource: Resource[IO, MonorepoContext] =
     tempDirResource.evalMap { repo =>
@@ -391,27 +386,6 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         fail(s"Expected project '$id'")
     }
   }
-
-  private def withInput[A](input: String)(io: IO[A]): IO[A] = {
-    val bytes = input.getBytes(StandardCharsets.UTF_8)
-
-    Resource
-      .make {
-        IO.blocking {
-          stdinLock.acquire()
-          val original = System.in
-          System.setIn(new ByteArrayInputStream(bytes))
-          original
-        }
-      }(restoreInput)
-      .use(_ => io)
-  }
-
-  private def restoreInput(original: InputStream): IO[Unit] =
-    IO.blocking {
-      System.setIn(original)
-      stdinLock.release()
-    }
 
   private def withFlags(
       ctx: MonorepoContext,

@@ -1,0 +1,187 @@
+package io.release.monorepo
+
+import cats.effect.IO
+import io.release.TestSupport
+import io.release.vcs.Vcs
+import munit.CatsEffectSuite
+
+import java.io.File
+
+class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectionSpecSupport {
+
+  test("detectChangedProjects - detect project-local changes under the project directory") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
+        sbt.IO.createDirectory(new File(repo, "api"))
+        sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "api/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "core/src/main/scala/Core.scala"), "object Core {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+        TestSupport.runGit(repo, "tag", "api-v0.1.0")
+
+        sbt.IO.write(
+          new File(repo, "core/src/main/scala/Core.scala"),
+          "object Core { val changed = true }\n"
+        )
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+        val core = nestedProject(repo, "core")
+        val api  = nestedProject(repo, "api")
+
+        detectChanged(vcs, Seq(core, api), env.state).flatMap { changed =>
+          readLogs(
+            env,
+            required = Seq(
+              "core has 1 changed file(s) since core-v0.1.0",
+              "api unchanged since api-v0.1.0"
+            )
+          ).map { logs =>
+            assertEquals(changed.map(_.name), Seq("core"))
+            assert(logs.contains("core has 1 changed file(s) since core-v0.1.0"))
+            assert(logs.contains("api unchanged since api-v0.1.0"))
+          }
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - exclude child project directories from parent project diffs") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
+        sbt.IO.write(new File(repo, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "core/version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "core/src/main/scala/Core.scala"), "object Core {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "root-v0.1.0")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        sbt.IO.write(
+          new File(repo, "core/src/main/scala/Core.scala"),
+          "object Core { val changed = true }\n"
+        )
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+        val root = rootProject(repo)
+        val core = nestedProject(repo, "core")
+
+        detectChanged(vcs, Seq(root, core), env.state).flatMap { changed =>
+          readLogs(
+            env,
+            required = Seq(
+              "root has only version/excluded file changes since root-v0.1.0, treating as unchanged",
+              "core has 1 changed file(s) since core-v0.1.0"
+            )
+          ).map { logs =>
+            assertEquals(changed.map(_.name), Seq("core"))
+            assert(
+              logs.contains(
+                "root has only version/excluded file changes since root-v0.1.0, treating as unchanged"
+              )
+            )
+            assert(logs.contains("core has 1 changed file(s) since core-v0.1.0"))
+          }
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - ignore additional excluded files beyond the version file") {
+    repoResource.use { repo =>
+      for {
+        sourceFile <- IO.blocking {
+                        sbt.IO.createDirectory(new File(repo, "core/src/main/scala"))
+                        sbt.IO.write(
+                          new File(repo, "core/version.sbt"),
+                          """version := "0.1.0-SNAPSHOT"""" + "\n"
+                        )
+                        val sf = new File(repo, "core/src/main/scala/Core.scala")
+                        sbt.IO.write(sf, "object Core {}\n")
+
+                        TestSupport.initGitRepo(repo)
+                        TestSupport.runGit(repo, "add", ".")
+                        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+                        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+                        sbt.IO.write(sf, "object Core { val changed = true }\n")
+                        TestSupport.runGit(repo, "add", ".")
+                        TestSupport.runGit(repo, "commit", "-m", "Update core sources")
+                        sf
+                      }
+        vcs        <- detectVcs(repo)
+        env         = testEnv(repo)
+        project     = nestedProject(repo, "core")
+        changed    <- detectChanged(
+                        vcs,
+                        Seq(project),
+                        env.state,
+                        additionalExcludeFiles = Seq(sourceFile)
+                      )
+        logs       <- readLogs(
+                        env,
+                        required = Seq(
+                          "core has only version/excluded file changes since " +
+                            "core-v0.1.0, treating as unchanged"
+                        )
+                      )
+      } yield {
+        assert(changed.isEmpty)
+        assert(
+          logs.contains(
+            "core has only version/excluded file changes since " +
+              "core-v0.1.0, treating as unchanged"
+          )
+        )
+        assert(!logs.contains("core has 1 changed file(s) since core-v0.1.0"))
+      }
+    }
+  }
+
+  test("detectChangedProjects - treat root project as unchanged when no files changed") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.write(
+          new File(repo, "version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "root-v0.1.0")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs: Vcs, env: TestEnv) =>
+        val project = rootProject(repo)
+
+        detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
+          readLogs(env, required = Seq("root unchanged since root-v0.1.0")).map { logs =>
+            assert(changed.isEmpty)
+            assert(logs.contains("root unchanged since root-v0.1.0"))
+          }
+        }
+      }
+    }
+  }
+}
+

@@ -13,8 +13,13 @@ import sbt.internal.util.GlobalLogging
 import sbt.internal.util.MainAppender
 import xsbti.*
 
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.PrintStream
+import java.nio.charset.StandardCharsets
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -80,11 +85,61 @@ object TestSupport {
       IO.blocking(deleteRecursively(dir))
     )
 
+  def loadedStateResource(
+      prefix: String,
+      buildSettings: Seq[Setting[?]] = Nil,
+      currentProjectId: Option[String] = None
+  )(projectsFor: File => Seq[Project]): Resource[IO, State] =
+    tempDirResource(prefix).evalMap { dir =>
+      IO.blocking(
+        loadedState(
+          dir,
+          projectsFor(dir),
+          buildSettings = buildSettings,
+          currentProjectId = currentProjectId
+        )
+      )
+    }
+
+  def loadedContextResource(
+      prefix: String,
+      buildSettings: Seq[Setting[?]] = Nil,
+      currentProjectId: Option[String] = None
+  )(projectsFor: File => Seq[Project]): Resource[IO, ReleaseContext] =
+    loadedStateResource(
+      prefix,
+      buildSettings = buildSettings,
+      currentProjectId = currentProjectId
+    )(projectsFor).map(state => ReleaseContext(state = state))
+
   def dummyStateResource(prefix: String): Resource[IO, State] =
     tempDirResource(prefix).evalMap(dir => IO.blocking(dummyState(dir)))
 
   def dummyContextResource(prefix: String): Resource[IO, ReleaseContext] =
     dummyStateResource(prefix).map(state => ReleaseContext(state = state))
+
+  def withInput[A](input: String)(io: IO[A]): IO[A] =
+    withSystemInput(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)))(io)
+
+  def withSystemInput[A](input: InputStream)(io: IO[A]): IO[A] =
+    redirectedInputResource(input).use(_ => io)
+
+  def redirectedInputResource(input: InputStream): Resource[IO, Unit] =
+    Resource
+      .make {
+        IO.blocking {
+          stdinLock.acquire()
+          val original = System.in
+          System.setIn(input)
+          original
+        }
+      } { original =>
+        IO.blocking {
+          System.setIn(original)
+          stdinLock.release()
+        }
+      }
+      .map(_ => ())
 
   def gitRepoResource(prefix: String): Resource[IO, File] =
     tempDirResource(prefix).evalMap { dir =>
@@ -184,6 +239,41 @@ object TestSupport {
 
   def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
     SbtRuntime.appendWithSession(state, settings)
+
+  final case class BufferedState(state: State, consoleBuffer: ByteArrayOutputStream)
+
+  def bufferedState(baseDir: File): BufferedState =
+    bufferedState(baseDir, new File(baseDir, "sbt-test.log"))
+
+  def bufferedState(
+      baseDir: File,
+      logFile: File
+  ): BufferedState = {
+    val consoleBuffer = new ByteArrayOutputStream()
+    val consoleOut    = ConsoleOut.printStreamOut(new PrintStream(consoleBuffer))
+    val globalLogging =
+      GlobalLogging.initial(
+        MainAppender.globalDefault(consoleOut),
+        logFile,
+        consoleOut
+      )
+
+    BufferedState(
+      state = State(
+        configuration = dummyAppConfiguration(baseDir),
+        definedCommands = Nil,
+        exitHooks = Set.empty,
+        onFailure = None,
+        remainingCommands = Nil,
+        history = State.newHistory,
+        attributes = AttributeMap.empty,
+        globalLogging = globalLogging,
+        currentCommand = None,
+        next = State.Continue
+      ),
+      consoleBuffer = consoleBuffer
+    )
+  }
 
   private class DummyAppMain extends AppMain {
     override def run(configuration: AppConfiguration): MainResult = new MainResult {}

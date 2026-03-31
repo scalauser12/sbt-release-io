@@ -2,8 +2,6 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Ref
-import cats.effect.Resource
-import io.release.TestSupport
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.AttributeKey
@@ -306,8 +304,6 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   private def dummyProject(name: String): ProjectReleaseInfo =
     MonorepoTestSupport.dummyProject(name)
 
-  private val contextResource: Resource[IO, MonorepoContext] =
-    TestSupport
-      .dummyStateResource("monorepo-step-def-spec")
-      .map(state => MonorepoContext(state = state))
+  private val contextResource =
+    MonorepoSpecSupport.dummyContextResource("monorepo-step-def-spec")
 }

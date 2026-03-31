@@ -17,8 +17,34 @@ import java.io.File
 
 object MonorepoSpecSupport {
 
+  def dummyProject(name: String): ProjectReleaseInfo =
+    MonorepoTestSupport.dummyProject(name)
+
   def projectNamed(projects: Seq[ProjectReleaseInfo], name: String): ProjectReleaseInfo =
     projects.find(_.name == name).getOrElse(fail(s"Expected project '$name'"))
+
+  def dummyContextResource(prefix: String): Resource[IO, MonorepoContext] =
+    TestSupport.dummyStateResource(prefix).map(state => MonorepoContext(state = state))
+
+  def loadedContextResource(
+      prefix: String,
+      selectedProjectIds: Seq[String],
+      versionsById: Map[String, (String, String)] = Map.empty,
+      vcs: Option[Vcs] = None,
+      interactive: Boolean = false,
+      skipTests: Boolean = false,
+      skipPublish: Boolean = false
+  )(projectsFor: File => Seq[Project]): Resource[IO, MonorepoContext] =
+    loadedFixtureResource(prefix)(projectsFor).map(
+      _.context(
+        selectedProjectIds = selectedProjectIds,
+        versionsById = versionsById,
+        vcs = vcs,
+        interactive = interactive,
+        skipTests = skipTests,
+        skipPublish = skipPublish
+      )
+    )
 
   def readNonEmptyLines(file: File): IO[List[String]] =
     IO.blocking {

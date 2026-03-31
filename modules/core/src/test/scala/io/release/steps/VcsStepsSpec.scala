@@ -1,7 +1,6 @@
 package io.release.steps
 
 import cats.effect.IO
-import cats.effect.Resource
 import io.release.ReleaseContext
 import io.release.TestAssertions
 import io.release.TestSupport
@@ -10,11 +9,9 @@ import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
 import munit.CatsEffectSuite
 
-import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
-import java.nio.charset.StandardCharsets
 
 class VcsStepsSpec extends CatsEffectSuite {
   private val fixturePrefix = "vcs-steps-spec"
@@ -123,7 +120,7 @@ class VcsStepsSpec extends CatsEffectSuite {
       )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
-        withInput("") {
+        TestSupport.withInput("") {
           TestAssertions.assertIllegalStateMessage(
             VcsSteps.tagRelease.execute(
               ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
@@ -151,7 +148,7 @@ class VcsStepsSpec extends CatsEffectSuite {
       }
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
-        withSystemInput(brokenInput) {
+        TestSupport.withSystemInput(brokenInput) {
           TestAssertions.assertFailure[IOException, ReleaseContext](
             VcsSteps.tagRelease.execute(
               ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
@@ -290,28 +287,4 @@ class VcsStepsSpec extends CatsEffectSuite {
         }
     }
   }
-
-  private def withInput[A](input: String)(io: IO[A]): IO[A] = {
-    val bytes = input.getBytes(StandardCharsets.UTF_8)
-
-    withSystemInput(new ByteArrayInputStream(bytes))(io)
-  }
-
-  private def withSystemInput[A](input: InputStream)(io: IO[A]): IO[A] =
-    Resource
-      .make {
-        IO.blocking {
-          TestSupport.stdinLock.acquire()
-          val original = System.in
-          System.setIn(input)
-          original
-        }
-      }(restoreInput)
-      .use(_ => io)
-
-  private def restoreInput(original: InputStream): IO[Unit] =
-    IO.blocking {
-      System.setIn(original)
-      TestSupport.stdinLock.release()
-    }
 }
