@@ -4,7 +4,6 @@ import cats.effect.IO
 import io.release.steps.StepHelpers
 import sbt.State
 
-
 /** Shared tag-conflict resolution for core and monorepo release steps.
   *
   * Handles the full state machine: if the tag does not exist, create it. If the tag already
@@ -184,7 +183,8 @@ private[release] object TagConflictResolver {
         IO.print(
           s"Tag [$tagName] exists${forLabel(params.label)}! " +
             "Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-        ) *> StepHelpers.readLine()
+        ) *> StepHelpers
+          .readLine()
           .map(raw => Option(raw).getOrElse(""))
     }
 

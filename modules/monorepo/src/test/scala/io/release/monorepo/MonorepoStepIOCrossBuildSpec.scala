@@ -27,8 +27,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(TestSupport.alternateScalaVersion)
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(TestSupport.alternateScalaVersion)
         )
       )
     }.use { ctx =>
@@ -73,15 +73,15 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"), LocalProject("api"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.CurrentScalaVersion,
             TestSupport.alternateScalaVersion
           )
         ),
         Project("api", apiBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(TestSupport.CurrentScalaVersion)
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(TestSupport.CurrentScalaVersion)
         )
       )
     }.use { ctx =>
@@ -137,8 +137,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq.empty
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq.empty
         )
       )
     }.use { ctx =>
@@ -174,8 +174,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.CurrentScalaVersion,
             TestSupport.alternateScalaVersion
           )
@@ -235,8 +235,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.CurrentScalaVersion,
             TestSupport.alternateScalaVersion
           )
@@ -274,8 +274,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.alternateScalaVersion,
             TestSupport.CurrentScalaVersion
           )
@@ -310,8 +310,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.CurrentScalaVersion,
             TestSupport.alternateScalaVersion
           ),
@@ -344,8 +344,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.CurrentScalaVersion,
             TestSupport.alternateScalaVersion
           )
@@ -395,8 +395,8 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.CurrentScalaVersion,
             TestSupport.alternateScalaVersion
           )

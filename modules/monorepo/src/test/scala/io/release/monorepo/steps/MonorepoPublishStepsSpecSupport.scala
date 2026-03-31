@@ -14,7 +14,9 @@ trait MonorepoPublishStepsSpecSupport {
       prefix: String,
       rootSettings: Seq[Def.Setting[?]] = Nil,
       projectId: String = "core"
-  )(projectSettings: File => Seq[Def.Setting[?]] = _ => Nil): Resource[IO, MonorepoSpecSupport.LoadedFixture] =
+  )(
+      projectSettings: File => Seq[Def.Setting[?]] = _ => Nil
+  ): Resource[IO, MonorepoSpecSupport.LoadedFixture] =
     MonorepoSpecSupport.loadedFixtureResource(prefix) { dir =>
       val projectBase = new File(dir, projectId)
       projectBase.mkdirs()
@@ -72,4 +74,3 @@ trait MonorepoPublishStepsSpecSupport {
   ): MonorepoProjectFailures =
     MonorepoSpecSupport.requireProjectFailures(cause)
 }
-

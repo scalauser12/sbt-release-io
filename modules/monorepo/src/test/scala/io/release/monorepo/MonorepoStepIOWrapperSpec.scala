@@ -25,8 +25,8 @@ class MonorepoStepIOWrapperSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           .aggregate(LocalProject("core"))
           .settings(scalaVersion := TestSupport.CurrentScalaVersion),
         Project("core", coreBase).settings(
-          scalaVersion       := TestSupport.CurrentScalaVersion,
-          crossScalaVersions := Seq(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
             TestSupport.CurrentScalaVersion,
             TestSupport.alternateScalaVersion
           )
@@ -75,4 +75,3 @@ class MonorepoStepIOWrapperSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 }
-

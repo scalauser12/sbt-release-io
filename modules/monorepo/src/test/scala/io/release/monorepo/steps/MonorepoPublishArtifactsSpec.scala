@@ -74,7 +74,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
   test("publishArtifacts.execute - skip the publish task when publish / skip is true") {
     singleProjectFixtureResource("monorepo-publish-skip-action") { _ =>
       Seq(
-        publish / skip := true,
+        publish / skip                            := true,
         ReleaseIO.releaseIOPublishArtifactsAction := {
           throw new RuntimeException("publish action should not run")
         }
@@ -94,8 +94,8 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val marker = new File(projectBase.getParentFile, "published.txt")
 
       Seq(
-        publish / skip                          := false,
-        publishTo                               := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        publish / skip                            := false,
+        publishTo                                 := Some(Resolver.file("local-test", projectBase.getParentFile)),
         ReleaseIO.releaseIOPublishArtifactsAction := {
           sbt.IO.write(marker, "published")
         }

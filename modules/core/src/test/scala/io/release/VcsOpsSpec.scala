@@ -467,7 +467,8 @@ class VcsOpsSpec extends CatsEffectSuite {
         didDecline <- declined.get
         log        <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
       } yield {
-        val warning = s"${ReleaseLogPrefixes.Core} Standard input closed before push confirmation. Skipping push."
+        val warning =
+          s"${ReleaseLogPrefixes.Core} Standard input closed before push confirmation. Skipping push."
         assertEquals(didPush, false)
         assertEquals(didDecline, true)
         assertEquals(log.sliding(warning.length).count(_ == warning), 1)

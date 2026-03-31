@@ -15,7 +15,11 @@ class MonorepoPublishFailureHandlingSpec
   ) {
     twoProjectFixtureResource("monorepo-publish-run-tests-failure-command")(
       firstSettings = projectBase =>
-        Seq(MonorepoStepTestCompat.failureCommandTestTaskSetting(new File(projectBase, "test-ran.txt"))),
+        Seq(
+          MonorepoStepTestCompat.failureCommandTestTaskSetting(
+            new File(projectBase, "test-ran.txt")
+          )
+        ),
       secondSettings = projectBase =>
         Seq(MonorepoStepTestCompat.successfulTestTaskSetting(new File(projectBase, "test-ran.txt")))
     ).use { fixture =>
@@ -23,11 +27,11 @@ class MonorepoPublishFailureHandlingSpec
 
       io.release.monorepo.MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map {
         result =>
-          val coreRun = new File(
+          val coreRun   = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
             "test-ran.txt"
           )
-          val apiRun  = new File(
+          val apiRun    = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "api").baseDir,
             "test-ran.txt"
           )
@@ -48,13 +52,17 @@ class MonorepoPublishFailureHandlingSpec
 
   test("runClean via compose - consume FailureCommand and fail with project attribution") {
     singleProjectFixtureResource("monorepo-publish-run-clean-failure-command") { projectBase =>
-      Seq(MonorepoStepTestCompat.failureCommandCleanTaskSetting(new File(projectBase, "clean-ran.txt")))
+      Seq(
+        MonorepoStepTestCompat.failureCommandCleanTaskSetting(
+          new File(projectBase, "clean-ran.txt")
+        )
+      )
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
       io.release.monorepo.MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map {
         result =>
-          val coreRun = new File(
+          val coreRun   = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
             "clean-ran.txt"
           )
@@ -105,8 +113,8 @@ class MonorepoPublishFailureHandlingSpec
 
       val throwingStep = io.release.monorepo.MonorepoStepIO.PerProject(
         name = "throwing-step",
-        execute = (_, project) =>
-          IO.raiseError(new RuntimeException(s"${project.name} action blew up"))
+        execute =
+          (_, project) => IO.raiseError(new RuntimeException(s"${project.name} action blew up"))
       )
 
       io.release.monorepo.MonorepoStepIO.compose(Seq(throwingStep))(ctx).map { result =>
@@ -127,4 +135,3 @@ class MonorepoPublishFailureHandlingSpec
     }
   }
 }
-

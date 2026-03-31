@@ -59,13 +59,12 @@ class MonorepoReleasePluginProcessModeSpec
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 
-    stateResource("monorepo-plugin-compiled-hooks", MonorepoReleasePlugin, settings).use {
-      loaded =>
-        resolveProcessMode(MonorepoReleasePlugin, loaded.state).map { processMode =>
-          assertEquals(checkLegacyMode(processMode), false)
-          assertEquals(releaseLegacyMode(processMode), false)
-          assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
-        }
+    stateResource("monorepo-plugin-compiled-hooks", MonorepoReleasePlugin, settings).use { loaded =>
+      resolveProcessMode(MonorepoReleasePlugin, loaded.state).map { processMode =>
+        assertEquals(checkLegacyMode(processMode), false)
+        assertEquals(releaseLegacyMode(processMode), false)
+        assert(checkStepNames(processMode).exists(_ == "before-selection:before-selection-hook"))
+      }
     }
   }
 

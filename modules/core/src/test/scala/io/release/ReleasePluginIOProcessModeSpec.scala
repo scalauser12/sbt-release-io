@@ -10,9 +10,7 @@ import sbt.Setting
 import scala.annotation.nowarn
 
 @nowarn("cat=deprecation")
-class ReleasePluginIOProcessModeSpec
-    extends CatsEffectSuite
-    with ReleasePluginIOLegacySpecSupport {
+class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginIOLegacySpecSupport {
 
   test("resolveProcessMode - treat raw process customization as legacy mode and ignore hooks") {
     val rawProcess                = Seq(ReleaseSteps.initializeVcs, ReleaseSteps.inquireVersions)
@@ -28,7 +26,9 @@ class ReleasePluginIOProcessModeSpec
         _            = assertEquals(checkLegacyMode(processMode), true)
         _            = assertEquals(releaseLegacyMode(processMode), true)
         _            =
-          assert(checkLegacyReasons(processMode).contains("`releaseIOProcess` differs from defaults"))
+          assert(
+            checkLegacyReasons(processMode).contains("`releaseIOProcess` differs from defaults")
+          )
         _            = assertEquals(checkStepNames(processMode), rawProcess.map(_.name))
         _            = assert(!checkStepNames(processMode).exists(_.startsWith("before-tag:")))
         _           <- logLegacyModeWarning(loaded.state, processMode.checkLegacy)
@@ -150,7 +150,9 @@ class ReleasePluginIOProcessModeSpec
     }
   }
 
-  test("resolveProcessMode - do not evaluate hook settings while legacy raw process mode is active") {
+  test(
+    "resolveProcessMode - do not evaluate hook settings while legacy raw process mode is active"
+  ) {
     val rawProcess                = Seq(ReleaseSteps.initializeVcs, ReleaseSteps.inquireVersions)
     val settings: Seq[Setting[?]] = Seq(
       ReleaseIO.releaseIOBeforeTagHooks := throwingHookSeq("hook boom")

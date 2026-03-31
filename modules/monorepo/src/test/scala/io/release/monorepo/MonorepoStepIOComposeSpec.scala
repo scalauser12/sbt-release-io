@@ -237,7 +237,9 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 
-  test("compose - detect FailureCommand sentinel after per-project execution and skip later steps") {
+  test(
+    "compose - detect FailureCommand sentinel after per-project execution and skip later steps"
+  ) {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
         val projects = Seq(dummyProject("core"), dummyProject("api"))
@@ -280,4 +282,3 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 }
-

@@ -72,24 +72,23 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
           scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"plain:$v").as(c))
         }
 
-        ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
-          result =>
-            for {
-              events       <- observed.get
-              finalVersion <- scalaVersionOf(result.state)
-            } yield {
-              assertEquals(
-                events,
-                List(
-                  s"validate:${TestSupport.CurrentScalaVersion}",
-                  s"validate:${TestSupport.alternateScalaVersion}",
-                  s"execute:${TestSupport.CurrentScalaVersion}",
-                  s"execute:${TestSupport.alternateScalaVersion}",
-                  s"plain:${TestSupport.CurrentScalaVersion}"
-                )
+        ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+          for {
+            events       <- observed.get
+            finalVersion <- scalaVersionOf(result.state)
+          } yield {
+            assertEquals(
+              events,
+              List(
+                s"validate:${TestSupport.CurrentScalaVersion}",
+                s"validate:${TestSupport.alternateScalaVersion}",
+                s"execute:${TestSupport.CurrentScalaVersion}",
+                s"execute:${TestSupport.alternateScalaVersion}",
+                s"plain:${TestSupport.CurrentScalaVersion}"
               )
-              assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
-            }
+            )
+            assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+          }
         }
       }
     }

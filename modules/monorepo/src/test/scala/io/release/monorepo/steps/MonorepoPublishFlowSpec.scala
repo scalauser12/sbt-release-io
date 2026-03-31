@@ -31,7 +31,11 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
 
   test("runTests.execute - skip project tests when skipTests is enabled") {
     singleProjectFixtureResource("monorepo-publish-skip-tests") { projectBase =>
-      Seq(MonorepoStepTestCompat.successfulTestTaskSetting(new java.io.File(projectBase, "test-ran.txt")))
+      Seq(
+        MonorepoStepTestCompat.successfulTestTaskSetting(
+          new java.io.File(projectBase, "test-ran.txt")
+        )
+      )
     }.use { fixture =>
       val ctx     = fixture.context(Seq("core"), skipTests = true)
       val project = fixture.projectInfo("core")
@@ -45,7 +49,11 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
 
   test("runTests.execute - run the configured project test task when skipTests is disabled") {
     singleProjectFixtureResource("monorepo-publish-run-tests") { projectBase =>
-      Seq(MonorepoStepTestCompat.successfulTestTaskSetting(new java.io.File(projectBase, "test-ran.txt")))
+      Seq(
+        MonorepoStepTestCompat.successfulTestTaskSetting(
+          new java.io.File(projectBase, "test-ran.txt")
+        )
+      )
     }.use { fixture =>
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")
@@ -82,10 +90,11 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
     singleProjectFixtureResource("monorepo-publish-clean-ok")().use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      _root_.io.release.monorepo.MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map {
-        result =>
+      _root_.io.release.monorepo.MonorepoStepIO
+        .compose(Seq(MonorepoPublishSteps.runClean))(ctx)
+        .map { result =>
           assert(!result.failed)
-      }
+        }
     }
   }
 }
