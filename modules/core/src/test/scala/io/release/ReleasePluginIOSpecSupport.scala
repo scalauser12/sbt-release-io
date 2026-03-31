@@ -126,28 +126,28 @@ trait ReleasePluginIOSpecSupport {
   protected def resolveProcessMode(
       plugin: ReleasePluginIOLike[Unit],
       state: State
-  ): IO[CoreCommandExecution.ResolvedProcessMode] =
+  ): IO[CoreCommandExecution.CompiledSteps] =
     CoreCommandExecution.resolveProcessMode(state, plugin.commandRuntime)
 
   protected def resolveReleaseRun(
       plugin: ReleasePluginIOLike[Unit],
       state: State
-  ): IO[CoreCommandExecution.ResolvedReleaseRun] =
+  ): IO[CoreCommandExecution.CompiledSteps] =
     CoreCommandExecution.resolveReleaseRun(state, (), plugin.commandRuntime)
 
   protected def checkStepNames(
-      processMode: CoreCommandExecution.ResolvedProcessMode
+      processMode: CoreCommandExecution.CompiledSteps
   ): Seq[String] =
-    processMode.checkSteps.map(_.name)
+    processMode.steps.map(_.name)
 
   protected def checkSteps(
-      processMode: CoreCommandExecution.ResolvedProcessMode
+      processMode: CoreCommandExecution.CompiledSteps
   ): Seq[ReleaseStepIO] =
-    processMode.checkSteps
+    processMode.steps
 
-  protected def runStepNames(runProcess: CoreCommandExecution.ResolvedReleaseRun): Seq[String] =
+  protected def runStepNames(runProcess: CoreCommandExecution.CompiledSteps): Seq[String] =
     runProcess.steps.map(_.name)
 
-  protected def runSteps(runProcess: CoreCommandExecution.ResolvedReleaseRun): Seq[ReleaseStepIO] =
+  protected def runSteps(runProcess: CoreCommandExecution.CompiledSteps): Seq[ReleaseStepIO] =
     runProcess.steps
 }

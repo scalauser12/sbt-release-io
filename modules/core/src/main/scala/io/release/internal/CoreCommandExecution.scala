@@ -36,11 +36,7 @@ private[release] object CoreCommandExecution {
       plan: CoreReleasePlan
   )
 
-  final case class ResolvedProcessMode(
-      checkSteps: Seq[ReleaseStepIO]
-  )
-
-  final case class ResolvedReleaseRun(
+  final case class CompiledSteps(
       steps: Seq[ReleaseStepIO]
   )
 
@@ -88,31 +84,28 @@ private[release] object CoreCommandExecution {
   def resolveProcessMode[T](
       state: State,
       runtime: CommandRuntime[T]
-  ): IO[ResolvedProcessMode] =
-    IO.blocking(
-      ResolvedProcessMode(
-        checkSteps = ReleaseHookCompiler.compile(
-          mergeHookConfiguration(
-            ReleaseHookCompiler.resolve(state),
-            runtime.resolveResourceHooks(state),
-            maybeResource = None
-          )
-        )
-      )
-    )
+  ): IO[CompiledSteps] =
+    compileMergedSteps(state, runtime, maybeResource = None)
 
   def resolveReleaseRun[T](
       state: State,
       resourceValue: T,
       runtime: CommandRuntime[T]
-  ): IO[ResolvedReleaseRun] =
+  ): IO[CompiledSteps] =
+    compileMergedSteps(state, runtime, maybeResource = Some(resourceValue))
+
+  private def compileMergedSteps[T](
+      state: State,
+      runtime: CommandRuntime[T],
+      maybeResource: Option[T]
+  ): IO[CompiledSteps] =
     IO.blocking(
-      ResolvedReleaseRun(
+      CompiledSteps(
         steps = ReleaseHookCompiler.compile(
           mergeHookConfiguration(
             ReleaseHookCompiler.resolve(state),
             runtime.resolveResourceHooks(state),
-            maybeResource = Some(resourceValue)
+            maybeResource = maybeResource
           )
         )
       )
@@ -284,7 +277,7 @@ private[release] object CoreCommandExecution {
       _       <- CheckModeOutput.logCheckStart(
                    inputs.cleanState,
                    ReleaseLogPrefixes.Core,
-                   process.checkSteps.length
+                   process.steps.length
                  )
       summary <- runtime
                    .initialContext(
@@ -296,7 +289,7 @@ private[release] object CoreCommandExecution {
                    .flatMap { initialCtx =>
                      CorePreflight.check(
                        initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
-                       process.checkSteps,
+                       process.steps,
                        inputs.crossEnabled
                      )
                    }

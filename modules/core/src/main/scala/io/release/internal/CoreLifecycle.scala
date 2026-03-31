@@ -20,7 +20,6 @@ private[release] object CoreLifecycle {
   }
 
   private final case class BuiltInPhase(
-      id: String,
       step: ReleaseStepIO,
       enabled: CoreHookConfiguration => Boolean = _ => true
   ) extends Phase {
@@ -45,11 +44,10 @@ private[release] object CoreLifecycle {
   }
 
   private val phases: Seq[Phase] = Seq(
-    BuiltInPhase("initialize-vcs", ReleaseSteps.initializeVcs),
-    BuiltInPhase("check-clean-working-dir", ReleaseSteps.checkCleanWorkingDir),
+    BuiltInPhase(ReleaseSteps.initializeVcs),
+    BuiltInPhase(ReleaseSteps.checkCleanWorkingDir),
     HookPhase("after-clean-check", _.afterCleanCheckHooks, Always, crossBuild = false),
     BuiltInPhase(
-      "check-snapshot-dependencies",
       ReleaseSteps.checkSnapshotDependencies,
       _.enableSnapshotDependenciesCheck
     ),
@@ -59,22 +57,22 @@ private[release] object CoreLifecycle {
       Always,
       crossBuild = false
     ),
-    BuiltInPhase("inquire-versions", ReleaseSteps.inquireVersions),
+    BuiltInPhase(ReleaseSteps.inquireVersions),
     HookPhase(
       "after-version-resolution",
       _.afterVersionResolutionHooks,
       Always,
       crossBuild = false
     ),
-    BuiltInPhase("run-clean", ReleaseSteps.runClean, _.enableRunClean),
-    BuiltInPhase("run-tests", ReleaseSteps.runTests, _.enableRunTests),
+    BuiltInPhase(ReleaseSteps.runClean, _.enableRunClean),
+    BuiltInPhase(ReleaseSteps.runTests, _.enableRunTests),
     HookPhase(
       "before-release-version-write",
       _.beforeReleaseVersionWriteHooks,
       Always,
       crossBuild = false
     ),
-    BuiltInPhase("set-release-version", ReleaseSteps.setReleaseVersion),
+    BuiltInPhase(ReleaseSteps.setReleaseVersion),
     HookPhase(
       "after-release-version-write",
       _.afterReleaseVersionWriteHooks,
@@ -82,7 +80,7 @@ private[release] object CoreLifecycle {
       crossBuild = false
     ),
     HookPhase("before-release-commit", _.beforeReleaseCommitHooks, Always, crossBuild = false),
-    BuiltInPhase("commit-release-version", ReleaseSteps.commitReleaseVersion),
+    BuiltInPhase(ReleaseSteps.commitReleaseVersion),
     HookPhase("after-release-commit", _.afterReleaseCommitHooks, Always, crossBuild = false),
     HookPhase(
       "before-tag",
@@ -91,7 +89,7 @@ private[release] object CoreLifecycle {
       crossBuild = false,
       enabled = _.enableTagging
     ),
-    BuiltInPhase("tag-release", ReleaseSteps.tagRelease, _.enableTagging),
+    BuiltInPhase(ReleaseSteps.tagRelease, _.enableTagging),
     HookPhase(
       "after-tag",
       _.afterTagHooks,
@@ -106,7 +104,7 @@ private[release] object CoreLifecycle {
       ReleaseSteps.publishArtifacts.enableCrossBuild,
       _.enablePublish
     ),
-    BuiltInPhase("publish-artifacts", ReleaseSteps.publishArtifacts, _.enablePublish),
+    BuiltInPhase(ReleaseSteps.publishArtifacts, _.enablePublish),
     HookPhase(
       "after-publish",
       _.afterPublishHooks,
@@ -120,7 +118,7 @@ private[release] object CoreLifecycle {
       Always,
       crossBuild = false
     ),
-    BuiltInPhase("set-next-version", ReleaseSteps.setNextVersion),
+    BuiltInPhase(ReleaseSteps.setNextVersion),
     HookPhase(
       "after-next-version-write",
       _.afterNextVersionWriteHooks,
@@ -128,7 +126,7 @@ private[release] object CoreLifecycle {
       crossBuild = false
     ),
     HookPhase("before-next-commit", _.beforeNextCommitHooks, Always, crossBuild = false),
-    BuiltInPhase("commit-next-version", ReleaseSteps.commitNextVersion),
+    BuiltInPhase(ReleaseSteps.commitNextVersion),
     HookPhase("after-next-commit", _.afterNextCommitHooks, Always, crossBuild = false),
     HookPhase(
       "before-push",
@@ -137,7 +135,7 @@ private[release] object CoreLifecycle {
       crossBuild = false,
       enabled = _.enablePush
     ),
-    BuiltInPhase("push-changes", ReleaseSteps.pushChanges, _.enablePush),
+    BuiltInPhase(ReleaseSteps.pushChanges, _.enablePush),
     HookPhase(
       "after-push",
       _.afterPushHooks,
@@ -146,9 +144,6 @@ private[release] object CoreLifecycle {
       enabled = _.enablePush
     )
   )
-
-  private val builtInPhases: Seq[BuiltInPhase] =
-    phases.collect { case phase: BuiltInPhase => phase }
 
   val defaults: Seq[ReleaseStepIO] =
     phases.flatMap(_.rawSteps)
