@@ -1,4 +1,5 @@
 import _root_.io.release.ReleaseStepIO
+import sbt.complete.DefaultParsers._
 
 name         := "foo"
 organization := "com.example"
@@ -36,7 +37,7 @@ myTask      := {
   writeMarker(baseDirectory.value, "mytask")
 }
 myInputTask := {
-  val marker = Def.spaceDelimited().parsed.headOption.getOrElse("myinputtask")
+  val marker = spaceDelimited("<marker>").parsed.headOption.getOrElse("myinputtask")
   writeMarker(baseDirectory.value, marker)
 }
 

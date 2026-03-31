@@ -3,6 +3,7 @@ package io.release
 import io.release.TestAssertions.assertFailure
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
+import sbt.Def._
 import sbt.Keys
 import sbt.LocalProject
 import sbt.Project
@@ -52,7 +53,7 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
       "release-step-io-from-input-task",
       _.settings(
         stateUpdateInputTask := {
-          val parsed = sbt.Def.spaceDelimited().parsed.mkString(":")
+          val parsed = spaceDelimited("<arg>").parsed.mkString(":")
           val marker = new File(Keys.baseDirectory.value, "from-input-task.txt")
           sbt.IO.write(marker, parsed)
           parsed
