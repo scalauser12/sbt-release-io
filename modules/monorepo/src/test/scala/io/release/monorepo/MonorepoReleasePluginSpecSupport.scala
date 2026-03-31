@@ -142,32 +142,32 @@ trait MonorepoReleasePluginSpecSupport {
   protected def resolveProcessMode(
       plugin: MonorepoReleasePluginLike[Unit],
       state: State
-  ): IO[MonorepoCommandExecution.ResolvedProcessMode] =
+  ): IO[MonorepoCommandExecution.CompiledMonorepoSteps] =
     MonorepoCommandExecution.resolveProcessMode(state, plugin.commandRuntime)
 
   protected def resolveReleaseRun(
       plugin: MonorepoReleasePluginLike[Unit],
       state: State
-  ): IO[MonorepoCommandExecution.ResolvedReleaseRun] =
+  ): IO[MonorepoCommandExecution.CompiledMonorepoSteps] =
     MonorepoCommandExecution.resolveReleaseRun(state, (), plugin.commandRuntime)
 
   protected def checkStepNames(
-      processMode: MonorepoCommandExecution.ResolvedProcessMode
+      processMode: MonorepoCommandExecution.CompiledMonorepoSteps
   ): Seq[String] =
-    processMode.checkSteps.map(_.name)
+    processMode.steps.map(_.name)
 
   protected def checkSteps(
-      processMode: MonorepoCommandExecution.ResolvedProcessMode
+      processMode: MonorepoCommandExecution.CompiledMonorepoSteps
   ): Seq[MonorepoStepIO] =
-    processMode.checkSteps
+    processMode.steps
 
   protected def runStepNames(
-      runProcess: MonorepoCommandExecution.ResolvedReleaseRun
+      runProcess: MonorepoCommandExecution.CompiledMonorepoSteps
   ): Seq[String] =
     runProcess.steps.map(_.name)
 
   protected def runSteps(
-      runProcess: MonorepoCommandExecution.ResolvedReleaseRun
+      runProcess: MonorepoCommandExecution.CompiledMonorepoSteps
   ): Seq[MonorepoStepIO] =
     runProcess.steps
 

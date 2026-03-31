@@ -41,11 +41,7 @@ private[monorepo] object MonorepoCommandExecution {
       plan: MonorepoReleasePlan
   )
 
-  final case class ResolvedProcessMode(
-      checkSteps: Seq[MonorepoStepIO]
-  )
-
-  final case class ResolvedReleaseRun(
+  final case class CompiledMonorepoSteps(
       steps: Seq[MonorepoStepIO]
   )
 
@@ -75,32 +71,29 @@ private[monorepo] object MonorepoCommandExecution {
   def resolveProcessMode[T](
       state: State,
       runtime: CommandRuntime[T]
-  ): IO[ResolvedProcessMode] =
-    IO.blocking(
-      ResolvedProcessMode(
-        checkSteps = MonorepoHookCompiler.compile(
-          MonorepoHookCompiler
-            .resolve(state)
-            .mergeWith(
-              MonorepoResourceHooks.materialize(runtime.resolveResourceHooks(state), None)
-            )
-        )
-      )
-    )
+  ): IO[CompiledMonorepoSteps] =
+    compileMergedSteps(state, runtime, maybeResource = None)
 
   def resolveReleaseRun[T](
       state: State,
       resourceValue: T,
       runtime: CommandRuntime[T]
-  ): IO[ResolvedReleaseRun] =
+  ): IO[CompiledMonorepoSteps] =
+    compileMergedSteps(state, runtime, maybeResource = Some(resourceValue))
+
+  private def compileMergedSteps[T](
+      state: State,
+      runtime: CommandRuntime[T],
+      maybeResource: Option[T]
+  ): IO[CompiledMonorepoSteps] =
     IO.blocking(
-      ResolvedReleaseRun(
+      CompiledMonorepoSteps(
         steps = MonorepoHookCompiler.compile(
           MonorepoHookCompiler
             .resolve(state)
             .mergeWith(
               MonorepoResourceHooks
-                .materialize(runtime.resolveResourceHooks(state), Some(resourceValue))
+                .materialize(runtime.resolveResourceHooks(state), maybeResource)
             )
         )
       )
@@ -246,9 +239,9 @@ private[monorepo] object MonorepoCommandExecution {
       _       <- CheckModeOutput.logCheckStart(
                    session.cleanState,
                    ReleaseLogPrefixes.Monorepo,
-                   process.checkSteps.length
+                   process.steps.length
                  )
-      summary <- MonorepoPreflight.check(session, process.checkSteps)
+      summary <- MonorepoPreflight.check(session, process.steps)
       _       <- logLines(session.cleanState, MonorepoPreflight.renderSummary(summary))
       _       <- CheckModeOutput.logCheckPassed(
                    session.cleanState,

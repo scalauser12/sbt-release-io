@@ -19,7 +19,6 @@ private[monorepo] object MonorepoLifecycle {
   }
 
   private final case class BuiltInPhase(
-      id: String,
       step: MonorepoStepIO,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   ) extends Phase {
@@ -57,14 +56,13 @@ private[monorepo] object MonorepoLifecycle {
   }
 
   private val phases: Seq[Phase] = Seq(
-    BuiltInPhase("initialize-vcs", MonorepoReleaseSteps.initializeVcs),
-    BuiltInPhase("check-clean-working-dir", MonorepoReleaseSteps.checkCleanWorkingDir),
-    BuiltInPhase("resolve-release-order", MonorepoReleaseSteps.resolveReleaseOrder),
+    BuiltInPhase(MonorepoReleaseSteps.initializeVcs),
+    BuiltInPhase(MonorepoReleaseSteps.checkCleanWorkingDir),
+    BuiltInPhase(MonorepoReleaseSteps.resolveReleaseOrder),
     GlobalHookPhase("before-selection", _.beforeSelectionHooks, AlwaysGlobal),
-    BuiltInPhase("detect-or-select-projects", MonorepoReleaseSteps.detectOrSelectProjects),
+    BuiltInPhase(MonorepoReleaseSteps.detectOrSelectProjects),
     GlobalHookPhase("after-selection", _.afterSelectionHooks, AlwaysGlobal),
     BuiltInPhase(
-      "check-snapshot-dependencies",
       MonorepoReleaseSteps.checkSnapshotDependencies,
       _.enableSnapshotDependenciesCheck
     ),
@@ -74,22 +72,22 @@ private[monorepo] object MonorepoLifecycle {
       AlwaysProject,
       MonorepoReleaseSteps.inquireVersions.enableCrossBuild
     ),
-    BuiltInPhase("inquire-versions", MonorepoReleaseSteps.inquireVersions),
+    BuiltInPhase(MonorepoReleaseSteps.inquireVersions),
     ProjectHookPhase(
       "after-version-resolution",
       _.afterVersionResolutionHooks,
       AlwaysProject,
       MonorepoReleaseSteps.inquireVersions.enableCrossBuild
     ),
-    BuiltInPhase("run-clean", MonorepoReleaseSteps.runClean, _.enableRunClean),
-    BuiltInPhase("run-tests", MonorepoReleaseSteps.runTests, _.enableRunTests),
+    BuiltInPhase(MonorepoReleaseSteps.runClean, _.enableRunClean),
+    BuiltInPhase(MonorepoReleaseSteps.runTests, _.enableRunTests),
     ProjectHookPhase(
       "before-release-version-write",
       _.beforeReleaseVersionWriteHooks,
       AlwaysProject,
       MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
     ),
-    BuiltInPhase("set-release-version", MonorepoReleaseSteps.setReleaseVersions),
+    BuiltInPhase(MonorepoReleaseSteps.setReleaseVersions),
     ProjectHookPhase(
       "after-release-version-write",
       _.afterReleaseVersionWriteHooks,
@@ -97,7 +95,7 @@ private[monorepo] object MonorepoLifecycle {
       MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
     ),
     GlobalHookPhase("before-release-commit", _.beforeReleaseCommitHooks, AlwaysGlobal),
-    BuiltInPhase("commit-release-versions", MonorepoReleaseSteps.commitReleaseVersions),
+    BuiltInPhase(MonorepoReleaseSteps.commitReleaseVersions),
     GlobalHookPhase("after-release-commit", _.afterReleaseCommitHooks, AlwaysGlobal),
     ProjectHookPhase(
       "before-tag",
@@ -106,7 +104,7 @@ private[monorepo] object MonorepoLifecycle {
       crossBuild = false,
       enabled = _.enableTagging
     ),
-    BuiltInPhase("tag-releases", MonorepoReleaseSteps.tagReleasesPerProject, _.enableTagging),
+    BuiltInPhase(MonorepoReleaseSteps.tagReleasesPerProject, _.enableTagging),
     ProjectHookPhase(
       "after-tag",
       _.afterTagHooks,
@@ -121,7 +119,7 @@ private[monorepo] object MonorepoLifecycle {
       MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
       enabled = _.enablePublish
     ),
-    BuiltInPhase("publish-artifacts", MonorepoReleaseSteps.publishArtifacts, _.enablePublish),
+    BuiltInPhase(MonorepoReleaseSteps.publishArtifacts, _.enablePublish),
     ProjectHookPhase(
       "after-publish",
       _.afterPublishHooks,
@@ -135,7 +133,7 @@ private[monorepo] object MonorepoLifecycle {
       AlwaysProject,
       MonorepoReleaseSteps.setNextVersions.enableCrossBuild
     ),
-    BuiltInPhase("set-next-version", MonorepoReleaseSteps.setNextVersions),
+    BuiltInPhase(MonorepoReleaseSteps.setNextVersions),
     ProjectHookPhase(
       "after-next-version-write",
       _.afterNextVersionWriteHooks,
@@ -143,7 +141,7 @@ private[monorepo] object MonorepoLifecycle {
       MonorepoReleaseSteps.setNextVersions.enableCrossBuild
     ),
     GlobalHookPhase("before-next-commit", _.beforeNextCommitHooks, AlwaysGlobal),
-    BuiltInPhase("commit-next-versions", MonorepoReleaseSteps.commitNextVersions),
+    BuiltInPhase(MonorepoReleaseSteps.commitNextVersions),
     GlobalHookPhase("after-next-commit", _.afterNextCommitHooks, AlwaysGlobal),
     GlobalHookPhase(
       "before-push",
@@ -151,7 +149,7 @@ private[monorepo] object MonorepoLifecycle {
       AlwaysGlobal,
       enabled = _.enablePush
     ),
-    BuiltInPhase("push-changes", MonorepoReleaseSteps.pushChanges, _.enablePush),
+    BuiltInPhase(MonorepoReleaseSteps.pushChanges, _.enablePush),
     GlobalHookPhase(
       "after-push",
       _.afterPushHooks,
