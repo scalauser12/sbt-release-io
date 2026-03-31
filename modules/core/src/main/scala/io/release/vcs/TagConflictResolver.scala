@@ -1,9 +1,9 @@
 package io.release.vcs
 
 import cats.effect.IO
+import io.release.steps.StepHelpers
 import sbt.State
 
-import java.io.EOFException
 
 /** Shared tag-conflict resolution for core and monorepo release steps.
   *
@@ -184,12 +184,8 @@ private[release] object TagConflictResolver {
         IO.print(
           s"Tag [$tagName] exists${forLabel(params.label)}! " +
             "Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-        ) *> IO.readLine
+        ) *> StepHelpers.readLine()
           .map(raw => Option(raw).getOrElse(""))
-          .handleErrorWith {
-            case _: EOFException => IO.pure("")
-            case err             => IO.raiseError(err)
-          }
     }
 
     effectiveAnswer.map {

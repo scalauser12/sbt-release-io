@@ -280,7 +280,7 @@ private[monorepo] object MonorepoVersionWorkflow {
         if (!interactive || useDefaults || !allowPrompts) IO.pure(suggested)
         else
           IO.print(s"$label [$suggested] : ") *>
-            IO.readLine.flatMap(parseVersionInput(_, suggested))
+            StepHelpers.readLine().flatMap(parseVersionInput(_, suggested))
     }
 
   private def missingVersionFileMessage(

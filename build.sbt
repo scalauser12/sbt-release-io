@@ -1,3 +1,5 @@
+import scoverage.ScoverageSbtPlugin
+
 val Sbt1Version = "1.12.3"
 val Sbt2Version = "2.0.0-RC9"
 val Scala212    = "2.12.21"
@@ -62,7 +64,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val core = (project in file("modules/core"))
-  .enablePlugins(SbtPlugin)
+  .enablePlugins(SbtPlugin, ScoverageSbtPlugin)
   .settings(
     commonSettings,
     name        := "sbt-release-io",
@@ -71,7 +73,7 @@ lazy val core = (project in file("modules/core"))
   )
 
 lazy val monorepo = (project in file("modules/monorepo"))
-  .enablePlugins(SbtPlugin)
+  .enablePlugins(SbtPlugin, ScoverageSbtPlugin)
   .dependsOn(core, core % "test->test")
   .settings(
     commonSettings,
@@ -82,6 +84,7 @@ lazy val monorepo = (project in file("modules/monorepo"))
 
 lazy val root = (project in file("."))
   .aggregate(core, monorepo)
+  .enablePlugins(ScoverageSbtPlugin)
   .settings(
     name           := "sbt-release-io-root",
     publish / skip := true

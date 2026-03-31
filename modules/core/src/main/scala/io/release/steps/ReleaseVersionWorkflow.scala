@@ -196,7 +196,8 @@ private[release] object ReleaseVersionWorkflow {
   }
 
   private def readVersionPrompt(prompt: String, defaultVersion: String): IO[String] =
-    IO.print(prompt) *> IO.readLine.flatMap(parseVersionInput(_, defaultVersion))
+    IO.print(prompt) *>
+      StepHelpers.readLine().flatMap(parseVersionInput(_, defaultVersion))
 
   private def resolveReleaseVersion(
       data: InquireData,

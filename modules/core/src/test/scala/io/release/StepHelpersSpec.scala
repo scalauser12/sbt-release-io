@@ -9,6 +9,9 @@ import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.ModuleID
 
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.nio.charset.StandardCharsets
 import scala.sys.process.Process
 
 class StepHelpersSpec extends CatsEffectSuite {
@@ -221,9 +224,38 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  private def stubVcs(base: java.io.File): Vcs =
+  test("StepHelpers.readLine - return consecutive lines from the same redirected stdin") {
+    val input = "first\nsecond\n"
+    val bytes = input.getBytes(StandardCharsets.UTF_8)
+
+    cats.effect.Resource
+      .make {
+        IO.blocking {
+          TestSupport.stdinLock.acquire()
+          val original = System.in
+          System.setIn(new ByteArrayInputStream(bytes))
+          original
+        }
+      } { original =>
+        IO.blocking {
+          System.setIn(original)
+          TestSupport.stdinLock.release()
+        }
+      }
+      .use { _ =>
+        for {
+          line1 <- StepHelpers.readLine()
+          line2 <- StepHelpers.readLine()
+        } yield {
+          assertEquals(line1, "first")
+          assertEquals(line2, "second")
+        }
+      }
+  }
+
+  private def stubVcs(base: File): Vcs =
     new Vcs {
-      override def baseDir: java.io.File                                                       = base
+      override def baseDir: File                                                               = base
       override def commandName: String                                                         = "git"
       override def currentHash: IO[String]                                                     = IO.pure("deadbeef")
       override def currentBranch: IO[String]                                                   = IO.pure("main")

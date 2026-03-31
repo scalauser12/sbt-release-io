@@ -14,6 +14,16 @@ sbt core/scripted          # core scripted tests only
 sbt monorepo/scripted      # monorepo scripted tests only
 ```
 
+### Code coverage (scoverage)
+
+Unit tests for `core` and `monorepo`, with an aggregated HTML/XML report at the repo root:
+
+```bash
+sbt clean coverage test coverageAggregate coverageOff
+```
+
+Open `target/scala-2.12/scoverage-report/index.html` (Scala version segment follows the build). Per-module reports: `sbt core/coverageReport`, `sbt monorepo/coverageReport`.
+
 ### Cross-build (sbt 2)
 
 ```bash

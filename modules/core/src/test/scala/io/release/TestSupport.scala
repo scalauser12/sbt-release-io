@@ -21,6 +21,8 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
+import java.util.concurrent.Callable
+import java.util.concurrent.Semaphore
 import scala.sys.process.Process
 
 /** Shared test fixtures for constructing minimal sbt `State` instances and test repositories. */
@@ -30,7 +32,7 @@ object TestSupport {
     * All test classes that mutate stdin must acquire this lock to prevent
     * concurrent tests from reading each other's redirected input.
     */
-  val stdinLock = new java.util.concurrent.Semaphore(1)
+  val stdinLock = new Semaphore(1)
 
   val CurrentScalaVersion: String = scala.util.Properties.versionNumberString
   val Scala212TestVersion: String = "2.12.21"
@@ -269,7 +271,7 @@ object TestSupport {
 
       override def topLoader(): ClassLoader             = getClass.getClassLoader
       override def globalLock(): GlobalLock             = new GlobalLock {
-        override def apply[T](lockFile: File, run: java.util.concurrent.Callable[T]): T = run.call()
+        override def apply[T](lockFile: File, run: Callable[T]): T = run.call()
       }
       override def bootDirectory(): File                = baseDir
       override def ivyRepositories(): Array[Repository] = Array.empty

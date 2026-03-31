@@ -28,7 +28,7 @@ private[release] object VcsOps {
       }
     }
 
-  private[release] def detectVcsFromBase(base: java.io.File): IO[Vcs] =
+  private[release] def detectVcsFromBase(base: File): IO[Vcs] =
     Vcs.detect(base).flatMap {
       case Some(vcs) => IO.pure(vcs)
       case None      =>
@@ -106,7 +106,7 @@ private[release] object VcsOps {
     } yield CleanCheckResult(vcs, currentHash)
 
   /** Resolve file path relative to VCS base directory. */
-  def relativizeToBase(vcs: Vcs, file: java.io.File): IO[String] =
+  def relativizeToBase(vcs: Vcs, file: File): IO[String] =
     IO.blocking {
       val base      = vcs.baseDir.getCanonicalFile
       val canonical = file.getCanonicalFile

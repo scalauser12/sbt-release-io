@@ -191,6 +191,86 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     }
   }
 
+  test("globalResource executeAction produces a step that runs the effect and passes context") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+          .globalResource[String]("res-action")
+          .executeAction(resource => resCtx => events.update(_ :+ s"action:$resource"))
+
+        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.Global]
+        step.execute(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(result, ctx)
+            assertEquals(obs, List("action:myResource"))
+          }
+        }
+      }
+    }
+  }
+
+  test("globalResource validateOnly produces a step with no-op execute") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+          .globalResource[String]("res-validate")
+          .withValidation(resource => resCtx => events.update(_ :+ s"validate:$resource"))
+          .validateOnly
+
+        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.Global]
+        step.validate(ctx) *> step.execute(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(result, ctx)
+            assertEquals(obs, List("validate:myResource"))
+          }
+        }
+      }
+    }
+  }
+
+  test("perProjectResource executeAction produces a step that runs the effect and passes context") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val project                          = dummyProject("core")
+        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+          .perProjectResource[String]("res-pp-action")
+          .executeAction(resource =>
+            (resCtx, proj) => events.update(_ :+ s"action:$resource:${proj.name}")
+          )
+
+        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.PerProject]
+        step.execute(ctx, project).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(result, ctx)
+            assertEquals(obs, List("action:myResource:core"))
+          }
+        }
+      }
+    }
+  }
+
+  test("perProjectResource validateOnly produces a step with no-op execute") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val project                          = dummyProject("core")
+        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+          .perProjectResource[String]("res-pp-validate")
+          .withValidation(resource =>
+            (resCtx, proj) => events.update(_ :+ s"validate:$resource:${proj.name}")
+          )
+          .validateOnly
+
+        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.PerProject]
+        step.validate(ctx, project) *> step.execute(ctx, project).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(result, ctx)
+            assertEquals(obs, List("validate:myResource:core"))
+          }
+        }
+      }
+    }
+  }
+
   private val steps = Seq(
     MonorepoStepIO.global("step-a").execute(ctx => IO.pure(ctx)),
     MonorepoStepIO.global("step-b").execute(ctx => IO.pure(ctx)),

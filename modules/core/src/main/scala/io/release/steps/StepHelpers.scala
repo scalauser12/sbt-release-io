@@ -10,6 +10,9 @@ import sbt.Incomplete
 import sbt.Result
 import sbt.internal.Aggregation.KeyValue
 
+import java.io.BufferedReader
+import java.io.InputStream
+import java.io.InputStreamReader
 import scala.sys.process.*
 
 /** Shared helpers used across release step objects. */
@@ -17,6 +20,33 @@ private[release] object StepHelpers {
 
   def errorMessage(err: Throwable): String =
     Option(err.getMessage).getOrElse(err.toString)
+
+  /** Read a line from standard input, reusing the reader while `System.in` is unchanged.
+    *
+    * Unlike `scala.io.StdIn.readLine()` (which caches a `BufferedReader` permanently and
+    * misses subsequent `System.setIn` calls) and `IO.readLine` (which uses a singleton
+    * daemon thread with its own request queue), this caches a `BufferedReader` per
+    * `System.in` identity — a new reader is only created when the stream instance changes.
+    * Returns `null` on EOF.
+    */
+  private[release] def readLine(): IO[String] =
+    IO.blocking(stdinReaderCache.readLine())
+
+  private[this] val stdinReaderCache = new StdinReaderCache
+
+  private final class StdinReaderCache {
+    @volatile private var cachedIn: InputStream        = _
+    @volatile private var cachedReader: BufferedReader  = _
+
+    def readLine(): String = synchronized {
+      val currentIn = System.in
+      if (currentIn ne cachedIn) {
+        cachedIn = currentIn
+        cachedReader = new BufferedReader(new InputStreamReader(currentIn))
+      }
+      cachedReader.readLine()
+    }
+  }
 
   def useDefaults[C <: ReleaseCtx[C]](ctx: C): Boolean =
     ctx.useDefaults
@@ -43,7 +73,7 @@ private[release] object StepHelpers {
 
   def askYesNo(prompt: String, defaultYes: Boolean): IO[Boolean] =
     IO.print(prompt) *>
-      IO.readLine.map { raw =>
+      readLine().map { raw =>
         Option(raw).map(_.trim.toLowerCase).getOrElse("") match {
           case ""          => defaultYes
           case "y" | "yes" => true

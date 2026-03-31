@@ -75,6 +75,25 @@ class MonorepoContextSpec extends FunSuite {
     assertEquals(proj.failureCause, None)
   }
 
+  test("ProjectReleaseInfo - releaseVersion returns the first element of versions") {
+    val proj = dummyProject("core").copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+
+    assertEquals(proj.releaseVersion, Some("1.0.0"))
+  }
+
+  test("ProjectReleaseInfo - nextVersion returns the second element of versions") {
+    val proj = dummyProject("core").copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+
+    assertEquals(proj.nextVersion, Some("1.1.0-SNAPSHOT"))
+  }
+
+  test("ProjectReleaseInfo - releaseVersion and nextVersion return None when versions is None") {
+    val proj = dummyProject("core")
+
+    assertEquals(proj.releaseVersion, None)
+    assertEquals(proj.nextVersion, None)
+  }
+
   test("MonorepoContext internal execution state - survive state replacement") {
     withState { state =>
       val plan    = MonorepoReleasePlan(
@@ -96,6 +115,30 @@ class MonorepoContextSpec extends FunSuite {
       assertEquals(updated.releasePlan.map(_.selectionMode), Some(SelectionMode.AllChanged))
       assertEquals(updated.useDefaults, true)
     }
+  }
+
+  test("MonorepoPreparation.selectionMessage - explicit selection") {
+    val projects = Seq(dummyProject("core"), dummyProject("api"))
+    val msg      = MonorepoPreparation.selectionMessage(projects, SelectionMode.ExplicitSelection)
+
+    assert(msg.contains("explicitly selected"))
+    assert(msg.contains("core, api"))
+  }
+
+  test("MonorepoPreparation.selectionMessage - all changed") {
+    val projects = Seq(dummyProject("core"))
+    val msg      = MonorepoPreparation.selectionMessage(projects, SelectionMode.AllChanged)
+
+    assert(msg.contains("all projects"))
+    assert(msg.contains("core"))
+  }
+
+  test("MonorepoPreparation.selectionMessage - detect changes") {
+    val projects = Seq(dummyProject("core"), dummyProject("api"))
+    val msg      = MonorepoPreparation.selectionMessage(projects, SelectionMode.DetectChanges)
+
+    assert(msg.contains("Releasing projects"))
+    assert(msg.contains("core, api"))
   }
 
   private def dummyProject(name: String): ProjectReleaseInfo =
