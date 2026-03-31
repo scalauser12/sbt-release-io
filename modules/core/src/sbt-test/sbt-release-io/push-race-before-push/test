@@ -1,0 +1,19 @@
+# Test: a remote advance from a before-push hook should abort before the final git push
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+
+# Set up bare remote and establish tracking
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git push -u origin main
+
+# Release should get through local actions, then fail after the remote advances in before-push
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify origin did not receive the release commit or release tag
+> checkRemoteUnchanged

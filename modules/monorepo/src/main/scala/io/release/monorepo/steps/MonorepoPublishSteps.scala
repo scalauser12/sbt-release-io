@@ -2,11 +2,15 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.CleanCompat
+import io.release.ReleaseIO
+import io.release.ReleaseIO.releaseIOInternalReleaseHash
+import io.release.ReleaseIO.releaseIOInternalReleaseTag
 import io.release.ReleaseIO.releaseIOPublishArtifactsAction
 import io.release.ReleaseIOCompat
 import io.release.internal.DecisionResolver
 import io.release.internal.PublishValidation
 import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import io.release.internal.SnapshotDependencyTasks
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
@@ -64,6 +68,53 @@ private[monorepo] object MonorepoPublishSteps {
       project.ref / publishTo,
       s"Failed to evaluate publishTo for ${project.name}"
     )
+
+  private def withProjectReleaseState(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] =
+    project.releaseVersion match {
+      case None                => IO.pure(ctx)
+      case Some(releaseVersion) =>
+        for {
+          resolvedMetadata <- IO.blocking {
+                                val extracted = SbtRuntime.extracted(ctx.state)
+                                (
+                                  extracted.getOpt(project.ref / releaseIOInternalReleaseHash).flatten,
+                                  extracted
+                                    .getOpt(project.ref / releaseIOInternalReleaseTag)
+                                    .flatten
+                                    .orElse(project.tagName)
+                                )
+                              }
+          (releaseHash, releaseTag) = resolvedMetadata
+          fallbackHash       <-
+            releaseHash match {
+              case some @ Some(_) => IO.pure(some)
+              case None           =>
+                ctx.vcs match {
+                  case Some(vcs) => vcs.currentHash.map(Some(_))
+                  case None      => IO.pure(None)
+                }
+            }
+          updatedCtx         <- IO.blocking {
+                                  val newState = SbtRuntime.appendWithSession(
+                                    ctx.state,
+                                    Seq(project.ref / version := releaseVersion) ++
+                                      fallbackHash.toSeq.flatMap(hash =>
+                                        ReleaseIO.releaseManifestHashSettings(
+                                          Seq(project.ref),
+                                          hash
+                                        )
+                                      ) ++
+                                      releaseTag.toSeq.flatMap(tag =>
+                                        ReleaseIO.releaseManifestTagSettings(project.ref, tag)
+                                      )
+                                  )
+                                  ctx.withState(newState)
+                                }
+        } yield updatedCtx
+    }
 
   /** Check for SNAPSHOT dependencies in each project.
     * Only checks resolved library dependencies — inter-project dependencies
@@ -125,7 +176,9 @@ private[monorepo] object MonorepoPublishSteps {
           if (skipped)
             logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
           else
-            runProjectTask(ctx, project.ref / releaseIOPublishArtifactsAction)
+            withProjectReleaseState(ctx, project).flatMap(publishCtx =>
+              runProjectTask(publishCtx, project.ref / releaseIOPublishArtifactsAction)
+            )
         },
     validate = (ctx, project) =>
       if (ctx.skipPublish) IO.unit

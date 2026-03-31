@@ -78,6 +78,17 @@ class Git(val baseDir: File) extends Vcs {
       runSingleLine("config", s"branch.$branch.remote")(s"git config branch.$branch.remote")
     }
 
+  def upstreamTrackingHash: IO[Option[String]] =
+    branchInfo.flatMap { case (branch, remote) =>
+      upstreamBranch(branch)
+        .flatMap(upstream =>
+          runSingleLine("rev-parse", "--verify", s"$remote/$upstream")(
+            s"git rev-parse --verify $remote/$upstream"
+          ).map(Some(_))
+        )
+        .handleError(_ => None)
+    }
+
   def hasUpstream: IO[Boolean] =
     currentBranch.flatMap { branch =>
       IO.blocking {
@@ -90,9 +101,7 @@ class Git(val baseDir: File) extends Vcs {
     for {
       info            <- branchInfo
       (branch, remote) = info
-      upstream        <-
-        runSingleLine("config", s"branch.$branch.merge")(s"git config branch.$branch.merge")
-          .map(_.stripPrefix("refs/heads/"))
+      upstream        <- upstreamBranch(branch)
       behind          <-
         runLines("rev-list", s"$branch..$remote/$upstream")("git rev-list")
           .map(_.nonEmpty)
@@ -155,13 +164,15 @@ class Git(val baseDir: File) extends Vcs {
       trackingRemote.map(remote => (branch, remote))
     }
 
+  private def upstreamBranch(branch: String): IO[String] =
+    runSingleLine("config", s"branch.$branch.merge")(s"git config branch.$branch.merge")
+      .map(_.stripPrefix("refs/heads/"))
+
   def pushChanges: IO[Unit] =
     for {
       info            <- branchInfo
       (branch, remote) = info
-      upstream        <- runSingleLine("config", s"branch.$branch.merge")(
-                           s"git config branch.$branch.merge"
-                         ).map(_.stripPrefix("refs/heads/"))
+      upstream        <- upstreamBranch(branch)
       _               <- runCmd("push", "--follow-tags", remote, s"$branch:$upstream")(
                            "git push --follow-tags"
                          )

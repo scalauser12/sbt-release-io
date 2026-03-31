@@ -2,8 +2,10 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
+import io.release.ReleaseIO
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.required
@@ -168,10 +170,27 @@ private[monorepo] object MonorepoVcsSteps {
                   settings.sign,
                   project.name
                 ).flatMap { case (updatedCtx, resolvedTagName) =>
-                  logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
-                    .as(
-                      updatedCtx.updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
+                  val persistedTagSettings = updatedCtx.currentProjects
+                    .filterNot(_.ref == project.ref)
+                    .flatMap(existingProject =>
+                      existingProject.tagName.toSeq.flatMap(existingTag =>
+                        ReleaseIO.releaseManifestTagSettings(existingProject.ref, existingTag)
+                      )
                     )
+                  for {
+                    _        <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
+                    newState <- IO.blocking {
+                                  SbtRuntime.appendWithSession(
+                                    updatedCtx.state,
+                                    persistedTagSettings ++ ReleaseIO.releaseManifestTagSettings(
+                                      project.ref,
+                                      resolvedTagName
+                                    )
+                                  )
+                                }
+                  } yield updatedCtx
+                    .withState(newState)
+                    .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
                 }
               }
           }

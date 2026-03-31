@@ -2,12 +2,15 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.ReleaseIO
 import io.release.ReleaseKeys
+import io.release.VcsOps
 import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SbtRuntime
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for monorepo command planning and execution.
@@ -173,7 +176,7 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T],
       interactiveEnabled: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
-    val cleanState         = state.remove(ReleaseKeys.versions)
+    val cleanState         = clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions))
     val program: IO[State] = prepareCommand(
       cleanState,
       args,
@@ -208,14 +211,29 @@ private[monorepo] object MonorepoCommandExecution {
                                         command.flags
                                       )
                                     )
+                      preparedCtx <-
+                        if (runProcess.steps.exists(_.name == VcsOps.PushChangesStepName))
+                          VcsOps.preparePushRelease(
+                            session.context,
+                            ReleaseLogPrefixes.Monorepo,
+                            remoteCheckLog = Some(r =>
+                              session.context.state.log.info(
+                                s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] before release actions ..."
+                              )
+                            )
+                          )
+                        else IO.pure(session.context)
                       finalCtx   <-
                         MonorepoStepIO.compose(runProcess.steps, command.flags.crossBuild)(
-                          session.context
+                          preparedCtx
                         )
                     } yield finalCtx
                   }
-      result   <- ReleaseCommandRunner
-                    .handleReleaseResult(finalCtx, ReleaseLogPrefixes.Monorepo)
+      cleanedCtx <- IO.blocking(
+                      finalCtx.withState(clearReleaseManifestMetadata(finalCtx.state))
+                    )
+      result     <- ReleaseCommandRunner
+                      .handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Monorepo)
     } yield result
 
   private def runPlannedCheck[T](
@@ -240,6 +258,12 @@ private[monorepo] object MonorepoCommandExecution {
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
+
+  private def clearReleaseManifestMetadata(state: State): State =
+    ReleaseIO.clearReleaseManifestMetadata(state, loadedProjectRefs(state))
+
+  private def loadedProjectRefs(state: State): Seq[ProjectRef] =
+    SbtRuntime.extracted(state).structure.allProjectRefs
 
   private def logReleaseStart(
       state: State,

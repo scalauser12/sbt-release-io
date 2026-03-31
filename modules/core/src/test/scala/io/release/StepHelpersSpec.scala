@@ -333,6 +333,8 @@ class StepHelpersSpec extends CatsEffectSuite {
       override def currentHash: IO[String]                                                     = IO.pure("deadbeef")
       override def currentBranch: IO[String]                                                   = IO.pure("main")
       override def trackingRemote: IO[String]                                                  = IO.pure("origin")
+      override def upstreamTrackingHash: IO[Option[String]]                                    =
+        IO.pure(Some("origin/main"))
       override def hasUpstream: IO[Boolean]                                                    = IO.pure(true)
       override def isBehindRemote: IO[Boolean]                                                 = IO.pure(false)
       override def existsTag(name: String): IO[Boolean]                                        = IO.pure(false)

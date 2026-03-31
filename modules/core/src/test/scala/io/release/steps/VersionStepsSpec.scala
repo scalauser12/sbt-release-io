@@ -2,6 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
+import io.release.ReleaseIO
 import io.release.ReleaseIO.*
 import io.release.TestAssertions
 import io.release.TestSupport
@@ -9,7 +10,9 @@ import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
+import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
+import sbt.Keys.packageOptions
 import sbt.Project
 
 import java.io.File
@@ -281,10 +284,81 @@ class VersionStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("commitReleaseVersion - expose the release hash through package options") {
+    TestSupport
+      .gitRepoWithCommitResource(
+        fixturePrefix,
+        prepareRepo = repo =>
+          IO.blocking(
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "1.0.0-SNAPSHOT"""" + "\n"
+            )
+          )
+      )
+      .use { case (repo, vcs) =>
+        val versionFile = new File(repo, "version.sbt")
+        val state       = TestSupport.gitRootState(
+          repo,
+          releaseManifestSettings() ++
+            Seq(
+              releaseIOVersionFile         := versionFile,
+              releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+              releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+                useGlobalVersion = true
+              ),
+              releaseIOUseGlobalVersion    := true,
+              releaseIOCommitMessage       := "Setting version to 1.0.0",
+              releaseIOVcsSign             := false,
+              releaseIOVcsSignOff          := false
+            )
+        )
+        val ctx         = ReleaseContext(state = state, vcs = Some(vcs))
+          .withVersions("1.0.0", "1.0.1-SNAPSHOT")
+
+        for {
+          written  <- VersionSteps.setReleaseVersion.execute(ctx)
+          result   <- VersionSteps.commitReleaseVersion.execute(written)
+          headHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
+        } yield {
+          assert(manifestAttributes(result.state).contains("Vcs-Release-Hash" -> headHash))
+        }
+      }
+  }
+
   private def assertReadVersion(dir: File, content: String, expected: String): IO[Unit] =
     writeVersionFile(dir, content).flatMap { file =>
       VersionSteps.defaultReadVersion(file).map(result => assertEquals(result, expected))
     }
+
+  private def manifestAttributes(state: sbt.State): Set[(String, String)] = {
+    val (_, options) = SbtRuntime.extracted(state).runTask(packageOptions, state)
+
+    options.flatMap {
+      case product: Product if product.productPrefix == "ManifestAttributes" =>
+        product.productElement(0) match {
+          case entries: Seq[?] @unchecked =>
+            entries.collect { case (name, value: String) =>
+              name.toString -> value
+            }
+          case _                         => Seq.empty
+        }
+      case _                                                       => Seq.empty
+    }.toSet
+  }
+
+  private def releaseManifestSettings(
+      basePackageOptions: Seq[sbt.PackageOption] = Seq.empty
+  ): Seq[sbt.Setting[?]] =
+    Seq(
+      packageOptions              := basePackageOptions,
+      releaseIOInternalReleaseHash := None,
+      releaseIOInternalReleaseTag := None,
+      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
+        releaseIOInternalReleaseHash.value,
+        releaseIOInternalReleaseTag.value
+      )
+    )
 
   private def withStartupPlan(
       ctx: ReleaseContext,

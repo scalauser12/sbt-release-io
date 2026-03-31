@@ -15,6 +15,7 @@ trait Vcs {
   def currentHash: IO[String]
   def currentBranch: IO[String]
   def trackingRemote: IO[String]
+  def upstreamTrackingHash: IO[Option[String]]
   def hasUpstream: IO[Boolean]
   def isBehindRemote: IO[Boolean]
   def existsTag(name: String): IO[Boolean]

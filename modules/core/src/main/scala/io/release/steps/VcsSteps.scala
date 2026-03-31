@@ -3,6 +3,7 @@ package io.release.steps
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseIO.releaseIOTagComment
+import io.release.ReleaseIO.releaseIOInternalReleaseTag
 import io.release.ReleaseIO.releaseIOTagName
 import io.release.ReleaseIO.releaseIOReadVersion
 import io.release.ReleaseIO.releaseIOVcsSign
@@ -19,7 +20,6 @@ import io.release.steps.StepHelpers.*
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
-import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
 
 /** VCS-related release steps: initialize, check, tag, push. */
@@ -142,7 +142,7 @@ private[release] object VcsSteps {
       SbtRuntime.appendWithSession(
         ctx.state,
         params.versionSessionSettings ++
-          Seq(packageOptions += ManifestAttributes("Vcs-Release-Tag" -> tagName))
+          Seq(releaseIOInternalReleaseTag := Some(tagName))
       )
     )
 

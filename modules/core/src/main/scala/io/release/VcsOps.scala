@@ -18,6 +18,15 @@ import scala.concurrent.duration.*
 private[release] object VcsOps {
 
   private[release] val DefaultRemoteCheckTimeout: FiniteDuration = 60.seconds
+  private[release] val PushChangesStepName                       = "push-changes"
+
+  private val confirmedUpstreamTipKey: AttributeKey[String] =
+    AttributeKey[String]("releaseIOInternalConfirmedUpstreamTip")
+
+  private final case class RemoteCheckResult[C <: ReleaseCtx[C]](
+      context: C,
+      refreshed: Boolean
+  )
 
   /** Detect VCS at the project base and return the context with the VCS adapter. */
   def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] =
@@ -133,6 +142,14 @@ private[release] object VcsOps {
       logPrefix: String,
       log: Option[String => Unit] = None
   ): IO[C] =
+    checkPushRemote(ctx, vcs, logPrefix, log).map(_.context)
+
+  private def checkPushRemote[C <: ReleaseCtx[C]](
+      ctx: C,
+      vcs: Vcs,
+      logPrefix: String,
+      log: Option[String => Unit] = None
+  ): IO[RemoteCheckResult[C]] =
     for {
       remote      <- vcs.trackingRemote
       _           <- log.fold(IO.unit)(f => IO.blocking(f(remote)))
@@ -143,7 +160,7 @@ private[release] object VcsOps {
                        .map(_.getOrElse(DefaultRemoteCheckTimeout))
       remoteCheck <- vcs.checkRemote(remote).map(Option(_)).timeoutTo(timeout, IO.pure(None))
       resultCtx   <- remoteCheck match {
-                       case Some(0) => IO.pure(ctx)
+                       case Some(0) => IO.pure(RemoteCheckResult(ctx, refreshed = true))
                        case Some(_) =>
                          DecisionResolver.confirmOrAbort(
                            ctx,
@@ -151,7 +168,7 @@ private[release] object VcsOps {
                            defaultYes = false,
                            prompt = "Error while checking remote. Still continue (y/n)? [n] ",
                            abortMessage = "Aborting the release due to remote check failure."
-                         )
+                         ).map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
                        case None    =>
                          IO.blocking {
                            ctx.state.log.warn(
@@ -160,11 +177,11 @@ private[release] object VcsOps {
                          } *>
                            DecisionResolver.confirmOrAbort(
                              ctx,
-                             configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
-                             defaultYes = false,
-                             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                             abortMessage = "Aborting the release due to remote check failure."
-                           )
+                              configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
+                              defaultYes = false,
+                              prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                              abortMessage = "Aborting the release due to remote check failure."
+                           ).map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
                      }
     } yield resultCtx
 
@@ -188,24 +205,32 @@ private[release] object VcsOps {
               )
             )
           }
-      // Best-effort check using local tracking refs (no fetch).
-      // On any error (missing refs, corrupted repo, etc.), conservatively treat as not behind
-      // and let the actual push surface the real failure.
-      behind    <- vcs.isBehindRemote.handleError(_ => false)
-      resultCtx <-
-        if (!behind) IO.pure(ctx)
-        else
-          DecisionResolver.confirmOrAbort(
-            ctx,
-            configuredAnswer = ctx.decisionDefaults.upstreamBehindAnswer,
-            defaultYes = false,
-            prompt = "The upstream branch has unmerged commits. " +
-              "A subsequent push may fail! Continue (y/n)? [n] ",
-            abortMessage = "Merge the upstream commits and run release again."
-          )
+      resultCtx <- confirmUpstreamReadiness(ctx, vcs)
     } yield resultCtx
 
-  /** After [[validatePushRemote]], optionally prompt before pushing (interactive mode).
+  /** Refresh the tracking remote before any release actions that may later push.
+    * Keeps `check` and validation mode network-free while preventing stale remote state from
+    * being discovered only at the final push.
+    */
+  def preparePushRelease[C <: ReleaseCtx[C]](
+      ctx: C,
+      logPrefix: String,
+      remoteCheckLog: Option[String => Unit] = None
+  ): IO[C] =
+    ensureVcs(ctx).flatMap { ctxWithVcs =>
+      ctxWithVcs.vcs match {
+        case Some(vcs) =>
+          refreshPushReadiness(ctxWithVcs, vcs, logPrefix, remoteCheckLog)
+        case None      =>
+          IO.raiseError(
+            new IllegalStateException(
+              "VCS not initialized. Ensure initializeVcs runs before this step."
+            )
+          )
+      }
+    }
+
+  /** After a fresh remote check, optionally prompt before pushing (interactive mode).
     */
   def interactivePushAfterRemote[C <: ReleaseCtx[C]](
       ctx: C,
@@ -213,7 +238,63 @@ private[release] object VcsOps {
       logPrefix: String,
       remoteCheckLog: Option[String => Unit]
   )(doPush: C => IO[C], onDeclinePush: C => IO[C]): IO[C] =
-    validatePushRemote(ctx, vcs, logPrefix, remoteCheckLog).flatMap { validatedCtx =>
+    refreshPushReadiness(ctx, vcs, logPrefix, remoteCheckLog).flatMap { validatedCtx =>
       DecisionResolver.resolvePushDecision(validatedCtx, logPrefix)(doPush, onDeclinePush)
     }
+
+  private def ensureVcs[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+    ctx.vcs match {
+      case Some(_) => IO.pure(ctx)
+      case None    => detectAndInit(ctx)
+    }
+
+  private def refreshPushReadiness[C <: ReleaseCtx[C]](
+      ctx: C,
+      vcs: Vcs,
+      logPrefix: String,
+      remoteCheckLog: Option[String => Unit]
+  ): IO[C] =
+    checkPushRemote(ctx, vcs, logPrefix, remoteCheckLog).flatMap {
+      case RemoteCheckResult(currentCtx, refreshed) =>
+        if (refreshed) confirmUpstreamReadiness(currentCtx, vcs)
+        else IO.pure(currentCtx)
+    }
+
+  // Best-effort check using the currently available tracking refs.
+  // On any error (missing refs, corrupted repo, etc.), conservatively treat as not behind
+  // and let the actual push surface the real failure.
+  private def confirmUpstreamReadiness[C <: ReleaseCtx[C]](
+      ctx: C,
+      vcs: Vcs
+  ): IO[C] =
+    vcs.isBehindRemote.handleError(_ => false).flatMap {
+      case false  => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))
+      case true   =>
+        currentUpstreamTip(vcs).flatMap {
+          case Some(currentTip) if confirmedUpstreamTip(ctx).contains(currentTip) =>
+            IO.pure(ctx)
+          case maybeTip                                                     =>
+            DecisionResolver
+              .confirmOrAbort(
+                ctx,
+                configuredAnswer = ctx.decisionDefaults.upstreamBehindAnswer,
+                defaultYes = false,
+                prompt = "The upstream branch has unmerged commits. " +
+                  "A subsequent push may fail! Continue (y/n)? [n] ",
+                abortMessage = "Merge the upstream commits and run release again."
+              )
+              .map(confirmUpstreamTip(_, maybeTip))
+        }
+    }
+
+  private def currentUpstreamTip(vcs: Vcs): IO[Option[String]] =
+    vcs.upstreamTrackingHash.handleError(_ => None)
+
+  private def confirmedUpstreamTip[C <: ReleaseCtx[C]](ctx: C): Option[String] =
+    ctx.metadata(confirmedUpstreamTipKey)
+
+  private def confirmUpstreamTip[C <: ReleaseCtx[C]](ctx: C, tip: Option[String]): C =
+    tip.fold(ctx.withoutMetadata(confirmedUpstreamTipKey))(value =>
+      ctx.withMetadata(confirmedUpstreamTipKey, value)
+    )
 }

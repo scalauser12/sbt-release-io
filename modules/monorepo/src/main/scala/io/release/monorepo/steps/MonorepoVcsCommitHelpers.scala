@@ -2,9 +2,11 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
+import io.release.ReleaseIO
 import io.release.ReleaseIO.releaseIOVcsSign
 import io.release.ReleaseIO.releaseIOVcsSignOff
 import io.release.VcsOps
+import io.release.internal.SbtRuntime
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.logInfo
 import io.release.monorepo.steps.MonorepoStepHelpers.versionSummary
@@ -73,6 +75,17 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                               )
                                             }
                                         }
-      } yield result
+        currentHash                  <- vcs.currentHash
+        updatedResult                <- IO.blocking {
+                                          val newState = SbtRuntime.appendWithSession(
+                                            result.state,
+                                            ReleaseIO.releaseManifestHashSettings(
+                                              result.currentProjects.map(_.ref),
+                                              currentHash
+                                            )
+                                          )
+                                          result.withState(newState)
+                                        }
+      } yield updatedResult
     }
 }

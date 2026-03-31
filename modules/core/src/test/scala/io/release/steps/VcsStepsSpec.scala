@@ -2,13 +2,19 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
+import io.release.ReleaseIO
+import io.release.ReleaseIO.releaseIOInternalReleaseHash
+import io.release.ReleaseIO.releaseIOInternalReleaseTag
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
+import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
+import sbt.Keys.packageOptions
+import sbt.Project
 
 import java.io.File
 import java.io.IOException
@@ -97,8 +103,8 @@ class VcsStepsSpec extends CatsEffectSuite {
       val versionFile = new File(repo, "version.sbt")
       val state       = TestSupport.gitRootState(
         repo,
-        Seq(
-          sbt.Keys.packageOptions                           := Seq.empty,
+        releaseManifestSettings() ++
+          Seq(
           io.release.ReleaseIO.releaseIOVersionFile         := versionFile,
           io.release.ReleaseIO.releaseIOReadVersion         := VersionSteps.defaultReadVersion,
           io.release.ReleaseIO.releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
@@ -120,6 +126,7 @@ class VcsStepsSpec extends CatsEffectSuite {
       } yield {
         assertEquals(tags.trim, "v1.0.1")
         assertEquals(result.vcs.map(_.commandName), Some("git"))
+        assert(manifestAttributes(result.state).contains("Vcs-Release-Tag" -> "v1.0.1"))
       }
     }
   }
@@ -303,4 +310,33 @@ class VcsStepsSpec extends CatsEffectSuite {
         }
     }
   }
+
+  private def manifestAttributes(state: sbt.State): Set[(String, String)] = {
+    val (_, options) = SbtRuntime.extracted(state).runTask(packageOptions, state)
+
+    options.flatMap {
+      case product: Product if product.productPrefix == "ManifestAttributes" =>
+        product.productElement(0) match {
+          case entries: Seq[?] @unchecked =>
+            entries.collect { case (name, value: String) =>
+              name.toString -> value
+            }
+          case _                         => Seq.empty
+        }
+      case _                                                       => Seq.empty
+    }.toSet
+  }
+
+  private def releaseManifestSettings(
+      basePackageOptions: Seq[sbt.PackageOption] = Seq.empty
+  ): Seq[sbt.Setting[?]] =
+    Seq(
+      packageOptions               := basePackageOptions,
+      releaseIOInternalReleaseHash := None,
+      releaseIOInternalReleaseTag  := None,
+      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
+        releaseIOInternalReleaseHash.value,
+        releaseIOInternalReleaseTag.value
+      )
+    )
 }

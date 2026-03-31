@@ -116,6 +116,12 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     releaseIOVcsSign                           := false,
     releaseIOVcsSignOff                        := false,
     releaseIOIgnoreUntrackedFiles              := false,
+    releaseIOInternalReleaseHash               := None,
+    releaseIOInternalReleaseTag                := None,
+    packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
+      releaseIOInternalReleaseHash.value,
+      releaseIOInternalReleaseTag.value
+    ),
     releaseIOVcsRemoteCheckTimeout             := scala.concurrent.duration.DurationInt(60).seconds,
     releaseIORuntimeVersion                    := {
       if (releaseIOUseGlobalVersion.value) (ThisBuild / Keys.version).value

@@ -1,0 +1,26 @@
+# Test: releaseIO should fail before any release actions when origin advanced remotely
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+
+# Set up bare remote and establish tracking
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git push -u origin main
+
+# Advance origin from a different clone without updating local tracking refs
+$ exec git clone remotes/origin.git temp-clone
+$ exec git -C temp-clone config user.email "other@example.com"
+$ exec git -C temp-clone config user.name "Other"
+$ exec git -C temp-clone commit --allow-empty -m "Remote advance"
+$ exec git -C temp-clone push origin main
+
+# Release should fail before version writes, tags, or commits
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify the local repository is unchanged
+> checkNoReleaseSideEffects

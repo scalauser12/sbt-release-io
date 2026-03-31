@@ -26,7 +26,7 @@ Legacy step-list editing fixtures were retired. New scripted tests should use li
 - Versioning and tags: `custom-tag`, `custom-version-format`, `global-version-false`, `invalid-version-input`, `version-bump`, `tag-default`
 - Cross-build behavior: `cross`, `cross-build-setting`
 - Test and clean phases: `run-clean`, `fail-test`, `run-tests-aggregate-fail`, `skip-tests`
-- Publish and push flow: `publish-to-check`, `publish-skip`, `publish-skip-root`, `skip-publish-setting`, `publish-multi-project`, `publish-nested-aggregate`, `push-changes`, `custom-publish-action`
+- Publish and push flow: `publish-to-check`, `publish-skip`, `publish-skip-root`, `skip-publish-setting`, `publish-multi-project`, `publish-nested-aggregate`, `push-changes`, `push-behind-remote`, `push-race-before-push`, `custom-publish-action`
 - Repository hygiene: `modified-files-fail`, `untracked-files`, `untracked-files-fail`, `vcs-signoff`
 - Version-file and dependency edge cases: `missing-version-file`, `snapshot-deps`, `snapshot-deps-test-scope`, `snapshot-deps-cross`, `empty-commit`, `empty-commit-noop`
 

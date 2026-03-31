@@ -21,9 +21,6 @@ $ exec git -C temp-clone config user.name "Other"
 $ exec git -C temp-clone commit --allow-empty -m "Remote advance"
 $ exec git -C temp-clone push origin main
 
-# Update local tracking refs so isBehindRemote detects the divergence
-$ exec git fetch origin
-
 # Release should fail at push-changes validate (behind remote, non-interactive aborts)
 -> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
 

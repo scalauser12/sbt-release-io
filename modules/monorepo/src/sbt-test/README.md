@@ -27,7 +27,7 @@ Legacy process-editing fixtures are no longer part of the scripted suite.
 - Change-detection extensions: `custom-change-detector`, `custom-detector-error`, `custom-detector-uses-basedir`
 - Version files and tags: `custom-version-format`, `per-project-releaseversionfile`, `version-file-change-detection`, `custom-tag-name`, `tag-exists-error`
 - Dependency ordering and cross-build: `diamond-dependency`, `topological-order`, `transitive-aggregates`, `nested-parent-exclusion`, `cross-build-setting`, `cross-build-heterogeneous`, `cross-build-empty-cross`, `cross-build-restore`
-- Publish, push, and validation flow: `missing-publishto`, `missing-version-file`, `snapshot-dependencies`, `publish-artifacts-checks-disabled`, `publish-skip-bypass`, `publish-skip-eval-error`, `publish-to-eval-error`, `push-behind-remote`, `push-changes-tracking-remote`, `selection-aware-validation`, `skip-publish`, `skip-tests`, `skip-tests-setting`, `vcs-signoff`
+- Publish, push, and validation flow: `manifest-metadata`, `missing-publishto`, `missing-version-file`, `snapshot-dependencies`, `publish-artifacts-checks-disabled`, `publish-skip-bypass`, `publish-skip-eval-error`, `publish-to-eval-error`, `push-behind-remote`, `push-changes-tracking-remote`, `selection-aware-validation`, `skip-publish`, `skip-tests`, `skip-tests-setting`, `vcs-signoff`
 - Project test and failure handling: `per-project-failure`, `dirty-working-dir`, `empty-commit-monorepo`, `run-clean`
 
 ## Migration note

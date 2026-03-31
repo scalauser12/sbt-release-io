@@ -622,6 +622,7 @@ private final class StubVcs(
     currentHash0: IO[String] = IO.pure("abc"),
     currentBranch0: IO[String] = IO.pure("main"),
     trackingRemote0: IO[String] = IO.pure("origin"),
+    upstreamTrackingHash0: IO[Option[String]] = IO.pure(Some("origin/main")),
     hasUpstream0: IO[Boolean] = IO.pure(true),
     isBehindRemote0: IO[Boolean] = IO.pure(false),
     existsTag0: IO[Boolean] = IO.pure(false),
@@ -644,6 +645,8 @@ private final class StubVcs(
   override def currentHash: IO[String]              = currentHash0
   override def currentBranch: IO[String]            = currentBranch0
   override def trackingRemote: IO[String]           = trackingRemote0
+  override def upstreamTrackingHash: IO[Option[String]] =
+    upstreamTrackingHash0
   override def hasUpstream: IO[Boolean]             = hasUpstream0
   override def isBehindRemote: IO[Boolean]          = isBehindRemote0
   override def existsTag(name: String): IO[Boolean] =

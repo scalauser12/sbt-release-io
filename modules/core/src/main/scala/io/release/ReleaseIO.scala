@@ -1,7 +1,9 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.SbtRuntime
 import io.release.version.Version
+import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
 
 import scala.concurrent.duration.FiniteDuration
@@ -221,6 +223,12 @@ trait ReleaseIO {
     */
   val releaseIOPublishArtifactsChecks: SettingKey[Boolean] =
     ReleaseIO._releaseIOPublishArtifactsChecks
+
+  private[release] val releaseIOInternalReleaseHash: SettingKey[Option[String]] =
+    ReleaseIO._releaseIOInternalReleaseHash
+
+  private[release] val releaseIOInternalReleaseTag: SettingKey[Option[String]] =
+    ReleaseIO._releaseIOInternalReleaseTag
 
 }
 
@@ -519,5 +527,71 @@ object ReleaseIO extends ReleaseIO {
     SettingKey[Boolean](
       "releaseIOPublishArtifactsChecks",
       "Whether to run publishTo validation checks for the publish step"
+    )
+
+  private[release] lazy val _releaseIOInternalReleaseHash: SettingKey[Option[String]] =
+    SettingKey[Option[String]](
+      "releaseIOInternalReleaseHash",
+      "Internal release-only manifest metadata for the committed release hash"
+    )
+
+  private[release] lazy val _releaseIOInternalReleaseTag: SettingKey[Option[String]] =
+    SettingKey[Option[String]](
+      "releaseIOInternalReleaseTag",
+      "Internal release-only manifest metadata for the release tag"
+    )
+
+  private[release] def releaseManifestPackageOptions(
+      releaseHash: Option[String],
+      releaseTag: Option[String]
+  ): Seq[PackageOption] = {
+    val attributes =
+      releaseHash.toSeq.map("Vcs-Release-Hash" -> _) ++
+        releaseTag.toSeq.map("Vcs-Release-Tag" -> _)
+
+    if (attributes.isEmpty) Seq.empty
+    else Seq(ManifestAttributes(attributes*))
+  }
+
+  private[release] def releaseManifestMetadataSettings(
+      projectRef: ProjectRef,
+      releaseHash: Option[String] = None,
+      releaseTag: Option[String] = None
+  ): Seq[Setting[?]] =
+    releaseHash.toSeq.map(hash => projectRef / releaseIOInternalReleaseHash := Some(hash)) ++
+      releaseTag.toSeq.map(tag => projectRef / releaseIOInternalReleaseTag := Some(tag))
+
+  private[release] def releaseManifestHashSettings(
+      projectRefs: Seq[ProjectRef],
+      releaseHash: String
+  ): Seq[Setting[?]] =
+    projectRefs.distinct.flatMap(ref =>
+      releaseManifestMetadataSettings(ref, releaseHash = Some(releaseHash))
+    )
+
+  private[release] def releaseManifestTagSettings(
+      projectRef: ProjectRef,
+      releaseTag: String
+  ): Seq[Setting[?]] =
+    releaseManifestMetadataSettings(projectRef, releaseTag = Some(releaseTag))
+
+  private[release] def clearReleaseManifestMetadata(state: State): State =
+    clearReleaseManifestMetadata(state, Nil)
+
+  private[release] def clearReleaseManifestMetadata(
+      state: State,
+      projectRefs: Seq[ProjectRef]
+  ): State =
+    SbtRuntime.appendWithSession(
+      state,
+      Seq(
+        releaseIOInternalReleaseHash := None,
+        releaseIOInternalReleaseTag := None
+      ) ++ projectRefs.distinct.flatMap(ref =>
+        Seq(
+          ref / releaseIOInternalReleaseHash := None,
+          ref / releaseIOInternalReleaseTag := None
+        )
+      )
     )
 }

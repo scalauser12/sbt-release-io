@@ -3,9 +3,11 @@ package io.release.internal
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseContext
+import io.release.ReleaseIO
 import io.release.ReleaseKeys
 import io.release.ReleaseResourceHooks
 import io.release.ReleaseStepIO
+import io.release.VcsOps
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for core command planning and execution.
@@ -52,8 +54,9 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State = {
-    val inputs  = buildCommandInputs(
-      state,
+    val cleanState = ReleaseIO.clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions))
+    val inputs     = buildCommandInputs(
+      cleanState,
       args,
       warnOnDuplicates = true,
       interactiveEnabled = runtime.resolveInteractiveEnabled(state),
@@ -69,8 +72,9 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State = {
-    val inputs  = buildCommandInputs(
-      state,
+    val cleanState = ReleaseIO.clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions))
+    val inputs     = buildCommandInputs(
+      cleanState,
       args,
       warnOnDuplicates = false,
       interactiveEnabled = false,
@@ -115,7 +119,7 @@ private[release] object CoreCommandExecution {
     )
 
   private def buildCommandInputs[T](
-      state: State,
+      cleanState: State,
       args: Seq[ReleaseCli.Arg],
       warnOnDuplicates: Boolean,
       interactiveEnabled: Boolean,
@@ -132,8 +136,8 @@ private[release] object CoreCommandExecution {
     val useDefaults   = args.contains(WithDefaults)
     val skipTests     = args.contains(SkipTests)
     val crossFromArgs = args.contains(CrossBuild)
-    val crossEnabled  = runtime.resolveCrossBuildEnabled(state) || crossFromArgs
-    val skipPublish   = runtime.resolveSkipPublishEnabled(state)
+    val crossEnabled  = runtime.resolveCrossBuildEnabled(cleanState) || crossFromArgs
+    val skipPublish   = runtime.resolveSkipPublishEnabled(cleanState)
     val interactive   = interactiveEnabled
 
     val releaseVersionMatches = allArgs { case ReleaseVersion(value) => value }
@@ -158,7 +162,7 @@ private[release] object CoreCommandExecution {
         count: Int
     ): Unit =
       if (warnOnDuplicates && count > 1)
-        state.log.warn(
+        cleanState.log.warn(
           s"${ReleaseLogPrefixes.Core} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
         )
 
@@ -186,7 +190,6 @@ private[release] object CoreCommandExecution {
       pushMatches.size
     )
 
-    val cleanState  = state.remove(ReleaseKeys.versions)
     val settings    = ReleaseDecisionDefaults.fromState(cleanState)
     val cliDefaults = ReleaseDecisionDefaults(
       tagExistsAnswer = tagDefaultArg,
@@ -243,18 +246,34 @@ private[release] object CoreCommandExecution {
                                       inputs.skipPublish,
                                       inputs.interactive
                                     )
+                      seededCtx    = initialCtx.withExecutionState(
+                                       CoreExecutionState(inputs.plan)
+                                     )
+                      preparedCtx <-
+                        if (runProcess.steps.exists(_.name == VcsOps.PushChangesStepName))
+                          VcsOps.preparePushRelease(
+                            seededCtx,
+                            ReleaseLogPrefixes.Core,
+                            remoteCheckLog = Some(r =>
+                              seededCtx.state.log.info(
+                                s"${ReleaseLogPrefixes.Core} Checking remote [$r] before release actions ..."
+                              )
+                            )
+                          )
+                        else IO.pure(seededCtx)
                       finalCtx   <- ReleaseStepIO.compose(
                                       runProcess.steps,
                                       inputs.crossEnabled
-                                    )(
-                                      initialCtx.withExecutionState(
-                                        CoreExecutionState(inputs.plan)
-                                      )
-                                    )
+                                    )(preparedCtx)
                     } yield finalCtx
                   }
-      result   <- ReleaseCommandRunner
-                    .handleReleaseResult(finalCtx, ReleaseLogPrefixes.Core)
+      cleanedCtx <- IO.blocking(
+                      finalCtx.withState(
+                        ReleaseIO.clearReleaseManifestMetadata(finalCtx.state)
+                      )
+                    )
+      result     <- ReleaseCommandRunner
+                      .handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Core)
     } yield result
 
   private def runPlannedCheck[T](

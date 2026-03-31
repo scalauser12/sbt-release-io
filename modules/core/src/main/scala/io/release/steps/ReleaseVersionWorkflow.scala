@@ -10,7 +10,6 @@ import io.release.internal.SbtRuntime
 import io.release.internal.VersionPlan
 import io.release.steps.StepHelpers.*
 import sbt.Keys.*
-import sbt.Package.ManifestAttributes
 import sbt.{internal as _, *}
 
 import java.nio.charset.StandardCharsets
@@ -119,11 +118,7 @@ private[release] object ReleaseVersionWorkflow {
                                      val newState = SbtRuntime.appendWithSession(
                                        resultCtx.state,
                                        sessionSettings(versionPlan) ++
-                                         Seq(
-                                           packageOptions += ManifestAttributes(
-                                             "Vcs-Release-Hash" -> currentHash
-                                           )
-                                         ) ++
+                                         Seq(releaseIOInternalReleaseHash := Some(currentHash)) ++
                                          versionValueSettings(versionPlan, releaseVersion)
                                      )
                                      resultCtx.withState(newState)

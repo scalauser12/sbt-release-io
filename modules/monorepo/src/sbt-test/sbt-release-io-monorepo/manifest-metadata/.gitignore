@@ -1,0 +1,8 @@
+target/
+project/target/
+project/project/
+global/
+core/target/
+api/target/
+*.class
+*.log

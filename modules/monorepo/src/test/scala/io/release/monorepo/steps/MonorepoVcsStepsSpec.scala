@@ -5,6 +5,7 @@ import cats.effect.Resource
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.internal.SbtRuntime
+import io.release.ReleaseIO
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoSpecSupport
@@ -13,8 +14,11 @@ import io.release.monorepo.SelectionMode
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Def
+import sbt.Keys.packageOptions
+import sbt.Package.ManifestAttributes
 import sbt.LocalProject
 import sbt.Project
+import sbt.ProjectRef
 import sbt.State
 
 import java.io.File
@@ -54,6 +58,29 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           Some("core-v1.0.0")
         )
         assertEquals(result.vcs.map(_.commandName), Some("git"))
+      }
+    }
+  }
+
+  test("tagReleasesPerProject.execute - expose tag metadata only for the tagged project") {
+    twoProjectTagContextResource.use { case (_, coreProject, apiProject, ctx) =>
+      for {
+        afterCore <- MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, coreProject)
+        afterApi  <- MonorepoVcsSteps.tagReleasesPerProject.execute(afterCore, apiProject)
+      } yield {
+        assertEquals(
+          manifestAttributes(afterCore.state, coreProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Tag" -> "core-v1.0.0")
+        )
+        assertEquals(manifestAttributes(afterCore.state, apiProject.ref), Set("Existing" -> "kept"))
+        assertEquals(
+          manifestAttributes(afterApi.state, coreProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Tag" -> "core-v1.0.0")
+        )
+        assertEquals(
+          manifestAttributes(afterApi.state, apiProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Tag" -> "api-v2.0.0")
+        )
       }
     }
   }
@@ -286,7 +313,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
               io.release.ReleaseIO.releaseIOVcsSign         := false
             )
           ),
-          Project("core", coreBase)
+          Project("core", coreBase).settings((releaseManifestSettings())*)
         )
         val state    = loadedState(repo, projects)
         val project  = projectInfo(
@@ -304,6 +331,65 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             vcs = Some(vcs),
             interactive = false,
             projects = Seq(project)
+          )
+        )
+      }
+    }
+
+  private val twoProjectTagContextResource
+      : Resource[IO, (File, ProjectReleaseInfo, ProjectReleaseInfo, MonorepoContext)] =
+    gitRepoWithVcsResource { repo =>
+      sbt.IO.write(new File(repo, "file.txt"), "initial")
+      val coreBase = new File(repo, "core")
+      val apiBase  = new File(repo, "api")
+      coreBase.mkdirs()
+      apiBase.mkdirs()
+      sbt.IO.write(new File(coreBase, "version.sbt"), """version := "1.0.0-SNAPSHOT"""" + "\n")
+      sbt.IO.write(new File(apiBase, "version.sbt"), """version := "2.0.0-SNAPSHOT"""" + "\n")
+    }.evalMap { case (repo, vcs) =>
+      IO.blocking {
+        val coreBase = new File(repo, "core")
+        val apiBase  = new File(repo, "api")
+        val projects = Seq(
+          rootProject(
+            repo,
+            aggregateIds = Seq("core", "api"),
+            settings = Seq(
+              MonorepoReleaseIO.releaseIOMonorepoTagName    := ((name: String, ver: String) =>
+                s"$name-v$ver"
+              ),
+              MonorepoReleaseIO.releaseIOMonorepoTagComment := ((name: String, ver: String) =>
+                s"Release $name $ver"
+              ),
+              io.release.ReleaseIO.releaseIOVcsSign         := false
+            )
+          ),
+          Project("core", coreBase).settings((releaseManifestSettings())*),
+          Project("api", apiBase).settings((releaseManifestSettings())*)
+        )
+        val state    = loadedState(repo, projects)
+        val core     = projectInfo(
+          state,
+          projects,
+          "core",
+          versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")
+        )
+        val api      = projectInfo(
+          state,
+          projects,
+          "api",
+          versions = Some("2.0.0" -> "2.1.0-SNAPSHOT")
+        )
+
+        (
+          repo,
+          core,
+          api,
+          MonorepoContext(
+            state = state,
+            vcs = Some(vcs),
+            interactive = false,
+            projects = Seq(core, api)
           )
         )
       }
@@ -382,6 +468,38 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           useDefaults = useDefaults,
           interactive = ctx.interactive
         )
+      )
+    )
+
+  private def manifestAttributes(
+      state: State,
+      projectRef: ProjectRef
+  ): Set[(String, String)] = {
+    val (_, options) = SbtRuntime.extracted(state).runTask(projectRef / packageOptions, state)
+
+    options.flatMap {
+      case product: Product if product.productPrefix == "ManifestAttributes" =>
+        product.productElement(0) match {
+          case entries: Seq[?] @unchecked =>
+            entries.collect { case (name, value: String) =>
+              name.toString -> value
+            }
+          case _                         => Seq.empty
+        }
+      case _                                                       => Seq.empty
+    }.toSet
+  }
+
+  private def releaseManifestSettings(
+      basePackageOptions: Seq[sbt.PackageOption] = Seq(ManifestAttributes("Existing" -> "kept"))
+  ): Seq[sbt.Setting[?]] =
+    Seq(
+      packageOptions                         := basePackageOptions,
+      ReleaseIO.releaseIOInternalReleaseHash := None,
+      ReleaseIO.releaseIOInternalReleaseTag  := None,
+      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
+        ReleaseIO.releaseIOInternalReleaseHash.value,
+        ReleaseIO.releaseIOInternalReleaseTag.value
       )
     )
 }
