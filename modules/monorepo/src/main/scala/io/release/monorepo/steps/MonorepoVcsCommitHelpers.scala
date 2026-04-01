@@ -19,12 +19,10 @@ private[monorepo] object MonorepoVcsCommitHelpers {
 
   private def resolveRelativePaths(
       ctx: MonorepoContext,
-      vcs: Vcs,
-      runtime: MonorepoRuntime
+      vcs: Vcs
   ): IO[Seq[(ProjectReleaseInfo, String)]] =
     ctx.currentProjects.toList.traverse { project =>
-      val versionFile = MonorepoVersionFiles.resolve(runtime, project.ref)
-      VcsOps.relativizeToBase(vcs, versionFile).map(rel => (project, rel))
+      VcsOps.relativizeToBase(vcs, project.versionFile).map(rel => (project, rel))
     }
 
   // ── VCS commit ────────────────────────────────────────────────────────
@@ -53,13 +51,13 @@ private[monorepo] object MonorepoVcsCommitHelpers {
   ): IO[MonorepoContext] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       for {
-        runtime                      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-        paths                        <- resolveRelativePaths(ctx, vcs, runtime)
+        paths                        <- resolveRelativePaths(ctx, vcs)
         settings                     <- IO.blocking {
+                                          val extracted = SbtRuntime.extracted(ctx.state)
                                           (
-                                            runtime.extracted.get(releaseIOVcsSign),
-                                            runtime.extracted.get(releaseIOVcsSignOff),
-                                            runtime.extracted.get(msgFormatterKey)
+                                            extracted.get(releaseIOVcsSign),
+                                            extracted.get(releaseIOVcsSignOff),
+                                            extracted.get(msgFormatterKey)
                                           )
                                         }
         (sign, signOff, msgFormatter) = settings

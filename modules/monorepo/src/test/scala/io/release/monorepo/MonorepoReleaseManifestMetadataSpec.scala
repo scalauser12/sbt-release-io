@@ -9,7 +9,7 @@ import io.release.monorepo.steps.MonorepoVcsCommitHelpers
 import io.release.monorepo.steps.MonorepoVersionSteps
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.Keys.packageOptions
+import sbt.Keys.{packageOptions, version}
 import sbt.Package.ManifestAttributes
 import sbt.ProjectRef
 import sbt.State
@@ -119,6 +119,62 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
           manifestAttributes(afterNextCommit.state, fixture.refsById("api")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> releaseHash)
         )
+      }
+    }
+  }
+
+  test("commitReleaseVersions - stage the version file captured during the write step") {
+    gitFixtureResource.use { case (fixture, vcs) =>
+      val coreVersionFile      = new File(new File(fixture.dir, "core"), "version.sbt")
+      val alternateVersionFile = new File(new File(fixture.dir, "core"), "alternate-version.sbt")
+      val mutatedState         = SbtRuntime.appendWithSession(
+        fixture.state,
+        Seq(
+          MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
+            (ref: ProjectRef, state: State) =>
+              val resolvedVersion = SbtRuntime.extracted(state).getOpt(ref / version).getOrElse("")
+              val defaultFile     = new File(new File(fixture.dir, ref.project), "version.sbt")
+              if (ref.project == "core" && resolvedVersion == "1.0.0") alternateVersionFile
+              else defaultFile
+          }
+        )
+      )
+      val ctx                  = fixture
+        .context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map(
+            "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT")
+          ),
+          vcs = Some(vcs)
+        )
+        .withState(mutatedState)
+      val project              = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      for {
+        _           <- writeVersion(coreVersionFile, "0.1.0-SNAPSHOT")
+        _           <- writeVersion(alternateVersionFile, "0.1.0-SNAPSHOT")
+        _           <- IO.blocking {
+                         TestSupport.runGit(fixture.dir, "add", "core/alternate-version.sbt")
+                         TestSupport.runGit(fixture.dir, "commit", "-m", "Add alternate version file")
+                       }
+        afterWrite  <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, project)
+        afterCommit <- MonorepoVersionSteps.commitReleaseVersions.execute(afterWrite)
+        status      <- IO.blocking(TestSupport.runGit(fixture.dir, "status", "--short"))
+        headVersion <- IO.blocking(TestSupport.runGit(fixture.dir, "show", "HEAD:core/version.sbt"))
+        headAlt     <-
+          IO.blocking(TestSupport.runGit(fixture.dir, "show", "HEAD:core/alternate-version.sbt"))
+      } yield {
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(afterWrite.projects, "core").versionFile,
+          coreVersionFile
+        )
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(afterCommit.projects, "core").versionFile,
+          coreVersionFile
+        )
+        assertEquals(headVersion.trim, """version := "1.0.0"""")
+        assertEquals(headAlt.trim, """version := "0.1.0-SNAPSHOT"""")
+        assertEquals(status.trim, "")
       }
     }
   }

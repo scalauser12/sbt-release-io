@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.monorepo.steps.MonorepoPublishSteps
@@ -205,6 +206,83 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       ) { err =>
         assert(err.getMessage.contains("Cross-build enabled but core has empty crossScalaVersions"))
         assert(!marker.exists())
+      }
+    }
+  }
+
+  test("compose - per-project validation returning ctx.failWith stops later projects") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val pCtx = ctx.withProjects(Seq(dummyProject("core"), dummyProject("api")))
+        val step = MonorepoStepIO.PerProject(
+          name = "validate-fail-with-step",
+          execute = (c, _) => IO.pure(c),
+          validateWithContext = Some((c, project) =>
+            observed.update(_ :+ project.name).as {
+              if (project.name == "core")
+                c.failWith(new RuntimeException("fatal stop"))
+              else c
+            }
+          )
+        )
+
+        MonorepoStepIO.compose(Seq(step))(pCtx).flatMap { result =>
+          observed.get.map { obs =>
+            assert(result.failed)
+            assertEquals(obs, List("core"))
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "compose - cross-build validation short-circuits later projects when the first project returns ctx.failWith"
+  ) {
+    loadedContextResource("monorepo-step-cross-validation-short-circuit", Seq("core", "api")) {
+      dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+
+        Seq(
+          Project("root", dir)
+            .aggregate(LocalProject("core"), LocalProject("api"))
+            .settings(scalaVersion := TestSupport.CurrentScalaVersion),
+          Project("core", coreBase).settings(
+            scalaVersion       := TestSupport.CurrentScalaVersion,
+            crossScalaVersions := Seq(TestSupport.CurrentScalaVersion)
+          ),
+          Project("api", apiBase).settings(
+            scalaVersion       := TestSupport.CurrentScalaVersion,
+            crossScalaVersions := Seq(TestSupport.CurrentScalaVersion)
+          )
+        )
+    }.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val step = MonorepoStepIO.PerProject(
+          name = "cross-validate-fail-with-step",
+          execute = (c, _) => IO.pure(c),
+          validateWithContext = Some((c, project) =>
+            observed.update(_ :+ project.name).as {
+              if (project.name == "core")
+                c.failWith(new RuntimeException("fatal stop"))
+              else c
+            }
+          ),
+          enableCrossBuild = true
+        )
+
+        MonorepoStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+          scalaVersionOf(result.state).flatMap { restoredVersion =>
+            observed.get.map { obs =>
+              assert(result.failed)
+              assertEquals(obs, List("core"))
+              assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+            }
+          }
+        }
       }
     }
   }

@@ -22,6 +22,20 @@ private[monorepo] object MonorepoCrossBuild {
 
   private val LogPrefix = ReleaseLogPrefixes.Monorepo
 
+  private def latestProject(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): ProjectReleaseInfo =
+    ctx.projects.find(_.ref == project.ref).getOrElse(project)
+
+  private def shouldSkipProject(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): Boolean = {
+    val currentProject = latestProject(ctx, project)
+    ctx.failed || currentProject.failed
+  }
+
   private def isScalaSessionSetting(setting: Setting[?]): Boolean =
     setting.key match {
       case ScopedKey(Scope(_, Zero, Zero, _), key)
@@ -69,16 +83,23 @@ private[monorepo] object MonorepoCrossBuild {
     if (crossBuild && enableCrossBuild)
       projects.foldLeft(IO.pure(ctx)) { (ioCtx, project) =>
         ioCtx.flatMap { currentCtx =>
-          runCrossBuildForProject(
-            currentCtx,
-            project,
-            (innerCtx, _) => validate(innerCtx, project)
-          )
+          val currentProject = latestProject(currentCtx, project)
+          if (shouldSkipProject(currentCtx, currentProject)) IO.pure(currentCtx)
+          else
+            runCrossBuildForProject(
+              currentCtx,
+              currentProject,
+              (innerCtx, _) => validate(innerCtx, currentProject)
+            )
         }
       }
     else
       projects.foldLeft(IO.pure(ctx)) { (ioCtx, project) =>
-        ioCtx.flatMap(currentCtx => validate(currentCtx, project))
+        ioCtx.flatMap { currentCtx =>
+          val currentProject = latestProject(currentCtx, project)
+          if (shouldSkipProject(currentCtx, currentProject)) IO.pure(currentCtx)
+          else validate(currentCtx, currentProject)
+        }
       }
   }
 
