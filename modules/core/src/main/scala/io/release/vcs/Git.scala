@@ -10,6 +10,9 @@ import scala.sys.process.ProcessLogger
 /** Git implementation of [[Vcs]] with all operations wrapped in `IO.blocking`. */
 class Git(val baseDir: File) extends Vcs {
 
+  private val DetachedHeadMessage =
+    "HEAD is detached. release-io branch-based VCS operations require a checked-out branch."
+
   val commandName: String = "git"
 
   private lazy val exec: String = {
@@ -70,8 +73,11 @@ class Git(val baseDir: File) extends Vcs {
     runSingleLine("rev-parse", "HEAD")("git rev-parse HEAD")
 
   def currentBranch: IO[String] =
-    runSingleLine("symbolic-ref", "HEAD")("git symbolic-ref HEAD")
-      .map(_.stripPrefix("refs/heads/"))
+    runSingleLine("rev-parse", "--abbrev-ref", "HEAD")("git rev-parse --abbrev-ref HEAD")
+      .flatMap {
+        case "HEAD" => IO.raiseError(new IllegalStateException(DetachedHeadMessage))
+        case branch => IO.pure(branch)
+      }
 
   def trackingRemote: IO[String] =
     currentBranch.flatMap { branch =>

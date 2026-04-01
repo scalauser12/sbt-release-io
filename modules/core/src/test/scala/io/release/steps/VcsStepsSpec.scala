@@ -188,6 +188,31 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagRelease.execute - trim whitespace around interactive keep input") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        TestSupport.withInput(" k \n") {
+          VcsSteps.tagRelease.execute(
+            ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
+          )
+        }.flatMap { result =>
+          IO.blocking(TestSupport.runGit(repo, "tag", "--list")).map { tags =>
+            assertEquals(tags.trim, "v1.0.0")
+            assertEquals(result.vcs.map(_.commandName), Some("git"))
+          }
+        }
+    }
+  }
+
   test("tagRelease.execute - treat EOF as the default abort answer when the tag already exists") {
     TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val state = TestSupport.gitRootState(
@@ -289,6 +314,43 @@ class VcsStepsSpec extends CatsEffectSuite {
               releaseVersionOverride = None,
               nextVersionOverride = None,
               decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
+            )
+          )
+        )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        VcsSteps.preflightTag(ctx).map { outcome =>
+          assertEquals(outcome.tagName, "v1.0.0")
+          assertEquals(outcome.status, "exists; release will keep the existing tag")
+        }
+    }
+  }
+
+  test("preflightTag - trim whitespace around the configured default answer") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+      val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+        .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        .withExecutionState(
+          CoreExecutionState(
+            CoreReleasePlan(
+              flags = ExecutionFlags(
+                useDefaults = false,
+                skipTests = false,
+                skipPublish = false,
+                interactive = false,
+                crossBuild = false
+              ),
+              releaseVersionOverride = None,
+              nextVersionOverride = None,
+              decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some(" k "))
             )
           )
         )

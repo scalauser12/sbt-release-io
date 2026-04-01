@@ -348,6 +348,23 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("validatePushReadiness - fail with a clear message when HEAD is detached") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = TestSupport.gitRootState(repo)
+      val ctx   = VcsOpsSpec.promptContext(
+        state,
+        interactive = false,
+        useDefaults = false
+      ).withVcs(vcs)
+
+      IO.blocking(TestSupport.runGit(repo, "checkout", "--detach", "HEAD")) *>
+        assertIllegalStateMessage(
+          VcsOps.validatePushReadiness(ctx, vcs),
+          "HEAD is detached. release-io branch-based VCS operations require a checked-out branch."
+        )
+    }
+  }
+
   test("validatePushReadiness - abort in non-interactive mode when local is behind remote") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       assertIllegalStateMessage(

@@ -99,7 +99,7 @@ private[release] object TagConflictResolver {
       vcs.existsTag(tagName).flatMap {
         case false => IO.pure(PreflightOutcome(tagName, "available"))
         case true  =>
-          defaultAnswer match {
+          normalizeAnswer(defaultAnswer) match {
             case Some("k") | Some("K")            =>
               IO.pure(
                 PreflightOutcome(tagName, "exists; release will keep the existing tag")
@@ -178,7 +178,8 @@ private[release] object TagConflictResolver {
       )
 
     effectiveAnswer.map { case (nextCtx, answer) =>
-      val action = answer match {
+      val normalized = normalizeAnswer(Some(answer)).getOrElse("")
+      val action     = normalized match {
         case "a" | "A" | "" => ConflictAction.Abort
         case "k" | "K"      => ConflictAction.Keep
         case "o" | "O"      => ConflictAction.Overwrite
@@ -190,4 +191,7 @@ private[release] object TagConflictResolver {
 
   private def forLabel(label: String): String =
     if (label.isEmpty) "" else s" for $label"
+
+  private def normalizeAnswer(answer: Option[String]): Option[String] =
+    answer.map(_.trim)
 }
