@@ -120,9 +120,6 @@ private[release] object CoreCommandExecution {
   ): CoreCommandInputs = {
     import ReleaseCli.Arg.*
 
-    def lastArg[A](extract: PartialFunction[ReleaseCli.Arg, A]): Option[A] =
-      args.collect(extract).lastOption
-
     def allArgs[A](extract: PartialFunction[ReleaseCli.Arg, A]): Seq[A] =
       args.collect(extract)
 
