@@ -32,19 +32,37 @@ Legacy step-list editing fixtures were retired. New scripted tests should use li
 
 ## Running tests
 
-Run all scripted tests:
+Run all scripted tests on sbt 1:
+
+```bash
+sbt core/scripted
+```
+
+Run all scripted tests on sbt 2:
 
 ```bash
 ./bin/sbt2-clean core/scripted
 ```
 
-Run a specific scenario:
+Run a specific scenario on sbt 1:
+
+```bash
+sbt "core/scripted sbt-release-io/simple"
+```
+
+Run a specific scenario on sbt 2:
 
 ```bash
 ./bin/sbt2-clean "core/scripted sbt-release-io/simple"
 ```
 
-Run multiple scenarios:
+Run multiple scenarios on sbt 1:
+
+```bash
+sbt "core/scripted sbt-release-io/simple sbt-release-io/snapshot-deps"
+```
+
+Run multiple scenarios on sbt 2:
 
 ```bash
 ./bin/sbt2-clean "core/scripted sbt-release-io/simple sbt-release-io/snapshot-deps"

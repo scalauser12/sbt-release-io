@@ -36,19 +36,37 @@ Global version mode and unified tag strategy were removed. The surviving suite c
 
 ## Running tests
 
-Run the monorepo scripted suite:
+Run the monorepo scripted suite on sbt 1:
+
+```bash
+sbt monorepo/scripted
+```
+
+Run the monorepo scripted suite on sbt 2:
 
 ```bash
 ./bin/sbt2-clean monorepo/scripted
 ```
 
-Run a specific scenario:
+Run a specific scenario on sbt 1:
+
+```bash
+sbt "monorepo/scripted sbt-release-io-monorepo/simple-monorepo"
+```
+
+Run a specific scenario on sbt 2:
 
 ```bash
 ./bin/sbt2-clean "monorepo/scripted sbt-release-io-monorepo/simple-monorepo"
 ```
 
-Run multiple scenarios:
+Run multiple scenarios on sbt 1:
+
+```bash
+sbt "monorepo/scripted sbt-release-io-monorepo/simple-monorepo sbt-release-io-monorepo/tag-exists-error"
+```
+
+Run multiple scenarios on sbt 2:
 
 ```bash
 ./bin/sbt2-clean "monorepo/scripted sbt-release-io-monorepo/simple-monorepo sbt-release-io-monorepo/tag-exists-error"

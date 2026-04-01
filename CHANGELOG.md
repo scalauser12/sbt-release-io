@@ -4,6 +4,74 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.8.0
+
+Published: 2026-04-01
+GitHub release:
+[v0.8.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.8.0)
+
+`v0.8.0` consolidates the internal release runtime for both plugins, formalizes
+persistent decision defaults in the public API, and removes the remaining
+legacy raw-process customization surface in favor of hooks, policies, and
+resource-aware custom plugins.
+
+### Breaking Changes
+
+- Remove the legacy raw-process customization APIs from the supported public
+  surface: `releaseIOProcess`, `releaseIOMonorepoProcess`, and the monorepo
+  `insertStepAfter` / `insertStepBefore` helpers.
+- Treat hooks, policy keys, and resource-aware custom plugins as the supported
+  migration path for advanced release customization in both modules.
+
+### Improvements
+
+- Add shared persistent decision-default settings for tag conflicts and yes/no
+  release prompts: `releaseIODefaultTagExistsAnswer`,
+  `releaseIODefaultSnapshotDependenciesAnswer`,
+  `releaseIODefaultRemoteCheckFailureAnswer`,
+  `releaseIODefaultUpstreamBehindAnswer`, and
+  `releaseIODefaultPushAnswer`.
+- Add matching CLI flags for core and monorepo release commands so non-
+  interactive and scripted runs can provide the same default answers
+  explicitly.
+- Preserve late-bound tag/version settings and release-only manifest metadata
+  more consistently across core and monorepo release flows.
+- Consolidate duplicated command execution, lifecycle compilation, and default-
+  setting wiring into shared internal helpers while keeping the public
+  hook/policy surface stable.
+
+### Documentation
+
+- Update the root README, module READMEs, and onboarding guides to reference
+  `0.8.0`.
+- Clarify in the scripted-test READMEs how to run the scripted suites on both
+  sbt 1 and sbt 2.
+- Keep the core and monorepo docs aligned on hooks, policies, and resource
+  hooks as the supported customization surface after the raw-process removal.
+
+### Tests
+
+- Extract shared test harness code into the internal `sbt-release-io-testkit`
+  module so `monorepo` no longer depends on `core` test output.
+- Expand coverage around manifest metadata, hook compilation, VCS/tag handling,
+  publish flow, late-bound setting resolution, cross-build behavior, and
+  monorepo change selection.
+
+### CI & Build
+
+- Add the internal unpublished `sbt-release-io-testkit` project to the build
+  graph and root aggregation.
+- Keep the release publish path tag-driven through GitHub Actions and
+  `sbt ci-release`.
+
+### Verification
+
+- sbt 1.12.3: `sbt scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt testkit/test core/test monorepo/test`
+- sbt 1.12.3: `sbt "core/scripted" "monorepo/scripted"`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean testkit/test core/test monorepo/test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean "core/scripted" "monorepo/scripted"`
+
 ## v0.7.1
 
 Published: 2026-03-31
