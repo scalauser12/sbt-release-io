@@ -5,11 +5,14 @@ import io.release.ReleaseContext
 import io.release.ReleaseCtx
 import io.release.internal.DecisionResolver
 import io.release.internal.PromptAdapter
+import io.release.internal.SbtRuntime
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt.EvaluateTask
 import sbt.Incomplete
 import sbt.Result
+import sbt.State
+import sbt.TaskKey
 import sbt.internal.Aggregation.KeyValue
 
 import scala.sys.process.*
@@ -127,5 +130,27 @@ private[release] object StepHelpers {
       Right(EvaluateTask.onResult(result)(_.flatMap(_.value)))
     } catch {
       case inc: Incomplete => Left(inc)
+    }
+
+  /** Run an sbt task and fail fast if it reports failure via `FailureCommand`.
+    *
+    * Some task-valued release settings can still return a value while also
+    * arming sbt's failure sentinel in the updated state. Built-in steps that
+    * need the task result immediately should honor that sentinel before
+    * continuing with prompts or VCS side effects.
+    */
+  def runTaskChecked[A](
+      state: State,
+      key: TaskKey[A],
+      actionName: String
+  ): IO[(State, A)] =
+    IO.blocking(SbtRuntime.runTask(state, key)).flatMap { case (nextState, value) =>
+      if (SbtRuntime.hasFailureCommand(nextState))
+        IO.raiseError(
+          new IllegalStateException(
+            s"$actionName: sbt task '${key.key.label}' reported failure via FailureCommand"
+          )
+        )
+      else IO.pure((nextState, value))
     }
 }

@@ -284,6 +284,70 @@ class VersionStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolveVersions - fail when releaseIOVersion reports FailureCommand") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val marker = new File(dir, "release-version-task.marker")
+
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                releaseIOVersionFile         := versionFile,
+                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+                releaseIOVersionFileContents := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOUseGlobalVersion    := true,
+                CoreStepTestCompat.failureCommandVersionTaskSetting(marker),
+                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+              )
+            )
+          )
+
+          TestAssertions.assertFailure[IllegalStateException, (ReleaseContext, VersionSteps.ResolvedVersions)](
+            VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
+          ) { err =>
+            assert(marker.exists())
+            assert(err.getMessage.contains(releaseIOVersion.key.label))
+            assert(err.getMessage.contains("FailureCommand"))
+          }
+      }
+    }
+  }
+
+  test("resolveVersions - fail when releaseIONextVersion reports FailureCommand") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val marker = new File(dir, "next-version-task.marker")
+
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                releaseIOVersionFile         := versionFile,
+                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+                releaseIOVersionFileContents := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOUseGlobalVersion    := true,
+                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
+                CoreStepTestCompat.failureCommandNextVersionTaskSetting(marker)
+              )
+            )
+          )
+
+          TestAssertions.assertFailure[IllegalStateException, (ReleaseContext, VersionSteps.ResolvedVersions)](
+            VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
+          ) { err =>
+            assert(marker.exists())
+            assert(err.getMessage.contains(releaseIONextVersion.key.label))
+            assert(err.getMessage.contains("FailureCommand"))
+          }
+      }
+    }
+  }
+
   test("commitReleaseVersion - expose the release hash through package options") {
     TestSupport
       .gitRepoWithCommitResource(
@@ -322,6 +386,104 @@ class VersionStepsSpec extends CatsEffectSuite {
           headHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
         } yield {
           assert(manifestAttributes(result.state).contains("Vcs-Release-Hash" -> headHash))
+        }
+      }
+  }
+
+  test("commitReleaseVersion - do not create a commit when releaseIOCommitMessage reports FailureCommand") {
+    TestSupport
+      .gitRepoWithCommitResource(
+        fixturePrefix,
+        prepareRepo = repo =>
+          IO.blocking(
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "1.0.0-SNAPSHOT"""" + "\n"
+            )
+          )
+      )
+      .use { case (repo, vcs) =>
+        val marker      = new File(repo, "commit-message-task.marker")
+        val versionFile = new File(repo, "version.sbt")
+        val state       = TestSupport.gitRootState(
+          repo,
+          Seq(
+            releaseIOVersionFile         := versionFile,
+            releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+            releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+              useGlobalVersion = true
+            ),
+            releaseIOUseGlobalVersion    := true,
+            CoreStepTestCompat.failureCommandCommitMessageSetting(marker),
+            releaseIOVcsSign             := false,
+            releaseIOVcsSignOff          := false
+          )
+        )
+        val ctx         = ReleaseContext(state = state, vcs = Some(vcs))
+          .withVersions("1.0.0", "1.0.1-SNAPSHOT")
+
+        for {
+          before  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
+          written <- VersionSteps.setReleaseVersion.execute(ctx)
+          _       <- TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+                       VersionSteps.commitReleaseVersion.execute(written)
+                     ) { err =>
+                       assert(marker.exists())
+                       assert(err.getMessage.contains(releaseIOCommitMessage.key.label))
+                       assert(err.getMessage.contains("FailureCommand"))
+                     }
+          after   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
+        } yield {
+          assertEquals(after, before)
+        }
+      }
+  }
+
+  test("commitNextVersion - do not create a commit when releaseIONextCommitMessage reports FailureCommand") {
+    TestSupport
+      .gitRepoWithCommitResource(
+        fixturePrefix,
+        prepareRepo = repo =>
+          IO.blocking(
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "1.0.0-SNAPSHOT"""" + "\n"
+            )
+          )
+      )
+      .use { case (repo, vcs) =>
+        val marker      = new File(repo, "next-commit-message-task.marker")
+        val versionFile = new File(repo, "version.sbt")
+        val state       = TestSupport.gitRootState(
+          repo,
+          Seq(
+            releaseIOVersionFile         := versionFile,
+            releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+            releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+              useGlobalVersion = true
+            ),
+            releaseIOUseGlobalVersion    := true,
+            CoreStepTestCompat.failureCommandNextCommitMessageSetting(marker),
+            releaseIOVcsSign             := false,
+            releaseIOVcsSignOff          := false
+          )
+        )
+        val ctx         = ReleaseContext(state = state, vcs = Some(vcs))
+          .withVersions("1.0.0", "1.0.1-SNAPSHOT")
+
+        for {
+          before  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
+          written <- VersionSteps.setNextVersion.execute(ctx)
+          _       <- TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+                       VersionSteps.commitNextVersion.execute(written)
+                     ) { err =>
+                       assert(marker.exists())
+                       assert(err.getMessage.contains(releaseIONextCommitMessage.key.label))
+                       assert(err.getMessage.contains("FailureCommand"))
+                     }
+          after   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
+        } yield {
+          assertEquals(after, before)
         }
       }
   }

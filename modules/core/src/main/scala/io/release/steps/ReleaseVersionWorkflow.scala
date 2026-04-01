@@ -112,7 +112,12 @@ private[release] object ReleaseVersionWorkflow {
     requireVersions(ctx) { case (releaseVersion, _) =>
       for {
         versionPlan             <- IO.blocking(resolveVersionPlan(ctx))
-        commitResult            <- commitVersionNative(ctx, releaseIOCommitMessage, versionPlan.versionFile)
+        commitResult            <- commitVersionNative(
+                                     ctx,
+                                     "commit-release-version",
+                                     releaseIOCommitMessage,
+                                     versionPlan.versionFile
+                                   )
         (resultCtx, currentHash) = commitResult
         finalCtx                <- IO.blocking {
                                      val newState = SbtRuntime.appendWithSession(
@@ -131,7 +136,12 @@ private[release] object ReleaseVersionWorkflow {
       for {
         versionPlan           <- IO.blocking(resolveVersionPlan(ctx))
         commitResult          <-
-          commitVersionNative(ctx, releaseIONextCommitMessage, versionPlan.versionFile)
+          commitVersionNative(
+            ctx,
+            "commit-next-version",
+            releaseIONextCommitMessage,
+            versionPlan.versionFile
+          )
         (resultCtx, _)         = commitResult
         finalCtx              <- IO.blocking {
                                    val newState = SbtRuntime.appendWithSession(
@@ -149,24 +159,24 @@ private[release] object ReleaseVersionWorkflow {
       allowPrompts: Boolean
   ): IO[(ReleaseContext, ResolvedVersions)] =
     for {
-      versionPlan <- IO.blocking(resolveVersionPlan(ctx))
-      _           <- ensureVersionFileExists(versionPlan.versionFile)
-      currentVer  <- versionPlan.readVersion(versionPlan.versionFile)
-      data        <- IO.blocking {
-                       val (s1, releaseFn) = SbtRuntime.runTask(ctx.state, releaseIOVersion)
-                       val (_, nextFn)     = SbtRuntime.runTask(s1, releaseIONextVersion)
-
-                       InquireData(
-                         state = ctx.state,
-                         currentVersion = currentVer,
-                         suggestedRelease = releaseFn(currentVer),
-                         nextVersionFn = nextFn,
-                         releaseVersionArg = versionPlan.releaseVersionOverride,
-                         nextVersionArg = versionPlan.nextVersionOverride,
-                         useDefaults = useDefaults(ctx)
-                       )
-                     }
-      releaseData <- resolveReleaseVersion(ctx, data, allowPrompts)
+      versionPlan     <- IO.blocking(resolveVersionPlan(ctx))
+      _               <- ensureVersionFileExists(versionPlan.versionFile)
+      currentVer      <- versionPlan.readVersion(versionPlan.versionFile)
+      releaseTaskData <- runTaskChecked(ctx.state, releaseIOVersion, "inquire-versions")
+      (s1, releaseFn)  = releaseTaskData
+      nextTaskData    <- runTaskChecked(s1, releaseIONextVersion, "inquire-versions")
+      (s2, nextFn)     = nextTaskData
+      updatedCtx       = ctx.withState(s2)
+      data             = InquireData(
+                           state = s2,
+                           currentVersion = currentVer,
+                           suggestedRelease = releaseFn(currentVer),
+                           nextVersionFn = nextFn,
+                           releaseVersionArg = versionPlan.releaseVersionOverride,
+                           nextVersionArg = versionPlan.nextVersionOverride,
+                           useDefaults = useDefaults(updatedCtx)
+                         )
+      releaseData     <- resolveReleaseVersion(updatedCtx, data, allowPrompts)
       nextData    <- resolveNextVersion(releaseData._1, data, releaseData._2, allowPrompts)
     } yield (
       nextData._1,
@@ -243,6 +253,7 @@ private[release] object ReleaseVersionWorkflow {
 
   private def commitVersionNative(
       ctx: ReleaseContext,
+      actionName: String,
       commitMessageKey: TaskKey[String],
       versionFile: File
   ): IO[(ReleaseContext, String)] =
@@ -254,12 +265,12 @@ private[release] object ReleaseVersionWorkflow {
       }.flatMap { case (sign, signOff) =>
         VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
           for {
-            _      <- vcs.add(relativePath)
             status <- VcsOps.trackedStatus(vcs)
             result <- if (status.nonEmpty) {
                         for {
-                          commitData        <- IO.blocking(SbtRuntime.runTask(ctx.state, commitMessageKey))
+                          commitData        <- runTaskChecked(ctx.state, commitMessageKey, actionName)
                           (commitState, msg) = commitData
+                          _                 <- vcs.add(relativePath)
                           _                 <- vcs.commit(msg, sign, signOff)
                           hash              <- vcs.currentHash
                         } yield (ctx.withState(commitState), hash)

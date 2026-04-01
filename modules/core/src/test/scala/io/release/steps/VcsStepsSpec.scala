@@ -130,6 +130,64 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagRelease.execute - do not create a tag when releaseIOTagName reports FailureCommand") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val marker = new File(repo, "tag-name-task.marker")
+      val state  = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          CoreStepTestCompat.failureCommandTagNameSetting(marker),
+          io.release.ReleaseIO.releaseIOTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      for {
+        _    <- TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+                  VcsSteps.tagRelease.execute(
+                    ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+                  )
+                ) { err =>
+                  assert(marker.exists())
+                  assert(err.getMessage.contains(io.release.ReleaseIO.releaseIOTagName.key.label))
+                  assert(err.getMessage.contains("FailureCommand"))
+                }
+        tags <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
+      } yield {
+        assertEquals(tags.trim, "")
+      }
+    }
+  }
+
+  test("tagRelease.execute - do not create a tag when releaseIOTagComment reports FailureCommand") {
+    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val marker = new File(repo, "tag-comment-task.marker")
+      val state  = TestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleaseIO.releaseIOVcsSign    := false,
+          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          CoreStepTestCompat.failureCommandTagCommentSetting(marker)
+        )
+      )
+
+      for {
+        _    <- TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+                  VcsSteps.tagRelease.execute(
+                    ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+                  )
+                ) { err =>
+                  assert(marker.exists())
+                  assert(err.getMessage.contains(io.release.ReleaseIO.releaseIOTagComment.key.label))
+                  assert(err.getMessage.contains("FailureCommand"))
+                }
+        tags <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
+      } yield {
+        assertEquals(tags.trim, "")
+      }
+    }
+  }
+
   test("tagRelease.execute - treat EOF as the default abort answer when the tag already exists") {
     TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val state = TestSupport.gitRootState(

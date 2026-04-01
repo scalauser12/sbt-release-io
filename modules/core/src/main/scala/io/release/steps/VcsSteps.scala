@@ -67,7 +67,7 @@ private[release] object VcsSteps {
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
-        params <- IO.blocking(resolveTagPlan(ctx))
+        params <- resolveTagPlan(ctx)
         result <- resolveTag(vcs, params, ctx.withState(params.state))
       } yield result
     }
@@ -92,23 +92,26 @@ private[release] object VcsSteps {
     maybeVersionPlan.fold(Seq.empty[Setting[?]])(VersionSteps.sessionSettings)
   }
 
-  private def resolveTagPlan(ctx: ReleaseContext): TagPlan = {
-    val versionSettings  = versionSessionSettings(ctx.state)
-    val (s1, tagName)    = SbtRuntime.runTask(ctx.state, releaseIOTagName)
-    val (s2, tagComment) = SbtRuntime.runTask(s1, releaseIOTagComment)
-    TagPlan(
+  private def resolveTagPlan(ctx: ReleaseContext): IO[TagPlan] =
+    for {
+      versionSettings      <- IO.blocking(versionSessionSettings(ctx.state))
+      tagNameTaskData      <- runTaskChecked(ctx.state, releaseIOTagName, "tag-release")
+      (s1, tagName)         = tagNameTaskData
+      tagCommentTaskData   <- runTaskChecked(s1, releaseIOTagComment, "tag-release")
+      (s2, tagComment)      = tagCommentTaskData
+      sign                 <- IO.blocking(SbtRuntime.getSetting(s2, releaseIOVcsSign))
+    } yield TagPlan(
       state = s2,
       tagName = tagName,
       tagComment = tagComment,
-      sign = SbtRuntime.getSetting(s2, releaseIOVcsSign),
+      sign = sign,
       defaultAnswer = Some(ctx.decisionDefaults.tagExistsAnswer).flatten,
       versionSessionSettings = versionSettings
     )
-  }
 
   private[release] def preflightTag(ctx: ReleaseContext): IO[PreflightTagOutcome] =
     preparePreflightContext(ctx).flatMap { preflightCtx =>
-      IO.blocking(resolveTagPlan(preflightCtx)).flatMap { params =>
+      resolveTagPlan(preflightCtx).flatMap { params =>
         val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
         detectedVcs.flatMap(vcs => resolveTagPreflight(vcs, params, preflightCtx))
       }
