@@ -473,6 +473,38 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("interactivePushAfterRemote - re-prompt on invalid push input until a valid answer") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val ctx = VcsOpsSpec.promptContext(
+        VcsOpsSpec.bufferedState(dir).state,
+        interactive = true,
+        useDefaults = false
+      )
+
+      for {
+        pushed     <- Ref[IO].of(false)
+        declined   <- Ref[IO].of(false)
+        vcs         = new StubVcs(dir)
+        _          <- TestSupport.withInput("maybe\ny\n") {
+                        VcsOps.interactivePushAfterRemote(
+                          ctx,
+                          vcs,
+                          ReleaseLogPrefixes.Core,
+                          remoteCheckLog = None
+                        )(
+                          doPush = currentCtx => pushed.set(true).as(currentCtx),
+                          onDeclinePush = currentCtx => declined.set(true).as(currentCtx)
+                        )
+                      }
+        didPush    <- pushed.get
+        didDecline <- declined.get
+      } yield {
+        assertEquals(didPush, true)
+        assertEquals(didDecline, false)
+      }
+    }
+  }
+
   test("interactivePushAfterRemote - closed stdin declines push and logs a warning") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = VcsOpsSpec.bufferedState(dir)

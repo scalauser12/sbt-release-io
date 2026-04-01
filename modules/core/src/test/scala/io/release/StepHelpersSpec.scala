@@ -139,6 +139,86 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
+  test("StepHelpers.askYesNo - re-prompt on invalid input until yes is entered") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      TestSupport.withInput("maybe\ny\n") {
+        StepHelpers
+          .askYesNo(
+            promptContext(state, interactive = true, useDefaults = false),
+            prompt = "Continue? [n] ",
+            defaultYes = false
+          )
+          .map { case (_, answer) =>
+            assertEquals(answer, true)
+          }
+      }
+    }
+  }
+
+  test("StepHelpers.askYesNo - re-prompt on invalid input until no is entered") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      TestSupport.withInput("maybe\nn\n") {
+        StepHelpers
+          .askYesNo(
+            promptContext(state, interactive = true, useDefaults = false),
+            prompt = "Continue? [y] ",
+            defaultYes = true
+          )
+          .map { case (_, answer) =>
+            assertEquals(answer, false)
+          }
+      }
+    }
+  }
+
+  test("StepHelpers.askYesNo - use the default after invalid input followed by blank") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      TestSupport.withInput("maybe\n\n") {
+        StepHelpers
+          .askYesNo(
+            promptContext(state, interactive = true, useDefaults = false),
+            prompt = "Continue? [y] ",
+            defaultYes = true
+          )
+          .map { case (_, answer) =>
+            assertEquals(answer, true)
+          }
+      }
+    }
+  }
+
+  test("StepHelpers.askYesNoOrEof - preserve EOF after invalid input") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      TestSupport.withInput("maybe") {
+        StepHelpers
+          .askYesNoOrEof(
+            promptContext(state, interactive = true, useDefaults = false),
+            prompt = "Continue? [y] ",
+            defaultYes = true
+          )
+          .map { case (_, answer) =>
+            assertEquals(answer, None)
+          }
+      }
+    }
+  }
+
+  test("StepHelpers.askYesNo - preserve CRLF prompt state when re-prompting after invalid input") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      TestSupport.withInput("maybe\r\ny\r\n") {
+        StepHelpers
+          .askYesNo(
+            promptContext(state, interactive = true, useDefaults = false),
+            prompt = "Continue? [n] ",
+            defaultYes = false
+          )
+          .map { case (_, answer) =>
+            assertEquals(answer, true)
+          }
+      }
+    }
+  }
+
   test("StepHelpers.parseVersionInput - return the default when the input is blank") {
     StepHelpers
       .parseVersionInput("   ", default = "1.2.3-SNAPSHOT")

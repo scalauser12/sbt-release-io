@@ -52,9 +52,7 @@ private[release] object PromptAdapter {
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
-    promptLine(ctx, prompt).map { case (nextCtx, input) =>
-      (nextCtx, input.map(parseYesNoInput(_, defaultYes)))
-    }
+    promptYesNoLoop(ctx, prompt, defaultYes)
 
   def promptYesNo[C <: ReleaseCtx[C]](
       ctx: C,
@@ -67,6 +65,22 @@ private[release] object PromptAdapter {
 
   private def promptState[C <: ReleaseCtx[C]](ctx: C): PromptState =
     ctx.metadata(PromptState.key).getOrElse(PromptState.empty)
+
+  private def promptYesNoLoop[C <: ReleaseCtx[C]](
+      ctx: C,
+      prompt: String,
+      defaultYes: Boolean
+  ): IO[(C, Option[Boolean])] =
+    promptLine(ctx, prompt).flatMap {
+      case (nextCtx, None)            => IO.pure((nextCtx, None))
+      case (nextCtx, Some(rawInput)) =>
+        parseYesNoInput(rawInput, defaultYes) match {
+          case Some(answer) => IO.pure((nextCtx, Some(answer)))
+          case None         =>
+            IO.print("Please answer 'y' or 'n' (or press Enter for the default).\n") *>
+              promptYesNoLoop(nextCtx, prompt, defaultYes)
+        }
+    }
 
   private def readLineBlocking(state: PromptState): (PromptState, Option[String]) = {
     val currentIn    = System.in
@@ -104,10 +118,11 @@ private[release] object PromptAdapter {
   private def decode(buffer: ByteArrayOutputStream): String =
     new String(buffer.toByteArray, stdinCharset)
 
-  private def parseYesNoInput(raw: String, defaultYes: Boolean): Boolean =
+  private def parseYesNoInput(raw: String, defaultYes: Boolean): Option[Boolean] =
     raw.trim.toLowerCase match {
-      case ""          => defaultYes
-      case "y" | "yes" => true
-      case _           => false
+      case ""           => Some(defaultYes)
+      case "y" | "yes"  => Some(true)
+      case "n" | "no"   => Some(false)
+      case _            => None
     }
 }
