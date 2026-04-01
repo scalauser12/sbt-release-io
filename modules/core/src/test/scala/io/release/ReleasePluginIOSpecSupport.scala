@@ -37,6 +37,21 @@ trait ReleasePluginIOSpecSupport {
 
   protected object InheritedHookFriendlyPlugin extends BaseHookFriendlyPlugin
 
+  protected object BaseReleaseSettingsPlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseBaseSettings"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override lazy val projectSettings: Seq[Setting[?]] =
+      baseReleaseSettings ++ Seq(
+        ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("base-before-tag")(_ => IO.unit)
+      )
+
+    def settingsForTests: Seq[Setting[?]] = projectSettings
+  }
+
   protected def resourceAwareHookPlugin(
       observed: Ref[IO, List[String]]
   ): ReleasePluginIOLike[Unit] =

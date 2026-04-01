@@ -3,6 +3,7 @@ package io.release.vcs
 import cats.effect.IO
 
 import java.io.File
+import scala.concurrent.duration.FiniteDuration
 
 /** IO-native VCS adapter. All operations that perform I/O return `IO`.
   * `baseDir` is the only synchronous accessor since it's a fixed property.
@@ -28,6 +29,13 @@ trait Vcs {
 
   /** Fetch/check the given remote. Returns the exit code. */
   def checkRemote(remote: String): IO[Int]
+
+  /** Fetch/check the given remote, aborting with `None` if the timeout elapses first.
+    * The default implementation preserves the existing fiber-timeout behavior for custom VCS
+    * adapters that do not need special process handling.
+    */
+  def checkRemoteWithTimeout(remote: String, timeout: FiniteDuration): IO[Option[Int]] =
+    checkRemote(remote).map(Option(_)).timeoutTo(timeout, IO.pure(None))
 
   // ── Actions (raise on non-zero exit) ─────────────────────────────────
   def add(files: String*): IO[Unit]

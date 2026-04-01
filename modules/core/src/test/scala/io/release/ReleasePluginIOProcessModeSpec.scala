@@ -93,4 +93,16 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
       }
     }
   }
+
+  test("custom plugins can build projectSettings from baseReleaseSettings") {
+    IO {
+      val labels = BaseReleaseSettingsPlugin.settingsForTests.map(_.key.key.label).toSet
+
+      assert(labels.contains("commands"))
+      assert(labels.contains("releaseIOCrossBuild"))
+      assert(labels.contains("releaseIOEnablePush"))
+      assert(labels.contains("releaseIOVcsRemoteCheckTimeout"))
+      assert(labels.contains("releaseIOBeforeTagHooks"))
+    }
+  }
 }

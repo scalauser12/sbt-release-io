@@ -266,6 +266,36 @@ class VcsOpsSpec extends CatsEffectSuite {
     IO(assertEquals(VcsOps.DefaultRemoteCheckTimeout, 60.seconds))
   }
 
+  test("validatePushRemote - pass the configured timeout into the VCS layer") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
+        val logged = VcsOpsSpec.bufferedState(
+          dir,
+          Seq(ReleaseIO.releaseIOVcsRemoteCheckTimeout := 5.millis)
+        )
+        val ctx    = VcsOpsSpec.promptContext(logged.state, interactive = false, useDefaults = false)
+
+        VcsOps
+          .validatePushRemote(
+            ctx,
+            new StubVcs(
+              dir,
+              recordedCalls0 = Some(calls),
+              checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(0)))
+            ),
+            ReleaseLogPrefixes.Core
+          )
+          .flatMap(_ => calls.get)
+          .map(seen =>
+            assertEquals(
+              seen,
+              Vector(StubVcsCall.CheckRemoteWithTimeout("origin", 5.millis))
+            )
+          )
+      }
+    }
+  }
+
   test("validatePushRemote - use the configured remote-check timeout") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val logged = VcsOpsSpec.bufferedState(
@@ -351,11 +381,13 @@ class VcsOpsSpec extends CatsEffectSuite {
   test("validatePushReadiness - fail with a clear message when HEAD is detached") {
     TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val state = TestSupport.gitRootState(repo)
-      val ctx   = VcsOpsSpec.promptContext(
-        state,
-        interactive = false,
-        useDefaults = false
-      ).withVcs(vcs)
+      val ctx   = VcsOpsSpec
+        .promptContext(
+          state,
+          interactive = false,
+          useDefaults = false
+        )
+        .withVcs(vcs)
 
       IO.blocking(TestSupport.runGit(repo, "checkout", "--detach", "HEAD")) *>
         assertIllegalStateMessage(
@@ -680,6 +712,7 @@ private final class StubVcs(
     untrackedFiles0: IO[Seq[String]] = IO.pure(Nil),
     status0: IO[String] = IO.pure(""),
     checkRemote0: IO[Int] = IO.pure(0),
+    checkRemoteWithTimeout0: Option[(String, FiniteDuration) => IO[Option[Int]]] = None,
     add0: IO[Unit] = IO.unit,
     commit0: IO[Unit] = IO.unit,
     tag0: IO[Unit] = IO.unit,
@@ -691,21 +724,27 @@ private final class StubVcs(
 
   override def commandName: String = "git"
 
-  override def currentHash: IO[String]              = currentHash0
-  override def currentBranch: IO[String]            = currentBranch0
-  override def trackingRemote: IO[String]           = trackingRemote0
+  override def currentHash: IO[String]                  = currentHash0
+  override def currentBranch: IO[String]                = currentBranch0
+  override def trackingRemote: IO[String]               = trackingRemote0
   override def upstreamTrackingHash: IO[Option[String]] =
     upstreamTrackingHash0
-  override def hasUpstream: IO[Boolean]             = hasUpstream0
-  override def isBehindRemote: IO[Boolean]          = isBehindRemote0
-  override def existsTag(name: String): IO[Boolean] =
+  override def hasUpstream: IO[Boolean]                 = hasUpstream0
+  override def isBehindRemote: IO[Boolean]              = isBehindRemote0
+  override def existsTag(name: String): IO[Boolean]     =
     record(StubVcsCall.ExistsTag(name)) *> existsTag0
-  override def modifiedFiles: IO[Seq[String]]       = modifiedFiles0
-  override def stagedFiles: IO[Seq[String]]         = stagedFiles0
-  override def untrackedFiles: IO[Seq[String]]      = untrackedFiles0
-  override def status: IO[String]                   = status0
-  override def checkRemote(remote: String): IO[Int] =
+  override def modifiedFiles: IO[Seq[String]]           = modifiedFiles0
+  override def stagedFiles: IO[Seq[String]]             = stagedFiles0
+  override def untrackedFiles: IO[Seq[String]]          = untrackedFiles0
+  override def status: IO[String]                       = status0
+  override def checkRemote(remote: String): IO[Int]     =
     record(StubVcsCall.CheckRemote(remote)) *> checkRemote0
+
+  override def checkRemoteWithTimeout(remote: String, timeout: FiniteDuration): IO[Option[Int]] =
+    record(StubVcsCall.CheckRemoteWithTimeout(remote, timeout)) *>
+      checkRemoteWithTimeout0.fold(super.checkRemoteWithTimeout(remote, timeout))(
+        _.apply(remote, timeout)
+      )
 
   // This stub records write-operation arguments and can optionally run canned effects, but it
   // does not model real VCS mutations.
@@ -727,6 +766,8 @@ private sealed trait StubVcsCall
 private object StubVcsCall {
   final case class ExistsTag(name: String)                                  extends StubVcsCall
   final case class CheckRemote(remote: String)                              extends StubVcsCall
+  final case class CheckRemoteWithTimeout(remote: String, timeout: FiniteDuration)
+      extends StubVcsCall
   final case class Add(files: List[String])                                 extends StubVcsCall
   final case class Commit(message: String, sign: Boolean, signOff: Boolean) extends StubVcsCall
   final case class Tag(name: String, comment: String, sign: Boolean, force: Boolean)

@@ -223,6 +223,56 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
+  test("step.copy - changing only enableCrossBuild keeps threaded validation single-wrapped") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = ReleaseStepIO
+          .step("copy-cross-build")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
+          .validateOnly
+        val copied = step.copy(enableCrossBuild = true)
+
+        copied.threadedValidation(ctx) *> events.get.map { obs =>
+          assert(copied.enableCrossBuild)
+          assertEquals(obs, List("validate", "context"))
+        }
+      }
+    }
+  }
+
+  test("step.copy - replacing validateWithContext retains the plain validate branch") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = ReleaseStepIO
+          .step("copy-validate-with-context")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .validateOnly
+        val copied = step.copy(
+          validateWithContext = Some(currentCtx => events.update(_ :+ "context").as(currentCtx))
+        )
+
+        copied.threadedValidation(ctx) *> events.get
+          .map(obs => assertEquals(obs, List("validate", "context")))
+      }
+    }
+  }
+
+  test("step.copy - replacing validate retains the threaded validation branch") {
+    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = ReleaseStepIO
+          .step("copy-validate")
+          .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
+          .validateOnly
+        val copied = step.copy(validate = _ => events.update(_ :+ "validate"))
+
+        copied.threadedValidation(ctx) *> events.get
+          .map(obs => assertEquals(obs, List("validate", "context")))
+      }
+    }
+  }
+
   test("step.validateOnly - creates a validation-only step with no-op execute") {
     TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>

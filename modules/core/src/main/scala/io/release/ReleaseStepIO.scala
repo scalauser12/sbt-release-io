@@ -20,16 +20,39 @@ import sbt.{internal as _, *}
   *                            `crossScalaVersions`
   * @param validateWithContext optional validation hook that can return an updated context
   */
-case class ReleaseStepIO(
+case class ReleaseStepIO private (
     name: String,
     execute: ReleaseContext => IO[ReleaseContext],
-    validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
+    private val rawValidate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
     enableCrossBuild: Boolean = false,
-    validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = None
+    private val rawValidateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = None
 ) {
 
+  // Keep the caller-provided validation inputs raw so apply(...) and copy(...) preserve the same
+  // invariants without double-wrapping already-composed validation functions.
+  private lazy val normalizedValidation =
+    ReleaseStepIO.normalizedValidationPair(rawValidate, rawValidateWithContext)
+
+  def validate: ReleaseContext => IO[Unit] =
+    normalizedValidation._1
+
+  def validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] =
+    rawValidateWithContext
+
+  def copy(
+      name: String = this.name,
+      execute: ReleaseContext => IO[ReleaseContext] = this.execute,
+      validate: ReleaseContext => IO[Unit] = this.validate,
+      enableCrossBuild: Boolean = this.enableCrossBuild,
+      validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = this.validateWithContext
+  ): ReleaseStepIO =
+    if ((validate eq this.validate) && validateWithContext == this.validateWithContext)
+      new ReleaseStepIO(name, execute, rawValidate, enableCrossBuild, rawValidateWithContext)
+    else
+      ReleaseStepIO(name, execute, validate, enableCrossBuild, validateWithContext)
+
   private[release] def threadedValidation: ReleaseContext => IO[ReleaseContext] =
-    validateWithContext.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
+    normalizedValidation._2.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
 }
 
 object ReleaseStepIO {
@@ -67,19 +90,14 @@ object ReleaseStepIO {
       validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
       enableCrossBuild: Boolean = false,
       validateWithContext: Option[ThreadedValidation] = None
-  ): ReleaseStepIO = {
-    val (normalizedValidate, normalizedValidateWithContext) = normalizedValidationPair(
-      validate,
-      validateWithContext
-    )
+  ): ReleaseStepIO =
     new ReleaseStepIO(
       name = name,
       execute = execute,
-      validate = normalizedValidate,
+      rawValidate = validate,
       enableCrossBuild = enableCrossBuild,
-      validateWithContext = normalizedValidateWithContext
+      rawValidateWithContext = validateWithContext
     )
-  }
 
   def apply(
       name: String,

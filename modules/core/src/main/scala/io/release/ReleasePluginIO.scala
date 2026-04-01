@@ -69,10 +69,12 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   protected def interactiveEnabled(state: State): Boolean =
     Project.extract(state).get(releaseIOInteractive)
 
-  /** Base settings that include command registration. Custom plugins that override
-    * `projectSettings` should include `baseReleaseSettings` in their sequence.
+  /** Base settings that include all default `releaseIO*` values plus command registration.
+    * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`
+    * so the release command and required default keys stay defined.
     */
-  protected def baseReleaseSettings: Seq[Setting[?]] = Seq(releaseIOCommand)
+  protected def baseReleaseSettings: Seq[Setting[?]] =
+    defaultSettingsValues ++ Seq(releaseIOCommand)
 
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] = Seq(
@@ -166,7 +168,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   )
 
   override lazy val projectSettings: Seq[Setting[?]] =
-    baseReleaseSettings ++ defaultSettingsValues
+    baseReleaseSettings
 
   /** Structured parser for `releaseIO` subcommands and arguments.
     *

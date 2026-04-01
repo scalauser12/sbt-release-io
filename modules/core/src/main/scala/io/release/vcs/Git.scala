@@ -3,6 +3,9 @@ package io.release.vcs
 import cats.effect.IO
 
 import java.io.File
+import java.lang.ProcessBuilder.Redirect
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.*
 import scala.sys.process.Process
 import scala.sys.process.ProcessBuilder
 import scala.sys.process.ProcessLogger
@@ -22,6 +25,12 @@ class Git(val baseDir: File) extends Vcs {
 
   private def cmd(args: String*): ProcessBuilder =
     Process(exec +: args, baseDir)
+
+  private def javaCmd(args: String*): java.lang.ProcessBuilder =
+    new java.lang.ProcessBuilder((exec +: args)*)
+      .directory(baseDir)
+      .redirectOutput(Redirect.DISCARD)
+      .redirectError(Redirect.DISCARD)
 
   private val devnull: ProcessLogger = new ProcessLogger {
     override def out(s: => String): Unit = {}
@@ -146,6 +155,12 @@ class Git(val baseDir: File) extends Vcs {
   def checkRemote(remote: String): IO[Int] =
     IO.blocking(cmd("fetch", remote).!)
 
+  override def checkRemoteWithTimeout(
+      remote: String,
+      timeout: FiniteDuration
+  ): IO[Option[Int]] =
+    Git.runCommandWithTimeout(javaCmd("fetch", remote), timeout)
+
   // ── Actions ──────────────────────────────────────────────────────────
 
   def add(files: String*): IO[Unit] =
@@ -186,7 +201,38 @@ class Git(val baseDir: File) extends Vcs {
 }
 
 object Git {
-  private val markerDirectory = ".git"
+  private val markerDirectory                                = ".git"
+  private[vcs] val DefaultDestroyGracePeriod: FiniteDuration = 1.second
+
+  private[vcs] def runCommandWithTimeout(
+      processBuilder: => java.lang.ProcessBuilder,
+      timeout: FiniteDuration,
+      destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod,
+      onStart: java.lang.Process => Unit = _ => ()
+  ): IO[Option[Int]] =
+    IO.blocking {
+      val process = processBuilder.start()
+      onStart(process)
+
+      if (waitFor(process, timeout)) Some(process.exitValue())
+      else {
+        terminate(process, destroyGracePeriod)
+        None
+      }
+    }
+
+  private def waitFor(process: java.lang.Process, timeout: FiniteDuration): Boolean =
+    process.waitFor(timeout.toMillis.max(0L), TimeUnit.MILLISECONDS)
+
+  private def terminate(process: java.lang.Process, destroyGracePeriod: FiniteDuration): Unit = {
+    process.destroy()
+
+    if (!waitFor(process, destroyGracePeriod) && process.isAlive) {
+      process.destroyForcibly()
+      waitFor(process, destroyGracePeriod)
+      ()
+    }
+  }
 
   def isRepository(dir: File): IO[Option[File]] = IO.blocking {
     def loop(d: File): Option[File] =

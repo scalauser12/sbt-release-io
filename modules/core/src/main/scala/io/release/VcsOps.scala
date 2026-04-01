@@ -158,30 +158,34 @@ private[release] object VcsOps {
                          Project.extract(ctx.state).getOpt(ReleaseIO.releaseIOVcsRemoteCheckTimeout)
                        )
                        .map(_.getOrElse(DefaultRemoteCheckTimeout))
-      remoteCheck <- vcs.checkRemote(remote).map(Option(_)).timeoutTo(timeout, IO.pure(None))
+      remoteCheck <- vcs.checkRemoteWithTimeout(remote, timeout)
       resultCtx   <- remoteCheck match {
                        case Some(0) => IO.pure(RemoteCheckResult(ctx, refreshed = true))
                        case Some(_) =>
-                         DecisionResolver.confirmOrAbort(
-                           ctx,
-                           configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
-                           defaultYes = false,
-                           prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                           abortMessage = "Aborting the release due to remote check failure."
-                         ).map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
+                         DecisionResolver
+                           .confirmOrAbort(
+                             ctx,
+                             configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
+                             defaultYes = false,
+                             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                             abortMessage = "Aborting the release due to remote check failure."
+                           )
+                           .map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
                        case None    =>
                          IO.blocking {
                            ctx.state.log.warn(
                              s"$logPrefix Remote check timed out after $timeout while fetching '$remote'."
                            )
                          } *>
-                           DecisionResolver.confirmOrAbort(
-                             ctx,
-                              configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
-                              defaultYes = false,
-                              prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                              abortMessage = "Aborting the release due to remote check failure."
-                           ).map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
+                           DecisionResolver
+                             .confirmOrAbort(
+                               ctx,
+                               configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
+                               defaultYes = false,
+                               prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+                               abortMessage = "Aborting the release due to remote check failure."
+                             )
+                             .map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
                      }
     } yield resultCtx
 
@@ -268,12 +272,12 @@ private[release] object VcsOps {
       vcs: Vcs
   ): IO[C] =
     vcs.isBehindRemote.handleError(_ => false).flatMap {
-      case false  => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))
-      case true   =>
+      case false => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))
+      case true  =>
         currentUpstreamTip(vcs).flatMap {
           case Some(currentTip) if confirmedUpstreamTip(ctx).contains(currentTip) =>
             IO.pure(ctx)
-          case maybeTip                                                     =>
+          case maybeTip                                                           =>
             DecisionResolver
               .confirmOrAbort(
                 ctx,
