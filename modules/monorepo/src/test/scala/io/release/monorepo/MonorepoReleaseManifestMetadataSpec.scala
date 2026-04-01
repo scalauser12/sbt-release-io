@@ -123,6 +123,48 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
     }
   }
 
+  test("commitReleaseVersions - preserve late-bound version settings for later next-version writes") {
+    gitFixtureResource.use { case (fixture, vcs) =>
+      val versionProperties = new File(new File(fixture.dir, "core"), "version.properties")
+      val versionSbt        = new File(new File(fixture.dir, "core"), "version.sbt")
+      val mutatedState      = TestSupport.appendSessionSettings(
+        fixture.state,
+        lateBoundVersionSettings(fixture.dir)
+      )
+      val ctx               = fixture
+        .context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map(
+            "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT")
+          ),
+          vcs = Some(vcs)
+        )
+        .withState(mutatedState)
+        .withProjects(
+          Seq(fixture.projectInfo("core", versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")))
+            .map(_.copy(versionFile = versionProperties))
+        )
+
+      for {
+        _           <- IO.blocking(sbt.IO.write(versionProperties, "version=0.1.0-SNAPSHOT\n"))
+        project      = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+        afterWrite  <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, project)
+        afterCommit <- MonorepoVersionSteps.commitReleaseVersions.execute(afterWrite)
+        nextWrite   <- MonorepoVersionSteps.setNextVersions.execute(
+                         afterCommit,
+                         MonorepoSpecSupport.projectNamed(afterCommit.projects, "core")
+                       )
+      } yield {
+        assertEquals(sbt.IO.read(versionProperties), "version=1.1.0-SNAPSHOT\n")
+        assertEquals(sbt.IO.read(versionSbt), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(nextWrite.projects, "core").versionFile,
+          versionProperties
+        )
+      }
+    }
+  }
+
   test("commitReleaseVersions - stage the version file captured during the write step") {
     gitFixtureResource.use { case (fixture, vcs) =>
       val coreVersionFile      = new File(new File(fixture.dir, "core"), "version.sbt")
@@ -301,6 +343,19 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
 
   private def writeVersion(file: File, version: String): IO[Unit] =
     IO.blocking(sbt.IO.write(file, s"""version := "$version"\n"""))
+
+  private def lateBoundVersionSettings(repo: File): Seq[sbt.Setting[?]] =
+    Seq(
+      MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
+        (ref: ProjectRef, _: State) => new File(new File(repo, ref.project), "version.properties")
+      },
+      MonorepoReleaseIO.releaseIOMonorepoReadVersion := { file =>
+        IO.blocking(sbt.IO.read(file).trim.stripPrefix("version="))
+      },
+      MonorepoReleaseIO.releaseIOMonorepoVersionFileContents := { (_, version) =>
+        IO.pure(s"version=$version\n")
+      }
+    )
 
   private def manifestAttributes(
       state: State,

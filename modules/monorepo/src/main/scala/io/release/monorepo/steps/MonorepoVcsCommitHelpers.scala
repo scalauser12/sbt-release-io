@@ -74,17 +74,18 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                               )
                                             }
                                         }
-        preservedManifestMetadata     = ReleaseIO.existingReleaseManifestSettings(
-                                          result.state,
-                                          result.currentProjects.map(_.ref)
-                                        )
         finalResult                  <-
           if (persistReleaseHash)
-            vcs.currentHash.flatMap { currentHash =>
-              IO.blocking {
+            for {
+              preserved  <- MonorepoVersionFiles.preservedSettings(
+                              result.state,
+                              result.currentProjects.map(_.ref)
+                            )
+              currentHash <- vcs.currentHash
+              updated     <- IO.blocking {
                 val newState = SbtRuntime.appendWithSession(
                   result.state,
-                  preservedManifestMetadata ++
+                  preserved ++
                   ReleaseIO.releaseManifestHashSettings(
                     result.currentProjects.map(_.ref),
                     currentHash
@@ -92,15 +93,19 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                 )
                 result.withState(newState)
               }
-            }
+            } yield updated
           else
-            IO.blocking {
-              val newState = SbtRuntime.appendWithSession(
-                result.state,
-                preservedManifestMetadata
+            MonorepoVersionFiles
+              .preservedSettings(result.state, result.currentProjects.map(_.ref))
+              .flatMap(preserved =>
+                IO.blocking {
+                  val newState = SbtRuntime.appendWithSession(
+                    result.state,
+                    preserved
+                  )
+                  result.withState(newState)
+                }
               )
-              result.withState(newState)
-            }
       } yield finalResult
     }
 }

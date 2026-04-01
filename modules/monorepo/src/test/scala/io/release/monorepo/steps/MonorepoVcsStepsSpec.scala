@@ -4,11 +4,12 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestAssertions
 import io.release.TestSupport
-import io.release.internal.SbtRuntime
 import io.release.ReleaseIO
+import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.MonorepoVersionFiles
 import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.SelectionMode
 import io.release.vcs.Vcs
@@ -115,6 +116,34 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         assertEquals(
           manifestAttributes(afterApi.state, apiProject.ref),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash", "Vcs-Release-Tag" -> "api-v2.0.0")
+        )
+      }
+    }
+  }
+
+  test(
+    "tagReleasesPerProject.execute - preserve late-bound monorepo version settings for later writes"
+  ) {
+    perProjectTagContextResource.use { case (repo, project, ctx) =>
+      val versionProperties = new File(new File(repo, "core"), "version.properties")
+      val mutatedState      = TestSupport.appendSessionSettings(
+        ctx.state,
+        lateBoundVersionSettings(repo)
+      )
+      val mutatedProject    = project.copy(versionFile = versionProperties)
+      val mutatedCtx        = ctx.withState(mutatedState).withProjects(Seq(mutatedProject))
+
+      for {
+        _        <- IO.blocking(sbt.IO.write(versionProperties, "version=1.0.0\n"))
+        afterTag <- MonorepoVcsSteps.tagReleasesPerProject.execute(mutatedCtx, mutatedProject)
+      } yield {
+        assertEquals(
+          MonorepoVersionFiles.resolve(afterTag.state, project.ref),
+          versionProperties
+        )
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(afterTag.projects, "core").versionFile,
+          versionProperties
         )
       }
     }
@@ -504,6 +533,19 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           interactive = ctx.interactive
         )
       )
+    )
+
+  private def lateBoundVersionSettings(repo: File): Seq[Def.Setting[?]] =
+    Seq(
+      MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
+        (ref: ProjectRef, _: State) => new File(new File(repo, ref.project), "version.properties")
+      },
+      MonorepoReleaseIO.releaseIOMonorepoReadVersion := { file =>
+        IO.blocking(sbt.IO.read(file).trim.stripPrefix("version="))
+      },
+      MonorepoReleaseIO.releaseIOMonorepoVersionFileContents := { (_, version) =>
+        IO.pure(s"version=$version\n")
+      }
     )
 
   private def manifestAttributes(

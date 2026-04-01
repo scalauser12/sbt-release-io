@@ -104,15 +104,14 @@ private[monorepo] object MonorepoPublishSteps {
                   case None      => IO.pure(None)
                 }
             }
+          preservedSettings <- MonorepoVersionFiles.preservedSettings(
+                                 ctx.state,
+                                 ctx.currentProjects.map(_.ref)
+                               )
           updatedCtx         <- IO.blocking {
-                                  val preservedManifestMetadata =
-                                    ReleaseIO.existingReleaseManifestSettings(
-                                      ctx.state,
-                                      ctx.currentProjects.map(_.ref)
-                                    )
                                   val newState = SbtRuntime.appendWithSession(
                                     ctx.state,
-                                    preservedManifestMetadata ++
+                                    preservedSettings ++
                                       Seq(project.ref / version := releaseVersion) ++
                                       fallbackHash.toSeq.flatMap(hash =>
                                         ReleaseIO.releaseManifestHashSettings(

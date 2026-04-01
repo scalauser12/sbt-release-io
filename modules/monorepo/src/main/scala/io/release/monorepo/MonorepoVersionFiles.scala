@@ -1,6 +1,8 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.ReleaseIO
+import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoReleaseIO as MR
 import sbt.{internal as _, *}
 
@@ -47,8 +49,34 @@ private[monorepo] object MonorepoVersionFiles {
     )
 
   def sessionSettings(state: State): IO[Seq[sbt.Setting[?]]] =
-    IO.blocking {
-      val runtime = MonorepoRuntime.fromState(state)
-      sessionSettings(runtime)
+    IO.blocking(sessionSettingsIfDefined(state))
+
+  /** Session settings that must survive later appendWithSession calls after late-bound
+    * monorepo version customization has already run.
+    */
+  def preservedSettings(
+      state: State,
+      projectRefs: Seq[ProjectRef]
+  ): IO[Seq[sbt.Setting[?]]] =
+    sessionSettings(state).map(
+      _ ++ ReleaseIO.existingReleaseManifestSettings(state, projectRefs)
+    )
+
+  private def sessionSettingsIfDefined(state: State): Seq[sbt.Setting[?]] = {
+    val extracted = SbtRuntime.extracted(state)
+
+    (
+      extracted.getOpt(MR.releaseIOMonorepoVersionFile),
+      extracted.getOpt(MR.releaseIOMonorepoReadVersion),
+      extracted.getOpt(MR.releaseIOMonorepoVersionFileContents)
+    ) match {
+      case (Some(versionFile), Some(readVersion), Some(versionFileContents)) =>
+        Seq(
+          MR.releaseIOMonorepoVersionFile         := versionFile,
+          MR.releaseIOMonorepoReadVersion         := readVersion,
+          MR.releaseIOMonorepoVersionFileContents := versionFileContents
+        )
+      case _                                                            => Seq.empty
     }
+  }
 }
