@@ -66,10 +66,7 @@ private[release] object PublishSteps {
           case false => IO.unit
           case true  =>
             for {
-              allRefs  <- IO.blocking {
-                            val extracted = SbtRuntime.extracted(ctx.state)
-                            effectiveAggregates(extracted, releaseIOPublishArtifactsAction)
-                          }
+              allRefs  <- publishTargetRefs(ctx.state)
               missing  <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
                             ioAcc.flatMap { acc =>
                               checkPublishSkip(ref, ctx.state).flatMap { skipped =>
@@ -129,6 +126,18 @@ private[release] object PublishSteps {
       }
   )
 
+  private[release] def shouldRunPublishHooks(ctx: ReleaseContext): IO[Boolean] =
+    if (ctx.skipPublish) IO.pure(false)
+    else
+      publishTargetRefs(ctx.state).flatMap { refs =>
+        refs.foldLeft(IO.pure(false)) { (ioShouldRun, ref) =>
+          ioShouldRun.flatMap {
+            case true  => IO.pure(true)
+            case false => checkPublishSkip(ref, ctx.state).map(skipped => !skipped)
+          }
+        }
+      }
+
   private[steps] def failOnSbtTaskFailure(
       ctx: ReleaseContext,
       newState: State,
@@ -174,6 +183,12 @@ private[release] object PublishSteps {
       extracted.currentRef +: loop(resolve(extracted.currentRef), Set(extracted.currentRef))._1
     }
   }
+
+  private def publishTargetRefs(state: State): IO[Seq[ProjectRef]] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+      effectiveAggregates(extracted, releaseIOPublishArtifactsAction)
+    }
 
   private def checkPublishSkip(
       ref: ProjectRef,

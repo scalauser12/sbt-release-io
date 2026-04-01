@@ -4,15 +4,15 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseStepIO
-import io.release.steps.ReleaseSteps
+import io.release.steps.{PublishSteps, ReleaseSteps}
 
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
 
-  private type Gate = ReleaseContext => Boolean
+  private type Gate = ReleaseContext => IO[Boolean]
 
-  private val Always: Gate      = _ => true
-  private val PublishGate: Gate = ctx => !ctx.skipPublish
+  private val Always: Gate      = _ => IO.pure(true)
+  private val PublishGate: Gate = PublishSteps.shouldRunPublishHooks
 
   private sealed trait Phase {
     def rawSteps: Seq[ReleaseStepIO]
@@ -160,8 +160,16 @@ private[release] object CoreLifecycle {
     hooks.map { hook =>
       ReleaseStepIO(
         name = s"$phase:${hook.name}",
-        execute = ctx => if (gate(ctx)) hook.execute(ctx) else IO.pure(ctx),
-        validate = ctx => if (gate(ctx)) hook.validate(ctx) else IO.unit,
+        execute = ctx =>
+          gate(ctx).flatMap {
+            case true  => hook.execute(ctx)
+            case false => IO.pure(ctx)
+          },
+        validate = ctx =>
+          gate(ctx).flatMap {
+            case true  => hook.validate(ctx)
+            case false => IO.unit
+          },
         enableCrossBuild = crossBuild
       )
     }

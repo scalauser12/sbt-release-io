@@ -23,7 +23,10 @@ private[release] object ExecutionEngine {
       initialCtx: C
   ): IO[C] =
     validations.foldLeft(IO.pure(initialCtx)) { (ioCtx, step) =>
-      ioCtx.flatMap(currentCtx => runValidationStep(logPrefix, step, currentCtx))
+      ioCtx.flatMap { currentCtx =>
+        if (currentCtx.failed) IO.pure(currentCtx)
+        else runValidationStep(logPrefix, step, currentCtx)
+      }
     }
 
   def runActions[C <: ReleaseCtx[C]](

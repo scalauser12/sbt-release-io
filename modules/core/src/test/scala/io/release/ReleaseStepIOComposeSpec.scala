@@ -105,6 +105,73 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     }
   }
 
+  test("compose - stop later validations and executes after ctx.failWith during validation") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val failing = ReleaseStepIO(
+          name = "validation-fail-with",
+          execute = c => observed.update(_ :+ "execute1").as(c),
+          validateWithContext = Some(currentCtx =>
+            observed.update(_ :+ "validate1").as(
+              currentCtx.failWith(new RuntimeException("stop validation"))
+            )
+          )
+        )
+        val skipped = ReleaseStepIO(
+          name = "validation-skipped",
+          execute = c => observed.update(_ :+ "execute2").as(c),
+          validateWithContext = Some(currentCtx =>
+            observed.update(_ :+ "validate2").as(currentCtx)
+          )
+        )
+
+        ReleaseStepIO.compose(Seq(failing, skipped), crossBuild = false)(ctx).flatMap { result =>
+          observed.get.map { events =>
+            assert(result.failed)
+            assertEquals(
+              result.failureCause.map(_.getMessage),
+              Some("stop validation")
+            )
+            assertEquals(events, List("validate1"))
+          }
+        }
+      }
+    }
+  }
+
+  test("validateOnly - stop later validations after ctx.failWith during validation") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val failing = ReleaseStepIO
+          .step("validation-fail-with")
+          .withValidationContext(currentCtx =>
+            observed.update(_ :+ "validate1").as(
+              currentCtx.failWith(new RuntimeException("stop validation"))
+            )
+          )
+          .validateOnly
+        val skipped = ReleaseStepIO
+          .step("validation-skipped")
+          .withValidationContext(currentCtx =>
+            observed.update(_ :+ "validate2").as(currentCtx)
+          )
+          .validateOnly
+
+        ReleaseComposer.validateOnly(Seq(failing, skipped), crossBuild = false)(ctx).flatMap {
+          result =>
+            observed.get.map { events =>
+              assert(result.failed)
+              assertEquals(
+                result.failureCause.map(_.getMessage),
+                Some("stop validation")
+              )
+              assertEquals(events, List("validate1"))
+            }
+        }
+      }
+    }
+  }
+
   test("compose - preserve CRLF prompt state across validation prompts") {
     contextResource.use { baseCtx =>
       val answersKey = AttributeKey[List[Boolean]]("validation-answers")
