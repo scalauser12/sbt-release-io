@@ -76,7 +76,7 @@ private[monorepo] object MonorepoVersionFiles {
           MR.releaseIOMonorepoReadVersion         := readVersion,
           MR.releaseIOMonorepoVersionFileContents := versionFileContents
         )
-      case _                                                            => Seq.empty
+      case _                                                                 => Seq.empty
     }
   }
 }

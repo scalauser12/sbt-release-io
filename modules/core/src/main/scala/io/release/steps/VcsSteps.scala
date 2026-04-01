@@ -94,12 +94,12 @@ private[release] object VcsSteps {
 
   private def resolveTagPlan(ctx: ReleaseContext): IO[TagPlan] =
     for {
-      versionSettings      <- IO.blocking(versionSessionSettings(ctx.state))
-      tagNameTaskData      <- runTaskChecked(ctx.state, releaseIOTagName, "tag-release")
-      (s1, tagName)         = tagNameTaskData
-      tagCommentTaskData   <- runTaskChecked(s1, releaseIOTagComment, "tag-release")
-      (s2, tagComment)      = tagCommentTaskData
-      sign                 <- IO.blocking(SbtRuntime.getSetting(s2, releaseIOVcsSign))
+      versionSettings    <- IO.blocking(versionSessionSettings(ctx.state))
+      tagNameTaskData    <- runTaskChecked(ctx.state, releaseIOTagName, "tag-release")
+      (s1, tagName)       = tagNameTaskData
+      tagCommentTaskData <- runTaskChecked(s1, releaseIOTagComment, "tag-release")
+      (s2, tagComment)    = tagCommentTaskData
+      sign               <- IO.blocking(SbtRuntime.getSetting(s2, releaseIOVcsSign))
     } yield TagPlan(
       state = s2,
       tagName = tagName,

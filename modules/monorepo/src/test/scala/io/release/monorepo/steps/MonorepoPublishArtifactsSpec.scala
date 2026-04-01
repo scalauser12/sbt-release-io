@@ -137,9 +137,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
                     entries.collect { case (name, value: String) =>
                       name.toString -> value
                     }
-                  case _                         => Seq.empty
+                  case _                          => Seq.empty
                 }
-              case _                                                       => Seq.empty
+              case _                                                                 => Seq.empty
             }.toMap
 
           val entries = manifestEntries(packageOptions.value)

@@ -21,7 +21,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           baseState,
           Seq(
             ReleaseIO.releaseIOInternalReleaseHash := Some("abc123"),
-            ReleaseIO.releaseIOInternalReleaseTag := Some("v1.0.0")
+            ReleaseIO.releaseIOInternalReleaseTag  := Some("v1.0.0")
           )
         )
         val cleared = ReleaseIO.clearReleaseManifestMetadata(seeded)
@@ -29,9 +29,9 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
         assertEquals(
           manifestAttributes(seeded),
           Set(
-            "Existing" -> "kept",
+            "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "abc123",
-            "Vcs-Release-Tag" -> "v1.0.0"
+            "Vcs-Release-Tag"  -> "v1.0.0"
           )
         )
         assertEquals(manifestAttributes(cleared), Set("Existing" -> "kept"))
@@ -46,7 +46,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           baseState,
           Seq(
             ReleaseIO.releaseIOInternalReleaseHash := Some("first-hash"),
-            ReleaseIO.releaseIOInternalReleaseTag := Some("v1.0.0")
+            ReleaseIO.releaseIOInternalReleaseTag  := Some("v1.0.0")
           )
         )
         val cleared    = ReleaseIO.clearReleaseManifestMetadata(firstPass)
@@ -54,16 +54,16 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           cleared,
           Seq(
             ReleaseIO.releaseIOInternalReleaseHash := Some("second-hash"),
-            ReleaseIO.releaseIOInternalReleaseTag := Some("v2.0.0")
+            ReleaseIO.releaseIOInternalReleaseTag  := Some("v2.0.0")
           )
         )
 
         assertEquals(
           manifestAttributes(secondPass),
           Set(
-            "Existing" -> "kept",
+            "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "second-hash",
-            "Vcs-Release-Tag" -> "v2.0.0"
+            "Vcs-Release-Tag"  -> "v2.0.0"
           )
         )
       }
@@ -93,9 +93,9 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
             entries.collect { case (name, value: String) =>
               name.toString -> value
             }
-          case _                         => Seq.empty
+          case _                          => Seq.empty
         }
-      case _                                                       => Seq.empty
+      case _                                                                 => Seq.empty
     }.toSet
   }
 

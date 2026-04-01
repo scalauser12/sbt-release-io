@@ -108,12 +108,12 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
       )
 
       hookStateResource("release-hook-compiler-publish-gate", settings).use { state =>
-        val publishHookSteps = ReleaseHookCompiler
+        val publishHookSteps    = ReleaseHookCompiler
           .compile(state)
           .filter(step =>
             step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
           )
-        val skippedCtx       = ReleaseContext(state = state, skipPublish = true)
+        val skippedCtx          = ReleaseContext(state = state, skipPublish = true)
         val publishSkippedState =
           TestSupport.appendSessionSettings(
             state,
@@ -130,14 +130,14 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
             .void
 
         for {
-          _       <- runPublishHooks(skippedCtx)
-          skipped <- observed.get
-          _        = assertEquals(skipped, Nil)
-          _       <- runPublishHooks(publishSkippedCtx)
+          _              <- runPublishHooks(skippedCtx)
+          skipped        <- observed.get
+          _               = assertEquals(skipped, Nil)
+          _              <- runPublishHooks(publishSkippedCtx)
           publishSkipped <- observed.get
-          _        = assertEquals(publishSkipped, Nil)
-          _       <- runPublishHooks(enabledCtx)
-          events  <- observed.get
+          _               = assertEquals(publishSkipped, Nil)
+          _              <- runPublishHooks(enabledCtx)
+          events         <- observed.get
         } yield assertEquals(
           events,
           List("validate-before", "execute-before", "validate-after", "execute-after")

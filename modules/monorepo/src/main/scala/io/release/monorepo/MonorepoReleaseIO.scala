@@ -217,37 +217,43 @@ trait MonorepoReleaseIO {
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] =
     _root_.io.release.internal.MonorepoDefaultSettings.commandAndHookSettings ++ Seq(
-      releaseIOMonorepoCommitMessage                   := ((summary: String) => s"Setting release versions: $summary"),
-      releaseIOMonorepoNextCommitMessage               := ((summary: String) => s"Setting next versions: $summary"),
-      releaseIOMonorepoDetectChanges                   := true,
-      releaseIOMonorepoIncludeDownstream               := false,
-      releaseIOMonorepoChangeDetector                  := None,
-      releaseIOMonorepoDetectChangesExcludes           := Seq.empty,
-      releaseIOMonorepoSharedPaths                     := Seq("build.sbt", "project/"),
-      releaseIOMonorepoTagName                         := ((name: String, ver: String) => s"$name/v$ver"),
-      releaseIOMonorepoTagComment                      := ((name: String, ver: String) => s"Release $name $ver"),
-      releaseIOMonorepoReadVersion                     := VersionSteps.defaultReadVersion,
-      releaseIOMonorepoVersionFileContents             := { (_, ver) =>
+      releaseIOMonorepoCommitMessage         := ((summary: String) =>
+        s"Setting release versions: $summary"
+      ),
+      releaseIOMonorepoNextCommitMessage     := ((summary: String) =>
+        s"Setting next versions: $summary"
+      ),
+      releaseIOMonorepoDetectChanges         := true,
+      releaseIOMonorepoIncludeDownstream     := false,
+      releaseIOMonorepoChangeDetector        := None,
+      releaseIOMonorepoDetectChangesExcludes := Seq.empty,
+      releaseIOMonorepoSharedPaths           := Seq("build.sbt", "project/"),
+      releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name/v$ver"),
+      releaseIOMonorepoTagComment            := ((name: String, ver: String) => s"Release $name $ver"),
+      releaseIOMonorepoReadVersion           := VersionSteps.defaultReadVersion,
+      releaseIOMonorepoVersionFileContents   := { (_, ver) =>
         IO.pure(s"""version := "$ver"\n""")
       },
-    releaseIOMonorepoVersionFile                     := { (ref: ProjectRef, state: State) =>
-      Project.extract(state).get(ref / releaseIOVersionFile)
-    },
-    releaseIOMonorepoProjects                        := {
-      val build      = loadedBuild.value
-      val root       = thisProjectRef.value
-      val projectMap = build.allProjectRefs.map { case (ref, proj) => ref -> proj.aggregate }.toMap
+      releaseIOMonorepoVersionFile           := { (ref: ProjectRef, state: State) =>
+        Project.extract(state).get(ref / releaseIOVersionFile)
+      },
+      releaseIOMonorepoProjects              := {
+        val build      = loadedBuild.value
+        val root       = thisProjectRef.value
+        val projectMap = build.allProjectRefs.map { case (ref, proj) =>
+          ref -> proj.aggregate
+        }.toMap
 
-      def transitive(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
-        if (visited.contains(ref)) Seq.empty
-        else {
-          val directAggs = projectMap.getOrElse(ref, Seq.empty)
-          directAggs.flatMap(agg => agg +: transitive(agg, visited + ref))
-        }
+        def transitive(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
+          if (visited.contains(ref)) Seq.empty
+          else {
+            val directAggs = projectMap.getOrElse(ref, Seq.empty)
+            directAggs.flatMap(agg => agg +: transitive(agg, visited + ref))
+          }
 
-      transitive(root, Set.empty).distinct
-    }
-  )
+        transitive(root, Set.empty).distinct
+      }
+    )
 }
 
 object MonorepoReleaseIO extends MonorepoReleaseIO {

@@ -31,14 +31,14 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       )
 
       for {
-        _          <- writeVersion(new File(new File(fixture.dir, "core"), "version.sbt"), "1.0.0")
-        _          <- writeVersion(new File(new File(fixture.dir, "api"), "version.sbt"), "2.0.0")
-        result     <- MonorepoVcsCommitHelpers.commitVersions(
-                        ctx,
-                        MonorepoReleaseIO.releaseIOMonorepoCommitMessage,
-                        { case (releaseVer, _) => releaseVer },
-                        persistReleaseHash = true
-                      )
+        _           <- writeVersion(new File(new File(fixture.dir, "core"), "version.sbt"), "1.0.0")
+        _           <- writeVersion(new File(new File(fixture.dir, "api"), "version.sbt"), "2.0.0")
+        result      <- MonorepoVcsCommitHelpers.commitVersions(
+                         ctx,
+                         MonorepoReleaseIO.releaseIOMonorepoCommitMessage,
+                         { case (releaseVer, _) => releaseVer },
+                         persistReleaseHash = true
+                       )
         currentHash <- vcs.currentHash
       } yield {
         assertEquals(
@@ -123,7 +123,9 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
     }
   }
 
-  test("commitReleaseVersions - preserve late-bound version settings for later next-version writes") {
+  test(
+    "commitReleaseVersions - preserve late-bound version settings for later next-version writes"
+  ) {
     gitFixtureResource.use { case (fixture, vcs) =>
       val versionProperties = new File(new File(fixture.dir, "core"), "version.properties")
       val versionSbt        = new File(new File(fixture.dir, "core"), "version.sbt")
@@ -172,12 +174,11 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       val mutatedState         = SbtRuntime.appendWithSession(
         fixture.state,
         Seq(
-          MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
-            (ref: ProjectRef, state: State) =>
-              val resolvedVersion = SbtRuntime.extracted(state).getOpt(ref / version).getOrElse("")
-              val defaultFile     = new File(new File(fixture.dir, ref.project), "version.sbt")
-              if (ref.project == "core" && resolvedVersion == "1.0.0") alternateVersionFile
-              else defaultFile
+          MonorepoReleaseIO.releaseIOMonorepoVersionFile := { (ref: ProjectRef, state: State) =>
+            val resolvedVersion = SbtRuntime.extracted(state).getOpt(ref / version).getOrElse("")
+            val defaultFile     = new File(new File(fixture.dir, ref.project), "version.sbt")
+            if (ref.project == "core" && resolvedVersion == "1.0.0") alternateVersionFile
+            else defaultFile
           }
         )
       )
@@ -226,15 +227,15 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
   ) {
     fixtureResource.use { fixture =>
       IO {
-        val coreRef  = fixture.refsById("core")
-        val apiRef   = fixture.refsById("api")
-        val seeded   = TestSupport.appendSessionSettings(
+        val coreRef = fixture.refsById("core")
+        val apiRef  = fixture.refsById("api")
+        val seeded  = TestSupport.appendSessionSettings(
           fixture.state,
           ReleaseIO.releaseManifestHashSettings(Seq(coreRef, apiRef), "abc123") ++
             ReleaseIO.releaseManifestTagSettings(coreRef, "core/v1.0.0") ++
             ReleaseIO.releaseManifestTagSettings(apiRef, "api/v2.0.0")
         )
-        val cleared  = ReleaseIO.clearReleaseManifestMetadata(
+        val cleared = ReleaseIO.clearReleaseManifestMetadata(
           seeded,
           fixture.refsById.values.toSeq
         )
@@ -242,17 +243,17 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         assertEquals(
           manifestAttributes(seeded, coreRef),
           Set(
-            "Existing" -> "kept",
+            "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "abc123",
-            "Vcs-Release-Tag" -> "core/v1.0.0"
+            "Vcs-Release-Tag"  -> "core/v1.0.0"
           )
         )
         assertEquals(
           manifestAttributes(seeded, apiRef),
           Set(
-            "Existing" -> "kept",
+            "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "abc123",
-            "Vcs-Release-Tag" -> "api/v2.0.0"
+            "Vcs-Release-Tag"  -> "api/v2.0.0"
           )
         )
         assertEquals(manifestAttributes(cleared, coreRef), Set("Existing" -> "kept"))
@@ -286,17 +287,17 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         assertEquals(
           manifestAttributes(secondPass, coreRef),
           Set(
-            "Existing" -> "kept",
+            "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "second-hash",
-            "Vcs-Release-Tag" -> "core/v2.0.0"
+            "Vcs-Release-Tag"  -> "core/v2.0.0"
           )
         )
         assertEquals(
           manifestAttributes(secondPass, apiRef),
           Set(
-            "Existing" -> "kept",
+            "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "second-hash",
-            "Vcs-Release-Tag" -> "api/v2.0.0"
+            "Vcs-Release-Tag"  -> "api/v2.0.0"
           )
         )
       }
@@ -346,10 +347,10 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
 
   private def lateBoundVersionSettings(repo: File): Seq[sbt.Setting[?]] =
     Seq(
-      MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
-        (ref: ProjectRef, _: State) => new File(new File(repo, ref.project), "version.properties")
+      MonorepoReleaseIO.releaseIOMonorepoVersionFile         := { (ref: ProjectRef, _: State) =>
+        new File(new File(repo, ref.project), "version.properties")
       },
-      MonorepoReleaseIO.releaseIOMonorepoReadVersion := { file =>
+      MonorepoReleaseIO.releaseIOMonorepoReadVersion         := { file =>
         IO.blocking(sbt.IO.read(file).trim.stripPrefix("version="))
       },
       MonorepoReleaseIO.releaseIOMonorepoVersionFileContents := { (_, version) =>
@@ -370,9 +371,9 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
             entries.collect { case (name, value: String) =>
               name.toString -> value
             }
-          case _                         => Seq.empty
+          case _                          => Seq.empty
         }
-      case _                                                       => Seq.empty
+      case _                                                                 => Seq.empty
     }.toSet
   }
 

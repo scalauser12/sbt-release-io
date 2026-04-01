@@ -66,18 +66,18 @@ private[release] object PublishSteps {
           case false => IO.unit
           case true  =>
             for {
-              allRefs  <- publishTargetRefs(ctx.state)
-              missing  <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
-                            ioAcc.flatMap { acc =>
-                              checkPublishSkip(ref, ctx.state).flatMap { skipped =>
-                                if (skipped) IO.pure(acc)
-                                else
-                                  checkPublishToMissing(ref, ctx.state).map { missing =>
-                                    if (missing) acc :+ ref else acc
-                                  }
-                              }
-                            }
-                          }
+              allRefs <- publishTargetRefs(ctx.state)
+              missing <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
+                           ioAcc.flatMap { acc =>
+                             checkPublishSkip(ref, ctx.state).flatMap { skipped =>
+                               if (skipped) IO.pure(acc)
+                               else
+                                 checkPublishToMissing(ref, ctx.state).map { missing =>
+                                   if (missing) acc :+ ref else acc
+                                 }
+                             }
+                           }
+                         }
               result  <- {
                 val names = missing.map(_.project)
                 PublishValidation.requirePublishTarget(names.mkString(", "))(

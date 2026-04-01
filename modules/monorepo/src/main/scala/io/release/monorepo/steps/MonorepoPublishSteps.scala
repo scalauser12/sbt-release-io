@@ -81,21 +81,23 @@ private[monorepo] object MonorepoPublishSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     project.releaseVersion match {
-      case None                => IO.pure(ctx)
+      case None                 => IO.pure(ctx)
       case Some(releaseVersion) =>
         for {
-          resolvedMetadata <- IO.blocking {
-                                val extracted = SbtRuntime.extracted(ctx.state)
-                                (
-                                  extracted.getOpt(project.ref / releaseIOInternalReleaseHash).flatten,
-                                  extracted
-                                    .getOpt(project.ref / releaseIOInternalReleaseTag)
-                                    .flatten
-                                    .orElse(project.tagName)
-                                )
-                              }
+          resolvedMetadata         <- IO.blocking {
+                                        val extracted = SbtRuntime.extracted(ctx.state)
+                                        (
+                                          extracted
+                                            .getOpt(project.ref / releaseIOInternalReleaseHash)
+                                            .flatten,
+                                          extracted
+                                            .getOpt(project.ref / releaseIOInternalReleaseTag)
+                                            .flatten
+                                            .orElse(project.tagName)
+                                        )
+                                      }
           (releaseHash, releaseTag) = resolvedMetadata
-          fallbackHash       <-
+          fallbackHash             <-
             releaseHash match {
               case some @ Some(_) => IO.pure(some)
               case None           =>
@@ -104,27 +106,27 @@ private[monorepo] object MonorepoPublishSteps {
                   case None      => IO.pure(None)
                 }
             }
-          preservedSettings <- MonorepoVersionFiles.preservedSettings(
-                                 ctx.state,
-                                 ctx.currentProjects.map(_.ref)
-                               )
-          updatedCtx         <- IO.blocking {
-                                  val newState = SbtRuntime.appendWithSession(
-                                    ctx.state,
-                                    preservedSettings ++
-                                      Seq(project.ref / version := releaseVersion) ++
-                                      fallbackHash.toSeq.flatMap(hash =>
-                                        ReleaseIO.releaseManifestHashSettings(
-                                          Seq(project.ref),
-                                          hash
-                                        )
-                                      ) ++
-                                      releaseTag.toSeq.flatMap(tag =>
-                                        ReleaseIO.releaseManifestTagSettings(project.ref, tag)
+          preservedSettings        <- MonorepoVersionFiles.preservedSettings(
+                                        ctx.state,
+                                        ctx.currentProjects.map(_.ref)
                                       )
-                                  )
-                                  ctx.withState(newState)
-                                }
+          updatedCtx               <- IO.blocking {
+                                        val newState = SbtRuntime.appendWithSession(
+                                          ctx.state,
+                                          preservedSettings ++
+                                            Seq(project.ref / version := releaseVersion) ++
+                                            fallbackHash.toSeq.flatMap(hash =>
+                                              ReleaseIO.releaseManifestHashSettings(
+                                                Seq(project.ref),
+                                                hash
+                                              )
+                                            ) ++
+                                            releaseTag.toSeq.flatMap(tag =>
+                                              ReleaseIO.releaseManifestTagSettings(project.ref, tag)
+                                            )
+                                        )
+                                        ctx.withState(newState)
+                                      }
         } yield updatedCtx
     }
 

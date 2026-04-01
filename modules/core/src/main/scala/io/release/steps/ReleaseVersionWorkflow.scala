@@ -134,23 +134,23 @@ private[release] object ReleaseVersionWorkflow {
   def commitNextVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (_, nextVersion) =>
       for {
-        versionPlan           <- IO.blocking(resolveVersionPlan(ctx))
-        commitResult          <-
+        versionPlan   <- IO.blocking(resolveVersionPlan(ctx))
+        commitResult  <-
           commitVersionNative(
             ctx,
             "commit-next-version",
             releaseIONextCommitMessage,
             versionPlan.versionFile
           )
-        (resultCtx, _)         = commitResult
-        finalCtx              <- IO.blocking {
-                                   val newState = SbtRuntime.appendWithSession(
-                                     resultCtx.state,
-                                     sessionSettings(versionPlan) ++
-                                       versionValueSettings(versionPlan, nextVersion)
-                                   )
-                                   resultCtx.withState(newState)
-                                 }
+        (resultCtx, _) = commitResult
+        finalCtx      <- IO.blocking {
+                           val newState = SbtRuntime.appendWithSession(
+                             resultCtx.state,
+                             sessionSettings(versionPlan) ++
+                               versionValueSettings(versionPlan, nextVersion)
+                           )
+                           resultCtx.withState(newState)
+                         }
       } yield finalCtx
     }
 
@@ -177,7 +177,7 @@ private[release] object ReleaseVersionWorkflow {
                            useDefaults = useDefaults(updatedCtx)
                          )
       releaseData     <- resolveReleaseVersion(updatedCtx, data, allowPrompts)
-      nextData    <- resolveNextVersion(releaseData._1, data, releaseData._2, allowPrompts)
+      nextData        <- resolveNextVersion(releaseData._1, data, releaseData._2, allowPrompts)
     } yield (
       nextData._1,
       ResolvedVersions(

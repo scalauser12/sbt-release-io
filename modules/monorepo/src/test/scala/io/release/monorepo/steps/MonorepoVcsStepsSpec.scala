@@ -103,7 +103,11 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       } yield {
         assertEquals(
           manifestAttributes(afterCore.state, coreProject.ref),
-          Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash", "Vcs-Release-Tag" -> "core-v1.0.0")
+          Set(
+            "Existing"         -> "kept",
+            "Vcs-Release-Hash" -> "release-hash",
+            "Vcs-Release-Tag"  -> "core-v1.0.0"
+          )
         )
         assertEquals(
           manifestAttributes(afterCore.state, apiProject.ref),
@@ -111,11 +115,19 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         )
         assertEquals(
           manifestAttributes(afterApi.state, coreProject.ref),
-          Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash", "Vcs-Release-Tag" -> "core-v1.0.0")
+          Set(
+            "Existing"         -> "kept",
+            "Vcs-Release-Hash" -> "release-hash",
+            "Vcs-Release-Tag"  -> "core-v1.0.0"
+          )
         )
         assertEquals(
           manifestAttributes(afterApi.state, apiProject.ref),
-          Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash", "Vcs-Release-Tag" -> "api-v2.0.0")
+          Set(
+            "Existing"         -> "kept",
+            "Vcs-Release-Hash" -> "release-hash",
+            "Vcs-Release-Tag"  -> "api-v2.0.0"
+          )
         )
       }
     }
@@ -564,10 +576,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private def lateBoundVersionSettings(repo: File): Seq[Def.Setting[?]] =
     Seq(
-      MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
-        (ref: ProjectRef, _: State) => new File(new File(repo, ref.project), "version.properties")
+      MonorepoReleaseIO.releaseIOMonorepoVersionFile         := { (ref: ProjectRef, _: State) =>
+        new File(new File(repo, ref.project), "version.properties")
       },
-      MonorepoReleaseIO.releaseIOMonorepoReadVersion := { file =>
+      MonorepoReleaseIO.releaseIOMonorepoReadVersion         := { file =>
         IO.blocking(sbt.IO.read(file).trim.stripPrefix("version="))
       },
       MonorepoReleaseIO.releaseIOMonorepoVersionFileContents := { (_, version) =>
@@ -588,9 +600,9 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             entries.collect { case (name, value: String) =>
               name.toString -> value
             }
-          case _                         => Seq.empty
+          case _                          => Seq.empty
         }
-      case _                                                       => Seq.empty
+      case _                                                                 => Seq.empty
     }.toSet
   }
 

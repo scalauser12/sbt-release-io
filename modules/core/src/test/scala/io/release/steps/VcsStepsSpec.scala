@@ -105,16 +105,16 @@ class VcsStepsSpec extends CatsEffectSuite {
         repo,
         releaseManifestSettings() ++
           Seq(
-          io.release.ReleaseIO.releaseIOVersionFile         := versionFile,
-          io.release.ReleaseIO.releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-          io.release.ReleaseIO.releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
-            useGlobalVersion = true
-          ),
-          io.release.ReleaseIO.releaseIOUseGlobalVersion    := true,
-          io.release.ReleaseIO.releaseIOVcsSign             := false,
-          io.release.ReleaseIO.releaseIOTagName             := "v1.0.1",
-          io.release.ReleaseIO.releaseIOTagComment          := "Releasing 1.0.1"
-        )
+            io.release.ReleaseIO.releaseIOVersionFile         := versionFile,
+            io.release.ReleaseIO.releaseIOReadVersion         := VersionSteps.defaultReadVersion,
+            io.release.ReleaseIO.releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+              useGlobalVersion = true
+            ),
+            io.release.ReleaseIO.releaseIOUseGlobalVersion    := true,
+            io.release.ReleaseIO.releaseIOVcsSign             := false,
+            io.release.ReleaseIO.releaseIOTagName             := "v1.0.1",
+            io.release.ReleaseIO.releaseIOTagComment          := "Releasing 1.0.1"
+          )
       )
 
       for {
@@ -166,8 +166,8 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state  = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign    := false,
-          io.release.ReleaseIO.releaseIOTagName    := "v1.0.0",
+          io.release.ReleaseIO.releaseIOVcsSign := false,
+          io.release.ReleaseIO.releaseIOTagName := "v1.0.0",
           CoreStepTestCompat.failureCommandTagCommentSetting(marker)
         )
       )
@@ -201,16 +201,18 @@ class VcsStepsSpec extends CatsEffectSuite {
       )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
-        TestSupport.withInput(" k \n") {
-          VcsSteps.tagRelease.execute(
-            ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
-          )
-        }.flatMap { result =>
-          IO.blocking(TestSupport.runGit(repo, "tag", "--list")).map { tags =>
-            assertEquals(tags.trim, "v1.0.0")
-            assertEquals(result.vcs.map(_.commandName), Some("git"))
+        TestSupport
+          .withInput(" k \n") {
+            VcsSteps.tagRelease.execute(
+              ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
+            )
           }
-        }
+          .flatMap { result =>
+            IO.blocking(TestSupport.runGit(repo, "tag", "--list")).map { tags =>
+              assertEquals(tags.trim, "v1.0.0")
+              assertEquals(result.vcs.map(_.commandName), Some("git"))
+            }
+          }
     }
   }
 
@@ -441,9 +443,9 @@ class VcsStepsSpec extends CatsEffectSuite {
             entries.collect { case (name, value: String) =>
               name.toString -> value
             }
-          case _                         => Seq.empty
+          case _                          => Seq.empty
         }
-      case _                                                       => Seq.empty
+      case _                                                                 => Seq.empty
     }.toSet
   }
 

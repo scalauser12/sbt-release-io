@@ -9,9 +9,9 @@ private[monorepo] object MonorepoLifecycle {
 
   private type ProjectGate = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]
 
-  private val AlwaysGlobal: MonorepoContext => Boolean                         = _ => true
-  private val AlwaysProject: ProjectGate                                       = (_, _) => IO.pure(true)
-  private val PublishProject: ProjectGate                                      =
+  private val AlwaysGlobal: MonorepoContext => Boolean = _ => true
+  private val AlwaysProject: ProjectGate               = (_, _) => IO.pure(true)
+  private val PublishProject: ProjectGate              =
     MonorepoPublishSteps.shouldRunPublishHooks
 
   private def globalHookPhase(
@@ -45,8 +45,7 @@ private[monorepo] object MonorepoLifecycle {
     LifecycleCompiler.HookPhase(
       phase = phase,
       resolveHooks = resolveHooks,
-      buildSteps = (phaseName, hooks) =>
-        compileProjectHooks(phaseName, hooks, gate, crossBuild),
+      buildSteps = (phaseName, hooks) => compileProjectHooks(phaseName, hooks, gate, crossBuild),
       enabled = enabled
     )
 

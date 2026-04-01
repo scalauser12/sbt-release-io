@@ -601,11 +601,11 @@ object ReleaseIO extends ReleaseIO {
       state,
       Seq(
         releaseIOInternalReleaseHash := None,
-        releaseIOInternalReleaseTag := None
+        releaseIOInternalReleaseTag  := None
       ) ++ projectRefs.distinct.flatMap(ref =>
         Seq(
           ref / releaseIOInternalReleaseHash := None,
-          ref / releaseIOInternalReleaseTag := None
+          ref / releaseIOInternalReleaseTag  := None
         )
       )
     )

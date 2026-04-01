@@ -55,7 +55,7 @@ private[release] object CoreCommandExecution {
       interactiveEnabled = runtime.resolveInteractiveEnabled(state),
       runtime
     )
-    val program = runPlannedRelease(inputs, runtime)
+    val program    = runPlannedRelease(inputs, runtime)
 
     ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
   }
@@ -73,7 +73,7 @@ private[release] object CoreCommandExecution {
       interactiveEnabled = false,
       runtime
     )
-    val program = runPlannedCheck(inputs, runtime)
+    val program    = runPlannedCheck(inputs, runtime)
 
     ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
   }
@@ -228,37 +228,37 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      finalCtx <- runtime.resource.use { resourceValue =>
-                    for {
-                      runProcess <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
-                      _          <- IO.blocking(
-                                      logReleaseStart(
-                                        inputs.cleanState,
-                                        runProcess.steps.length,
-                                        inputs.crossEnabled
-                                      )
-                                    )
-                      initialCtx <- runtime.initialContext(
-                                      inputs.cleanState,
-                                      inputs.skipTests,
-                                      inputs.skipPublish,
-                                      inputs.interactive
-                                    )
-                      seededCtx    = initialCtx.withExecutionState(
-                                       CoreExecutionState(inputs.plan)
-                                     )
-                      preparedCtx <-
-                        CommandRuntimeSupport.preparePushIfNeeded(
-                          seededCtx,
-                          runProcess.steps.map(_.name),
-                          ReleaseLogPrefixes.Core
-                        )
-                      finalCtx   <- ReleaseStepIO.compose(
-                                      runProcess.steps,
-                                      inputs.crossEnabled
-                                    )(preparedCtx)
-                    } yield finalCtx
-                  }
+      finalCtx   <- runtime.resource.use { resourceValue =>
+                      for {
+                        runProcess  <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
+                        _           <- IO.blocking(
+                                         logReleaseStart(
+                                           inputs.cleanState,
+                                           runProcess.steps.length,
+                                           inputs.crossEnabled
+                                         )
+                                       )
+                        initialCtx  <- runtime.initialContext(
+                                         inputs.cleanState,
+                                         inputs.skipTests,
+                                         inputs.skipPublish,
+                                         inputs.interactive
+                                       )
+                        seededCtx    = initialCtx.withExecutionState(
+                                         CoreExecutionState(inputs.plan)
+                                       )
+                        preparedCtx <-
+                          CommandRuntimeSupport.preparePushIfNeeded(
+                            seededCtx,
+                            runProcess.steps.map(_.name),
+                            ReleaseLogPrefixes.Core
+                          )
+                        finalCtx    <- ReleaseStepIO.compose(
+                                         runProcess.steps,
+                                         inputs.crossEnabled
+                                       )(preparedCtx)
+                      } yield finalCtx
+                    }
       cleanedCtx <- IO.blocking(
                       finalCtx.withState(
                         CommandRuntimeSupport.cleanReleaseState(finalCtx.state)

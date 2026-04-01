@@ -72,7 +72,7 @@ private[release] object PromptAdapter {
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
     promptLine(ctx, prompt).flatMap {
-      case (nextCtx, None)            => IO.pure((nextCtx, None))
+      case (nextCtx, None)           => IO.pure((nextCtx, None))
       case (nextCtx, Some(rawInput)) =>
         parseYesNoInput(rawInput, defaultYes) match {
           case Some(answer) => IO.pure((nextCtx, Some(answer)))
@@ -120,9 +120,9 @@ private[release] object PromptAdapter {
 
   private def parseYesNoInput(raw: String, defaultYes: Boolean): Option[Boolean] =
     raw.trim.toLowerCase match {
-      case ""           => Some(defaultYes)
-      case "y" | "yes"  => Some(true)
-      case "n" | "no"   => Some(false)
-      case _            => None
+      case ""          => Some(defaultYes)
+      case "y" | "yes" => Some(true)
+      case "n" | "no"  => Some(false)
+      case _           => None
     }
 }

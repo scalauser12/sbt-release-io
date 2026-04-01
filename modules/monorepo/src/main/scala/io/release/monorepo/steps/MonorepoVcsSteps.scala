@@ -177,14 +177,14 @@ private[monorepo] object MonorepoVcsSteps {
                                  )
                     _         <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
                     newState  <- IO.blocking {
-                                  SbtRuntime.appendWithSession(
-                                    updatedCtx.state,
-                                    preserved ++ ReleaseIO.releaseManifestTagSettings(
-                                      project.ref,
-                                      resolvedTagName
-                                    )
-                                  )
-                                }
+                                   SbtRuntime.appendWithSession(
+                                     updatedCtx.state,
+                                     preserved ++ ReleaseIO.releaseManifestTagSettings(
+                                       project.ref,
+                                       resolvedTagName
+                                     )
+                                   )
+                                 }
                   } yield updatedCtx
                     .withState(newState)
                     .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))

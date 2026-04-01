@@ -306,13 +306,14 @@ class VersionStepsSpec extends CatsEffectSuite {
             )
           )
 
-          TestAssertions.assertFailure[IllegalStateException, (ReleaseContext, VersionSteps.ResolvedVersions)](
-            VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
-          ) { err =>
-            assert(marker.exists())
-            assert(err.getMessage.contains(releaseIOVersion.key.label))
-            assert(err.getMessage.contains("FailureCommand"))
-          }
+          TestAssertions
+            .assertFailure[IllegalStateException, (ReleaseContext, VersionSteps.ResolvedVersions)](
+              VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
+            ) { err =>
+              assert(marker.exists())
+              assert(err.getMessage.contains(releaseIOVersion.key.label))
+              assert(err.getMessage.contains("FailureCommand"))
+            }
       }
     }
   }
@@ -338,13 +339,14 @@ class VersionStepsSpec extends CatsEffectSuite {
             )
           )
 
-          TestAssertions.assertFailure[IllegalStateException, (ReleaseContext, VersionSteps.ResolvedVersions)](
-            VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
-          ) { err =>
-            assert(marker.exists())
-            assert(err.getMessage.contains(releaseIONextVersion.key.label))
-            assert(err.getMessage.contains("FailureCommand"))
-          }
+          TestAssertions
+            .assertFailure[IllegalStateException, (ReleaseContext, VersionSteps.ResolvedVersions)](
+              VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
+            ) { err =>
+              assert(marker.exists())
+              assert(err.getMessage.contains(releaseIONextVersion.key.label))
+              assert(err.getMessage.contains("FailureCommand"))
+            }
       }
     }
   }
@@ -391,7 +393,9 @@ class VersionStepsSpec extends CatsEffectSuite {
       }
   }
 
-  test("commitReleaseVersion - do not create a commit when releaseIOCommitMessage reports FailureCommand") {
+  test(
+    "commitReleaseVersion - do not create a commit when releaseIOCommitMessage reports FailureCommand"
+  ) {
     ReleaseTestSupport
       .gitRepoWithCommitResource(
         fixturePrefix,
@@ -440,7 +444,9 @@ class VersionStepsSpec extends CatsEffectSuite {
       }
   }
 
-  test("commitNextVersion - do not create a commit when releaseIONextCommitMessage reports FailureCommand") {
+  test(
+    "commitNextVersion - do not create a commit when releaseIONextCommitMessage reports FailureCommand"
+  ) {
     ReleaseTestSupport
       .gitRepoWithCommitResource(
         fixturePrefix,
@@ -504,9 +510,9 @@ class VersionStepsSpec extends CatsEffectSuite {
             entries.collect { case (name, value: String) =>
               name.toString -> value
             }
-          case _                         => Seq.empty
+          case _                          => Seq.empty
         }
-      case _                                                       => Seq.empty
+      case _                                                                 => Seq.empty
     }.toSet
   }
 
@@ -514,9 +520,9 @@ class VersionStepsSpec extends CatsEffectSuite {
       basePackageOptions: Seq[sbt.PackageOption] = Seq.empty
   ): Seq[sbt.Setting[?]] =
     Seq(
-      packageOptions              := basePackageOptions,
+      packageOptions               := basePackageOptions,
       releaseIOInternalReleaseHash := None,
-      releaseIOInternalReleaseTag := None,
+      releaseIOInternalReleaseTag  := None,
       packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
         releaseIOInternalReleaseHash.value,
         releaseIOInternalReleaseTag.value

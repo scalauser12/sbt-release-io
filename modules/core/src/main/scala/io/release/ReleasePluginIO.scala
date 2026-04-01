@@ -80,31 +80,31 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] =
     CoreDefaultSettings.commandAndHookSettings ++ Seq(
-      releaseIOReadVersion                       := ReleaseSteps.defaultReadVersion,
-      releaseIOVersionFileContents               := ReleaseSteps.defaultWriteVersion(
+      releaseIOReadVersion            := ReleaseSteps.defaultReadVersion,
+      releaseIOVersionFileContents    := ReleaseSteps.defaultWriteVersion(
         releaseIOUseGlobalVersion.value
       ),
-      releaseIOVersionFile                       := baseDirectory.value / "version.sbt",
-      releaseIOUseGlobalVersion                  := true,
-      releaseIOVcsSign                           := false,
-      releaseIOVcsSignOff                        := false,
-      releaseIOIgnoreUntrackedFiles              := false,
-      releaseIOInternalReleaseHash               := None,
-      releaseIOInternalReleaseTag                := None,
+      releaseIOVersionFile            := baseDirectory.value / "version.sbt",
+      releaseIOUseGlobalVersion       := true,
+      releaseIOVcsSign                := false,
+      releaseIOVcsSignOff             := false,
+      releaseIOIgnoreUntrackedFiles   := false,
+      releaseIOInternalReleaseHash    := None,
+      releaseIOInternalReleaseTag     := None,
       packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
         releaseIOInternalReleaseHash.value,
         releaseIOInternalReleaseTag.value
       ),
-      releaseIORuntimeVersion                    := {
+      releaseIORuntimeVersion         := {
         if (releaseIOUseGlobalVersion.value) (ThisBuild / Keys.version).value
         else Keys.version.value
       },
-      releaseIOTagName                           := s"v${releaseIORuntimeVersion.value}",
-      releaseIOTagComment                        := s"Releasing ${releaseIORuntimeVersion.value}",
-      releaseIOCommitMessage                     := s"Setting version to ${releaseIORuntimeVersion.value}",
-      releaseIONextCommitMessage                 := s"Setting version to ${releaseIORuntimeVersion.value}",
-      releaseIOVersionBump                       := Version.Bump.default,
-      releaseIOVersion                           := {
+      releaseIOTagName                := s"v${releaseIORuntimeVersion.value}",
+      releaseIOTagComment             := s"Releasing ${releaseIORuntimeVersion.value}",
+      releaseIOCommitMessage          := s"Setting version to ${releaseIORuntimeVersion.value}",
+      releaseIONextCommitMessage      := s"Setting version to ${releaseIORuntimeVersion.value}",
+      releaseIOVersionBump            := Version.Bump.default,
+      releaseIOVersion                := {
         val bump = releaseIOVersionBump.value
         ver =>
           Version(ver)
@@ -123,7 +123,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
               throw new IllegalArgumentException(s"Cannot parse version: $ver")
             )
       },
-      releaseIONextVersion                       := {
+      releaseIONextVersion            := {
         val bump = releaseIOVersionBump.value
         ver =>
           Version(ver)
@@ -133,8 +133,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
             )
       },
       ReleaseIOCompat.snapshotDependenciesSetting,
-      releaseIOPublishArtifactsChecks            := true,
-      releaseIOPublishArtifactsAction            := publish.value
+      releaseIOPublishArtifactsChecks := true,
+      releaseIOPublishArtifactsAction := publish.value
     )
 
   override lazy val projectSettings: Seq[Setting[?]] =

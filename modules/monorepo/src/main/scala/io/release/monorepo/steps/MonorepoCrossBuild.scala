@@ -185,10 +185,10 @@ private[monorepo] object MonorepoCrossBuild {
 
     private def restoreEntryScalaSession(ctx: MonorepoContext): IO[MonorepoContext] =
       IO.blocking {
-        val currentExtracted                          = SbtRuntime.extracted(ctx.state)
-        val entryExtracted                            = SbtRuntime.extracted(entryState)
+        val currentExtracted                     = SbtRuntime.extracted(ctx.state)
+        val entryExtracted                       = SbtRuntime.extracted(entryState)
         import currentExtracted.*
-        implicit val showKey: Show[ScopedKey[?]]      = currentExtracted.showKey
+        implicit val showKey: Show[ScopedKey[?]] = currentExtracted.showKey
 
         val currentSettingsWithoutScala = session.mergeSettings.filterNot(isScalaSessionSetting)
         val entryScalaSettings          =

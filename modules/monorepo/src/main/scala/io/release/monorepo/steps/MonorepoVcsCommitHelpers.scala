@@ -77,22 +77,22 @@ private[monorepo] object MonorepoVcsCommitHelpers {
         finalResult                  <-
           if (persistReleaseHash)
             for {
-              preserved  <- MonorepoVersionFiles.preservedSettings(
-                              result.state,
-                              result.currentProjects.map(_.ref)
-                            )
+              preserved   <- MonorepoVersionFiles.preservedSettings(
+                               result.state,
+                               result.currentProjects.map(_.ref)
+                             )
               currentHash <- vcs.currentHash
               updated     <- IO.blocking {
-                val newState = SbtRuntime.appendWithSession(
-                  result.state,
-                  preserved ++
-                  ReleaseIO.releaseManifestHashSettings(
-                    result.currentProjects.map(_.ref),
-                    currentHash
-                  )
-                )
-                result.withState(newState)
-              }
+                               val newState = SbtRuntime.appendWithSession(
+                                 result.state,
+                                 preserved ++
+                                   ReleaseIO.releaseManifestHashSettings(
+                                     result.currentProjects.map(_.ref),
+                                     currentHash
+                                   )
+                               )
+                               result.withState(newState)
+                             }
             } yield updated
           else
             MonorepoVersionFiles

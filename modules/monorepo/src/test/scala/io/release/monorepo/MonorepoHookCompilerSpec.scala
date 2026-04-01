@@ -138,7 +138,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
               step
           }
 
-        val skippedCtx = fixture.context(selectedProjectIds = Seq("core"), skipPublish = true)
+        val skippedCtx          = fixture.context(selectedProjectIds = Seq("core"), skipPublish = true)
         val publishSkippedState = TestSupport.appendSessionSettings(
           fixture.state,
           Seq(fixture.refsById("core") / publish / skip := true)
@@ -159,14 +159,14 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
             .void
 
         for {
-          _       <- runPublishHooks(skippedCtx)
-          skipped <- observed.get
-          _        = assertEquals(skipped, Nil)
-          _       <- runPublishHooks(publishSkippedCtx)
+          _              <- runPublishHooks(skippedCtx)
+          skipped        <- observed.get
+          _               = assertEquals(skipped, Nil)
+          _              <- runPublishHooks(publishSkippedCtx)
           projectSkipped <- observed.get
-          _        = assertEquals(projectSkipped, Nil)
-          _       <- runPublishHooks(enabledCtx)
-          events  <- observed.get
+          _               = assertEquals(projectSkipped, Nil)
+          _              <- runPublishHooks(enabledCtx)
+          events         <- observed.get
         } yield assertEquals(
           events,
           List("validate-before", "execute-before", "validate-after", "execute-after")

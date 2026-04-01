@@ -156,10 +156,10 @@ private[monorepo] object MonorepoCommandExecution {
       extracted <- IO.blocking(Project.extract(cleanState))
       flags     <- IO.blocking(parseFlags(args, extracted, interactiveEnabled))
       defaults   = resolveDecisionDefaults(cleanState, args)
-      planned    <- MonorepoReleasePlan.build(
-                      cleanState,
-                      plannerInputs(args, flags, defaults, commandName)
-                    )
+      planned   <- MonorepoReleasePlan.build(
+                     cleanState,
+                     plannerInputs(args, flags, defaults, commandName)
+                   )
     } yield planned.map(plan => PlannedCommand(cleanState, flags, plan))
 
   private def runMonorepoCommand[T](
@@ -191,29 +191,29 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      finalCtx <- runtime.resource.use { resourceValue =>
-                    for {
-                      runProcess <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
-                      _          <- IO.blocking(
-                                      logReleaseStart(
-                                        session.cleanState,
-                                        runProcess.steps.length,
-                                        session.context.projects.length,
-                                        command.flags
-                                      )
-                                    )
-                      preparedCtx <-
-                        CommandRuntimeSupport.preparePushIfNeeded(
-                          session.context,
-                          runProcess.steps.map(_.name),
-                          ReleaseLogPrefixes.Monorepo
-                        )
-                      finalCtx   <-
-                        MonorepoStepIO.compose(runProcess.steps, command.flags.crossBuild)(
-                          preparedCtx
-                        )
-                    } yield finalCtx
-                  }
+      finalCtx   <- runtime.resource.use { resourceValue =>
+                      for {
+                        runProcess  <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
+                        _           <- IO.blocking(
+                                         logReleaseStart(
+                                           session.cleanState,
+                                           runProcess.steps.length,
+                                           session.context.projects.length,
+                                           command.flags
+                                         )
+                                       )
+                        preparedCtx <-
+                          CommandRuntimeSupport.preparePushIfNeeded(
+                            session.context,
+                            runProcess.steps.map(_.name),
+                            ReleaseLogPrefixes.Monorepo
+                          )
+                        finalCtx    <-
+                          MonorepoStepIO.compose(runProcess.steps, command.flags.crossBuild)(
+                            preparedCtx
+                          )
+                      } yield finalCtx
+                    }
       cleanedCtx <- IO.blocking(
                       finalCtx.withState(
                         CommandRuntimeSupport.cleanReleaseState(

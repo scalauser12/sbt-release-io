@@ -21,11 +21,13 @@ object ReleaseTestSupport {
       buildSettings: Seq[Setting[?]] = Nil,
       currentProjectId: Option[String] = None
   )(projectsFor: File => Seq[Project]): Resource[IO, ReleaseContext] =
-    TestSupport.loadedStateResource(
-      prefix,
-      buildSettings = buildSettings,
-      currentProjectId = currentProjectId
-    )(projectsFor).map(state => ReleaseContext(state = state))
+    TestSupport
+      .loadedStateResource(
+        prefix,
+        buildSettings = buildSettings,
+        currentProjectId = currentProjectId
+      )(projectsFor)
+      .map(state => ReleaseContext(state = state))
 
   def dummyContextResource(prefix: String): Resource[IO, ReleaseContext] =
     TestSupport.dummyStateResource(prefix).map(state => ReleaseContext(state = state))

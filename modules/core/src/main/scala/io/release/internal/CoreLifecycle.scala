@@ -36,9 +36,19 @@ private[release] object CoreLifecycle {
       ReleaseSteps.checkSnapshotDependencies,
       _.enableSnapshotDependenciesCheck
     ),
-    hookPhase("before-version-resolution", _.beforeVersionResolutionHooks, Always, crossBuild = false),
+    hookPhase(
+      "before-version-resolution",
+      _.beforeVersionResolutionHooks,
+      Always,
+      crossBuild = false
+    ),
     LifecycleCompiler.BuiltInPhase(ReleaseSteps.inquireVersions),
-    hookPhase("after-version-resolution", _.afterVersionResolutionHooks, Always, crossBuild = false),
+    hookPhase(
+      "after-version-resolution",
+      _.afterVersionResolutionHooks,
+      Always,
+      crossBuild = false
+    ),
     LifecycleCompiler.BuiltInPhase(ReleaseSteps.runClean, _.enableRunClean),
     LifecycleCompiler.BuiltInPhase(ReleaseSteps.runTests, _.enableRunTests),
     hookPhase(
