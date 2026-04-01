@@ -3,11 +3,8 @@ package io.release.internal
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseContext
-import io.release.ReleaseIO
-import io.release.ReleaseKeys
 import io.release.ReleaseResourceHooks
 import io.release.ReleaseStepIO
-import io.release.VcsOps
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for core command planning and execution.
@@ -50,7 +47,7 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State = {
-    val cleanState = ReleaseIO.clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions))
+    val cleanState = CommandRuntimeSupport.cleanReleaseState(state)
     val inputs     = buildCommandInputs(
       cleanState,
       args,
@@ -68,7 +65,7 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State = {
-    val cleanState = ReleaseIO.clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions))
+    val cleanState = CommandRuntimeSupport.cleanReleaseState(state)
     val inputs     = buildCommandInputs(
       cleanState,
       args,
@@ -102,11 +99,11 @@ private[release] object CoreCommandExecution {
     IO.blocking(
       CompiledSteps(
         steps = ReleaseHookCompiler.compile(
-          mergeHookConfiguration(
+          CommandRuntimeSupport.mergeMaterializedHooks(
             ReleaseHookCompiler.resolve(state),
             runtime.resolveResourceHooks(state),
             maybeResource = maybeResource
-          )
+          )(ReleaseResourceHooks.materialize, (left, right) => left.mergeWith(right))
         )
       )
     )
@@ -138,46 +135,61 @@ private[release] object CoreCommandExecution {
     val upstreamMatches       = allArgs { case UpstreamBehindDefault(value) => value }
     val pushMatches           = allArgs { case PushDefault(value) => value }
 
-    val releaseVersionArg = releaseVersionMatches.lastOption
-    val nextVersionArg    = nextVersionMatches.lastOption
-    val tagDefaultArg     = tagDefaultMatches.lastOption
-    val snapshotDefault   = snapshotMatches.lastOption
-    val remoteDefault     = remoteMatches.lastOption
-    val upstreamDefault   = upstreamMatches.lastOption
-    val pushDefault       = pushMatches.lastOption
-
-    def warnIfRepeated(
-        argName: String,
-        selected: Option[String],
-        count: Int
-    ): Unit =
-      if (warnOnDuplicates && count > 1)
-        cleanState.log.warn(
-          s"${ReleaseLogPrefixes.Core} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
-        )
-
-    warnIfRepeated("release-version", releaseVersionArg, releaseVersionMatches.size)
-    warnIfRepeated("next-version", nextVersionArg, nextVersionMatches.size)
-    warnIfRepeated("default-tag-exists-answer", tagDefaultArg, tagDefaultMatches.size)
-    warnIfRepeated(
+    val releaseVersionArg = DecisionDefaultsSupport.resolveLast(
+      cleanState,
+      ReleaseLogPrefixes.Core,
+      "release-version",
+      releaseVersionMatches,
+      (value: String) => value,
+      warnOnDuplicates
+    )
+    val nextVersionArg    = DecisionDefaultsSupport.resolveLast(
+      cleanState,
+      ReleaseLogPrefixes.Core,
+      "next-version",
+      nextVersionMatches,
+      (value: String) => value,
+      warnOnDuplicates
+    )
+    val tagDefaultArg     = DecisionDefaultsSupport.resolveLast(
+      cleanState,
+      ReleaseLogPrefixes.Core,
+      "default-tag-exists-answer",
+      tagDefaultMatches,
+      (value: String) => value,
+      warnOnDuplicates
+    )
+    val snapshotDefault   = DecisionDefaultsSupport.resolveLast(
+      cleanState,
+      ReleaseLogPrefixes.Core,
       "default-snapshot-dependencies-answer",
-      snapshotDefault.map(renderYesNo),
-      snapshotMatches.size
+      snapshotMatches,
+      DecisionDefaultsSupport.renderYesNo,
+      warnOnDuplicates
     )
-    warnIfRepeated(
+    val remoteDefault     = DecisionDefaultsSupport.resolveLast(
+      cleanState,
+      ReleaseLogPrefixes.Core,
       "default-remote-check-failure-answer",
-      remoteDefault.map(renderYesNo),
-      remoteMatches.size
+      remoteMatches,
+      DecisionDefaultsSupport.renderYesNo,
+      warnOnDuplicates
     )
-    warnIfRepeated(
+    val upstreamDefault   = DecisionDefaultsSupport.resolveLast(
+      cleanState,
+      ReleaseLogPrefixes.Core,
       "default-upstream-behind-answer",
-      upstreamDefault.map(renderYesNo),
-      upstreamMatches.size
+      upstreamMatches,
+      DecisionDefaultsSupport.renderYesNo,
+      warnOnDuplicates
     )
-    warnIfRepeated(
+    val pushDefault       = DecisionDefaultsSupport.resolveLast(
+      cleanState,
+      ReleaseLogPrefixes.Core,
       "default-push-answer",
-      pushDefault.map(renderYesNo),
-      pushMatches.size
+      pushMatches,
+      DecisionDefaultsSupport.renderYesNo,
+      warnOnDuplicates
     )
 
     val settings    = ReleaseDecisionDefaults.fromState(cleanState)
@@ -211,9 +223,6 @@ private[release] object CoreCommandExecution {
     )
   }
 
-  private def renderYesNo(value: Boolean): String =
-    if (value) "y" else "n"
-
   private def runPlannedRelease[T](
       inputs: CoreCommandInputs,
       runtime: CommandRuntime[T]
@@ -239,17 +248,11 @@ private[release] object CoreCommandExecution {
                                        CoreExecutionState(inputs.plan)
                                      )
                       preparedCtx <-
-                        if (runProcess.steps.exists(_.name == VcsOps.PushChangesStepName))
-                          VcsOps.preparePushRelease(
-                            seededCtx,
-                            ReleaseLogPrefixes.Core,
-                            remoteCheckLog = Some(r =>
-                              seededCtx.state.log.info(
-                                s"${ReleaseLogPrefixes.Core} Checking remote [$r] before release actions ..."
-                              )
-                            )
-                          )
-                        else IO.pure(seededCtx)
+                        CommandRuntimeSupport.preparePushIfNeeded(
+                          seededCtx,
+                          runProcess.steps.map(_.name),
+                          ReleaseLogPrefixes.Core
+                        )
                       finalCtx   <- ReleaseStepIO.compose(
                                       runProcess.steps,
                                       inputs.crossEnabled
@@ -258,7 +261,7 @@ private[release] object CoreCommandExecution {
                   }
       cleanedCtx <- IO.blocking(
                       finalCtx.withState(
-                        ReleaseIO.clearReleaseManifestMetadata(finalCtx.state)
+                        CommandRuntimeSupport.cleanReleaseState(finalCtx.state)
                       )
                     )
       result     <- ReleaseCommandRunner
@@ -294,15 +297,8 @@ private[release] object CoreCommandExecution {
       _       <- CheckModeOutput.logCheckPassed(inputs.cleanState, ReleaseLogPrefixes.Core)
     } yield inputs.cleanState
 
-  private def mergeHookConfiguration[T](
-      plainHooks: CoreHookConfiguration,
-      resourceHooks: ReleaseResourceHooks[T],
-      maybeResource: Option[T]
-  ): CoreHookConfiguration =
-    plainHooks.mergeWith(ReleaseResourceHooks.materialize(resourceHooks, maybeResource))
-
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
-    ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)
+    CommandRuntimeSupport.logLines(state, ReleaseLogPrefixes.Core, lines)
 
   private def logReleaseStart(
       state: State,

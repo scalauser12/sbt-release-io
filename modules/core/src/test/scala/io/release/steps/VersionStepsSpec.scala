@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseIO
 import io.release.ReleaseIO.*
+import io.release.ReleaseTestSupport
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.internal.CoreExecutionState
@@ -30,7 +31,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   )
 
   test("resolveVersionPlan - use live version settings even when a startup plan is attached") {
-    TestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
       val dir          = baseCtx.state.configuration.baseDirectory
       val resolvedFile = new File(dir, "resolved-version.sbt")
       val ctx          = withStartupPlan(baseCtx, "1.2.3", "1.2.4-SNAPSHOT")
@@ -61,7 +62,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   }
 
   test("resolveVersionPlan - leave overrides empty when no execution state is attached") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val dir      = ctx.state.configuration.baseDirectory
       val liveFile = new File(dir, "live-version.sbt")
 
@@ -93,7 +94,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   test(
     "resolveVersionPlan - delegate live resolution to CoreVersionResolver and read overrides"
   ) {
-    TestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
       val dir          = baseCtx.state.configuration.baseDirectory
       val fallbackFile = new File(dir, "fallback-version.sbt")
       val resolverRuns = new AtomicInteger(0)
@@ -349,7 +350,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   }
 
   test("commitReleaseVersion - expose the release hash through package options") {
-    TestSupport
+    ReleaseTestSupport
       .gitRepoWithCommitResource(
         fixturePrefix,
         prepareRepo = repo =>
@@ -362,7 +363,7 @@ class VersionStepsSpec extends CatsEffectSuite {
       )
       .use { case (repo, vcs) =>
         val versionFile = new File(repo, "version.sbt")
-        val state       = TestSupport.gitRootState(
+        val state       = ReleaseTestSupport.gitRootState(
           repo,
           releaseManifestSettings() ++
             Seq(
@@ -391,7 +392,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   }
 
   test("commitReleaseVersion - do not create a commit when releaseIOCommitMessage reports FailureCommand") {
-    TestSupport
+    ReleaseTestSupport
       .gitRepoWithCommitResource(
         fixturePrefix,
         prepareRepo = repo =>
@@ -405,7 +406,7 @@ class VersionStepsSpec extends CatsEffectSuite {
       .use { case (repo, vcs) =>
         val marker      = new File(repo, "commit-message-task.marker")
         val versionFile = new File(repo, "version.sbt")
-        val state       = TestSupport.gitRootState(
+        val state       = ReleaseTestSupport.gitRootState(
           repo,
           Seq(
             releaseIOVersionFile         := versionFile,
@@ -440,7 +441,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   }
 
   test("commitNextVersion - do not create a commit when releaseIONextCommitMessage reports FailureCommand") {
-    TestSupport
+    ReleaseTestSupport
       .gitRepoWithCommitResource(
         fixturePrefix,
         prepareRepo = repo =>
@@ -454,7 +455,7 @@ class VersionStepsSpec extends CatsEffectSuite {
       .use { case (repo, vcs) =>
         val marker      = new File(repo, "next-commit-message-task.marker")
         val versionFile = new File(repo, "version.sbt")
-        val state       = TestSupport.gitRootState(
+        val state       = ReleaseTestSupport.gitRootState(
           repo,
           Seq(
             releaseIOVersionFile         := versionFile,

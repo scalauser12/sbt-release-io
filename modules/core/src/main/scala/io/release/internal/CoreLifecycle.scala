@@ -14,129 +14,124 @@ private[release] object CoreLifecycle {
   private val Always: Gate      = _ => IO.pure(true)
   private val PublishGate: Gate = PublishSteps.shouldRunPublishHooks
 
-  private sealed trait Phase {
-    def rawSteps: Seq[ReleaseStepIO]
-    def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO]
-  }
-
-  private final case class BuiltInPhase(
-      step: ReleaseStepIO,
-      enabled: CoreHookConfiguration => Boolean = _ => true
-  ) extends Phase {
-    override val rawSteps: Seq[ReleaseStepIO] = Seq(step)
-
-    override def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO] =
-      if (enabled(hooks)) Seq(step) else Seq.empty
-  }
-
-  private final case class HookPhase(
+  private def hookPhase(
       phase: String,
       resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],
       gate: Gate,
       crossBuild: Boolean,
       enabled: CoreHookConfiguration => Boolean = _ => true
-  ) extends Phase {
-    override val rawSteps: Seq[ReleaseStepIO] = Seq.empty
+  ): LifecycleCompiler.HookPhase[CoreHookConfiguration, ReleaseHookIO, ReleaseStepIO] =
+    LifecycleCompiler.HookPhase(
+      phase = phase,
+      resolveHooks = resolveHooks,
+      buildSteps = (phaseName, hooks) => compileHooks(phaseName, hooks, gate, crossBuild),
+      enabled = enabled
+    )
 
-    override def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO] =
-      if (enabled(hooks)) compileHooks(phase, resolveHooks(hooks), gate, crossBuild)
-      else Seq.empty
-  }
-
-  private val phases: Seq[Phase] = Seq(
-    BuiltInPhase(ReleaseSteps.initializeVcs),
-    BuiltInPhase(ReleaseSteps.checkCleanWorkingDir),
-    HookPhase("after-clean-check", _.afterCleanCheckHooks, Always, crossBuild = false),
-    BuiltInPhase(
+  private val phases: Seq[LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseStepIO]] = Seq(
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.initializeVcs),
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.checkCleanWorkingDir),
+    hookPhase("after-clean-check", _.afterCleanCheckHooks, Always, crossBuild = false),
+    LifecycleCompiler.BuiltInPhase(
       ReleaseSteps.checkSnapshotDependencies,
       _.enableSnapshotDependenciesCheck
     ),
-    HookPhase(
-      "before-version-resolution",
-      _.beforeVersionResolutionHooks,
-      Always,
-      crossBuild = false
-    ),
-    BuiltInPhase(ReleaseSteps.inquireVersions),
-    HookPhase(
-      "after-version-resolution",
-      _.afterVersionResolutionHooks,
-      Always,
-      crossBuild = false
-    ),
-    BuiltInPhase(ReleaseSteps.runClean, _.enableRunClean),
-    BuiltInPhase(ReleaseSteps.runTests, _.enableRunTests),
-    HookPhase(
+    hookPhase("before-version-resolution", _.beforeVersionResolutionHooks, Always, crossBuild = false),
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.inquireVersions),
+    hookPhase("after-version-resolution", _.afterVersionResolutionHooks, Always, crossBuild = false),
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.runClean, _.enableRunClean),
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.runTests, _.enableRunTests),
+    hookPhase(
       "before-release-version-write",
       _.beforeReleaseVersionWriteHooks,
       Always,
       crossBuild = false
     ),
-    BuiltInPhase(ReleaseSteps.setReleaseVersion),
-    HookPhase(
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.setReleaseVersion),
+    hookPhase(
       "after-release-version-write",
       _.afterReleaseVersionWriteHooks,
       Always,
       crossBuild = false
     ),
-    HookPhase("before-release-commit", _.beforeReleaseCommitHooks, Always, crossBuild = false),
-    BuiltInPhase(ReleaseSteps.commitReleaseVersion),
-    HookPhase("after-release-commit", _.afterReleaseCommitHooks, Always, crossBuild = false),
-    HookPhase(
+    hookPhase(
+      "before-release-commit",
+      _.beforeReleaseCommitHooks,
+      Always,
+      crossBuild = false
+    ),
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.commitReleaseVersion),
+    hookPhase(
+      "after-release-commit",
+      _.afterReleaseCommitHooks,
+      Always,
+      crossBuild = false
+    ),
+    hookPhase(
       "before-tag",
       _.beforeTagHooks,
       Always,
       crossBuild = false,
       enabled = _.enableTagging
     ),
-    BuiltInPhase(ReleaseSteps.tagRelease, _.enableTagging),
-    HookPhase(
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.tagRelease, _.enableTagging),
+    hookPhase(
       "after-tag",
       _.afterTagHooks,
       Always,
       crossBuild = false,
       enabled = _.enableTagging
     ),
-    HookPhase(
+    hookPhase(
       "before-publish",
       _.beforePublishHooks,
       PublishGate,
       ReleaseSteps.publishArtifacts.enableCrossBuild,
-      _.enablePublish
+      enabled = _.enablePublish
     ),
-    BuiltInPhase(ReleaseSteps.publishArtifacts, _.enablePublish),
-    HookPhase(
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.publishArtifacts, _.enablePublish),
+    hookPhase(
       "after-publish",
       _.afterPublishHooks,
       PublishGate,
       ReleaseSteps.publishArtifacts.enableCrossBuild,
-      _.enablePublish
+      enabled = _.enablePublish
     ),
-    HookPhase(
+    hookPhase(
       "before-next-version-write",
       _.beforeNextVersionWriteHooks,
       Always,
       crossBuild = false
     ),
-    BuiltInPhase(ReleaseSteps.setNextVersion),
-    HookPhase(
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.setNextVersion),
+    hookPhase(
       "after-next-version-write",
       _.afterNextVersionWriteHooks,
       Always,
       crossBuild = false
     ),
-    HookPhase("before-next-commit", _.beforeNextCommitHooks, Always, crossBuild = false),
-    BuiltInPhase(ReleaseSteps.commitNextVersion),
-    HookPhase("after-next-commit", _.afterNextCommitHooks, Always, crossBuild = false),
-    HookPhase(
+    hookPhase(
+      "before-next-commit",
+      _.beforeNextCommitHooks,
+      Always,
+      crossBuild = false
+    ),
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.commitNextVersion),
+    hookPhase(
+      "after-next-commit",
+      _.afterNextCommitHooks,
+      Always,
+      crossBuild = false
+    ),
+    hookPhase(
       "before-push",
       _.beforePushHooks,
       Always,
       crossBuild = false,
       enabled = _.enablePush
     ),
-    BuiltInPhase(ReleaseSteps.pushChanges, _.enablePush),
-    HookPhase(
+    LifecycleCompiler.BuiltInPhase(ReleaseSteps.pushChanges, _.enablePush),
+    hookPhase(
       "after-push",
       _.afterPushHooks,
       Always,
@@ -146,10 +141,10 @@ private[release] object CoreLifecycle {
   )
 
   val defaults: Seq[ReleaseStepIO] =
-    phases.flatMap(_.rawSteps)
+    LifecycleCompiler.defaults(phases)
 
   def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO] =
-    phases.flatMap(_.compile(hooks))
+    LifecycleCompiler.compile(hooks, phases)
 
   private def compileHooks(
       phase: String,

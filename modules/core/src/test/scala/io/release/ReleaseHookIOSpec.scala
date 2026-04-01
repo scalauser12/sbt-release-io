@@ -18,7 +18,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseHookIO.io - execute delegates to the supplied function") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val modified = ctx.withVersions("1.0.0", "1.1.0-SNAPSHOT")
       val hook     = ReleaseHookIO.io("transform-hook")(_ => IO.pure(modified))
       hook
@@ -28,14 +28,14 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseHookIO.io - execute receives the original context") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseHookIO.io("echo-hook")(c => IO.pure(c))
       hook.execute(ctx).map(result => assertEquals(result, ctx))
     }
   }
 
   test("ReleaseHookIO.io - execute propagates IO errors") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook =
         ReleaseHookIO.io("failing-hook")(_ => IO.raiseError(new RuntimeException("hook-boom")))
       hook.execute(ctx).attempt.map {
@@ -46,7 +46,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseHookIO.io - default validate is a no-op that returns unit") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseHookIO.io("io-hook-default-validate")(_ => IO.pure(ctx))
       hook.validate(ctx).map(result => assertEquals(result, ()))
     }
@@ -64,7 +64,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   test(
     "ReleaseHookIO.action - execute runs the effect and returns the original context unchanged"
   ) {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { sideEffect =>
         val hook = ReleaseHookIO.action("side-effect-hook")(_ => sideEffect.set(true))
         hook.execute(ctx).flatMap { result =>
@@ -78,7 +78,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseHookIO.action - execute receives the original context when running the effect") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Option[ReleaseContext]](None).flatMap { captured =>
         val hook = ReleaseHookIO.action("capture-hook")(c => captured.set(Some(c)))
         hook.execute(ctx).flatMap { _ =>
@@ -89,7 +89,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseHookIO.action - execute propagates IO errors from the effect") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseHookIO
         .action("failing-action")(_ => IO.raiseError(new RuntimeException("action-boom")))
       hook.execute(ctx).attempt.map {
@@ -100,7 +100,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseHookIO.action - default validate is a no-op that returns unit") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseHookIO.action("action-hook-default-validate")(_ => IO.unit)
       hook.validate(ctx).map(result => assertEquals(result, ()))
     }
@@ -116,7 +116,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseResourceHookIO.io - execute(resource)(ctx) delegates to the supplied function") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val modified = ctx.withVersions("2.0.0", "2.1.0-SNAPSHOT")
       val hook     =
         ReleaseResourceHookIO.io[String]("resource-transform-hook")(_ => _ => IO.pure(modified))
@@ -127,7 +127,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseResourceHookIO.io - execute passes the resource value to the function") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { captured =>
         val hook = ReleaseResourceHookIO
           .io[String]("capture-resource-hook")(r => c => captured.set(Some(r)).as(c))
@@ -139,7 +139,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseResourceHookIO.io - execute propagates IO errors") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseResourceHookIO.io[String]("failing-resource-hook")(_ =>
         _ => IO.raiseError(new RuntimeException("resource-boom"))
       )
@@ -151,7 +151,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseResourceHookIO.io - default validate is a no-op that returns unit") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook =
         ReleaseResourceHookIO.io[String]("resource-io-hook-default-validate")(_ => c => IO.pure(c))
       hook.validate(ctx).map(result => assertEquals(result, ()))
@@ -170,7 +170,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   test(
     "ReleaseResourceHookIO.action - execute(resource)(ctx) runs the effect and returns ctx unchanged"
   ) {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { sideEffect =>
         val hook = ReleaseResourceHookIO
           .action[Int]("resource-side-effect-hook")(_ => _ => sideEffect.set(true))
@@ -185,7 +185,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseResourceHookIO.action - execute passes the resource value to the effect") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Option[Int]](None).flatMap { captured =>
         val hook = ReleaseResourceHookIO
           .action[Int]("capture-resource-action-hook")(r => _ => captured.set(Some(r)))
@@ -197,7 +197,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseResourceHookIO.action - execute propagates IO errors from the effect") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseResourceHookIO.action[String]("failing-resource-action")(_ =>
         _ => IO.raiseError(new RuntimeException("resource-action-boom"))
       )
@@ -209,7 +209,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   }
 
   test("ReleaseResourceHookIO.action - default validate is a no-op that returns unit") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseResourceHookIO
         .action[String]("resource-action-hook-default-validate")(_ => _ => IO.unit)
       hook.validate(ctx).map(result => assertEquals(result, ()))

@@ -34,7 +34,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVcs - return the callback result when VCS is initialized") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val key = AttributeKey[String]("detected-vcs")
 
       StepHelpers
@@ -46,7 +46,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVcs - raise IllegalStateException when VCS is missing") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       assertIllegalStateMessage(
         StepHelpers.requireVcs(ctx)(_ => IO.pure(ctx)),
         "VCS not initialized. Ensure initializeVcs runs before this step."
@@ -55,7 +55,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVersions - return the callback result when versions are set") {
-    TestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { baseCtx =>
       val key = AttributeKey[String]("resolved-versions")
       val ctx = baseCtx.withVersions("1.0.0", "1.0.1-SNAPSHOT")
 
@@ -68,7 +68,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.requireVersions - raise IllegalStateException when versions are missing") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       assertIllegalStateMessage(
         StepHelpers.requireVersions(ctx)(_ => IO.pure(ctx)),
         "Versions not set. Ensure inquireVersions runs before this step."
@@ -247,7 +247,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   test(
     "StepHelpers.handleSnapshotDependencies - do nothing when there are no snapshot dependencies"
   ) {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       StepHelpers
         .handleSnapshotDependencies(
           ctx,
@@ -298,7 +298,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readLine - return consecutive lines from the same redirected stdin") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       TestSupport.withInput("first\nsecond\n") {
         for {
           first  <- StepHelpers.readLine(ctx)
@@ -312,7 +312,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readLine - leave later bytes available to direct System.in consumers") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       TestSupport.withInput("first\nsecond\n") {
         for {
           line        <- StepHelpers.readLine(ctx)
@@ -328,7 +328,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readLine - split CRLF input into logical lines") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       TestSupport.withInput("first\r\nsecond\r\n") {
         for {
           first  <- StepHelpers.readLine(ctx)
@@ -344,7 +344,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readLine - return the partial final line before EOF") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       TestSupport.withInput("partial-without-newline") {
         for {
           line <- StepHelpers.readLine(ctx)
@@ -358,7 +358,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readLine - reset CRLF carry-over when System.in identity changes") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       for {
         first  <- TestSupport.withInput("first\r") {
                     StepHelpers.readLine(ctx)
@@ -374,7 +374,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test("StepHelpers.readRequiredLine - fail fast when redirected stdin reaches EOF") {
-    TestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       TestSupport.withInput("") {
         assertIllegalStateMessage(
           StepHelpers.readRequiredLine(ctx, "Release version"),

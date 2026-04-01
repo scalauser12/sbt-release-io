@@ -2,6 +2,8 @@ val Sbt1Version = "1.12.3"
 val Sbt2Version = "2.0.0-RC9"
 val Scala212    = "2.12.21"
 val Scala3      = "3.8.1"
+val MunitVersion = "1.2.4"
+val MunitCatsEffectVersion = "2.2.0"
 
 ThisBuild / versionScheme := Some("early-semver")
 
@@ -36,8 +38,8 @@ lazy val commonSettings = Seq(
   ),
   libraryDependencies ++= Seq(
     "org.typelevel" %% "cats-effect"       % "3.7.0",
-    "org.scalameta" %% "munit"             % "1.2.4" % Test,
-    "org.typelevel" %% "munit-cats-effect" % "2.2.0" % Test
+    "org.scalameta" %% "munit"             % MunitVersion % Test,
+    "org.typelevel" %% "munit-cats-effect" % MunitCatsEffectVersion % Test
   ),
   scalacOptions ++= Seq(
     "-deprecation",
@@ -61,8 +63,19 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("munit.Framework")
 )
 
+lazy val testkit = (project in file("modules/testkit"))
+  .enablePlugins(SbtPlugin)
+  .settings(
+    commonSettings,
+    name := "sbt-release-io-testkit",
+    description := "Internal shared test harness for sbt-release-io",
+    publish / skip := true,
+    libraryDependencies += "org.scalameta" %% "munit" % MunitVersion
+  )
+
 lazy val core = (project in file("modules/core"))
   .enablePlugins(SbtPlugin)
+  .dependsOn(testkit % "test->compile")
   .settings(
     commonSettings,
     name        := "sbt-release-io",
@@ -72,7 +85,7 @@ lazy val core = (project in file("modules/core"))
 
 lazy val monorepo = (project in file("modules/monorepo"))
   .enablePlugins(SbtPlugin)
-  .dependsOn(core, core % "test->test")
+  .dependsOn(core, testkit % "test->compile")
   .settings(
     commonSettings,
     name        := "sbt-release-io-monorepo",
@@ -81,7 +94,7 @@ lazy val monorepo = (project in file("modules/monorepo"))
   )
 
 lazy val root = (project in file("."))
-  .aggregate(core, monorepo)
+  .aggregate(testkit, core, monorepo)
   .settings(
     name           := "sbt-release-io-root",
     publish / skip := true
@@ -89,6 +102,7 @@ lazy val root = (project in file("."))
 
 Global / excludeLintKeys ++= Set(
   ThisBuild / git.gitUncommittedChanges,
+  testkit / git.gitDescribedVersion,
   core / git.gitDescribedVersion,
   monorepo / git.gitDescribedVersion,
   root / git.gitDescribedVersion

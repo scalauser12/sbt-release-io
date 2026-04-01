@@ -215,49 +215,21 @@ trait MonorepoReleaseIO {
 
   // ── Default settings ──────────────────────────────────────────────────
 
-  lazy val monorepoDefaultSettings: Seq[Setting[?]] = Seq(
-    releaseIOMonorepoCrossBuild                      := false,
-    releaseIOMonorepoSkipTests                       := false,
-    releaseIOMonorepoSkipPublish                     := false,
-    releaseIOMonorepoEnableSnapshotDependenciesCheck := true,
-    releaseIOMonorepoEnableRunClean                  := true,
-    releaseIOMonorepoEnableRunTests                  := true,
-    releaseIOMonorepoEnableTagging                   := true,
-    releaseIOMonorepoEnablePublish                   := true,
-    releaseIOMonorepoEnablePush                      := true,
-    releaseIOMonorepoBeforeSelectionHooks            := Seq.empty,
-    releaseIOMonorepoAfterSelectionHooks             := Seq.empty,
-    releaseIOMonorepoBeforeVersionResolutionHooks    := Seq.empty,
-    releaseIOMonorepoAfterVersionResolutionHooks     := Seq.empty,
-    releaseIOMonorepoBeforeReleaseVersionWriteHooks  := Seq.empty,
-    releaseIOMonorepoAfterReleaseVersionWriteHooks   := Seq.empty,
-    releaseIOMonorepoBeforeReleaseCommitHooks        := Seq.empty,
-    releaseIOMonorepoAfterReleaseCommitHooks         := Seq.empty,
-    releaseIOMonorepoBeforeTagHooks                  := Seq.empty,
-    releaseIOMonorepoAfterTagHooks                   := Seq.empty,
-    releaseIOMonorepoBeforePublishHooks              := Seq.empty,
-    releaseIOMonorepoAfterPublishHooks               := Seq.empty,
-    releaseIOMonorepoBeforeNextVersionWriteHooks     := Seq.empty,
-    releaseIOMonorepoAfterNextVersionWriteHooks      := Seq.empty,
-    releaseIOMonorepoBeforeNextCommitHooks           := Seq.empty,
-    releaseIOMonorepoAfterNextCommitHooks            := Seq.empty,
-    releaseIOMonorepoBeforePushHooks                 := Seq.empty,
-    releaseIOMonorepoAfterPushHooks                  := Seq.empty,
-    releaseIOMonorepoPublishArtifactsChecks          := true,
-    releaseIOMonorepoInteractive                     := false,
-    releaseIOMonorepoCommitMessage                   := ((summary: String) => s"Setting release versions: $summary"),
-    releaseIOMonorepoNextCommitMessage               := ((summary: String) => s"Setting next versions: $summary"),
-    releaseIOMonorepoDetectChanges                   := true,
-    releaseIOMonorepoIncludeDownstream               := false,
-    releaseIOMonorepoChangeDetector                  := None,
-    releaseIOMonorepoDetectChangesExcludes           := Seq.empty,
-    releaseIOMonorepoSharedPaths                     := Seq("build.sbt", "project/"),
-    releaseIOMonorepoTagName                         := ((name: String, ver: String) => s"$name/v$ver"),
-    releaseIOMonorepoTagComment                      := ((name: String, ver: String) => s"Release $name $ver"),
-    releaseIOMonorepoReadVersion                     := VersionSteps.defaultReadVersion,
-    releaseIOMonorepoVersionFileContents             := { (_, ver) =>
-      IO.pure(s"""version := "$ver"\n""")
-    },
+  lazy val monorepoDefaultSettings: Seq[Setting[?]] =
+    _root_.io.release.internal.MonorepoDefaultSettings.commandAndHookSettings ++ Seq(
+      releaseIOMonorepoCommitMessage                   := ((summary: String) => s"Setting release versions: $summary"),
+      releaseIOMonorepoNextCommitMessage               := ((summary: String) => s"Setting next versions: $summary"),
+      releaseIOMonorepoDetectChanges                   := true,
+      releaseIOMonorepoIncludeDownstream               := false,
+      releaseIOMonorepoChangeDetector                  := None,
+      releaseIOMonorepoDetectChangesExcludes           := Seq.empty,
+      releaseIOMonorepoSharedPaths                     := Seq("build.sbt", "project/"),
+      releaseIOMonorepoTagName                         := ((name: String, ver: String) => s"$name/v$ver"),
+      releaseIOMonorepoTagComment                      := ((name: String, ver: String) => s"Release $name $ver"),
+      releaseIOMonorepoReadVersion                     := VersionSteps.defaultReadVersion,
+      releaseIOMonorepoVersionFileContents             := { (_, ver) =>
+        IO.pure(s"""version := "$ver"\n""")
+      },
     releaseIOMonorepoVersionFile                     := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / releaseIOVersionFile)
     },

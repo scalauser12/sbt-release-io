@@ -109,34 +109,10 @@ trait MonorepoReleasePluginSpecSupport {
     }
 
   protected def settingsDefaults: Seq[Setting[?]] =
-    Seq(
-      MonorepoReleaseIO.releaseIOMonorepoEnableSnapshotDependenciesCheck := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnableRunClean                  := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnableRunTests                  := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnableTagging                   := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnablePublish                   := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnablePush                      := true,
-      io.release.ReleaseIO.releaseIOVcsRemoteCheckTimeout                := scala.concurrent.duration
+    _root_.io.release.internal.MonorepoDefaultSettings.commandAndHookSettings ++ Seq(
+      _root_.io.release.ReleaseIO.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
         .DurationInt(60)
-        .seconds,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks            := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks             := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeVersionResolutionHooks    := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterVersionResolutionHooks     := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeReleaseVersionWriteHooks  := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterReleaseVersionWriteHooks   := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeReleaseCommitHooks        := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterReleaseCommitHooks         := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeTagHooks                  := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterTagHooks                   := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforePublishHooks              := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterPublishHooks               := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeNextVersionWriteHooks     := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterNextVersionWriteHooks      := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeNextCommitHooks           := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterNextCommitHooks            := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforePushHooks                 := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterPushHooks                  := Seq.empty
+        .seconds
     )
 
   protected def resolveProcessMode(

@@ -2,8 +2,6 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.internal.SbtRuntime
-import io.release.vcs.Vcs
 import sbt.Project
 import sbt.Setting
 import sbt.State
@@ -101,22 +99,8 @@ object TestSupport {
       )
     }
 
-  def loadedContextResource(
-      prefix: String,
-      buildSettings: Seq[Setting[?]] = Nil,
-      currentProjectId: Option[String] = None
-  )(projectsFor: File => Seq[Project]): Resource[IO, ReleaseContext] =
-    loadedStateResource(
-      prefix,
-      buildSettings = buildSettings,
-      currentProjectId = currentProjectId
-    )(projectsFor).map(state => ReleaseContext(state = state))
-
   def dummyStateResource(prefix: String): Resource[IO, State] =
     tempDirResource(prefix).evalMap(dir => IO.blocking(dummyState(dir)))
-
-  def dummyContextResource(prefix: String): Resource[IO, ReleaseContext] =
-    dummyStateResource(prefix).map(state => ReleaseContext(state = state))
 
   def withInput[A](input: String)(io: IO[A]): IO[A] =
     withSystemInput(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)))(io)
@@ -154,50 +138,11 @@ object TestSupport {
       prepareRepo: File => IO[Unit] = repo =>
         IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "initial")),
       commitMessage: String = "Initial commit"
-  ): Resource[IO, (File, Vcs)] =
+  ): Resource[IO, File] =
     gitRepoResource(prefix).evalMap { repo =>
       prepareRepo(repo) *>
-        IO.blocking(commitAll(repo, commitMessage)) *>
-        detectVcs(repo).map(repo -> _)
-    }
-
-  def gitRootState(
-      repo: File,
-      rootSettings: Seq[Setting[?]] = Nil
-  ): State =
-    loadedState(
-      repo,
-      Seq(
-        Project("root", repo).settings(
-          (Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := false) ++ rootSettings)*
-        )
-      ),
-      currentProjectId = Some("root")
-    )
-
-  def gitRepoWithLoadedStateResource(
-      prefix: String,
-      rootSettings: Seq[Setting[?]] = Nil,
-      prepareRepo: File => IO[Unit] = repo =>
-        IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "initial")),
-      commitMessage: String = "Initial commit"
-  ): Resource[IO, (File, State)] =
-    gitRepoWithCommitResource(prefix, prepareRepo, commitMessage).evalMap { case (repo, _) =>
-      IO.blocking(repo -> gitRootState(repo, rootSettings))
-    }
-
-  def brokenRemoteContextResource(
-      prefix: String,
-      interactive: Boolean = false
-  ): Resource[IO, ReleaseContext] =
-    tempDirResource(prefix).evalMap { repo =>
-      initRepoWithBrokenRemote(repo).map { vcs =>
-        ReleaseContext(
-          state = gitRootState(repo),
-          vcs = Some(vcs),
-          interactive = interactive
-        )
-      }
+        IO.blocking(commitAll(repo, commitMessage))
+          .as(repo)
     }
 
   def dummyState(baseDir: File): State = {
@@ -238,7 +183,7 @@ object TestSupport {
     )
 
   def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
-    SbtRuntime.appendWithSession(state, settings)
+    TestkitSbtCompat.extract(state).appendWithSession(settings, state)
 
   final case class BufferedState(state: State, consoleBuffer: ByteArrayOutputStream)
 
@@ -396,24 +341,4 @@ object TestSupport {
 
   def runGit(repo: File, args: String*): String =
     Process(Seq("git") ++ args, repo).!!
-
-  def detectVcs(repo: File): IO[Vcs] =
-    Vcs.detect(repo).flatMap {
-      case Some(vcs) => IO.pure(vcs)
-      case None      =>
-        IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-    }
-
-  def initRepoWithBrokenRemote(repo: File): IO[Vcs] =
-    IO.blocking {
-      initGitRepo(repo)
-      sbt.IO.write(new File(repo, "file.txt"), "initial")
-      runGit(repo, "add", ".")
-      runGit(repo, "commit", "-m", "Initial commit")
-      runGit(repo, "branch", "-M", "main")
-      runGit(repo, "remote", "add", "origin", new File(repo, "missing-remote.git").getAbsolutePath)
-      runGit(repo, "config", "branch.main.remote", "origin")
-      runGit(repo, "config", "branch.main.merge", "refs/heads/main")
-      repo
-    }.flatMap(detectVcs)
 }

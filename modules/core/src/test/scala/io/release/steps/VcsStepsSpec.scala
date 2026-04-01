@@ -5,6 +5,7 @@ import io.release.ReleaseContext
 import io.release.ReleaseIO
 import io.release.ReleaseIO.releaseIOInternalReleaseHash
 import io.release.ReleaseIO.releaseIOInternalReleaseTag
+import io.release.ReleaseTestSupport
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.internal.CoreExecutionState
@@ -23,7 +24,7 @@ class VcsStepsSpec extends CatsEffectSuite {
   private val fixturePrefix = "vcs-steps-spec"
 
   test("initializeVcs - detect Git from the loaded project base") {
-    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
+    ReleaseTestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
       VcsSteps.initializeVcs.execute(ReleaseContext(state = state)).map { result =>
         assertEquals(result.vcs.map(_.commandName), Some("git"))
       }
@@ -31,13 +32,13 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanWorkingDir.validate - succeed for a clean loaded repo") {
-    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
+    ReleaseTestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
       VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
     }
   }
 
   test("checkCleanWorkingDir.validate - fail for a dirty tracked file in a loaded repo") {
-    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (repo, state) =>
+    ReleaseTestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (repo, state) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
         TestAssertions.assertFailure[IllegalStateException, Unit](
           VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
@@ -49,13 +50,13 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
-    TestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
       VcsSteps.pushChanges.validate(ctx)
     }
   }
 
   test("pushChanges.validate function value - fail when VCS was not initialized") {
-    TestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
+    ReleaseTestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
       val validate = VcsSteps.pushChanges.validate
 
       TestAssertions.assertFailure[IllegalStateException, Unit](
@@ -70,7 +71,7 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("pushChanges.execute - fail during remote preflight in non-interactive mode") {
-    TestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
       TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
         VcsSteps.pushChanges.execute(ctx)
       )(err => assert(err.getMessage.contains("Aborting the release due to remote check failure.")))
@@ -78,8 +79,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - abort in non-interactive mode when the tag already exists") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -98,9 +99,9 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - create the tag and keep the resulting context usable") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val versionFile = new File(repo, "version.sbt")
-      val state       = TestSupport.gitRootState(
+      val state       = ReleaseTestSupport.gitRootState(
         repo,
         releaseManifestSettings() ++
           Seq(
@@ -131,9 +132,9 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - do not create a tag when releaseIOTagName reports FailureCommand") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val marker = new File(repo, "tag-name-task.marker")
-      val state  = TestSupport.gitRootState(
+      val state  = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -160,9 +161,9 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - do not create a tag when releaseIOTagComment reports FailureCommand") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val marker = new File(repo, "tag-comment-task.marker")
-      val state  = TestSupport.gitRootState(
+      val state  = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -189,8 +190,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - trim whitespace around interactive keep input") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -214,8 +215,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - treat EOF as the default abort answer when the tag already exists") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -237,8 +238,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("tagRelease.execute - propagate non-EOF input failures when the tag already exists") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -266,8 +267,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("preflightTag - fail deterministically in non-interactive mode when the tag exists") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -290,8 +291,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("preflightTag - report keep behavior when the configured default answer is keep") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -327,8 +328,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("preflightTag - trim whitespace around the configured default answer") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -364,8 +365,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("preflightTag - report interactive prompt behavior when the tag exists") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,
@@ -391,8 +392,8 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("preflightTag - use the configured command name in tag conflict guidance") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign    := false,

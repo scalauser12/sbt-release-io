@@ -2,10 +2,9 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseIO
-import io.release.ReleaseKeys
-import io.release.VcsOps
 import io.release.internal.CheckModeOutput
+import io.release.internal.CommandRuntimeSupport
+import io.release.internal.DecisionDefaultsSupport
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ReleaseCommandRunner
@@ -89,12 +88,11 @@ private[monorepo] object MonorepoCommandExecution {
     IO.blocking(
       CompiledMonorepoSteps(
         steps = MonorepoHookCompiler.compile(
-          MonorepoHookCompiler
-            .resolve(state)
-            .mergeWith(
-              MonorepoResourceHooks
-                .materialize(runtime.resolveResourceHooks(state), maybeResource)
-            )
+          CommandRuntimeSupport.mergeMaterializedHooks(
+            MonorepoHookCompiler.resolve(state),
+            runtime.resolveResourceHooks(state),
+            maybeResource
+          )(MonorepoResourceHooks.materialize, (left, right) => left.mergeWith(right))
         )
       )
     )
@@ -170,7 +168,7 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T],
       interactiveEnabled: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
-    val cleanState         = clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions))
+    val cleanState         = CommandRuntimeSupport.cleanReleaseState(state, loadedProjectRefs(state))
     val program: IO[State] = prepareCommand(
       cleanState,
       args,
@@ -205,17 +203,11 @@ private[monorepo] object MonorepoCommandExecution {
                                       )
                                     )
                       preparedCtx <-
-                        if (runProcess.steps.exists(_.name == VcsOps.PushChangesStepName))
-                          VcsOps.preparePushRelease(
-                            session.context,
-                            ReleaseLogPrefixes.Monorepo,
-                            remoteCheckLog = Some(r =>
-                              session.context.state.log.info(
-                                s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] before release actions ..."
-                              )
-                            )
-                          )
-                        else IO.pure(session.context)
+                        CommandRuntimeSupport.preparePushIfNeeded(
+                          session.context,
+                          runProcess.steps.map(_.name),
+                          ReleaseLogPrefixes.Monorepo
+                        )
                       finalCtx   <-
                         MonorepoStepIO.compose(runProcess.steps, command.flags.crossBuild)(
                           preparedCtx
@@ -223,7 +215,12 @@ private[monorepo] object MonorepoCommandExecution {
                     } yield finalCtx
                   }
       cleanedCtx <- IO.blocking(
-                      finalCtx.withState(clearReleaseManifestMetadata(finalCtx.state))
+                      finalCtx.withState(
+                        CommandRuntimeSupport.cleanReleaseState(
+                          finalCtx.state,
+                          loadedProjectRefs(finalCtx.state)
+                        )
+                      )
                     )
       result     <- ReleaseCommandRunner
                       .handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Monorepo)
@@ -250,10 +247,7 @@ private[monorepo] object MonorepoCommandExecution {
     } yield command.cleanState
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
-    ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
-
-  private def clearReleaseManifestMetadata(state: State): State =
-    ReleaseIO.clearReleaseManifestMetadata(state, loadedProjectRefs(state))
+    CommandRuntimeSupport.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
 
   private def loadedProjectRefs(state: State): Seq[ProjectRef] =
     SbtRuntime.extracted(state).structure.allProjectRefs
@@ -279,59 +273,44 @@ private[monorepo] object MonorepoCommandExecution {
     def allArgs[A](extract: PartialFunction[MonorepoCli.Arg, A]): Seq[A] =
       args.collect(extract)
 
-    def warnIfRepeated(
-        argName: String,
-        selected: Option[String],
-        count: Int
-    ): Unit =
-      if (count > 1)
-        state.log.warn(
-          s"${ReleaseLogPrefixes.Monorepo} Multiple $argName args provided; using '${selected.getOrElse("<unknown>")}'"
-        )
-
-    def resolveDefault[A](
-        argName: String,
-        extract: PartialFunction[MonorepoCli.Arg, A],
-        render: A => String
-    ): Option[A] = {
-      val matches   = allArgs(extract)
-      val selected  = matches.lastOption
-      val displayed = selected.map(render)
-      warnIfRepeated(argName, displayed, matches.size)
-      selected
-    }
-
     val cliDefaults = ReleaseDecisionDefaults(
-      tagExistsAnswer = resolveDefault(
+      tagExistsAnswer = DecisionDefaultsSupport.resolveLast(
+        state,
+        ReleaseLogPrefixes.Monorepo,
         "default-tag-exists-answer",
-        { case TagDefault(value) => value },
+        allArgs { case TagDefault(value) => value },
         (value: String) => value
       ),
-      snapshotDependenciesAnswer = resolveDefault(
+      snapshotDependenciesAnswer = DecisionDefaultsSupport.resolveLast(
+        state,
+        ReleaseLogPrefixes.Monorepo,
         "default-snapshot-dependencies-answer",
-        { case SnapshotDependenciesDefault(value) => value },
-        renderYesNo
+        allArgs { case SnapshotDependenciesDefault(value) => value },
+        DecisionDefaultsSupport.renderYesNo
       ),
-      remoteCheckFailureAnswer = resolveDefault(
+      remoteCheckFailureAnswer = DecisionDefaultsSupport.resolveLast(
+        state,
+        ReleaseLogPrefixes.Monorepo,
         "default-remote-check-failure-answer",
-        { case RemoteCheckFailureDefault(value) => value },
-        renderYesNo
+        allArgs { case RemoteCheckFailureDefault(value) => value },
+        DecisionDefaultsSupport.renderYesNo
       ),
-      upstreamBehindAnswer = resolveDefault(
+      upstreamBehindAnswer = DecisionDefaultsSupport.resolveLast(
+        state,
+        ReleaseLogPrefixes.Monorepo,
         "default-upstream-behind-answer",
-        { case UpstreamBehindDefault(value) => value },
-        renderYesNo
+        allArgs { case UpstreamBehindDefault(value) => value },
+        DecisionDefaultsSupport.renderYesNo
       ),
-      pushAnswer = resolveDefault(
+      pushAnswer = DecisionDefaultsSupport.resolveLast(
+        state,
+        ReleaseLogPrefixes.Monorepo,
         "default-push-answer",
-        { case PushDefault(value) => value },
-        renderYesNo
+        allArgs { case PushDefault(value) => value },
+        DecisionDefaultsSupport.renderYesNo
       )
     )
 
     ReleaseDecisionDefaults.merge(cliDefaults, ReleaseDecisionDefaults.fromState(state))
   }
-
-  private def renderYesNo(value: Boolean): String =
-    if (value) "y" else "n"
 }

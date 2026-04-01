@@ -5,6 +5,7 @@ import cats.effect.Resource
 import io.release.ReleaseContext
 import io.release.ReleaseIO
 import io.release.ReleaseIOCompat
+import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.internal.SbtCompat
@@ -44,7 +45,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   }
 
   test("publishArtifacts.execute - skip when skipPublish is true") {
-    TestSupport.dummyContextResource(s"$fixturePrefix-skip-pub").use { ctx =>
+    ReleaseTestSupport.dummyContextResource(s"$fixturePrefix-skip-pub").use { ctx =>
       val skipped = ctx.copy(skipPublish = true)
       PublishSteps.publishArtifacts.execute(skipped).map { result =>
         assert(!result.failed)
@@ -213,7 +214,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   }
 
   test("runTests.execute - skip when skipTests is true") {
-    TestSupport.dummyContextResource(s"$fixturePrefix-skip-test").use { ctx =>
+    ReleaseTestSupport.dummyContextResource(s"$fixturePrefix-skip-test").use { ctx =>
       val skipped = ctx.copy(skipTests = true)
       PublishSteps.runTests.execute(skipped).map { result =>
         assert(!result.failed)
@@ -236,7 +237,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   // ── failOnSbtTaskFailure ────────────────────────────────────────────
 
   test("failOnSbtTaskFailure - strip FailureCommand and retain the clean failure cause") {
-    TestSupport.dummyContextResource(s"$fixturePrefix-clean").use { ctx =>
+    ReleaseTestSupport.dummyContextResource(s"$fixturePrefix-clean").use { ctx =>
       IO {
         val message  =
           "run-clean: clean action reported failure via FailureCommand"

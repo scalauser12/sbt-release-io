@@ -1,5 +1,6 @@
 package sbt
 
+import _root_.io.release.TestkitSbtCompat
 import _root_.io.release.TestSupport
 import cats.effect.IO as CEIO
 import cats.effect.Resource
@@ -13,7 +14,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
   test("synthetic loaded state - expose the current project and base directory") {
     singleProjectStateResource.use { state =>
       CEIO.blocking {
-        val extracted = Project.extract(state)
+        val extracted = TestkitSbtCompat.extract(state)
         assertEquals(extracted.currentRef.project, "root")
         assertEquals(
           extracted.get(Keys.baseDirectory).getCanonicalFile,
@@ -28,7 +29,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
 
     singleProjectStateResource.use { state =>
       CEIO.blocking {
-        val base              = Project.extract(state).get(Keys.baseDirectory)
+        val base              = TestkitSbtCompat.extract(state).get(Keys.baseDirectory)
         val seeded            = TestSupport.appendSessionSettings(
           state,
           Seq(
@@ -39,7 +40,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
             }
           )
         )
-        val appendedExtracted = Project.extract(seeded)
+        val appendedExtracted = TestkitSbtCompat.extract(seeded)
         val (newState, value) = appendedExtracted.runTask(appendedTask, seeded)
 
         assertEquals(value, "appended")
@@ -47,7 +48,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
           sbt.IO.read(new JFile(base, "appended-task.txt"), StandardCharsets.UTF_8),
           "appended"
         )
-        assertEquals(Project.extract(newState).currentRef.project, "root")
+        assertEquals(TestkitSbtCompat.extract(newState).currentRef.project, "root")
       }
     }
   }
@@ -76,7 +77,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
       )
     }.use { state =>
       CEIO.blocking {
-        val extracted = Project.extract(state)
+        val extracted = TestkitSbtCompat.extract(state)
         extracted.get(Keys.baseDirectory)
         assertEquals(extracted.currentProject.aggregate.map(_.project).sorted, List("api", "core"))
         assertEquals(
@@ -120,7 +121,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
           ),
           "core"
         )
-        assertEquals(Project.extract(newState).currentRef.project, "root")
+        assertEquals(TestkitSbtCompat.extract(newState).currentRef.project, "root")
       }
     }
   }
@@ -149,7 +150,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
       )
     }.use { state =>
       CEIO.blocking {
-        val extracted = Project.extract(state)
+        val extracted = TestkitSbtCompat.extract(state)
         extracted.get(Keys.baseDirectory)
         assertEquals(extracted.currentProject.aggregate.map(_.project).sorted, List("api", "core"))
         assertEquals(
@@ -177,7 +178,7 @@ class TestBuildStateSpec extends CatsEffectSuite {
         assertEquals(readFile(new JFile(rootBase, "aggregated-task-root.txt")), "root")
         assert(!new JFile(apiBase, "aggregated-task-api.txt").exists())
         assert(!new JFile(coreBase, "aggregated-task-core.txt").exists())
-        assertEquals(Project.extract(newState).currentRef.project, "root")
+        assertEquals(TestkitSbtCompat.extract(newState).currentRef.project, "root")
       }
     }
   }

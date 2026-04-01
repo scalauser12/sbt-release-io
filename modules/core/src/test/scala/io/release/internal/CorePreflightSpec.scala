@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
+import io.release.ReleaseTestSupport
 import io.release.TestSupport
 import io.release.steps.VcsSteps
 import io.release.steps.VersionSteps
@@ -184,7 +185,7 @@ class CorePreflightSpec extends CatsEffectSuite {
   private def withInitialContext[A](
       f: (File, File, ReleaseContext) => IO[A]
   ): IO[A] =
-    TestSupport
+    ReleaseTestSupport
       .gitRepoWithCommitResource(
         "core-preflight-spec",
         prepareRepo = repo =>
@@ -198,7 +199,7 @@ class CorePreflightSpec extends CatsEffectSuite {
       )
       .use { case (repo, _) =>
         val versionFile = new File(repo, "version.sbt")
-        val state       = TestSupport.gitRootState(repo, baseVersionSettings(versionFile))
+        val state       = ReleaseTestSupport.gitRootState(repo, baseVersionSettings(versionFile))
         val initialCtx  = releaseContext(state)
 
         f(repo, versionFile, initialCtx)
@@ -207,7 +208,7 @@ class CorePreflightSpec extends CatsEffectSuite {
   private def withPluginInitialContext[A](
       extraSettings: Seq[sbt.Setting[?]]
   )(f: (File, File, ReleaseContext) => IO[A]): IO[A] =
-    TestSupport
+    ReleaseTestSupport
       .gitRepoWithCommitResource(
         "core-preflight-plugin-spec",
         prepareRepo = repo =>

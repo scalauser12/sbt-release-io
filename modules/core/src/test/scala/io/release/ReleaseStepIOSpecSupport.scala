@@ -15,20 +15,20 @@ import java.nio.charset.StandardCharsets
 trait ReleaseStepIOSpecSupport {
 
   protected val contextResource: Resource[IO, ReleaseContext] =
-    TestSupport.dummyContextResource("sbt-release-io-compose-spec")
+    ReleaseTestSupport.dummyContextResource("sbt-release-io-compose-spec")
 
   protected def loadedContextResource(
       prefix: String,
       configure: Project => Project
   ): Resource[IO, ReleaseContext] =
-    TestSupport.loadedContextResource(prefix, currentProjectId = Some("root")) { dir =>
+    ReleaseTestSupport.loadedContextResource(prefix, currentProjectId = Some("root")) { dir =>
       Seq(configure(Project("root", dir)))
     }
 
   protected def loadedContextWithProjectsResource(
       prefix: String
   )(projectsFor: File => Seq[Project]): Resource[IO, ReleaseContext] =
-    TestSupport.loadedContextResource(prefix, currentProjectId = Some("root"))(projectsFor)
+    ReleaseTestSupport.loadedContextResource(prefix, currentProjectId = Some("root"))(projectsFor)
 
   protected def scalaVersionOf(state: State): IO[String] =
     IO.blocking(SbtRuntime.extracted(state).get(Keys.scalaVersion))

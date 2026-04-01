@@ -44,7 +44,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - succeed on a clean repo and return the current hash") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false).map { result =>
         assert(result.currentHash.nonEmpty)
         assertEquals(result.vcs.commandName, "git")
@@ -53,7 +53,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - raise error listing modified files when a tracked file is modified") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
         assertFailure[IllegalStateException, VcsOps.CleanCheckResult](
           VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false)
@@ -65,7 +65,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - raise error listing staged files when staged-but-uncommitted") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking {
         sbt.IO.write(new File(repo, "staged.txt"), "staged content")
         TestSupport.runGit(repo, "add", "staged.txt")
@@ -80,7 +80,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - raise error listing untracked files when untracked files exist") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
         assertFailure[IllegalStateException, VcsOps.CleanCheckResult](
           VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = false)
@@ -92,7 +92,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanFromVcs - succeed with untracked files when ignoreUntracked is true") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking(sbt.IO.write(new File(repo, "untracked.txt"), "new")) *>
         VcsOps.checkCleanFromVcs(vcs, ignoreUntracked = true).map { result =>
           assert(result.currentHash.nonEmpty)
@@ -101,9 +101,9 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("detectVcs - detect Git from a loaded sbt state") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
-        TestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+        ReleaseTestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
       ).flatMap { state =>
         VcsOps.detectVcs(state).map { vcs =>
           assertEquals(vcs.commandName, "git")
@@ -113,9 +113,9 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanWorkingDir(state) - succeed for a clean loaded repo") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
-        TestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+        ReleaseTestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
       ).flatMap { state =>
         VcsOps.checkCleanWorkingDir(state).map { result =>
           assert(result.currentHash.nonEmpty)
@@ -126,9 +126,9 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("checkCleanWorkingDir(state, vcs) - read settings from the loaded state") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
-        TestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+        ReleaseTestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
       ).flatMap { state =>
         for {
           vcs    <- VcsOps.detectVcs(state)
@@ -141,7 +141,7 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("relativizeToBase - return the path relative to the VCS root") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       IO.blocking {
         val nested = new File(repo, "nested/version.sbt")
         sbt.IO.write(nested, """version := "0.1.0-SNAPSHOT"""")
@@ -156,7 +156,7 @@ class VcsOpsSpec extends CatsEffectSuite {
 
   test("relativizeToBase - raise when the file is outside the VCS root") {
     TestSupport.tempDirResource(fixturePrefix).use { outside =>
-      TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (_, vcs) =>
+      ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (_, vcs) =>
         val external = new File(outside, "version.sbt")
         IO.blocking(sbt.IO.write(external, """version := "0.1.0-SNAPSHOT"""")) *>
           assertFailure[IllegalStateException, String](VcsOps.relativizeToBase(vcs, external))(
@@ -379,8 +379,8 @@ class VcsOpsSpec extends CatsEffectSuite {
   }
 
   test("validatePushReadiness - fail with a clear message when HEAD is detached") {
-    TestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = TestSupport.gitRootState(repo)
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(repo)
       val ctx   = VcsOpsSpec
         .promptContext(
           state,

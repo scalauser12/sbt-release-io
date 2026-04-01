@@ -331,7 +331,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private val brokenRemoteContextResource: Resource[IO, MonorepoContext] =
     tempDirResource.evalMap { repo =>
-      TestSupport.initRepoWithBrokenRemote(repo).map { vcs =>
+      initRepoWithBrokenRemote(repo).map { vcs =>
         val state = loadedState(repo, Seq(rootProject(repo)))
 
         MonorepoContext(
@@ -339,6 +339,33 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           vcs = Some(vcs),
           interactive = false
         )
+      }
+    }
+
+  private def initRepoWithBrokenRemote(repo: File): IO[Vcs] =
+    IO.blocking {
+      TestSupport.initGitRepo(repo)
+      sbt.IO.write(new File(repo, "file.txt"), "initial")
+      TestSupport.runGit(repo, "add", ".")
+      TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+      TestSupport.runGit(repo, "branch", "-M", "main")
+      TestSupport.runGit(
+        repo,
+        "remote",
+        "add",
+        "origin",
+        new File(repo, "missing-remote.git").getAbsolutePath
+      )
+      TestSupport.runGit(repo, "config", "branch.main.remote", "origin")
+      TestSupport.runGit(repo, "config", "branch.main.merge", "refs/heads/main")
+      repo
+    }.flatMap { initialized =>
+      Vcs.detect(initialized).flatMap {
+        case Some(vcs) => IO.pure(vcs)
+        case None      =>
+          IO.raiseError(
+            new RuntimeException(s"Failed to detect VCS in ${initialized.getAbsolutePath}")
+          )
       }
     }
 
