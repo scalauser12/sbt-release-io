@@ -14,7 +14,6 @@ import io.release.monorepo.MonorepoStepIO
 import io.release.monorepo.SelectionMode
 import io.release.monorepo.steps.MonorepoVersionStepsSpec.VersionFixture
 import munit.CatsEffectSuite
-import sbt.{Def, State}
 
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger

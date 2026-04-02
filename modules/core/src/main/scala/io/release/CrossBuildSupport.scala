@@ -63,7 +63,7 @@ private[release] object CrossBuildSupport {
   /** Check if a setting is Scala-related state (`scalaVersion`, `scalaHome`). */
   private def isScalaSetting(s: Setting[?]): Boolean =
     s.key match {
-      case ScopedKey(Scope(_, Zero, Zero, _), key)
+      case ScopedKey(Scope(_, _, Zero, _), key)
           if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>
         true
       case _ => false

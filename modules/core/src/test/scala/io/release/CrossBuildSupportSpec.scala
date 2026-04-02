@@ -3,11 +3,8 @@ package io.release
 import cats.effect.IO
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
+import sbt.*
 import sbt.Keys.*
-import sbt.LocalProject
-import sbt.Project
-import sbt.ProjectRef
-import sbt.State
 
 import java.io.File
 
@@ -76,6 +73,20 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
         .get(extracted.structure.data)
         .flatten
         .orElse((sbt.GlobalScope / scalaHome).get(extracted.structure.data).flatten)
+    }
+
+  private def projectTestScalaVersionOf(state: State, ref: ProjectRef): IO[Option[String]] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+      (ref / sbt.Test / scalaVersion).get(extracted.structure.data)
+    }
+
+  private def projectTestScalaHomeOf(state: State, ref: ProjectRef): IO[Option[File]] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+      (ref / sbt.Test / scalaHome)
+        .get(extracted.structure.data)
+        .flatten
     }
 
   private def projectNameOf(state: State, ref: ProjectRef): IO[String] =
@@ -157,6 +168,60 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       } yield {
         assertEquals(switchedVersion, Some(switchedScala))
         assertEquals(restoredVersion, None)
+        assertEquals(restoredName, retainedName)
+      }
+    }
+  }
+
+  test(
+    "switchScalaVersion plus restoreEntryScalaSession restore config-scoped Scala settings and keep current non-Scala session settings"
+  ) {
+    val retainedName  = "core-from-current-session"
+    val overrideScala = TestSupport.alternateScalaVersion
+    val switchedScala = TestSupport.CurrentScalaVersion
+
+    stateResource("cross-build-support-config-session-restore").use { baseState =>
+      val coreRef        = SbtRuntime.extracted(baseState).currentRef
+      val entryScalaHome =
+        new File(SbtRuntime.extracted(baseState).get(baseDirectory), "scala-home-test-entry")
+      val entryState     = TestSupport.appendSessionSettings(
+        baseState,
+        Seq(
+          coreRef / sbt.Test / scalaVersion := overrideScala,
+          coreRef / sbt.Test / scalaHome    := Some(entryScalaHome)
+        )
+      )
+
+      for {
+        switchedState     <- CrossBuildSupport.switchScalaVersion(entryState, switchedScala)
+        switchedVersion   <- projectTestScalaVersionOf(switchedState, coreRef)
+        switchedHome      <- projectTestScalaHomeOf(switchedState, coreRef)
+        currentState       = TestSupport.appendSessionSettings(
+                               switchedState,
+                               Seq(coreRef / name := retainedName)
+                             )
+        currentName       <- projectNameOf(currentState, coreRef)
+        restoredState     <- CrossBuildSupport.restoreEntryScalaSession(
+                               entryState,
+                               currentState
+                             )
+        restoredVersion   <- projectTestScalaVersionOf(restoredState, coreRef)
+        restoredHome      <- projectTestScalaHomeOf(restoredState, coreRef)
+        restoredName      <- projectNameOf(restoredState, coreRef)
+      } yield {
+        assertEquals(
+          switchedVersion,
+          Some(switchedScala),
+          "switchScalaVersion should clear the config-scoped scalaVersion session override"
+        )
+        assertEquals(
+          switchedHome,
+          None,
+          "switchScalaVersion should clear the config-scoped scalaHome session override"
+        )
+        assertEquals(currentName, retainedName)
+        assertEquals(restoredVersion, Some(overrideScala))
+        assertEquals(restoredHome, Some(entryScalaHome))
         assertEquals(restoredName, retainedName)
       }
     }

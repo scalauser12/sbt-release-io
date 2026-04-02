@@ -65,12 +65,7 @@ private[release] object CrossBuildExecution {
     for {
       _        <- runtime.logIteration(currentCtx, logMessageForVersion(version))
       switched <- runtime.switchToVersion(currentCtx, version)
-      result   <- action(switched).attempt
-                    .flatMap {
-                      case Right(nextCtx) => IO.pure(nextCtx)
-                      case Left(err)      => IO.raiseError(err)
-                    }
-                    .flatMap(runtime.detectIterationFailure)
+      result   <- action(switched).flatMap(runtime.detectIterationFailure)
     } yield result
 
   private def restoreAfterCompletion[C](

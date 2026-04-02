@@ -43,7 +43,7 @@ private[monorepo] object MonorepoStepTestCompat {
 
   def failureCommandVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
     project / ReleaseIO.releaseIOVersioningReleaseVersion := {
-      Def
+      val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>
           state.copy(
@@ -58,7 +58,7 @@ private[monorepo] object MonorepoStepTestCompat {
 
   def failureCommandNextVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
     project / ReleaseIO.releaseIOVersioningNextVersion := {
-      Def
+      val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>
           state.copy(
@@ -77,7 +77,7 @@ private[monorepo] object MonorepoStepTestCompat {
     value: String
   ): Setting[?] =
     project / ReleaseIO.releaseIOVersioningNextVersion := {
-      Def
+      val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>
           state.put(key, value)

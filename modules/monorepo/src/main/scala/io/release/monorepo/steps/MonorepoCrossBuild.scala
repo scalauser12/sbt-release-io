@@ -80,14 +80,8 @@ private[monorepo] object MonorepoCrossBuild {
       enableCrossBuild: Boolean
   ): IO[MonorepoContext] =
     if (crossBuild && enableCrossBuild)
-      foldCurrentProjects(
-        ctx,
-        (currentCtx, currentProject) =>
-          runCrossBuildForProject(
-            currentCtx,
-            currentProject,
-            (innerCtx, _) => validate(innerCtx, currentProject)
-          )
+      foldCurrentProjects(ctx, (currentCtx, currentProject) =>
+        runCrossBuildForProject(currentCtx, currentProject, validate)
       )
     else
       foldCurrentProjects(ctx, validate)
@@ -115,11 +109,14 @@ private[monorepo] object MonorepoCrossBuild {
             s"$LogPrefix Cross-build enabled but ${project.name} has empty crossScalaVersions"
           )
         )
-      else
+      else {
+        def refreshedProject(currentCtx: MonorepoContext): ProjectReleaseInfo =
+          latestProject(currentCtx, project)
+
         CrossBuildExecution.runVersions(
           initialCtx = ctx,
           crossVersions = crossVersions,
-          action = currentCtx => action(currentCtx, project),
+          action = currentCtx => action(currentCtx, refreshedProject(currentCtx)),
           logMessageForVersion =
             version => s"$LogPrefix Cross-building ${project.name} with Scala $version",
           runtime = CrossBuildExecution.LoopRuntime[MonorepoContext](
@@ -130,8 +127,11 @@ private[monorepo] object MonorepoCrossBuild {
               CrossBuildSupport
                 .restoreEntryScalaSession(entryState, currentCtx.state)
                 .map(currentCtx.withState),
-            detectIterationFailure =
-              currentCtx => MonorepoStepHelpers.detectProjectFailureCommand(currentCtx, project),
+            detectIterationFailure = currentCtx =>
+              MonorepoStepHelpers.detectProjectFailureCommand(
+                currentCtx,
+                refreshedProject(currentCtx)
+              ),
             shouldStop = currentCtx => shouldSkipProject(currentCtx, project),
             onRestoreAfterCompletionFailure = (currentCtx, restoreErr) =>
               CrossBuildExecution.raiseRestoreFailure(
@@ -142,5 +142,6 @@ private[monorepo] object MonorepoCrossBuild {
               )
           )
         )
+      }
     }
 }

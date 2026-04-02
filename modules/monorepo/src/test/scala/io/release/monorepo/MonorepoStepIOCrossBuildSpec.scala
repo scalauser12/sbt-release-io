@@ -401,6 +401,106 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
     }
   }
 
+  test("compose - cross-build execute uses the latest project snapshot on later versions") {
+    loadedContextResource("monorepo-step-cross-execute-latest-project", Seq("core")) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"))
+          .settings(scalaVersion := TestSupport.CurrentScalaVersion),
+        Project("core", coreBase).settings(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion
+          )
+        )
+      )
+    }.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val step = MonorepoStepIO.PerProject(
+          name = "cross-step",
+          execute = (c, project) =>
+            scalaVersionOf(c.state).flatMap { version =>
+              observed.update(_ :+ s"$version:${project.tagName.getOrElse("missing")}") *>
+                (if (version == TestSupport.CurrentScalaVersion)
+                   IO.pure(c.updateProject(project.ref)(_.copy(tagName = Some("updated"))))
+                 else
+                   IO.pure(c))
+            },
+          enableCrossBuild = true
+        )
+
+        MonorepoStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+          observed.get.map { obs =>
+            val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
+            assertEquals(
+              obs,
+              List(
+                s"${TestSupport.CurrentScalaVersion}:missing",
+                s"${TestSupport.alternateScalaVersion}:updated"
+              )
+            )
+            assertEquals(project.tagName, Some("updated"))
+          }
+        }
+      }
+    }
+  }
+
+  test("compose - cross-build validation uses the latest project snapshot on later versions") {
+    loadedContextResource("monorepo-step-cross-validate-latest-project", Seq("core")) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"))
+          .settings(scalaVersion := TestSupport.CurrentScalaVersion),
+        Project("core", coreBase).settings(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion
+          )
+        )
+      )
+    }.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val step = MonorepoStepIO.PerProject(
+          name = "cross-step",
+          execute = (c, _) => IO.pure(c),
+          validateWithContext = Some((c, project) =>
+            scalaVersionOf(c.state).flatMap { version =>
+              observed.update(_ :+ s"$version:${project.tagName.getOrElse("missing")}") *>
+                (if (version == TestSupport.CurrentScalaVersion)
+                   IO.pure(c.updateProject(project.ref)(_.copy(tagName = Some("validated"))))
+                 else
+                   IO.pure(c))
+            }
+          ),
+          enableCrossBuild = true
+        )
+
+        MonorepoStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+          observed.get.map { obs =>
+            val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
+            assertEquals(
+              obs,
+              List(
+                s"${TestSupport.CurrentScalaVersion}:missing",
+                s"${TestSupport.alternateScalaVersion}:validated"
+              )
+            )
+            assertEquals(project.tagName, Some("validated"))
+          }
+        }
+      }
+    }
+  }
+
   test("compose - per-project validation returning ctx.failWith stops later projects") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
