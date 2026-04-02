@@ -100,17 +100,6 @@ private[release] object ReleaseComposer {
           .restoreEntryScalaSession(entryState, currentCtx.state)
           .map(currentCtx.withState)
 
-      def logRestoreAfterActionFailure(
-          currentCtx: ReleaseContext,
-          restoreErr: Throwable
-      ): IO[Unit] =
-        IO.blocking {
-          currentCtx.state.log.error(
-            s"$LogPrefix Failed to restore the entry Scala settings after a cross-build failure: " +
-              s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
-          )
-        }
-
       def logRestoreAfterCompletionFailure(
           currentCtx: ReleaseContext,
           restoreErr: Throwable
@@ -146,13 +135,6 @@ private[release] object ReleaseComposer {
           restoreEntry = restoreEntry,
           detectIterationFailure = detectIterationFailure,
           shouldStop = _.failed,
-          onRestoreAfterActionFailure = (currentCtx, err, restoreErr) =>
-            CrossBuildExecution.rethrowWithRestoreFailure(
-              currentCtx,
-              err,
-              restoreErr,
-              logRestoreAfterActionFailure
-            ),
           onRestoreAfterCompletionFailure = (currentCtx, restoreErr) =>
             CrossBuildExecution.raiseRestoreFailure(
               currentCtx,

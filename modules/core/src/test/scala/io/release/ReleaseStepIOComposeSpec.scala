@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.CrossBuildExecution
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
@@ -242,17 +241,6 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           assertEquals(result.metadata(executionKey), Some(false))
         }
       }
-    }
-  }
-
-  test("attachSuppressed - keep the original failure primary and record the restore failure") {
-    IO {
-      val original = new RuntimeException("boom")
-      val restore  = new IllegalStateException("restore failed")
-      val combined = CrossBuildExecution.attachSuppressed(original, restore)
-
-      assertEquals(combined, original)
-      assertEquals(combined.getSuppressed.toSeq, Seq(restore))
     }
   }
 

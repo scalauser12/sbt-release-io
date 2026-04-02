@@ -20,33 +20,6 @@ import java.io.PrintStream
 
 class MonorepoCrossBuildSpec extends CatsEffectSuite {
 
-  test(
-    "rethrowWithRestoreFailure - keep the original failure primary and log the restore failure"
-  ) {
-    TestSupport.tempDirResource("monorepo-cross-build").use { dir =>
-      IO.blocking {
-        val consoleBuffer = new ByteArrayOutputStream()
-        val ctx           = MonorepoContext(state = bufferedState(dir, consoleBuffer))
-        val original      = new RuntimeException("action boom")
-        val restore       = new IllegalStateException("restore boom")
-        (ctx, original, restore, consoleBuffer)
-      }.flatMap { case (ctx, original, restore, consoleBuffer) =>
-        MonorepoCrossBuild.rethrowWithRestoreFailure(ctx, original, restore).attempt.flatMap {
-          case Left(err) =>
-            IO.blocking {
-              assertEquals(err, original)
-              assertEquals(err.getSuppressed.toSeq, Seq(restore))
-              val log = consoleBuffer.toString("UTF-8")
-              assert(log.contains("Failed to restore the entry Scala settings"))
-              assert(log.contains("restore boom"))
-            }
-          case Right(_)  =>
-            fail("Expected the original failure to be rethrown")
-        }
-      }
-    }
-  }
-
   test("multi-version cross-build logs include the project name") {
     MonorepoSpecSupport
       .loadedFixtureResource("monorepo-cross-build-log") { dir =>

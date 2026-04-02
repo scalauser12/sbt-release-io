@@ -69,6 +69,33 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 
+  test("compose - per-project validation returning ctx.failWith skips execute and later projects") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val pCtx = ctx.withProjects(Seq(dummyProject("core"), dummyProject("api")))
+        val step = MonorepoStepIO.PerProject(
+          name = "validate-fail-with-step",
+          validateWithContext = Some((currentCtx, project) =>
+            observed.update(_ :+ s"validate:${project.name}").as {
+              if (project.name == "core")
+                currentCtx.failWith(new RuntimeException("fatal stop"))
+              else currentCtx
+            }
+          ),
+          execute = (currentCtx, project) =>
+            observed.update(_ :+ s"execute:${project.name}").as(currentCtx)
+        )
+
+        MonorepoStepIO.compose(Seq(step))(pCtx).flatMap { result =>
+          observed.get.map { obs =>
+            assert(result.failed)
+            assertEquals(obs, List("validate:core"))
+          }
+        }
+      }
+    }
+  }
+
   test("compose - batch-validate then execute selected projects after the selection boundary") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>

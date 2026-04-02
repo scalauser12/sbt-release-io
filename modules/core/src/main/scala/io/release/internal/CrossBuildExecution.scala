@@ -16,26 +16,8 @@ private[release] object CrossBuildExecution {
       restoreEntry: C => IO[C],
       detectIterationFailure: C => IO[C],
       shouldStop: C => Boolean,
-      onRestoreAfterActionFailure: (C, Throwable, Throwable) => IO[C],
       onRestoreAfterCompletionFailure: (C, Throwable) => IO[C]
   )
-
-  def attachSuppressed(
-      original: Throwable,
-      suppressed: Throwable
-  ): Throwable = {
-    original.addSuppressed(suppressed)
-    original
-  }
-
-  def rethrowWithRestoreFailure[C](
-      ctx: C,
-      original: Throwable,
-      restoreFailure: Throwable,
-      logRestoreFailure: (C, Throwable) => IO[Unit]
-  ): IO[C] =
-    logRestoreFailure(ctx, restoreFailure) *>
-      IO.raiseError(attachSuppressed(original, restoreFailure))
 
   def raiseRestoreFailure[C](
       ctx: C,
@@ -86,12 +68,7 @@ private[release] object CrossBuildExecution {
       result   <- action(switched).attempt
                     .flatMap {
                       case Right(nextCtx) => IO.pure(nextCtx)
-                      case Left(err)      =>
-                        runtime.restoreEntry(switched).attempt.flatMap {
-                          case Right(_)         => IO.raiseError(err)
-                          case Left(restoreErr) =>
-                            runtime.onRestoreAfterActionFailure(switched, err, restoreErr)
-                        }
+                      case Left(err)      => IO.raiseError(err)
                     }
                     .flatMap(runtime.detectIterationFailure)
     } yield result

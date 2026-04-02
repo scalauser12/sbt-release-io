@@ -12,7 +12,7 @@ import sbt.{internal as _, *}
 /** Cross-build executor for monorepo per-project steps.
   *
   * When cross-build is active, each project's action is executed once per
-  * distinct `crossScalaVersions` value with Scala version switching and restore-on-error.
+  * distinct `crossScalaVersions` value with Scala version switching and restore-on-completion.
   * FailureCommand detection and project-failure short-circuiting are handled
   * uniformly for both the project loop and the version loop.
   */
@@ -46,17 +46,6 @@ private[monorepo] object MonorepoCrossBuild {
       }
     }
 
-  private def logRestoreAfterActionFailure(
-      ctx: MonorepoContext,
-      restoreFailure: Throwable
-  ): IO[Unit] =
-    IO.blocking {
-      ctx.state.log.error(
-        s"$LogPrefix Failed to restore the entry Scala settings after a cross-build failure: " +
-          s"${Option(restoreFailure.getMessage).getOrElse(restoreFailure.toString)}"
-      )
-    }
-
   private def logRestoreAfterCompletionFailure(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
@@ -68,18 +57,6 @@ private[monorepo] object MonorepoCrossBuild {
           s"${project.name}: ${Option(restoreFailure.getMessage).getOrElse(restoreFailure.toString)}"
       )
     }
-
-  private[monorepo] def rethrowWithRestoreFailure(
-      ctx: MonorepoContext,
-      original: Throwable,
-      restoreFailure: Throwable
-  ): IO[MonorepoContext] =
-    CrossBuildExecution.rethrowWithRestoreFailure(
-      ctx,
-      original,
-      restoreFailure,
-      logRestoreAfterActionFailure
-    )
 
   /** Run a per-project action with optional cross-build iteration. */
   def runPerProjectWithCrossBuild(
@@ -156,8 +133,6 @@ private[monorepo] object MonorepoCrossBuild {
             detectIterationFailure =
               currentCtx => MonorepoStepHelpers.detectProjectFailureCommand(currentCtx, project),
             shouldStop = currentCtx => shouldSkipProject(currentCtx, project),
-            onRestoreAfterActionFailure = (currentCtx, err, restoreErr) =>
-              rethrowWithRestoreFailure(currentCtx, err, restoreErr),
             onRestoreAfterCompletionFailure = (currentCtx, restoreErr) =>
               CrossBuildExecution.raiseRestoreFailure(
                 currentCtx,

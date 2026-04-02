@@ -35,10 +35,13 @@ private[release] object StepExecutionSupport {
   ): IO[C] =
     for {
       validatedCtx <- runValidationPhase(logPrefix, steps, startCtx)
-      resultCtx    <- ExecutionEngine.runActions(
-                        steps.map(actionStep),
-                        armOnFailure(validatedCtx)
-                      )
+      resultCtx    <-
+        if (validatedCtx.failed) IO.pure(validatedCtx)
+        else
+          ExecutionEngine.runActions(
+            steps.map(actionStep),
+            armOnFailure(validatedCtx)
+          )
     } yield resultCtx
 
   def runSequentialValidateThenExecute[C <: ReleaseCtx[C]](
@@ -53,7 +56,9 @@ private[release] object StepExecutionSupport {
         else {
           for {
             validatedCtx <- step.validate(currentCtx)
-            nextCtx      <- runSingleStepAction(step, validatedCtx, armOnFailure)
+            nextCtx      <-
+              if (hasFailed(validatedCtx)) IO.pure(validatedCtx)
+              else runSingleStepAction(step, validatedCtx, armOnFailure)
           } yield nextCtx
         }
       }
