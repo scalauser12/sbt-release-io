@@ -53,7 +53,7 @@ private[release] object CoreCommandExecution {
       cleanState,
       args,
       warnOnDuplicates = true,
-      interactiveEnabled = runtime.resolveInteractiveEnabled(state),
+      interactiveEnabled = runtime.resolveInteractiveEnabled(cleanState),
       runtime
     )
     val program    = runPlannedRelease(inputs, runtime)

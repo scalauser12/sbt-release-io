@@ -59,7 +59,13 @@ private[monorepo] object MonorepoCommandExecution {
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    runMonorepoCommand(state, args, runtime, interactiveEnabled = true) { (command, session) =>
+    runMonorepoCommand(
+      state,
+      args,
+      runtime,
+      interactiveEnabled = true,
+      warnOnDuplicates = true
+    ) { (command, session) =>
       runPlannedRelease(command, session, runtime)
     }
 
@@ -68,7 +74,13 @@ private[monorepo] object MonorepoCommandExecution {
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    runMonorepoCommand(state, args, runtime, interactiveEnabled = false) { (command, session) =>
+    runMonorepoCommand(
+      state,
+      args,
+      runtime,
+      interactiveEnabled = false,
+      warnOnDuplicates = false
+    ) { (command, session) =>
       runPlannedCheck(command, session, runtime)
     }
 
@@ -153,11 +165,12 @@ private[monorepo] object MonorepoCommandExecution {
       cleanState: State,
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T],
-      interactiveEnabled: Boolean
+      interactiveEnabled: Boolean,
+      warnOnDuplicates: Boolean
   ): IO[Either[State, PlannedCommand]] =
     for {
       flags   <- IO.blocking(resolveFlags(cleanState, args, runtime, interactiveEnabled))
-      defaults = resolveDecisionDefaults(cleanState, args)
+      defaults = resolveDecisionDefaults(cleanState, args, warnOnDuplicates)
       planned <- MonorepoReleasePlan.build(
                    cleanState,
                    plannerInputs(args, flags, defaults, runtime.commandName)
@@ -168,14 +181,16 @@ private[monorepo] object MonorepoCommandExecution {
       state: State,
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T],
-      interactiveEnabled: Boolean
+      interactiveEnabled: Boolean,
+      warnOnDuplicates: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
     val cleanState         = CommandRuntimeSupport.cleanReleaseState(state, loadedProjectRefs(state))
     val program: IO[State] = prepareCommand(
       cleanState,
       args,
       runtime,
-      interactiveEnabled
+      interactiveEnabled,
+      warnOnDuplicates
     ).flatMap {
       case Left(failedState) => IO.pure(failedState)
       case Right(command)    =>
@@ -278,9 +293,10 @@ private[monorepo] object MonorepoCommandExecution {
   ): Unit =
     releaseStartLines(stepCount, projectCount, flags).foreach(line => state.log.info(line))
 
-  private def resolveDecisionDefaults(
+  private[monorepo] def resolveDecisionDefaults(
       state: State,
-      args: Seq[MonorepoCli.Arg]
+      args: Seq[MonorepoCli.Arg],
+      warnOnDuplicates: Boolean
   ): ReleaseDecisionDefaults = {
     import MonorepoCli.Arg.*
 
@@ -293,35 +309,40 @@ private[monorepo] object MonorepoCommandExecution {
         ReleaseLogPrefixes.Monorepo,
         "default-tag-exists-answer",
         allArgs { case TagDefault(value) => value },
-        (value: String) => value
+        (value: String) => value,
+        warnOnDuplicates
       ),
       snapshotDependenciesAnswer = DecisionDefaultsSupport.resolveLast(
         state,
         ReleaseLogPrefixes.Monorepo,
         "default-snapshot-dependencies-answer",
         allArgs { case SnapshotDependenciesDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo
+        DecisionDefaultsSupport.renderYesNo,
+        warnOnDuplicates
       ),
       remoteCheckFailureAnswer = DecisionDefaultsSupport.resolveLast(
         state,
         ReleaseLogPrefixes.Monorepo,
         "default-remote-check-failure-answer",
         allArgs { case RemoteCheckFailureDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo
+        DecisionDefaultsSupport.renderYesNo,
+        warnOnDuplicates
       ),
       upstreamBehindAnswer = DecisionDefaultsSupport.resolveLast(
         state,
         ReleaseLogPrefixes.Monorepo,
         "default-upstream-behind-answer",
         allArgs { case UpstreamBehindDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo
+        DecisionDefaultsSupport.renderYesNo,
+        warnOnDuplicates
       ),
       pushAnswer = DecisionDefaultsSupport.resolveLast(
         state,
         ReleaseLogPrefixes.Monorepo,
         "default-push-answer",
         allArgs { case PushDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo
+        DecisionDefaultsSupport.renderYesNo,
+        warnOnDuplicates
       )
     )
 
