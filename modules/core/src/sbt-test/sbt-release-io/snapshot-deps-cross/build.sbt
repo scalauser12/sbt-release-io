@@ -19,11 +19,11 @@ libraryDependencies ++= {
     Nil
 }
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 // Skip publish and push steps
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {

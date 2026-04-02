@@ -51,13 +51,13 @@ lazy val root = (project in file("."))
   .settings(
     name := "cross-build-restore-test",
 
-    releaseIOMonorepoCrossBuild           := true,
-    releaseIOMonorepoBeforePublishHooks   := Seq(crossBuildMarkerHook),
-    releaseIOMonorepoBeforeNextVersionWriteHooks := Seq(checkRestoredVersionHook),
-    releaseIOIgnoreUntrackedFiles         := true,
-    releaseIOMonorepoEnablePush           := false,
-    releaseIOMonorepoEnableRunClean       := false,
-    releaseIOMonorepoEnableRunTests       := false,
+    releaseIOMonorepoBehaviorCrossBuild           := true,
+    releaseIOMonorepoHooksBeforePublish   := Seq(crossBuildMarkerHook),
+    releaseIOMonorepoHooksBeforeNextVersionWrite := Seq(checkRestoredVersionHook),
+    releaseIOVcsIgnoreUntrackedFiles         := true,
+    releaseIOMonorepoPolicyEnablePush           := false,
+    releaseIOMonorepoPolicyEnableRunClean       := false,
+    releaseIOMonorepoPolicyEnableRunTests       := false,
 
     checkAll := {
       // core was cross-built with both 2.13 and 2.12

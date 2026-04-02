@@ -48,8 +48,8 @@ object CustomStepExamples {
     * Run with: `sbt "releaseIO with-defaults"`
     */
   lazy val firstHookSettings: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOEnablePush := false,
-    ReleaseIO.releaseIOBeforeTagHooks += printBannerHook
+    ReleaseIO.releaseIOPolicyEnablePush := false,
+    ReleaseIO.releaseIOHooksBeforeTag += printBannerHook
   )
 
   /** A richer hook-based setup with policy toggles and a few semantic lifecycle hooks.
@@ -64,11 +64,11 @@ object CustomStepExamples {
     * }}}
     */
   lazy val customHookSettings: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOEnablePush := false,
-    ReleaseIO.releaseIOAfterCleanCheckHooks += validateBranchHook,
-    ReleaseIO.releaseIOAfterVersionResolutionHooks += generateChangelogHook,
-    ReleaseIO.releaseIOAfterTagHooks += optionalNotifyHook,
-    ReleaseIO.releaseIOAfterNextCommitHooks += markReleaseDoneHook
+    ReleaseIO.releaseIOPolicyEnablePush := false,
+    ReleaseIO.releaseIOHooksAfterCleanCheck += validateBranchHook,
+    ReleaseIO.releaseIOHooksAfterVersionResolution += generateChangelogHook,
+    ReleaseIO.releaseIOHooksAfterTag += optionalNotifyHook,
+    ReleaseIO.releaseIOHooksAfterNextCommit += markReleaseDoneHook
   )
 
   /** Recommended template for a safe local rehearsal with the compiled built-ins intact.
@@ -88,11 +88,11 @@ object CustomStepExamples {
     * }}}
     */
   lazy val rehearsalSettings: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOEnablePush     := false,
-    ReleaseIO.releaseIOEnablePublish  := false,
-    ReleaseIO.releaseIOEnableRunClean := false,
-    ReleaseIO.releaseIOAfterCleanCheckHooks += validateBranchHook,
-    ReleaseIO.releaseIOBeforeTagHooks += printBannerHook
+    ReleaseIO.releaseIOPolicyEnablePush     := false,
+    ReleaseIO.releaseIOPolicyEnablePublish  := false,
+    ReleaseIO.releaseIOPolicyEnableRunClean := false,
+    ReleaseIO.releaseIOHooksAfterCleanCheck += validateBranchHook,
+    ReleaseIO.releaseIOHooksBeforeTag += printBannerHook
   )
 
   val printBannerHook: ReleaseHookIO = ReleaseHookIO.action("print-banner")(_ =>

@@ -39,11 +39,11 @@ lazy val root = (project in file("."))
   .settings(
     name := "cross-build-empty-cross-test",
 
-    releaseIOMonorepoBeforePublishHooks := Seq(crossBuildMarkerHook),
-    releaseIOIgnoreUntrackedFiles       := true,
-    releaseIOMonorepoEnablePush         := false,
-    releaseIOMonorepoEnableRunClean     := false,
-    releaseIOMonorepoEnableRunTests     := false,
+    releaseIOMonorepoHooksBeforePublish := Seq(crossBuildMarkerHook),
+    releaseIOVcsIgnoreUntrackedFiles       := true,
+    releaseIOMonorepoPolicyEnablePush         := false,
+    releaseIOMonorepoPolicyEnableRunClean     := false,
+    releaseIOMonorepoPolicyEnableRunTests     := false,
 
     checkFailureArtifacts := {
       val coreBase         = file("core/marker")

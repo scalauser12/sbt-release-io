@@ -20,11 +20,11 @@ lazy val root = (project in file("."))
     name := "simple-monorepo-test",
 
     // Skip push and publish in tests
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
 
     // Ignore untracked files in tests
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     // Consolidated verification task
     checkAll := {

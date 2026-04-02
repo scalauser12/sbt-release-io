@@ -2,11 +2,11 @@ import sbt.IO
 
 name                          := "with-defaults-test"
 scalaVersion                  := "2.12.18"
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 // Skip push and publish in scripted tests
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 val checkContentsOfVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")

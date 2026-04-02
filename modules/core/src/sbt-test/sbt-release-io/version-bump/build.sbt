@@ -3,11 +3,11 @@ import scala.sys.process.*
 name         := "version-bump-test"
 scalaVersion := "2.12.18"
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 // Skip push and publish in tests
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 val checkVersionSbt = inputKey[Unit]("Assert version.sbt contains a specific version string")
 checkVersionSbt := {

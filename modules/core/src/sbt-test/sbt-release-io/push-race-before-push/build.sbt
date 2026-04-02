@@ -7,10 +7,10 @@ name := "push-race-before-push-test"
 
 scalaVersion := "2.12.18"
 
-releaseIOEnablePublish        := false
-releaseIOEnableRunClean       := false
-releaseIOEnableRunTests       := false
-releaseIOIgnoreUntrackedFiles := true
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnableRunClean       := false
+releaseIOPolicyEnableRunTests       := false
+releaseIOVcsIgnoreUntrackedFiles := true
 
 def runCommand(command: Seq[String]): Unit = {
   val exitCode = Process(command).!
@@ -45,7 +45,7 @@ def advanceRemoteHook: ReleaseHookIO =
     }
   }
 
-releaseIOBeforePushHooks := Seq(advanceRemoteHook)
+releaseIOHooksBeforePush := Seq(advanceRemoteHook)
 
 val checkRemoteUnchanged =
   taskKey[Unit]("Verify origin did not receive the release commit or release tag")

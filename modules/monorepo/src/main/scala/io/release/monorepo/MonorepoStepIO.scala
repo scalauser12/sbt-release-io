@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.internal.StepKernel
 
 /** A monorepo release step that can operate at global scope or per-project scope.
   *
@@ -21,69 +22,10 @@ sealed trait MonorepoStepIO {
 
 object MonorepoStepIO {
 
-  private type GlobalThreadedValidation     = MonorepoContext => IO[MonorepoContext]
+  private type GlobalThreadedValidation     =
+    StepKernel.ThreadedValidation[MonorepoContext]
   private type PerProjectThreadedValidation =
-    (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-
-  private def asThreadedValidation(
-      validate: MonorepoContext => IO[Unit]
-  ): GlobalThreadedValidation =
-    ctx => validate(ctx).as(ctx)
-
-  private def asThreadedValidation(
-      validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
-  ): PerProjectThreadedValidation =
-    (ctx, project) => validate(ctx, project).as(ctx)
-
-  private def appendThreadedValidation(
-      existing: Option[GlobalThreadedValidation],
-      next: GlobalThreadedValidation
-  ): Option[GlobalThreadedValidation] =
-    Some(existing.fold(next)(current => ctx => current(ctx).flatMap(next)))
-
-  private def appendThreadedValidation(
-      existing: Option[PerProjectThreadedValidation],
-      next: PerProjectThreadedValidation
-  ): Option[PerProjectThreadedValidation] =
-    Some(
-      existing.fold(next)(current =>
-        (ctx, project) => current(ctx, project).flatMap(updatedCtx => next(updatedCtx, project))
-      )
-    )
-
-  private def normalizedValidationPair(
-      validate: MonorepoContext => IO[Unit],
-      validateWithContext: Option[GlobalThreadedValidation]
-  ): (MonorepoContext => IO[Unit], Option[GlobalThreadedValidation]) =
-    validateWithContext match {
-      case None           => (validate, None)
-      case Some(threaded) =>
-        val composed = appendThreadedValidation(
-          Some(asThreadedValidation(validate)),
-          threaded
-        ).get
-        ((ctx: MonorepoContext) => composed(ctx).void, Some(composed))
-    }
-
-  private def normalizedValidationPair(
-      validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
-      validateWithContext: Option[PerProjectThreadedValidation]
-  ): (
-      (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
-      Option[PerProjectThreadedValidation]
-  ) =
-    validateWithContext match {
-      case None           => (validate, None)
-      case Some(threaded) =>
-        val composed = appendThreadedValidation(
-          Some(asThreadedValidation(validate)),
-          threaded
-        ).get
-        (
-          (ctx: MonorepoContext, project: ProjectReleaseInfo) => composed(ctx, project).void,
-          Some(composed)
-        )
-    }
+    StepKernel.ThreadedItemValidation[MonorepoContext, ProjectReleaseInfo]
 
   private[monorepo] def buildGlobal(
       name: String,
@@ -91,19 +33,8 @@ object MonorepoStepIO {
       validate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit,
       isSelectionBoundary: Boolean = false,
       validateWithContext: Option[GlobalThreadedValidation] = None
-  ): Global = {
-    val (normalizedValidate, normalizedValidateWithContext) = normalizedValidationPair(
-      validate,
-      validateWithContext
-    )
-    new Global(
-      name = name,
-      execute = execute,
-      validate = normalizedValidate,
-      isSelectionBoundary = isSelectionBoundary,
-      validateWithContext = normalizedValidateWithContext
-    )
-  }
+  ): Global =
+    new Global(name, execute, validate, isSelectionBoundary, validateWithContext)
 
   private[monorepo] def buildPerProject(
       name: String,
@@ -112,19 +43,8 @@ object MonorepoStepIO {
         (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit,
       enableCrossBuild: Boolean = false,
       validateWithContext: Option[PerProjectThreadedValidation] = None
-  ): PerProject = {
-    val (normalizedValidate, normalizedValidateWithContext) = normalizedValidationPair(
-      validate,
-      validateWithContext
-    )
-    new PerProject(
-      name = name,
-      execute = execute,
-      validate = normalizedValidate,
-      enableCrossBuild = enableCrossBuild,
-      validateWithContext = normalizedValidateWithContext
-    )
-  }
+  ): PerProject =
+    new PerProject(name, execute, validate, enableCrossBuild, validateWithContext)
 
   /** A step that runs once globally (e.g., check clean working dir, push changes).
     *
@@ -132,13 +52,55 @@ object MonorepoStepIO {
     *   setup (sequential validate-then-execute) and main (batch validation then execution)
     *   phases. Only the built-in `detect-or-select-projects` step should set this.
     */
-  case class Global(
+  case class Global private[monorepo] (
       name: String,
       execute: MonorepoContext => IO[MonorepoContext],
-      validate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit,
+      private val rawValidate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit,
       isSelectionBoundary: Boolean = false,
-      validateWithContext: Option[MonorepoContext => IO[MonorepoContext]] = None
+      private val rawValidateWithContext: Option[MonorepoContext => IO[MonorepoContext]] = None
   ) extends MonorepoStepIO {
+
+    private lazy val normalizedValidation =
+      StepKernel.normalizedValidationPair[MonorepoContext](rawValidate, rawValidateWithContext)
+
+    def validate: MonorepoContext => IO[Unit] =
+      normalizedValidation._1
+
+    def validateWithContext: Option[MonorepoContext => IO[MonorepoContext]] =
+      normalizedValidation._2
+
+    def copy(
+        name: String = this.name,
+        execute: MonorepoContext => IO[MonorepoContext] = this.execute,
+        validate: MonorepoContext => IO[Unit] = null,
+        isSelectionBoundary: Boolean = this.isSelectionBoundary,
+        validateWithContext: Option[MonorepoContext => IO[MonorepoContext]] = null
+    ): Global = {
+      val validateWasProvided            = validate != null
+      val validateWithContextWasProvided = validateWithContext != null
+
+      if (!validateWasProvided && !validateWithContextWasProvided)
+        new Global(name, execute, rawValidate, isSelectionBoundary, rawValidateWithContext)
+      else if (validateWasProvided && !validateWithContextWasProvided)
+        new Global(name, execute, validate, isSelectionBoundary, normalizedValidation._2)
+      else if (!validateWasProvided && validateWithContextWasProvided)
+        validateWithContext match {
+          case None       =>
+            new Global(name, execute, this.validate, isSelectionBoundary, None)
+          case Some(next) =>
+            val preservedValidation =
+              normalizedValidation._2.getOrElse(StepKernel.asThreadedValidation(this.validate))
+            new Global(
+              name,
+              execute,
+              (_ctx: MonorepoContext) => IO.unit,
+              isSelectionBoundary,
+              StepKernel.appendThreadedValidation(Some(preservedValidation), next)
+            )
+        }
+      else
+        new Global(name, execute, validate, isSelectionBoundary, validateWithContext)
+    }
 
     private[monorepo] def threadedValidation: MonorepoContext => IO[MonorepoContext] =
       validateWithContext.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
@@ -153,21 +115,91 @@ object MonorepoStepIO {
         validateWithContext: Option[GlobalThreadedValidation] = None
     ): Global =
       buildGlobal(name, execute, validate, isSelectionBoundary, validateWithContext)
+
+    def unapply(
+        step: Global
+    ): Option[
+      (
+          String,
+          MonorepoContext => IO[MonorepoContext],
+          MonorepoContext => IO[Unit],
+          Boolean,
+          Option[GlobalThreadedValidation]
+      )
+    ] =
+      Some(
+        (
+          step.name,
+          step.execute,
+          step.validate,
+          step.isSelectionBoundary,
+          step.validateWithContext
+        )
+      )
   }
 
   /** A step that runs once per selected project in topological order
     * (e.g., set version, publish, tag).
     */
-  case class PerProject(
+  case class PerProject private[monorepo] (
       name: String,
       execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
-      validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+      private val rawValidate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
         (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit,
       enableCrossBuild: Boolean = false,
-      validateWithContext: Option[
+      private val rawValidateWithContext: Option[
         (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
       ] = None
   ) extends MonorepoStepIO {
+
+    private lazy val normalizedValidation =
+      StepKernel.normalizedValidationPair[MonorepoContext, ProjectReleaseInfo](
+        rawValidate,
+        rawValidateWithContext
+      )
+
+    def validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+      normalizedValidation._1
+
+    def validateWithContext: Option[
+      (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+    ] =
+      normalizedValidation._2
+
+    def copy(
+        name: String = this.name,
+        execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] = this.execute,
+        validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] = null,
+        enableCrossBuild: Boolean = this.enableCrossBuild,
+        validateWithContext: Option[
+          (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+        ] = null
+    ): PerProject = {
+      val validateWasProvided            = validate != null
+      val validateWithContextWasProvided = validateWithContext != null
+
+      if (!validateWasProvided && !validateWithContextWasProvided)
+        new PerProject(name, execute, rawValidate, enableCrossBuild, rawValidateWithContext)
+      else if (validateWasProvided && !validateWithContextWasProvided)
+        new PerProject(name, execute, validate, enableCrossBuild, normalizedValidation._2)
+      else if (!validateWasProvided && validateWithContextWasProvided)
+        validateWithContext match {
+          case None       =>
+            new PerProject(name, execute, this.validate, enableCrossBuild, None)
+          case Some(next) =>
+            val preservedValidation =
+              normalizedValidation._2.getOrElse(StepKernel.asThreadedValidation(this.validate))
+            new PerProject(
+              name,
+              execute,
+              (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit,
+              enableCrossBuild,
+              StepKernel.appendThreadedValidation(Some(preservedValidation), next)
+            )
+        }
+      else
+        new PerProject(name, execute, validate, enableCrossBuild, validateWithContext)
+    }
 
     private[monorepo] def threadedValidation(
         ctx: MonorepoContext,
@@ -189,220 +221,220 @@ object MonorepoStepIO {
         validateWithContext: Option[PerProjectThreadedValidation] = None
     ): PerProject =
       buildPerProject(name, execute, validate, enableCrossBuild, validateWithContext)
+
+    def unapply(
+        step: PerProject
+    ): Option[
+      (
+          String,
+          (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
+          (MonorepoContext, ProjectReleaseInfo) => IO[Unit],
+          Boolean,
+          Option[PerProjectThreadedValidation]
+      )
+    ] =
+      Some(
+        (
+          step.name,
+          step.execute,
+          step.validate,
+          step.enableCrossBuild,
+          step.validateWithContext
+        )
+      )
   }
 
   // ── Builder API ──────────────────────────────────────────────────────
 
   /** Start building a global step. */
-  def global(name: String): GlobalBuilder = new GlobalBuilder(name, None, false)
+  def global(name: String): GlobalBuilder =
+    new GlobalBuilder(StepKernel.SingleBuilderState[MonorepoContext](name))
 
   /** Start building a per-project step. */
   def perProject(name: String): PerProjectBuilder =
-    new PerProjectBuilder(name, None, false)
+    new PerProjectBuilder(
+      StepKernel.ItemBuilderState[MonorepoContext, ProjectReleaseInfo](name)
+    )
 
   /** Start building a resource-aware global step. */
   def globalResource[T](name: String): ResourceGlobalBuilder[T] =
-    new ResourceGlobalBuilder[T](name, _ => None, false)
+    new ResourceGlobalBuilder[T](
+      StepKernel.SingleResourceBuilderState[T, MonorepoContext](name)
+    )
 
   /** Start building a resource-aware per-project step. */
   def perProjectResource[T](name: String): ResourcePerProjectBuilder[T] =
-    new ResourcePerProjectBuilder[T](name, _ => None, false)
+    new ResourcePerProjectBuilder[T](
+      StepKernel.ItemResourceBuilderState[T, MonorepoContext, ProjectReleaseInfo](name)
+    )
 
   /** Fluent builder for global steps. */
   final class GlobalBuilder private[MonorepoStepIO] (
-      private val name: String,
-      private val validateWithContextFn: Option[GlobalThreadedValidation],
-      private val selectionBoundary: Boolean
+      private val state: StepKernel.SingleBuilderState[MonorepoContext]
   ) {
 
-    private def appendValidation(f: GlobalThreadedValidation): GlobalBuilder =
-      new GlobalBuilder(
-        name,
-        appendThreadedValidation(validateWithContextFn, f),
-        selectionBoundary
-      )
-
     def withValidation(f: MonorepoContext => IO[Unit]): GlobalBuilder =
-      appendValidation(asThreadedValidation(f))
+      new GlobalBuilder(state.appendValidation(StepKernel.asThreadedValidation(f)))
 
     def withValidationContext(
         f: MonorepoContext => IO[MonorepoContext]
     ): GlobalBuilder =
-      appendValidation(f)
+      new GlobalBuilder(state.appendValidation(f))
 
     private[monorepo] def withSelectionBoundary: GlobalBuilder =
-      new GlobalBuilder(name, validateWithContextFn, true)
+      new GlobalBuilder(state.withFlag)
 
     def execute(f: MonorepoContext => IO[MonorepoContext]): Global =
       buildGlobal(
-        name = name,
+        name = state.name,
         execute = f,
-        isSelectionBoundary = selectionBoundary,
-        validateWithContext = validateWithContextFn
+        isSelectionBoundary = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
 
     def executeAction(f: MonorepoContext => IO[Unit]): Global =
       buildGlobal(
-        name = name,
+        name = state.name,
         execute = ctx => f(ctx).as(ctx),
-        isSelectionBoundary = selectionBoundary,
-        validateWithContext = validateWithContextFn
+        isSelectionBoundary = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
 
     def validateOnly: Global =
       buildGlobal(
-        name,
+        state.name,
         ctx => IO.pure(ctx),
-        isSelectionBoundary = selectionBoundary,
-        validateWithContext = validateWithContextFn
+        isSelectionBoundary = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
   }
 
   /** Fluent builder for per-project steps. */
   final class PerProjectBuilder private[MonorepoStepIO] (
-      private val name: String,
-      private val validateWithContextFn: Option[PerProjectThreadedValidation],
-      private val crossBuild: Boolean
+      private val state: StepKernel.ItemBuilderState[MonorepoContext, ProjectReleaseInfo]
   ) {
 
     def withCrossBuild: PerProjectBuilder =
-      new PerProjectBuilder(name, validateWithContextFn, true)
-
-    private def appendValidation(f: PerProjectThreadedValidation): PerProjectBuilder =
-      new PerProjectBuilder(name, appendThreadedValidation(validateWithContextFn, f), crossBuild)
+      new PerProjectBuilder(state.withFlag)
 
     def withValidation(
         f: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): PerProjectBuilder =
-      appendValidation(asThreadedValidation(f))
+      new PerProjectBuilder(state.appendValidation(StepKernel.asThreadedValidation(f)))
 
     def withValidationContext(
         f: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
     ): PerProjectBuilder =
-      appendValidation(f)
+      new PerProjectBuilder(state.appendValidation(f))
 
     def execute(
         f: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
     ): PerProject =
       buildPerProject(
-        name = name,
+        name = state.name,
         execute = f,
-        enableCrossBuild = crossBuild,
-        validateWithContext = validateWithContextFn
+        enableCrossBuild = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
 
     def executeAction(
         f: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): PerProject =
       buildPerProject(
-        name = name,
+        name = state.name,
         execute = (ctx, proj) => f(ctx, proj).as(ctx),
-        enableCrossBuild = crossBuild,
-        validateWithContext = validateWithContextFn
+        enableCrossBuild = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
 
     def validateOnly: PerProject =
       buildPerProject(
-        name = name,
+        name = state.name,
         execute = (ctx, _) => IO.pure(ctx),
-        enableCrossBuild = crossBuild,
-        validateWithContext = validateWithContextFn
+        enableCrossBuild = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
   }
 
   /** Fluent builder for resource-aware global steps. */
   final class ResourceGlobalBuilder[T] private[MonorepoStepIO] (
-      private val name: String,
-      private val validateWithContextFn: T => Option[GlobalThreadedValidation],
-      private val selectionBoundary: Boolean
+      private val state: StepKernel.SingleResourceBuilderState[T, MonorepoContext]
   ) {
 
-    private def appendValidation(
-        f: T => GlobalThreadedValidation
-    ): ResourceGlobalBuilder[T] =
-      new ResourceGlobalBuilder[T](
-        name,
-        resource => appendThreadedValidation(validateWithContextFn(resource), f(resource)),
-        selectionBoundary
-      )
-
     def withValidation(f: T => MonorepoContext => IO[Unit]): ResourceGlobalBuilder[T] =
-      appendValidation(resource => asThreadedValidation(f(resource)))
+      new ResourceGlobalBuilder[T](
+        state.appendValidation(resource => StepKernel.asThreadedValidation(f(resource)))
+      )
 
     def withValidationContext(
         f: T => MonorepoContext => IO[MonorepoContext]
     ): ResourceGlobalBuilder[T] =
-      appendValidation(f)
+      new ResourceGlobalBuilder[T](state.appendValidation(f))
 
     private[monorepo] def withSelectionBoundary: ResourceGlobalBuilder[T] =
-      new ResourceGlobalBuilder[T](name, validateWithContextFn, true)
+      new ResourceGlobalBuilder[T](state.withFlag)
 
     def execute(f: T => MonorepoContext => IO[MonorepoContext]): T => MonorepoStepIO =
       resource =>
         buildGlobal(
-          name = name,
+          name = state.name,
           execute = f(resource),
-          isSelectionBoundary = selectionBoundary,
-          validateWithContext = validateWithContextFn(resource)
+          isSelectionBoundary = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
 
     def executeAction(f: T => MonorepoContext => IO[Unit]): T => MonorepoStepIO =
       resource =>
         buildGlobal(
-          name = name,
+          name = state.name,
           execute = ctx => f(resource)(ctx).as(ctx),
-          isSelectionBoundary = selectionBoundary,
-          validateWithContext = validateWithContextFn(resource)
+          isSelectionBoundary = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
 
     def validateOnly: T => MonorepoStepIO =
       resource =>
         buildGlobal(
-          name = name,
+          name = state.name,
           execute = ctx => IO.pure(ctx),
-          isSelectionBoundary = selectionBoundary,
-          validateWithContext = validateWithContextFn(resource)
+          isSelectionBoundary = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
   }
 
   /** Fluent builder for resource-aware per-project steps. */
   final class ResourcePerProjectBuilder[T] private[MonorepoStepIO] (
-      private val name: String,
-      private val validateWithContextFn: T => Option[PerProjectThreadedValidation],
-      private val crossBuild: Boolean
+      private val state: StepKernel.ItemResourceBuilderState[
+        T,
+        MonorepoContext,
+        ProjectReleaseInfo
+      ]
   ) {
 
     def withCrossBuild: ResourcePerProjectBuilder[T] =
-      new ResourcePerProjectBuilder[T](name, validateWithContextFn, true)
-
-    private def appendValidation(
-        f: T => PerProjectThreadedValidation
-    ): ResourcePerProjectBuilder[T] =
-      new ResourcePerProjectBuilder[T](
-        name,
-        resource => appendThreadedValidation(validateWithContextFn(resource), f(resource)),
-        crossBuild
-      )
+      new ResourcePerProjectBuilder[T](state.withFlag)
 
     def withValidation(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): ResourcePerProjectBuilder[T] =
-      appendValidation(resource => asThreadedValidation(f(resource)))
+      new ResourcePerProjectBuilder[T](
+        state.appendValidation(resource => StepKernel.asThreadedValidation(f(resource)))
+      )
 
     def withValidationContext(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
     ): ResourcePerProjectBuilder[T] =
-      appendValidation(f)
+      new ResourcePerProjectBuilder[T](state.appendValidation(f))
 
     def execute(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
     ): T => MonorepoStepIO =
       resource =>
         buildPerProject(
-          name = name,
+          name = state.name,
           execute = f(resource),
-          enableCrossBuild = crossBuild,
-          validateWithContext = validateWithContextFn(resource)
+          enableCrossBuild = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
 
     def executeAction(
@@ -410,19 +442,19 @@ object MonorepoStepIO {
     ): T => MonorepoStepIO =
       resource =>
         buildPerProject(
-          name = name,
+          name = state.name,
           execute = (ctx, proj) => f(resource)(ctx, proj).as(ctx),
-          enableCrossBuild = crossBuild,
-          validateWithContext = validateWithContextFn(resource)
+          enableCrossBuild = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
 
     def validateOnly: T => MonorepoStepIO =
       resource =>
         buildPerProject(
-          name = name,
+          name = state.name,
           execute = (ctx, _) => IO.pure(ctx),
-          enableCrossBuild = crossBuild,
-          validateWithContext = validateWithContextFn(resource)
+          enableCrossBuild = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
   }
 

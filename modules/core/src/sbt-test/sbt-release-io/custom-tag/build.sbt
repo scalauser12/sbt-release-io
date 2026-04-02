@@ -4,13 +4,13 @@ name         := "custom-tag-test"
 scalaVersion := "2.12.18"
 
 // Custom tag name with prefix (version is evaluated at tag time via reapply)
-releaseIOTagName := s"release-${version.value}"
+releaseIOVcsTagName := s"release-${version.value}"
 
 // Skip push and publish steps in tests
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkCustomTag = taskKey[Unit]("Check that custom tag was created")
 checkCustomTag := {

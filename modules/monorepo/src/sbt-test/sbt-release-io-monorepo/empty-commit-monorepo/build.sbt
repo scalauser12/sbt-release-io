@@ -21,12 +21,12 @@ lazy val root = (project in file("."))
   .settings(
     name := "empty-commit-monorepo-test",
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkGitState := {
       // Expected commits:

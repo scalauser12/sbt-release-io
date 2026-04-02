@@ -3,6 +3,7 @@ package io.release
 import cats.effect.IO
 import cats.effect.Ref
 import munit.CatsEffectSuite
+import sbt.AttributeKey
 import sbt.Keys
 
 class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
@@ -88,6 +89,74 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
               )
             )
             assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+          }
+        }
+      }
+    }
+  }
+
+  test("compose - restore the entry state when no entry scalaVersion is defined") {
+    val metadataKey = AttributeKey[String]("cross-build-no-entry-scala-version")
+
+    loadedContextResource(
+      "release-step-io-no-entry-scala-version",
+      _.settings(
+        Keys.crossScalaVersions := Seq(
+          TestSupport.CurrentScalaVersion,
+          TestSupport.alternateScalaVersion
+        )
+      )
+    ).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val crossStep = ReleaseStepIO(
+          name = "cross-step",
+          validate =
+            c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"cross-validate:$v")),
+          execute =
+            c =>
+              scalaVersionOf(c.state).flatMap(v =>
+                observed.update(_ :+ s"cross-execute:$v").as(c.withMetadata(metadataKey, "kept"))
+              ),
+          enableCrossBuild = true
+        )
+        val plainStep = ReleaseStepIO(
+          name = "plain-step",
+          validate =
+            c =>
+              scopedScalaVersionOf(c.state)
+                .flatMap(v => observed.update(_ :+ s"plain-validate:$v")),
+          execute =
+            c =>
+              scopedScalaVersionOf(c.state).flatMap { v =>
+                if (c.metadata(metadataKey).contains("kept"))
+                  observed.update(_ :+ s"plain-execute:$v").as(c)
+                else
+                  IO.raiseError(new RuntimeException("missing metadata after restore"))
+              }
+        )
+
+        scopedScalaVersionOf(ctx.state).flatMap { initialVersion =>
+          ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
+            result =>
+              for {
+                events          <- observed.get
+                restoredVersion <- scopedScalaVersionOf(result.state)
+              } yield {
+                assertEquals(initialVersion, None)
+                assertEquals(restoredVersion, None)
+                assertEquals(
+                  events,
+                  List(
+                    s"cross-validate:${TestSupport.CurrentScalaVersion}",
+                    s"cross-validate:${TestSupport.alternateScalaVersion}",
+                    "plain-validate:None",
+                    s"cross-execute:${TestSupport.CurrentScalaVersion}",
+                    s"cross-execute:${TestSupport.alternateScalaVersion}",
+                    "plain-execute:None"
+                  )
+                )
+                assertEquals(result.metadata(metadataKey), Some("kept"))
+              }
           }
         }
       }

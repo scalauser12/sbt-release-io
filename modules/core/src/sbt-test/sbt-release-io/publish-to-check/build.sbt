@@ -27,6 +27,6 @@ checkVersionUnchanged := {
   assert(contents == expected, s"Expected version.sbt to remain '$expected' but got: $contents")
 }
 
-releaseIOEnablePush     := false
-releaseIOEnableRunClean := false
-releaseIOEnableRunTests := false
+releaseIOPolicyEnablePush     := false
+releaseIOPolicyEnableRunClean := false
+releaseIOPolicyEnableRunTests := false

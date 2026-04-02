@@ -30,13 +30,38 @@ private[release] object CrossBuildSupport {
         GlobalScope / Keys.scalaHome    := None
       )
 
-      val cleared      = session.mergeSettings.filterNot(crossExclude)
+      val cleared      = session.mergeSettings.filterNot(isScalaSessionSetting)
       val newStructure = LoadCompat.reapply(add ++ cleared, structure)
       Project.setProject(session, newStructure, state)
     }
 
-  /** Check if a setting should be excluded during cross-build (scalaVersion, scalaHome). */
-  private def crossExclude(s: Setting[?]): Boolean =
+  /** Resolve the entry Scala version for a project-like scope, falling back to global scope. */
+  def resolveEntryScalaVersion(extracted: Extracted, ref: ProjectRef): Option[String] =
+    (ref / Keys.scalaVersion)
+      .get(extracted.structure.data)
+      .orElse((GlobalScope / Keys.scalaVersion).get(extracted.structure.data))
+
+  /** Restore only the Scala-related session settings from the captured entry state.
+    * Keeps the current session's non-Scala settings intact while reapplying the entry
+    * `scalaVersion` / `scalaHome` slice.
+    */
+  def restoreEntryScalaSession(entryState: State, currentState: State): IO[State] =
+    IO.blocking {
+      val currentExtracted                     = Project.extract(currentState)
+      val entryExtracted                       = Project.extract(entryState)
+      import currentExtracted.*
+      implicit val showKey: Show[ScopedKey[?]] = currentExtracted.showKey
+
+      val currentSettingsWithoutScala = session.mergeSettings.filterNot(isScalaSessionSetting)
+      val entryScalaSettings          =
+        entryExtracted.session.mergeSettings.filter(isScalaSessionSetting)
+      val newStructure                =
+        LoadCompat.reapply(entryScalaSettings ++ currentSettingsWithoutScala, structure)
+      Project.setProject(session, newStructure, currentState)
+    }
+
+  /** Check if a setting is Scala-session state (`scalaVersion`, `scalaHome`). */
+  private def isScalaSessionSetting(s: Setting[?]): Boolean =
     s.key match {
       case ScopedKey(Scope(_, Zero, Zero, _), key)
           if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>

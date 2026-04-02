@@ -4,6 +4,11 @@ Use this page for starter `build.sbt` patterns and common configuration recipes.
 exhaustive settings and CLI catalog, see [Settings reference](reference.md). For a worked
 hook-first tutorial, see [Hook-first walkthrough](hook-first-walkthrough.md).
 
+Use the grouped `releaseIOBehavior*`, `releaseIODefaults*`, `releaseIOPolicy*`,
+`releaseIOHooks*`, `releaseIOVersioning*`, `releaseIOVcs*`, and `releaseIOPublish*` names in
+`build.sbt`. The older flat names remain as deprecated aliases, and `inspect` still prints the
+legacy sbt key labels in this release.
+
 ## Starter configuration
 
 In `build.sbt`:
@@ -13,11 +18,11 @@ import _root_.cats.effect.IO
 import _root_.io.release.ReleaseHookIO
 
 // Keep the built-in process and disable phases semantically
-releaseIOEnablePush    := false
-releaseIOEnablePublish := false
+releaseIOPolicyEnablePush    := false
+releaseIOPolicyEnablePublish := false
 
 // Add lifecycle hooks around the remaining phases
-releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-audit")(ctx =>
+releaseIOHooksBeforeTag += ReleaseHookIO.action("before-tag-audit")(ctx =>
   IO.blocking {
     val version = ctx.releaseVersion.getOrElse("unknown")
     ctx.state.log.info(s"[release-io] Auditing tag inputs for $version")
@@ -25,30 +30,30 @@ releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-audit")(ctx =>
 )
 
 // Enable cross-building by default
-releaseIOCrossBuild := true
+releaseIOBehaviorCrossBuild := true
 
 // Runtime flag: keep the publish step available, but skip it when the release runs
-releaseIOSkipPublish := true
+releaseIOBehaviorSkipPublish := true
 
 // Enable interactive prompts (disabled by default)
-releaseIOInteractive := true
+releaseIOBehaviorInteractive := true
 
 // Fail the remote reachability check if it hangs for too long
 releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(30).seconds
 
 // Custom version file reader (default parses `[ThisBuild /] version := "x.y.z"`)
-releaseIOReadVersion := (file =>
+releaseIOVersioningReadVersion := (file =>
   IO.blocking(sbt.IO.read(file).trim)
 )
 
 // Custom version file content (default produces `ThisBuild / version := "x.y.z"\n`)
-releaseIOVersionFileContents := ((_, version) =>
+releaseIOVersioningFileContents := ((_, version) =>
   IO.pure(s"$version\n")
 )
 ```
 
-`releaseIOEnablePublish := false` removes publish from the compiled hook-first lifecycle
-entirely, including `beforePublish` / `afterPublish` hooks. `releaseIOSkipPublish := true`
+`releaseIOPolicyEnablePublish := false` removes publish from the compiled hook-first lifecycle
+entirely, including `beforePublish` / `afterPublish` hooks. `releaseIOBehaviorSkipPublish := true`
 keeps the phase in the process shape but skips the publish action at execution time.
 
 ## Example: Persistent decision defaults
@@ -57,11 +62,11 @@ Use these shared settings when you want `build.sbt` to pre-answer the built-in
 confirmation and tag-conflict decisions during release runs.
 
 ```scala
-releaseIODefaultTagExistsAnswer := Some("a")
-releaseIODefaultSnapshotDependenciesAnswer := Some(false)
-releaseIODefaultRemoteCheckFailureAnswer := Some(false)
-releaseIODefaultUpstreamBehindAnswer := Some(false)
-releaseIODefaultPushAnswer := Some(true)
+releaseIODefaultsTagExistsAnswer := Some("a")
+releaseIODefaultsSnapshotDependenciesAnswer := Some(false)
+releaseIODefaultsRemoteCheckFailureAnswer := Some(false)
+releaseIODefaultsUpstreamBehindAnswer := Some(false)
+releaseIODefaultsPushAnswer := Some(true)
 ```
 
 ## Custom version formats
@@ -70,9 +75,9 @@ The default reader and writer assume a `version.sbt` file containing `[ThisBuild
 
 | Setting                        | Role                                                                               |
 | ------------------------------ | ---------------------------------------------------------------------------------- |
-| `releaseIOVersionFile`         | Path to the version file                                                           |
-| `releaseIOReadVersion`         | `File => IO[String]` — extract the version string from the file                    |
-| `releaseIOVersionFileContents` | `(File, String) => IO[String]` — returns the version file content to write to disk |
+| `releaseIOVersioningFile` | Path to the version file |
+| `releaseIOVersioningReadVersion` | `File => IO[String]` — extract the version string from the file |
+| `releaseIOVersioningFileContents` | `(File, String) => IO[String]` — returns the version file content to write to disk |
 
 The function receives the current file as its first argument, so it can read existing content and replace only the version line while preserving other fields.
 
@@ -90,10 +95,10 @@ Override the settings in `build.sbt`:
 ```scala
 import _root_.cats.effect.IO
 
-releaseIOVersionFile := baseDirectory.value / "version.properties"
+releaseIOVersioningFile := baseDirectory.value / "version.properties"
 
 // Parse app.version=x.y.z from the properties file
-releaseIOReadVersion := { (file: File) =>
+releaseIOVersioningReadVersion := { (file: File) =>
   IO.blocking(sbt.IO.read(file)).flatMap { contents =>
     val pattern = """app\.version=(.+)""".r
     pattern.findFirstMatchIn(contents) match {
@@ -106,7 +111,7 @@ releaseIOReadVersion := { (file: File) =>
 }
 
 // Replace only the app.version line, preserve everything else
-releaseIOVersionFileContents := { (file: File, ver: String) =>
+releaseIOVersioningFileContents := { (file: File, ver: String) =>
   IO.blocking(sbt.IO.read(file)).map { contents =>
     contents.linesIterator
       .map {

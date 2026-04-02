@@ -40,7 +40,7 @@ object ReleaseTestSupport {
       repo,
       Seq(
         Project("root", repo).settings(
-          (Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := false) ++ rootSettings)*
+          (Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false) ++ rootSettings)*
         )
       ),
       currentProjectId = Some("root")

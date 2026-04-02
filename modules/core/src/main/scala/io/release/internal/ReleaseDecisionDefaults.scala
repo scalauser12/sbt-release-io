@@ -27,14 +27,14 @@ private[release] object ReleaseDecisionDefaults {
     val extracted = Project.extract(state)
 
     ReleaseDecisionDefaults(
-      tagExistsAnswer = extracted.getOpt(ReleaseIO.releaseIODefaultTagExistsAnswer).flatten,
+      tagExistsAnswer = extracted.getOpt(ReleaseIO.releaseIODefaultsTagExistsAnswer).flatten,
       snapshotDependenciesAnswer =
-        extracted.getOpt(ReleaseIO.releaseIODefaultSnapshotDependenciesAnswer).flatten,
+        extracted.getOpt(ReleaseIO.releaseIODefaultsSnapshotDependenciesAnswer).flatten,
       remoteCheckFailureAnswer =
-        extracted.getOpt(ReleaseIO.releaseIODefaultRemoteCheckFailureAnswer).flatten,
+        extracted.getOpt(ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer).flatten,
       upstreamBehindAnswer =
-        extracted.getOpt(ReleaseIO.releaseIODefaultUpstreamBehindAnswer).flatten,
-      pushAnswer = extracted.getOpt(ReleaseIO.releaseIODefaultPushAnswer).flatten
+        extracted.getOpt(ReleaseIO.releaseIODefaultsUpstreamBehindAnswer).flatten,
+      pushAnswer = extracted.getOpt(ReleaseIO.releaseIODefaultsPushAnswer).flatten
     )
   }
 

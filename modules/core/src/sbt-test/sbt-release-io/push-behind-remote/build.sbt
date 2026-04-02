@@ -3,10 +3,10 @@ import scala.sys.process.*
 name         := "push-behind-remote-test"
 scalaVersion := "2.12.18"
 
-releaseIOEnablePublish        := false
-releaseIOEnableRunClean       := false
-releaseIOEnableRunTests       := false
-releaseIOIgnoreUntrackedFiles := true
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnableRunClean       := false
+releaseIOPolicyEnableRunTests       := false
+releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkNoReleaseSideEffects =
   taskKey[Unit]("Verify no version, commit, or tag changes happened after early push failure")

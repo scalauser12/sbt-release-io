@@ -7,7 +7,9 @@ import java.io.File
 
 class MonorepoVersionFilesSpec extends CatsEffectSuite {
 
-  test("resolve - use the monorepo per-project resolver instead of the root releaseIOVersionFile") {
+  test(
+    "resolve - use the monorepo per-project resolver instead of the root releaseIOVersioningFile"
+  ) {
     MonorepoSpecSupport
       .loadedFixtureResource("monorepo-version-files") { dir =>
         val coreBase               = new File(dir, "core")
@@ -22,8 +24,8 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             dir,
             projectIds = Seq("core"),
             settings = Seq(
-              io.release.ReleaseIO.releaseIOVersionFile      := rootVersionFile,
-              MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
+              io.release.ReleaseIO.releaseIOVersioningFile      := rootVersionFile,
+              MonorepoReleaseIO.releaseIOMonorepoVersioningFile := {
                 (_: sbt.ProjectRef, _: sbt.State) =>
                   monorepoProjectVersion
               }
@@ -33,7 +35,10 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             "core",
             coreBase,
             settings = Seq(
-              io.release.ReleaseIO.releaseIOVersionFile := new File(coreBase, "ignored-version.sbt")
+              io.release.ReleaseIO.releaseIOVersioningFile := new File(
+                coreBase,
+                "ignored-version.sbt"
+              )
             )
           )
         )

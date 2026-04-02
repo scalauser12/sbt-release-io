@@ -34,7 +34,7 @@ private[monorepo] object MonorepoVersionSteps {
     execute = ctx =>
       commitVersions(
         ctx,
-        MR.releaseIOMonorepoCommitMessage,
+        MR.releaseIOMonorepoVcsReleaseCommitMessage,
         { case (releaseVer, _) => releaseVer },
         persistReleaseHash = true
       )
@@ -46,7 +46,7 @@ private[monorepo] object MonorepoVersionSteps {
     execute = ctx =>
       commitVersions(
         ctx,
-        MR.releaseIOMonorepoNextCommitMessage,
+        MR.releaseIOMonorepoVcsNextCommitMessage,
         { case (_, nextVer) => nextVer },
         persistReleaseHash = false
       )

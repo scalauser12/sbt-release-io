@@ -51,11 +51,11 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                           := "publish-skip-eval-error-test",
-    releaseIOIgnoreUntrackedFiles  := true,
-    releaseIOMonorepoEnableSnapshotDependenciesCheck := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
     expectPublishSkipEvalFailure  := {
       val sbtVersionProp     = sbtVersion.value
       val pluginVersionProp  =

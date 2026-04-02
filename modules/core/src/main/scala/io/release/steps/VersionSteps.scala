@@ -47,8 +47,8 @@ private[release] object VersionSteps {
                       s"Could not parse version from ${file.getName}. " +
                         s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents\n""" +
                         "If you use a custom version file format, configure " +
-                        "`releaseIOVersionFile`, `releaseIOReadVersion`, and " +
-                        "`releaseIOVersionFileContents`. See `releaseIO help` for examples."
+                        "`releaseIOVersioningFile`, `releaseIOVersioningReadVersion`, and " +
+                        "`releaseIOVersioningFileContents`. See `releaseIO help` for examples."
                     )
                   )
     } yield result

@@ -183,13 +183,13 @@ private[monorepo] object MonorepoSelectionResolver {
       val runtime = MonorepoRuntime.fromState(state)
 
       DetectionSettings(
-        detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChanges),
+        detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionEnabled),
         includeDownstream =
-          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream),
-        customDetector = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoChangeDetector),
-        userExcludes =
-          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectChangesExcludes),
-        sharedPaths = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoSharedPaths)
+          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream),
+        customDetector =
+          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector),
+        userExcludes = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionExcludes),
+        sharedPaths = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionSharedPaths)
       )
     }
 
@@ -276,11 +276,11 @@ private[monorepo] object MonorepoSelectionResolver {
       }
       .mkString("; ")
 
-    "Duplicate configured monorepo project ids in releaseIOMonorepoProjects: " +
+    "Duplicate configured monorepo project ids in releaseIOMonorepoSelectionProjects: " +
       s"$duplicateNames. " +
       s"Conflicting live projects: $details. " +
       "Monorepo selectors and project=version overrides are name-based, " +
-      "so releaseIOMonorepoProjects must contain unique ref.project values."
+      "so releaseIOMonorepoSelectionProjects must contain unique ref.project values."
   }
 
   private def projectIdentity(project: ProjectReleaseInfo): String =

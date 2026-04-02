@@ -1,14 +1,14 @@
 package io.release.internal
 
 import cats.effect.IO
-import io.release.ReleaseIO.releaseIOSnapshotDependencies
+import io.release.ReleaseIO.releaseIODiagnosticsSnapshotDependencies
 import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
 import scala.util.control.NonFatal
 
-/** Evaluates `releaseIOSnapshotDependencies` for core (aggregated) vs monorepo (single project). */
+/** Evaluates `releaseIODiagnosticsSnapshotDependencies` for core (aggregated) vs monorepo (single project). */
 private[release] object SnapshotDependencyTasks {
 
   /** Aggregated snapshot dependencies from the current project (same semantics as core `PublishSteps`). */
@@ -17,7 +17,7 @@ private[release] object SnapshotDependencyTasks {
       val extracted   = SbtRuntime.extracted(state)
       val thisRef     = extracted.get(thisProjectRef)
       val (_, result) =
-        SbtCompat.runTaskAggregated(thisRef / releaseIOSnapshotDependencies, state)
+        SbtCompat.runTaskAggregated(thisRef / releaseIODiagnosticsSnapshotDependencies, state)
       StepHelpers.aggregatedTaskValues(result) match {
         case Left(incomplete) =>
           Left("Error checking for snapshot dependencies: " + incomplete)
@@ -33,7 +33,7 @@ private[release] object SnapshotDependencyTasks {
   ): IO[Seq[ModuleID]] =
     IO.blocking {
       val extracted = Project.extract(state)
-      extracted.runTask(ref / releaseIOSnapshotDependencies, state)._2
+      extracted.runTask(ref / releaseIODiagnosticsSnapshotDependencies, state)._2
     }.recoverWith { case NonFatal(cause) =>
       IO.raiseError(
         new IllegalStateException(

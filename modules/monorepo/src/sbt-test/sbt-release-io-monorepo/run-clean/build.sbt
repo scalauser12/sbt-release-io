@@ -44,10 +44,10 @@ lazy val root = (project in file("."))
   .settings(
     name := "run-clean-monorepo-test",
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkReleaseSelection := {
       val coreContents = IO.read(file("core/version.sbt"))

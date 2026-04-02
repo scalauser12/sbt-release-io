@@ -1,4 +1,4 @@
-# Test: releaseIOMonorepoPublishArtifactsChecks := false bypasses publishTo validation
+# Test: releaseIOMonorepoPublishChecks := false bypasses publishTo validation
 $ exec git init
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"

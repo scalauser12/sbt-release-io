@@ -49,6 +49,24 @@ private[monorepo] object MonorepoPreflight {
     }
   }
 
+  private final case class CheckSegments(
+      setupSteps: Seq[MonorepoProcessStep],
+      mainSteps: Seq[MonorepoProcessStep]
+  )
+
+  private object CheckSegments {
+    def apply(steps: Seq[MonorepoStepIO], crossBuild: Boolean): CheckSegments = {
+      val normalized    = MonorepoProcessStep.normalize(steps, crossBuild)
+      val boundaryIndex = normalized.indexWhere(_.isSelectionBoundary)
+
+      if (boundaryIndex < 0) CheckSegments(Seq.empty, normalized)
+      else {
+        val (setupSteps, mainSteps) = normalized.splitAt(boundaryIndex + 1)
+        CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
+      }
+    }
+  }
+
   sealed trait Evaluation[+A]
   object Evaluation {
     final case class Resolved[A](value: A)        extends Evaluation[A]
@@ -143,38 +161,110 @@ private[monorepo] object MonorepoPreflight {
       session: MonorepoPreparedSession,
       steps: Seq[MonorepoStepIO]
   ): IO[Summary] = {
-    val checkSteps = CheckSteps(steps)
+    val checkSteps    = CheckSteps(steps)
+    val checkSegments = CheckSegments(steps, session.flags.crossBuild)
 
     for {
-      baseCtx      <- resolveBaseContext(session.context, checkSteps)
-      selected     <- resolveSelection(baseCtx, session.plan, checkSteps.shouldResolveSelection)
-      withVersions <- resolveVersionSnapshot(selected.context, checkSteps.shouldResolveVersions)
-      tagOutcomes  <-
+      baseCtx <- resolveBaseContext(session.context, checkSteps)
+      summary <- if (checkSegments.setupSteps.nonEmpty)
+                   checkWithSelectionBoundary(
+                     baseCtx,
+                     session.plan,
+                     checkSegments,
+                     checkSteps,
+                     session.flags.crossBuild
+                   )
+                 else
+                   checkWithoutSelectionBoundary(
+                     baseCtx,
+                     checkSegments.mainSteps,
+                     checkSteps,
+                     session.flags.crossBuild
+                   )
+    } yield summary
+  }
+
+  private def checkWithSelectionBoundary(
+      baseCtx: MonorepoContext,
+      plan: MonorepoReleasePlan,
+      checkSegments: CheckSegments,
+      checkSteps: CheckSteps,
+      crossBuildEnabled: Boolean
+  ): IO[Summary] =
+    for {
+      setupValidated <- validateSegment(checkSegments.setupSteps)(baseCtx)
+      selected       <-
+        resolveSelection(setupValidated, plan, checkSteps.shouldResolveSelection)
+      withVersions   <- resolveVersionSnapshot(selected.context, checkSteps.shouldResolveVersions)
+      validatedCtx   <- validateSegment(checkSegments.mainSteps)(withVersions)
+      tagOutcomes    <-
         resolveTagSnapshot(
-          withVersions,
+          validatedCtx,
           checkSteps.shouldPreflightTags,
           checkSteps.shouldResolveVersions
         )
-      _            <- validateOnly(steps, session.flags.crossBuild)(withVersions)
-      projects     <-
-        renderProjects(
-          withVersions.currentProjects,
-          checkSteps.shouldResolveVersions,
-          tagOutcomes
-        )
-      summary       = Summary(
-                        selectionMode = selected.selectionMode,
-                        projects = projects,
-                        crossBuildEnabled = session.flags.crossBuild,
-                        publishSummary = CheckModeOutput.publishStatus(
-                          publishConfigured = checkSteps.publishConfigured,
-                          skipPublish = withVersions.skipPublish,
-                          skippedMessage = "skipped via releaseIOMonorepoSkipPublish := true"
-                        ),
-                        pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
-                        stepNames = checkSteps.stepNames
-                      )
+      summary        <- buildSummary(
+                          selectionMode = selected.selectionMode,
+                          ctx = validatedCtx,
+                          versionsResolved = checkSteps.shouldResolveVersions,
+                          tagOutcomes = tagOutcomes,
+                          checkSteps = checkSteps,
+                          crossBuildEnabled = crossBuildEnabled
+                        )
     } yield summary
+
+  private def checkWithoutSelectionBoundary(
+      baseCtx: MonorepoContext,
+      normalizedSteps: Seq[MonorepoProcessStep],
+      checkSteps: CheckSteps,
+      crossBuildEnabled: Boolean
+  ): IO[Summary] = {
+    val selectionMode =
+      Evaluation.NotEvaluated(s"$DetectOrSelectProjectsStep not in check process")
+
+    splitAtBuiltInVersionResolution(normalizedSteps) match {
+      case None                            =>
+        for {
+          validatedCtx <- validateSegment(normalizedSteps)(baseCtx)
+          tagOutcomes  <-
+            resolveTagSnapshot(
+              validatedCtx,
+              checkSteps.shouldPreflightTags,
+              builtInVersionsResolved = false
+            )
+          summary      <- buildSummary(
+                            selectionMode = selectionMode,
+                            ctx = validatedCtx,
+                            versionsResolved = false,
+                            tagOutcomes = tagOutcomes,
+                            checkSteps = checkSteps,
+                            crossBuildEnabled = crossBuildEnabled
+                          )
+        } yield summary
+
+      case Some((prefixSteps, suffixSteps)) =>
+        for {
+          prefixValidated <- validateSegment(prefixSteps)(baseCtx)
+          withVersions    <- resolveVersionSnapshot(prefixValidated, shouldResolveVersions = true)
+          validatedCtx    <- validateSegment(suffixSteps)(withVersions)
+          tagOutcomes     <-
+            resolveTagSnapshot(
+              validatedCtx,
+              checkSteps.shouldPreflightTags,
+              builtInVersionsResolved = builtInTagPreflightFollowsVersionResolution(
+                normalizedSteps
+              )
+            )
+          summary         <- buildSummary(
+                               selectionMode = selectionMode,
+                               ctx = validatedCtx,
+                               versionsResolved = true,
+                               tagOutcomes = tagOutcomes,
+                               checkSteps = checkSteps,
+                               crossBuildEnabled = crossBuildEnabled
+                             )
+        } yield summary
+    }
   }
 
   private def resolveBaseContext(
@@ -228,15 +318,55 @@ private[monorepo] object MonorepoPreflight {
     else
       MonorepoVcsSteps.preflightTags(ctx).map(Evaluation.Resolved(_))
 
-  private def validateOnly(
-      steps: Seq[MonorepoStepIO],
-      crossBuild: Boolean
+  private def validateSegment(
+      steps: Seq[MonorepoProcessStep]
   )(ctx: MonorepoContext): IO[MonorepoContext] =
     ExecutionEngine.runValidations(
       ReleaseLogPrefixes.Monorepo,
-      MonorepoProcessStep.normalize(steps, crossBuild).map(_.validationStep),
+      steps.map(_.validationStep),
       ctx
     )
+
+  private def splitAtBuiltInVersionResolution(
+      steps: Seq[MonorepoProcessStep]
+  ): Option[(Seq[MonorepoProcessStep], Seq[MonorepoProcessStep])] = {
+    val versionIndex = steps.indexWhere(_.name == InquireVersionsStep)
+
+    if (versionIndex < 0) None
+    else Some(steps.splitAt(versionIndex + 1))
+  }
+
+  private def builtInTagPreflightFollowsVersionResolution(
+      steps: Seq[MonorepoProcessStep]
+  ): Boolean = {
+    val versionIndex = steps.indexWhere(_.name == InquireVersionsStep)
+    val tagIndex     = steps.indexWhere(_.name == TagReleasesStep)
+
+    versionIndex >= 0 && tagIndex > versionIndex
+  }
+
+  private def buildSummary(
+      selectionMode: Evaluation[SelectionMode],
+      ctx: MonorepoContext,
+      versionsResolved: Boolean,
+      tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]],
+      checkSteps: CheckSteps,
+      crossBuildEnabled: Boolean
+  ): IO[Summary] =
+    renderProjects(ctx.currentProjects, versionsResolved, tagOutcomes).map { projects =>
+      Summary(
+        selectionMode = selectionMode,
+        projects = projects,
+        crossBuildEnabled = crossBuildEnabled,
+        publishSummary = CheckModeOutput.publishStatus(
+          publishConfigured = checkSteps.publishConfigured,
+          skipPublish = ctx.skipPublish,
+          skippedMessage = "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
+        ),
+        pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
+        stepNames = checkSteps.stepNames
+      )
+    }
 
   private[monorepo] def renderProjects(
       projects: Seq[ProjectReleaseInfo],

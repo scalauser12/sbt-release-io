@@ -33,7 +33,7 @@ import sbt.{internal as _, *}
   *
   * '''Do not add `object autoImport`''' to custom plugins. When both [[ReleasePluginIO]]
   * and a custom plugin define autoImport, the build gets ambiguous references
-  * (e.g. `reference to releaseIOBeforeTagHooks is ambiguous`). [[ReleasePluginIO]] is
+  * (e.g. `reference to releaseIOHooksBeforeTag is ambiguous`). [[ReleasePluginIO]] is
   * auto-enabled via `allRequirements`, so its keys are already in scope when
   * the custom plugin is enabled.
   */
@@ -55,20 +55,20 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     ReleaseResourceHooks.empty
 
   /** Whether cross-building is enabled (before command-line args are applied).
-    * Defaults to reading from the `releaseIOCrossBuild` setting.
+    * Defaults to reading from the `releaseIOBehaviorCrossBuild` setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOCrossBuild)
+    Project.extract(state).get(releaseIOBehaviorCrossBuild)
 
-  /** Whether to skip publish. Defaults to reading from the `releaseIOSkipPublish` setting. */
+  /** Whether to skip publish. Defaults to reading from the `releaseIOBehaviorSkipPublish` setting. */
   protected def skipPublishEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOSkipPublish)
+    Project.extract(state).get(releaseIOBehaviorSkipPublish)
 
   /** Whether interactive prompts are enabled.
-    * Defaults to reading from the `releaseIOInteractive` setting.
+    * Defaults to reading from the `releaseIOBehaviorInteractive` setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOInteractive)
+    Project.extract(state).get(releaseIOBehaviorInteractive)
 
   /** Base settings that include all default `releaseIO*` values plus command registration.
     * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`
@@ -80,32 +80,32 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] =
     CoreDefaultSettings.commandAndHookSettings ++ Seq(
-      releaseIOReadVersion            := ReleaseSteps.defaultReadVersion,
-      releaseIOVersionFileContents    := ReleaseSteps.defaultWriteVersion(
-        releaseIOUseGlobalVersion.value
+      releaseIOVersioningReadVersion    := ReleaseSteps.defaultReadVersion,
+      releaseIOVersioningFileContents   := ReleaseSteps.defaultWriteVersion(
+        releaseIOVersioningUseGlobal.value
       ),
-      releaseIOVersionFile            := baseDirectory.value / "version.sbt",
-      releaseIOUseGlobalVersion       := true,
-      releaseIOVcsSign                := false,
-      releaseIOVcsSignOff             := false,
-      releaseIOIgnoreUntrackedFiles   := false,
-      releaseIOInternalReleaseHash    := None,
-      releaseIOInternalReleaseTag     := None,
+      releaseIOVersioningFile           := baseDirectory.value / "version.sbt",
+      releaseIOVersioningUseGlobal      := true,
+      releaseIOVcsSign                  := false,
+      releaseIOVcsSignOff               := false,
+      releaseIOVcsIgnoreUntrackedFiles  := false,
+      releaseIOInternalReleaseHash      := None,
+      releaseIOInternalReleaseTag       := None,
       packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
         releaseIOInternalReleaseHash.value,
         releaseIOInternalReleaseTag.value
       ),
-      releaseIORuntimeVersion         := {
-        if (releaseIOUseGlobalVersion.value) (ThisBuild / Keys.version).value
+      releaseIORuntimeCurrentVersion    := {
+        if (releaseIOVersioningUseGlobal.value) (ThisBuild / Keys.version).value
         else Keys.version.value
       },
-      releaseIOTagName                := s"v${releaseIORuntimeVersion.value}",
-      releaseIOTagComment             := s"Releasing ${releaseIORuntimeVersion.value}",
-      releaseIOCommitMessage          := s"Setting version to ${releaseIORuntimeVersion.value}",
-      releaseIONextCommitMessage      := s"Setting version to ${releaseIORuntimeVersion.value}",
-      releaseIOVersionBump            := Version.Bump.default,
-      releaseIOVersion                := {
-        val bump = releaseIOVersionBump.value
+      releaseIOVcsTagName               := s"v${releaseIORuntimeCurrentVersion.value}",
+      releaseIOVcsTagComment            := s"Releasing ${releaseIORuntimeCurrentVersion.value}",
+      releaseIOVcsReleaseCommitMessage  := s"Setting version to ${releaseIORuntimeCurrentVersion.value}",
+      releaseIOVcsNextCommitMessage     := s"Setting version to ${releaseIORuntimeCurrentVersion.value}",
+      releaseIOVersioningBump           := Version.Bump.default,
+      releaseIOVersioningReleaseVersion := {
+        val bump = releaseIOVersioningBump.value
         ver =>
           Version(ver)
             .map { v =>
@@ -123,8 +123,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
               throw new IllegalArgumentException(s"Cannot parse version: $ver")
             )
       },
-      releaseIONextVersion            := {
-        val bump = releaseIOVersionBump.value
+      releaseIOVersioningNextVersion    := {
+        val bump = releaseIOVersioningBump.value
         ver =>
           Version(ver)
             .map(_.bump(bump).asSnapshot.render)
@@ -133,8 +133,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
             )
       },
       ReleaseIOCompat.snapshotDependenciesSetting,
-      releaseIOPublishArtifactsChecks := true,
-      releaseIOPublishArtifactsAction := publish.value
+      releaseIOPublishChecks            := true,
+      releaseIOPublishAction            := publish.value
     )
 
   override lazy val projectSettings: Seq[Setting[?]] =

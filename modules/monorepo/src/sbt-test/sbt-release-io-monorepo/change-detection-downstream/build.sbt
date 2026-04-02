@@ -26,15 +26,15 @@ lazy val root = (project in file("."))
   .settings(
     name := "change-detection-downstream-test",
 
-    releaseIOMonorepoDetectChanges     := true,
-    releaseIOMonorepoIncludeDownstream := true,
+    releaseIOMonorepoDetectionEnabled     := true,
+    releaseIOMonorepoDetectionIncludeDownstream := true,
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       // All three projects should have been released (core changed, api+web are downstream)

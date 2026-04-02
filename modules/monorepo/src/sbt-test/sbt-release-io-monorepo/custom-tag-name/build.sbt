@@ -21,12 +21,12 @@ lazy val root = (project in file("."))
   .settings(
     name                          := "custom-tag-name-test",
     // Custom tag name format: "release/<project>/<version>"
-    releaseIOMonorepoTagName      := { (name: String, ver: String) =>
+    releaseIOMonorepoVcsTagName      := { (name: String, ver: String) =>
       s"release/$name/$ver"
     },
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOVcsIgnoreUntrackedFiles := true,
     checkAll                      := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")

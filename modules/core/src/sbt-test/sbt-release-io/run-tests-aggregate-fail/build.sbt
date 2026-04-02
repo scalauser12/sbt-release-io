@@ -16,6 +16,6 @@ lazy val sub  = (project in file("sub"))
     testFrameworks += new TestFramework("munit.Framework")
   )
 
-releaseIOIgnoreUntrackedFiles := true
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOVcsIgnoreUntrackedFiles := true
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false

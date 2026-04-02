@@ -4,11 +4,11 @@ name         := "push-changes-test"
 scalaVersion := "2.12.18"
 
 // Keep push-changes; filter out publish-artifacts, run-clean, run-tests
-releaseIOEnablePublish        := false
-releaseIOEnableRunClean       := false
-releaseIOEnableRunTests       := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnableRunClean       := false
+releaseIOPolicyEnableRunTests       := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkPushed = taskKey[Unit]("Verify branch and tag were pushed to remote")
 checkPushed := {

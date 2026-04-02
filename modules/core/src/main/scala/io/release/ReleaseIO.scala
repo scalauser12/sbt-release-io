@@ -12,217 +12,267 @@ import scala.concurrent.duration.FiniteDuration
   * Both the default [[ReleasePluginIO]] and custom [[ReleasePluginIOLike]] derivations can
   * mix in or import from here.
   *
+  * Grouped subtraits expose the preferred public surface by behavior (`releaseIOBehavior*`),
+  * defaults (`releaseIODefaults*`), policies (`releaseIOPolicy*`), hooks (`releaseIOHooks*`),
+  * versioning (`releaseIOVersioning*`), VCS (`releaseIOVcs*`), publish (`releaseIOPublish*`),
+  * runtime (`releaseIORuntime*`), and diagnostics (`releaseIODiagnostics*`).
+  *
   * Setting keys are singletons defined in the companion object. Custom plugins should
   * ''not'' define `object autoImport extends ReleaseIO` when coexisting with
   * [[ReleasePluginIO]] — that causes ambiguous references in build.sbt.
   * [[ReleasePluginIO]] is auto-enabled and its keys are in scope automatically.
   */
-trait ReleaseIO {
+trait ReleaseIO
+    extends ReleaseIOBehaviorKeys
+    with ReleaseIODefaultsKeys
+    with ReleaseIOPolicyKeys
+    with ReleaseIOHookKeys
+    with ReleaseIOVersioningKeys
+    with ReleaseIOVcsKeys
+    with ReleaseIOPublishKeys
+    with ReleaseIORuntimeKeys
+    with ReleaseIODiagnosticsKeys {
 
-  // ── Setting keys (delegated to singleton in companion object) ───────────
+  // ── Deprecated compatibility aliases ───────────────────────────────────
 
   /** When `true`, steps with `enableCrossBuild = true` are executed once per `crossScalaVersions`.
     * Can also be enabled via the `cross` command-line argument to `releaseIO`.
     */
-  val releaseIOCrossBuild: SettingKey[Boolean] = ReleaseIO._releaseIOCrossBuild
+  @deprecated("Use releaseIOBehaviorCrossBuild instead.", "0.9.0")
+  val releaseIOCrossBuild: SettingKey[Boolean] = releaseIOBehaviorCrossBuild
 
   /** When `true`, the `publishArtifacts` step is skipped entirely. */
-  val releaseIOSkipPublish: SettingKey[Boolean] = ReleaseIO._releaseIOSkipPublish
+  @deprecated("Use releaseIOBehaviorSkipPublish instead.", "0.9.0")
+  val releaseIOSkipPublish: SettingKey[Boolean] = releaseIOBehaviorSkipPublish
 
   /** When `true`, release steps may prompt for confirmation/input (versions, push, etc.). */
-  val releaseIOInteractive: SettingKey[Boolean] = ReleaseIO._releaseIOInteractive
+  @deprecated("Use releaseIOBehaviorInteractive instead.", "0.9.0")
+  val releaseIOInteractive: SettingKey[Boolean] = releaseIOBehaviorInteractive
 
   /** Default action when a release tag already exists.
     * Supported values: `o` (overwrite), `k` (keep), `a` (abort), or a replacement tag name.
     */
+  @deprecated("Use releaseIODefaultsTagExistsAnswer instead.", "0.9.0")
   val releaseIODefaultTagExistsAnswer: SettingKey[Option[String]] =
-    ReleaseIO._releaseIODefaultTagExistsAnswer
+    releaseIODefaultsTagExistsAnswer
 
   /** Default decision for continuing when SNAPSHOT dependencies are detected. */
+  @deprecated("Use releaseIODefaultsSnapshotDependenciesAnswer instead.", "0.9.0")
   val releaseIODefaultSnapshotDependenciesAnswer: SettingKey[Option[Boolean]] =
-    ReleaseIO._releaseIODefaultSnapshotDependenciesAnswer
+    releaseIODefaultsSnapshotDependenciesAnswer
 
   /** Default decision for continuing after a remote-check failure before push. */
+  @deprecated("Use releaseIODefaultsRemoteCheckFailureAnswer instead.", "0.9.0")
   val releaseIODefaultRemoteCheckFailureAnswer: SettingKey[Option[Boolean]] =
-    ReleaseIO._releaseIODefaultRemoteCheckFailureAnswer
+    releaseIODefaultsRemoteCheckFailureAnswer
 
   /** Default decision for continuing when the local branch is behind upstream. */
+  @deprecated("Use releaseIODefaultsUpstreamBehindAnswer instead.", "0.9.0")
   val releaseIODefaultUpstreamBehindAnswer: SettingKey[Option[Boolean]] =
-    ReleaseIO._releaseIODefaultUpstreamBehindAnswer
+    releaseIODefaultsUpstreamBehindAnswer
 
   /** Default decision for whether to push changes at the end of the release. */
+  @deprecated("Use releaseIODefaultsPushAnswer instead.", "0.9.0")
   val releaseIODefaultPushAnswer: SettingKey[Option[Boolean]] =
-    ReleaseIO._releaseIODefaultPushAnswer
+    releaseIODefaultsPushAnswer
 
   /** When `false`, the snapshot-dependency validation phase is omitted from the compiled process. */
+  @deprecated("Use releaseIOPolicyEnableSnapshotDependenciesCheck instead.", "0.9.0")
   val releaseIOEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
-    ReleaseIO._releaseIOEnableSnapshotDependenciesCheck
+    releaseIOPolicyEnableSnapshotDependenciesCheck
 
   /** When `false`, the `run-clean` phase is omitted from the compiled process. */
-  val releaseIOEnableRunClean: SettingKey[Boolean] = ReleaseIO._releaseIOEnableRunClean
+  @deprecated("Use releaseIOPolicyEnableRunClean instead.", "0.9.0")
+  val releaseIOEnableRunClean: SettingKey[Boolean] = releaseIOPolicyEnableRunClean
 
   /** When `false`, the `run-tests` phase is omitted from the compiled process. */
-  val releaseIOEnableRunTests: SettingKey[Boolean] = ReleaseIO._releaseIOEnableRunTests
+  @deprecated("Use releaseIOPolicyEnableRunTests instead.", "0.9.0")
+  val releaseIOEnableRunTests: SettingKey[Boolean] = releaseIOPolicyEnableRunTests
 
   /** When `false`, the `tag-release` phase is omitted from the compiled process. */
-  val releaseIOEnableTagging: SettingKey[Boolean] = ReleaseIO._releaseIOEnableTagging
+  @deprecated("Use releaseIOPolicyEnableTagging instead.", "0.9.0")
+  val releaseIOEnableTagging: SettingKey[Boolean] = releaseIOPolicyEnableTagging
 
   /** When `false`, the `publish-artifacts` phase is omitted from the compiled process. */
-  val releaseIOEnablePublish: SettingKey[Boolean] = ReleaseIO._releaseIOEnablePublish
+  @deprecated("Use releaseIOPolicyEnablePublish instead.", "0.9.0")
+  val releaseIOEnablePublish: SettingKey[Boolean] = releaseIOPolicyEnablePublish
 
   /** When `false`, the `push-changes` phase is omitted from the compiled process. */
-  val releaseIOEnablePush: SettingKey[Boolean] = ReleaseIO._releaseIOEnablePush
+  @deprecated("Use releaseIOPolicyEnablePush instead.", "0.9.0")
+  val releaseIOEnablePush: SettingKey[Boolean] = releaseIOPolicyEnablePush
 
   /** Hooks that run after the clean-working-dir validation/check phase. */
+  @deprecated("Use releaseIOHooksAfterCleanCheck instead.", "0.9.0")
   val releaseIOAfterCleanCheckHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterCleanCheckHooks
+    releaseIOHooksAfterCleanCheck
 
   /** Hooks that run immediately before version resolution. */
+  @deprecated("Use releaseIOHooksBeforeVersionResolution instead.", "0.9.0")
   val releaseIOBeforeVersionResolutionHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforeVersionResolutionHooks
+    releaseIOHooksBeforeVersionResolution
 
   /** Hooks that run immediately after version resolution. */
+  @deprecated("Use releaseIOHooksAfterVersionResolution instead.", "0.9.0")
   val releaseIOAfterVersionResolutionHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterVersionResolutionHooks
+    releaseIOHooksAfterVersionResolution
 
   /** Hooks that run immediately before writing the release version. */
+  @deprecated("Use releaseIOHooksBeforeReleaseVersionWrite instead.", "0.9.0")
   val releaseIOBeforeReleaseVersionWriteHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforeReleaseVersionWriteHooks
+    releaseIOHooksBeforeReleaseVersionWrite
 
   /** Hooks that run immediately after writing the release version. */
+  @deprecated("Use releaseIOHooksAfterReleaseVersionWrite instead.", "0.9.0")
   val releaseIOAfterReleaseVersionWriteHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterReleaseVersionWriteHooks
+    releaseIOHooksAfterReleaseVersionWrite
 
   /** Hooks that run immediately before committing the release version. */
+  @deprecated("Use releaseIOHooksBeforeReleaseCommit instead.", "0.9.0")
   val releaseIOBeforeReleaseCommitHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforeReleaseCommitHooks
+    releaseIOHooksBeforeReleaseCommit
 
   /** Hooks that run immediately after committing the release version. */
+  @deprecated("Use releaseIOHooksAfterReleaseCommit instead.", "0.9.0")
   val releaseIOAfterReleaseCommitHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterReleaseCommitHooks
+    releaseIOHooksAfterReleaseCommit
 
   /** Hooks that run immediately before tagging the release. */
+  @deprecated("Use releaseIOHooksBeforeTag instead.", "0.9.0")
   val releaseIOBeforeTagHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforeTagHooks
+    releaseIOHooksBeforeTag
 
   /** Hooks that run immediately after tagging the release. */
+  @deprecated("Use releaseIOHooksAfterTag instead.", "0.9.0")
   val releaseIOAfterTagHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterTagHooks
+    releaseIOHooksAfterTag
 
   /** Hooks that run immediately before publish. */
+  @deprecated("Use releaseIOHooksBeforePublish instead.", "0.9.0")
   val releaseIOBeforePublishHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforePublishHooks
+    releaseIOHooksBeforePublish
 
   /** Hooks that run immediately after publish. */
+  @deprecated("Use releaseIOHooksAfterPublish instead.", "0.9.0")
   val releaseIOAfterPublishHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterPublishHooks
+    releaseIOHooksAfterPublish
 
   /** Hooks that run immediately before writing the next version. */
+  @deprecated("Use releaseIOHooksBeforeNextVersionWrite instead.", "0.9.0")
   val releaseIOBeforeNextVersionWriteHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforeNextVersionWriteHooks
+    releaseIOHooksBeforeNextVersionWrite
 
   /** Hooks that run immediately after writing the next version. */
+  @deprecated("Use releaseIOHooksAfterNextVersionWrite instead.", "0.9.0")
   val releaseIOAfterNextVersionWriteHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterNextVersionWriteHooks
+    releaseIOHooksAfterNextVersionWrite
 
   /** Hooks that run immediately before committing the next version. */
+  @deprecated("Use releaseIOHooksBeforeNextCommit instead.", "0.9.0")
   val releaseIOBeforeNextCommitHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforeNextCommitHooks
+    releaseIOHooksBeforeNextCommit
 
   /** Hooks that run immediately after committing the next version. */
+  @deprecated("Use releaseIOHooksAfterNextCommit instead.", "0.9.0")
   val releaseIOAfterNextCommitHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterNextCommitHooks
+    releaseIOHooksAfterNextCommit
 
   /** Hooks that run immediately before pushing release changes. */
+  @deprecated("Use releaseIOHooksBeforePush instead.", "0.9.0")
   val releaseIOBeforePushHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOBeforePushHooks
+    releaseIOHooksBeforePush
 
   /** Hooks that run immediately after pushing release changes. */
+  @deprecated("Use releaseIOHooksAfterPush instead.", "0.9.0")
   val releaseIOAfterPushHooks: SettingKey[Seq[ReleaseHookIO]] =
-    ReleaseIO._releaseIOAfterPushHooks
+    releaseIOHooksAfterPush
 
   /** Function that reads the current version string from the version file.
     * Default parses the standard sbt `[ThisBuild /] version := "x.y.z"` format.
     */
-  val releaseIOReadVersion: SettingKey[File => IO[String]] = ReleaseIO._releaseIOReadVersion
+  @deprecated("Use releaseIOVersioningReadVersion instead.", "0.9.0")
+  val releaseIOReadVersion: SettingKey[File => IO[String]] = releaseIOVersioningReadVersion
 
   /** Function that produces the version file contents for a given version.
     * Receives `(versionFile, newVersion)` and returns `IO[newFileContents]`.
     * The file parameter allows reading existing content for partial updates.
     */
+  @deprecated("Use releaseIOVersioningFileContents instead.", "0.9.0")
   val releaseIOVersionFileContents: SettingKey[(File, String) => IO[String]] =
-    ReleaseIO._releaseIOVersionFileContents
+    releaseIOVersioningFileContents
 
   // ── Forked sbt-release keys ─────────────────────────────────────────────
 
   /** Path to the version file (e.g. `version.sbt`). */
-  val releaseIOVersionFile: SettingKey[File] = ReleaseIO._releaseIOVersionFile
+  @deprecated("Use releaseIOVersioningFile instead.", "0.9.0")
+  val releaseIOVersionFile: SettingKey[File] = releaseIOVersioningFile
 
   /** When `true`, the version file uses `ThisBuild / version` instead of `version`. */
-  val releaseIOUseGlobalVersion: SettingKey[Boolean] = ReleaseIO._releaseIOUseGlobalVersion
-
-  /** When `true`, VCS tags and commits are GPG-signed. */
-  val releaseIOVcsSign: SettingKey[Boolean] = ReleaseIO._releaseIOVcsSign
-
-  /** When `true`, VCS commits include a `Signed-off-by` line. */
-  val releaseIOVcsSignOff: SettingKey[Boolean] = ReleaseIO._releaseIOVcsSignOff
+  @deprecated("Use releaseIOVersioningUseGlobal instead.", "0.9.0")
+  val releaseIOUseGlobalVersion: SettingKey[Boolean] = releaseIOVersioningUseGlobal
 
   /** When `true`, untracked files do not cause the clean-working-dir check to fail. */
-  val releaseIOIgnoreUntrackedFiles: SettingKey[Boolean] = ReleaseIO._releaseIOIgnoreUntrackedFiles
-
-  /** Timeout for the remote reachability check (`git fetch`) used before push. */
-  val releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
-    ReleaseIO._releaseIOVcsRemoteCheckTimeout
+  @deprecated("Use releaseIOVcsIgnoreUntrackedFiles instead.", "0.9.0")
+  val releaseIOIgnoreUntrackedFiles: SettingKey[Boolean] = releaseIOVcsIgnoreUntrackedFiles
 
   /** The current version at evaluation time. Useful as a dependency for tag/commit message tasks
     * so they pick up the version set by `setReleaseVersion` via `appendWithSession`.
     */
   @transient
-  val releaseIORuntimeVersion: TaskKey[String] = ReleaseIO._releaseIORuntimeVersion
+  @deprecated("Use releaseIORuntimeCurrentVersion instead.", "0.9.0")
+  val releaseIORuntimeVersion: TaskKey[String] = releaseIORuntimeCurrentVersion
 
   /** Tag name for the release. Default: `s"v$$version"`. */
   @transient
-  val releaseIOTagName: TaskKey[String] = ReleaseIO._releaseIOTagName
+  @deprecated("Use releaseIOVcsTagName instead.", "0.9.0")
+  val releaseIOTagName: TaskKey[String] = releaseIOVcsTagName
 
   /** Tag comment. Default: `s"Releasing $$version"`. */
   @transient
-  val releaseIOTagComment: TaskKey[String] = ReleaseIO._releaseIOTagComment
+  @deprecated("Use releaseIOVcsTagComment instead.", "0.9.0")
+  val releaseIOTagComment: TaskKey[String] = releaseIOVcsTagComment
 
   /** Commit message for the release version commit. */
   @transient
-  val releaseIOCommitMessage: TaskKey[String] = ReleaseIO._releaseIOCommitMessage
+  @deprecated("Use releaseIOVcsReleaseCommitMessage instead.", "0.9.0")
+  val releaseIOCommitMessage: TaskKey[String] = releaseIOVcsReleaseCommitMessage
 
   /** Commit message for the next snapshot version commit. */
   @transient
-  val releaseIONextCommitMessage: TaskKey[String] = ReleaseIO._releaseIONextCommitMessage
+  @deprecated("Use releaseIOVcsNextCommitMessage instead.", "0.9.0")
+  val releaseIONextCommitMessage: TaskKey[String] = releaseIOVcsNextCommitMessage
 
   /** Function that computes the release version from the current version. */
   @transient
-  val releaseIOVersion: TaskKey[String => String] = ReleaseIO._releaseIOVersion
+  @deprecated("Use releaseIOVersioningReleaseVersion instead.", "0.9.0")
+  val releaseIOVersion: TaskKey[String => String] = releaseIOVersioningReleaseVersion
 
   /** Function that computes the next development version from the release version. */
   @transient
-  val releaseIONextVersion: TaskKey[String => String] = ReleaseIO._releaseIONextVersion
+  @deprecated("Use releaseIOVersioningNextVersion instead.", "0.9.0")
+  val releaseIONextVersion: TaskKey[String => String] = releaseIOVersioningNextVersion
 
   /** Version bump strategy. */
   @transient
-  val releaseIOVersionBump: TaskKey[Version.Bump] =
-    ReleaseIO._releaseIOVersionBump
+  @deprecated("Use releaseIOVersioningBump instead.", "0.9.0")
+  val releaseIOVersionBump: TaskKey[Version.Bump] = releaseIOVersioningBump
 
   /** Task that resolves SNAPSHOT dependencies for validation. */
   @transient
+  @deprecated("Use releaseIODiagnosticsSnapshotDependencies instead.", "0.9.0")
   val releaseIOSnapshotDependencies: TaskKey[Seq[ModuleID]] =
-    ReleaseIO._releaseIOSnapshotDependencies
+    releaseIODiagnosticsSnapshotDependencies
 
   /** Task that performs the actual publish action. Default: `publish`. */
   @transient
-  val releaseIOPublishArtifactsAction: TaskKey[Unit] = ReleaseIO._releaseIOPublishArtifactsAction
+  @deprecated("Use releaseIOPublishAction instead.", "0.9.0")
+  val releaseIOPublishArtifactsAction: TaskKey[Unit] = releaseIOPublishAction
 
   /** When false, skips publishTo/skip validation in the publishArtifacts step.
     * Useful when overriding `releaseIOPublishArtifactsAction` with a custom publish task.
     */
+  @deprecated("Use releaseIOPublishChecks instead.", "0.9.0")
   val releaseIOPublishArtifactsChecks: SettingKey[Boolean] =
-    ReleaseIO._releaseIOPublishArtifactsChecks
+    releaseIOPublishChecks
 
   private[release] val releaseIOInternalReleaseHash: SettingKey[Option[String]] =
     ReleaseIO._releaseIOInternalReleaseHash

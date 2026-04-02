@@ -20,7 +20,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     singleProjectFixtureResource(
       "monorepo-publish-validate-fail",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks := true
+        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := true
       )
     ) { _ =>
       Seq(
@@ -42,7 +42,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     val checksDisabled = singleProjectFixtureResource(
       "monorepo-publish-validate-disabled",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks := false
+        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := false
       )
     ) { _ =>
       Seq(
@@ -54,7 +54,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     val skipPublish = singleProjectFixtureResource(
       "monorepo-publish-validate-skip",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks := true
+        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := true
       )
     ) { _ =>
       Seq(
@@ -77,8 +77,8 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
   test("publishArtifacts.execute - skip the publish task when publish / skip is true") {
     singleProjectFixtureResource("monorepo-publish-skip-action") { _ =>
       Seq(
-        publish / skip                            := true,
-        ReleaseIO.releaseIOPublishArtifactsAction := {
+        publish / skip                   := true,
+        ReleaseIO.releaseIOPublishAction := {
           throw new RuntimeException("publish action should not run")
         }
       )
@@ -97,9 +97,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val marker = new File(projectBase.getParentFile, "published.txt")
 
       Seq(
-        publish / skip                            := false,
-        publishTo                                 := Some(Resolver.file("local-test", projectBase.getParentFile)),
-        ReleaseIO.releaseIOPublishArtifactsAction := {
+        publish / skip                   := false,
+        publishTo                        := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        ReleaseIO.releaseIOPublishAction := {
           sbt.IO.write(marker, "published")
         }
       )
@@ -118,17 +118,17 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val marker = new File(projectBase.getParentFile, "publish-metadata.txt")
 
       Seq(
-        publish / skip                            := false,
-        publishTo                                 := Some(Resolver.file("local-test", projectBase.getParentFile)),
-        version                                   := "0.1.0-SNAPSHOT",
-        packageOptions                            := Seq.empty,
-        ReleaseIO.releaseIOInternalReleaseHash    := None,
-        ReleaseIO.releaseIOInternalReleaseTag     := None,
+        publish / skip                         := false,
+        publishTo                              := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        version                                := "0.1.0-SNAPSHOT",
+        packageOptions                         := Seq.empty,
+        ReleaseIO.releaseIOInternalReleaseHash := None,
+        ReleaseIO.releaseIOInternalReleaseTag  := None,
         packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
           ReleaseIO.releaseIOInternalReleaseHash.value,
           ReleaseIO.releaseIOInternalReleaseTag.value
         ),
-        ReleaseIO.releaseIOPublishArtifactsAction := {
+        ReleaseIO.releaseIOPublishAction       := {
           def manifestEntries(options: Seq[PackageOption]): Map[String, String] =
             options.flatMap {
               case product: Product if product.productPrefix == "ManifestAttributes" =>
@@ -180,7 +180,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     singleProjectFixtureResource(
       "monorepo-publish-validate-pass",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks := true
+        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := true
       )
     ) { projectBase =>
       Seq(

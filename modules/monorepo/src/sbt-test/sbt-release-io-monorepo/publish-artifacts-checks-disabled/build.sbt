@@ -6,7 +6,7 @@ lazy val core = (project in file("core"))
     scalaVersion                    := "2.12.18",
     // publishTo is intentionally NOT set, and publish / skip is NOT set.
     // Override publish action to no-op so the publish step runs without error.
-    releaseIOPublishArtifactsAction := {}
+    releaseIOPublishAction := {}
   )
 
 val checkAll = taskKey[Unit]("Run all verification checks")
@@ -20,14 +20,14 @@ lazy val root = (project in file("."))
     // Disable publishTo validation -- this is the setting under test.
     // Without this, the release would fail like in the missing-publishto test
     // (check phase aborts because publishTo is not set and publish/skip is not true).
-    releaseIOMonorepoPublishArtifactsChecks := false,
+    releaseIOMonorepoPublishChecks := false,
 
     // Keep publish-artifacts step in process so its validation phase runs
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)

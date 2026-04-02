@@ -26,14 +26,14 @@ lazy val root = (project in file("."))
     name := "custom-projects-setting-test",
 
     // Override to release only core and api - exclude extra
-    releaseIOMonorepoProjects := thisProject.value.aggregate.filter { ref =>
+    releaseIOMonorepoSelectionProjects := thisProject.value.aggregate.filter { ref =>
       ref.project == "core" || ref.project == "api"
     },
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       // core and api should be updated

@@ -15,9 +15,9 @@ crossScalaVersions := Seq(Scala213, Scala212)
 libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
-releaseIOEnablePush    := false
+releaseIOPolicyEnablePush    := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
 
 val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
@@ -30,7 +30,7 @@ val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
   }
 }
 
-releaseIOBeforePublishHooks := Seq(crossBuildMarkerHook)
+releaseIOHooksBeforePublish := Seq(crossBuildMarkerHook)
 
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")
 checkGitTag := {

@@ -11,7 +11,7 @@ class ReleasePluginIOReleaseRunSpec extends CatsEffectSuite with ReleasePluginIO
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val plugin                    = resourceAwareHookPlugin(observed)
       val settings: Seq[Setting[?]] = Seq(
-        ReleaseIO.releaseIOBeforeTagHooks +=
+        ReleaseIO.releaseIOHooksBeforeTag +=
           ReleaseHookIO.action("plain-before-tag")(_ => observed.update(_ :+ "plain-execute"))
       )
 
@@ -54,8 +54,8 @@ class ReleasePluginIOReleaseRunSpec extends CatsEffectSuite with ReleasePluginIO
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val plugin                    = resourceAwareHookPlugin(observed)
       val settings: Seq[Setting[?]] = Seq(
-        ReleaseIO.releaseIOEnableTagging := false,
-        ReleaseIO.releaseIOBeforeTagHooks +=
+        ReleaseIO.releaseIOPolicyEnableTagging := false,
+        ReleaseIO.releaseIOHooksBeforeTag +=
           ReleaseHookIO.action("plain-before-tag")(_ => observed.update(_ :+ "plain-execute"))
       )
 
@@ -75,7 +75,7 @@ class ReleasePluginIOReleaseRunSpec extends CatsEffectSuite with ReleasePluginIO
 
   test("resolveReleaseRun keeps custom plugins on the compiled hook path") {
     val settings: Seq[Setting[?]] = Seq(
-      ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
+      ReleaseIO.releaseIOHooksBeforeTag += ReleaseHookIO.action("before-tag-hook")(_ => IO.unit)
     )
 
     stateResource("release-plugin-custom-run", HookFriendlyPlugin, settings).use { loaded =>

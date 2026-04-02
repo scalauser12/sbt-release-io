@@ -15,11 +15,11 @@ lazy val root = (project in file("."))
     name := "push-behind-remote-test",
 
     // Keep push-changes enabled; only filter publish/clean/tests
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkNoVersionChange := {
       val contents = IO.read(file("core/version.sbt"))

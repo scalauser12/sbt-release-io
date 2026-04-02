@@ -7,8 +7,8 @@ name := "hook-lifecycle"
 
 scalaVersion := "2.12.18"
 
-releaseIOIgnoreUntrackedFiles := true
-releaseIOEnablePush           := false
+releaseIOVcsIgnoreUntrackedFiles := true
+releaseIOPolicyEnablePush           := false
 
 publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
 
@@ -20,10 +20,10 @@ def markerHook(marker: String): ReleaseHookIO =
     }
   }
 
-releaseIOBeforeTagHooks     := Seq(markerHook("before-tag"))
-releaseIOAfterTagHooks      := Seq(markerHook("after-tag"))
-releaseIOBeforePublishHooks := Seq(markerHook("before-publish"))
-releaseIOAfterPublishHooks  := Seq(markerHook("after-publish"))
+releaseIOHooksBeforeTag     := Seq(markerHook("before-tag"))
+releaseIOHooksAfterTag      := Seq(markerHook("after-tag"))
+releaseIOHooksBeforePublish := Seq(markerHook("before-publish"))
+releaseIOHooksAfterPublish  := Seq(markerHook("after-publish"))
 
 val checkHookMarkers = taskKey[Unit]("Check hook markers")
 checkHookMarkers := {

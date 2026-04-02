@@ -21,12 +21,12 @@ lazy val root = (project in file("."))
   .settings(
     name                           := "detect-changes-disabled-test",
     // Disable change detection — all projects should be released regardless of changes
-    releaseIOMonorepoDetectChanges := false,
-    releaseIOMonorepoEnablePublish  := false,
-    releaseIOMonorepoEnablePush     := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoDetectionEnabled := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles  := true,
     // Consolidated verification task
     checkAll                       := {
       // Check tags: both core and api should be released even though only core has changes

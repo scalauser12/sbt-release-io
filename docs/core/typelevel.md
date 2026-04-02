@@ -58,7 +58,7 @@ def uploadArchive(ctx: ReleaseContext): IO[Unit] =
       IO.raiseError(new RuntimeException("releaseVersion is not set"))
   }
 
-releaseIOAfterPublishHooks += ReleaseHookIO.action("upload-archive")(uploadArchive)
+releaseIOHooksAfterPublish += ReleaseHookIO.action("upload-archive")(uploadArchive)
 ```
 
 Use `ReleaseStepIO` only for lower-level internal composition or reusable helper code around

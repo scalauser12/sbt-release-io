@@ -124,8 +124,8 @@ def assertNestedRun(
 name         := "check-test"
 scalaVersion := "2.12.18"
 
-releaseIOEnablePush := false
-releaseIOIgnoreUntrackedFiles := true
+releaseIOPolicyEnablePush := false
+releaseIOVcsIgnoreUntrackedFiles := true
 publishTo := Some(Resolver.file("test-repo", target.value / "repo"))
 
 expectCheckSuccess := {
@@ -158,7 +158,7 @@ expectCheckMissingVersionFileFailure := {
     shouldSucceed = false,
     expectedSubstrings = Seq(
       "Version file not found",
-      "releaseIOVersionFile",
+      "releaseIOVersioningFile",
       "releaseIO help"
     ),
     sbtVersion0 = sbtVersion.value,

@@ -5,6 +5,7 @@ import cats.effect.Resource
 import io.release.internal.SbtRuntime
 import sbt.Keys.*
 import sbt.Project
+import sbt.ProjectRef
 import sbt.State
 
 import java.io.File
@@ -30,6 +31,14 @@ trait MonorepoStepIOSpecSupport {
     IO.blocking {
       val extracted = SbtRuntime.extracted(state)
       (extracted.currentRef / scalaVersion)
+        .get(extracted.structure.data)
+        .orElse((sbt.GlobalScope / scalaVersion).get(extracted.structure.data))
+    }
+
+  protected def projectScalaVersionOf(state: State, ref: ProjectRef): IO[Option[String]] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+      (ref / scalaVersion)
         .get(extracted.structure.data)
         .orElse((sbt.GlobalScope / scalaVersion).get(extracted.structure.data))
     }

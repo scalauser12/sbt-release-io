@@ -33,7 +33,7 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-all-changed",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoDetectChanges := false
+        MonorepoReleaseIO.releaseIOMonorepoDetectionEnabled := false
       )
     ).use { fixture =>
       val ctx = fixture.context(Seq("core", "api", "consumer"))
@@ -51,9 +51,9 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-custom",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoChangeDetector    :=
+        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector    :=
           Some((ref: ProjectRef, _: File, _: sbt.State) => IO.pure(ref.project == "api")),
-        MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream := false
+        MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := false
       )
     ).use { fixture =>
       MonorepoSelectionResolver
@@ -72,9 +72,9 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-downstream",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoChangeDetector    :=
+        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector    :=
           Some((ref: ProjectRef, _: File, _: sbt.State) => IO.pure(ref.project == "api")),
-        MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream := true
+        MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := true
       )
     ).use { fixture =>
       MonorepoSelectionResolver
@@ -93,7 +93,7 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-force-include",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoChangeDetector :=
+        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector :=
           Some((ref: ProjectRef, _: File, _: sbt.State) => IO.pure(ref.project == "core"))
       )
     ).use { fixture =>
@@ -188,7 +188,7 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
               assert(message.contains("shared"))
               assert(message.contains(dirA.getAbsolutePath))
               assert(message.contains(dirB.getAbsolutePath))
-              assert(message.contains("releaseIOMonorepoProjects"))
+              assert(message.contains("releaseIOMonorepoSelectionProjects"))
             case Right(value)  =>
               fail(s"Expected duplicate project-name validation to fail but got: $value")
           }

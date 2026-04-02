@@ -76,11 +76,12 @@ Read next:
 - [Selective release walkthrough](docs/monorepo/selective-release-walkthrough.md)
 - [Monorepo customization](docs/monorepo/customization.md)
 
-For routine customization, prefer the hook/policy settings (`releaseIOEnable*`,
-`releaseIO*Hooks`, `releaseIOMonorepoEnable*`, `releaseIOMonorepo*Hooks`) and leave the built-in
-process intact. For shared-resource or advanced integration work, use custom plugins built around
-the hook and resource-hook APIs. Raw process override is no longer part of the supported public
-surface.
+For routine customization, prefer the grouped hook/policy settings
+(`releaseIOPolicy*`, `releaseIOHooks*`, `releaseIOMonorepoPolicy*`,
+`releaseIOMonorepoHooks*`) and leave the built-in process intact. The older flat key names remain
+as deprecated aliases for now. For shared-resource or advanced integration work, use custom
+plugins built around the hook and resource-hook APIs. Raw process override is no longer part of
+the supported public surface.
 
 For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
 [docs/monorepo/recipes.md](docs/monorepo/recipes.md). For rollback and recovery, see

@@ -4,7 +4,7 @@
 
 - **Two-phase release steps**: Each step has a `validate` phase (preflight checks) and an `execute` phase (actions), both running in cats-effect `IO`
 - **Independent codebase**: Ports sbt-release's types, settings, and execution model onto cats-effect IO — no runtime dependency on sbt-release
-- **Hook-first customization**: Extend the built-in release flow with `releaseIOEnable*` policies and `releaseIO*Hooks`
+- **Hook-first customization**: Extend the built-in release flow with grouped `releaseIOPolicy*` keys and `releaseIOHooks*`
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
 - **Resource-safe custom plugins**: Acquire shared resources (HTTP clients, temp dirs, etc.) once for the entire release with guaranteed cleanup via `Resource[IO, T]`

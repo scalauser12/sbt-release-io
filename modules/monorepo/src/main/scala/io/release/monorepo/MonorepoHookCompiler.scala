@@ -11,39 +11,39 @@ private[monorepo] object MonorepoHookCompiler {
 
     MonorepoHookConfiguration(
       enableSnapshotDependenciesCheck =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableSnapshotDependenciesCheck),
-      enableRunClean = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableRunClean),
-      enableRunTests = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableRunTests),
-      enableTagging = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnableTagging),
-      enablePublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnablePublish),
-      enablePush = extracted.get(MonorepoReleaseIO.releaseIOMonorepoEnablePush),
-      beforeSelectionHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks),
-      afterSelectionHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck),
+      enableRunClean = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean),
+      enableRunTests = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests),
+      enableTagging = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging),
+      enablePublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish),
+      enablePush = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush),
+      beforeSelectionHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection),
+      afterSelectionHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection),
       beforeVersionResolutionHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforeVersionResolutionHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution),
       afterVersionResolutionHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterVersionResolutionHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution),
       beforeReleaseVersionWriteHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforeReleaseVersionWriteHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseVersionWrite),
       afterReleaseVersionWriteHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterReleaseVersionWriteHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseVersionWrite),
       beforeReleaseCommitHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforeReleaseCommitHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit),
       afterReleaseCommitHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterReleaseCommitHooks),
-      beforeTagHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforeTagHooks),
-      afterTagHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterTagHooks),
-      beforePublishHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforePublishHooks),
-      afterPublishHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterPublishHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit),
+      beforeTagHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeTag),
+      afterTagHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag),
+      beforePublishHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforePublish),
+      afterPublishHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterPublish),
       beforeNextVersionWriteHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforeNextVersionWriteHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextVersionWrite),
       afterNextVersionWriteHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterNextVersionWriteHooks),
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite),
       beforeNextCommitHooks =
-        extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforeNextCommitHooks),
-      afterNextCommitHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterNextCommitHooks),
-      beforePushHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoBeforePushHooks),
-      afterPushHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoAfterPushHooks)
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit),
+      afterNextCommitHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit),
+      beforePushHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush),
+      afterPushHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush)
     )
   }
 

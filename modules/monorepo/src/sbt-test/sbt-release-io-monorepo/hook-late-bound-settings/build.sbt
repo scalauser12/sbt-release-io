@@ -15,13 +15,13 @@ val checkLateBoundTag         = taskKey[Unit]("Check the late-bound tag")
 
 def lateBoundVersionSettings: Seq[Setting[?]] =
   Seq(
-    releaseIOMonorepoVersionFile         := { (ref: ProjectRef, state: State) =>
+    releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / baseDirectory) / "version.properties"
     },
-    releaseIOMonorepoReadVersion         := { file =>
+    releaseIOMonorepoVersioningReadVersion         := { file =>
       IO.blocking(sbt.IO.read(file).trim)
     },
-    releaseIOMonorepoVersionFileContents := { (_, version) =>
+    releaseIOMonorepoVersioningFileContents := { (_, version) =>
       IO.pure(version + "\n")
     }
   )
@@ -31,11 +31,11 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "hook-late-bound-settings-monorepo",
-    releaseIOIgnoreUntrackedFiles := true,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush   := false,
-    releaseIOMonorepoBeforeVersionResolutionHooks := Seq(
+    releaseIOVcsIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush   := false,
+    releaseIOMonorepoHooksBeforeVersionResolution := Seq(
       MonorepoProjectHookIO.io("late-bound-version-settings") { (ctx, _) =>
         IO.blocking {
           val extracted    = Project.extract(ctx.state)
@@ -48,13 +48,13 @@ lazy val root = (project in file("."))
         }
       }
     ),
-    releaseIOMonorepoBeforeTagHooks := Seq(
+    releaseIOMonorepoHooksBeforeTag := Seq(
       MonorepoProjectHookIO.io("late-bound-tag-settings") { (ctx, _) =>
         IO.blocking {
           val extracted    = Project.extract(ctx.state)
           val updatedState = extracted.appendWithSession(
             lateBoundVersionSettings ++ Seq(
-              releaseIOMonorepoTagName := ((_: String, _: String) => "late-bound-runtime-tag")
+              releaseIOMonorepoVcsTagName := ((_: String, _: String) => "late-bound-runtime-tag")
             ),
             ctx.state
           )

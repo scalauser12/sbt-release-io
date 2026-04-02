@@ -23,14 +23,14 @@ lazy val root = (project in file("."))
     name         := "nested-parent-test",
     scalaVersion := "2.12.18",
 
-    releaseIOMonorepoDetectChanges := true,
+    releaseIOMonorepoDetectionEnabled := true,
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

@@ -7,28 +7,54 @@ examples, see [Usage](usage.md).
 Settings prefixed `releaseIO` come from the core plugin. Settings prefixed
 `releaseIOMonorepo` are the monorepo-specific layer.
 
-`releaseIOMonorepo` also consumes a small set of shared core `releaseIO*` settings for
-decision defaults during tag-conflict handling and confirmation prompts.
+`releaseIOMonorepo` also consumes shared core `releaseIODefaults*` and
+`releaseIOVcsRemoteCheckTimeout` settings for decision defaults and the pre-push remote check.
 
 ## Migration note
 
 The supported build-facing customization surface is now hook- and policy-based. Use
-`releaseIOMonorepoEnable*`, `releaseIOMonorepo*Hooks`, and resource-aware custom plugins
+grouped `releaseIOMonorepoPolicy*`, `releaseIOMonorepoHooks*`, and resource-aware custom plugins
 built around `monorepoResourceHooks` instead of legacy step-list editing.
 
-## Main settings
+Use the grouped names in `build.sbt`. The older flat names remain as deprecated aliases in this
+release. `inspect`, `show`, and key index output still display the legacy sbt key labels because
+the underlying key instances were not renamed yet.
+
+## Grouped key migration
+
+| Old name | Preferred grouped name |
+| -------- | ---------------------- |
+| `releaseIOMonorepoProjects` | `releaseIOMonorepoSelectionProjects` |
+| `releaseIOMonorepoCrossBuild` | `releaseIOMonorepoBehaviorCrossBuild` |
+| `releaseIOMonorepoSkipTests` | `releaseIOMonorepoBehaviorSkipTests` |
+| `releaseIOMonorepoSkipPublish` | `releaseIOMonorepoBehaviorSkipPublish` |
+| `releaseIOMonorepoCommitMessage` | `releaseIOMonorepoVcsReleaseCommitMessage` |
+| `releaseIOMonorepoTagName` | `releaseIOMonorepoVcsTagName` |
+| `releaseIOMonorepoDetectChanges` | `releaseIOMonorepoDetectionEnabled` |
+| `releaseIOMonorepoIncludeDownstream` | `releaseIOMonorepoDetectionIncludeDownstream` |
+| `releaseIOMonorepoEnablePush` | `releaseIOMonorepoPolicyEnablePush` |
+| `releaseIOMonorepoBeforePublishHooks` | `releaseIOMonorepoHooksBeforePublish` |
+
+## Selection settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoProjects` | `Seq[ProjectRef]` | all transitively aggregated subprojects | Which subprojects participate in releases |
-| `releaseIOMonorepoCrossBuild` | `Boolean` | `false` | Enable cross-building by default |
-| `releaseIOMonorepoSkipTests` | `Boolean` | `false` | Skip tests |
-| `releaseIOMonorepoSkipPublish` | `Boolean` | `false` | Skip publish |
-| `releaseIOMonorepoInteractive` | `Boolean` | `false` | Enable prompting in `run` mode |
+| `releaseIOMonorepoSelectionProjects` | `Seq[ProjectRef]` | all transitively aggregated subprojects | Which subprojects participate in releases |
+
+## Behavior settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIOMonorepoBehaviorCrossBuild` | `Boolean` | `false` | Enable cross-building by default |
+| `releaseIOMonorepoBehaviorSkipTests` | `Boolean` | `false` | Skip tests |
+| `releaseIOMonorepoBehaviorSkipPublish` | `Boolean` | `false` | Skip publish |
+| `releaseIOMonorepoBehaviorInteractive` | `Boolean` | `false` | Enable prompting in `run` mode |
+
+## Shared core settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
 | `releaseIOVcsRemoteCheckTimeout` | `FiniteDuration` | `60.seconds` | Timeout for the shared remote reachability check before push |
-| `releaseIOMonorepoPublishArtifactsChecks` | `Boolean` | `true` | Validate `publishTo` / `publish / skip` before publish |
-| `releaseIOMonorepoCommitMessage` | `String => String` | summary formatter | Commit message for release-version commits |
-| `releaseIOMonorepoNextCommitMessage` | `String => String` | summary formatter | Commit message for next-version commits |
 
 ## Shared decision-default settings
 
@@ -36,11 +62,11 @@ These shared core settings also apply to `releaseIOMonorepo`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIODefaultTagExistsAnswer` | `Option[String]` | `None` | Default answer for per-project tag-conflict handling |
-| `releaseIODefaultSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Default answer for snapshot-dependency confirmation |
-| `releaseIODefaultRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Default answer when the shared remote check fails before push |
-| `releaseIODefaultUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Default answer when the local branch is behind upstream |
-| `releaseIODefaultPushAnswer` | `Option[Boolean]` | `None` | Default answer for the final push confirmation |
+| `releaseIODefaultsTagExistsAnswer` | `Option[String]` | `None` | Default answer for per-project tag-conflict handling |
+| `releaseIODefaultsSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Default answer for snapshot-dependency confirmation |
+| `releaseIODefaultsRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Default answer when the shared remote check fails before push |
+| `releaseIODefaultsUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Default answer when the local branch is behind upstream |
+| `releaseIODefaultsPushAnswer` | `Option[Boolean]` | `None` | Default answer for the final push confirmation |
 
 ### Example configuration
 
@@ -49,11 +75,11 @@ confirmation and tag-conflict decisions. They do not affect project selection or
 override syntax.
 
 ```scala
-releaseIODefaultTagExistsAnswer := Some("a")
-releaseIODefaultSnapshotDependenciesAnswer := Some(false)
-releaseIODefaultRemoteCheckFailureAnswer := Some(false)
-releaseIODefaultUpstreamBehindAnswer := Some(false)
-releaseIODefaultPushAnswer := Some(true)
+releaseIODefaultsTagExistsAnswer := Some("a")
+releaseIODefaultsSnapshotDependenciesAnswer := Some(false)
+releaseIODefaultsRemoteCheckFailureAnswer := Some(false)
+releaseIODefaultsUpstreamBehindAnswer := Some(false)
+releaseIODefaultsPushAnswer := Some(true)
 ```
 
 ## Hook and policy settings
@@ -61,70 +87,79 @@ releaseIODefaultPushAnswer := Some(true)
 These settings compile into the built-in monorepo lifecycle for both `releaseIOMonorepo`
 and `releaseIOMonorepo check`.
 
-`releaseIOMonorepoSkipPublish` skips publish at runtime even if the phase still exists.
-`releaseIOMonorepoEnablePublish` removes the publish phase from the compiled lifecycle
-entirely.
+`releaseIOMonorepoBehaviorSkipPublish` skips publish at runtime even if the phase still exists.
+`releaseIOMonorepoPolicyEnablePublish` removes the publish phase from the compiled lifecycle
+entirely, so `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` do not
+exist when it is `false`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoEnableSnapshotDependenciesCheck` | `Boolean` | `true` | Include `check-snapshot-dependencies` |
-| `releaseIOMonorepoEnableRunClean` | `Boolean` | `true` | Include `run-clean` |
-| `releaseIOMonorepoEnableRunTests` | `Boolean` | `true` | Include `run-tests` |
-| `releaseIOMonorepoEnableTagging` | `Boolean` | `true` | Include `tag-releases` |
-| `releaseIOMonorepoEnablePublish` | `Boolean` | `true` | Include `publish-artifacts` |
-| `releaseIOMonorepoEnablePush` | `Boolean` | `true` | Include `push-changes` |
-| `releaseIOMonorepoBeforeSelectionHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `detect-or-select-projects` |
-| `releaseIOMonorepoAfterSelectionHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `detect-or-select-projects` |
-| `releaseIOMonorepoBeforeVersionResolutionHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `inquire-versions` |
-| `releaseIOMonorepoAfterVersionResolutionHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `inquire-versions` |
-| `releaseIOMonorepoBeforeReleaseVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `set-release-version` |
-| `releaseIOMonorepoAfterReleaseVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `set-release-version` |
-| `releaseIOMonorepoBeforeReleaseCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `commit-release-versions` |
-| `releaseIOMonorepoAfterReleaseCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `commit-release-versions` |
-| `releaseIOMonorepoBeforeTagHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `tag-releases` |
-| `releaseIOMonorepoAfterTagHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `tag-releases` |
-| `releaseIOMonorepoBeforePublishHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `publish-artifacts` |
-| `releaseIOMonorepoAfterPublishHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `publish-artifacts` |
-| `releaseIOMonorepoBeforeNextVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `set-next-version` |
-| `releaseIOMonorepoAfterNextVersionWriteHooks` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `set-next-version` |
-| `releaseIOMonorepoBeforeNextCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `commit-next-versions` |
-| `releaseIOMonorepoAfterNextCommitHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `commit-next-versions` |
-| `releaseIOMonorepoBeforePushHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `push-changes` |
-| `releaseIOMonorepoAfterPushHooks` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `push-changes` |
+| `releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck` | `Boolean` | `true` | Include `check-snapshot-dependencies` |
+| `releaseIOMonorepoPolicyEnableRunClean` | `Boolean` | `true` | Include `run-clean` |
+| `releaseIOMonorepoPolicyEnableRunTests` | `Boolean` | `true` | Include `run-tests` |
+| `releaseIOMonorepoPolicyEnableTagging` | `Boolean` | `true` | Include `tag-releases` |
+| `releaseIOMonorepoPolicyEnablePublish` | `Boolean` | `true` | Include `publish-artifacts` |
+| `releaseIOMonorepoPolicyEnablePush` | `Boolean` | `true` | Include `push-changes` |
+| `releaseIOMonorepoHooksBeforeSelection` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `detect-or-select-projects` |
+| `releaseIOMonorepoHooksAfterSelection` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `detect-or-select-projects` |
+| `releaseIOMonorepoHooksBeforeVersionResolution` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `inquire-versions` |
+| `releaseIOMonorepoHooksAfterVersionResolution` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `inquire-versions` |
+| `releaseIOMonorepoHooksBeforeReleaseVersionWrite` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `set-release-version` |
+| `releaseIOMonorepoHooksAfterReleaseVersionWrite` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `set-release-version` |
+| `releaseIOMonorepoHooksBeforeReleaseCommit` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `commit-release-versions` |
+| `releaseIOMonorepoHooksAfterReleaseCommit` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `commit-release-versions` |
+| `releaseIOMonorepoHooksBeforeTag` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `tag-releases` |
+| `releaseIOMonorepoHooksAfterTag` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `tag-releases` |
+| `releaseIOMonorepoHooksBeforePublish` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `publish-artifacts` |
+| `releaseIOMonorepoHooksAfterPublish` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `publish-artifacts` |
+| `releaseIOMonorepoHooksBeforeNextVersionWrite` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `set-next-version` |
+| `releaseIOMonorepoHooksAfterNextVersionWrite` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks after `set-next-version` |
+| `releaseIOMonorepoHooksBeforeNextCommit` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `commit-next-versions` |
+| `releaseIOMonorepoHooksAfterNextCommit` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `commit-next-versions` |
+| `releaseIOMonorepoHooksBeforePush` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `push-changes` |
+| `releaseIOMonorepoHooksAfterPush` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `push-changes` |
 
-## Version settings
-
-| Setting | Type | Default | Description |
-| ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoVersionFile` | `MonorepoVersionFileResolver` | scoped `releaseIOVersionFile` | Resolve each project's version file |
-| `releaseIOMonorepoReadVersion` | `File => IO[String]` | regex parser | Read a version from a project's version file |
-| `releaseIOMonorepoVersionFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Produce version-file contents for a project |
-
-## Tagging settings
+## Versioning settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Format per-project tags |
-| `releaseIOMonorepoTagComment` | `(String, String) => String` | `(name, ver) => s"Release $name $ver"` | Format per-project tag comments |
+| `releaseIOMonorepoVersioningFile` | `MonorepoVersionFileResolver` | scoped `releaseIOVersioningFile` | Resolve each project's version file |
+| `releaseIOMonorepoVersioningReadVersion` | `File => IO[String]` | regex parser | Read a version from a project's version file |
+| `releaseIOMonorepoVersioningFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Produce version-file contents for a project |
+
+## VCS settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIOMonorepoVcsTagName` | `(String, String) => String` | `(name, ver) => s"$name/v$ver"` | Format per-project tags |
+| `releaseIOMonorepoVcsTagComment` | `(String, String) => String` | `(name, ver) => s"Release $name $ver"` | Format per-project tag comments |
+| `releaseIOMonorepoVcsReleaseCommitMessage` | `String => String` | summary formatter | Commit message for release-version commits |
+| `releaseIOMonorepoVcsNextCommitMessage` | `String => String` | summary formatter | Commit message for next-version commits |
+
+## Publish settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIOMonorepoPublishChecks` | `Boolean` | `true` | Validate `publishTo` / `publish / skip` before publish |
 
 ## Change detection settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoDetectChanges` | `Boolean` | `true` | Enable git-based change detection |
-| `releaseIOMonorepoIncludeDownstream` | `Boolean` | `false` | Include downstream dependents of changed projects |
-| `releaseIOMonorepoChangeDetector` | `Option[(ProjectRef, File, State) => IO[Boolean]]` | `None` | Custom change detector |
-| `releaseIOMonorepoDetectChangesExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
-| `releaseIOMonorepoSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level shared paths checked per project |
+| `releaseIOMonorepoDetectionEnabled` | `Boolean` | `true` | Enable git-based change detection |
+| `releaseIOMonorepoDetectionIncludeDownstream` | `Boolean` | `false` | Include downstream dependents of changed projects |
+| `releaseIOMonorepoDetectionChangeDetector` | `Option[(ProjectRef, File, State) => IO[Boolean]]` | `None` | Custom change detector |
+| `releaseIOMonorepoDetectionExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
+| `releaseIOMonorepoDetectionSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level shared paths checked per project |
 
-Files matching `releaseIOMonorepoSharedPaths` are checked against each project's last
+Files matching `releaseIOMonorepoDetectionSharedPaths` are checked against each project's last
 release tag. If any shared file changed since that tag, the project is marked as changed.
 
 ## Example configuration
 
 ```scala
-releaseIOMonorepoSkipTests := true
-releaseIOMonorepoCrossBuild := true
+releaseIOMonorepoBehaviorSkipTests := true
+releaseIOMonorepoBehaviorCrossBuild := true
 releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(30).seconds
-releaseIOMonorepoTagName := ((name, ver) => s"release/$name/$ver")
+releaseIOMonorepoVcsTagName := ((name, ver) => s"release/$name/$ver")
 ```

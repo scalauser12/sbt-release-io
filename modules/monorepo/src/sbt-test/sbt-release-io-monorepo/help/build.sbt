@@ -99,7 +99,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name := "help-monorepo-test",
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
     expectMonorepoHelp := {
       val before            = snapshot()
       val outputFile        = target.value / "monorepo-help.log"

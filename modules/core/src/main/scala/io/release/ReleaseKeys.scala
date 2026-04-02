@@ -10,7 +10,7 @@ import sbt.AttributeKey
 private[release] object ReleaseKeys {
 
   /** Stored on `sbt.State` so that the version pair is available to sbt settings
-    * (e.g. `releaseIOTagName`) that cannot read from [[ReleaseContext]] directly.
+    * (e.g. `releaseIOVcsTagName`) that cannot read from [[ReleaseContext]] directly.
     */
   val versions: AttributeKey[(String, String)] =
     AttributeKey[(String, String)]("releaseIOVersions", "Release and next version pair")

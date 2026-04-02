@@ -67,7 +67,7 @@ def assertUnchanged(before: (Int, List[String], String)): Unit = {
 name         := "help-test"
 scalaVersion := "2.12.18"
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 expectReleaseHelp := {
   val before            = snapshot()

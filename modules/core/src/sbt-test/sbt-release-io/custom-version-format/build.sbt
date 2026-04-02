@@ -3,11 +3,11 @@ import scala.sys.process.*
 name         := "custom-version-format-test"
 scalaVersion := "2.12.18"
 
-// Point releaseIOVersionFile to a properties file instead of the default version.sbt
-releaseIOVersionFile := baseDirectory.value / "version.properties"
+// Point releaseIOVersioningFile to a properties file instead of the default version.sbt
+releaseIOVersioningFile := baseDirectory.value / "version.properties"
 
 // Custom reader: parse app.version=x.y.z from properties file
-releaseIOReadVersion := { (f: File) =>
+releaseIOVersioningReadVersion := { (f: File) =>
   _root_.cats.effect.IO.blocking(sbt.IO.read(f)).flatMap { contents =>
     val pattern = """app\.version=(.+)""".r
     pattern.findFirstMatchIn(contents) match {
@@ -23,7 +23,7 @@ releaseIOReadVersion := { (f: File) =>
 }
 
 // Custom writer: read existing file, replace only the app.version line, preserve everything else
-releaseIOVersionFileContents := { (f: File, ver: String) =>
+releaseIOVersioningFileContents := { (f: File, ver: String) =>
   _root_.cats.effect.IO.blocking(sbt.IO.read(f)).map { contents =>
     contents.linesIterator
       .map {
@@ -34,10 +34,10 @@ releaseIOVersionFileContents := { (f: File, ver: String) =>
   }
 }
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 val checkVersionProps =
   taskKey[Unit]("Verify version.properties has custom format with next version")

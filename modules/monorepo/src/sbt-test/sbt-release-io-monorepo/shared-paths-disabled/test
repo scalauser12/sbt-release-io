@@ -1,4 +1,4 @@
-# Test: releaseIOMonorepoSharedPaths := Seq.empty disables shared path detection
+# Test: releaseIOMonorepoDetectionSharedPaths := Seq.empty disables shared path detection
 $ exec git init
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"

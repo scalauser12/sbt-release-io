@@ -53,27 +53,27 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     "compile - apply monorepo policies and lifecycle hooks around the remaining built-in phases"
   ) {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoEnableSnapshotDependenciesCheck := false,
-      MonorepoReleaseIO.releaseIOMonorepoEnableRunClean                  := false,
-      MonorepoReleaseIO.releaseIOMonorepoEnableRunTests                  := false,
-      MonorepoReleaseIO.releaseIOMonorepoEnablePublish                   := false,
-      MonorepoReleaseIO.releaseIOMonorepoEnablePush                      := false,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks            := Seq(
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := false,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean                  := false,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests                  := false,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish                   := false,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush                      := false,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection                  := Seq(
         MonorepoGlobalHookIO.action("before-selection")(_ => IO.unit)
       ),
-      MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks             := Seq(
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection                   := Seq(
         MonorepoGlobalHookIO.action("after-selection")(_ => IO.unit)
       ),
-      MonorepoReleaseIO.releaseIOMonorepoBeforeVersionResolutionHooks    := Seq(
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution          := Seq(
         MonorepoProjectHookIO.action("before-version")((_, _) => IO.unit)
       ),
-      MonorepoReleaseIO.releaseIOMonorepoAfterVersionResolutionHooks     := Seq(
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution           := Seq(
         MonorepoProjectHookIO.action("after-version")((_, _) => IO.unit)
       ),
-      MonorepoReleaseIO.releaseIOMonorepoBeforeTagHooks                  := Seq(
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeTag                        := Seq(
         MonorepoProjectHookIO.action("before-tag")((_, _) => IO.unit)
       ),
-      MonorepoReleaseIO.releaseIOMonorepoAfterTagHooks                   := Seq(
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag                         := Seq(
         MonorepoProjectHookIO.action("after-tag")((_, _) => IO.unit)
       )
     )
@@ -112,14 +112,14 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
   test("compile - skip publish hook validation and execution when publish is skipped at runtime") {
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val settings: Seq[Setting[?]] = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoBeforePublishHooks := Seq(
+        MonorepoReleaseIO.releaseIOMonorepoHooksBeforePublish := Seq(
           MonorepoProjectHookIO(
             name = "before-publish",
             execute = (ctx, _) => observed.update(_ :+ "execute-before").as(ctx),
             validate = (_, _) => observed.update(_ :+ "validate-before")
           )
         ),
-        MonorepoReleaseIO.releaseIOMonorepoAfterPublishHooks  := Seq(
+        MonorepoReleaseIO.releaseIOMonorepoHooksAfterPublish  := Seq(
           MonorepoProjectHookIO(
             name = "after-publish",
             execute = (ctx, _) => observed.update(_ :+ "execute-after").as(ctx),
@@ -205,29 +205,29 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
 
   private def hookSettingsDefaults: Seq[Setting[?]] =
     Seq(
-      MonorepoReleaseIO.releaseIOMonorepoEnableSnapshotDependenciesCheck := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnableRunClean                  := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnableRunTests                  := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnableTagging                   := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnablePublish                   := true,
-      MonorepoReleaseIO.releaseIOMonorepoEnablePush                      := true,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks            := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks             := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeVersionResolutionHooks    := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterVersionResolutionHooks     := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeReleaseVersionWriteHooks  := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterReleaseVersionWriteHooks   := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeReleaseCommitHooks        := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterReleaseCommitHooks         := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeTagHooks                  := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterTagHooks                   := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforePublishHooks              := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterPublishHooks               := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeNextVersionWriteHooks     := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterNextVersionWriteHooks      := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforeNextCommitHooks           := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterNextCommitHooks            := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoBeforePushHooks                 := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoAfterPushHooks                  := Seq.empty
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := true,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean                  := true,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests                  := true,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging                   := true,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish                   := true,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush                      := true,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection                  := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection                   := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution          := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution           := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseVersionWrite        := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseVersionWrite         := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit              := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit               := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeTag                        := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag                         := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforePublish                    := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterPublish                     := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextVersionWrite           := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite            := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit                 := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit                  := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush                       := Seq.empty,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush                        := Seq.empty
     )
 }

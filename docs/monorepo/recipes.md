@@ -6,7 +6,7 @@ Enable cross-building so version-sensitive steps run once per `crossScalaVersion
 
 ```scala
 // build.sbt
-releaseIOMonorepoCrossBuild := true
+releaseIOMonorepoBehaviorCrossBuild := true
 ```
 
 Or pass the `cross` flag on the command line:
@@ -47,7 +47,7 @@ MonorepoStepIO
 
 ## CI/CD integration
 
-The plugin defaults to non-interactive mode (`releaseIOMonorepoInteractive := false`), so it works in CI without additional configuration. Pass `with-defaults` to suppress the remaining prompts, and supply versions explicitly.
+The plugin defaults to non-interactive mode (`releaseIOMonorepoBehaviorInteractive := false`), so it works in CI without additional configuration. Pass `with-defaults` to suppress the remaining prompts, and supply versions explicitly.
 
 ### Per-project version overrides
 
@@ -87,8 +87,8 @@ To rehearse a release locally, disable push, skip publish, run `check`, then run
 
 ```scala
 // build.sbt
-releaseIOMonorepoEnablePush := false
-releaseIOMonorepoSkipPublish := true
+releaseIOMonorepoPolicyEnablePush := false
+releaseIOMonorepoBehaviorSkipPublish := true
 ```
 
 First run the preflight with no release side effects:
@@ -107,9 +107,9 @@ sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-
 push. With cross-build validation enabled, sbt may temporarily switch Scala versions during
 validation and then restore the entry version.
 
-`releaseIOMonorepoSkipPublish := true` keeps the publish phase available but skips it at
+`releaseIOMonorepoBehaviorSkipPublish := true` keeps the publish phase available but skips it at
 execution time. If you want to remove publish from the compiled lifecycle entirely,
-use `releaseIOMonorepoEnablePublish := false` instead.
+use `releaseIOMonorepoPolicyEnablePublish := false` instead.
 
 Then run the real release:
 
@@ -141,10 +141,10 @@ In `build.sbt`:
 import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoGlobalHookIO
 
-releaseIOMonorepoEnablePush := false
-releaseIOMonorepoEnablePublish := false
-releaseIOMonorepoEnableRunClean := false
-releaseIOMonorepoAfterSelectionHooks +=
+releaseIOMonorepoPolicyEnablePush := false
+releaseIOMonorepoPolicyEnablePublish := false
+releaseIOMonorepoPolicyEnableRunClean := false
+releaseIOMonorepoHooksAfterSelection +=
   MonorepoGlobalHookIO.action("print-selected-projects")(ctx =>
     IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
   )

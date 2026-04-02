@@ -319,6 +319,194 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     }
   }
 
+  test("Global.copy changing only isSelectionBoundary keeps threaded validation single-wrapped") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .global("copy-global-boundary")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
+          .validateOnly
+        val copied = step.copy(isSelectionBoundary = true)
+
+        copied.threadedValidation(ctx) *> events.get.map { obs =>
+          assert(copied.isSelectionBoundary)
+          assertEquals(obs, List("validate", "context"))
+        }
+      }
+    }
+  }
+
+  test("Global.copy replacing validateWithContext retains the plain validate branch") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .global("copy-global-validate-with-context")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .validateOnly
+        val copied = step.copy(
+          validateWithContext = Some(currentCtx => events.update(_ :+ "context").as(currentCtx))
+        )
+
+        copied.threadedValidation(ctx) *> events.get
+          .map(obs => assertEquals(obs, List("validate", "context")))
+      }
+    }
+  }
+
+  test("Global.copy replacing validateWithContext preserves threaded context updates") {
+    contextResource.use { ctx =>
+      val key = AttributeKey[String]("copy-global-validate-with-context-replacement")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .global("copy-global-validate-with-context-replacement")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "old-context").as(currentCtx.withMetadata(key, "old"))
+          )
+          .validateOnly
+        val copied = step.copy(
+          validateWithContext = Some(currentCtx =>
+            events
+              .update(_ :+ s"new-context:${currentCtx.metadata(key).getOrElse("missing")}")
+              .as(currentCtx.withMetadata(key, "new"))
+          )
+        )
+
+        copied.threadedValidation(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(obs, List("validate", "old-context", "new-context:old"))
+            assertEquals(result.metadata(key), Some("new"))
+          }
+        }
+      }
+    }
+  }
+
+  test("Global.copy replacing validate retains the threaded validation branch") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .global("copy-global-validate")
+          .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
+          .validateOnly
+        val copied = step.copy(validate = _ => events.update(_ :+ "validate"))
+
+        copied.threadedValidation(ctx) *> events.get
+          .map(obs => assertEquals(obs, List("validate", "context")))
+      }
+    }
+  }
+
+  test("PerProject.copy changing only enableCrossBuild keeps threaded validation single-wrapped") {
+    contextResource.use { ctx =>
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .perProject("copy-per-project-cross-build")
+          .withValidation((_, currentProject) =>
+            events.update(_ :+ s"validate:${currentProject.name}")
+          )
+          .withValidationContext((currentCtx, currentProject) =>
+            events.update(_ :+ s"context:${currentProject.name}").as(currentCtx)
+          )
+          .validateOnly
+        val copied = step.copy(enableCrossBuild = true)
+
+        copied.threadedValidation(ctx, project) *> events.get.map { obs =>
+          assert(copied.enableCrossBuild)
+          assertEquals(obs, List("validate:core", "context:core"))
+        }
+      }
+    }
+  }
+
+  test("PerProject.copy replacing validateWithContext retains the plain validate branch") {
+    contextResource.use { ctx =>
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .perProject("copy-per-project-validate-with-context")
+          .withValidation((_, currentProject) =>
+            events.update(_ :+ s"validate:${currentProject.name}")
+          )
+          .validateOnly
+        val copied = step.copy(
+          validateWithContext = Some((currentCtx, currentProject) =>
+            events.update(_ :+ s"context:${currentProject.name}").as(currentCtx)
+          )
+        )
+
+        copied.threadedValidation(ctx, project) *> events.get
+          .map(obs => assertEquals(obs, List("validate:core", "context:core")))
+      }
+    }
+  }
+
+  test("PerProject.copy replacing validateWithContext preserves threaded context updates") {
+    contextResource.use { ctx =>
+      val key     = AttributeKey[String]("copy-per-project-validate-with-context-replacement")
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .perProject("copy-per-project-validate-with-context-replacement")
+          .withValidation((_, currentProject) =>
+            events.update(_ :+ s"validate:${currentProject.name}")
+          )
+          .withValidationContext((currentCtx, currentProject) =>
+            events
+              .update(_ :+ s"old-context:${currentProject.name}")
+              .as(currentCtx.withMetadata(key, "old"))
+          )
+          .validateOnly
+        val copied = step.copy(
+          validateWithContext = Some((currentCtx, currentProject) =>
+            events
+              .update(
+                _ :+ s"new-context:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
+              .as(currentCtx.withMetadata(key, "new"))
+          )
+        )
+
+        copied.threadedValidation(ctx, project).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(
+              obs,
+              List("validate:core", "old-context:core", "new-context:core:old")
+            )
+            assertEquals(result.metadata(key), Some("new"))
+          }
+        }
+      }
+    }
+  }
+
+  test("PerProject.copy replacing validate retains the threaded validation branch") {
+    contextResource.use { ctx =>
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .perProject("copy-per-project-validate")
+          .withValidationContext((currentCtx, currentProject) =>
+            events.update(_ :+ s"context:${currentProject.name}").as(currentCtx)
+          )
+          .validateOnly
+        val copied = step.copy(
+          validate = (_, currentProject) => events.update(_ :+ s"validate:${currentProject.name}")
+        )
+
+        copied.threadedValidation(ctx, project) *> events.get
+          .map(obs => assertEquals(obs, List("validate:core", "context:core")))
+      }
+    }
+  }
+
   test("executeAction wraps IO[Unit] correctly for Global") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>

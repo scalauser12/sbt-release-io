@@ -2,21 +2,21 @@ name         := "custom-publish-action-test"
 scalaVersion := "2.12.18"
 
 // Override the publish action to write a marker file instead of actually publishing
-releaseIOPublishArtifactsAction := {
+releaseIOPublishAction := {
   val marker = baseDirectory.value / "marker" / "publish.log"
   IO.createDirectory(marker.getParentFile)
   IO.append(marker, "custom-publish-ran\n")
 }
 
 // Disable publishTo checks — no real publishTo configured
-releaseIOPublishArtifactsChecks := false
+releaseIOPublishChecks := false
 
 // Keep publish-artifacts; filter out push-changes, run-clean, run-tests
-releaseIOEnablePush           := false
-releaseIOEnableRunClean       := false
-releaseIOEnableRunTests       := false
+releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnableRunClean       := false
+releaseIOPolicyEnableRunTests       := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkPublished = taskKey[Unit]("Verify custom publish action ran exactly once")
 checkPublished := {

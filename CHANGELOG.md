@@ -26,11 +26,11 @@ resource-aware custom plugins.
 ### Improvements
 
 - Add shared persistent decision-default settings for tag conflicts and yes/no
-  release prompts: `releaseIODefaultTagExistsAnswer`,
-  `releaseIODefaultSnapshotDependenciesAnswer`,
-  `releaseIODefaultRemoteCheckFailureAnswer`,
-  `releaseIODefaultUpstreamBehindAnswer`, and
-  `releaseIODefaultPushAnswer`.
+  release prompts: `releaseIODefaultsTagExistsAnswer`,
+  `releaseIODefaultsSnapshotDependenciesAnswer`,
+  `releaseIODefaultsRemoteCheckFailureAnswer`,
+  `releaseIODefaultsUpstreamBehindAnswer`, and
+  `releaseIODefaultsPushAnswer`.
 - Add matching CLI flags for core and monorepo release commands so non-
   interactive and scripted runs can provide the same default answers
   explicitly.
@@ -273,7 +273,7 @@ GitHub release:
 - Fix cross-build restoration not being exception-safe in monorepo. Failed
   cross-builds now restore the entry Scala version before propagating the
   error.
-- Fix global-version mode not preserving `releaseIOVersionFile` across sbt
+- Fix global-version mode not preserving `releaseIOVersioningFile` across sbt
   state reloads during version writes in monorepo.
 - Fix global CLI version overrides (`release-version <version>`) not
   force-including projects in detect-changes mode in monorepo.
@@ -294,7 +294,7 @@ GitHub release:
 - Add `global-override-detect-changes` to verify global overrides force all
   projects in detect-changes mode.
 - Add `global-version-file-preserve` to verify a custom
-  `releaseIOVersionFile` survives reloads in global mode.
+  `releaseIOVersioningFile` survives reloads in global mode.
 - Add `publish-nested-aggregate` to verify transitive aggregate `publishTo`
   validation.
 - Add unit tests for `defaultReadVersion` block comment handling.
@@ -318,7 +318,7 @@ GitHub release:
   such as `1.0.0-RC1`.
 - Use atomic `git push --follow-tags` instead of separate branch and tag
   pushes.
-- Apply `releaseIOMonorepoDetectChangesExcludes` to shared-path change
+- Apply `releaseIOMonorepoDetectionExcludes` to shared-path change
   detection.
 - Preserve `failureCause` in `mergeSnapshot` for per-project failure reporting.
 
@@ -363,8 +363,8 @@ GitHub release:
 ### Features
 
 - Add customizable monorepo commit messages via
-  `releaseIOMonorepoCommitMessage` and `releaseIOMonorepoNextCommitMessage`.
-- Add customizable monorepo tag comments via `releaseIOMonorepoTagComment` and
+  `releaseIOMonorepoVcsReleaseCommitMessage` and `releaseIOMonorepoVcsNextCommitMessage`.
+- Add customizable monorepo tag comments via `releaseIOMonorepoVcsTagComment` and
   `releaseIOMonorepoUnifiedTagComment`.
 
 ### Bug Fixes
@@ -469,7 +469,7 @@ GitHub release:
 - Store failure causes in `ReleaseContext` and `MonorepoContext` for better
   error diagnostics.
 - Add shared-path detection for monorepo change detection via
-  `releaseIOMonorepoSharedPaths`.
+  `releaseIOMonorepoDetectionSharedPaths`.
 - Optimize unified tag mode by pre-computing tag lookups and eliminating
   redundant git calls.
 
@@ -537,7 +537,7 @@ GitHub release:
 
 ### Features
 
-- Add `releaseIOMonorepoDetectChangesExcludes` to filter additional files from
+- Add `releaseIOMonorepoDetectionExcludes` to filter additional files from
   git-based change detection.
 - Add global version override syntax (`release-version 2.0.0`) for uniform
   versions in global-version mode.

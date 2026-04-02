@@ -3,7 +3,7 @@ lazy val lib = (project in file("lib"))
     name                            := "lib",
     scalaVersion                    := "2.12.18",
     // Custom publish action: write a marker file
-    releaseIOPublishArtifactsAction := {
+    releaseIOPublishAction := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
       IO.append(marker, "lib-published\n")
@@ -17,12 +17,12 @@ lazy val root = (project in file("."))
     scalaVersion   := "2.12.18",
     publish / skip := true,
 
-    releaseIOPublishArtifactsChecks := false,
+    releaseIOPublishChecks := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
-    releaseIOEnablePush           := false,
-    releaseIOEnableRunClean       := false,
-    releaseIOEnableRunTests       := false
+    releaseIOVcsIgnoreUntrackedFiles := true,
+    releaseIOPolicyEnablePush           := false,
+    releaseIOPolicyEnableRunClean       := false,
+    releaseIOPolicyEnableRunTests       := false
   )
 
 val checkPublished = taskKey[Unit]("Verify child publish ran despite root skip")

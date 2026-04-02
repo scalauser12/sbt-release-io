@@ -35,7 +35,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         _           <- writeVersion(new File(new File(fixture.dir, "api"), "version.sbt"), "2.0.0")
         result      <- MonorepoVcsCommitHelpers.commitVersions(
                          ctx,
-                         MonorepoReleaseIO.releaseIOMonorepoCommitMessage,
+                         MonorepoReleaseIO.releaseIOMonorepoVcsReleaseCommitMessage,
                          { case (releaseVer, _) => releaseVer },
                          persistReleaseHash = true
                        )
@@ -68,7 +68,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         beforeHash <- vcs.currentHash
         result     <- MonorepoVcsCommitHelpers.commitVersions(
                         ctx,
-                        MonorepoReleaseIO.releaseIOMonorepoCommitMessage,
+                        MonorepoReleaseIO.releaseIOMonorepoVcsReleaseCommitMessage,
                         { case (releaseVer, _) => releaseVer },
                         persistReleaseHash = true
                       )
@@ -174,7 +174,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       val mutatedState         = SbtRuntime.appendWithSession(
         fixture.state,
         Seq(
-          MonorepoReleaseIO.releaseIOMonorepoVersionFile := { (ref: ProjectRef, state: State) =>
+          MonorepoReleaseIO.releaseIOMonorepoVersioningFile := { (ref: ProjectRef, state: State) =>
             val resolvedVersion = SbtRuntime.extracted(state).getOpt(ref / version).getOrElse("")
             val defaultFile     = new File(new File(fixture.dir, ref.project), "version.sbt")
             if (ref.project == "core" && resolvedVersion == "1.0.0") alternateVersionFile
@@ -347,13 +347,13 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
 
   private def lateBoundVersionSettings(repo: File): Seq[sbt.Setting[?]] =
     Seq(
-      MonorepoReleaseIO.releaseIOMonorepoVersionFile         := { (ref: ProjectRef, _: State) =>
+      MonorepoReleaseIO.releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, _: State) =>
         new File(new File(repo, ref.project), "version.properties")
       },
-      MonorepoReleaseIO.releaseIOMonorepoReadVersion         := { file =>
+      MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion  := { file =>
         IO.blocking(sbt.IO.read(file).trim.stripPrefix("version="))
       },
-      MonorepoReleaseIO.releaseIOMonorepoVersionFileContents := { (_, version) =>
+      MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents := { (_, version) =>
         IO.pure(s"version=$version\n")
       }
     )

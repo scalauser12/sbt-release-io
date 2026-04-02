@@ -33,11 +33,11 @@ private[monorepo] object MonorepoCommandParsers {
     Try {
       Project
         .extract(state)
-        .get(MonorepoReleaseIO.releaseIOMonorepoProjects)
+        .get(MonorepoReleaseIO.releaseIOMonorepoSelectionProjects)
         .map(_.project)
     }.toEither.left
       .map { err =>
-        s"Failed to resolve releaseIOMonorepoProjects while building the $commandName parser: ${errorMessage(err)}"
+        s"Failed to resolve releaseIOMonorepoSelectionProjects while building the $commandName parser: ${errorMessage(err)}"
       }
       .flatMap(validateProjectNames)
 
@@ -55,10 +55,10 @@ private[monorepo] object MonorepoCommandParsers {
     if (duplicates.isEmpty) Right(normalizeProjectNames(projectNames))
     else
       Left(
-        "Duplicate configured monorepo project ids in releaseIOMonorepoProjects: " +
+        "Duplicate configured monorepo project ids in releaseIOMonorepoSelectionProjects: " +
           s"${duplicates.mkString(", ")}. " +
           "Monorepo selectors and project=version overrides are name-based, " +
-          "so releaseIOMonorepoProjects must contain unique ref.project values."
+          "so releaseIOMonorepoSelectionProjects must contain unique ref.project values."
       )
   }
 

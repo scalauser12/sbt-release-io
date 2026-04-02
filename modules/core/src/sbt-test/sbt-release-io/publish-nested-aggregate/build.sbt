@@ -22,10 +22,10 @@ lazy val root = (project in file("."))
     name                          := "publish-nested-aggregate-test",
     scalaVersion                  := "2.12.18",
     publishTo                     := Some(Resolver.file("file", new File("."))),
-    releaseIOIgnoreUntrackedFiles := true,
-    releaseIOEnablePush           := false,
-    releaseIOEnableRunClean       := false,
-    releaseIOEnableRunTests       := false
+    releaseIOVcsIgnoreUntrackedFiles := true,
+    releaseIOPolicyEnablePush           := false,
+    releaseIOPolicyEnableRunClean       := false,
+    releaseIOPolicyEnableRunTests       := false
   )
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")

@@ -5,10 +5,10 @@ name := "untracked-files-test"
 scalaVersion := "2.12.18"
 
 // Skip push and publish steps in tests (following upstream sbt-release pattern)
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 // Custom verification task (following upstream sbt-release pattern)
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")

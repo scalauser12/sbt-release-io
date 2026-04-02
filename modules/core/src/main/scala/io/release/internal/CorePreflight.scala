@@ -134,9 +134,9 @@ private[release] object CorePreflight {
     val checkSteps = CheckSteps(steps)
 
     for {
-      versionSnapshot <- resolveVersionSnapshot(initialCtx, checkSteps)
+      validatedCtx    <- ReleaseComposer.validateOnly(steps, crossBuild)(initialCtx)
+      versionSnapshot <- resolveVersionSnapshot(validatedCtx, checkSteps)
       tagSummary      <- resolveTagSummary(versionSnapshot, checkSteps)
-      _               <- ReleaseComposer.validateOnly(steps, crossBuild)(versionSnapshot.context)
       summary          = Summary(
                            versions = versionSnapshot.summary,
                            tag = tagSummary,
@@ -144,7 +144,7 @@ private[release] object CorePreflight {
                            publishSummary = CheckModeOutput.publishStatus(
                              publishConfigured = checkSteps.publishConfigured,
                              skipPublish = versionSnapshot.context.skipPublish,
-                             skippedMessage = "skipped via releaseIOSkipPublish := true"
+                             skippedMessage = "skipped via releaseIOBehaviorSkipPublish := true"
                            ),
                            pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
                            stepNames = checkSteps.stepNames

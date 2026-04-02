@@ -13,7 +13,7 @@ Each scenario lives under `sbt-release-io-monorepo/<test-name>/` and typically c
 
 The monorepo scripted suite covers only the supported customization surface:
 
-- policy keys such as `releaseIOMonorepoEnable*`, `releaseIOMonorepoSkipPublish`, and `releaseIOIgnoreUntrackedFiles`
+- policy keys such as `releaseIOMonorepoEnable*`, `releaseIOMonorepoBehaviorSkipPublish`, and `releaseIOVcsIgnoreUntrackedFiles`
 - global and per-project lifecycle hooks
 - resource-aware hooks via `monorepoResourceHooks`
 

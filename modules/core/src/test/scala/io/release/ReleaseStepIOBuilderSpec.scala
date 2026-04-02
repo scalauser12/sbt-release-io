@@ -258,6 +258,36 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
+  test("step.copy - replacing validateWithContext preserves threaded context updates") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key = sbt.AttributeKey[String]("copy-validate-with-context-replacement")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = ReleaseStepIO
+          .step("copy-validate-with-context-replacement")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "old-context").as(currentCtx.withMetadata(key, "old"))
+          )
+          .validateOnly
+        val copied = step.copy(
+          validateWithContext = Some(currentCtx =>
+            events
+              .update(_ :+ s"new-context:${currentCtx.metadata(key).getOrElse("missing")}")
+              .as(currentCtx.withMetadata(key, "new"))
+          )
+        )
+
+        copied.threadedValidation(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(obs, List("validate", "old-context", "new-context:old"))
+            assertEquals(result.metadata(key), Some("new"))
+          }
+        }
+      }
+    }
+  }
+
   test("step.copy - replacing validate retains the threaded validation branch") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>

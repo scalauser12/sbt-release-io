@@ -6,7 +6,7 @@ $ exec git add .
 $ exec git commit -m "Initial commit"
 
 # Release all projects — change detection is disabled.
-# The default releaseIOMonorepoProjects should transitively discover
+# The default releaseIOMonorepoSelectionProjects should transitively discover
 # both services and api (root -> services -> api).
 > releaseIOMonorepo with-defaults release-version services=1.0.0 release-version api=1.0.0 next-version services=1.1.0-SNAPSHOT next-version api=1.1.0-SNAPSHOT
 

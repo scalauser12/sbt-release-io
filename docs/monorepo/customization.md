@@ -4,8 +4,8 @@
 
 Monorepo customization is hook-first:
 
-- `releaseIOMonorepoEnable*` turns built-in phases on or off
-- `releaseIOMonorepo*Hooks` adds behavior around supported lifecycle points
+- `releaseIOMonorepoPolicy*` turns built-in phases on or off
+- `releaseIOMonorepoHooks*` adds behavior around supported lifecycle points
 - `MonorepoReleasePluginLike.monorepoResourceHooks` lets custom plugins use one shared resource
 
 Legacy raw-process step-list editing was removed. Use hooks and policies instead.
@@ -25,10 +25,10 @@ def markerHook(marker: String): MonorepoProjectHookIO =
     }
   }
 
-releaseIOMonorepoEnablePush := false
-releaseIOMonorepoEnablePublish := false
-releaseIOMonorepoBeforeTagHooks += markerHook("before-tag")
-releaseIOMonorepoAfterTagHooks += markerHook("after-tag")
+releaseIOMonorepoPolicyEnablePush := false
+releaseIOMonorepoPolicyEnablePublish := false
+releaseIOMonorepoHooksBeforeTag += markerHook("before-tag")
+releaseIOMonorepoHooksAfterTag += markerHook("after-tag")
 ```
 
 Hook semantics:
@@ -42,26 +42,43 @@ Hook semantics:
 The tagging lifecycle phase is still named `tag-releases`, but the supported built-in step
 symbol is `MonorepoReleaseSteps.tagReleasesPerProject`.
 
+The older flat names remain as deprecated aliases in this release. Prefer the grouped names in
+`build.sbt`, even though `inspect` still prints the legacy sbt key labels.
+
+## Key rename guide
+
+| Old name | Preferred grouped name |
+| -------- | ---------------------- |
+| `releaseIOMonorepoEnablePush` | `releaseIOMonorepoPolicyEnablePush` |
+| `releaseIOMonorepoEnablePublish` | `releaseIOMonorepoPolicyEnablePublish` |
+| `releaseIOMonorepoEnableRunClean` | `releaseIOMonorepoPolicyEnableRunClean` |
+| `releaseIOMonorepoBeforeSelectionHooks` | `releaseIOMonorepoHooksBeforeSelection` |
+| `releaseIOMonorepoAfterSelectionHooks` | `releaseIOMonorepoHooksAfterSelection` |
+| `releaseIOMonorepoBeforeTagHooks` | `releaseIOMonorepoHooksBeforeTag` |
+| `releaseIOMonorepoAfterTagHooks` | `releaseIOMonorepoHooksAfterTag` |
+| `releaseIOMonorepoBeforePublishHooks` | `releaseIOMonorepoHooksBeforePublish` |
+| `releaseIOMonorepoAfterPublishHooks` | `releaseIOMonorepoHooksAfterPublish` |
+
 ## Migration guide
 
 | Old intent | New hook/policy surface |
 | ---------- | ----------------------- |
-| Remove `push-changes` | `releaseIOMonorepoEnablePush := false` |
-| Remove `publish-artifacts` | `releaseIOMonorepoEnablePublish := false` |
-| Remove `run-clean` | `releaseIOMonorepoEnableRunClean := false` |
-| Remove `run-tests` | `releaseIOMonorepoEnableRunTests := false` |
-| Insert logic before or after project selection | `releaseIOMonorepoBeforeSelectionHooks` / `releaseIOMonorepoAfterSelectionHooks` |
-| Insert logic around version resolution | `releaseIOMonorepoBeforeVersionResolutionHooks` / `releaseIOMonorepoAfterVersionResolutionHooks` |
-| Insert logic around tagging | `releaseIOMonorepoBeforeTagHooks` / `releaseIOMonorepoAfterTagHooks` |
-| Insert logic around publish | `releaseIOMonorepoBeforePublishHooks` / `releaseIOMonorepoAfterPublishHooks` |
+| Remove `push-changes` | `releaseIOMonorepoPolicyEnablePush := false` |
+| Remove `publish-artifacts` | `releaseIOMonorepoPolicyEnablePublish := false` |
+| Remove `run-clean` | `releaseIOMonorepoPolicyEnableRunClean := false` |
+| Remove `run-tests` | `releaseIOMonorepoPolicyEnableRunTests := false` |
+| Insert logic before or after project selection | `releaseIOMonorepoHooksBeforeSelection` / `releaseIOMonorepoHooksAfterSelection` |
+| Insert logic around version resolution | `releaseIOMonorepoHooksBeforeVersionResolution` / `releaseIOMonorepoHooksAfterVersionResolution` |
+| Insert logic around tagging | `releaseIOMonorepoHooksBeforeTag` / `releaseIOMonorepoHooksAfterTag` |
+| Insert logic around publish | `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` |
 
 ### Copy/paste replacements
 
 Disable push and publish:
 
 ```scala
-releaseIOMonorepoEnablePush := false
-releaseIOMonorepoEnablePublish := false
+releaseIOMonorepoPolicyEnablePush := false
+releaseIOMonorepoPolicyEnablePublish := false
 ```
 
 Replace "insert a step after project selection" with a global hook:
@@ -70,7 +87,7 @@ Replace "insert a step after project selection" with a global hook:
 import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoGlobalHookIO
 
-releaseIOMonorepoAfterSelectionHooks +=
+releaseIOMonorepoHooksAfterSelection +=
   MonorepoGlobalHookIO.action("print-selected-projects")(ctx =>
     IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
   )
@@ -82,7 +99,7 @@ Add a per-project notification after tagging:
 import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
-releaseIOMonorepoAfterTagHooks +=
+releaseIOMonorepoHooksAfterTag +=
   MonorepoProjectHookIO.action("notify-tagged") { (_, project) =>
     val version = project.versions.map(_._1).getOrElse("unknown")
     IO.println(s"[monorepo] tagged ${project.name} $version")

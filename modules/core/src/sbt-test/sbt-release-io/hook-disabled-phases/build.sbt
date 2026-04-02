@@ -10,10 +10,10 @@ scalaVersion := "2.12.18"
 libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
-releaseIOIgnoreUntrackedFiles := true
-releaseIOEnableRunTests       := false
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOVcsIgnoreUntrackedFiles := true
+releaseIOPolicyEnableRunTests       := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 def markerHook(marker: String): ReleaseHookIO =
   ReleaseHookIO.action(marker) { ctx =>
@@ -23,8 +23,8 @@ def markerHook(marker: String): ReleaseHookIO =
     }
   }
 
-releaseIOBeforePublishHooks := Seq(markerHook("before-publish"))
-releaseIOAfterPublishHooks  := Seq(markerHook("after-publish"))
+releaseIOHooksBeforePublish := Seq(markerHook("before-publish"))
+releaseIOHooksAfterPublish  := Seq(markerHook("after-publish"))
 
 val checkNoPublishHooks = taskKey[Unit]("Check publish hooks did not run")
 checkNoPublishHooks := {

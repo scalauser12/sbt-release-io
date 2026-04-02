@@ -383,7 +383,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private def gitRepoWithLoadedStateResource(
       rootSettings: Seq[Def.Setting[?]] = Seq(
-        io.release.ReleaseIO.releaseIOIgnoreUntrackedFiles := false
+        io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false
       )
   ): Resource[IO, (File, State)] =
     gitRepoWithVcsResource { repo =>
@@ -407,13 +407,13 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             repo,
             aggregateIds = Seq("core"),
             settings = Seq(
-              MonorepoReleaseIO.releaseIOMonorepoTagName    := ((name: String, ver: String) =>
+              MonorepoReleaseIO.releaseIOMonorepoVcsTagName    := ((name: String, ver: String) =>
                 s"$name-v$ver"
               ),
-              MonorepoReleaseIO.releaseIOMonorepoTagComment := ((name: String, ver: String) =>
+              MonorepoReleaseIO.releaseIOMonorepoVcsTagComment := ((name: String, ver: String) =>
                 s"Release $name $ver"
               ),
-              io.release.ReleaseIO.releaseIOVcsSign         := false
+              io.release.ReleaseIO.releaseIOVcsSign            := false
             )
           ),
           Project("core", coreBase).settings((releaseManifestSettings())*)
@@ -458,13 +458,13 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             repo,
             aggregateIds = Seq("core", "api"),
             settings = Seq(
-              MonorepoReleaseIO.releaseIOMonorepoTagName    := ((name: String, ver: String) =>
+              MonorepoReleaseIO.releaseIOMonorepoVcsTagName    := ((name: String, ver: String) =>
                 s"$name-v$ver"
               ),
-              MonorepoReleaseIO.releaseIOMonorepoTagComment := ((name: String, ver: String) =>
+              MonorepoReleaseIO.releaseIOMonorepoVcsTagComment := ((name: String, ver: String) =>
                 s"Release $name $ver"
               ),
-              io.release.ReleaseIO.releaseIOVcsSign         := false
+              io.release.ReleaseIO.releaseIOVcsSign            := false
             )
           ),
           Project("core", coreBase).settings((releaseManifestSettings())*),
@@ -532,7 +532,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       else Project("root", repo)
 
     aggregated.settings(
-      (Seq(io.release.ReleaseIO.releaseIOIgnoreUntrackedFiles := false) ++ settings)*
+      (Seq(io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false) ++ settings)*
     )
   }
 
@@ -576,13 +576,13 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private def lateBoundVersionSettings(repo: File): Seq[Def.Setting[?]] =
     Seq(
-      MonorepoReleaseIO.releaseIOMonorepoVersionFile         := { (ref: ProjectRef, _: State) =>
+      MonorepoReleaseIO.releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, _: State) =>
         new File(new File(repo, ref.project), "version.properties")
       },
-      MonorepoReleaseIO.releaseIOMonorepoReadVersion         := { file =>
+      MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion  := { file =>
         IO.blocking(sbt.IO.read(file).trim.stripPrefix("version="))
       },
-      MonorepoReleaseIO.releaseIOMonorepoVersionFileContents := { (_, version) =>
+      MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents := { (_, version) =>
         IO.pure(s"version=$version\n")
       }
     )

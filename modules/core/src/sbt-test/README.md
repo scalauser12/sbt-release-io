@@ -13,8 +13,8 @@ Each scenario lives under `sbt-release-io/<test-name>/` and typically contains:
 
 The scripted suite now covers only the supported extension surface:
 
-- policy keys such as `releaseIOEnable*`, `releaseIOSkipPublish`, and `releaseIOIgnoreUntrackedFiles`
-- plain lifecycle hooks such as `releaseIOBeforeTagHooks`
+- policy keys such as `releaseIOEnable*`, `releaseIOBehaviorSkipPublish`, and `releaseIOVcsIgnoreUntrackedFiles`
+- plain lifecycle hooks such as `releaseIOHooksBeforeTag`
 - resource-aware hooks via `releaseResourceHooks`
 
 Legacy step-list editing fixtures were retired. New scripted tests should use lifecycle hooks and policy keys only.

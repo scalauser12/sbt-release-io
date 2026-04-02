@@ -1,8 +1,8 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.releaseIONextVersion
-import io.release.ReleaseIO.releaseIOVersion
+import io.release.ReleaseIO.releaseIOVersioningNextVersion
+import io.release.ReleaseIO.releaseIOVersioningReleaseVersion
 import io.release.internal.DecisionResolver
 import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoStepHelpers.*
@@ -132,12 +132,12 @@ private[monorepo] object MonorepoVersionWorkflow {
                                                          val (updatedState, releaseVersionFn) =
                                                            SbtRuntime.runTask(
                                                              ctx.state,
-                                                             project.ref / releaseIOVersion
+                                                             project.ref / releaseIOVersioningReleaseVersion
                                                            )
                                                          val (_, nextVersionFn)               =
                                                            SbtRuntime.runTask(
                                                              updatedState,
-                                                             project.ref / releaseIONextVersion
+                                                             project.ref / releaseIOVersioningNextVersion
                                                            )
                                                          val useDefaults                      =
                                                            StepHelpers.useDefaults(ctx)
@@ -195,12 +195,12 @@ private[monorepo] object MonorepoVersionWorkflow {
 
   /** Fail fast when any configured monorepo projects resolve to the same physical version file.
     * Runs once at the start of each version-write phase so it sees the current state after any
-    * late-bound steps that may have mutated `releaseIOMonorepoVersionFile`. Checks all projects
-    * from `releaseIOMonorepoProjects`, not just the selected subset, so that a partial release
+    * late-bound steps that may have mutated `releaseIOMonorepoVersioningFile`. Checks all projects
+    * from `releaseIOMonorepoSelectionProjects`, not just the selected subset, so that a partial release
     * still detects a shared file that would be mutated for unreleased siblings.
     */
   private def validateDistinctVersionFiles(runtime: MonorepoRuntime): IO[Unit] = {
-    val entries = runtime.extracted.get(MR.releaseIOMonorepoProjects).map { ref =>
+    val entries = runtime.extracted.get(MR.releaseIOMonorepoSelectionProjects).map { ref =>
       ref.project -> MonorepoVersionFiles.resolve(runtime, ref).getCanonicalPath
     }
     val byPath  = entries.groupBy(_._2).filter(_._2.length > 1)
@@ -219,7 +219,7 @@ private[monorepo] object MonorepoVersionWorkflow {
             "Each monorepo project needs its own version file. " +
             "If you are upgrading from global version mode, " +
             "create per-project version.sbt files and remove any " +
-            "`ThisBuild / releaseIOVersionFile` override. " +
+            "`ThisBuild / releaseIOVersioningFile` override. " +
             "See `releaseIOMonorepo help` for setup guidance."
         )
       )
@@ -302,8 +302,8 @@ private[monorepo] object MonorepoVersionWorkflow {
     if (includeConfigurationGuidance)
       prefix +
         "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, or configure " +
-        "`releaseIOMonorepoVersionFile`, `releaseIOMonorepoReadVersion`, and " +
-        "`releaseIOMonorepoVersionFileContents`. See `releaseIOMonorepo help`."
+        "`releaseIOMonorepoVersioningFile`, `releaseIOMonorepoVersioningReadVersion`, and " +
+        "`releaseIOMonorepoVersioningFileContents`. See `releaseIOMonorepo help`."
     else prefix + "See `releaseIOMonorepo help`."
   }
 }

@@ -7,77 +7,123 @@ walkthrough, start with [Getting started](getting-started.md).
 ## Migration note
 
 The hook/policy lifecycle is now the only supported build-facing customization surface.
-Migrate legacy step-list edits to `releaseIOEnable*` policy keys, `releaseIO*Hooks`, and
+Migrate legacy step-list edits to grouped `releaseIOPolicy*` keys, `releaseIOHooks*`, and
 resource-aware custom plugins built around `releaseResourceHooks`.
 
-## Main settings
+Use the grouped names in `build.sbt`. The older flat names remain as deprecated aliases in this
+release. `inspect`, `show`, and key index output still display the legacy sbt key labels because
+the underlying key instances were not renamed yet.
 
-All release settings use the `releaseIO` prefix.
+## Grouped key migration
+
+| Old name | Preferred grouped name |
+| -------- | ---------------------- |
+| `releaseIOCrossBuild` | `releaseIOBehaviorCrossBuild` |
+| `releaseIOSkipPublish` | `releaseIOBehaviorSkipPublish` |
+| `releaseIOInteractive` | `releaseIOBehaviorInteractive` |
+| `releaseIODefaultTagExistsAnswer` | `releaseIODefaultsTagExistsAnswer` |
+| `releaseIOVersionFile` | `releaseIOVersioningFile` |
+| `releaseIOReadVersion` | `releaseIOVersioningReadVersion` |
+| `releaseIOVersionFileContents` | `releaseIOVersioningFileContents` |
+| `releaseIOTagName` | `releaseIOVcsTagName` |
+| `releaseIOCommitMessage` | `releaseIOVcsReleaseCommitMessage` |
+| `releaseIOPublishArtifactsAction` | `releaseIOPublishAction` |
+| `releaseIORuntimeVersion` | `releaseIORuntimeCurrentVersion` |
+| `releaseIOEnablePush` | `releaseIOPolicyEnablePush` |
+| `releaseIOBeforeTagHooks` | `releaseIOHooksBeforeTag` |
+| `releaseIOAfterPublishHooks` | `releaseIOHooksAfterPublish` |
+
+## Behavior settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOCrossBuild` | `Boolean` | `false` | Cross-build steps per `crossScalaVersions` |
-| `releaseIOSkipPublish` | `Boolean` | `false` | Skip the publish step entirely at runtime |
-| `releaseIOInteractive` | `Boolean` | `false` | Enable interactive prompting in `run` mode |
-| `releaseIODefaultTagExistsAnswer` | `Option[String]` | `None` | Default answer for tag-conflict handling |
-| `releaseIODefaultSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Default answer for snapshot-dependency confirmation |
-| `releaseIODefaultRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Default answer when the remote check fails |
-| `releaseIODefaultUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Default answer when the branch is behind upstream |
-| `releaseIODefaultPushAnswer` | `Option[Boolean]` | `None` | Default answer for the final push prompt |
-| `releaseIOVersionFile` | `File` | `baseDirectory / "version.sbt"` | Path to the version file |
-| `releaseIOUseGlobalVersion` | `Boolean` | `true` | Read/write `ThisBuild / version` instead of project-scoped `version` |
-| `releaseIOReadVersion` | `File => IO[String]` | parses `version := "x.y.z"` | Read a version from the version file |
-| `releaseIOVersionFileContents` | `(File, String) => IO[String]` | writes `ThisBuild / version := "x.y.z"` | Produce version-file contents for a new version |
-| `releaseIOVersionBump` | `Version.Bump` | `Next` | Version bump strategy |
-| `releaseIOVersion` | `String => String` | strips qualifier/snapshot | Compute the release version from the current one |
-| `releaseIONextVersion` | `String => String` | bumps and appends `-SNAPSHOT` | Compute the next development version |
-| `releaseIOTagName` | `String` | `s"v${version.value}"` | Git tag name |
-| `releaseIOTagComment` | `String` | `s"Releasing ${version.value}"` | Git tag comment |
-| `releaseIOCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Release-version commit message |
-| `releaseIONextCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Next-version commit message |
+| `releaseIOBehaviorCrossBuild` | `Boolean` | `false` | Cross-build steps per `crossScalaVersions` |
+| `releaseIOBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step entirely at runtime |
+| `releaseIOBehaviorInteractive` | `Boolean` | `false` | Enable interactive prompting in `run` mode |
+
+## Decision-default settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIODefaultsTagExistsAnswer` | `Option[String]` | `None` | Default answer for tag-conflict handling |
+| `releaseIODefaultsSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Default answer for snapshot-dependency confirmation |
+| `releaseIODefaultsRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Default answer when the remote check fails |
+| `releaseIODefaultsUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Default answer when the branch is behind upstream |
+| `releaseIODefaultsPushAnswer` | `Option[Boolean]` | `None` | Default answer for the final push prompt |
+
+## Versioning settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIOVersioningFile` | `File` | `baseDirectory / "version.sbt"` | Path to the version file |
+| `releaseIOVersioningUseGlobal` | `Boolean` | `true` | Read/write `ThisBuild / version` instead of project-scoped `version` |
+| `releaseIOVersioningReadVersion` | `File => IO[String]` | parses `version := "x.y.z"` | Read a version from the version file |
+| `releaseIOVersioningFileContents` | `(File, String) => IO[String]` | writes `ThisBuild / version := "x.y.z"` | Produce version-file contents for a new version |
+| `releaseIOVersioningBump` | `Version.Bump` | `Next` | Version bump strategy |
+| `releaseIOVersioningReleaseVersion` | `String => String` | strips qualifier/snapshot | Compute the release version from the current one |
+| `releaseIOVersioningNextVersion` | `String => String` | bumps and appends `-SNAPSHOT` | Compute the next development version |
+
+## VCS settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIOVcsTagName` | `String` | `s"v${version.value}"` | Git tag name |
+| `releaseIOVcsTagComment` | `String` | `s"Releasing ${version.value}"` | Git tag comment |
+| `releaseIOVcsReleaseCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Release-version commit message |
+| `releaseIOVcsNextCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Next-version commit message |
 | `releaseIOVcsSign` | `Boolean` | `false` | GPG-sign tags and commits |
 | `releaseIOVcsSignOff` | `Boolean` | `false` | Add `Signed-off-by` to commits |
-| `releaseIOIgnoreUntrackedFiles` | `Boolean` | `false` | Ignore untracked files in the clean check |
+| `releaseIOVcsIgnoreUntrackedFiles` | `Boolean` | `false` | Ignore untracked files in the clean check |
 | `releaseIOVcsRemoteCheckTimeout` | `FiniteDuration` | `60.seconds` | Timeout for the remote reachability check before push |
-| `releaseIOPublishArtifactsAction` | `Unit` | `publish` | Task that performs the publish |
-| `releaseIOPublishArtifactsChecks` | `Boolean` | `true` | Validate `publishTo` / `skip` before publish |
-| `releaseIOSnapshotDependencies` | `Seq[ModuleID]` | auto-resolved | SNAPSHOT dependencies used by validation |
-| `releaseIORuntimeVersion` | `String` | scope-aware `version` | Reads the current release version from live sbt state |
+
+## Publish settings
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIOPublishAction` | `Unit` | `publish` | Task that performs the publish |
+| `releaseIOPublishChecks` | `Boolean` | `true` | Validate `publishTo` / `skip` before publish |
+
+## Runtime and diagnostics
+
+| Setting | Type | Default | Description |
+| ------- | ---- | ------- | ----------- |
+| `releaseIODiagnosticsSnapshotDependencies` | `Seq[ModuleID]` | auto-resolved | SNAPSHOT dependencies used by validation |
+| `releaseIORuntimeCurrentVersion` | `String` | scope-aware `version` | Reads the current release version from live sbt state |
 
 ## Hook and policy settings
 
 These settings compile into the built-in lifecycle for both `releaseIO` and
 `releaseIO check`.
 
-`releaseIOSkipPublish` skips publish at runtime even if the phase still exists.
-`releaseIOEnablePublish` removes the publish phase from the compiled lifecycle entirely,
-so `beforePublish` / `afterPublish` hooks do not exist when it is `false`.
+`releaseIOBehaviorSkipPublish` skips publish at runtime even if the phase still exists.
+`releaseIOPolicyEnablePublish` removes the publish phase from the compiled lifecycle entirely,
+so `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` do not exist when it is `false`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOEnableSnapshotDependenciesCheck` | `Boolean` | `true` | Include `check-snapshot-dependencies` |
-| `releaseIOEnableRunClean` | `Boolean` | `true` | Include `run-clean` |
-| `releaseIOEnableRunTests` | `Boolean` | `true` | Include `run-tests` |
-| `releaseIOEnableTagging` | `Boolean` | `true` | Include `tag-release` |
-| `releaseIOEnablePublish` | `Boolean` | `true` | Include `publish-artifacts` |
-| `releaseIOEnablePush` | `Boolean` | `true` | Include `push-changes` |
-| `releaseIOAfterCleanCheckHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `check-clean-working-dir` |
-| `releaseIOBeforeVersionResolutionHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `inquire-versions` |
-| `releaseIOAfterVersionResolutionHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `inquire-versions` |
-| `releaseIOBeforeReleaseVersionWriteHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `set-release-version` |
-| `releaseIOAfterReleaseVersionWriteHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `set-release-version` |
-| `releaseIOBeforeReleaseCommitHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `commit-release-version` |
-| `releaseIOAfterReleaseCommitHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `commit-release-version` |
-| `releaseIOBeforeTagHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `tag-release` |
-| `releaseIOAfterTagHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `tag-release` |
-| `releaseIOBeforePublishHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `publish-artifacts` |
-| `releaseIOAfterPublishHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `publish-artifacts` |
-| `releaseIOBeforeNextVersionWriteHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `set-next-version` |
-| `releaseIOAfterNextVersionWriteHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `set-next-version` |
-| `releaseIOBeforeNextCommitHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `commit-next-version` |
-| `releaseIOAfterNextCommitHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `commit-next-version` |
-| `releaseIOBeforePushHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `push-changes` |
-| `releaseIOAfterPushHooks` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `push-changes` |
+| `releaseIOPolicyEnableSnapshotDependenciesCheck` | `Boolean` | `true` | Include `check-snapshot-dependencies` |
+| `releaseIOPolicyEnableRunClean` | `Boolean` | `true` | Include `run-clean` |
+| `releaseIOPolicyEnableRunTests` | `Boolean` | `true` | Include `run-tests` |
+| `releaseIOPolicyEnableTagging` | `Boolean` | `true` | Include `tag-release` |
+| `releaseIOPolicyEnablePublish` | `Boolean` | `true` | Include `publish-artifacts` |
+| `releaseIOPolicyEnablePush` | `Boolean` | `true` | Include `push-changes` |
+| `releaseIOHooksAfterCleanCheck` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `check-clean-working-dir` |
+| `releaseIOHooksBeforeVersionResolution` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `inquire-versions` |
+| `releaseIOHooksAfterVersionResolution` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `inquire-versions` |
+| `releaseIOHooksBeforeReleaseVersionWrite` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `set-release-version` |
+| `releaseIOHooksAfterReleaseVersionWrite` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `set-release-version` |
+| `releaseIOHooksBeforeReleaseCommit` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `commit-release-version` |
+| `releaseIOHooksAfterReleaseCommit` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `commit-release-version` |
+| `releaseIOHooksBeforeTag` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `tag-release` |
+| `releaseIOHooksAfterTag` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `tag-release` |
+| `releaseIOHooksBeforePublish` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `publish-artifacts` |
+| `releaseIOHooksAfterPublish` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `publish-artifacts` |
+| `releaseIOHooksBeforeNextVersionWrite` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `set-next-version` |
+| `releaseIOHooksAfterNextVersionWrite` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `set-next-version` |
+| `releaseIOHooksBeforeNextCommit` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `commit-next-version` |
+| `releaseIOHooksAfterNextCommit` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `commit-next-version` |
+| `releaseIOHooksBeforePush` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks before `push-changes` |
+| `releaseIOHooksAfterPush` | `Seq[ReleaseHookIO]` | `Seq.empty` | Hooks after `push-changes` |
 
 ## Version bump types
 

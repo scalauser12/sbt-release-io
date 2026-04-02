@@ -158,7 +158,7 @@ private[monorepo] object MonorepoVcsSteps {
         required(ctx.vcs, "VCS not initialized") { vcs =>
           required(project.versions, s"Versions not set for ${project.name}") {
             case (releaseVer, _) =>
-              // Resolved per-project: tag name/comment depend on releaseIORuntimeVersion
+              // Resolved per-project: tag name/comment depend on releaseIORuntimeCurrentVersion
               // which varies by project.
               MonorepoReleaseIO.resolveTagSettings(ctx.state).flatMap { settings =>
                 val initialTagName = settings.perProjectTagName(project.name, releaseVer)

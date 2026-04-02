@@ -45,11 +45,11 @@ lazy val root = (project in file("."))
   .aggregate(core, api, web)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    releaseIOMonorepoEnablePush := false,
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoIncludeDownstream := true,
-    releaseIOMonorepoAfterSelectionHooks +=
+    releaseIOMonorepoPolicyEnablePush := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoDetectionIncludeDownstream := true,
+    releaseIOMonorepoHooksAfterSelection +=
       MonorepoGlobalHookIO.action("print-selected-projects")(ctx =>
         IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
       )
@@ -110,7 +110,7 @@ Now run a no-side-effect rehearsal:
 sbt "releaseIOMonorepo check with-defaults"
 ```
 
-With `releaseIOMonorepoIncludeDownstream := true`, the changed `core` project pulls in its
+With `releaseIOMonorepoDetectionIncludeDownstream := true`, the changed `core` project pulls in its
 downstream dependents:
 
 - `core` is selected because its files changed since `core/v0.1.0`

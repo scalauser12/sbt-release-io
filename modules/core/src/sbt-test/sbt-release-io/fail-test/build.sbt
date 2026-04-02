@@ -78,6 +78,6 @@ expectReleaseFailure := {
   )
 }
 
-releaseIOIgnoreUntrackedFiles := true
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOVcsIgnoreUntrackedFiles := true
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false

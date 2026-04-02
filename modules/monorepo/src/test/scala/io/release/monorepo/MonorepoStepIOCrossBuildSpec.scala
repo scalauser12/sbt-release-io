@@ -60,6 +60,51 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
     }
   }
 
+  test("compose - restore the selected project's entry scalaVersion when currentRef differs") {
+    loadedContextResource("monorepo-step-project-entry-version", Seq("core")) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"))
+          .settings(scalaVersion := TestSupport.alternateScalaVersion),
+        Project("core", coreBase).settings(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(TestSupport.alternateScalaVersion)
+        )
+      )
+    }.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val step = MonorepoStepIO.PerProject(
+          name = "cross-step",
+          execute = (c, project) =>
+            projectScalaVersionOf(c.state, project.ref).flatMap {
+              case Some(version) => observed.update(_ :+ version).as(c)
+              case None          =>
+                IO.raiseError(new RuntimeException("missing project scalaVersion during cross-build"))
+            },
+          enableCrossBuild = true
+        )
+
+        val project = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+        for {
+          initialRootVersion    <- scopedScalaVersionOf(ctx.state)
+          initialProjectVersion <- projectScalaVersionOf(ctx.state, project.ref)
+          result                <- MonorepoStepIO.compose(Seq(step), crossBuild = true)(ctx)
+          observedVersions      <- observed.get
+          restoredProject       <- projectScalaVersionOf(result.state, project.ref)
+        } yield {
+          assertEquals(initialRootVersion, Some(TestSupport.alternateScalaVersion))
+          assertEquals(initialProjectVersion, Some(TestSupport.CurrentScalaVersion))
+          assertEquals(observedVersions, List(TestSupport.alternateScalaVersion))
+          assertEquals(restoredProject, Some(TestSupport.CurrentScalaVersion))
+        }
+      }
+    }
+  }
+
   test(
     "compose - cross-build multi-version per-project steps run once per configured version and later non-cross steps still run once"
   ) {

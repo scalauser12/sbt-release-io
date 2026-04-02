@@ -23,10 +23,10 @@ lazy val root = (project in file("."))
   .settings(
     name                          := "skip-publish-test",
     // Skip publish — bypasses publishTo validation in check phase
-    releaseIOMonorepoSkipPublish  := true,
+    releaseIOMonorepoBehaviorSkipPublish  := true,
     // Keep publish-artifacts in process (only filter push-changes)
-    releaseIOMonorepoEnablePush := false,
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnablePush := false,
+    releaseIOVcsIgnoreUntrackedFiles := true,
     checkAll                      := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 2, s"Expected 2 tags but found ${tags.length}: ${tags.mkString(", ")}")

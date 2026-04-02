@@ -20,10 +20,10 @@ lazy val root = (project in file("."))
     name := "next-version-only-test",
 
     // Skip push and publish in tests
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val coreVer = IO.read(file("core/version.sbt"))

@@ -49,10 +49,10 @@ private[release] object ReleaseVersionWorkflow {
 
   private[steps] def resolveCurrentSettings(state: State): ResolvedSettings =
     ResolvedSettings(
-      versionFile = SbtRuntime.getSetting(state, releaseIOVersionFile),
-      readVersion = SbtRuntime.getSetting(state, releaseIOReadVersion),
-      versionFileContents = SbtRuntime.getSetting(state, releaseIOVersionFileContents),
-      useGlobalVersion = SbtRuntime.getSetting(state, releaseIOUseGlobalVersion)
+      versionFile = SbtRuntime.getSetting(state, releaseIOVersioningFile),
+      readVersion = SbtRuntime.getSetting(state, releaseIOVersioningReadVersion),
+      versionFileContents = SbtRuntime.getSetting(state, releaseIOVersioningFileContents),
+      useGlobalVersion = SbtRuntime.getSetting(state, releaseIOVersioningUseGlobal)
     )
 
   private[steps] def sessionSettings(state: State): Seq[Setting[?]] = {
@@ -72,10 +72,10 @@ private[release] object ReleaseVersionWorkflow {
 
   private[steps] def sessionSettings(versionPlan: VersionPlan): Seq[Setting[?]] =
     Seq(
-      releaseIOVersionFile         := versionPlan.versionFile,
-      releaseIOReadVersion         := versionPlan.readVersion,
-      releaseIOVersionFileContents := versionPlan.versionFileContents,
-      releaseIOUseGlobalVersion    := versionPlan.useGlobalVersion
+      releaseIOVersioningFile         := versionPlan.versionFile,
+      releaseIOVersioningReadVersion  := versionPlan.readVersion,
+      releaseIOVersioningFileContents := versionPlan.versionFileContents,
+      releaseIOVersioningUseGlobal    := versionPlan.useGlobalVersion
     )
 
   def validateInquireVersions(ctx: ReleaseContext): IO[Unit] =
@@ -115,7 +115,7 @@ private[release] object ReleaseVersionWorkflow {
         commitResult            <- commitVersionNative(
                                      ctx,
                                      "commit-release-version",
-                                     releaseIOCommitMessage,
+                                     releaseIOVcsReleaseCommitMessage,
                                      versionPlan.versionFile
                                    )
         (resultCtx, currentHash) = commitResult
@@ -139,7 +139,7 @@ private[release] object ReleaseVersionWorkflow {
           commitVersionNative(
             ctx,
             "commit-next-version",
-            releaseIONextCommitMessage,
+            releaseIOVcsNextCommitMessage,
             versionPlan.versionFile
           )
         (resultCtx, _) = commitResult
@@ -162,9 +162,10 @@ private[release] object ReleaseVersionWorkflow {
       versionPlan     <- IO.blocking(resolveVersionPlan(ctx))
       _               <- ensureVersionFileExists(versionPlan.versionFile)
       currentVer      <- versionPlan.readVersion(versionPlan.versionFile)
-      releaseTaskData <- runTaskChecked(ctx.state, releaseIOVersion, "inquire-versions")
+      releaseTaskData <-
+        runTaskChecked(ctx.state, releaseIOVersioningReleaseVersion, "inquire-versions")
       (s1, releaseFn)  = releaseTaskData
-      nextTaskData    <- runTaskChecked(s1, releaseIONextVersion, "inquire-versions")
+      nextTaskData    <- runTaskChecked(s1, releaseIOVersioningNextVersion, "inquire-versions")
       (s2, nextFn)     = nextTaskData
       updatedCtx       = ctx.withState(s2)
       data             = InquireData(
@@ -245,8 +246,8 @@ private[release] object ReleaseVersionWorkflow {
           new IllegalStateException(
             s"Version file not found: ${versionFile.getPath}. " +
               "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, " +
-              "or configure `releaseIOVersionFile`, `releaseIOReadVersion`, and " +
-              "`releaseIOVersionFileContents`. See `releaseIO help` for setup details."
+              "or configure `releaseIOVersioningFile`, `releaseIOVersioningReadVersion`, and " +
+              "`releaseIOVersioningFileContents`. See `releaseIO help` for setup details."
           )
         )
     }
@@ -270,10 +271,17 @@ private[release] object ReleaseVersionWorkflow {
                         for {
                           commitData        <- runTaskChecked(ctx.state, commitMessageKey, actionName)
                           (commitState, msg) = commitData
-                          _                 <- vcs.add(relativePath)
-                          _                 <- vcs.commit(msg, sign, signOff)
-                          hash              <- vcs.currentHash
-                        } yield (ctx.withState(commitState), hash)
+                          result            <- IO.uncancelable { _ =>
+                                                 // Keep staging and commit atomic with respect to
+                                                 // cancellation so we do not leave staged-but-
+                                                 // uncommitted changes behind.
+                                                 for {
+                                                   _    <- vcs.add(relativePath)
+                                                   _    <- vcs.commit(msg, sign, signOff)
+                                                   hash <- vcs.currentHash
+                                                 } yield (ctx.withState(commitState), hash)
+                                               }
+                        } yield result
                       } else {
                         vcs.currentHash.map(hash => (ctx, hash))
                       }

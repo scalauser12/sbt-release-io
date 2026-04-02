@@ -17,7 +17,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
           dir,
           Seq(
             Project("root", dir).settings(
-              ReleaseIO.releaseIOSnapshotDependencies := Seq.empty[ModuleID]
+              ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq.empty[ModuleID]
             )
           ),
           currentProjectId = Some("root")
@@ -35,7 +35,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   ) {
     TestSupport.tempDirResource(s"$fixturePrefix-throw").use { dir =>
       val throwingSetting: Setting[?] =
-        ReleaseIO.releaseIOSnapshotDependencies := {
+        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := {
           throw new RuntimeException("snapshot deps eval error")
           Seq.empty[ModuleID]
         }

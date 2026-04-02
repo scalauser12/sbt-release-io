@@ -5,7 +5,7 @@ import io.release.CleanCompat
 import io.release.ReleaseIO
 import io.release.ReleaseIO.releaseIOInternalReleaseHash
 import io.release.ReleaseIO.releaseIOInternalReleaseTag
-import io.release.ReleaseIO.releaseIOPublishArtifactsAction
+import io.release.ReleaseIO.releaseIOPublishAction
 import io.release.ReleaseIOCompat
 import io.release.internal.DecisionResolver
 import io.release.internal.PublishValidation
@@ -13,7 +13,7 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.SnapshotDependencyTasks
 import io.release.monorepo.*
-import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks
+import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -133,7 +133,7 @@ private[monorepo] object MonorepoPublishSteps {
   /** Check for SNAPSHOT dependencies in each project.
     * Only checks resolved library dependencies — inter-project dependencies
     * (via `.dependsOn()`) are resolved internally by sbt from compiled classes
-    * and are not included in `releaseIOSnapshotDependencies`.
+    * and are not included in `releaseIODiagnosticsSnapshotDependencies`.
     */
   val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.buildPerProject(
     name = "check-snapshot-dependencies",
@@ -191,14 +191,14 @@ private[monorepo] object MonorepoPublishSteps {
             logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
           else
             withProjectReleaseState(ctx, project).flatMap(publishCtx =>
-              runProjectTask(publishCtx, project.ref / releaseIOPublishArtifactsAction)
+              runProjectTask(publishCtx, project.ref / releaseIOPublishAction)
             )
         },
     validate = (ctx, project) =>
       if (ctx.skipPublish) IO.unit
       else
         IO.blocking(
-          Project.extract(ctx.state).get(releaseIOMonorepoPublishArtifactsChecks)
+          Project.extract(ctx.state).get(releaseIOMonorepoPublishChecks)
         ).flatMap {
           case false => IO.unit
           case true  =>

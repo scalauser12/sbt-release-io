@@ -3,11 +3,11 @@ import sbt.IO
 name         := "global-version-false-test"
 scalaVersion := "2.12.18"
 
-releaseIOUseGlobalVersion     := false
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVersioningUseGlobal     := false
+releaseIOVcsIgnoreUntrackedFiles := true
 
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 val checkVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")

@@ -10,8 +10,8 @@ lazy val root = (project in file("."))
   .settings(
     name := "empty-override-value-test",
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
 
-    releaseIOIgnoreUntrackedFiles := true
+    releaseIOVcsIgnoreUntrackedFiles := true
   )

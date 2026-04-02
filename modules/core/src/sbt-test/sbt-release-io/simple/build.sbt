@@ -5,11 +5,11 @@ name := "simple-test"
 scalaVersion := "2.12.18"
 
 // Skip push and publish steps in tests (following upstream sbt-release pattern)
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 // Ignore untracked files in tests (test script itself is untracked)
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 // Custom verification tasks (following upstream sbt-release pattern)
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")

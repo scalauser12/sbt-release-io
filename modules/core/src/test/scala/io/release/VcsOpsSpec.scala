@@ -103,7 +103,8 @@ class VcsOpsSpec extends CatsEffectSuite {
   test("detectVcs - detect Git from a loaded sbt state") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
-        ReleaseTestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+        ReleaseTestSupport
+          .gitRootState(repo, Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true))
       ).flatMap { state =>
         VcsOps.detectVcs(state).map { vcs =>
           assertEquals(vcs.commandName, "git")
@@ -115,7 +116,8 @@ class VcsOpsSpec extends CatsEffectSuite {
   test("checkCleanWorkingDir(state) - succeed for a clean loaded repo") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
-        ReleaseTestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+        ReleaseTestSupport
+          .gitRootState(repo, Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true))
       ).flatMap { state =>
         VcsOps.checkCleanWorkingDir(state).map { result =>
           assert(result.currentHash.nonEmpty)
@@ -128,7 +130,8 @@ class VcsOpsSpec extends CatsEffectSuite {
   test("checkCleanWorkingDir(state, vcs) - read settings from the loaded state") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
-        ReleaseTestSupport.gitRootState(repo, Seq(ReleaseIO.releaseIOIgnoreUntrackedFiles := true))
+        ReleaseTestSupport
+          .gitRootState(repo, Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true))
       ).flatMap { state =>
         for {
           vcs    <- VcsOps.detectVcs(state)

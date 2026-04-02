@@ -2,14 +2,14 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseIO.releaseIOTagComment
+import io.release.ReleaseIO.releaseIOVcsTagComment
 import io.release.ReleaseIO.releaseIOInternalReleaseTag
-import io.release.ReleaseIO.releaseIOTagName
-import io.release.ReleaseIO.releaseIOReadVersion
+import io.release.ReleaseIO.releaseIOVcsTagName
+import io.release.ReleaseIO.releaseIOVersioningReadVersion
 import io.release.ReleaseIO.releaseIOVcsSign
-import io.release.ReleaseIO.releaseIOUseGlobalVersion
-import io.release.ReleaseIO.releaseIOVersionFile
-import io.release.ReleaseIO.releaseIOVersionFileContents
+import io.release.ReleaseIO.releaseIOVersioningUseGlobal
+import io.release.ReleaseIO.releaseIOVersioningFile
+import io.release.ReleaseIO.releaseIOVersioningFileContents
 import io.release.ReleaseStepIO
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
@@ -61,7 +61,7 @@ private[release] object VcsSteps {
     }
   }
 
-  // No validation phase: the tag name depends on releaseIOTagName, which is resolved from the
+  // No validation phase: the tag name depends on releaseIOVcsTagName, which is resolved from the
   // release version set by inquireVersions.execute. At validation time, that version is not yet
   // available, so tag-exists checks can only run during execution.
   val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
@@ -76,10 +76,10 @@ private[release] object VcsSteps {
   private def versionSessionSettings(state: State): Seq[Setting[?]] = {
     val extracted        = SbtRuntime.extracted(state)
     val maybeVersionPlan = for {
-      versionFile         <- extracted.getOpt(releaseIOVersionFile)
-      readVersion         <- extracted.getOpt(releaseIOReadVersion)
-      versionFileContents <- extracted.getOpt(releaseIOVersionFileContents)
-      useGlobalVersion    <- extracted.getOpt(releaseIOUseGlobalVersion)
+      versionFile         <- extracted.getOpt(releaseIOVersioningFile)
+      readVersion         <- extracted.getOpt(releaseIOVersioningReadVersion)
+      versionFileContents <- extracted.getOpt(releaseIOVersioningFileContents)
+      useGlobalVersion    <- extracted.getOpt(releaseIOVersioningUseGlobal)
     } yield VersionPlan(
       versionFile = versionFile,
       readVersion = readVersion,
@@ -95,9 +95,9 @@ private[release] object VcsSteps {
   private def resolveTagPlan(ctx: ReleaseContext): IO[TagPlan] =
     for {
       versionSettings    <- IO.blocking(versionSessionSettings(ctx.state))
-      tagNameTaskData    <- runTaskChecked(ctx.state, releaseIOTagName, "tag-release")
+      tagNameTaskData    <- runTaskChecked(ctx.state, releaseIOVcsTagName, "tag-release")
       (s1, tagName)       = tagNameTaskData
-      tagCommentTaskData <- runTaskChecked(s1, releaseIOTagComment, "tag-release")
+      tagCommentTaskData <- runTaskChecked(s1, releaseIOVcsTagComment, "tag-release")
       (s2, tagComment)    = tagCommentTaskData
       sign               <- IO.blocking(SbtRuntime.getSetting(s2, releaseIOVcsSign))
     } yield TagPlan(

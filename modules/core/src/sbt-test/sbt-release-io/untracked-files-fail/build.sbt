@@ -4,9 +4,9 @@ import sbt.IO
 name         := "untracked-files-fail-test"
 scalaVersion := "2.12.18"
 
-// Default releaseIOIgnoreUntrackedFiles is false — untracked files should block release
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+// Default releaseIOVcsIgnoreUntrackedFiles is false — untracked files should block release
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {

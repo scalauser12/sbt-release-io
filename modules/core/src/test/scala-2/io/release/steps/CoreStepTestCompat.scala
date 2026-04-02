@@ -13,7 +13,7 @@ import java.io.File
 private[steps] object CoreStepTestCompat {
 
   def failureCommandPublishTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOPublishArtifactsAction := Def
+    ReleaseIO.releaseIOPublishAction := Def
       .task {
         sbt.IO.write(marker, "ran")
       }
@@ -39,7 +39,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVersion := Def
+    ReleaseIO.releaseIOVersioningReleaseVersion := Def
       .task {
         sbt.IO.write(marker, "ran")
         (currentVersion: String) => currentVersion.stripSuffix("-SNAPSHOT")
@@ -53,7 +53,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandNextVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIONextVersion := Def
+    ReleaseIO.releaseIOVersioningNextVersion := Def
       .task {
         sbt.IO.write(marker, "ran")
         (_: String) => "0.2.0-SNAPSHOT"
@@ -67,7 +67,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandCommitMessageSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOCommitMessage := Def
+    ReleaseIO.releaseIOVcsReleaseCommitMessage := Def
       .task {
         sbt.IO.write(marker, "ran")
         "Setting version"
@@ -81,7 +81,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandNextCommitMessageSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIONextCommitMessage := Def
+    ReleaseIO.releaseIOVcsNextCommitMessage := Def
       .task {
         sbt.IO.write(marker, "ran")
         "Setting next version"
@@ -95,7 +95,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandTagNameSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOTagName := Def
+    ReleaseIO.releaseIOVcsTagName := Def
       .task {
         sbt.IO.write(marker, "ran")
         "v1.0.0"
@@ -109,7 +109,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandTagCommentSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOTagComment := Def
+    ReleaseIO.releaseIOVcsTagComment := Def
       .task {
         sbt.IO.write(marker, "ran")
         "Releasing 1.0.0"

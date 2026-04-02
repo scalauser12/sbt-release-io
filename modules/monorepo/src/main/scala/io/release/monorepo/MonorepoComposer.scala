@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.StepExecutionSupport
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
   *
@@ -63,47 +64,31 @@ private[monorepo] object MonorepoComposer {
   private def runMainSegment(
       steps: Seq[MonorepoProcessStep],
       startCtx: MonorepoContext
-  ): IO[MonorepoContext] = {
-    val actions = steps.map(_.actionStep)
-
-    for {
-      validatedCtx <- ExecutionEngine.runValidations(
-                        LogPrefix,
-                        steps.map(_.validationStep),
-                        startCtx
-                      )
-      resultCtx    <- ExecutionEngine.runActions(
-                        actions,
-                        ExecutionEngine.armOnFailure(validatedCtx)
-                      )
-    } yield resultCtx
-  }
+  ): IO[MonorepoContext] =
+    StepExecutionSupport.runMainSegment(
+      logPrefix = LogPrefix,
+      steps = steps.map(asPreparedStep),
+      startCtx = startCtx,
+      armOnFailure = ExecutionEngine.armOnFailure[MonorepoContext]
+    )
 
   private def runSequentialValidateThenExecute(
       steps: Seq[MonorepoProcessStep],
       startCtx: MonorepoContext
   ): IO[MonorepoContext] =
-    steps.foldLeft(IO.pure(startCtx)) { (ioCtx, step) =>
-      ioCtx.flatMap { currentCtx =>
-        if (currentCtx.failed) IO.pure(currentCtx)
-        else {
-          for {
-            validatedCtx <- step.validate(currentCtx)
-            nextCtx      <- runSingleStepAction(step, validatedCtx)
-          } yield nextCtx
-        }
-      }
-    }
-
-  private def runSingleStepAction(
-      step: MonorepoProcessStep,
-      ctx: MonorepoContext
-  ): IO[MonorepoContext] = {
-    val actions = Seq(
-      step.actionStep
+    StepExecutionSupport.runSequentialValidateThenExecute(
+      steps = steps.map(asPreparedStep),
+      startCtx = startCtx,
+      armOnFailure = ExecutionEngine.armOnFailure[MonorepoContext],
+      hasFailed = (ctx: MonorepoContext) => ctx.failed
     )
 
-    ExecutionEngine
-      .runActionPhase(actions)(ExecutionEngine.armOnFailure(ctx))
-  }
+  private def asPreparedStep(
+      step: MonorepoProcessStep
+  ): StepExecutionSupport.PreparedStep[MonorepoContext] =
+    StepExecutionSupport.PreparedStep(
+      name = step.name,
+      validate = step.validate,
+      execute = step.execute
+    )
 }

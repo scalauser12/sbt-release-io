@@ -23,10 +23,10 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "selection-aware-validation-test",
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles := true,
     checkSelectionAwareValidation := {
       val tags        = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
       val coreVersion = IO.read(file("core/version.sbt"))

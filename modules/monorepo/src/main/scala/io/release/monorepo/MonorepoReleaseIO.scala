@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.ReleaseIO.releaseIOVersionFile
+import io.release.ReleaseIO.releaseIOVersioningFile
 import io.release.steps.VersionSteps
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -13,159 +13,196 @@ import sbt.{internal as _, *}
   * Step construction is handled by [[MonorepoStepIO]]; this trait keeps the
   * build-facing settings surface for hook and policy customization.
   */
-trait MonorepoReleaseIO {
-  import MonorepoReleaseIO.*
-
-  // ── Core settings ─────────────────────────────────────────────────────
+trait MonorepoReleaseIO
+    extends MonorepoReleaseIOSelectionKeys
+    with MonorepoReleaseIOBehaviorKeys
+    with MonorepoReleaseIOPolicyKeys
+    with MonorepoReleaseIOHookKeys
+    with MonorepoReleaseIOVersioningKeys
+    with MonorepoReleaseIODetectionKeys
+    with MonorepoReleaseIOVcsKeys
+    with MonorepoReleaseIOPublishKeys {
+  // ── Deprecated compatibility aliases ─────────────────────────────────
 
   /** Which subprojects participate in monorepo releases. Default: all transitively aggregated projects. */
-  val releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] = _releaseIOMonorepoProjects
-
-  // ── Hook / policy settings ────────────────────────────────────────────
+  @deprecated("Use releaseIOMonorepoSelectionProjects instead.", "0.9.0")
+  val releaseIOMonorepoProjects: SettingKey[Seq[ProjectRef]] =
+    releaseIOMonorepoSelectionProjects
 
   /** When false, omits the snapshot-dependency validation phase from the compiled hook process. */
+  @deprecated("Use releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck instead.", "0.9.0")
   val releaseIOMonorepoEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
-    _releaseIOMonorepoEnableSnapshotDependenciesCheck
+    releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck
 
   /** When false, omits the `run-clean` phase from the compiled hook process. */
-  val releaseIOMonorepoEnableRunClean: SettingKey[Boolean] = _releaseIOMonorepoEnableRunClean
+  @deprecated("Use releaseIOMonorepoPolicyEnableRunClean instead.", "0.9.0")
+  val releaseIOMonorepoEnableRunClean: SettingKey[Boolean] =
+    releaseIOMonorepoPolicyEnableRunClean
 
   /** When false, omits the `run-tests` phase from the compiled hook process. */
+  @deprecated("Use releaseIOMonorepoPolicyEnableRunTests instead.", "0.9.0")
   val releaseIOMonorepoEnableRunTests: SettingKey[Boolean] =
-    _releaseIOMonorepoEnableRunTests
+    releaseIOMonorepoPolicyEnableRunTests
 
   /** When false, omits the `tag-releases` phase from the compiled hook process. */
-  val releaseIOMonorepoEnableTagging: SettingKey[Boolean] = _releaseIOMonorepoEnableTagging
+  @deprecated("Use releaseIOMonorepoPolicyEnableTagging instead.", "0.9.0")
+  val releaseIOMonorepoEnableTagging: SettingKey[Boolean] =
+    releaseIOMonorepoPolicyEnableTagging
 
   /** When false, omits the `publish-artifacts` phase from the compiled hook process. */
-  val releaseIOMonorepoEnablePublish: SettingKey[Boolean] = _releaseIOMonorepoEnablePublish
+  @deprecated("Use releaseIOMonorepoPolicyEnablePublish instead.", "0.9.0")
+  val releaseIOMonorepoEnablePublish: SettingKey[Boolean] =
+    releaseIOMonorepoPolicyEnablePublish
 
   /** When false, omits the `push-changes` phase from the compiled hook process. */
-  val releaseIOMonorepoEnablePush: SettingKey[Boolean] = _releaseIOMonorepoEnablePush
+  @deprecated("Use releaseIOMonorepoPolicyEnablePush instead.", "0.9.0")
+  val releaseIOMonorepoEnablePush: SettingKey[Boolean] = releaseIOMonorepoPolicyEnablePush
 
   /** Hooks that run immediately before project selection/change detection. */
+  @deprecated("Use releaseIOMonorepoHooksBeforeSelection instead.", "0.9.0")
   val releaseIOMonorepoBeforeSelectionHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoBeforeSelectionHooks
+    releaseIOMonorepoHooksBeforeSelection
 
   /** Hooks that run immediately after project selection/change detection. */
+  @deprecated("Use releaseIOMonorepoHooksAfterSelection instead.", "0.9.0")
   val releaseIOMonorepoAfterSelectionHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoAfterSelectionHooks
+    releaseIOMonorepoHooksAfterSelection
 
   /** Hooks that run immediately before `inquire-versions`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforeVersionResolution instead.", "0.9.0")
   val releaseIOMonorepoBeforeVersionResolutionHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoBeforeVersionResolutionHooks
+    releaseIOMonorepoHooksBeforeVersionResolution
 
   /** Hooks that run immediately after `inquire-versions`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterVersionResolution instead.", "0.9.0")
   val releaseIOMonorepoAfterVersionResolutionHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoAfterVersionResolutionHooks
+    releaseIOMonorepoHooksAfterVersionResolution
 
   /** Hooks that run immediately before `set-release-version`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforeReleaseVersionWrite instead.", "0.9.0")
   val releaseIOMonorepoBeforeReleaseVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoBeforeReleaseVersionWriteHooks
+    releaseIOMonorepoHooksBeforeReleaseVersionWrite
 
   /** Hooks that run immediately after `set-release-version`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterReleaseVersionWrite instead.", "0.9.0")
   val releaseIOMonorepoAfterReleaseVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoAfterReleaseVersionWriteHooks
+    releaseIOMonorepoHooksAfterReleaseVersionWrite
 
   /** Hooks that run immediately before `commit-release-versions`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforeReleaseCommit instead.", "0.9.0")
   val releaseIOMonorepoBeforeReleaseCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoBeforeReleaseCommitHooks
+    releaseIOMonorepoHooksBeforeReleaseCommit
 
   /** Hooks that run immediately after `commit-release-versions`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterReleaseCommit instead.", "0.9.0")
   val releaseIOMonorepoAfterReleaseCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoAfterReleaseCommitHooks
+    releaseIOMonorepoHooksAfterReleaseCommit
 
   /** Hooks that run immediately before `tag-releases`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforeTag instead.", "0.9.0")
   val releaseIOMonorepoBeforeTagHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoBeforeTagHooks
+    releaseIOMonorepoHooksBeforeTag
 
   /** Hooks that run immediately after `tag-releases`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterTag instead.", "0.9.0")
   val releaseIOMonorepoAfterTagHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoAfterTagHooks
+    releaseIOMonorepoHooksAfterTag
 
   /** Hooks that run immediately before `publish-artifacts`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforePublish instead.", "0.9.0")
   val releaseIOMonorepoBeforePublishHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoBeforePublishHooks
+    releaseIOMonorepoHooksBeforePublish
 
   /** Hooks that run immediately after `publish-artifacts`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterPublish instead.", "0.9.0")
   val releaseIOMonorepoAfterPublishHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoAfterPublishHooks
+    releaseIOMonorepoHooksAfterPublish
 
   /** Hooks that run immediately before `set-next-version`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforeNextVersionWrite instead.", "0.9.0")
   val releaseIOMonorepoBeforeNextVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoBeforeNextVersionWriteHooks
+    releaseIOMonorepoHooksBeforeNextVersionWrite
 
   /** Hooks that run immediately after `set-next-version`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterNextVersionWrite instead.", "0.9.0")
   val releaseIOMonorepoAfterNextVersionWriteHooks: SettingKey[Seq[MonorepoProjectHookIO]] =
-    _releaseIOMonorepoAfterNextVersionWriteHooks
+    releaseIOMonorepoHooksAfterNextVersionWrite
 
   /** Hooks that run immediately before `commit-next-versions`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforeNextCommit instead.", "0.9.0")
   val releaseIOMonorepoBeforeNextCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoBeforeNextCommitHooks
+    releaseIOMonorepoHooksBeforeNextCommit
 
   /** Hooks that run immediately after `commit-next-versions`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterNextCommit instead.", "0.9.0")
   val releaseIOMonorepoAfterNextCommitHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoAfterNextCommitHooks
+    releaseIOMonorepoHooksAfterNextCommit
 
   /** Hooks that run immediately before `push-changes`. */
+  @deprecated("Use releaseIOMonorepoHooksBeforePush instead.", "0.9.0")
   val releaseIOMonorepoBeforePushHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoBeforePushHooks
+    releaseIOMonorepoHooksBeforePush
 
   /** Hooks that run immediately after `push-changes`. */
+  @deprecated("Use releaseIOMonorepoHooksAfterPush instead.", "0.9.0")
   val releaseIOMonorepoAfterPushHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    _releaseIOMonorepoAfterPushHooks
-
-  // ── Version settings ──────────────────────────────────────────────────
+    releaseIOMonorepoHooksAfterPush
 
   /** State-aware resolver for a project's version file.
-    *
-    * Custom resolvers can inspect the current `State` if the file location depends on
-    * build state rather than project identity alone.
-    */
+   *
+   * Custom resolvers can inspect the current `State` if the file location depends on
+   * build state rather than project identity alone.
+   */
   type MonorepoVersionFileResolver = MonorepoReleaseIO.MonorepoVersionFileResolver
 
   /** Per-project version file resolver. Default: scoped `releaseIOVersionFile`. */
+  @deprecated("Use releaseIOMonorepoVersioningFile instead.", "0.9.0")
   val releaseIOMonorepoVersionFile: SettingKey[MonorepoVersionFileResolver] =
-    _releaseIOMonorepoVersionFile
+    releaseIOMonorepoVersioningFile
 
   /** Per-project version reader. Default: same regex as core `defaultReadVersion`. */
-  val releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] = _releaseIOMonorepoReadVersion
+  @deprecated("Use releaseIOMonorepoVersioningReadVersion instead.", "0.9.0")
+  val releaseIOMonorepoReadVersion: SettingKey[File => IO[String]] =
+    releaseIOMonorepoVersioningReadVersion
 
   /** Per-project version writer. Default: produces `version := "x.y.z"\n`.
     * The default implementation ignores the `File` parameter; custom implementations
     * may read the existing file to perform partial updates.
     */
+  @deprecated("Use releaseIOMonorepoVersioningFileContents instead.", "0.9.0")
   val releaseIOMonorepoVersionFileContents: SettingKey[(File, String) => IO[String]] =
-    _releaseIOMonorepoVersionFileContents
-
-  // ── Tagging settings ──────────────────────────────────────────────────
+    releaseIOMonorepoVersioningFileContents
 
   /** Tag name formatter for per-project tags. (projectName, version) => tagName.
     * Must preserve `*` literally — change detection passes `"*"` as the version
     * to generate glob patterns for `git tag --list`.
     */
-  val releaseIOMonorepoTagName: SettingKey[(String, String) => String] = _releaseIOMonorepoTagName
+  @deprecated("Use releaseIOMonorepoVcsTagName instead.", "0.9.0")
+  val releaseIOMonorepoTagName: SettingKey[(String, String) => String] =
+    releaseIOMonorepoVcsTagName
 
   /** Tag comment formatter for per-project tags. (projectName, version) => comment. */
+  @deprecated("Use releaseIOMonorepoVcsTagComment instead.", "0.9.0")
   val releaseIOMonorepoTagComment: SettingKey[(String, String) => String] =
-    _releaseIOMonorepoTagComment
-
-  // ── Change detection settings ─────────────────────────────────────────
+    releaseIOMonorepoVcsTagComment
 
   /** Whether to use git-based change detection. Default: true. */
-  val releaseIOMonorepoDetectChanges: SettingKey[Boolean] = _releaseIOMonorepoDetectChanges
+  @deprecated("Use releaseIOMonorepoDetectionEnabled instead.", "0.9.0")
+  val releaseIOMonorepoDetectChanges: SettingKey[Boolean] = releaseIOMonorepoDetectionEnabled
 
   /** Custom change detection function. When set, replaces the built-in git diff logic. */
+  @deprecated("Use releaseIOMonorepoDetectionChangeDetector instead.", "0.9.0")
   val releaseIOMonorepoChangeDetector
       : SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]] =
-    _releaseIOMonorepoChangeDetector
+    releaseIOMonorepoDetectionChangeDetector
 
   /** Additional files to exclude from change detection (absolute paths).
     * Per-project version files are always excluded automatically.
     * Use this to exclude files like generated changelogs that change every release.
     */
+  @deprecated("Use releaseIOMonorepoDetectionExcludes instead.", "0.9.0")
   val releaseIOMonorepoDetectChangesExcludes: SettingKey[Seq[File]] =
-    _releaseIOMonorepoDetectChangesExcludes
+    releaseIOMonorepoDetectionExcludes
 
   /** Root-level paths (relative to the repo root) checked for changes during detection.
     * Each project's own tag is used as the baseline: if any shared path changed since that
@@ -173,71 +210,80 @@ trait MonorepoReleaseIO {
     * Default: `Seq("build.sbt", "project/")`.
     * Set to `Seq.empty` to disable shared path detection.
     */
+  @deprecated("Use releaseIOMonorepoDetectionSharedPaths instead.", "0.9.0")
   val releaseIOMonorepoSharedPaths: SettingKey[Seq[String]] =
-    _releaseIOMonorepoSharedPaths
+    releaseIOMonorepoDetectionSharedPaths
 
   /** When true and change detection is enabled, projects that transitively depend on
     * detected-changed projects are automatically included in the release.
     * Default: false.
     */
-  val releaseIOMonorepoIncludeDownstream: SettingKey[Boolean] = _releaseIOMonorepoIncludeDownstream
-
-  // ── Behavioral settings ───────────────────────────────────────────────
+  @deprecated("Use releaseIOMonorepoDetectionIncludeDownstream instead.", "0.9.0")
+  val releaseIOMonorepoIncludeDownstream: SettingKey[Boolean] =
+    releaseIOMonorepoDetectionIncludeDownstream
 
   /** Cross-build enabled. Default: false. */
-  val releaseIOMonorepoCrossBuild: SettingKey[Boolean] = _releaseIOMonorepoCrossBuild
+  @deprecated("Use releaseIOMonorepoBehaviorCrossBuild instead.", "0.9.0")
+  val releaseIOMonorepoCrossBuild: SettingKey[Boolean] = releaseIOMonorepoBehaviorCrossBuild
 
   /** Skip tests. Default: false. */
-  val releaseIOMonorepoSkipTests: SettingKey[Boolean] = _releaseIOMonorepoSkipTests
+  @deprecated("Use releaseIOMonorepoBehaviorSkipTests instead.", "0.9.0")
+  val releaseIOMonorepoSkipTests: SettingKey[Boolean] = releaseIOMonorepoBehaviorSkipTests
 
   /** Skip publish. Default: false. */
-  val releaseIOMonorepoSkipPublish: SettingKey[Boolean] = _releaseIOMonorepoSkipPublish
+  @deprecated("Use releaseIOMonorepoBehaviorSkipPublish instead.", "0.9.0")
+  val releaseIOMonorepoSkipPublish: SettingKey[Boolean] =
+    releaseIOMonorepoBehaviorSkipPublish
 
   /** Interactive mode. Default: false. */
-  val releaseIOMonorepoInteractive: SettingKey[Boolean] = _releaseIOMonorepoInteractive
+  @deprecated("Use releaseIOMonorepoBehaviorInteractive instead.", "0.9.0")
+  val releaseIOMonorepoInteractive: SettingKey[Boolean] =
+    releaseIOMonorepoBehaviorInteractive
 
   /** When false, skips publishTo/skip validation in the monorepo publishArtifacts step. */
+  @deprecated("Use releaseIOMonorepoPublishChecks instead.", "0.9.0")
   val releaseIOMonorepoPublishArtifactsChecks: SettingKey[Boolean] =
-    _releaseIOMonorepoPublishArtifactsChecks
-
-  // ── Commit message settings ──────────────────────────────────────────
+    releaseIOMonorepoPublishChecks
 
   /** Commit message formatter for release version commits. Receives the version summary
     * (e.g. "core 1.0.0, api 2.0.0") and returns the full commit message.
     */
-  val releaseIOMonorepoCommitMessage: SettingKey[String => String] = _releaseIOMonorepoCommitMessage
+  @deprecated("Use releaseIOMonorepoVcsReleaseCommitMessage instead.", "0.9.0")
+  val releaseIOMonorepoCommitMessage: SettingKey[String => String] =
+    releaseIOMonorepoVcsReleaseCommitMessage
 
   /** Commit message formatter for next version commits. Receives the version summary
     * (e.g. "core 1.0.1-SNAPSHOT, api 2.0.1-SNAPSHOT") and returns the full commit message.
     */
+  @deprecated("Use releaseIOMonorepoVcsNextCommitMessage instead.", "0.9.0")
   val releaseIOMonorepoNextCommitMessage: SettingKey[String => String] =
-    _releaseIOMonorepoNextCommitMessage
+    releaseIOMonorepoVcsNextCommitMessage
 
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] =
     _root_.io.release.internal.MonorepoDefaultSettings.commandAndHookSettings ++ Seq(
-      releaseIOMonorepoCommitMessage         := ((summary: String) =>
+      releaseIOMonorepoVcsReleaseCommitMessage    := ((summary: String) =>
         s"Setting release versions: $summary"
       ),
-      releaseIOMonorepoNextCommitMessage     := ((summary: String) =>
+      releaseIOMonorepoVcsNextCommitMessage       := ((summary: String) =>
         s"Setting next versions: $summary"
       ),
-      releaseIOMonorepoDetectChanges         := true,
-      releaseIOMonorepoIncludeDownstream     := false,
-      releaseIOMonorepoChangeDetector        := None,
-      releaseIOMonorepoDetectChangesExcludes := Seq.empty,
-      releaseIOMonorepoSharedPaths           := Seq("build.sbt", "project/"),
-      releaseIOMonorepoTagName               := ((name: String, ver: String) => s"$name/v$ver"),
-      releaseIOMonorepoTagComment            := ((name: String, ver: String) => s"Release $name $ver"),
-      releaseIOMonorepoReadVersion           := VersionSteps.defaultReadVersion,
-      releaseIOMonorepoVersionFileContents   := { (_, ver) =>
+      releaseIOMonorepoDetectionEnabled           := true,
+      releaseIOMonorepoDetectionIncludeDownstream := false,
+      releaseIOMonorepoDetectionChangeDetector    := None,
+      releaseIOMonorepoDetectionExcludes          := Seq.empty,
+      releaseIOMonorepoDetectionSharedPaths       := Seq("build.sbt", "project/"),
+      releaseIOMonorepoVcsTagName                 := ((name: String, ver: String) => s"$name/v$ver"),
+      releaseIOMonorepoVcsTagComment              := ((name: String, ver: String) => s"Release $name $ver"),
+      releaseIOMonorepoVersioningReadVersion      := VersionSteps.defaultReadVersion,
+      releaseIOMonorepoVersioningFileContents     := { (_, ver) =>
         IO.pure(s"""version := "$ver"\n""")
       },
-      releaseIOMonorepoVersionFile           := { (ref: ProjectRef, state: State) =>
-        Project.extract(state).get(ref / releaseIOVersionFile)
+      releaseIOMonorepoVersioningFile             := { (ref: ProjectRef, state: State) =>
+        Project.extract(state).get(ref / releaseIOVersioningFile)
       },
-      releaseIOMonorepoProjects              := {
+      releaseIOMonorepoSelectionProjects          := {
         val build      = loadedBuild.value
         val root       = thisProjectRef.value
         val projectMap = build.allProjectRefs.map { case (ref, proj) =>
@@ -548,8 +594,8 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     IO.blocking {
       val extracted = Project.extract(state)
       ResolvedMonorepoTagSettings(
-        perProjectTagName = extracted.get(releaseIOMonorepoTagName),
-        tagComment = extracted.get(releaseIOMonorepoTagComment),
+        perProjectTagName = extracted.get(releaseIOMonorepoVcsTagName),
+        tagComment = extracted.get(releaseIOMonorepoVcsTagComment),
         sign = extracted.get(_root_.io.release.ReleaseIO.releaseIOVcsSign)
       )
     }

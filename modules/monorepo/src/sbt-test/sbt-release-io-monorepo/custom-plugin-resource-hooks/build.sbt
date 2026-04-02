@@ -56,11 +56,11 @@ lazy val root = (project in file("."))
   .enablePlugins(CustomReleasePlugin)
   .settings(
     name                          := "custom-plugin-resource-hooks-monorepo",
-    releaseIOIgnoreUntrackedFiles := true,
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush   := false,
-    releaseIOMonorepoAfterSelectionHooks := Seq(plainAfterSelectionHook(baseDirectory.value)),
-    releaseIOMonorepoAfterTagHooks := Seq(plainAfterTagHook(baseDirectory.value)),
+    releaseIOVcsIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush   := false,
+    releaseIOMonorepoHooksAfterSelection := Seq(plainAfterSelectionHook(baseDirectory.value)),
+    releaseIOMonorepoHooksAfterTag := Seq(plainAfterTagHook(baseDirectory.value)),
     checkGlobalValidateOrder      := {
       val lines = sbt.IO.readLines(baseDirectory.value / "global-validate-order.log")
       assert(

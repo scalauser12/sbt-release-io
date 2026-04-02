@@ -12,31 +12,31 @@ private[release] object ReleaseHookCompiler {
 
     CoreHookConfiguration(
       enableSnapshotDependenciesCheck =
-        extracted.get(ReleaseIO.releaseIOEnableSnapshotDependenciesCheck),
-      enableRunClean = extracted.get(ReleaseIO.releaseIOEnableRunClean),
-      enableRunTests = extracted.get(ReleaseIO.releaseIOEnableRunTests),
-      enableTagging = extracted.get(ReleaseIO.releaseIOEnableTagging),
-      enablePublish = extracted.get(ReleaseIO.releaseIOEnablePublish),
-      enablePush = extracted.get(ReleaseIO.releaseIOEnablePush),
-      afterCleanCheckHooks = extracted.get(ReleaseIO.releaseIOAfterCleanCheckHooks),
-      beforeVersionResolutionHooks = extracted.get(ReleaseIO.releaseIOBeforeVersionResolutionHooks),
-      afterVersionResolutionHooks = extracted.get(ReleaseIO.releaseIOAfterVersionResolutionHooks),
+        extracted.get(ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck),
+      enableRunClean = extracted.get(ReleaseIO.releaseIOPolicyEnableRunClean),
+      enableRunTests = extracted.get(ReleaseIO.releaseIOPolicyEnableRunTests),
+      enableTagging = extracted.get(ReleaseIO.releaseIOPolicyEnableTagging),
+      enablePublish = extracted.get(ReleaseIO.releaseIOPolicyEnablePublish),
+      enablePush = extracted.get(ReleaseIO.releaseIOPolicyEnablePush),
+      afterCleanCheckHooks = extracted.get(ReleaseIO.releaseIOHooksAfterCleanCheck),
+      beforeVersionResolutionHooks = extracted.get(ReleaseIO.releaseIOHooksBeforeVersionResolution),
+      afterVersionResolutionHooks = extracted.get(ReleaseIO.releaseIOHooksAfterVersionResolution),
       beforeReleaseVersionWriteHooks =
-        extracted.get(ReleaseIO.releaseIOBeforeReleaseVersionWriteHooks),
+        extracted.get(ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite),
       afterReleaseVersionWriteHooks =
-        extracted.get(ReleaseIO.releaseIOAfterReleaseVersionWriteHooks),
-      beforeReleaseCommitHooks = extracted.get(ReleaseIO.releaseIOBeforeReleaseCommitHooks),
-      afterReleaseCommitHooks = extracted.get(ReleaseIO.releaseIOAfterReleaseCommitHooks),
-      beforeTagHooks = extracted.get(ReleaseIO.releaseIOBeforeTagHooks),
-      afterTagHooks = extracted.get(ReleaseIO.releaseIOAfterTagHooks),
-      beforePublishHooks = extracted.get(ReleaseIO.releaseIOBeforePublishHooks),
-      afterPublishHooks = extracted.get(ReleaseIO.releaseIOAfterPublishHooks),
-      beforeNextVersionWriteHooks = extracted.get(ReleaseIO.releaseIOBeforeNextVersionWriteHooks),
-      afterNextVersionWriteHooks = extracted.get(ReleaseIO.releaseIOAfterNextVersionWriteHooks),
-      beforeNextCommitHooks = extracted.get(ReleaseIO.releaseIOBeforeNextCommitHooks),
-      afterNextCommitHooks = extracted.get(ReleaseIO.releaseIOAfterNextCommitHooks),
-      beforePushHooks = extracted.get(ReleaseIO.releaseIOBeforePushHooks),
-      afterPushHooks = extracted.get(ReleaseIO.releaseIOAfterPushHooks)
+        extracted.get(ReleaseIO.releaseIOHooksAfterReleaseVersionWrite),
+      beforeReleaseCommitHooks = extracted.get(ReleaseIO.releaseIOHooksBeforeReleaseCommit),
+      afterReleaseCommitHooks = extracted.get(ReleaseIO.releaseIOHooksAfterReleaseCommit),
+      beforeTagHooks = extracted.get(ReleaseIO.releaseIOHooksBeforeTag),
+      afterTagHooks = extracted.get(ReleaseIO.releaseIOHooksAfterTag),
+      beforePublishHooks = extracted.get(ReleaseIO.releaseIOHooksBeforePublish),
+      afterPublishHooks = extracted.get(ReleaseIO.releaseIOHooksAfterPublish),
+      beforeNextVersionWriteHooks = extracted.get(ReleaseIO.releaseIOHooksBeforeNextVersionWrite),
+      afterNextVersionWriteHooks = extracted.get(ReleaseIO.releaseIOHooksAfterNextVersionWrite),
+      beforeNextCommitHooks = extracted.get(ReleaseIO.releaseIOHooksBeforeNextCommit),
+      afterNextCommitHooks = extracted.get(ReleaseIO.releaseIOHooksAfterNextCommit),
+      beforePushHooks = extracted.get(ReleaseIO.releaseIOHooksBeforePush),
+      afterPushHooks = extracted.get(ReleaseIO.releaseIOHooksAfterPush)
     )
   }
 

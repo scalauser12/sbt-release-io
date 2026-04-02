@@ -4,7 +4,7 @@ lazy val core = (project in file("core"))
   .settings(
     name                 := "core",
     scalaVersion         := "2.12.18",
-    releaseIOVersionFile := baseDirectory.value / "version.properties"
+    releaseIOVersioningFile := baseDirectory.value / "version.properties"
   )
 
 lazy val api = (project in file("api"))
@@ -23,7 +23,7 @@ lazy val root = (project in file("."))
     name         := "per-project-releaseversionfile-test",
     scalaVersion := "2.12.18",
 
-    releaseIOMonorepoReadVersion := { (f: File) =>
+    releaseIOMonorepoVersioningReadVersion := { (f: File) =>
       _root_.cats.effect.IO.blocking(sbt.IO.read(f)).flatMap { contents =>
         if (f.getName == "version.properties") {
           val pattern = """app\.version=(.+)""".r
@@ -57,7 +57,7 @@ lazy val root = (project in file("."))
       }
     },
 
-    releaseIOMonorepoVersionFileContents := { (f: File, ver: String) =>
+    releaseIOMonorepoVersioningFileContents := { (f: File, ver: String) =>
       if (f.getName == "version.properties")
         _root_.cats.effect.IO.blocking(sbt.IO.read(f)).map { contents =>
           contents.linesIterator
@@ -71,12 +71,12 @@ lazy val root = (project in file("."))
         _root_.cats.effect.IO.pure(s"""version := "$ver"\n""")
     },
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val coreProps = IO.read(file("core/version.properties"))

@@ -16,10 +16,10 @@ lazy val root = (project in file("."))
 
     releaseIOVcsSignOff := true,
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkSignOff := {
       // Get all commit messages (full body) except the initial commit

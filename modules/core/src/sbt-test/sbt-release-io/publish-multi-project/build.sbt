@@ -4,10 +4,10 @@ lazy val root = (project in file("."))
     name                          := "publish-multi-project-test",
     scalaVersion                  := "2.12.18",
     publishTo                     := Some(Resolver.file("file", new File("."))),
-    releaseIOIgnoreUntrackedFiles := true,
-    releaseIOEnablePush           := false,
-    releaseIOEnableRunClean       := false,
-    releaseIOEnableRunTests       := false
+    releaseIOVcsIgnoreUntrackedFiles := true,
+    releaseIOPolicyEnablePush           := false,
+    releaseIOPolicyEnableRunClean       := false,
+    releaseIOPolicyEnableRunTests       := false
   )
 
 // Sub-project with publishTo configured

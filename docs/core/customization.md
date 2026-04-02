@@ -4,8 +4,8 @@
 
 Core release customization is hook-first:
 
-- `releaseIOEnable*` turns built-in phases on or off
-- `releaseIO*Hooks` adds behavior around supported lifecycle points
+- `releaseIOPolicy*` turns built-in phases on or off
+- `releaseIOHooks*` adds behavior around supported lifecycle points
 - `ReleasePluginIOLike.releaseResourceHooks` lets custom plugins use one shared resource
 
 Legacy raw-process step-list editing was removed. If you previously customized the release
@@ -27,10 +27,10 @@ def markerHook(marker: String): ReleaseHookIO =
     }
   }
 
-releaseIOEnablePush := false
-releaseIOEnablePublish := false
-releaseIOBeforeTagHooks += markerHook("before-tag")
-releaseIOAfterTagHooks += markerHook("after-tag")
+releaseIOPolicyEnablePush := false
+releaseIOPolicyEnablePublish := false
+releaseIOHooksBeforeTag += markerHook("before-tag")
+releaseIOHooksAfterTag += markerHook("after-tag")
 ```
 
 Hook semantics:
@@ -40,25 +40,42 @@ Hook semantics:
 - `releaseIO check` validates the same lifecycle shape that `releaseIO` executes
 - hooks extend behavior, but they do not change phase ordering
 
+The older flat names remain as deprecated aliases in this release. Prefer the grouped names in
+`build.sbt`, even though `inspect` still prints the legacy sbt key labels.
+
+## Key rename guide
+
+| Old name | Preferred grouped name |
+| -------- | ---------------------- |
+| `releaseIOEnablePush` | `releaseIOPolicyEnablePush` |
+| `releaseIOEnablePublish` | `releaseIOPolicyEnablePublish` |
+| `releaseIOEnableRunTests` | `releaseIOPolicyEnableRunTests` |
+| `releaseIOBeforeTagHooks` | `releaseIOHooksBeforeTag` |
+| `releaseIOAfterTagHooks` | `releaseIOHooksAfterTag` |
+| `releaseIOBeforeVersionResolutionHooks` | `releaseIOHooksBeforeVersionResolution` |
+| `releaseIOAfterVersionResolutionHooks` | `releaseIOHooksAfterVersionResolution` |
+| `releaseIOBeforePublishHooks` | `releaseIOHooksBeforePublish` |
+| `releaseIOAfterPublishHooks` | `releaseIOHooksAfterPublish` |
+
 ## Migration guide
 
 | Old intent | New hook/policy surface |
 | ---------- | ----------------------- |
-| Remove `push-changes` | `releaseIOEnablePush := false` |
-| Remove `publish-artifacts` | `releaseIOEnablePublish := false` |
-| Remove `run-tests` or `run-clean` | `releaseIOEnableRunTests := false` / `releaseIOEnableRunClean := false` |
-| Insert logic before tagging | `releaseIOBeforeTagHooks += ...` |
-| Insert logic after tagging | `releaseIOAfterTagHooks += ...` |
-| Insert logic around version resolution | `releaseIOBeforeVersionResolutionHooks` / `releaseIOAfterVersionResolutionHooks` |
-| Insert logic around publish | `releaseIOBeforePublishHooks` / `releaseIOAfterPublishHooks` |
+| Remove `push-changes` | `releaseIOPolicyEnablePush := false` |
+| Remove `publish-artifacts` | `releaseIOPolicyEnablePublish := false` |
+| Remove `run-tests` or `run-clean` | `releaseIOPolicyEnableRunTests := false` / `releaseIOPolicyEnableRunClean := false` |
+| Insert logic before tagging | `releaseIOHooksBeforeTag += ...` |
+| Insert logic after tagging | `releaseIOHooksAfterTag += ...` |
+| Insert logic around version resolution | `releaseIOHooksBeforeVersionResolution` / `releaseIOHooksAfterVersionResolution` |
+| Insert logic around publish | `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` |
 
 ### Copy/paste replacements
 
 Disable push and publish:
 
 ```scala
-releaseIOEnablePush := false
-releaseIOEnablePublish := false
+releaseIOPolicyEnablePush := false
+releaseIOPolicyEnablePublish := false
 ```
 
 Replace a "run this before tagging" custom step with a lifecycle hook:
@@ -67,7 +84,7 @@ Replace a "run this before tagging" custom step with a lifecycle hook:
 import _root_.cats.effect.IO
 import _root_.io.release.ReleaseHookIO
 
-releaseIOBeforeTagHooks += ReleaseHookIO.action("write-release-marker") { ctx =>
+releaseIOHooksBeforeTag += ReleaseHookIO.action("write-release-marker") { ctx =>
   IO.blocking {
     val base = Project.extract(ctx.state).get(baseDirectory)
     sbt.IO.write(base / "release.marker", "before-tag\n")
@@ -81,7 +98,7 @@ Add a notification after tagging:
 import _root_.cats.effect.IO
 import _root_.io.release.ReleaseHookIO
 
-releaseIOAfterTagHooks += ReleaseHookIO.action("notify-tagged") { ctx =>
+releaseIOHooksAfterTag += ReleaseHookIO.action("notify-tagged") { ctx =>
   IO.blocking {
     val version = ctx.releaseVersion.getOrElse("unknown")
     ctx.state.log.info(s"[release-io] Tagged $version")

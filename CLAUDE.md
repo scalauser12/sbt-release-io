@@ -99,7 +99,7 @@ docs/
 
 ### Customization Model
 
-**Supported — Hook lifecycle:** Policy settings enable/disable phases (`releaseIOEnableRunTests`, `releaseIOEnablePublish`, etc.). Hook settings inject logic at semantic points (`releaseIOBeforeTagHooks`, `releaseIOAfterPublishHooks`, etc.). Compiled into ordered step sequence at startup.
+**Supported — Hook lifecycle:** Policy settings enable/disable phases (`releaseIOPolicyEnableRunTests`, `releaseIOPolicyEnablePublish`, etc.). Hook settings inject logic at semantic points (`releaseIOHooksBeforeTag`, `releaseIOHooksAfterPublish`, etc.). The older flat names remain as deprecated aliases for compatibility. Compiled into an ordered step sequence at startup.
 
 **Advanced internals:** Lower-level step types still exist for internals, tests, and custom plugin
 helpers, but build-facing customization should use hooks, policies, and resource hooks.

@@ -30,12 +30,12 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "diamond-dependency-test",
-    releaseIOMonorepoBeforeTagHooks := Seq(recordOrderHook),
-    releaseIOIgnoreUntrackedFiles   := true,
-    releaseIOMonorepoEnablePublish  := false,
-    releaseIOMonorepoEnablePush     := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoHooksBeforeTag := Seq(recordOrderHook),
+    releaseIOVcsIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
     checkAll                      := {
       // Check execution order
       val marker = baseDirectory.value / "order.txt"

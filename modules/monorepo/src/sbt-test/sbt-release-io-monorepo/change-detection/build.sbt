@@ -20,14 +20,14 @@ lazy val root = (project in file("."))
     name := "change-detection-test",
 
     // Enable change detection (default is true, but be explicit)
-    releaseIOMonorepoDetectChanges := true,
+    releaseIOMonorepoDetectionEnabled := true,
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     // Consolidated verification task
     checkAll := {

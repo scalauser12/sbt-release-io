@@ -36,12 +36,12 @@ lazy val root = (project in file("."))
   .settings(
     name := "topological-order-test",
 
-    releaseIOMonorepoBeforeTagHooks := Seq(recordOrderHook),
-    releaseIOIgnoreUntrackedFiles   := true,
-    releaseIOMonorepoEnablePublish  := false,
-    releaseIOMonorepoEnablePush     := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoHooksBeforeTag := Seq(recordOrderHook),
+    releaseIOVcsIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
     checkAll := {
       // Check execution order

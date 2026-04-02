@@ -132,8 +132,9 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val mutatedState = SbtRuntime.appendWithSession(
           fixture.state,
           Seq(
-            MonorepoReleaseIO.releaseIOMonorepoVersionFile := { (_: sbt.ProjectRef, _: sbt.State) =>
-              sharedFile
+            MonorepoReleaseIO.releaseIOMonorepoVersioningFile := {
+              (_: sbt.ProjectRef, _: sbt.State) =>
+                sharedFile
             }
           )
         )
@@ -179,7 +180,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val countingState = SbtRuntime.appendWithSession(
           fixture.state,
           Seq(
-            MonorepoReleaseIO.releaseIOMonorepoVersionFile := {
+            MonorepoReleaseIO.releaseIOMonorepoVersioningFile := {
               (ref: sbt.ProjectRef, _: sbt.State) =>
                 resolverCalls.incrementAndGet()
                 new File(new File(fixture.dir, ref.project), "version.sbt")
@@ -241,8 +242,10 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
             "core",
             coreBase,
             settings = Seq(
-              releaseIOVersion     := ((version: String) => version.stripSuffix("-SNAPSHOT")),
-              releaseIONextVersion := ((_: String) => "0.2.0-SNAPSHOT")
+              releaseIOVersioningReleaseVersion := ((version: String) =>
+                version.stripSuffix("-SNAPSHOT")
+              ),
+              releaseIOVersioningNextVersion    := ((_: String) => "0.2.0-SNAPSHOT")
             )
           )
         )

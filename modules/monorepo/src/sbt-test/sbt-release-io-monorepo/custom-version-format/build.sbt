@@ -22,7 +22,7 @@ lazy val root = (project in file("."))
     name := "custom-version-format-test",
 
     // Point version files to .properties files instead of version.sbt
-    releaseIOMonorepoVersionFile := {
+    releaseIOMonorepoVersioningFile := {
       val build = loadedBuild.value
       (ref: ProjectRef, _: State) => {
         val projBase = build.allProjectRefs
@@ -34,7 +34,7 @@ lazy val root = (project in file("."))
     },
 
     // Custom reader: parse app.version=x.y.z from properties file
-    releaseIOMonorepoReadVersion := { (f: File) =>
+    releaseIOMonorepoVersioningReadVersion := { (f: File) =>
       _root_.cats.effect.IO.blocking(sbt.IO.read(f)).flatMap { contents =>
         val pattern = """app\.version=(.+)""".r
         pattern.findFirstMatchIn(contents) match {
@@ -50,7 +50,7 @@ lazy val root = (project in file("."))
     },
 
     // Custom writer: read existing file, replace only the app.version line, preserve everything else
-    releaseIOMonorepoVersionFileContents := { (f: File, ver: String) =>
+    releaseIOMonorepoVersioningFileContents := { (f: File, ver: String) =>
       _root_.cats.effect.IO.blocking(sbt.IO.read(f)).map { contents =>
         contents.linesIterator
           .map {
@@ -61,12 +61,12 @@ lazy val root = (project in file("."))
       }
     },
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       // Check core version.properties has next version and preserved app.name

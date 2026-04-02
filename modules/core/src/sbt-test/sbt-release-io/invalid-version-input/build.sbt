@@ -4,10 +4,10 @@ import sbt.IO
 name         := "invalid-version-input-test"
 scalaVersion := "2.12.18"
 
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkNoGitTags = taskKey[Unit]("Check that no git tags were created")
 checkNoGitTags := {

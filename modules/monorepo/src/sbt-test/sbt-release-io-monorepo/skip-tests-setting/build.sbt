@@ -28,10 +28,10 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                           := "skip-tests-setting-test",
-    releaseIOMonorepoSkipTests     := true,
-    releaseIOIgnoreUntrackedFiles  := true,
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoBehaviorSkipTests     := true,
+    releaseIOVcsIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
     checkAll                       := {
       val coreMarker = file("core/marker/tests-ran")
       assert(

@@ -6,7 +6,7 @@ Enable cross-building so version-sensitive steps run once per `crossScalaVersion
 
 ```scala
 // build.sbt
-releaseIOCrossBuild := true
+releaseIOBehaviorCrossBuild := true
 ```
 
 Or pass the `cross` flag on the command line:
@@ -46,7 +46,7 @@ ReleaseStepIO.step("my-step").withCrossBuild.execute(ctx => ...)
 
 ## CI/CD integration
 
-The plugin defaults to non-interactive mode (`releaseIOInteractive := false`), so it works in CI without additional configuration. Pass `with-defaults` to suppress the remaining version prompts, and supply versions explicitly:
+The plugin defaults to non-interactive mode (`releaseIOBehaviorInteractive := false`), so it works in CI without additional configuration. Pass `with-defaults` to suppress the remaining version prompts, and supply versions explicitly:
 
 ```bash
 sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
@@ -88,8 +88,8 @@ To rehearse a release locally, disable push, skip publish, run `check`, then run
 
 ```scala
 // build.sbt
-releaseIOEnablePush := false
-releaseIOSkipPublish := true
+releaseIOPolicyEnablePush := false
+releaseIOBehaviorSkipPublish := true
 ```
 
 First run the preflight with no release side effects:

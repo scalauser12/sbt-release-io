@@ -14,14 +14,14 @@ scalaVersion := Scala213
 crossScalaVersions := Seq(Scala213, Scala212)
 
 // Enable cross-build via the setting (not the CLI flag)
-releaseIOCrossBuild := true
+releaseIOBehaviorCrossBuild := true
 
 libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
-releaseIOEnablePush    := false
+releaseIOPolicyEnablePush    := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
 
 val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
@@ -34,7 +34,7 @@ val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
   }
 }
 
-releaseIOBeforePublishHooks := Seq(crossBuildMarkerHook)
+releaseIOHooksBeforePublish := Seq(crossBuildMarkerHook)
 
 val checkCrossBuildInvocations =
   taskKey[Unit]("Verify cross-build ran exactly once per configured Scala version")

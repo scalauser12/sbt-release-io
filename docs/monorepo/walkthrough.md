@@ -40,8 +40,8 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     // Disable push and publish during initial setup — re-enable when ready
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnablePublish := false
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false
   )
 ```
 

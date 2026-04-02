@@ -21,14 +21,14 @@ lazy val root = (project in file("."))
     name := "shared-version-file-test",
     // Point all projects at the same root version.sbt — simulates a stale
     // global-version-mode config left over from before the removal.
-    releaseIOMonorepoVersionFile := { (_: ProjectRef, _: sbt.State) =>
+    releaseIOMonorepoVersioningFile := { (_: ProjectRef, _: sbt.State) =>
       baseDirectory.value / "version.sbt"
     },
-    releaseIOIgnoreUntrackedFiles   := true,
-    releaseIOMonorepoEnablePublish  := false,
-    releaseIOMonorepoEnablePush     := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
     checkUnchanged := {
       val versionContents = IO.read(baseDirectory.value / "version.sbt")
       assert(

@@ -46,7 +46,7 @@ trait ReleasePluginIOSpecSupport {
 
     override lazy val projectSettings: Seq[Setting[?]] =
       baseReleaseSettings ++ Seq(
-        ReleaseIO.releaseIOBeforeTagHooks += ReleaseHookIO.action("base-before-tag")(_ => IO.unit)
+        ReleaseIO.releaseIOHooksBeforeTag += ReleaseHookIO.action("base-before-tag")(_ => IO.unit)
       )
 
     def settingsForTests: Seq[Setting[?]] = projectSettings

@@ -7,10 +7,10 @@ libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
 // Skip push and publish steps in tests
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkGitTag = taskKey[Unit]("Check that a git tag exists")
 checkGitTag := {

@@ -11,7 +11,7 @@ class MonorepoReleasePluginProcessModeSpec
 
   test("resolveProcessMode compiles plain hooks for the default monorepo plugin") {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks +=
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection +=
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 
@@ -28,10 +28,10 @@ class MonorepoReleasePluginProcessModeSpec
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val plugin                    = resourceAwareHookPlugin(observed)
       val settings: Seq[Setting[?]] = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks +=
+        MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection +=
           MonorepoGlobalHookIO
             .action("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
-        MonorepoReleaseIO.releaseIOMonorepoAfterTagHooks +=
+        MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag +=
           MonorepoProjectHookIO.action("plain-after-tag")((_, project) =>
             observed.update(_ :+ s"plain-project-execute:${project.name}")
           )
@@ -68,7 +68,7 @@ class MonorepoReleasePluginProcessModeSpec
     "resolveProcessMode keeps a direct custom plugin with unrelated overrides on compiled hook mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks +=
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection +=
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 
@@ -84,7 +84,7 @@ class MonorepoReleasePluginProcessModeSpec
     "resolveProcessMode keeps an inherited custom plugin with unrelated overrides on compiled hook mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks +=
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection +=
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 
@@ -104,7 +104,7 @@ class MonorepoReleasePluginProcessModeSpec
       "monorepo-plugin-throwing-hooks",
       MonorepoReleasePlugin,
       Seq(
-        MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks := throwingHookSeq("hook boom")
+        MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection := throwingHookSeq("hook boom")
       )
     ).use { loaded =>
       interceptMessageIO[RuntimeException]("hook boom") {

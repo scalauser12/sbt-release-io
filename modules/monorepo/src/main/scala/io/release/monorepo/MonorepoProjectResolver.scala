@@ -11,7 +11,7 @@ private[monorepo] object MonorepoProjectResolver {
     IO.blocking {
       val extracted   = Project.extract(state)
       val runtime     = MonorepoRuntime.fromExtracted(state, extracted)
-      val projectRefs = extracted.get(MonorepoReleaseIO.releaseIOMonorepoProjects)
+      val projectRefs = extracted.get(MonorepoReleaseIO.releaseIOMonorepoSelectionProjects)
 
       projectRefs.map { ref =>
         val baseDir = (ref / baseDirectory).get(extracted.structure.data)

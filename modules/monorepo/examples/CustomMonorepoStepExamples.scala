@@ -40,8 +40,8 @@ object CustomMonorepoStepExamples {
     * Run with: `sbt "releaseIOMonorepo with-defaults"`
     */
   val firstHookSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoEnablePush := false,
-    MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks += printSummaryHook
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush := false,
+    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook
   )
 
   /** A richer hook-based setup with policy toggles and a mix of global and per-project hooks.
@@ -52,11 +52,11 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val customHookSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoEnablePush := false,
-    MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks += printSummaryHook,
-    MonorepoReleaseIO.releaseIOMonorepoBeforeVersionResolutionHooks += checkReadmeHook,
-    MonorepoReleaseIO.releaseIOMonorepoAfterVersionResolutionHooks += generateChangelogHook,
-    MonorepoReleaseIO.releaseIOMonorepoAfterNextCommitHooks += markReleaseDoneHook
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush := false,
+    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook,
+    MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook,
+    MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution += generateChangelogHook,
+    MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit += markReleaseDoneHook
   )
 
   /** Recommended template for selective monorepo rehearsals driven by change detection.
@@ -78,11 +78,11 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val selectionAndDetectionSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoEnablePush        := false,
-    MonorepoReleaseIO.releaseIOMonorepoEnablePublish     := false,
-    MonorepoReleaseIO.releaseIOMonorepoEnableRunClean    := false,
-    MonorepoReleaseIO.releaseIOMonorepoIncludeDownstream := true,
-    MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks += printSummaryHook
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush           := false,
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish        := false,
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean       := false,
+    MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := true,
+    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook
   )
 
   /** Recommended template for targeted project rehearsals with explicit selectors.
@@ -100,11 +100,11 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val targetedRehearsalSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoEnablePush     := false,
-    MonorepoReleaseIO.releaseIOMonorepoEnablePublish  := false,
-    MonorepoReleaseIO.releaseIOMonorepoEnableRunClean := false,
-    MonorepoReleaseIO.releaseIOMonorepoAfterSelectionHooks += printSummaryHook,
-    MonorepoReleaseIO.releaseIOMonorepoBeforeVersionResolutionHooks += checkReadmeHook
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush     := false,
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish  := false,
+    MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean := false,
+    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook,
+    MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook
   )
 
   val printSummaryHook: MonorepoGlobalHookIO = MonorepoGlobalHookIO.action("print-summary")(ctx =>

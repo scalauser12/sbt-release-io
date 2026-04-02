@@ -1,6 +1,8 @@
 package io.release.steps
 
+import cats.effect.Deferred
 import cats.effect.IO
+import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseIO
 import io.release.ReleaseIO.*
@@ -12,6 +14,7 @@ import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.SbtRuntime
+import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
 import sbt.Project
@@ -205,13 +208,13 @@ class VersionStepsSpec extends CatsEffectSuite {
             dir,
             Seq(
               Project("root", dir).settings(
-                releaseIOVersionFile         := versionFile,
-                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-                releaseIOVersionFileContents := VersionSteps
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps
                   .defaultWriteVersion(useGlobalVersion = true),
-                releaseIOUseGlobalVersion    := true,
-                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
-                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
               )
             )
           )
@@ -235,13 +238,13 @@ class VersionStepsSpec extends CatsEffectSuite {
             dir,
             Seq(
               Project("root", dir).settings(
-                releaseIOVersionFile         := versionFile,
-                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-                releaseIOVersionFileContents := VersionSteps
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps
                   .defaultWriteVersion(useGlobalVersion = true),
-                releaseIOUseGlobalVersion    := true,
-                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
-                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
               )
             )
           )
@@ -264,13 +267,13 @@ class VersionStepsSpec extends CatsEffectSuite {
             dir,
             Seq(
               Project("root", dir).settings(
-                releaseIOVersionFile         := versionFile,
-                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-                releaseIOVersionFileContents := VersionSteps
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps
                   .defaultWriteVersion(useGlobalVersion = true),
-                releaseIOUseGlobalVersion    := true,
-                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
-                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
               )
             )
           )
@@ -285,7 +288,7 @@ class VersionStepsSpec extends CatsEffectSuite {
     }
   }
 
-  test("resolveVersions - fail when releaseIOVersion reports FailureCommand") {
+  test("resolveVersions - fail when releaseIOVersioningReleaseVersion reports FailureCommand") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val marker = new File(dir, "release-version-task.marker")
 
@@ -295,13 +298,13 @@ class VersionStepsSpec extends CatsEffectSuite {
             dir,
             Seq(
               Project("root", dir).settings(
-                releaseIOVersionFile         := versionFile,
-                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-                releaseIOVersionFileContents := VersionSteps
+                releaseIOVersioningFile         := versionFile,
+                releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents := VersionSteps
                   .defaultWriteVersion(useGlobalVersion = true),
-                releaseIOUseGlobalVersion    := true,
+                releaseIOVersioningUseGlobal    := true,
                 CoreStepTestCompat.failureCommandVersionTaskSetting(marker),
-                releaseIONextVersion         := (_ => "0.2.0-SNAPSHOT")
+                releaseIOVersioningNextVersion  := (_ => "0.2.0-SNAPSHOT")
               )
             )
           )
@@ -311,14 +314,14 @@ class VersionStepsSpec extends CatsEffectSuite {
               VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
             ) { err =>
               assert(marker.exists())
-              assert(err.getMessage.contains(releaseIOVersion.key.label))
+              assert(err.getMessage.contains(releaseIOVersioningReleaseVersion.key.label))
               assert(err.getMessage.contains("FailureCommand"))
             }
       }
     }
   }
 
-  test("resolveVersions - fail when releaseIONextVersion reports FailureCommand") {
+  test("resolveVersions - fail when releaseIOVersioningNextVersion reports FailureCommand") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val marker = new File(dir, "next-version-task.marker")
 
@@ -328,12 +331,12 @@ class VersionStepsSpec extends CatsEffectSuite {
             dir,
             Seq(
               Project("root", dir).settings(
-                releaseIOVersionFile         := versionFile,
-                releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-                releaseIOVersionFileContents := VersionSteps
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps
                   .defaultWriteVersion(useGlobalVersion = true),
-                releaseIOUseGlobalVersion    := true,
-                releaseIOVersion             := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
                 CoreStepTestCompat.failureCommandNextVersionTaskSetting(marker)
               )
             )
@@ -344,7 +347,7 @@ class VersionStepsSpec extends CatsEffectSuite {
               VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
             ) { err =>
               assert(marker.exists())
-              assert(err.getMessage.contains(releaseIONextVersion.key.label))
+              assert(err.getMessage.contains(releaseIOVersioningNextVersion.key.label))
               assert(err.getMessage.contains("FailureCommand"))
             }
       }
@@ -369,15 +372,15 @@ class VersionStepsSpec extends CatsEffectSuite {
           repo,
           releaseManifestSettings() ++
             Seq(
-              releaseIOVersionFile         := versionFile,
-              releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-              releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+              releaseIOVersioningFile          := versionFile,
+              releaseIOVersioningReadVersion   := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents  := VersionSteps.defaultWriteVersion(
                 useGlobalVersion = true
               ),
-              releaseIOUseGlobalVersion    := true,
-              releaseIOCommitMessage       := "Setting version to 1.0.0",
-              releaseIOVcsSign             := false,
-              releaseIOVcsSignOff          := false
+              releaseIOVersioningUseGlobal     := true,
+              releaseIOVcsReleaseCommitMessage := "Setting version to 1.0.0",
+              releaseIOVcsSign                 := false,
+              releaseIOVcsSignOff              := false
             )
         )
         val ctx         = ReleaseContext(state = state, vcs = Some(vcs))
@@ -393,8 +396,53 @@ class VersionStepsSpec extends CatsEffectSuite {
       }
   }
 
+  test("commitReleaseVersion - finish staging and commit after cancellation is requested") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "1.0.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          for {
+            addStarted       <- Deferred[IO, Unit]
+            allowAddToFinish <- Deferred[IO, Unit]
+            commitCalls      <- Ref[IO].of(0)
+            vcs               = cancelSafeCommitVcs(
+                                  base = dir,
+                                  addStarted = addStarted,
+                                  allowAddToFinish = allowAddToFinish,
+                                  commitCalls = commitCalls
+                                )
+            state             = TestSupport.loadedState(
+                                  dir,
+                                  Seq(
+                                    Project("root", dir).settings(
+                                      releaseIOVersioningFile          := versionFile,
+                                      releaseIOVersioningReadVersion   := VersionSteps.defaultReadVersion,
+                                      releaseIOVersioningFileContents  := VersionSteps.defaultWriteVersion(
+                                        useGlobalVersion = true
+                                      ),
+                                      releaseIOVersioningUseGlobal     := true,
+                                      releaseIOVcsReleaseCommitMessage := "Setting version to 1.0.0",
+                                      releaseIOVcsSign                 := false,
+                                      releaseIOVcsSignOff              := false
+                                    )
+                                  )
+                                )
+            ctx               = ReleaseContext(state = state, vcs = Some(vcs))
+                                  .withVersions("1.0.0", "1.0.1-SNAPSHOT")
+            written          <- VersionSteps.setReleaseVersion.execute(ctx)
+            commitFiber      <- VersionSteps.commitReleaseVersion.execute(written).start
+            _                <- addStarted.get
+            cancelFiber      <- commitFiber.cancel.start
+            _                <- allowAddToFinish.complete(()).void
+            _                <- cancelFiber.join.void
+            _                <- commitFiber.join.void
+            calls            <- commitCalls.get
+          } yield assertEquals(calls, 1)
+      }
+    }
+  }
+
   test(
-    "commitReleaseVersion - do not create a commit when releaseIOCommitMessage reports FailureCommand"
+    "commitReleaseVersion - do not create a commit when releaseIOVcsReleaseCommitMessage reports FailureCommand"
   ) {
     ReleaseTestSupport
       .gitRepoWithCommitResource(
@@ -413,15 +461,15 @@ class VersionStepsSpec extends CatsEffectSuite {
         val state       = ReleaseTestSupport.gitRootState(
           repo,
           Seq(
-            releaseIOVersionFile         := versionFile,
-            releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-            releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+            releaseIOVersioningFile         := versionFile,
+            releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+            releaseIOVersioningFileContents := VersionSteps.defaultWriteVersion(
               useGlobalVersion = true
             ),
-            releaseIOUseGlobalVersion    := true,
+            releaseIOVersioningUseGlobal    := true,
             CoreStepTestCompat.failureCommandCommitMessageSetting(marker),
-            releaseIOVcsSign             := false,
-            releaseIOVcsSignOff          := false
+            releaseIOVcsSign                := false,
+            releaseIOVcsSignOff             := false
           )
         )
         val ctx         = ReleaseContext(state = state, vcs = Some(vcs))
@@ -434,7 +482,7 @@ class VersionStepsSpec extends CatsEffectSuite {
                        VersionSteps.commitReleaseVersion.execute(written)
                      ) { err =>
                        assert(marker.exists())
-                       assert(err.getMessage.contains(releaseIOCommitMessage.key.label))
+                       assert(err.getMessage.contains(releaseIOVcsReleaseCommitMessage.key.label))
                        assert(err.getMessage.contains("FailureCommand"))
                      }
           after   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
@@ -445,7 +493,7 @@ class VersionStepsSpec extends CatsEffectSuite {
   }
 
   test(
-    "commitNextVersion - do not create a commit when releaseIONextCommitMessage reports FailureCommand"
+    "commitNextVersion - do not create a commit when releaseIOVcsNextCommitMessage reports FailureCommand"
   ) {
     ReleaseTestSupport
       .gitRepoWithCommitResource(
@@ -464,15 +512,15 @@ class VersionStepsSpec extends CatsEffectSuite {
         val state       = ReleaseTestSupport.gitRootState(
           repo,
           Seq(
-            releaseIOVersionFile         := versionFile,
-            releaseIOReadVersion         := VersionSteps.defaultReadVersion,
-            releaseIOVersionFileContents := VersionSteps.defaultWriteVersion(
+            releaseIOVersioningFile         := versionFile,
+            releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+            releaseIOVersioningFileContents := VersionSteps.defaultWriteVersion(
               useGlobalVersion = true
             ),
-            releaseIOUseGlobalVersion    := true,
+            releaseIOVersioningUseGlobal    := true,
             CoreStepTestCompat.failureCommandNextCommitMessageSetting(marker),
-            releaseIOVcsSign             := false,
-            releaseIOVcsSignOff          := false
+            releaseIOVcsSign                := false,
+            releaseIOVcsSignOff             := false
           )
         )
         val ctx         = ReleaseContext(state = state, vcs = Some(vcs))
@@ -485,7 +533,7 @@ class VersionStepsSpec extends CatsEffectSuite {
                        VersionSteps.commitNextVersion.execute(written)
                      ) { err =>
                        assert(marker.exists())
-                       assert(err.getMessage.contains(releaseIONextCommitMessage.key.label))
+                       assert(err.getMessage.contains(releaseIOVcsNextCommitMessage.key.label))
                        assert(err.getMessage.contains("FailureCommand"))
                      }
           after   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
@@ -564,4 +612,35 @@ class VersionStepsSpec extends CatsEffectSuite {
       file
     }
   }
+
+  private def cancelSafeCommitVcs(
+      base: File,
+      addStarted: Deferred[IO, Unit],
+      allowAddToFinish: Deferred[IO, Unit],
+      commitCalls: Ref[IO, Int]
+  ): Vcs =
+    new Vcs {
+      override def baseDir: File                                                               = base
+      override def commandName: String                                                         = "git"
+      override def currentHash: IO[String]                                                     = IO.pure("deadbeef")
+      override def currentBranch: IO[String]                                                   = IO.pure("main")
+      override def trackingRemote: IO[String]                                                  = IO.pure("origin")
+      override def upstreamTrackingHash: IO[Option[String]]                                    =
+        IO.pure(Some("origin/main"))
+      override def hasUpstream: IO[Boolean]                                                    = IO.pure(true)
+      override def isBehindRemote: IO[Boolean]                                                 = IO.pure(false)
+      override def existsTag(name: String): IO[Boolean]                                        = IO.pure(false)
+      override def modifiedFiles: IO[Seq[String]]                                              = IO.pure(Seq("version.sbt"))
+      override def stagedFiles: IO[Seq[String]]                                                = IO.pure(Nil)
+      override def untrackedFiles: IO[Seq[String]]                                             = IO.pure(Nil)
+      override def status: IO[String]                                                          = IO.pure("M version.sbt")
+      override def checkRemote(remote: String): IO[Int]                                        = IO.pure(0)
+      override def add(files: String*): IO[Unit]                                               =
+        addStarted.complete(()).void *> allowAddToFinish.get
+      override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit]          =
+        commitCalls.update(_ + 1)
+      override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
+        IO.unit
+      override def pushChanges: IO[Unit]                                                       = IO.unit
+    }
 }

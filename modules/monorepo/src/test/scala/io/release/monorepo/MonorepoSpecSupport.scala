@@ -161,9 +161,9 @@ object MonorepoSpecSupport {
       (
         MonorepoReleaseIO.monorepoDefaultSettings ++
           Seq(
-            io.release.ReleaseIO.releaseIOVersionFile := new File(repo, "version.sbt"),
-            io.release.ReleaseIO.releaseIOVcsSign     := false,
-            io.release.ReleaseIO.releaseIOVcsSignOff  := false
+            io.release.ReleaseIO.releaseIOVersioningFile := new File(repo, "version.sbt"),
+            io.release.ReleaseIO.releaseIOVcsSign        := false,
+            io.release.ReleaseIO.releaseIOVcsSignOff     := false
           ) ++
           settings
       )*
@@ -178,7 +178,7 @@ object MonorepoSpecSupport {
     Project(id, base).settings(
       (
         Seq(
-          io.release.ReleaseIO.releaseIOVersionFile := new File(base, "version.sbt")
+          io.release.ReleaseIO.releaseIOVersioningFile := new File(base, "version.sbt")
         ) ++ settings
       )*
     )

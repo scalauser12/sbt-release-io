@@ -14,16 +14,16 @@ lazy val root = (project in file("."))
     scalaVersion := "2.12.18",
 
     // Include root project itself alongside aggregated sub-projects
-    releaseIOMonorepoProjects := thisProjectRef.value +: thisProject.value.aggregate,
+    releaseIOMonorepoSelectionProjects := thisProjectRef.value +: thisProject.value.aggregate,
 
-    releaseIOMonorepoDetectChanges := true,
+    releaseIOMonorepoDetectionEnabled := true,
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

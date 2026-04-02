@@ -27,12 +27,12 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "hook-disabled-phases-monorepo",
-    releaseIOIgnoreUntrackedFiles := true,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush   := false,
-    releaseIOMonorepoBeforePublishHooks := Seq(markerHook("before-publish")),
-    releaseIOMonorepoAfterPublishHooks := Seq(markerHook("after-publish")),
+    releaseIOVcsIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush   := false,
+    releaseIOMonorepoHooksBeforePublish := Seq(markerHook("before-publish")),
+    releaseIOMonorepoHooksAfterPublish := Seq(markerHook("after-publish")),
     checkNoPublishHooks           := {
       List("before-publish", "after-publish").foreach { marker =>
         val markerFile = file("core") / s"$marker.marker"

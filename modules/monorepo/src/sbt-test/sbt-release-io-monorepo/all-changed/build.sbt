@@ -20,12 +20,12 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                           := "all-changed-test",
-    releaseIOMonorepoDetectChanges := true,
-    releaseIOMonorepoEnablePublish  := false,
-    releaseIOMonorepoEnablePush     := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoDetectionEnabled := true,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles  := true,
     // Consolidated verification task
     checkAll                       := {
       // Check tags: original 2 manual tags + core/v0.2.0 + api/v0.2.0 = 4 tags

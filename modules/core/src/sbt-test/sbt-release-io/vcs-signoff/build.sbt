@@ -5,10 +5,10 @@ scalaVersion := "2.12.18"
 
 releaseIOVcsSignOff := true
 
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkSignOff = taskKey[Unit]("Verify release commits contain Signed-off-by trailer")
 checkSignOff := {

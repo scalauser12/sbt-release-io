@@ -20,15 +20,15 @@ lazy val root = (project in file("."))
     name := "shared-paths-custom-test",
 
     // Change detection enabled, custom shared path instead of defaults
-    releaseIOMonorepoDetectChanges := true,
-    releaseIOMonorepoSharedPaths   := Seq(".scalafmt.conf"),
+    releaseIOMonorepoDetectionEnabled := true,
+    releaseIOMonorepoDetectionSharedPaths   := Seq(".scalafmt.conf"),
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

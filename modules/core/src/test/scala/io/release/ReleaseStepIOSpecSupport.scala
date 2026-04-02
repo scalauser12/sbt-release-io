@@ -33,6 +33,14 @@ trait ReleaseStepIOSpecSupport {
   protected def scalaVersionOf(state: State): IO[String] =
     IO.blocking(SbtRuntime.extracted(state).get(Keys.scalaVersion))
 
+  protected def scopedScalaVersionOf(state: State): IO[Option[String]] =
+    IO.blocking {
+      val extracted = SbtRuntime.extracted(state)
+      (extracted.currentRef / Keys.scalaVersion)
+        .get(extracted.structure.data)
+        .orElse((sbt.GlobalScope / Keys.scalaVersion).get(extracted.structure.data))
+    }
+
   protected def readFile(file: File): IO[String] =
     IO.blocking(sbt.IO.read(file, StandardCharsets.UTF_8))
 

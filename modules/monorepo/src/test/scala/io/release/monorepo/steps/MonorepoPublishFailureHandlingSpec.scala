@@ -84,7 +84,7 @@ class MonorepoPublishFailureHandlingSpec
     singleProjectFixtureResource(
       "monorepo-publish-eval-error",
       rootSettings = Seq(
-        io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishArtifactsChecks := false
+        io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishChecks := false
       )
     ) { _ =>
       Seq(MonorepoStepTestCompat.throwingPublishSkipSetting)

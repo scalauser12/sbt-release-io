@@ -21,7 +21,7 @@ lazy val root = (project in file("."))
   .settings(
     name                            := "custom-detector-error-test",
     // Custom change detector: throws for "api", succeeds for "core"
-    releaseIOMonorepoChangeDetector := Some { (ref: ProjectRef, _: File, _: State) =>
+    releaseIOMonorepoDetectionChangeDetector := Some { (ref: ProjectRef, _: File, _: State) =>
       if (ref.project == "api")
         _root_.cats.effect.IO.raiseError(
           new RuntimeException("Simulated detector failure for api")
@@ -29,11 +29,11 @@ lazy val root = (project in file("."))
       else
         _root_.cats.effect.IO.pure(true)
     },
-    releaseIOMonorepoEnablePublish  := false,
-    releaseIOMonorepoEnablePush     := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles   := true,
     checkAll                        := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       // Both should be tagged: core detected as changed, api conservatively treated as changed

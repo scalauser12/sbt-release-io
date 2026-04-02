@@ -1,4 +1,4 @@
-# Test: custom releaseIOPublishArtifactsAction runs during release
+# Test: custom releaseIOPublishAction runs during release
 $ exec git init
 $ exec git config user.email "test@example.com"
 $ exec git config user.name "Test User"

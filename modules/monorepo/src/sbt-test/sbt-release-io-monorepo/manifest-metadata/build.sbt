@@ -67,8 +67,8 @@ lazy val root = (project in file("."))
   .settings(
     name                          := "manifest-metadata-monorepo",
     scalaVersion                  := "2.12.18",
-    releaseIOMonorepoEnablePush   := false,
-    releaseIOMonorepoAfterNextCommitHooks := Seq(
+    releaseIOMonorepoPolicyEnablePush   := false,
+    releaseIOMonorepoHooksAfterNextCommit := Seq(
       MonorepoGlobalHookIO.action("record-visible-release-metadata") { ctx =>
         CatsIO.blocking {
           val extracted = Project.extract(ctx.state)
@@ -88,7 +88,7 @@ lazy val root = (project in file("."))
         }
       }
     ),
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
     checkPublishedMetadata        := {
       val coreReleaseHash = "git rev-parse core/v0.1.0^{commit}".!!.trim
       val apiReleaseHash  = "git rev-parse api/v0.1.0^{commit}".!!.trim

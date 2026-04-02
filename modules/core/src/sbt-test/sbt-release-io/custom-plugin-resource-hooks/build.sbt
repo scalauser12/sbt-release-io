@@ -6,9 +6,9 @@ name := "custom-plugin-resource-hooks"
 
 scalaVersion := "2.12.18"
 
-releaseIOIgnoreUntrackedFiles := true
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOVcsIgnoreUntrackedFiles := true
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 enablePlugins(CustomPlugin)
 
@@ -31,7 +31,7 @@ def plainBeforeTagHook(base: File): ReleaseHookIO =
       }
   )
 
-releaseIOBeforeTagHooks := Seq(plainBeforeTagHook(baseDirectory.value))
+releaseIOHooksBeforeTag := Seq(plainBeforeTagHook(baseDirectory.value))
 
 val checkValidateOrder = taskKey[Unit]("Check validate order for beforeTag hooks")
 checkValidateOrder := {

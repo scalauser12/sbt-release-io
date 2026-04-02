@@ -36,7 +36,7 @@ class PublishStepsSpec extends CatsEffectSuite {
           result.failureCause.exists(
             _.getMessage.contains(
               "publish-artifacts: sbt task " +
-                s"'${ReleaseIO.releaseIOPublishArtifactsAction.key.label}'"
+                s"'${ReleaseIO.releaseIOPublishAction.key.label}'"
             )
           )
         )
@@ -58,7 +58,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("checkSnapshotDependencies.validate - fail on snapshot dependencies") {
     loadedContextResource(s"$fixturePrefix-snapshots") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIOSnapshotDependencies := Seq(
+        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -75,7 +75,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
     loadedContextResource(s"$fixturePrefix-snapshots-field") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIOSnapshotDependencies := Seq(
+        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -91,7 +91,7 @@ class PublishStepsSpec extends CatsEffectSuite {
 
   test("publishArtifacts.validate - short-circuit when publishArtifactsChecks is false") {
     loadedContextResource(s"$fixturePrefix-val-off") { _ =>
-      () -> Seq(ReleaseIO.releaseIOPublishArtifactsChecks := false)
+      () -> Seq(ReleaseIO.releaseIOPublishChecks := false)
     }.use { case (ctx, _) =>
       PublishSteps.publishArtifacts.validate(ctx)
     }
@@ -100,8 +100,8 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("publishArtifacts.validate - pass when publish/skip is true") {
     loadedContextResource(s"$fixturePrefix-val-skip") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIOPublishArtifactsChecks := true,
-        publish / skip                            := true
+        ReleaseIO.releaseIOPublishChecks := true,
+        publish / skip                   := true
       )
     }.use { case (ctx, _) =>
       PublishSteps.publishArtifacts.validate(ctx)
@@ -110,7 +110,7 @@ class PublishStepsSpec extends CatsEffectSuite {
 
   test("publishArtifacts.validate - fail when publishTo is missing and checks enabled") {
     loadedContextResource(s"$fixturePrefix-val-missing") { _ =>
-      () -> Seq(ReleaseIO.releaseIOPublishArtifactsChecks := true)
+      () -> Seq(ReleaseIO.releaseIOPublishChecks := true)
     }.use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
         PublishSteps.publishArtifacts.validate(ctx)
@@ -123,7 +123,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   ) {
     loadedContextResource(s"$fixturePrefix-val-throw-pt") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIOPublishArtifactsChecks := true,
+        ReleaseIO.releaseIOPublishChecks := true,
         CoreStepTestCompat.throwingPublishToSetting
       )
     }.use { case (ctx, _) =>
@@ -139,9 +139,9 @@ class PublishStepsSpec extends CatsEffectSuite {
   ) {
     loadedContextResource(s"$fixturePrefix-val-throw-ps") { dir =>
       () -> Seq(
-        ReleaseIO.releaseIOPublishArtifactsChecks := true,
+        ReleaseIO.releaseIOPublishChecks := true,
         CoreStepTestCompat.throwingPublishSkipSetting,
-        publishTo                                 := Some(Resolver.file("local", new File(dir, "repo")))
+        publishTo                        := Some(Resolver.file("local", new File(dir, "repo")))
       )
     }.use { case (ctx, _) =>
       PublishSteps.publishArtifacts.validate(ctx)
@@ -155,9 +155,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-false",
       rootSettings = Seq(
-        ReleaseIO.releaseIOPublishArtifactsChecks                  := true,
-        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate := false,
-        publishTo                                                  := Some(
+        ReleaseIO.releaseIOPublishChecks                  := true,
+        ReleaseIO.releaseIOPublishAction / Keys.aggregate := false,
+        publishTo                                         := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),
@@ -174,9 +174,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-true",
       rootSettings = Seq(
-        ReleaseIO.releaseIOPublishArtifactsChecks                  := true,
-        ReleaseIO.releaseIOPublishArtifactsAction / Keys.aggregate := true,
-        publishTo                                                  := Some(
+        ReleaseIO.releaseIOPublishChecks                  := true,
+        ReleaseIO.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                         := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),

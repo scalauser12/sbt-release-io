@@ -39,12 +39,12 @@ lazy val root = (project in file("."))
     name := "cross-build-setting-test",
 
     // Enable cross-build via the SETTING (not the CLI flag)
-    releaseIOMonorepoCrossBuild      := true,
-    releaseIOMonorepoBeforePublishHooks := Seq(crossBuildMarkerHook),
-    releaseIOIgnoreUntrackedFiles    := true,
-    releaseIOMonorepoEnablePush      := false,
-    releaseIOMonorepoEnableRunClean  := false,
-    releaseIOMonorepoEnableRunTests  := false,
+    releaseIOMonorepoBehaviorCrossBuild      := true,
+    releaseIOMonorepoHooksBeforePublish := Seq(crossBuildMarkerHook),
+    releaseIOVcsIgnoreUntrackedFiles    := true,
+    releaseIOMonorepoPolicyEnablePush      := false,
+    releaseIOMonorepoPolicyEnableRunClean  := false,
+    releaseIOMonorepoPolicyEnableRunTests  := false,
 
     checkAll := {
       // core has crossScalaVersions := Seq(2.13, 2.12) -> action runs twice

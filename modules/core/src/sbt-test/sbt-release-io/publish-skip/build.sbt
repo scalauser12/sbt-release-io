@@ -4,6 +4,6 @@ scalaVersion := "2.12.18"
 // No publishTo configured, but publish/skip bypasses the check
 publish / skip := true
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
-releaseIOEnablePush := false
+releaseIOPolicyEnablePush := false

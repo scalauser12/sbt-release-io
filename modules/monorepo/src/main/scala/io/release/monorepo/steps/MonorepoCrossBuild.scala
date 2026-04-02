@@ -1,14 +1,12 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import io.release.LoadCompat
+import io.release.CrossBuildSupport
 import io.release.ReleaseComposer
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.*
-import sbt.Def.ScopedKey
 import sbt.Keys.*
-import sbt.util.Show
 import sbt.{internal as _, *}
 
 /** Cross-build executor for monorepo per-project steps.
@@ -35,14 +33,6 @@ private[monorepo] object MonorepoCrossBuild {
     val currentProject = latestProject(ctx, project)
     ctx.failed || currentProject.failed
   }
-
-  private def isScalaSessionSetting(setting: Setting[?]): Boolean =
-    setting.key match {
-      case ScopedKey(Scope(_, Zero, Zero, _), key)
-          if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>
-        true
-      case _ => false
-    }
 
   private[monorepo] def rethrowWithRestoreFailure(
       ctx: MonorepoContext,
@@ -117,9 +107,7 @@ private[monorepo] object MonorepoCrossBuild {
       val crossVersions =
         (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
       val entryVersion  =
-        (extracted.currentRef / scalaVersion)
-          .get(extracted.structure.data)
-          .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
+        CrossBuildSupport.resolveEntryScalaVersion(extracted, project.ref)
       (crossVersions, entryVersion, ctx.state)
     }.flatMap { case (crossVersions, entryVersion, entryState) =>
       if (crossVersions.isEmpty)
@@ -183,27 +171,11 @@ private[monorepo] object MonorepoCrossBuild {
     def switchTo(version: String)(ctx: MonorepoContext): IO[MonorepoContext] =
       SbtRuntime.switchScalaVersion(ctx.state, version).map(ctx.withState)
 
-    private def restoreEntryScalaSession(ctx: MonorepoContext): IO[MonorepoContext] =
-      IO.blocking {
-        val currentExtracted                     = SbtRuntime.extracted(ctx.state)
-        val entryExtracted                       = SbtRuntime.extracted(entryState)
-        import currentExtracted.*
-        implicit val showKey: Show[ScopedKey[?]] = currentExtracted.showKey
-
-        val currentSettingsWithoutScala = session.mergeSettings.filterNot(isScalaSessionSetting)
-        val entryScalaSettings          =
-          entryExtracted.session.mergeSettings.filter(isScalaSessionSetting)
-        val newStructure                =
-          LoadCompat.reapply(entryScalaSettings ++ currentSettingsWithoutScala, structure)
-        val restoredState               = Project.setProject(session, newStructure, ctx.state)
-
-        ctx.withState(restoredState)
-      }
-
     def restoreEntry(ctx: MonorepoContext): IO[MonorepoContext] =
       entryVersion match {
         case Some(ver) => switchTo(ver)(ctx)
-        case None      => restoreEntryScalaSession(ctx)
+        case None      =>
+          CrossBuildSupport.restoreEntryScalaSession(entryState, ctx.state).map(ctx.withState)
       }
 
     def restoreAfterCompletion(ctx: MonorepoContext): IO[MonorepoContext] =

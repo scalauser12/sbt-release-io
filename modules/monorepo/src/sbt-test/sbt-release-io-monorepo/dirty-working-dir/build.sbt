@@ -13,12 +13,12 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                          := "dirty-working-dir-test",
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
     // Key: set to false so untracked files trigger the error
-    releaseIOIgnoreUntrackedFiles := false,
+    releaseIOVcsIgnoreUntrackedFiles := false,
     checkFailureArtifacts         := {
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
       assert(

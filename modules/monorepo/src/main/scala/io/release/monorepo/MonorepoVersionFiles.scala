@@ -17,7 +17,7 @@ private[monorepo] object MonorepoVersionFiles {
   )
 
   def resolve(runtime: MonorepoRuntime, ref: ProjectRef): File =
-    runtime.extracted.get(MR.releaseIOMonorepoVersionFile)(ref, runtime.state)
+    runtime.extracted.get(MR.releaseIOMonorepoVersioningFile)(ref, runtime.state)
 
   def resolve(state: State, ref: ProjectRef): File =
     resolve(MonorepoRuntime.fromState(state), ref)
@@ -42,10 +42,10 @@ private[monorepo] object MonorepoVersionFiles {
   /** Settings to preserve across sbt state reloads during version writes. */
   def sessionSettings(runtime: MonorepoRuntime): Seq[sbt.Setting[?]] =
     Seq(
-      MR.releaseIOMonorepoVersionFile         :=
-        runtime.extracted.get(MR.releaseIOMonorepoVersionFile),
-      MR.releaseIOMonorepoReadVersion         := runtime.readVersion,
-      MR.releaseIOMonorepoVersionFileContents := runtime.versionFileContents
+      MR.releaseIOMonorepoVersioningFile         :=
+        runtime.extracted.get(MR.releaseIOMonorepoVersioningFile),
+      MR.releaseIOMonorepoVersioningReadVersion  := runtime.readVersion,
+      MR.releaseIOMonorepoVersioningFileContents := runtime.versionFileContents
     )
 
   def sessionSettings(state: State): IO[Seq[sbt.Setting[?]]] =
@@ -66,15 +66,15 @@ private[monorepo] object MonorepoVersionFiles {
     val extracted = SbtRuntime.extracted(state)
 
     (
-      extracted.getOpt(MR.releaseIOMonorepoVersionFile),
-      extracted.getOpt(MR.releaseIOMonorepoReadVersion),
-      extracted.getOpt(MR.releaseIOMonorepoVersionFileContents)
+      extracted.getOpt(MR.releaseIOMonorepoVersioningFile),
+      extracted.getOpt(MR.releaseIOMonorepoVersioningReadVersion),
+      extracted.getOpt(MR.releaseIOMonorepoVersioningFileContents)
     ) match {
       case (Some(versionFile), Some(readVersion), Some(versionFileContents)) =>
         Seq(
-          MR.releaseIOMonorepoVersionFile         := versionFile,
-          MR.releaseIOMonorepoReadVersion         := readVersion,
-          MR.releaseIOMonorepoVersionFileContents := versionFileContents
+          MR.releaseIOMonorepoVersioningFile         := versionFile,
+          MR.releaseIOMonorepoVersioningReadVersion  := readVersion,
+          MR.releaseIOMonorepoVersioningFileContents := versionFileContents
         )
       case _                                                                 => Seq.empty
     }

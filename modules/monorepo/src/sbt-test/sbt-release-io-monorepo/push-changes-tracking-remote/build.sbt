@@ -15,11 +15,11 @@ lazy val root = (project in file("."))
     name := "push-changes-tracking-remote-test",
 
     // Keep push-changes enabled; skip unrelated heavy steps for speed.
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkPushTargets := {
       val branch    = "git rev-parse --abbrev-ref HEAD".!!.trim

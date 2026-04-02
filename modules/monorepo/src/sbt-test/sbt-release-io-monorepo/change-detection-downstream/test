@@ -1,4 +1,4 @@
-# Test: downstream dependents are included when releaseIOMonorepoIncludeDownstream is true
+# Test: downstream dependents are included when releaseIOMonorepoDetectionIncludeDownstream is true
 # Setup: core <- api <- web (transitive dependency chain)
 # Only core has file changes, but all three should be released.
 

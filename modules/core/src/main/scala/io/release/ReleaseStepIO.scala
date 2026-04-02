@@ -2,6 +2,7 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.SbtRuntime
+import io.release.internal.StepKernel
 import sbt.{internal as _, *}
 
 /** A single release step with explicit validation and execution phases.
@@ -31,7 +32,7 @@ case class ReleaseStepIO private (
   // Keep the caller-provided validation inputs raw so apply(...) and copy(...) preserve the same
   // invariants without double-wrapping already-composed validation functions.
   private lazy val normalizedValidation =
-    ReleaseStepIO.normalizedValidationPair(rawValidate, rawValidateWithContext)
+    StepKernel.normalizedValidationPair(rawValidate, rawValidateWithContext)
 
   def validate: ReleaseContext => IO[Unit] =
     normalizedValidation._1
@@ -42,14 +43,36 @@ case class ReleaseStepIO private (
   def copy(
       name: String = this.name,
       execute: ReleaseContext => IO[ReleaseContext] = this.execute,
-      validate: ReleaseContext => IO[Unit] = this.validate,
+      validate: ReleaseContext => IO[Unit] = null,
       enableCrossBuild: Boolean = this.enableCrossBuild,
-      validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = this.validateWithContext
-  ): ReleaseStepIO =
-    if ((validate eq this.validate) && validateWithContext == this.validateWithContext)
+      validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = null
+  ): ReleaseStepIO = {
+    val validateWasProvided            = validate != null
+    val validateWithContextWasProvided = validateWithContext != null
+
+    if (!validateWasProvided && !validateWithContextWasProvided)
       new ReleaseStepIO(name, execute, rawValidate, enableCrossBuild, rawValidateWithContext)
+    else if (validateWasProvided && !validateWithContextWasProvided)
+      new ReleaseStepIO(name, execute, validate, enableCrossBuild, normalizedValidation._2)
+    else if (!validateWasProvided && validateWithContextWasProvided)
+      validateWithContext match {
+        case None       =>
+          new ReleaseStepIO(name, execute, this.validate, enableCrossBuild, None)
+        case Some(next) =>
+          val preservedValidation =
+            normalizedValidation._2.getOrElse(StepKernel.asThreadedValidation(this.validate))
+          new ReleaseStepIO(
+            name = name,
+            execute = execute,
+            rawValidate = (_ctx: ReleaseContext) => IO.unit,
+            enableCrossBuild = enableCrossBuild,
+            rawValidateWithContext =
+              StepKernel.appendThreadedValidation(Some(preservedValidation), next)
+          )
+      }
     else
-      ReleaseStepIO(name, execute, validate, enableCrossBuild, validateWithContext)
+      new ReleaseStepIO(name, execute, validate, enableCrossBuild, validateWithContext)
+  }
 
   private[release] def threadedValidation: ReleaseContext => IO[ReleaseContext] =
     normalizedValidation._2.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
@@ -57,32 +80,7 @@ case class ReleaseStepIO private (
 
 object ReleaseStepIO {
 
-  private type ThreadedValidation = ReleaseContext => IO[ReleaseContext]
-
-  private def asThreadedValidation(
-      validate: ReleaseContext => IO[Unit]
-  ): ThreadedValidation =
-    ctx => validate(ctx).as(ctx)
-
-  private def appendThreadedValidation(
-      existing: Option[ThreadedValidation],
-      next: ThreadedValidation
-  ): Option[ThreadedValidation] =
-    Some(existing.fold(next)(current => ctx => current(ctx).flatMap(next)))
-
-  private def normalizedValidationPair(
-      validate: ReleaseContext => IO[Unit],
-      validateWithContext: Option[ThreadedValidation]
-  ): (ReleaseContext => IO[Unit], Option[ThreadedValidation]) =
-    validateWithContext match {
-      case None           => (validate, None)
-      case Some(threaded) =>
-        val composed = appendThreadedValidation(
-          Some(asThreadedValidation(validate)),
-          threaded
-        ).get
-        ((ctx: ReleaseContext) => composed(ctx).void, Some(composed))
-    }
+  private type ThreadedValidation = StepKernel.ThreadedValidation[ReleaseContext]
 
   private[release] def build(
       name: String,
@@ -188,108 +186,95 @@ object ReleaseStepIO {
   // ── Builder API ──────────────────────────────────────────────────────
 
   /** Start building a release step. */
-  def step(name: String): StepBuilder = new StepBuilder(name, None, false)
+  def step(name: String): StepBuilder =
+    new StepBuilder(StepKernel.SingleBuilderState[ReleaseContext](name))
 
   /** Start building a resource-aware release step. */
   def resourceStep[T](name: String): ResourceStepBuilder[T] =
-    new ResourceStepBuilder[T](name, _ => None, false)
+    new ResourceStepBuilder[T](StepKernel.SingleResourceBuilderState[T, ReleaseContext](name))
 
   /** Fluent builder for release steps. */
   final class StepBuilder private[ReleaseStepIO] (
-      private val name: String,
-      private val validateWithContextFn: Option[ThreadedValidation],
-      private val crossBuild: Boolean
+      private val state: StepKernel.SingleBuilderState[ReleaseContext]
   ) {
 
-    private def appendValidation(f: ThreadedValidation): StepBuilder =
-      new StepBuilder(name, appendThreadedValidation(validateWithContextFn, f), crossBuild)
-
     def withValidation(f: ReleaseContext => IO[Unit]): StepBuilder =
-      appendValidation(asThreadedValidation(f))
+      new StepBuilder(state.appendValidation(StepKernel.asThreadedValidation(f)))
 
     def withValidationContext(f: ReleaseContext => IO[ReleaseContext]): StepBuilder =
-      appendValidation(f)
+      new StepBuilder(state.appendValidation(f))
 
     def withCrossBuild: StepBuilder =
-      new StepBuilder(name, validateWithContextFn, true)
+      new StepBuilder(state.withFlag)
 
     def execute(f: ReleaseContext => IO[ReleaseContext]): ReleaseStepIO =
       build(
-        name = name,
+        name = state.name,
         execute = f,
-        enableCrossBuild = crossBuild,
-        validateWithContext = validateWithContextFn
+        enableCrossBuild = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
 
     def executeAction(f: ReleaseContext => IO[Unit]): ReleaseStepIO =
       build(
-        name = name,
+        name = state.name,
         execute = ctx => f(ctx).as(ctx),
-        enableCrossBuild = crossBuild,
-        validateWithContext = validateWithContextFn
+        enableCrossBuild = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
 
     def validateOnly: ReleaseStepIO =
       build(
-        name = name,
+        name = state.name,
         execute = ctx => IO.pure(ctx),
-        enableCrossBuild = crossBuild,
-        validateWithContext = validateWithContextFn
+        enableCrossBuild = state.flagEnabled,
+        validateWithContext = state.validateWithContext
       )
   }
 
   /** Fluent builder for resource-aware release steps. */
   final class ResourceStepBuilder[T] private[ReleaseStepIO] (
-      private val name: String,
-      private val validateWithContextFn: T => Option[ThreadedValidation],
-      private val crossBuild: Boolean
+      private val state: StepKernel.SingleResourceBuilderState[T, ReleaseContext]
   ) {
 
-    private def appendValidation(
-        f: T => ThreadedValidation
-    ): ResourceStepBuilder[T] =
-      new ResourceStepBuilder[T](
-        name,
-        resource => appendThreadedValidation(validateWithContextFn(resource), f(resource)),
-        crossBuild
-      )
-
     def withValidation(f: T => ReleaseContext => IO[Unit]): ResourceStepBuilder[T] =
-      appendValidation(resource => asThreadedValidation(f(resource)))
+      new ResourceStepBuilder[T](
+        state.appendValidation(resource => StepKernel.asThreadedValidation(f(resource)))
+      )
 
     def withValidationContext(
         f: T => ReleaseContext => IO[ReleaseContext]
     ): ResourceStepBuilder[T] =
-      appendValidation(f)
+      new ResourceStepBuilder[T](state.appendValidation(f))
 
     def withCrossBuild: ResourceStepBuilder[T] =
-      new ResourceStepBuilder[T](name, validateWithContextFn, true)
+      new ResourceStepBuilder[T](state.withFlag)
 
     def execute(f: T => ReleaseContext => IO[ReleaseContext]): T => ReleaseStepIO =
       resource =>
         build(
-          name = name,
+          name = state.name,
           execute = f(resource),
-          enableCrossBuild = crossBuild,
-          validateWithContext = validateWithContextFn(resource)
+          enableCrossBuild = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
 
     def executeAction(f: T => ReleaseContext => IO[Unit]): T => ReleaseStepIO =
       resource =>
         build(
-          name = name,
+          name = state.name,
           execute = ctx => f(resource)(ctx).as(ctx),
-          enableCrossBuild = crossBuild,
-          validateWithContext = validateWithContextFn(resource)
+          enableCrossBuild = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
 
     def validateOnly: T => ReleaseStepIO =
       resource =>
         build(
-          name = name,
+          name = state.name,
           execute = ctx => IO.pure(ctx),
-          enableCrossBuild = crossBuild,
-          validateWithContext = validateWithContextFn(resource)
+          enableCrossBuild = state.flagEnabled,
+          validateWithContext = state.validateWithContext(resource)
         )
   }
 

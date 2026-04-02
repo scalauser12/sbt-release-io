@@ -19,17 +19,17 @@ lazy val root = (project in file("."))
   .settings(
     name := "shared-paths-disabled-test",
 
-    releaseIOMonorepoDetectChanges := true,
+    releaseIOMonorepoDetectionEnabled := true,
 
     // Disable shared path detection
-    releaseIOMonorepoSharedPaths := Seq.empty,
+    releaseIOMonorepoDetectionSharedPaths := Seq.empty,
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

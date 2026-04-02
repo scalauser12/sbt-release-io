@@ -12,7 +12,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   ) {
     singleProjectFixtureResource("monorepo-publish-snapshots") { _ =>
       Seq(
-        ReleaseIO.releaseIOSnapshotDependencies := Seq(
+        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -32,7 +32,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-snapshots-field") { _ =>
       Seq(
-        ReleaseIO.releaseIOSnapshotDependencies := Seq(
+        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -85,7 +85,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
 
   test("checkSnapshotDependencies.validate - pass when no snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-no-snapshots") { _ =>
-      Seq(ReleaseIO.releaseIOSnapshotDependencies := Seq.empty[ModuleID])
+      Seq(ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq.empty[ModuleID])
     }.use { fixture =>
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")

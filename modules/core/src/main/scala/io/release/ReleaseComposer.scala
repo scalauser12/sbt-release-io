@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
+import io.release.internal.StepExecutionSupport
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -36,29 +37,13 @@ private[release] object ReleaseComposer {
     */
   def compose(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
       initialCtx: ReleaseContext
-  ): IO[ReleaseContext] = {
-    val wrappedActions = steps.map { step =>
-      val baseAction = (ctx: ReleaseContext) =>
-        IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *> step.execute(
-          ctx
-        )
-
-      ExecutionEngine.ActionStep(
-        step.name,
-        ExecutionEngine.withErrorRecovery(LogPrefix)(
-          wrapWithCrossBuild(step, crossBuild)(baseAction)
-        )
-      )
-    }
-
-    for {
-      validatedCtx <- runValidationPhase(steps, crossBuild, initialCtx)
-      resultCtx    <- ExecutionEngine.runActions(
-                        wrappedActions,
-                        ExecutionEngine.armOnFailure(validatedCtx)
-                      )
-    } yield resultCtx
-  }
+  ): IO[ReleaseContext] =
+    StepExecutionSupport.runMainSegment(
+      logPrefix = LogPrefix,
+      steps = preparedSteps(steps, crossBuild),
+      startCtx = initialCtx,
+      armOnFailure = ExecutionEngine.armOnFailure[ReleaseContext]
+    )
 
   /** Run only the validation phase for the given steps.
     * Used by preflight checks to reuse the exact validation wiring without executing actions.
@@ -66,22 +51,31 @@ private[release] object ReleaseComposer {
   def validateOnly(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
-    runValidationPhase(steps, crossBuild, initialCtx)
-
-  private def runValidationPhase(
-      steps: Seq[ReleaseStepIO],
-      crossBuild: Boolean,
-      initialCtx: ReleaseContext
-  ): IO[ReleaseContext] =
-    ExecutionEngine.runValidations(
+    StepExecutionSupport.runValidationPhase(
       logPrefix = LogPrefix,
-      validations = steps.map { step =>
-        ExecutionEngine.ValidationStep(
-          step.name,
-          wrapWithCrossBuild(step, crossBuild)(step.threadedValidation)
-        )
-      },
+      steps = preparedSteps(steps, crossBuild),
       initialCtx = initialCtx
+    )
+
+  private def preparedSteps(
+      steps: Seq[ReleaseStepIO],
+      crossBuild: Boolean
+  ): Seq[StepExecutionSupport.PreparedStep[ReleaseContext]] =
+    steps.map(preparedStep(_, crossBuild))
+
+  private def preparedStep(
+      step: ReleaseStepIO,
+      crossBuild: Boolean
+  ): StepExecutionSupport.PreparedStep[ReleaseContext] =
+    StepExecutionSupport.PreparedStep(
+      name = step.name,
+      validate = wrapWithCrossBuild(step, crossBuild)(step.threadedValidation),
+      execute = ExecutionEngine.withErrorRecovery(LogPrefix)(
+        wrapWithCrossBuild(step, crossBuild) { ctx =>
+          IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *>
+            step.execute(ctx)
+        }
+      )
     )
 
   private def wrapWithCrossBuild(
@@ -97,21 +91,23 @@ private[release] object ReleaseComposer {
       action: ReleaseContext => IO[ReleaseContext]
   )(ctx: ReleaseContext): IO[ReleaseContext] = IO.defer {
     IO.blocking {
-      val extracted      = SbtRuntime.extracted(ctx.state)
+      val entryState     = ctx.state
+      val extracted      = SbtRuntime.extracted(entryState)
       val crossVersions  = extracted.get(crossScalaVersions)
       val currentVersion =
-        (extracted.currentRef / scalaVersion)
-          .get(extracted.structure.data)
-          .orElse((GlobalScope / scalaVersion).get(extracted.structure.data))
-      (crossVersions, currentVersion)
-    }.flatMap { case (crossVersions, currentVersion) =>
+        CrossBuildSupport.resolveEntryScalaVersion(extracted, extracted.currentRef)
+      (crossVersions, currentVersion, entryState)
+    }.flatMap { case (crossVersions, currentVersion, entryState) =>
       def switchTo(version: String)(currentCtx: ReleaseContext): IO[ReleaseContext] =
         SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
 
       def restoreEntry(currentCtx: ReleaseContext): IO[ReleaseContext] =
         currentVersion match {
           case Some(ver) => switchTo(ver)(currentCtx)
-          case None      => IO.pure(currentCtx)
+          case None      =>
+            CrossBuildSupport
+              .restoreEntryScalaSession(entryState, currentCtx.state)
+              .map(currentCtx.withState)
         }
 
       def restoreOnError(currentCtx: ReleaseContext, err: Throwable): IO[ReleaseContext] =

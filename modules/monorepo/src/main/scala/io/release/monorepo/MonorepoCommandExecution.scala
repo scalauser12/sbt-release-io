@@ -106,14 +106,16 @@ private[monorepo] object MonorepoCommandExecution {
 
     ReleaseFlags(
       useDefaults = args.contains(WithDefaults),
-      skipTests =
-        args.contains(SkipTests) || extracted.get(MonorepoReleaseIO.releaseIOMonorepoSkipTests),
-      crossBuild =
-        args.contains(CrossBuild) || extracted.get(MonorepoReleaseIO.releaseIOMonorepoCrossBuild),
+      skipTests = args.contains(SkipTests) || extracted.get(
+        MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests
+      ),
+      crossBuild = args.contains(CrossBuild) || extracted.get(
+        MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild
+      ),
       allChanged = args.contains(AllChanged),
-      skipPublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoSkipPublish),
+      skipPublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish),
       interactive =
-        interactiveEnabled && extracted.get(MonorepoReleaseIO.releaseIOMonorepoInteractive)
+        interactiveEnabled && extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorInteractive)
     )
   }
 

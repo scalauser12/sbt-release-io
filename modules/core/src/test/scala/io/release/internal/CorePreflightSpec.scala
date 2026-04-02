@@ -4,8 +4,11 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
+import io.release.ReleaseStepIO
 import io.release.ReleaseTestSupport
+import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.steps.ReleaseSteps
 import io.release.steps.VcsSteps
 import io.release.steps.VersionSteps
 import munit.CatsEffectSuite
@@ -118,6 +121,99 @@ class CorePreflightSpec extends CatsEffectSuite {
     }
   }
 
+  test("check - fail validation before version resolution is attempted") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val versionResolutionFailure = "version resolution should not run"
+
+      for {
+        _            <- IO.blocking(sbt.IO.write(new File(repo, "tracked.txt"), "dirty"))
+        mutatedState <- IO.blocking {
+                          SbtRuntime.appendWithSession(
+                            initialCtx.state,
+                            Seq(
+                              ReleaseIO.releaseIOVersioningReadVersion := { (_: File) =>
+                                IO.raiseError(new IllegalStateException(versionResolutionFailure))
+                              }
+                            )
+                          )
+                        }
+        dirtyCtx      = initialCtx.withState(mutatedState)
+        _            <- assertFailure[IllegalStateException, CorePreflight.Summary](
+                          CorePreflight.check(
+                            dirtyCtx,
+                            Seq(
+                              VcsSteps.checkCleanWorkingDir,
+                              VersionSteps.inquireVersions
+                            ),
+                            crossBuild = false
+                          )
+                        ) { err =>
+                          assert(err.getMessage.contains("unstaged modified files"))
+                          assert(!err.getMessage.contains(versionResolutionFailure))
+                        }
+      } yield ()
+    }
+  }
+
+  test("check - render publish summary from the validated context") {
+    withInitialContext { case (_, _, initialCtx) =>
+      CorePreflight
+        .check(
+          initialCtx,
+          Seq(
+            skipPublishInValidationStep,
+            ReleaseSteps.publishArtifacts
+          ),
+          crossBuild = false
+        )
+        .map { summary =>
+          assertEquals(
+            summary.versions,
+            CorePreflight.VersionsSummary.NotEvaluated(
+              "inquire-versions not in check process"
+            )
+          )
+          assertEquals(
+            summary.publishSummary,
+            "skipped via releaseIOBehaviorSkipPublish := true"
+          )
+        }
+    }
+  }
+
+  test("check - resolve versions and tag summary from the validated state") {
+    withInitialContextWithoutExplicitTagName { case (_, versionFile, initialCtx) =>
+      CorePreflight
+        .check(
+          initialCtx,
+          Seq(
+            overrideVersionTasksInValidationStep(
+              releaseVersion = "1.2.3",
+              nextVersion = "1.2.4-SNAPSHOT"
+            ),
+            VersionSteps.inquireVersions,
+            VcsSteps.tagRelease
+          ),
+          crossBuild = false
+        )
+        .map { summary =>
+          assertEquals(
+            summary.versions,
+            CorePreflight.VersionsSummary.Resolved(
+              versionFile = versionFile,
+              currentVersion = "0.1.0-SNAPSHOT",
+              releaseVersion = "1.2.3",
+              nextVersion = "1.2.4-SNAPSHOT"
+            )
+          )
+          assertEquals(
+            summary.tag,
+            CorePreflight.TagSummary.Resolved("v1.2.3", "available")
+          )
+        }
+    }
+  }
+
   test(
     "check - render versions and tags as not evaluated when the check process omits the built-in steps"
   ) {
@@ -149,9 +245,9 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - summarize the compiled hook process and disabled phases") {
     withPluginInitialContext(
       Seq(
-        ReleaseIO.releaseIOEnablePublish  := false,
-        ReleaseIO.releaseIOEnablePush     := false,
-        ReleaseIO.releaseIOBeforeTagHooks := Seq(
+        ReleaseIO.releaseIOPolicyEnablePublish := false,
+        ReleaseIO.releaseIOPolicyEnablePush    := false,
+        ReleaseIO.releaseIOHooksBeforeTag      := Seq(
           ReleaseHookIO.action("before-tag-marker")(_ => IO.unit)
         )
       )
@@ -205,6 +301,33 @@ class CorePreflightSpec extends CatsEffectSuite {
         f(repo, versionFile, initialCtx)
       }
 
+  private def withInitialContextWithoutExplicitTagName[A](
+      f: (File, File, ReleaseContext) => IO[A]
+  ): IO[A] =
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        "core-preflight-default-tag-spec",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(new File(repo, "tracked.txt"), "initial")
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        val versionFile = new File(repo, "version.sbt")
+        val state       =
+          ReleaseTestSupport.gitRootState(
+            repo,
+            baseVersionSettings(versionFile, includeExplicitTagName = false)
+          )
+        val initialCtx  = releaseContext(state)
+
+        f(repo, versionFile, initialCtx)
+      }
+
   private def withPluginInitialContext[A](
       extraSettings: Seq[sbt.Setting[?]]
   )(f: (File, File, ReleaseContext) => IO[A]): IO[A] =
@@ -252,47 +375,62 @@ class CorePreflightSpec extends CatsEffectSuite {
         f(repo, versionFile, initialCtx)
       }
 
-  private def baseVersionSettings(versionFile: File): Seq[sbt.Setting[?]] =
+  private def baseVersionSettings(
+      versionFile: File,
+      includeExplicitTagName: Boolean = true
+  ): Seq[sbt.Setting[?]] =
     Seq(
-      io.release.ReleaseIO.releaseIOVersionFile          := versionFile,
-      io.release.ReleaseIO.releaseIOReadVersion          := VersionSteps.defaultReadVersion,
-      io.release.ReleaseIO.releaseIOVersionFileContents  := VersionSteps.defaultWriteVersion(
+      io.release.ReleaseIO.releaseIOVersioningFile           := versionFile,
+      io.release.ReleaseIO.releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+      io.release.ReleaseIO.releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
         useGlobalVersion = true
       ),
-      io.release.ReleaseIO.releaseIOUseGlobalVersion     := true,
-      io.release.ReleaseIO.releaseIOVersion              := ((_: String) => "0.1.0"),
-      io.release.ReleaseIO.releaseIONextVersion          := ((_: String) => "0.2.0-SNAPSHOT"),
-      io.release.ReleaseIO.releaseIOTagName              := "v0.1.0",
-      io.release.ReleaseIO.releaseIOTagComment           := "Releasing 0.1.0",
-      io.release.ReleaseIO.releaseIOVcsSign              := false,
-      io.release.ReleaseIO.releaseIOIgnoreUntrackedFiles := false
-    )
+      io.release.ReleaseIO.releaseIOVersioningUseGlobal      := true,
+      io.release.ReleaseIO.releaseIOVersioningReleaseVersion := ((_: String) => "0.1.0"),
+      io.release.ReleaseIO.releaseIOVersioningNextVersion    := ((_: String) => "0.2.0-SNAPSHOT"),
+      io.release.ReleaseIO.releaseIOVcsTagComment            := "Releasing 0.1.0",
+      io.release.ReleaseIO.releaseIOVcsSign                  := false,
+      io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles  := false
+    ) ++
+      (if (includeExplicitTagName) Seq(io.release.ReleaseIO.releaseIOVcsTagName := "v0.1.0")
+       else
+         Seq(
+           sbt.ThisBuild / sbt.Keys.version                  := "0.1.0-SNAPSHOT",
+           sbt.Keys.version                                  := "0.1.0-SNAPSHOT",
+           io.release.ReleaseIO.releaseIORuntimeCurrentVersion := {
+             if (io.release.ReleaseIO.releaseIOVersioningUseGlobal.value)
+               (sbt.ThisBuild / sbt.Keys.version).value
+             else sbt.Keys.version.value
+           },
+           io.release.ReleaseIO.releaseIOVcsTagName            :=
+             s"v${io.release.ReleaseIO.releaseIORuntimeCurrentVersion.value}"
+         ))
 
   private def hookSettingsDefaults: Seq[sbt.Setting[?]] =
     Seq(
-      ReleaseIO.releaseIOEnableSnapshotDependenciesCheck := true,
-      ReleaseIO.releaseIOEnableRunClean                  := true,
-      ReleaseIO.releaseIOEnableRunTests                  := true,
-      ReleaseIO.releaseIOEnableTagging                   := true,
-      ReleaseIO.releaseIOEnablePublish                   := true,
-      ReleaseIO.releaseIOEnablePush                      := true,
-      ReleaseIO.releaseIOAfterCleanCheckHooks            := Seq.empty,
-      ReleaseIO.releaseIOBeforeVersionResolutionHooks    := Seq.empty,
-      ReleaseIO.releaseIOAfterVersionResolutionHooks     := Seq.empty,
-      ReleaseIO.releaseIOBeforeReleaseVersionWriteHooks  := Seq.empty,
-      ReleaseIO.releaseIOAfterReleaseVersionWriteHooks   := Seq.empty,
-      ReleaseIO.releaseIOBeforeReleaseCommitHooks        := Seq.empty,
-      ReleaseIO.releaseIOAfterReleaseCommitHooks         := Seq.empty,
-      ReleaseIO.releaseIOBeforeTagHooks                  := Seq.empty,
-      ReleaseIO.releaseIOAfterTagHooks                   := Seq.empty,
-      ReleaseIO.releaseIOBeforePublishHooks              := Seq.empty,
-      ReleaseIO.releaseIOAfterPublishHooks               := Seq.empty,
-      ReleaseIO.releaseIOBeforeNextVersionWriteHooks     := Seq.empty,
-      ReleaseIO.releaseIOAfterNextVersionWriteHooks      := Seq.empty,
-      ReleaseIO.releaseIOBeforeNextCommitHooks           := Seq.empty,
-      ReleaseIO.releaseIOAfterNextCommitHooks            := Seq.empty,
-      ReleaseIO.releaseIOBeforePushHooks                 := Seq.empty,
-      ReleaseIO.releaseIOAfterPushHooks                  := Seq.empty
+      ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck := true,
+      ReleaseIO.releaseIOPolicyEnableRunClean                  := true,
+      ReleaseIO.releaseIOPolicyEnableRunTests                  := true,
+      ReleaseIO.releaseIOPolicyEnableTagging                   := true,
+      ReleaseIO.releaseIOPolicyEnablePublish                   := true,
+      ReleaseIO.releaseIOPolicyEnablePush                      := true,
+      ReleaseIO.releaseIOHooksAfterCleanCheck                  := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforeVersionResolution          := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterVersionResolution           := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite        := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterReleaseVersionWrite         := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforeReleaseCommit              := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterReleaseCommit               := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforeTag                        := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterTag                         := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforePublish                    := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterPublish                     := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforeNextVersionWrite           := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterNextVersionWrite            := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforeNextCommit                 := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterNextCommit                  := Seq.empty,
+      ReleaseIO.releaseIOHooksBeforePush                       := Seq.empty,
+      ReleaseIO.releaseIOHooksAfterPush                        := Seq.empty
     )
 
   private def releaseContext(state: sbt.State): ReleaseContext =
@@ -313,4 +451,30 @@ class CorePreflightSpec extends CatsEffectSuite {
         )
       )
     )
+
+  private val skipPublishInValidationStep: ReleaseStepIO =
+    ReleaseStepIO
+      .step("skip-publish-in-validation")
+      .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
+      .validateOnly
+
+  private def overrideVersionTasksInValidationStep(
+      releaseVersion: String,
+      nextVersion: String
+  ): ReleaseStepIO =
+    ReleaseStepIO
+      .step(s"override-version-tasks-$releaseVersion")
+      .withValidationContext { currentCtx =>
+        IO.blocking {
+          val newState = SbtRuntime.appendWithSession(
+            currentCtx.state,
+            Seq(
+              ReleaseIO.releaseIOVersioningReleaseVersion := ((_: String) => releaseVersion),
+              ReleaseIO.releaseIOVersioningNextVersion    := ((_: String) => nextVersion)
+            )
+          )
+          currentCtx.withState(newState)
+        }
+      }
+      .validateOnly
 }

@@ -16,7 +16,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 - [Configuration](configuration.md)
   Starter `build.sbt` patterns and common configuration recipes.
 - [Settings reference](reference.md)
-  Full `releaseIO*` settings and CLI reference.
+  Full grouped `releaseIOBehavior*`, `releaseIOPolicy*`, `releaseIOHooks*`, and related CLI reference.
 - [Concepts](concepts.md)
   Validate/execute semantics, execution model, and how the plugin compares to sbt-release.
 - [Typelevel libraries](typelevel.md)

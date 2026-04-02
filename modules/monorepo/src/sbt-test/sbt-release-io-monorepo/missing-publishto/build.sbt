@@ -15,10 +15,10 @@ lazy val root = (project in file("."))
   .settings(
     name                          := "missing-publishto-test",
     // Keep publish-artifacts in process (only filter push-changes)
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles := true,
     checkNoCommits                := {
       val count = "git log --oneline".!!.trim.split("\n").length
       // Only the initial commit should exist — check phase aborts before any actions

@@ -27,8 +27,9 @@ First command:
 sbt "releaseIO check with-defaults"
 ```
 
-Preferred customization keeps the built-in process intact and uses `releaseIOEnable*` policies,
-`releaseIO*Hooks`, and resource-aware custom plugins when one shared resource is needed.
+Preferred customization keeps the built-in process intact and uses grouped
+`releaseIOPolicy*` keys, `releaseIOHooks*`, and resource-aware custom plugins when one shared
+resource is needed. The older flat key names remain as deprecated aliases.
 
 ## Read next
 

@@ -36,12 +36,12 @@ lazy val root = (project in file("."))
   .settings(
     name                          := "publish-skip-bypass-test",
     // Keep publish-artifacts in process (only filter push-changes)
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOMonorepoBeforePublishHooks := Seq(beforePublishMarkerHook),
-    releaseIOMonorepoAfterPublishHooks  := Seq(afterPublishMarkerHook),
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOMonorepoHooksBeforePublish := Seq(beforePublishMarkerHook),
+    releaseIOMonorepoHooksAfterPublish  := Seq(afterPublishMarkerHook),
+    releaseIOVcsIgnoreUntrackedFiles := true,
     checkGitTags                  := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(tags.length == 1, s"Expected 1 tag but found ${tags.length}: ${tags.mkString(", ")}")

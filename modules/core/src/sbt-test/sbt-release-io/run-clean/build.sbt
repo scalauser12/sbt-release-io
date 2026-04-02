@@ -24,8 +24,8 @@ assertStaleFileCleaned := {
 }
 
 // Skip push and publish in scripted tests.
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 // Target files created by scripted should not block the release pre-checks.
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true

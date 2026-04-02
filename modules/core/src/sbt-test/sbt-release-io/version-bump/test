@@ -23,7 +23,7 @@ $ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 # SCENARIO 2: NextStable bump strategy
 # Starting version: 1.0.0-RC1-SNAPSHOT
 # Expected release: 1.0.0 (qualifier stripped by NextStable), next: 1.0.1-SNAPSHOT
-> set releaseIOVersionBump := _root_.io.release.version.Version.Bump.NextStable
+> set releaseIOVersioningBump := _root_.io.release.version.Version.Bump.NextStable
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 1.0.1-SNAPSHOT
 
@@ -39,7 +39,7 @@ $ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 # SCENARIO 3: Bugfix bump strategy
 # Starting version: 1.0.0-RC1-SNAPSHOT
 # Expected release: 1.0.0 (qualifier stripped by Bugfix), next: 1.0.1-SNAPSHOT
-> set releaseIOVersionBump := _root_.io.release.version.Version.Bump.Bugfix
+> set releaseIOVersioningBump := _root_.io.release.version.Version.Bump.Bugfix
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 1.0.1-SNAPSHOT
 
@@ -54,7 +54,7 @@ $ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 
 # SCENARIO 4: Minor bump strategy
 # Expected release: 1.0.0 (qualifier stripped by Minor), next: 1.1.0-SNAPSHOT
-> set releaseIOVersionBump := _root_.io.release.version.Version.Bump.Minor
+> set releaseIOVersioningBump := _root_.io.release.version.Version.Bump.Minor
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 1.1.0-SNAPSHOT
 
@@ -69,7 +69,7 @@ $ exec grep -q '"1.0.0-RC1-SNAPSHOT"' version.sbt
 
 # SCENARIO 5: Major bump strategy
 # Expected release: 1.0.0 (qualifier stripped by Major), next: 2.0.0-SNAPSHOT
-> set releaseIOVersionBump := _root_.io.release.version.Version.Bump.Major
+> set releaseIOVersioningBump := _root_.io.release.version.Version.Bump.Major
 > releaseIO with-defaults default-tag-exists-answer o
 > checkVersionSbt 2.0.0-SNAPSHOT
 

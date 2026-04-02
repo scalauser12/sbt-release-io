@@ -19,12 +19,12 @@ lazy val root = (project in file("."))
   .settings(
     name := "interactive-monorepo-test",
 
-    releaseIOMonorepoInteractive := true,
+    releaseIOMonorepoBehaviorInteractive := true,
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val coreContents = IO.read(file("core/version.sbt"))

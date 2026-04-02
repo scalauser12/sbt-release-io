@@ -25,9 +25,9 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                           := "per-project-failure-test",
-    releaseIOIgnoreUntrackedFiles  := true,
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
+    releaseIOVcsIgnoreUntrackedFiles  := true,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
     checkFailureArtifacts          := {
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
       assert(

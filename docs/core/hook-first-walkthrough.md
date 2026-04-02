@@ -33,10 +33,10 @@ import _root_.io.release.ReleaseHookIO
 
 lazy val root = (project in file("."))
   .settings(
-    releaseIOEnablePush := false,
-    releaseIOEnablePublish := false,
-    releaseIOEnableRunClean := false,
-    releaseIOAfterCleanCheckHooks += ReleaseHookIO.action("validate-main-branch") { ctx =>
+    releaseIOPolicyEnablePush := false,
+    releaseIOPolicyEnablePublish := false,
+    releaseIOPolicyEnableRunClean := false,
+    releaseIOHooksAfterCleanCheck += ReleaseHookIO.action("validate-main-branch") { ctx =>
       ctx.vcs match {
         case Some(vcs) =>
           vcs.currentBranch.flatMap { branch =>
@@ -47,7 +47,7 @@ lazy val root = (project in file("."))
           IO.raiseError(new RuntimeException("VCS not initialized"))
       }
     },
-    releaseIOBeforeTagHooks += ReleaseHookIO.action("print-tag-banner") { ctx =>
+    releaseIOHooksBeforeTag += ReleaseHookIO.action("print-tag-banner") { ctx =>
       IO.blocking {
         val version = ctx.releaseVersion.getOrElse("unknown")
         ctx.state.log.info(s"[release-io] Preparing tag for $version")

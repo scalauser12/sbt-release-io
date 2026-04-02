@@ -35,8 +35,9 @@ sbt "releaseIOMonorepo check with-defaults"
 ```
 
 Preferred customization keeps the built-in process intact and uses
-`releaseIOMonorepoEnable*` policies, `releaseIOMonorepo*Hooks`, and resource-aware custom
-plugins. Raw process override is no longer part of the supported public surface.
+grouped `releaseIOMonorepoPolicy*` keys, `releaseIOMonorepoHooks*`, and resource-aware custom
+plugins. The older flat key names remain as deprecated aliases. Raw process override is no longer
+part of the supported public surface.
 
 ## Read next
 

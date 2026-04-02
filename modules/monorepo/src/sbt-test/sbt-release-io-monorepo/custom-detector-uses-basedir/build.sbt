@@ -21,7 +21,7 @@ lazy val root = (project in file("."))
   .settings(
     name                            := "custom-detector-uses-basedir-test",
     // Custom change detector: uses baseDir to diff against HEAD~1, excluding version.sbt
-    releaseIOMonorepoChangeDetector := Some { (_: ProjectRef, baseDir: File, _: State) =>
+    releaseIOMonorepoDetectionChangeDetector := Some { (_: ProjectRef, baseDir: File, _: State) =>
       _root_.cats.effect.IO.blocking {
         val output = Process(
           Seq("git", "diff", "--name-only", "HEAD~1", "--", baseDir.getAbsolutePath),
@@ -33,11 +33,11 @@ lazy val root = (project in file("."))
           .nonEmpty
       }
     },
-    releaseIOMonorepoEnablePublish  := false,
-    releaseIOMonorepoEnablePush     := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
-    releaseIOIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
+    releaseIOVcsIgnoreUntrackedFiles   := true,
     checkAll                        := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(

@@ -58,7 +58,7 @@ private[release] object VcsOps {
   def checkCleanWorkingDir(state: State): IO[CleanCheckResult] =
     IO.blocking {
       val extracted       = Project.extract(state)
-      val ignoreUntracked = extracted.get(ReleaseIO.releaseIOIgnoreUntrackedFiles)
+      val ignoreUntracked = extracted.get(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles)
       val base            = extracted.get(thisProject).base
       (ignoreUntracked, base)
     }.flatMap { case (ignoreUntracked, base) =>
@@ -70,7 +70,7 @@ private[release] object VcsOps {
     */
   def checkCleanWorkingDir(state: State, vcs: Vcs): IO[CleanCheckResult] =
     IO.blocking(
-      Project.extract(state).getOpt(ReleaseIO.releaseIOIgnoreUntrackedFiles).getOrElse(false)
+      Project.extract(state).getOpt(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles).getOrElse(false)
     ).flatMap(ignoreUntracked => checkCleanFromVcs(vcs, ignoreUntracked))
 
   /** Core clean-working-directory validation against an already-detected VCS adapter. */
@@ -105,7 +105,7 @@ private[release] object VcsOps {
                      )
       _           <- IO.raiseWhen(untracked.nonEmpty && !ignoreUntracked)(
                        new IllegalStateException(
-                         s"""Aborting release: untracked files. Remove them or specify 'releaseIOIgnoreUntrackedFiles := true' in settings
+                         s"""Aborting release: untracked files. Remove them or specify 'releaseIOVcsIgnoreUntrackedFiles := true' in settings
                             |
                             |Untracked files:
                             |

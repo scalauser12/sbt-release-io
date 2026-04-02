@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
 // 3-level hierarchy: root -> services -> api
-// Default releaseIOMonorepoProjects should discover api transitively.
+// Default releaseIOMonorepoSelectionProjects should discover api transitively.
 
 lazy val api = (project in file("services/api"))
   .settings(
@@ -14,7 +14,7 @@ lazy val api = (project in file("services/api"))
       System
         .setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
     ),
-    releaseIOPublishArtifactsAction        := {
+    releaseIOPublishAction        := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
       IO.append(marker, "api\n")
@@ -35,7 +35,7 @@ lazy val services = (project in file("services"))
       System
         .setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
     ),
-    releaseIOPublishArtifactsAction        := {
+    releaseIOPublishAction        := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
       IO.append(marker, "services\n")
@@ -49,14 +49,14 @@ lazy val root = (project in file("."))
     name         := "transitive-agg-test",
     scalaVersion := "2.12.18",
 
-    // Do NOT override releaseIOMonorepoProjects — use the default
+    // Do NOT override releaseIOMonorepoSelectionProjects — use the default
     // which should transitively discover: services, api
 
-    releaseIOMonorepoDetectChanges := false,
+    releaseIOMonorepoDetectionEnabled := false,
 
-    releaseIOMonorepoEnablePush := false,
+    releaseIOMonorepoPolicyEnablePush := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     checkAll := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted

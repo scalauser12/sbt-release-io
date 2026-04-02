@@ -12,7 +12,7 @@ api/v0.5.0
 Customize the format:
 
 ```scala
-releaseIOMonorepoTagName := ((name, ver) => s"release/$name/$ver")
+releaseIOMonorepoVcsTagName := ((name, ver) => s"release/$name/$ver")
 ```
 
 Each project keeps its own `version.sbt`, and CLI overrides are always expressed as `project=version` pairs:
@@ -23,7 +23,7 @@ sbt "releaseIOMonorepo core api with-defaults release-version core=1.0.0 release
 
 ## Cross-build support
 
-When the `cross` flag is active (or `releaseIOMonorepoCrossBuild := true`), steps with `enableCrossBuild = true` run once per entry in the project's `crossScalaVersions`.
+When the `cross` flag is active (or `releaseIOMonorepoBehaviorCrossBuild := true`), steps with `enableCrossBuild = true` run once per entry in the project's `crossScalaVersions`.
 
 Steps with cross-build enabled by default: `check-snapshot-dependencies`, `run-tests`, `publish-artifacts`.
 

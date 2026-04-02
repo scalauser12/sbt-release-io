@@ -19,15 +19,15 @@ lazy val root = (project in file("."))
   .settings(
     name := "detect-changes-excludes-test",
 
-    releaseIOMonorepoDetectChanges         := true,
-    releaseIOMonorepoDetectChangesExcludes := Seq((core / baseDirectory).value / "CHANGELOG.md"),
+    releaseIOMonorepoDetectionEnabled         := true,
+    releaseIOMonorepoDetectionExcludes := Seq((core / baseDirectory).value / "CHANGELOG.md"),
 
-    releaseIOMonorepoEnablePublish := false,
-    releaseIOMonorepoEnablePush    := false,
-    releaseIOMonorepoEnableRunClean := false,
-    releaseIOMonorepoEnableRunTests := false,
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
-    releaseIOIgnoreUntrackedFiles := true,
+    releaseIOVcsIgnoreUntrackedFiles := true,
 
     // Consolidated verification task
     checkAll := {

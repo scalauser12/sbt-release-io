@@ -38,11 +38,11 @@ lazy val root = (project in file("."))
   .settings(
     name := "cross-build-heterogeneous-test",
 
-    releaseIOMonorepoBeforePublishHooks := Seq(crossBuildMarkerHook),
-    releaseIOIgnoreUntrackedFiles       := true,
-    releaseIOMonorepoEnablePush         := false,
-    releaseIOMonorepoEnableRunClean     := false,
-    releaseIOMonorepoEnableRunTests     := false,
+    releaseIOMonorepoHooksBeforePublish := Seq(crossBuildMarkerHook),
+    releaseIOVcsIgnoreUntrackedFiles       := true,
+    releaseIOMonorepoPolicyEnablePush         := false,
+    releaseIOMonorepoPolicyEnableRunClean     := false,
+    releaseIOMonorepoPolicyEnableRunTests     := false,
 
     checkAll := {
       // core has crossScalaVersions := Seq(2.13, 2.12) → action runs twice, once per version

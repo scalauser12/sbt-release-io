@@ -3,8 +3,8 @@ package io.release.steps
 import cats.effect.IO
 import io.release.CleanCompat
 import io.release.ReleaseContext
-import io.release.ReleaseIO.releaseIOPublishArtifactsAction
-import io.release.ReleaseIO.releaseIOPublishArtifactsChecks
+import io.release.ReleaseIO.releaseIOPublishAction
+import io.release.ReleaseIO.releaseIOPublishChecks
 import io.release.ReleaseIOCompat
 import io.release.ReleaseStepIO
 import io.release.internal.DecisionResolver
@@ -50,11 +50,11 @@ private[release] object PublishSteps {
           val extracted = SbtRuntime.extracted(ctx.state)
           val newState  =
             extracted
-              .runAggregated(extracted.currentRef / releaseIOPublishArtifactsAction, ctx.state)
+              .runAggregated(extracted.currentRef / releaseIOPublishAction, ctx.state)
           failOnSbtTaskFailure(
             ctx,
             newState,
-            s"publish-artifacts: sbt task '${releaseIOPublishArtifactsAction.key.label}' " +
+            s"publish-artifacts: sbt task '${releaseIOPublishAction.key.label}' " +
               "reported failure via FailureCommand"
           )
         }
@@ -62,7 +62,7 @@ private[release] object PublishSteps {
     validate = ctx =>
       if (ctx.skipPublish) IO.unit
       else
-        IO.blocking(SbtRuntime.getSetting(ctx.state, releaseIOPublishArtifactsChecks)).flatMap {
+        IO.blocking(SbtRuntime.getSetting(ctx.state, releaseIOPublishChecks)).flatMap {
           case false => IO.unit
           case true  =>
             for {
@@ -187,7 +187,7 @@ private[release] object PublishSteps {
   private def publishTargetRefs(state: State): IO[Seq[ProjectRef]] =
     IO.blocking {
       val extracted = SbtRuntime.extracted(state)
-      effectiveAggregates(extracted, releaseIOPublishArtifactsAction)
+      effectiveAggregates(extracted, releaseIOPublishAction)
     }
 
   private def checkPublishSkip(

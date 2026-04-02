@@ -3,11 +3,11 @@ import scala.sys.process.*
 name         := "tag-default-test"
 scalaVersion := "2.12.18"
 
-releaseIOIgnoreUntrackedFiles := true
+releaseIOVcsIgnoreUntrackedFiles := true
 
 // Skip push and publish in tests
-releaseIOEnablePublish        := false
-releaseIOEnablePush           := false
+releaseIOPolicyEnablePublish        := false
+releaseIOPolicyEnablePush           := false
 
 val checkTagExists = inputKey[Unit]("Assert that a git tag exists")
 checkTagExists := {

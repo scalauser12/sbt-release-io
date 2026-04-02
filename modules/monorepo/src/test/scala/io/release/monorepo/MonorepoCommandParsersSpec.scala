@@ -167,7 +167,7 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
       case Left(message) =>
         assert(message.contains("Duplicate configured monorepo project ids"))
         assert(message.contains("core"))
-        assert(message.contains("releaseIOMonorepoProjects"))
+        assert(message.contains("releaseIOMonorepoSelectionProjects"))
       case Right(tokens) =>
         fail(s"Expected duplicate project-name validation to fail but got: $tokens")
     }
@@ -231,7 +231,7 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
 
         result match {
           case Left(message) =>
-            assert(message.contains("Failed to resolve releaseIOMonorepoProjects"))
+            assert(message.contains("Failed to resolve releaseIOMonorepoSelectionProjects"))
           case Right(value)  =>
             fail(s"Expected project-name resolution to fail but got: $value")
         }
