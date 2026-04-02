@@ -47,8 +47,8 @@ private[monorepo] object MonorepoVersionWorkflow {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
-    project.versions match {
-      case Some((releaseVersion, nextVersion)) if releaseVersion.nonEmpty && nextVersion.nonEmpty =>
+    project.resolvedVersions match {
+      case Some((releaseVersion, nextVersion)) =>
         MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
           logInfo(ctx, s"${project.name}: pre-set -> $releaseVersion (next: $nextVersion)")
             .as(
@@ -145,7 +145,7 @@ private[monorepo] object MonorepoVersionWorkflow {
       useDefaults         = StepHelpers.useDefaults(updatedCtx)
       releaseData        <- promptOrDefault(
                               updatedCtx,
-                              project.releaseVersion.filter(_.nonEmpty),
+                              project.releaseVersion,
                               suggestedRelease,
                               s"Release version for ${project.name}",
                               useDefaults,
@@ -153,7 +153,7 @@ private[monorepo] object MonorepoVersionWorkflow {
                             )
       nextData           <- promptOrDefault(
                               releaseData._1,
-                              project.nextVersion.filter(_.nonEmpty),
+                              project.nextVersion,
                               nextVersionFn(releaseData._2),
                               s"Next version for ${project.name}",
                               useDefaults,
@@ -172,10 +172,10 @@ private[monorepo] object MonorepoVersionWorkflow {
   private def versionsPairOrFail(
       project: ProjectReleaseInfo
   ): IO[(String, String)] =
-    project.versions match {
+    project.resolvedVersions match {
       case Some(pair) => IO.pure(pair)
       case None       =>
-        IO.raiseError(new IllegalStateException(s"Versions not set for ${project.name}"))
+        IO.raiseError(new IllegalStateException(s"Resolved versions not set for ${project.name}"))
     }
 
   private def ensureVersionFileExists(

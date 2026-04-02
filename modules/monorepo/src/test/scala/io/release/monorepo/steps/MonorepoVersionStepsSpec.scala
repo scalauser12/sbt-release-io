@@ -296,9 +296,82 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
               sbt.IO.read(new File(new File(fixture.dir, "api"), "version.sbt")),
               """version := "2.0.0"""" + "\n"
             )
-          }
         }
       }
+    }
+  }
+
+  test("inquireVersions.execute - keep a release-only override and compute the next version") {
+    fixtureResource.use { fixture =>
+      val seededCtx = MonorepoSpecSupport
+        .withPlan(
+          fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        .updateProject(fixture.loaded.refsById("core"))(_.copy(versions = Some("1.0.0" -> "")))
+      val project   = MonorepoSpecSupport.projectNamed(seededCtx.projects, "core")
+
+      MonorepoVersionSteps.inquireVersions.execute(seededCtx, project).map { result =>
+        val updated = MonorepoSpecSupport.projectNamed(result.projects, "core")
+
+        assertEquals(updated.versions, Some("1.0.0" -> "0.2.0-SNAPSHOT"))
+        assertEquals(updated.resolvedVersions, Some("1.0.0" -> "0.2.0-SNAPSHOT"))
+      }
+    }
+  }
+
+  test("inquireVersions.execute - compute the release version and keep a next-only override") {
+    fixtureResource.use { fixture =>
+      val seededCtx = MonorepoSpecSupport
+        .withPlan(
+          fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        .updateProject(fixture.loaded.refsById("core"))(
+          _.copy(versions = Some("" -> "1.2.0-SNAPSHOT"))
+        )
+      val project   = MonorepoSpecSupport.projectNamed(seededCtx.projects, "core")
+
+      MonorepoVersionSteps.inquireVersions.execute(seededCtx, project).map { result =>
+        val updated = MonorepoSpecSupport.projectNamed(result.projects, "core")
+
+        assertEquals(updated.versions, Some("0.1.0" -> "1.2.0-SNAPSHOT"))
+        assertEquals(updated.resolvedVersions, Some("0.1.0" -> "1.2.0-SNAPSHOT"))
+      }
+    }
+  }
+
+  test("inquireVersions.execute - bypass version tasks when both versions are already resolved") {
+    fixtureResource.use { fixture =>
+      val releaseMarker = new File(fixture.loaded.dir, "release-version-bypass.marker")
+      val nextMarker    = new File(fixture.loaded.dir, "next-version-bypass.marker")
+      val projectRef     = fixture.loaded.refsById("core")
+      val mutatedState  = SbtRuntime.appendWithSession(
+        fixture.loaded.state,
+        Seq(
+          MonorepoStepTestCompat.failureCommandVersionTaskSetting(projectRef, releaseMarker),
+          MonorepoStepTestCompat.failureCommandNextVersionTaskSetting(projectRef, nextMarker)
+        )
+      )
+      val ctx           = MonorepoSpecSupport
+        .withPlan(
+          fixture.context(
+            Seq("core"),
+            versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+          ),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        .withState(mutatedState)
+      val project       = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      MonorepoVersionSteps.inquireVersions.execute(ctx, project).map { result =>
+        val updated = MonorepoSpecSupport.projectNamed(result.projects, "core")
+
+        assertEquals(updated.versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+        assert(!releaseMarker.exists(), "release version task should not run for resolved overrides")
+        assert(!nextMarker.exists(), "next version task should not run for resolved overrides")
+      }
+    }
   }
 
   test("setNextVersions.execute - write the next snapshot to the per-project version file") {

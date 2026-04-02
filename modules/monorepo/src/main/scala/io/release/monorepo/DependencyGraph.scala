@@ -63,6 +63,7 @@ private[monorepo] object DependencyGraph {
         val extracted  = Project.extract(state)
         val structure  = extracted.structure
         val projectSet = uniqueProjects.toSet
+        val projectOrder = uniqueProjects.zipWithIndex.toMap
 
         // Build adjacency map: project -> set of projects it depends on (within our set)
         val dependsOn: Map[ProjectRef, Set[ProjectRef]] = uniqueProjects.map { ref =>
@@ -75,13 +76,16 @@ private[monorepo] object DependencyGraph {
           ref -> deps
         }.toMap
 
-        // Build reverse adjacency map: project -> set of projects that depend on it
-        val dependedOnBy: Map[ProjectRef, Set[ProjectRef]] =
-          dependsOn.toSeq
-            .flatMap { case (proj, deps) => deps.map(_ -> proj) }
-            .groupBy(_._1)
-            .map { case (k, v) => k -> v.map(_._2).toSet }
-            .withDefaultValue(Set.empty)
+        // Build reverse adjacency map with caller order as the stable tiebreaker.
+        val dependedOnBy: Map[ProjectRef, Vector[ProjectRef]] =
+          uniqueProjects.foldLeft(Map.empty[ProjectRef, Vector[ProjectRef]].withDefaultValue(Vector.empty)) {
+            case (acc, proj) =>
+              dependsOn.getOrElse(proj, Set.empty).toVector
+                .sortBy(projectOrder)
+                .foldLeft(acc) { case (updated, dependency) =>
+                  updated.updated(dependency, updated(dependency) :+ proj)
+                }
+          }
 
         // Kahn's algorithm — pure tail-recursive implementation
         val inDegree: Map[ProjectRef, Int] =
@@ -89,24 +93,26 @@ private[monorepo] object DependencyGraph {
 
         @annotation.tailrec
         def loop(
-            queue: List[ProjectRef],
+            queue: scala.collection.immutable.Queue[ProjectRef],
             degrees: Map[ProjectRef, Int],
-            acc: List[ProjectRef]
-        ): List[ProjectRef] =
-          queue match {
-            case Nil             => acc.reverse
-            case current :: rest =>
-              val (newQueue, newDegrees) = dependedOnBy(current).foldLeft((rest, degrees)) {
-                case ((q, d), dependent) =>
-                  val nd = d(dependent) - 1
-                  if (nd == 0) (dependent :: q, d.updated(dependent, nd))
-                  else (q, d.updated(dependent, nd))
-              }
-              loop(newQueue, newDegrees, current :: acc)
+            acc: Vector[ProjectRef]
+        ): Vector[ProjectRef] =
+          if (queue.isEmpty) acc
+          else {
+            val (current, rest)       = queue.dequeue
+            val (newQueue, newDegrees) = dependedOnBy(current).foldLeft((rest, degrees)) {
+              case ((q, d), dependent) =>
+                val nd = d(dependent) - 1
+                if (nd == 0) (q.enqueue(dependent), d.updated(dependent, nd))
+                else (q, d.updated(dependent, nd))
+            }
+            loop(newQueue, newDegrees, acc :+ current)
           }
 
-        val seeds = uniqueProjects.filter(p => inDegree(p) == 0).toList
-        loop(seeds, inDegree, Nil)
+        val seeds = uniqueProjects
+          .filter(p => inDegree(p) == 0)
+          .foldLeft(scala.collection.immutable.Queue.empty[ProjectRef])(_.enqueue(_))
+        loop(seeds, inDegree, Vector.empty)
       }.flatMap { result =>
         if (result.length != uniqueProjects.length) {
           val remaining = uniqueProjects.filterNot(result.contains)

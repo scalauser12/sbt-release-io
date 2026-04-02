@@ -58,11 +58,7 @@ class DependencyGraphSpec extends CatsEffectSuite {
 
       DependencyGraph.topologicalSort(Seq(topRef, rightRef, baseRef, leftRef), state).map {
         ordered =>
-          assertEquals(ordered.toSet, Set(baseRef, leftRef, rightRef, topRef))
-          assertBefore(ordered, baseRef, leftRef)
-          assertBefore(ordered, baseRef, rightRef)
-          assertBefore(ordered, leftRef, topRef)
-          assertBefore(ordered, rightRef, topRef)
+          assertEquals(ordered, Seq(baseRef, rightRef, leftRef, topRef))
       }
     }
   }
@@ -126,8 +122,7 @@ class DependencyGraphSpec extends CatsEffectSuite {
 
       DependencyGraph.topologicalSort(Seq(dependentRef, isolatedRef, baseRef), state).map {
         ordered =>
-          assertEquals(ordered.toSet, Set(baseRef, dependentRef, isolatedRef))
-          assertBefore(ordered, baseRef, dependentRef)
+          assertEquals(ordered, Seq(isolatedRef, baseRef, dependentRef))
       }
     }
   }

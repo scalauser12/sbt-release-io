@@ -17,7 +17,8 @@ import sbt.{internal as _, *}
   * @param name        project name (matches `ref.project`)
   * @param baseDir     project root directory
   * @param versionFile most recently resolved version-file path for this project
-  * @param versions    `(releaseVersion, nextVersion)` pair, set by version inquiry steps
+  * @param versions    stored `(releaseVersion, nextVersion)` pair. During override merge, one
+  *                    side may be temporarily empty until `inquire-versions` resolves both.
   * @param tagName     VCS tag for this project's release, set by the tagging step
   * @param failed      set to true when this project's step action fails
   * @param failureCause throwable captured when this project's step action fails
@@ -32,8 +33,16 @@ case class ProjectReleaseInfo(
     failed: Boolean = false,
     failureCause: Option[Throwable] = None
 ) {
-  def releaseVersion: Option[String] = versions.map(_._1)
-  def nextVersion: Option[String]    = versions.map(_._2)
+  def releaseVersion: Option[String] = versions.map(_._1).filter(_.nonEmpty)
+  def nextVersion: Option[String]    = versions.map(_._2).filter(_.nonEmpty)
+
+  def resolvedVersions: Option[(String, String)] =
+    versions.flatMap {
+      case (releaseVersion, nextVersion)
+          if releaseVersion.nonEmpty && nextVersion.nonEmpty =>
+        Some((releaseVersion, nextVersion))
+      case _                                                => None
+    }
 }
 
 /** Immutable context threaded through each monorepo release step during both phases.

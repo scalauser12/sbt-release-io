@@ -114,6 +114,6 @@ private[monorepo] object MonorepoStepHelpers {
       selector: ((String, String)) => String
   ): String =
     ctx.currentProjects
-      .flatMap(p => p.versions.map(v => s"${p.name} ${selector(v)}"))
+      .flatMap(p => p.resolvedVersions.map(v => s"${p.name} ${selector(v)}"))
       .mkString(", ")
 }

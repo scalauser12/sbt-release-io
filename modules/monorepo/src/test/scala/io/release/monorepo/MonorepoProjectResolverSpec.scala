@@ -98,6 +98,38 @@ class MonorepoProjectResolverSpec extends FunSuite {
     assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
   }
 
+  test("applyVersionOverrides - keep next version unresolved when only release is overridden") {
+    val result = MonorepoProjectResolver.applyVersionOverrides(
+      Seq(project("core")),
+      plan(
+        selectionMode = SelectionMode.ExplicitSelection,
+        releaseVersionOverrides = Map("core" -> "1.0.0")
+      )
+    )
+    val core   = projectNamed(result, "core")
+
+    assertEquals(core.versions, Some("1.0.0" -> ""))
+    assertEquals(core.releaseVersion, Some("1.0.0"))
+    assertEquals(core.nextVersion, None)
+    assertEquals(core.resolvedVersions, None)
+  }
+
+  test("applyVersionOverrides - keep release version unresolved when only next is overridden") {
+    val result = MonorepoProjectResolver.applyVersionOverrides(
+      Seq(project("core")),
+      plan(
+        selectionMode = SelectionMode.ExplicitSelection,
+        nextVersionOverrides = Map("core" -> "1.2.0-SNAPSHOT")
+      )
+    )
+    val core   = projectNamed(result, "core")
+
+    assertEquals(core.versions, Some("" -> "1.2.0-SNAPSHOT"))
+    assertEquals(core.releaseVersion, None)
+    assertEquals(core.nextVersion, Some("1.2.0-SNAPSHOT"))
+    assertEquals(core.resolvedVersions, None)
+  }
+
   private val defaultFlags = ExecutionFlags(
     useDefaults = false,
     skipTests = false,

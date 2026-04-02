@@ -406,12 +406,12 @@ private[monorepo] object MonorepoPreflight {
       project: ProjectReleaseInfo,
       builtInVersionsResolved: Boolean
   ): Evaluation[ProjectVersions] =
-    project.versions match {
-      case Some((releaseVersion, nextVersion)) if releaseVersion.nonEmpty && nextVersion.nonEmpty =>
+    project.resolvedVersions match {
+      case Some((releaseVersion, nextVersion)) =>
         Evaluation.Resolved(ProjectVersions(releaseVersion, nextVersion))
-      case _ if builtInVersionsResolved                                                           =>
+      case _                              if builtInVersionsResolved =>
         Evaluation.NotEvaluated("versions were not resolved for this project")
-      case _                                                                                      =>
+      case _                                                   =>
         Evaluation.NotEvaluated(s"$InquireVersionsStep not in check process")
     }
 

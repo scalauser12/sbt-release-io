@@ -241,6 +241,63 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
     }
   }
 
+  test("detectChangedProjects - key shared path cache by tag and effective excludes") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core"))
+        sbt.IO.createDirectory(new File(repo, "api"))
+        sbt.IO.createDirectory(new File(repo, "versions"))
+        sbt.IO.write(
+          new File(repo, "versions/core.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+        sbt.IO.write(
+          new File(repo, "versions/api.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "shared-v0.1.0")
+
+        sbt.IO.write(
+          new File(repo, "versions/core.sbt"),
+          """version := "0.2.0-SNAPSHOT"""" + "\n"
+        )
+        TestSupport.runGit(repo, "add", "versions/core.sbt")
+        TestSupport.runGit(repo, "commit", "-m", "Update core version file")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val core = projectInfo(
+          repo,
+          name = "core",
+          baseDir = new File(repo, "core"),
+          versionFile = new File(repo, "versions/core.sbt")
+        )
+        val api  = projectInfo(
+          repo,
+          name = "api",
+          baseDir = new File(repo, "api"),
+          versionFile = new File(repo, "versions/api.sbt")
+        )
+
+        detectChanged(
+          vcs,
+          Seq(core, api),
+          env.state,
+          sharedPaths = Seq("versions/"),
+          tagNameFn = (_, version) => s"shared-v$version"
+        ).map { changed =>
+          assertEquals(changed.map(_.name), Seq("api"))
+        }
+      }
+    }
+  }
+
   test("detectChangedProjects - ignore shared path changes when sharedPaths is empty") {
     repoResource.use { repo =>
       IO.blocking {

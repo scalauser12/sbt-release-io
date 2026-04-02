@@ -50,12 +50,13 @@ trait ChangeDetectionSpecSupport {
       projects: Seq[ProjectReleaseInfo],
       state: State,
       sharedPaths: Seq[String] = Seq.empty,
-      additionalExcludeFiles: Seq[File] = Seq.empty
+      additionalExcludeFiles: Seq[File] = Seq.empty,
+      tagNameFn: (String, String) => String = perProjectTagName
   ): IO[Seq[ProjectReleaseInfo]] =
     ChangeDetection.detectChangedProjects(
       vcs,
       projects,
-      perProjectTagName,
+      tagNameFn,
       state,
       additionalExcludeFiles = additionalExcludeFiles,
       sharedPaths = sharedPaths

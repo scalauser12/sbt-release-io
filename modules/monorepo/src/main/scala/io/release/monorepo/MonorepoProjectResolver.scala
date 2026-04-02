@@ -75,10 +75,19 @@ private[monorepo] object MonorepoProjectResolver {
 
       if (releaseOverride.isEmpty && nextOverride.isEmpty) project
       else {
-        val (currentRelease, currentNext) = project.versions.getOrElse(("", ""))
-        project.copy(versions =
-          Some((releaseOverride.getOrElse(currentRelease), nextOverride.getOrElse(currentNext)))
-        )
+        val mergedVersions = project.versions match {
+          case Some((currentRelease, currentNext)) =>
+            Some(
+              releaseOverride.getOrElse(currentRelease) ->
+                nextOverride.getOrElse(currentNext)
+            )
+          case None                                =>
+            Some(
+              releaseOverride.getOrElse("") ->
+                nextOverride.getOrElse("")
+            )
+        }
+        project.copy(versions = mergedVersions)
       }
     }
 }

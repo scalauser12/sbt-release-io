@@ -8,7 +8,7 @@ import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 private[monorepo] object MonorepoVersionSteps {
 
   /** Inquire release and next versions for each project.
-    * If the project already has versions pre-populated (from command-line overrides),
+    * If both versions are already resolved (for example from CLI overrides or a prior step),
     * those are used directly without prompting or computing.
     */
   val inquireVersions: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(

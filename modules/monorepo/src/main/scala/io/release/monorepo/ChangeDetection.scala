@@ -36,6 +36,7 @@ private[monorepo] object ChangeDetection {
       sharedPaths: Seq[String],
       tagNameFn: (String, String) => String
   )
+  private final case class SharedPathCacheKey(tag: String, excludes: Vector[String])
 
   /** Normalize path separators to forward slashes to match git output on all platforms.
     * Uses canonical paths to handle symlinks (e.g. macOS /var → /private/var).
@@ -124,7 +125,7 @@ private[monorepo] object ChangeDetection {
       )
 
       val (_, changedProjects) =
-        projects.foldLeft(Map.empty[String, Boolean] -> Vector.empty[ProjectReleaseInfo]) {
+        projects.foldLeft(Map.empty[SharedPathCacheKey, Boolean] -> Vector.empty[ProjectReleaseInfo]) {
           case ((cache, acc), project) =>
             val (updatedCache, changed) = processProject(inputs, project, cache)
             updatedCache -> (if (changed) acc :+ project else acc)
@@ -171,12 +172,13 @@ private[monorepo] object ChangeDetection {
   private def processProject(
       inputs: DetectionInputs,
       project: ProjectReleaseInfo,
-      sharedPathCache: Map[String, Boolean]
-  ): (Map[String, Boolean], Boolean) = {
+      sharedPathCache: Map[SharedPathCacheKey, Boolean]
+  ): (Map[SharedPathCacheKey, Boolean], Boolean) = {
     val ProjectTagLookup(tagPattern, tagLookup) = projectTagLookup(inputs, project)
     val excludes                                =
       inputs.globalExcludes ++ gitRelativize(inputs.vcs.baseDir, project.versionFile).toSet
-    val (updatedCache, sharedChanged)           = sharedPathsChanged(inputs, sharedPathCache, tagLookup)
+    val (updatedCache, sharedChanged)           =
+      sharedPathsChanged(inputs, sharedPathCache, tagLookup, excludes)
     val excludedChildDirs                       = childDirPrefixes(inputs, project)
     val changed                                 = sharedChanged || hasChangedSinceLastTag(
       inputs.vcs,
@@ -201,12 +203,14 @@ private[monorepo] object ChangeDetection {
 
   private def sharedPathsChanged(
       inputs: DetectionInputs,
-      cache: Map[String, Boolean],
-      tagLookup: TagLookupResult
-  ): (Map[String, Boolean], Boolean) =
+      cache: Map[SharedPathCacheKey, Boolean],
+      tagLookup: TagLookupResult,
+      excludes: Set[String]
+  ): (Map[SharedPathCacheKey, Boolean], Boolean) =
     tagLookup match {
       case TagLookupResult.TagFound(tag) if inputs.sharedPaths.nonEmpty =>
-        cache.get(tag) match {
+        val cacheKey = SharedPathCacheKey(tag, excludes.toVector.sorted)
+        cache.get(cacheKey) match {
           case Some(changed) => cache -> changed
           case None          =>
             val changed =
@@ -215,9 +219,9 @@ private[monorepo] object ChangeDetection {
                 tag,
                 inputs.state,
                 inputs.sharedPaths,
-                inputs.globalExcludes
+                excludes
               )
-            cache.updated(tag, changed) -> changed
+            cache.updated(cacheKey, changed) -> changed
         }
       case _                                                            => cache -> false
     }
@@ -238,7 +242,7 @@ private[monorepo] object ChangeDetection {
     }
 
   /** Check whether any shared (root-level) paths have changed since the given tag.
-    * Results are cached per tag by the caller to avoid redundant git calls.
+    * Results are cached per tag + effective excludes by the caller to avoid redundant git calls.
     * '''Performs blocking I/O''' (git subprocess calls) — must only be called
     * from within `IO.blocking`.
     */
@@ -348,10 +352,10 @@ private[monorepo] object ChangeDetection {
         vcs.baseDir
       ).!!.linesIterator.filter(_.nonEmpty).toList
     ) match {
-      case Failure(_)            =>
+      case Failure(err)          =>
         state.log.warn(
-          s"${ReleaseLogPrefixes.Monorepo} git diff failed for ${project.name}, " +
-            "conservatively treating as changed"
+          s"${ReleaseLogPrefixes.Monorepo} git diff failed for ${project.name}: " +
+            s"${errorMessage(err)}. Conservatively treating as changed"
         )
         true
       case Success(changedFiles) =>
