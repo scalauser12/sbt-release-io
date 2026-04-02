@@ -15,7 +15,7 @@ optional interactive prompts, and configurable version files and VCS behavior.
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.8.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.8.1")
 ```
 
 Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin loads automatically
@@ -29,7 +29,8 @@ sbt "releaseIO check with-defaults"
 
 Preferred customization keeps the built-in process intact and uses grouped
 `releaseIOPolicy*` keys, `releaseIOHooks*`, and resource-aware custom plugins when one shared
-resource is needed. The older flat key names remain as deprecated aliases.
+resource is needed. The lower-level `ReleaseStepIO` DSL is deprecated and retained only for
+built-ins, tests, and internal composition. The older flat key names remain as deprecated aliases.
 
 ## Read next
 

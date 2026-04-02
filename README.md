@@ -29,7 +29,7 @@ Start with the plugin-specific onboarding guides:
 Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.8.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.8.1")
 ```
 
 The plugin activates automatically. Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`.
@@ -51,7 +51,7 @@ Read next:
 Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.8.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.8.1")
 ```
 
 In `build.sbt`:
@@ -80,8 +80,9 @@ For routine customization, prefer the grouped hook/policy settings
 (`releaseIOPolicy*`, `releaseIOHooks*`, `releaseIOMonorepoPolicy*`,
 `releaseIOMonorepoHooks*`) and leave the built-in process intact. The older flat key names remain
 as deprecated aliases for now. For shared-resource or advanced integration work, use custom
-plugins built around the hook and resource-hook APIs. Raw process override is no longer part of
-the supported public surface.
+plugins built around the hook and resource-hook APIs. The lower-level `ReleaseStepIO` and
+`MonorepoStepIO` DSLs are now deprecated and retained only for built-ins, tests, and internal
+composition. Raw process override is no longer part of the supported public surface.
 
 For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
 [docs/monorepo/recipes.md](docs/monorepo/recipes.md). For rollback and recovery, see

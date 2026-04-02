@@ -5,7 +5,9 @@ Use this page for the core plugin's execution model and the conceptual differenc
 
 ## Validate / execute model
 
-Each `ReleaseStepIO` has two phases:
+Internally, the compiled core lifecycle is expressed in terms of `ReleaseStepIO`, the deprecated
+lower-level step type that built-ins, tests, and internal composition still use under the
+hook-first model. Each compiled step has two phases:
 
 - `validate: ReleaseContext => IO[Unit]`
 - `execute: ReleaseContext => IO[ReleaseContext]`
@@ -50,16 +52,17 @@ commands such as `+publish`. The main difference is the effect model:
 
 ### Summary
 
-| Aspect                  | sbt-release                                 | sbt-release-io                         |
-| ----------------------- | ------------------------------------------- | -------------------------------------- |
-| Effect system           | Plain `State => State` via `Function.chain` | `IO`-wrapped via `unsafeRunSync`       |
-| Step type               | `ReleaseStep(action, check)`                | `ReleaseStepIO(validate, execute)`     |
-| Resource management     | Manual                                      | `Resource.use` with guaranteed cleanup |
-| Cross-build validation  | Actions only                                | Both `validate` and `execute` phases   |
-| Custom plugin resources | Not supported                               | `ReleasePluginIOLike[T]`               |
-| VCS support             | Git, Mercurial, Subversion                  | Git only                               |
-| Error handling          | `FailureCommand` sentinel in State          | `IO.raiseError` + `handleErrorWith`    |
-| Composability           | `Function.chain`                            | Monadic (`for`/`flatMap`)              |
+| Aspect                  | sbt-release                                 | sbt-release-io                                    |
+| ----------------------- | ------------------------------------------- | ------------------------------------------------- |
+| Effect system           | Plain `State => State` via `Function.chain` | `IO`-wrapped via `unsafeRunSync`                  |
+| Internal step type      | `ReleaseStep(action, check)`                | `ReleaseStepIO(validate, execute)`                |
+| Supported customization | Direct process editing and step surgery     | Hook-first policies, hooks, and resource hooks    |
+| Resource management     | Manual                                      | `Resource.use` with guaranteed cleanup            |
+| Cross-build validation  | Actions only                                | Both `validate` and `execute` phases              |
+| Custom plugin resources | Not supported                               | `ReleasePluginIOLike[T]`                          |
+| VCS support             | Git, Mercurial, Subversion                  | Git only                                          |
+| Error handling          | `FailureCommand` sentinel in State          | `IO.raiseError` + `handleErrorWith`               |
+| Composability           | `Function.chain`                            | Monadic (`for`/`flatMap`)                         |
 
 The plugin ports sbt-release's types, settings, and execution model onto cats-effect IO,
 with no runtime dependency on sbt-release.
