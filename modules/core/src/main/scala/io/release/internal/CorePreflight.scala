@@ -11,6 +11,7 @@ import io.release.steps.VersionSteps
 import java.io.File
 
 /** Preflight support for `releaseIO check` and command help text without release side effects. */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object CorePreflight {
 
   private val InquireVersionsStep  = ReleaseSteps.inquireVersions.name

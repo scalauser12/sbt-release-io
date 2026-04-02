@@ -5,6 +5,7 @@ import cats.effect.Ref
 import io.release.internal.SbtCompat
 import munit.CatsEffectSuite
 
+@scala.annotation.nowarn("cat=deprecation")
 class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecSupport {
 
   test("compose - run global validation before execute when no selection boundary exists") {

@@ -39,14 +39,19 @@ Both the `validate` and `execute` phases are cross-built.
 
 ### Custom steps
 
-Opt in to cross-building with the builder API:
+The lower-level `MonorepoStepIO` DSL is deprecated. For build-facing customization, prefer
+hooks. Per-project hooks attached to the publish phase inherit its cross-build behavior when
+`cross` (or `releaseIOMonorepoBehaviorCrossBuild := true`) is enabled:
 
 ```scala
-MonorepoStepIO
-  .perProject("my-step")
-  .withCrossBuild
-  .executeAction((ctx, project) => ...)
+releaseIOMonorepoHooksBeforePublish +=
+  MonorepoProjectHookIO.action("verify-publish-env") { (_, project) =>
+    IO.println(s"[monorepo] verifying publish environment for ${project.name}")
+  }
 ```
+
+Use the monorepo resource-hook APIs in a custom plugin when the hook logic needs a shared
+resource.
 
 ## CI/CD integration
 

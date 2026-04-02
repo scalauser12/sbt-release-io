@@ -13,6 +13,7 @@ import java.io.File
   *   - Version steps — version inquiry, setting, committing
   *   - Publish steps — snapshot dependency checks, publishing, tests, clean
   */
+@scala.annotation.nowarn("cat=deprecation")
 object ReleaseSteps {
 
   // ── VCS steps ───────────────────────────────────────────────────────────

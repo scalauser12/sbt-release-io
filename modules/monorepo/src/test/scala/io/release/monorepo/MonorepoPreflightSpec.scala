@@ -12,6 +12,7 @@ import munit.CatsEffectSuite
 
 import java.io.File
 
+@scala.annotation.nowarn("cat=deprecation")
 class MonorepoPreflightSpec extends CatsEffectSuite {
 
   test("renderSummary - include selection and per-project tag summaries") {

@@ -10,6 +10,7 @@ import sbt.Setting
 
 import java.io.File
 
+@scala.annotation.nowarn("cat=deprecation")
 class MonorepoHookCompilerSpec extends CatsEffectSuite {
 
   test(

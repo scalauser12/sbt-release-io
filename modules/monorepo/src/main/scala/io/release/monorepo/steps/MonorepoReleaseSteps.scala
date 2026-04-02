@@ -4,6 +4,7 @@ import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 
 /** Facade re-exporting all built-in monorepo release steps and default sequences. */
+@scala.annotation.nowarn("cat=deprecation")
 object MonorepoReleaseSteps {
 
   val initializeVcs: MonorepoStepIO.Global        = MonorepoVcsSteps.initializeVcs

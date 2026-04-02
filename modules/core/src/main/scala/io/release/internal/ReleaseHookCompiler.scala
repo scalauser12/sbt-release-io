@@ -5,6 +5,7 @@ import io.release.ReleaseStepIO
 import sbt.State
 
 /** Compiles semantic core hook settings into the existing linear release engine. */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object ReleaseHookCompiler {
 
   def resolve(state: State): CoreHookConfiguration = {

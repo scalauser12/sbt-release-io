@@ -11,6 +11,7 @@ import sbt.taskKey
 
 import java.io.File
 
+@scala.annotation.nowarn("cat=deprecation")
 class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
 
   test("command steps - surface command parse failures for fromCommand") {

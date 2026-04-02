@@ -15,6 +15,7 @@ import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 
 /** VCS-related monorepo release steps. */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoVcsSteps {
 
   private val DefaultCommandName = "releaseIOMonorepo"

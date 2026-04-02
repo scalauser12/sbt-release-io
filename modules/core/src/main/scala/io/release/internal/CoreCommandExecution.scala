@@ -12,6 +12,7 @@ import sbt.{internal as _, *}
   * Public plugin extension points stay on [[io.release.ReleasePluginIOLike]]; this object owns
   * the private command plumbing so the plugin trait can read top-down.
   */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object CoreCommandExecution {
 
   final case class CommandRuntime[T](

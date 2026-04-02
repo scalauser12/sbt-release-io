@@ -23,6 +23,7 @@ import sbt.Keys.*
 import sbt.{internal as _, *}
 
 /** VCS-related release steps: initialize, check, tag, push. */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object VcsSteps {
 
   private val DefaultCommandName = "releaseIO"

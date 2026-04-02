@@ -5,6 +5,7 @@ import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
 
+@scala.annotation.nowarn("cat=deprecation")
 class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   private val fixturePrefix = "sbt-release-io-builder-spec"
 

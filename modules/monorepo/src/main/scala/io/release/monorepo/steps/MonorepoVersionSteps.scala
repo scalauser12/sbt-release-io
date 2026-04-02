@@ -4,6 +4,7 @@ import io.release.monorepo.steps.MonorepoVcsCommitHelpers.commitVersions
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 
 /** Version-related monorepo release steps: inquire, set, commit. */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoVersionSteps {
 
   /** Inquire release and next versions for each project.

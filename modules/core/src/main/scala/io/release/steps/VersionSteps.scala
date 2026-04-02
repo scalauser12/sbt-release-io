@@ -8,6 +8,7 @@ import sbt.State
 import sbt.{internal as _, *}
 
 /** Version-related release steps: inquire, set, commit versions. */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object VersionSteps {
 
   private[steps] type ResolvedSettings = ReleaseVersionWorkflow.ResolvedSettings

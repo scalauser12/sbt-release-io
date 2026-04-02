@@ -5,6 +5,7 @@ import io.release.internal.LifecycleCompiler
 import io.release.monorepo.steps.{MonorepoPublishSteps, MonorepoReleaseSteps}
 
 /** Canonical monorepo lifecycle order and hook compilation. */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoLifecycle {
 
   private type ProjectGate = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]

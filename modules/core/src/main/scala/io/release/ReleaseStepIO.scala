@@ -21,6 +21,10 @@ import sbt.{internal as _, *}
   *                            `crossScalaVersions`
   * @param validateWithContext optional validation hook that can return an updated context
   */
+@deprecated(
+  "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
+  "0.8.1"
+)
 case class ReleaseStepIO private (
     name: String,
     execute: ReleaseContext => IO[ReleaseContext],
@@ -67,6 +71,11 @@ case class ReleaseStepIO private (
     normalizedValidation._2.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
 }
 
+@deprecated(
+  "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
+  "0.8.1"
+)
+@scala.annotation.nowarn("cat=deprecation")
 object ReleaseStepIO {
 
   private type ThreadedValidation = StepKernel.ThreadedValidation[ReleaseContext]
@@ -201,6 +210,10 @@ object ReleaseStepIO {
     new ResourceStepBuilder[T](StepKernel.SingleResourceBuilderState[T, ReleaseContext](name))
 
   /** Fluent builder for release steps. */
+  @deprecated(
+    "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
+    "0.8.1"
+  )
   final class StepBuilder private[ReleaseStepIO] (
       private val state: StepKernel.SingleBuilderState[ReleaseContext]
   ) {
@@ -240,6 +253,10 @@ object ReleaseStepIO {
   }
 
   /** Fluent builder for resource-aware release steps. */
+  @deprecated(
+    "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
+    "0.8.1"
+  )
   final class ResourceStepBuilder[T] private[ReleaseStepIO] (
       private val state: StepKernel.SingleResourceBuilderState[T, ReleaseContext]
   ) {

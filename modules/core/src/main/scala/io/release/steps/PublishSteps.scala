@@ -19,6 +19,7 @@ import sbt.{internal as _, *}
 import scala.util.control.NonFatal
 
 /** Publish, test, and dependency-related release steps. */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object PublishSteps {
 
   val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO.build(

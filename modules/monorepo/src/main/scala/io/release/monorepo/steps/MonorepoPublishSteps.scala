@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
   * FailureCommand detection is handled centrally by [[MonorepoStepHelpers.runPerProject]].
   * Step implementations here just run their sbt tasks and return the updated context.
   */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoPublishSteps {
 
   private def runProjectTask[A](

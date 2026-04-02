@@ -7,6 +7,7 @@ import io.release.ReleaseStepIO
 import io.release.steps.{PublishSteps, ReleaseSteps}
 
 /** Canonical core lifecycle order and hook compilation. */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object CoreLifecycle {
 
   private type Gate = ReleaseContext => IO[Boolean]

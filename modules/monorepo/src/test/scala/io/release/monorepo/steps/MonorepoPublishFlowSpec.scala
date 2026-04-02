@@ -5,6 +5,7 @@ import io.release.TestAssertions.assertFailure
 import munit.CatsEffectSuite
 import sbt.*
 
+@scala.annotation.nowarn("cat=deprecation")
 class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsSpecSupport {
 
   test(

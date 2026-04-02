@@ -25,6 +25,7 @@ private[monorepo] final case class MonorepoProcessStep(
     ExecutionEngine.ActionStep(name, execute)
 }
 
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoProcessStep {
 
   private val LogPrefix = ReleaseLogPrefixes.Monorepo

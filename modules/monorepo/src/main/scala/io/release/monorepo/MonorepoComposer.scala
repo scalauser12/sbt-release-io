@@ -10,6 +10,7 @@ import io.release.internal.StepExecutionSupport
   * Public `MonorepoStepIO` instances are first normalized into [[MonorepoProcessStep]]
   * values. The composer then only owns sequencing and phase boundaries.
   */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Monorepo

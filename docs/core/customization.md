@@ -166,11 +166,12 @@ When updating older builds or plugins:
 
 - rename `step.check` to `step.validate`
 - rename `step.action` to `step.execute`
-- replace older convenience factories with `ReleaseHookIO`, `ReleaseResourceHookIO`, and
-  the current `ReleaseStepIO` builder/factory APIs where needed internally
+- replace older convenience factories with `ReleaseHookIO` and `ReleaseResourceHookIO`
+- keep the deprecated `ReleaseStepIO` APIs only for built-ins, tests, and internal composition
 
 ## Lower-level step types
 
-`ReleaseStepIO` still exists as the lower-level step type used by built-ins, tests, and
-internal composition. It is no longer the supported build-facing customization path for
-changing the default release pipeline. Prefer hooks and policies in `build.sbt`.
+`ReleaseStepIO` is deprecated and retained only as the lower-level step type used by built-ins,
+tests, and internal composition. It is no longer the supported build-facing customization path
+for changing the default release pipeline. Prefer hooks, resource hooks, and grouped
+hook/policy settings in `build.sbt`.

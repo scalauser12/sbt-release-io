@@ -16,10 +16,19 @@ import io.release.internal.StepKernel
   * @see [[MonorepoStepIO.PerProject]] for steps that run per subproject (e.g., publish)
   * @see [[MonorepoStepIO.compose]]    for the orchestration entry point
   */
+@deprecated(
+  "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+  "0.8.1"
+)
 sealed trait MonorepoStepIO {
   def name: String
 }
 
+@deprecated(
+  "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+  "0.8.1"
+)
+@scala.annotation.nowarn("cat=deprecation")
 object MonorepoStepIO {
 
   private type GlobalThreadedValidation     =
@@ -89,10 +98,14 @@ object MonorepoStepIO {
 
   /** A step that runs once globally (e.g., check clean working dir, push changes).
     *
-    * @param isSelectionBoundary Internal flag — marks this step as the boundary between
-    *   setup (sequential validate-then-execute) and main (batch validation then execution)
-    *   phases. Only the built-in `detect-or-select-projects` step should set this.
-    */
+   * @param isSelectionBoundary Internal flag — marks this step as the boundary between
+   *   setup (sequential validate-then-execute) and main (batch validation then execution)
+   *   phases. Only the built-in `detect-or-select-projects` step should set this.
+   */
+  @deprecated(
+    "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+    "0.8.1"
+  )
   case class Global private[monorepo] (
       name: String,
       execute: MonorepoContext => IO[MonorepoContext],
@@ -172,6 +185,10 @@ object MonorepoStepIO {
   /** A step that runs once per selected project in topological order
     * (e.g., set version, publish, tag).
     */
+  @deprecated(
+    "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+    "0.8.1"
+  )
   case class PerProject private[monorepo] (
       name: String,
       execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
@@ -296,6 +313,10 @@ object MonorepoStepIO {
     )
 
   /** Fluent builder for global steps. */
+  @deprecated(
+    "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+    "0.8.1"
+  )
   final class GlobalBuilder private[MonorepoStepIO] (
       private val state: StepKernel.SingleBuilderState[MonorepoContext]
   ) {
@@ -337,6 +358,10 @@ object MonorepoStepIO {
   }
 
   /** Fluent builder for per-project steps. */
+  @deprecated(
+    "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+    "0.8.1"
+  )
   final class PerProjectBuilder private[MonorepoStepIO] (
       private val state: StepKernel.ItemBuilderState[MonorepoContext, ProjectReleaseInfo]
   ) {
@@ -384,6 +409,10 @@ object MonorepoStepIO {
   }
 
   /** Fluent builder for resource-aware global steps. */
+  @deprecated(
+    "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+    "0.8.1"
+  )
   final class ResourceGlobalBuilder[T] private[MonorepoStepIO] (
       private val state: StepKernel.SingleResourceBuilderState[T, MonorepoContext]
   ) {
@@ -430,6 +459,10 @@ object MonorepoStepIO {
   }
 
   /** Fluent builder for resource-aware per-project steps. */
+  @deprecated(
+    "Use MonorepoGlobalHookIO/MonorepoProjectHookIO, MonorepoGlobalResourceHookIO/MonorepoProjectResourceHookIO, or grouped releaseIOMonorepoHooks*/releaseIOMonorepoPolicy* settings instead.",
+    "0.8.1"
+  )
   final class ResourcePerProjectBuilder[T] private[MonorepoStepIO] (
       private val state: StepKernel.ItemResourceBuilderState[
         T,

@@ -4,6 +4,7 @@ import io.release.internal.SbtRuntime
 import sbt.State
 
 /** Compiles semantic monorepo hook settings into the existing monorepo engine. */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoHookCompiler {
 
   def resolve(state: State): MonorepoHookConfiguration = {

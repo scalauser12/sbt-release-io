@@ -8,7 +8,6 @@ import io.release.ReleaseIO
 import io.release.ReleasePluginIOLike
 import io.release.ReleaseResourceHookIO
 import io.release.ReleaseResourceHooks
-import io.release.ReleaseStepIO
 import io.release.internal.ReleaseLogPrefixes
 import sbt.*
 import sbt.Keys.thisProject
@@ -21,7 +20,8 @@ import scala.util.control.NonFatal
  * '''How to read this file (recommended path):'''
  *  1. Start with `firstHookSettings` for a working hook-based setup.
  *  2. Move to `customHookSettings` for a richer policy + lifecycle example.
- *  3. Browse the individual step examples for lower-level internal building blocks.
+ *  3. Use `DeprecatedStepExamples` only when maintaining built-ins, tests, or other
+ *     internal integrations that still depend on the deprecated lower-level step DSL.
  *  4. Use `MyReleasePlugin` for advanced resource-aware customization.
  *
  * Note: plugin objects like `MyReleasePlugin` must live in `project/MyReleasePlugin.scala`
@@ -160,152 +160,161 @@ object CustomStepExamples {
   val markReleaseDoneHook: ReleaseHookIO =
     ReleaseHookIO.io("mark-done")(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
 
-  // ── Individual step examples ─────────────────────────────────────────
+  // ── Deprecated/internal step examples ────────────────────────────────
 
-  /** Custom step using `ReleaseStepIO.io` with pure console output. */
-  val printBanner: ReleaseStepIO = ReleaseStepIO.io("print-banner")(ctx =>
-    IO.println("=" * 60) *>
-      IO.println("  RELEASE IN PROGRESS") *>
-      IO.println("=" * 60).as(ctx)
-  )
+  /** Lower-level `ReleaseStepIO` examples retained only for built-ins, tests, and other
+    * internal integrations. Prefer hooks and resource hooks for build-facing customization.
+    */
+  @scala.annotation.nowarn("cat=deprecation")
+  object DeprecatedStepExamples {
+    import _root_.io.release.ReleaseStepIO
 
-  /** Custom step using `ReleaseStepIO.pure` for a side-effect-free context transformation. */
-  val markReleaseDone: ReleaseStepIO =
-    ReleaseStepIO.pure("mark-done")(ctx => ctx.withMetadata(releaseCompletedKey, true))
+    /** Custom step using `ReleaseStepIO.io` with pure console output. */
+    val printBanner: ReleaseStepIO = ReleaseStepIO.io("print-banner")(ctx =>
+      IO.println("=" * 60) *>
+        IO.println("  RELEASE IN PROGRESS") *>
+        IO.println("=" * 60).as(ctx)
+    )
 
-  /** Custom step using `ReleaseStepIO.io` with VCS access and error handling via `IO.raiseError`. */
-  val validateBranch: ReleaseStepIO = ReleaseStepIO.io("validate-branch")(ctx =>
-    ctx.vcs match {
-      case Some(vcs) =>
-        vcs.currentBranch.flatMap(branch =>
-          if (branch == "main" || branch == "master")
-            IO.pure(ctx)
-          else
-            IO.raiseError(
-              new RuntimeException(
-                s"Releases must be done from main/master, but current branch is '$branch'"
+    /** Custom step using `ReleaseStepIO.pure` for a side-effect-free context transformation. */
+    val markReleaseDone: ReleaseStepIO =
+      ReleaseStepIO.pure("mark-done")(ctx => ctx.withMetadata(releaseCompletedKey, true))
+
+    /** Custom step using `ReleaseStepIO.io` with VCS access and error handling via
+      * `IO.raiseError`.
+      */
+    val validateBranch: ReleaseStepIO = ReleaseStepIO.io("validate-branch")(ctx =>
+      ctx.vcs match {
+        case Some(vcs) =>
+          vcs.currentBranch.flatMap(branch =>
+            if (branch == "main" || branch == "master")
+              IO.pure(ctx)
+            else
+              IO.raiseError(
+                new RuntimeException(
+                  s"Releases must be done from main/master, but current branch is '$branch'"
+                )
               )
-            )
-        )
-      case None      =>
-        IO.raiseError(new RuntimeException("VCS not initialized"))
-    }
-  )
-
-  /** Error recovery: use `.handleErrorWith` with `NonFatal` to log a warning and continue
-    * instead of aborting the release. Useful for non-critical steps like notifications.
-    */
-  val optionalNotify: ReleaseStepIO = ReleaseStepIO.io("optional-notify")(ctx =>
-    IO.blocking {
-      // Replace with real notification logic (e.g., Slack webhook, email)
-      val version = ctx.releaseVersion.getOrElse("unknown")
-      ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Notifying release of $version...")
-    }.as(ctx)
-      .handleErrorWith {
-        case NonFatal(err) =>
-          IO.blocking(
-            ctx.state.log.warn(
-              s"${ReleaseLogPrefixes.Core} Notification failed: ${err.getMessage}, continuing..."
-            )
-          ).as(ctx)
-        case fatal         => IO.raiseError(fatal)
-      }
-  )
-
-  /** Custom step using `IO.blocking` for shell execution.
-    * Demo helper only: avoid passing untrusted shell strings in production.
-    */
-  def runShellCommand(name: String, command: String): ReleaseStepIO =
-    ReleaseStepIO.io(s"shell-$name")(ctx =>
-      IO.blocking {
-        import scala.sys.process._
-        command.!
-      }.flatMap(exitCode =>
-        if (exitCode != 0)
-          IO.raiseError(
-            new RuntimeException(s"Command '$command' failed with exit code $exitCode")
           )
-        else IO.pure(ctx)
-      )
+        case None      =>
+          IO.raiseError(new RuntimeException("VCS not initialized"))
+      }
     )
 
-  /** Custom step accessing `ctx.versions` and `Project.extract(ctx.state)` for sbt settings.
-    * Intentionally simple demo logic: append-only and not fully idempotent.
-    */
-  val generateChangelog: ReleaseStepIO = ReleaseStepIO.io("generate-changelog")(ctx =>
-    ctx.versions match {
-      case Some((releaseVer, _)) =>
-        IO.blocking {
-          val baseDir  = Project.extract(ctx.state).get(thisProject).base
-          val file     = new java.io.File(baseDir, "CHANGELOG.md")
-          val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
-          val existing =
-            if (file.exists())
-              scala.util.Using(scala.io.Source.fromFile(file))(_.mkString).get
-            else "# Changelog\n"
-          java.nio.file.Files.write(file.toPath, (existing + entry).getBytes("UTF-8"))
-        } *>
-          IO.println(s"${ReleaseLogPrefixes.Core} Updated CHANGELOG.md for $releaseVer").as(ctx)
-      case None                  =>
-        IO.raiseError(new RuntimeException("Versions not set"))
-    }
-  )
-
-  /** State modification: use `ctx.withState` to modify sbt state mid-release.
-    * Here we add a manifest attribute to packaged jars with the release version.
-    */
-  val addReleaseManifestEntry: ReleaseStepIO = ReleaseStepIO.io("add-manifest-entry")(ctx =>
-    IO.blocking {
-      val version   = ctx.releaseVersion.getOrElse("unknown")
-      val extracted = Project.extract(ctx.state)
-      val newState  = extracted.appendWithSession(
-        Seq(
-          extracted.currentRef / Keys.packageOptions +=
-            Package.ManifestAttributes("Release-Version" -> version)
-        ),
-        ctx.state
-      )
-      ctx.withState(newState)
-    }
-  )
-
-  /** Cross-build step: construct `ReleaseStepIO(...)` directly with `enableCrossBuild = true`
-    * so the step runs once per `crossScalaVersions` when cross-building is active.
-    *
-    * For task-based steps, prefer the shorthand:
-    * `ReleaseStepIO.fromTask(Keys.test, enableCrossBuild = true)`
-    */
-  val crossBuildTest: ReleaseStepIO = ReleaseStepIO(
-    name = "cross-build-test",
-    execute = ctx =>
+    /** Error recovery: use `.handleErrorWith` with `NonFatal` to log a warning and continue
+      * instead of aborting the release. Useful for non-critical steps like notifications.
+      */
+    val optionalNotify: ReleaseStepIO = ReleaseStepIO.io("optional-notify")(ctx =>
       IO.blocking {
-        val scalaVer = Project.extract(ctx.state).get(Keys.scalaVersion)
-        ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Running tests for Scala $scalaVer")
-        ctx
-      },
-    enableCrossBuild = true
-  )
-
-  // ── Utilities ────────────────────────────────────────────────────────
-
-  /** Wraps a step so it only runs when `condition` returns true.
-    *
-    * Example:
-    * {{{
-    * conditionalStep("publish",
-    *   _.releaseVersion.isDefined,
-    *   ReleaseSteps.publishArtifacts)
-    * }}}
-    */
-  def conditionalStep(
-      name: String,
-      condition: ReleaseContext => Boolean,
-      step: ReleaseStepIO
-  ): ReleaseStepIO =
-    ReleaseStepIO.io(s"conditional-$name")(ctx =>
-      if (condition(ctx)) step.execute(ctx)
-      else IO.println(s"${ReleaseLogPrefixes.Core} Skipping $name (condition not met)").as(ctx)
+        // Replace with real notification logic (e.g., Slack webhook, email)
+        val version = ctx.releaseVersion.getOrElse("unknown")
+        ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Notifying release of $version...")
+      }.as(ctx)
+        .handleErrorWith {
+          case NonFatal(err) =>
+            IO.blocking(
+              ctx.state.log.warn(
+                s"${ReleaseLogPrefixes.Core} Notification failed: ${err.getMessage}, continuing..."
+              )
+            ).as(ctx)
+          case fatal         => IO.raiseError(fatal)
+        }
     )
+
+    /** Custom step using `IO.blocking` for shell execution.
+      * Demo helper only: avoid passing untrusted shell strings in production.
+      */
+    def runShellCommand(name: String, command: String): ReleaseStepIO =
+      ReleaseStepIO.io(s"shell-$name")(ctx =>
+        IO.blocking {
+          import scala.sys.process.*
+          command.!
+        }.flatMap(exitCode =>
+          if (exitCode != 0)
+            IO.raiseError(
+              new RuntimeException(s"Command '$command' failed with exit code $exitCode")
+            )
+          else IO.pure(ctx)
+        )
+      )
+
+    /** Custom step accessing `ctx.versions` and `Project.extract(ctx.state)` for sbt settings.
+      * Intentionally simple demo logic: append-only and not fully idempotent.
+      */
+    val generateChangelog: ReleaseStepIO = ReleaseStepIO.io("generate-changelog")(ctx =>
+      ctx.versions match {
+        case Some((releaseVer, _)) =>
+          IO.blocking {
+            val baseDir  = Project.extract(ctx.state).get(thisProject).base
+            val file     = new java.io.File(baseDir, "CHANGELOG.md")
+            val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
+            val existing =
+              if (file.exists())
+                scala.util.Using(scala.io.Source.fromFile(file))(_.mkString).get
+              else "# Changelog\n"
+            java.nio.file.Files.write(file.toPath, (existing + entry).getBytes("UTF-8"))
+          } *>
+            IO.println(s"${ReleaseLogPrefixes.Core} Updated CHANGELOG.md for $releaseVer").as(ctx)
+        case None                  =>
+          IO.raiseError(new RuntimeException("Versions not set"))
+      }
+    )
+
+    /** State modification: use `ctx.withState` to modify sbt state mid-release.
+      * Here we add a manifest attribute to packaged jars with the release version.
+      */
+    val addReleaseManifestEntry: ReleaseStepIO = ReleaseStepIO.io("add-manifest-entry")(ctx =>
+      IO.blocking {
+        val version   = ctx.releaseVersion.getOrElse("unknown")
+        val extracted = Project.extract(ctx.state)
+        val newState  = extracted.appendWithSession(
+          Seq(
+            extracted.currentRef / Keys.packageOptions +=
+              Package.ManifestAttributes("Release-Version" -> version)
+          ),
+          ctx.state
+        )
+        ctx.withState(newState)
+      }
+    )
+
+    /** Cross-build step using the deprecated lower-level step DSL.
+      *
+      * Prefer `beforePublish` / `afterPublish` hooks for build-facing customization. Those hook
+      * phases inherit the publish phase's cross-build behavior when cross-build is enabled.
+      */
+    val crossBuildTest: ReleaseStepIO = ReleaseStepIO(
+      name = "cross-build-test",
+      execute = ctx =>
+        IO.blocking {
+          val scalaVer = Project.extract(ctx.state).get(Keys.scalaVersion)
+          ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Running tests for Scala $scalaVer")
+          ctx
+        },
+      enableCrossBuild = true
+    )
+
+    // ── Utilities ──────────────────────────────────────────────────────
+
+    /** Wraps a step so it only runs when `condition` returns true.
+      *
+      * Example:
+      * {{{
+      * conditionalStep("publish",
+      *   _.releaseVersion.isDefined,
+      *   ReleaseSteps.publishArtifacts)
+      * }}}
+      */
+    def conditionalStep(
+        name: String,
+        condition: ReleaseContext => Boolean,
+        step: ReleaseStepIO
+    ): ReleaseStepIO =
+      ReleaseStepIO.io(s"conditional-$name")(ctx =>
+        if (condition(ctx)) step.execute(ctx)
+        else IO.println(s"${ReleaseLogPrefixes.Core} Skipping $name (condition not met)").as(ctx)
+      )
+  }
 
 }
 

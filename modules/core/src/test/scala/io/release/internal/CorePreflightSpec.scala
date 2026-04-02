@@ -16,6 +16,7 @@ import sbt.Project
 
 import java.io.File
 
+@scala.annotation.nowarn("cat=deprecation")
 class CorePreflightSpec extends CatsEffectSuite {
 
   test("renderSummary - include resolved versions, tag status, and workflow flags") {

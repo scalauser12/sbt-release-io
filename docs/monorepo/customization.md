@@ -192,10 +192,11 @@ When updating older builds or plugins:
 - rename `check` to `validate`
 - rename `action` to `execute`
 - replace older step convenience factories with the current hook/resource-hook builders
-  and the `MonorepoStepIO` APIs where needed internally
+- keep the deprecated `MonorepoStepIO` APIs only for built-ins, tests, and internal composition
 
 ## Lower-level step types
 
-`MonorepoStepIO` still exists as the lower-level step type used by built-ins, tests, and
-internal composition. It is no longer the supported build-facing customization path for
-changing the monorepo pipeline. Prefer hooks and policies in `build.sbt`.
+`MonorepoStepIO` is deprecated and retained only as the lower-level step type used by built-ins,
+tests, and internal composition. It is no longer the supported build-facing customization path
+for changing the monorepo pipeline. Prefer hooks, resource hooks, and grouped hook/policy
+settings in `build.sbt`.

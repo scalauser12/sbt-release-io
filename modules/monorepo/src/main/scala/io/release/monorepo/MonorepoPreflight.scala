@@ -9,6 +9,7 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.steps.{MonorepoReleaseSteps, MonorepoVcsSteps}
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoPreflight {
 
   private val InitializeVcsStep          = MonorepoReleaseSteps.initializeVcs.name

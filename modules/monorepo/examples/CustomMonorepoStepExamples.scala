@@ -9,7 +9,6 @@ import io.release.monorepo.MonorepoProjectResourceHookIO
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoReleasePluginLike
 import io.release.monorepo.MonorepoResourceHooks
-import io.release.monorepo.MonorepoStepIO
 import sbt.*
 
 /** Examples showing the supported hook/policy monorepo customization path.
@@ -21,7 +20,9 @@ import sbt.*
   * '''How to read this file (recommended path):'''
   *   1. Start with `firstHookSettings` for an immediate hook-based setup.
   *   2. Move to `customHookSettings` for a richer global/per-project example.
-  *   3. See `MyMonorepoRelease` for advanced resource-aware customization.
+  *   3. Use `DeprecatedStepExamples` only when maintaining built-ins, tests, or other
+  *      internal integrations that still depend on the deprecated lower-level step DSL.
+  *   4. See `MyMonorepoRelease` for advanced resource-aware customization.
   *
   * Plugin objects like `MyMonorepoRelease` must live in `project/` (as `.scala` files)
   * to be discovered by sbt. The objects below are examples to copy there.
@@ -143,77 +144,86 @@ object CustomMonorepoStepExamples {
       IO.pure(ctx.withMetadata(releaseCompletedKey, true))
     )
 
-  // --- Global step: print a release summary ---
+  /** Lower-level `MonorepoStepIO` examples retained only for built-ins, tests, and other
+    * internal integrations. Prefer monorepo hooks and resource hooks for build-facing
+    * customization.
+    */
+  @scala.annotation.nowarn("cat=deprecation")
+  object DeprecatedStepExamples {
+    import _root_.io.release.monorepo.MonorepoStepIO
 
-  val printSummary: MonorepoStepIO = MonorepoStepIO
-    .global("print-summary")
-    .executeAction(ctx =>
-      IO.println(
-        s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}"
-      )
-    )
+    // --- Global step: print a release summary ---
 
-  // --- Global step: validate branch name ---
-
-  val validateBranch: MonorepoStepIO = MonorepoStepIO
-    .global("validate-branch")
-    .execute(ctx =>
-      ctx.vcs match {
-        case Some(vcs) =>
-          for {
-            branch <- vcs.currentBranch
-            result <- if (branch == "main" || branch == "master") IO.pure(ctx)
-                      else
-                        IO.raiseError(
-                          new RuntimeException(
-                            s"Releases must be done from main/master, not '$branch'"
-                          )
-                        )
-          } yield result
-        case None      =>
-          IO.raiseError(new RuntimeException("VCS not initialized"))
-      }
-    )
-
-  // --- Per-project step: check for a required file ---
-
-  val checkReadmeExists: MonorepoStepIO = MonorepoStepIO
-    .perProject("check-readme")
-    .execute((ctx, project) =>
-      if (!(new java.io.File(project.baseDir, "README.md")).exists())
-        IO.raiseError(
-          new RuntimeException(
-            s"Project '${project.name}' is missing README.md at ${project.baseDir}"
-          )
+    val printSummary: MonorepoStepIO = MonorepoStepIO
+      .global("print-summary")
+      .executeAction(ctx =>
+        IO.println(
+          s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}"
         )
-      else IO.pure(ctx)
-    )
+      )
 
-  // --- Per-project step: generate a changelog per project ---
-  // Intentionally simple demo logic: append-only and not fully idempotent.
+    // --- Global step: validate branch name ---
 
-  val generateChangelog: MonorepoStepIO = MonorepoStepIO
-    .perProject("generate-changelog")
-    .executeAction((ctx, project) =>
-      project.versions match {
-        case Some((releaseVer, _)) =>
-          IO.blocking {
-            val file     = project.baseDir / "CHANGELOG.md"
-            val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
-            val existing =
-              if (file.exists()) sbt.IO.read(file) else s"# ${project.name} Changelog\n"
-            sbt.IO.write(file, existing + entry)
-          } *> IO.println(s"[monorepo] Updated CHANGELOG.md for ${project.name} $releaseVer")
-        case None                  =>
-          IO.println(s"[monorepo] Skipping changelog for ${project.name} — no versions set")
-      }
-    )
+    val validateBranch: MonorepoStepIO = MonorepoStepIO
+      .global("validate-branch")
+      .execute(ctx =>
+        ctx.vcs match {
+          case Some(vcs) =>
+            for {
+              branch <- vcs.currentBranch
+              result <- if (branch == "main" || branch == "master") IO.pure(ctx)
+                        else
+                          IO.raiseError(
+                            new RuntimeException(
+                              s"Releases must be done from main/master, not '$branch'"
+                            )
+                          )
+            } yield result
+          case None      =>
+            IO.raiseError(new RuntimeException("VCS not initialized"))
+        }
+      )
 
-  // --- Global step: store a custom attribute ---
+    // --- Per-project step: check for a required file ---
 
-  val markReleaseDone: MonorepoStepIO = MonorepoStepIO
-    .global("mark-done")
-    .execute(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
+    val checkReadmeExists: MonorepoStepIO = MonorepoStepIO
+      .perProject("check-readme")
+      .execute((ctx, project) =>
+        if (!(new java.io.File(project.baseDir, "README.md")).exists())
+          IO.raiseError(
+            new RuntimeException(
+              s"Project '${project.name}' is missing README.md at ${project.baseDir}"
+            )
+          )
+        else IO.pure(ctx)
+      )
+
+    // --- Per-project step: generate a changelog per project ---
+    // Intentionally simple demo logic: append-only and not fully idempotent.
+
+    val generateChangelog: MonorepoStepIO = MonorepoStepIO
+      .perProject("generate-changelog")
+      .executeAction((ctx, project) =>
+        project.versions match {
+          case Some((releaseVer, _)) =>
+            IO.blocking {
+              val file     = project.baseDir / "CHANGELOG.md"
+              val entry    = s"\n## $releaseVer\n\n- Release $releaseVer\n"
+              val existing =
+                if (file.exists()) sbt.IO.read(file) else s"# ${project.name} Changelog\n"
+              sbt.IO.write(file, existing + entry)
+            } *> IO.println(s"[monorepo] Updated CHANGELOG.md for ${project.name} $releaseVer")
+          case None                  =>
+            IO.println(s"[monorepo] Skipping changelog for ${project.name} — no versions set")
+        }
+      )
+
+    // --- Global step: store a custom attribute ---
+
+    val markReleaseDone: MonorepoStepIO = MonorepoStepIO
+      .global("mark-done")
+      .execute(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
+  }
 
 }
 

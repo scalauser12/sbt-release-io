@@ -8,6 +8,7 @@ import sbt.AttributeKey
 import sbt.Keys
 import sbt.taskKey
 
+@scala.annotation.nowarn("cat=deprecation")
 class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
 
   test("compose - cross-build logs include each configured Scala version") {

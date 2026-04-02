@@ -37,15 +37,17 @@ Both the `validate` and `execute` phases are cross-built. This differs from sbt-
 
 ### Custom steps
 
-Opt in to cross-building with the constructor parameter or the builder API:
+The lower-level `ReleaseStepIO` DSL is deprecated. For build-facing customization, prefer
+hooks. Hooks attached to the publish phase inherit its cross-build behavior when `cross` (or
+`releaseIOBehaviorCrossBuild := true`) is enabled:
 
 ```scala
-// Constructor
-ReleaseStepIO(name = "my-step", execute = ..., enableCrossBuild = true)
-
-// Builder
-ReleaseStepIO.step("my-step").withCrossBuild.execute(ctx => ...)
+releaseIOHooksBeforePublish += ReleaseHookIO.action("verify-publish-env") { ctx =>
+  IO.blocking(ctx.state.log.info("[release-io] verifying publish environment"))
+}
 ```
+
+Use `ReleaseResourceHookIO` in a custom plugin when the hook logic needs a shared resource.
 
 ## CI/CD integration
 

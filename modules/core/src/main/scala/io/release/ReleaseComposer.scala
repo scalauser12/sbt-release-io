@@ -20,6 +20,7 @@ import sbt.{internal as _, *}
   * `remainingCommands` for the sentinel, marks the context as failed, and re-arms
   * `onFailure`. Once failed, subsequent steps are skipped.
   */
+@scala.annotation.nowarn("cat=deprecation")
 private[release] object ReleaseComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Core

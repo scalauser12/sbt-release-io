@@ -17,6 +17,7 @@ import sbt.{internal as _, *}
   * Public plugin extension points stay on [[MonorepoReleasePluginLike]]; this object owns the
   * private command plumbing so the plugin trait can read top-down.
   */
+@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoCommandExecution {
 
   final case class CommandRuntime[T](
