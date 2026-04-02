@@ -215,4 +215,148 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       hook.validate(ctx).map(result => assertEquals(result, ()))
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // ReleaseResourceHooks.materialize
+  // ---------------------------------------------------------------------------
+
+  test(
+    "ReleaseResourceHooks.materialize - with Some(resource) hook calls through to resource function"
+  ) {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        val resourceHook = ReleaseResourceHookIO.action[String]("before-tag") { resource => _ =>
+          log.update(_ :+ resource)
+        }
+        val hooks        = ReleaseResourceHooks[String](beforeTagHooks = Seq(resourceHook))
+        val config       = ReleaseResourceHooks.materialize(hooks, Some("my-resource"))
+
+        config.beforeTagHooks.head.execute(ctx).flatMap { result =>
+          log.get.map { events =>
+            assertEquals(events, List("my-resource"))
+            assertEquals(result, ctx)
+          }
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHooks.materialize - materializes after-clean-check hooks") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        val resourceHook = ReleaseResourceHookIO.action[String]("after-clean-check") {
+          resource => _ =>
+            log.update(_ :+ resource)
+        }
+        val hooks        = ReleaseResourceHooks[String](afterCleanCheckHooks = Seq(resourceHook))
+        val config       = ReleaseResourceHooks.materialize(hooks, Some("my-resource"))
+
+        config.afterCleanCheckHooks.head.execute(ctx).flatMap { result =>
+          log.get.map { events =>
+            assertEquals(events, List("my-resource"))
+            assertEquals(result, ctx)
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "ReleaseResourceHooks.materialize - with None hook returns context unchanged without calling resource function"
+  ) {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        val resourceHook = ReleaseResourceHookIO.action[String]("before-tag") { _ => _ =>
+          log.update(_ :+ "should-not-run")
+        }
+        val hooks        = ReleaseResourceHooks[String](beforeTagHooks = Seq(resourceHook))
+        val config       = ReleaseResourceHooks.materialize(hooks, None)
+
+        config.beforeTagHooks.head.execute(ctx).flatMap { result =>
+          log.get.map { events =>
+            assertEquals(events, Nil)
+            assertEquals(result, ctx)
+          }
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHooks.materialize - preserves hook names during materialization") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
+      val beforeTagHook = ReleaseResourceHookIO.io[String]("named-before-tag-hook")(_ => IO.pure)
+      val afterCleanHook =
+        ReleaseResourceHookIO.io[String]("named-after-clean-hook")(_ => IO.pure)
+      val hooks          =
+        ReleaseResourceHooks[String](
+          beforeTagHooks = Seq(beforeTagHook),
+          afterCleanCheckHooks = Seq(afterCleanHook)
+        )
+      val config         = ReleaseResourceHooks.materialize(hooks, None)
+
+      IO {
+        assertEquals(config.beforeTagHooks.head.name, "named-before-tag-hook")
+        assertEquals(config.afterCleanCheckHooks.head.name, "named-after-clean-hook")
+      }
+    }
+  }
+
+  test("ReleaseResourceHooks.materialize - all boolean policies default to true") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
+      val config = ReleaseResourceHooks.materialize(ReleaseResourceHooks.empty[String], None)
+
+      IO {
+        assert(config.enableSnapshotDependenciesCheck)
+        assert(config.enableRunClean)
+        assert(config.enableRunTests)
+        assert(config.enableTagging)
+        assert(config.enablePublish)
+        assert(config.enablePush)
+      }
+    }
+  }
+
+  test("ReleaseResourceHooks.materialize - preserves validate function from resource hook") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        val resourceHook = ReleaseResourceHookIO[String](
+          name = "hook-with-validate",
+          execute = _ => IO.pure,
+          validate = _ => log.update(_ :+ "validated")
+        )
+        val hooks        = ReleaseResourceHooks[String](beforeTagHooks = Seq(resourceHook))
+        val config       = ReleaseResourceHooks.materialize(hooks, Some("res"))
+
+        config.beforeTagHooks.head.validate(ctx).flatMap { _ =>
+          log.get.map(events => assertEquals(events, List("validated")))
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHooks.materialize - empty hooks produce empty hook sequences") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
+      val config = ReleaseResourceHooks.materialize(ReleaseResourceHooks.empty[String], None)
+
+      IO {
+        assert(config.afterCleanCheckHooks.isEmpty)
+        assert(config.beforeVersionResolutionHooks.isEmpty)
+        assert(config.afterVersionResolutionHooks.isEmpty)
+        assert(config.beforeReleaseVersionWriteHooks.isEmpty)
+        assert(config.afterReleaseVersionWriteHooks.isEmpty)
+        assert(config.beforeReleaseCommitHooks.isEmpty)
+        assert(config.afterReleaseCommitHooks.isEmpty)
+        assert(config.beforeTagHooks.isEmpty)
+        assert(config.afterTagHooks.isEmpty)
+        assert(config.beforePublishHooks.isEmpty)
+        assert(config.afterPublishHooks.isEmpty)
+        assert(config.beforeNextVersionWriteHooks.isEmpty)
+        assert(config.afterNextVersionWriteHooks.isEmpty)
+        assert(config.beforeNextCommitHooks.isEmpty)
+        assert(config.afterNextCommitHooks.isEmpty)
+        assert(config.beforePushHooks.isEmpty)
+        assert(config.afterPushHooks.isEmpty)
+      }
+    }
+  }
 }

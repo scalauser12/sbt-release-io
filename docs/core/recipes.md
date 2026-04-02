@@ -38,16 +38,16 @@ Both the `validate` and `execute` phases are cross-built. This differs from sbt-
 ### Custom steps
 
 The lower-level `ReleaseStepIO` DSL is deprecated. For build-facing customization, prefer
-hooks. Hooks attached to the publish phase inherit its cross-build behavior when `cross` (or
-`releaseIOBehaviorCrossBuild := true`) is enabled:
+hooks. Only hooks attached to the `publish-artifacts` phase inherit cross-build when `cross`
+(or `releaseIOBehaviorCrossBuild := true`) is enabled. Hooks around all other lifecycle
+phases still run once per release. `ReleaseResourceHookIO` follows the same phase-level rule
+as plain hooks:
 
 ```scala
 releaseIOHooksBeforePublish += ReleaseHookIO.action("verify-publish-env") { ctx =>
   IO.blocking(ctx.state.log.info("[release-io] verifying publish environment"))
 }
 ```
-
-Use `ReleaseResourceHookIO` in a custom plugin when the hook logic needs a shared resource.
 
 ## CI/CD integration
 

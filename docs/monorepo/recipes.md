@@ -40,8 +40,10 @@ Both the `validate` and `execute` phases are cross-built.
 ### Custom steps
 
 The lower-level `MonorepoStepIO` DSL is deprecated. For build-facing customization, prefer
-hooks. Per-project hooks attached to the publish phase inherit its cross-build behavior when
-`cross` (or `releaseIOMonorepoBehaviorCrossBuild := true`) is enabled:
+hooks. Only per-project hooks attached to the `publish-artifacts` phase inherit cross-build
+when `cross` (or `releaseIOMonorepoBehaviorCrossBuild := true`) is enabled. Per-project
+hooks around all other lifecycle phases still run once per project. Resource hooks follow
+the same phase-level rule as plain hooks:
 
 ```scala
 releaseIOMonorepoHooksBeforePublish +=
@@ -49,9 +51,6 @@ releaseIOMonorepoHooksBeforePublish +=
     IO.println(s"[monorepo] verifying publish environment for ${project.name}")
   }
 ```
-
-Use the monorepo resource-hook APIs in a custom plugin when the hook logic needs a shared
-resource.
 
 ## CI/CD integration
 
