@@ -33,14 +33,17 @@ case class ReleaseStepIO private (
     private val rawValidateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = None
 ) {
 
-  // Keep the caller-provided validation inputs raw so apply(...) and copy(...) preserve the same
-  // invariants without double-wrapping already-composed validation functions.
+  // Keep the caller-provided validation inputs raw so apply(...), copy(...), and public
+  // round-tripping preserve the same invariants without double-wrapping already-composed
+  // validation functions.
   private lazy val normalizedValidation =
     StepKernel.normalizedValidationPair(rawValidate, rawValidateWithContext)
 
+  // Public validate exposes the normalized IO[Unit] view.
   def validate: ReleaseContext => IO[Unit] =
     normalizedValidation._1
 
+  // Public validateWithContext preserves the raw stored threaded hook for round-trips.
   def validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] =
     rawValidateWithContext
 

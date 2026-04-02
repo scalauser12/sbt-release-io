@@ -114,14 +114,19 @@ object MonorepoStepIO {
       private val rawValidateWithContext: Option[MonorepoContext => IO[MonorepoContext]] = None
   ) extends MonorepoStepIO {
 
+    // Keep the caller-provided validation inputs raw so apply(...), copy(...), and public
+    // round-tripping preserve the same invariants without double-wrapping already-composed
+    // validation functions.
     private lazy val normalizedValidation =
       StepKernel.normalizedValidationPair[MonorepoContext](rawValidate, rawValidateWithContext)
 
+    // Public validate exposes the normalized IO[Unit] view.
     def validate: MonorepoContext => IO[Unit] =
       normalizedValidation._1
 
+    // Public validateWithContext preserves the raw stored threaded hook for round-trips.
     def validateWithContext: Option[MonorepoContext => IO[MonorepoContext]] =
-      normalizedValidation._2
+      rawValidateWithContext
 
     def copy(
         name: String = this.name,
@@ -147,7 +152,7 @@ object MonorepoStepIO {
     }
 
     private[monorepo] def threadedValidation: MonorepoContext => IO[MonorepoContext] =
-      validateWithContext.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
+      normalizedValidation._2.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
   }
 
   object Global {
@@ -175,9 +180,9 @@ object MonorepoStepIO {
         (
           step.name,
           step.execute,
-          step.validate,
+          step.rawValidate,
           step.isSelectionBoundary,
-          step.validateWithContext
+          step.rawValidateWithContext
         )
       )
   }
@@ -200,19 +205,24 @@ object MonorepoStepIO {
       ] = None
   ) extends MonorepoStepIO {
 
+    // Keep the caller-provided validation inputs raw so apply(...), copy(...), and public
+    // round-tripping preserve the same invariants without double-wrapping already-composed
+    // validation functions.
     private lazy val normalizedValidation =
       StepKernel.normalizedValidationPair[MonorepoContext, ProjectReleaseInfo](
         rawValidate,
         rawValidateWithContext
       )
 
+    // Public validate exposes the normalized IO[Unit] view.
     def validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
       normalizedValidation._1
 
+    // Public validateWithContext preserves the raw stored threaded hook for round-trips.
     def validateWithContext: Option[
       (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
     ] =
-      normalizedValidation._2
+      rawValidateWithContext
 
     def copy(
         name: String = this.name,
@@ -249,7 +259,7 @@ object MonorepoStepIO {
         ctx: MonorepoContext,
         project: ProjectReleaseInfo
     ): IO[MonorepoContext] =
-      validateWithContext match {
+      normalizedValidation._2 match {
         case Some(f) => f(ctx, project)
         case None    => this.validate.apply(ctx, project).as(ctx)
       }
@@ -281,9 +291,9 @@ object MonorepoStepIO {
         (
           step.name,
           step.execute,
-          step.validate,
+          step.rawValidate,
           step.enableCrossBuild,
-          step.validateWithContext
+          step.rawValidateWithContext
         )
       )
   }

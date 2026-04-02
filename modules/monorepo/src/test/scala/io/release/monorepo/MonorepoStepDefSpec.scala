@@ -95,6 +95,66 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     }
   }
 
+  test("Global.validateWithContext getter returns the stored raw threaded hook") {
+    contextResource.use { ctx =>
+      val key = AttributeKey[String]("global-validation-context-getter")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO.Global(
+          name = "validated-context-getter",
+          execute = currentCtx => IO.pure(currentCtx),
+          validate = _ => events.update(_ :+ "validate"),
+          validateWithContext = Some(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
+          )
+        )
+
+        step.validateWithContext match {
+          case Some(validateWithContext) =>
+            validateWithContext(ctx).flatMap { result =>
+              events.get.map { obs =>
+                assertEquals(obs, List("context"))
+                assertEquals(result.metadata(key), Some("ok"))
+              }
+            }
+          case None                      =>
+            IO.raiseError(new AssertionError("expected validateWithContext to be defined"))
+        }
+      }
+    }
+  }
+
+  test("Global.unapply/apply round-trips raw validation without double-running") {
+    contextResource.use { ctx =>
+      val key = AttributeKey[String]("global-round-trip")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO
+          .global("global-round-trip")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
+          )
+          .validateOnly
+
+        MonorepoStepIO.Global.unapply(step) match {
+          case Some((name, execute, validate, isSelectionBoundary, validateWithContext)) =>
+            val rebuilt =
+              MonorepoStepIO.Global(name, execute, validate, isSelectionBoundary, validateWithContext)
+
+            rebuilt.threadedValidation(ctx).flatMap { result =>
+              events.get.map { obs =>
+                assertEquals(obs, List("validate", "context"))
+                assertEquals(result.metadata(key), Some("ok"))
+              }
+            }
+          case None                                                                    =>
+            IO.raiseError(new AssertionError("expected Global.unapply to succeed"))
+        }
+      }
+    }
+  }
+
   test("withValidationContext wires threaded validation function on PerProject") {
     contextResource.use { ctx =>
       val key     = AttributeKey[String]("project-validation-context")
@@ -125,6 +185,80 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
 
         val validate = step.validate
         validate(ctx, project) *> events.get.map(obs => assertEquals(obs, List("context:core")))
+      }
+    }
+  }
+
+  test("PerProject.validateWithContext getter returns the stored raw threaded hook") {
+    contextResource.use { ctx =>
+      val key     = AttributeKey[String]("project-validation-context-getter")
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO.PerProject(
+          name = "validated-pp-getter",
+          execute = (currentCtx, _) => IO.pure(currentCtx),
+          validate = (_, currentProject) =>
+            events.update(_ :+ s"validate:${currentProject.name}"),
+          validateWithContext = Some((currentCtx, currentProject) =>
+            events
+              .update(_ :+ s"context:${currentProject.name}")
+              .as(currentCtx.withMetadata(key, currentProject.name))
+          )
+        )
+
+        step.validateWithContext match {
+          case Some(validateWithContext) =>
+            validateWithContext(ctx, project).flatMap { result =>
+              events.get.map { obs =>
+                assertEquals(obs, List("context:core"))
+                assertEquals(result.metadata(key), Some("core"))
+              }
+            }
+          case None                      =>
+            IO.raiseError(new AssertionError("expected validateWithContext to be defined"))
+        }
+      }
+    }
+  }
+
+  test("PerProject.unapply/apply round-trips raw validation without double-running") {
+    contextResource.use { ctx =>
+      val key     = AttributeKey[String]("project-round-trip")
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = MonorepoStepIO
+          .perProject("project-round-trip")
+          .withValidation((_, currentProject) =>
+            events.update(_ :+ s"validate:${currentProject.name}")
+          )
+          .withValidationContext((currentCtx, currentProject) =>
+            events
+              .update(_ :+ s"context:${currentProject.name}")
+              .as(currentCtx.withMetadata(key, currentProject.name))
+          )
+          .validateOnly
+
+        MonorepoStepIO.PerProject.unapply(step) match {
+          case Some((name, execute, validate, enableCrossBuild, validateWithContext)) =>
+            val rebuilt = MonorepoStepIO.PerProject(
+              name,
+              execute,
+              validate,
+              enableCrossBuild,
+              validateWithContext
+            )
+
+            rebuilt.threadedValidation(ctx, project).flatMap { result =>
+              events.get.map { obs =>
+                assertEquals(obs, List("validate:core", "context:core"))
+                assertEquals(result.metadata(key), Some("core"))
+              }
+            }
+          case None                                                                   =>
+            IO.raiseError(new AssertionError("expected PerProject.unapply to succeed"))
+        }
       }
     }
   }

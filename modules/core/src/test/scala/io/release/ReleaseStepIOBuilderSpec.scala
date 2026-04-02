@@ -149,6 +149,35 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
+  test("step.validateWithContext getter returns the stored raw threaded hook") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key = sbt.AttributeKey[String]("validation-context-getter")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step = ReleaseStepIO(
+          name = "context-validation-getter",
+          execute = currentCtx => IO.pure(currentCtx),
+          validate = _ => events.update(_ :+ "validate"),
+          validateWithContext = Some(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
+          )
+        )
+
+        step.validateWithContext match {
+          case Some(validateWithContext) =>
+            validateWithContext(ctx).flatMap { result =>
+              events.get.map { obs =>
+                assertEquals(obs, List("context"))
+                assertEquals(result.metadata(key), Some("ok"))
+              }
+            }
+          case None                      =>
+            IO.raiseError(new AssertionError("expected validateWithContext to be defined"))
+        }
+      }
+    }
+  }
+
   test("step - default validate is a no-op") {
     assertNoOpValidate(
       ReleaseStepIO
