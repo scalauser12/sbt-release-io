@@ -48,32 +48,19 @@ case class ReleaseStepIO private (
       validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] =
         ReleaseStepIO.UnspecifiedValidateWithContext
   ): ReleaseStepIO = {
-    val validateWasProvided            = !(validate eq ReleaseStepIO.UnspecifiedValidate)
-    val validateWithContextWasProvided =
-      !(validateWithContext eq ReleaseStepIO.UnspecifiedValidateWithContext)
+    val (nextRawValidate, nextRawValidateWithContext) =
+      StepKernel.resolveSingleCopyFields(
+        currentRawValidate = rawValidate,
+        currentRawValidateWithContext = rawValidateWithContext,
+        currentValidate = this.validate,
+        currentNormalizedValidateWithContext = normalizedValidation._2,
+        requestedValidate = validate,
+        unspecifiedValidate = ReleaseStepIO.UnspecifiedValidate,
+        requestedValidateWithContext = validateWithContext,
+        unspecifiedValidateWithContext = ReleaseStepIO.UnspecifiedValidateWithContext
+      )
 
-    if (!validateWasProvided && !validateWithContextWasProvided)
-      new ReleaseStepIO(name, execute, rawValidate, enableCrossBuild, rawValidateWithContext)
-    else if (validateWasProvided && !validateWithContextWasProvided)
-      new ReleaseStepIO(name, execute, validate, enableCrossBuild, normalizedValidation._2)
-    else if (!validateWasProvided && validateWithContextWasProvided)
-      validateWithContext match {
-        case None       =>
-          new ReleaseStepIO(name, execute, this.validate, enableCrossBuild, None)
-        case Some(next) =>
-          val preservedValidation =
-            normalizedValidation._2.getOrElse(StepKernel.asThreadedValidation(this.validate))
-          new ReleaseStepIO(
-            name = name,
-            execute = execute,
-            rawValidate = (_ctx: ReleaseContext) => IO.unit,
-            enableCrossBuild = enableCrossBuild,
-            rawValidateWithContext =
-              StepKernel.appendThreadedValidation(Some(preservedValidation), next)
-          )
-      }
-    else
-      new ReleaseStepIO(name, execute, validate, enableCrossBuild, validateWithContext)
+    new ReleaseStepIO(name, execute, nextRawValidate, enableCrossBuild, nextRawValidateWithContext)
   }
 
   private[release] def threadedValidation: ReleaseContext => IO[ReleaseContext] =
@@ -90,8 +77,7 @@ object ReleaseStepIO {
         new IllegalStateException("ReleaseStepIO.copy validate sentinel should never execute")
       )
 
-  private[release] val UnspecifiedValidateWithContextFn:
-    ReleaseContext => IO[ReleaseContext] =
+  private[release] val UnspecifiedValidateWithContextFn: ReleaseContext => IO[ReleaseContext] =
     (_ctx: ReleaseContext) =>
       IO.raiseError(
         new IllegalStateException(
@@ -99,8 +85,8 @@ object ReleaseStepIO {
         )
       )
 
-  private[release] val UnspecifiedValidateWithContext:
-    Option[ReleaseContext => IO[ReleaseContext]] =
+  private[release] val UnspecifiedValidateWithContext
+      : Option[ReleaseContext => IO[ReleaseContext]] =
     Some(UnspecifiedValidateWithContextFn)
 
   private[release] def build(

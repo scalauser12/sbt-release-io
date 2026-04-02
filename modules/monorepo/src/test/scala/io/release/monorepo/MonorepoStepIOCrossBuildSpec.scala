@@ -82,7 +82,9 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
             projectScalaVersionOf(c.state, project.ref).flatMap {
               case Some(version) => observed.update(_ :+ version).as(c)
               case None          =>
-                IO.raiseError(new RuntimeException("missing project scalaVersion during cross-build"))
+                IO.raiseError(
+                  new RuntimeException("missing project scalaVersion during cross-build")
+                )
             },
           enableCrossBuild = true
         )
@@ -220,13 +222,13 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
         for {
-          restoredVersion <- scalaVersionOf(result.state)
-          restoredCore    <- projectScalaVersionOf(result.state, core.ref)
+          restoredVersion  <- scalaVersionOf(result.state)
+          restoredCore     <- projectScalaVersionOf(result.state, core.ref)
           crossInvocations <-
             MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "cross-invocations.txt"))
-          plainVersions   <- MonorepoSpecSupport.readNonEmptyLines(
-                               new File(core.baseDir, "plain-project-version.txt")
-                             )
+          plainVersions    <- MonorepoSpecSupport.readNonEmptyLines(
+                                new File(core.baseDir, "plain-project-version.txt")
+                              )
         } yield {
           assertEquals(
             crossInvocations,

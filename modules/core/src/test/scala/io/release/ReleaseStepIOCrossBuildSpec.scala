@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.SbtCompat
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.AttributeKey
@@ -10,6 +9,53 @@ import sbt.Keys
 import sbt.taskKey
 
 class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
+
+  test("compose - cross-build logs include each configured Scala version") {
+    TestSupport.tempDirResource("release-step-io-cross-log").use { dir =>
+      IO.blocking {
+        val buffered = TestSupport.bufferedState(dir)
+        val state    = sbt.TestBuildState(
+          baseState = buffered.state,
+          baseDir = dir,
+          projects = Seq(
+            sbt
+              .Project("root", dir)
+              .settings(
+                Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
+                Keys.crossScalaVersions := Seq(
+                  TestSupport.CurrentScalaVersion,
+                  TestSupport.alternateScalaVersion
+                )
+              )
+          ),
+          currentProjectId = Some("root")
+        )
+        (ReleaseContext(state = state), buffered.consoleBuffer)
+      }.flatMap { case (ctx, consoleBuffer) =>
+        val step = ReleaseStepIO(
+          name = "cross-step",
+          execute = currentCtx => IO.pure(currentCtx),
+          enableCrossBuild = true
+        )
+
+        ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { _ =>
+          IO.blocking {
+            val log = consoleBuffer.toString("UTF-8")
+            assert(
+              log.contains(
+                s"Cross-building with Scala ${TestSupport.CurrentScalaVersion}"
+              )
+            )
+            assert(
+              log.contains(
+                s"Cross-building with Scala ${TestSupport.alternateScalaVersion}"
+              )
+            )
+          }
+        }
+      }
+    }
+  }
 
   test(
     "compose - cross-build step runs once for a single configured Scala version and restores the entry version"
@@ -164,27 +210,24 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
           name = "cross-step",
           validate =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"cross-validate:$v")),
-          execute =
-            c =>
-              scalaVersionOf(c.state).flatMap(v =>
-                observed.update(_ :+ s"cross-execute:$v").as(c.withMetadata(metadataKey, "kept"))
-              ),
+          execute = c =>
+            scalaVersionOf(c.state).flatMap(v =>
+              observed.update(_ :+ s"cross-execute:$v").as(c.withMetadata(metadataKey, "kept"))
+            ),
           enableCrossBuild = true
         )
         val plainStep = ReleaseStepIO(
           name = "plain-step",
-          validate =
-            c =>
-              scopedScalaVersionOf(c.state)
-                .flatMap(v => observed.update(_ :+ s"plain-validate:$v")),
-          execute =
-            c =>
-              scopedScalaVersionOf(c.state).flatMap { v =>
-                if (c.metadata(metadataKey).contains("kept"))
-                  observed.update(_ :+ s"plain-execute:$v").as(c)
-                else
-                  IO.raiseError(new RuntimeException("missing metadata after restore"))
-              }
+          validate = c =>
+            scopedScalaVersionOf(c.state)
+              .flatMap(v => observed.update(_ :+ s"plain-validate:$v")),
+          execute = c =>
+            scopedScalaVersionOf(c.state).flatMap { v =>
+              if (c.metadata(metadataKey).contains("kept"))
+                observed.update(_ :+ s"plain-execute:$v").as(c)
+              else
+                IO.raiseError(new RuntimeException("missing metadata after restore"))
+            }
         )
 
         scopedScalaVersionOf(ctx.state).flatMap { initialVersion =>
@@ -327,7 +370,8 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
             assert(result.failed)
             assertEquals(executedVersions, List(TestSupport.CurrentScalaVersion))
             assert(
-              result.failureCause.exists(_.getMessage.contains("reported failure via FailureCommand"))
+              result.failureCause
+                .exists(_.getMessage.contains("reported failure via FailureCommand"))
             )
             assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
           }

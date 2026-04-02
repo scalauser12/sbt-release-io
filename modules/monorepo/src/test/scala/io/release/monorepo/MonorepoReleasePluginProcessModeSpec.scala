@@ -124,7 +124,9 @@ class MonorepoReleasePluginProcessModeSpec
     }
   }
 
-  test("commandRuntime forwards an inherited custom plugin's behavior overrides into flag resolution") {
+  test(
+    "commandRuntime forwards an inherited custom plugin's behavior overrides into flag resolution"
+  ) {
     stateResource(
       "monorepo-plugin-inherited-behavior-overrides",
       InheritedBehaviorOverridePlugin

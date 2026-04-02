@@ -395,14 +395,14 @@ class CorePreflightSpec extends CatsEffectSuite {
       (if (includeExplicitTagName) Seq(io.release.ReleaseIO.releaseIOVcsTagName := "v0.1.0")
        else
          Seq(
-           sbt.ThisBuild / sbt.Keys.version                  := "0.1.0-SNAPSHOT",
-           sbt.Keys.version                                  := "0.1.0-SNAPSHOT",
-           io.release.ReleaseIO.releaseIORuntimeCurrentVersion := {
+           sbt.ThisBuild / sbt.Keys.version                                     := "0.1.0-SNAPSHOT",
+           sbt.Keys.version                                                     := "0.1.0-SNAPSHOT",
+           io.release.ReleaseIO.releaseIORuntimeCurrentVersion                  := {
              if (io.release.ReleaseIO.releaseIOVersioningUseGlobal.value)
                (sbt.ThisBuild / sbt.Keys.version).value
              else sbt.Keys.version.value
            },
-           io.release.ReleaseIO.releaseIOVcsTagName            :=
+           io.release.ReleaseIO.releaseIOVcsTagName                             :=
              s"v${io.release.ReleaseIO.releaseIORuntimeCurrentVersion.value}"
          ))
 

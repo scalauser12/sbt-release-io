@@ -25,16 +25,16 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
             Project("root", dir)
               .aggregate(LocalProject("core"))
               .settings(
-                scalaVersion := TestSupport.CurrentScalaVersion,
-                name := "root"
+                scalaVersion     := TestSupport.CurrentScalaVersion,
+                name             := "root"
               ),
             Project("core", coreBase).settings(
-              scalaVersion := TestSupport.CurrentScalaVersion,
+              scalaVersion       := TestSupport.CurrentScalaVersion,
               crossScalaVersions := Seq(
                 TestSupport.CurrentScalaVersion,
                 TestSupport.alternateScalaVersion
               ),
-              name := "core"
+              name               := "core"
             )
           ),
           currentProjectId = Some("core")
@@ -53,7 +53,7 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
           projects = Seq(
             Project("root", dir)
               .aggregate(LocalProject("core"))
-              .settings(name := "root"),
+              .settings(name                        := "root"),
             Project("core", coreBase).settings(name := "core")
           ),
           currentProjectId = Some("core")
@@ -84,9 +84,9 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
   test(
     "switchScalaVersion plus restoreEntryScalaSession restore project-scoped Scala settings and keep current non-Scala session settings"
   ) {
-    val retainedName   = "core-from-current-session"
-    val overrideScala  = TestSupport.alternateScalaVersion
-    val switchedScala  = TestSupport.CurrentScalaVersion
+    val retainedName  = "core-from-current-session"
+    val overrideScala = TestSupport.alternateScalaVersion
+    val switchedScala = TestSupport.CurrentScalaVersion
 
     stateResource("cross-build-support-session-restore").use { baseState =>
       val coreRef        = SbtRuntime.extracted(baseState).currentRef

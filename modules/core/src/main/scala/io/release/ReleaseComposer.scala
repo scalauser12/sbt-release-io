@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.CrossBuildExecution
 import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
@@ -22,14 +23,6 @@ import sbt.{internal as _, *}
 private[release] object ReleaseComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Core
-
-  private[release] def attachSuppressed(
-      original: Throwable,
-      suppressed: Throwable
-  ): Throwable = {
-    original.addSuppressed(suppressed)
-    original
-  }
 
   /** Compose a sequence of steps into a two-phase IO program.
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
@@ -98,7 +91,7 @@ private[release] object ReleaseComposer {
         CrossBuildSupport.distinctCrossScalaVersions(extracted.get(crossScalaVersions))
       (crossVersions, entryState)
     }.flatMap { case (crossVersions, entryState) =>
-      def switchTo(version: String)(currentCtx: ReleaseContext): IO[ReleaseContext] =
+      def switchToVersion(currentCtx: ReleaseContext, version: String): IO[ReleaseContext] =
         SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
 
       def restoreEntry(currentCtx: ReleaseContext): IO[ReleaseContext] =
@@ -106,29 +99,26 @@ private[release] object ReleaseComposer {
           .restoreEntryScalaSession(entryState, currentCtx.state)
           .map(currentCtx.withState)
 
-      def restoreOnError(currentCtx: ReleaseContext, err: Throwable): IO[ReleaseContext] =
-        restoreEntry(currentCtx).attempt.flatMap {
-          case Right(_)         => IO.raiseError(err)
-          case Left(restoreErr) =>
-            IO.blocking {
-              currentCtx.state.log.error(
-                s"$LogPrefix Failed to restore the entry Scala settings after a cross-build failure: " +
-                  s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
-              )
-              attachSuppressed(err, restoreErr)
-            } *> IO.raiseError(err)
+      def logRestoreAfterActionFailure(
+          currentCtx: ReleaseContext,
+          restoreErr: Throwable
+      ): IO[Unit] =
+        IO.blocking {
+          currentCtx.state.log.error(
+            s"$LogPrefix Failed to restore the entry Scala settings after a cross-build failure: " +
+              s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
+          )
         }
 
-      def restoreAfterCompletion(currentCtx: ReleaseContext): IO[ReleaseContext] =
-        restoreEntry(currentCtx).attempt.flatMap {
-          case Right(restoredCtx) => IO.pure(restoredCtx)
-          case Left(restoreErr)   =>
-            IO.blocking {
-              currentCtx.state.log.error(
-                s"$LogPrefix Failed to restore the entry Scala settings after cross-build completion: " +
-                  s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
-              )
-            } *> IO.raiseError(restoreErr)
+      def logRestoreAfterCompletionFailure(
+          currentCtx: ReleaseContext,
+          restoreErr: Throwable
+      ): IO[Unit] =
+        IO.blocking {
+          currentCtx.state.log.error(
+            s"$LogPrefix Failed to restore the entry Scala settings after cross-build completion: " +
+              s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
+          )
         }
 
       def detectIterationFailure(currentCtx: ReleaseContext): IO[ReleaseContext] = IO {
@@ -142,47 +132,41 @@ private[release] object ReleaseComposer {
         } else currentCtx
       }
 
-      def runIteration(
-          currentCtx: ReleaseContext,
-          version: String,
-          logMessage: String
-      ): IO[ReleaseContext] =
-        for {
-          _        <- IO.blocking(currentCtx.state.log.info(logMessage))
-          switched <- switchTo(version)(currentCtx)
-          result   <- action(switched).attempt.flatMap {
-                        case Right(nextCtx) => IO.pure(nextCtx)
-                        case Left(err)      => restoreOnError(switched, err)
-                      }.flatMap(detectIterationFailure)
-        } yield result
-
       if (crossVersions.isEmpty)
         IO.raiseError(
           new IllegalStateException(
             s"$LogPrefix Cross-build enabled but crossScalaVersions is empty"
           )
         )
-      else if (crossVersions.length == 1)
-        runIteration(
-          ctx,
-          crossVersions.head,
-          s"$LogPrefix Cross-building with Scala ${crossVersions.head}"
-        ).flatMap(restoreAfterCompletion)
       else {
-        val finalIO = crossVersions.foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
-          ioCtx.flatMap { currentCtx =>
-            if (currentCtx.failed) IO.pure(currentCtx)
-            else
-              runIteration(
-                currentCtx,
-                version,
-                s"$LogPrefix Cross-building with Scala $version"
-              )
-          }
-        }
+        val runtime = CrossBuildExecution.LoopRuntime[ReleaseContext](
+          logIteration = (currentCtx, message) => IO.blocking(currentCtx.state.log.info(message)),
+          switchToVersion = switchToVersion,
+          restoreEntry = restoreEntry,
+          detectIterationFailure = detectIterationFailure,
+          shouldStop = _.failed,
+          onRestoreAfterActionFailure = (currentCtx, err, restoreErr) =>
+            CrossBuildExecution.rethrowWithRestoreFailure(
+              currentCtx,
+              err,
+              restoreErr,
+              logRestoreAfterActionFailure
+            ),
+          onRestoreAfterCompletionFailure = (currentCtx, restoreErr) =>
+            CrossBuildExecution.raiseRestoreFailure(
+              currentCtx,
+              restoreErr,
+              logRestoreAfterCompletionFailure
+            )
+        )
 
-        finalIO
-          .flatMap(restoreAfterCompletion)
+        CrossBuildExecution.runVersions(
+          initialCtx = ctx,
+          crossVersions = crossVersions,
+          action = action,
+          logMessageForVersion = version => s"$LogPrefix Cross-building with Scala $version",
+          runtime = runtime
+        )
       }
     }
 }

@@ -223,7 +223,7 @@ private[monorepo] object MonorepoPreflight {
       Evaluation.NotEvaluated(s"$DetectOrSelectProjectsStep not in check process")
 
     splitAtBuiltInVersionResolution(normalizedSteps) match {
-      case None                            =>
+      case None =>
         for {
           validatedCtx <- validateSegment(normalizedSteps)(baseCtx)
           tagOutcomes  <-

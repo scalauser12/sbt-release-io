@@ -33,8 +33,8 @@ object MonorepoStepIO {
         new IllegalStateException("MonorepoStepIO.Global.copy validate sentinel should never run")
       )
 
-  private[monorepo] val UnspecifiedGlobalValidateWithContextFn:
-    MonorepoContext => IO[MonorepoContext] =
+  private[monorepo] val UnspecifiedGlobalValidateWithContextFn
+      : MonorepoContext => IO[MonorepoContext] =
     (_ctx: MonorepoContext) =>
       IO.raiseError(
         new IllegalStateException(
@@ -42,12 +42,12 @@ object MonorepoStepIO {
         )
       )
 
-  private[monorepo] val UnspecifiedGlobalValidateWithContext:
-    Option[MonorepoContext => IO[MonorepoContext]] =
+  private[monorepo] val UnspecifiedGlobalValidateWithContext
+      : Option[MonorepoContext => IO[MonorepoContext]] =
     Some(UnspecifiedGlobalValidateWithContextFn)
 
-  private[monorepo] val UnspecifiedPerProjectValidate:
-    (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+  private[monorepo] val UnspecifiedPerProjectValidate
+      : (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
     (_ctx: MonorepoContext, _project: ProjectReleaseInfo) =>
       IO.raiseError(
         new IllegalStateException(
@@ -55,8 +55,8 @@ object MonorepoStepIO {
         )
       )
 
-  private[monorepo] val UnspecifiedPerProjectValidateWithContextFn:
-    (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
+  private[monorepo] val UnspecifiedPerProjectValidateWithContextFn
+      : (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
     (_ctx: MonorepoContext, _project: ProjectReleaseInfo) =>
       IO.raiseError(
         new IllegalStateException(
@@ -64,8 +64,8 @@ object MonorepoStepIO {
         )
       )
 
-  private[monorepo] val UnspecifiedPerProjectValidateWithContext:
-    Option[(MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]] =
+  private[monorepo] val UnspecifiedPerProjectValidateWithContext
+      : Option[(MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]] =
     Some(UnspecifiedPerProjectValidateWithContextFn)
 
   private[monorepo] def buildGlobal(
@@ -118,31 +118,19 @@ object MonorepoStepIO {
         validateWithContext: Option[MonorepoContext => IO[MonorepoContext]] =
           MonorepoStepIO.UnspecifiedGlobalValidateWithContext
     ): Global = {
-      val validateWasProvided            = !(validate eq MonorepoStepIO.UnspecifiedGlobalValidate)
-      val validateWithContextWasProvided =
-        !(validateWithContext eq MonorepoStepIO.UnspecifiedGlobalValidateWithContext)
+      val (nextRawValidate, nextRawValidateWithContext) =
+        StepKernel.resolveSingleCopyFields(
+          currentRawValidate = rawValidate,
+          currentRawValidateWithContext = rawValidateWithContext,
+          currentValidate = this.validate,
+          currentNormalizedValidateWithContext = normalizedValidation._2,
+          requestedValidate = validate,
+          unspecifiedValidate = MonorepoStepIO.UnspecifiedGlobalValidate,
+          requestedValidateWithContext = validateWithContext,
+          unspecifiedValidateWithContext = MonorepoStepIO.UnspecifiedGlobalValidateWithContext
+        )
 
-      if (!validateWasProvided && !validateWithContextWasProvided)
-        new Global(name, execute, rawValidate, isSelectionBoundary, rawValidateWithContext)
-      else if (validateWasProvided && !validateWithContextWasProvided)
-        new Global(name, execute, validate, isSelectionBoundary, normalizedValidation._2)
-      else if (!validateWasProvided && validateWithContextWasProvided)
-        validateWithContext match {
-          case None       =>
-            new Global(name, execute, this.validate, isSelectionBoundary, None)
-          case Some(next) =>
-            val preservedValidation =
-              normalizedValidation._2.getOrElse(StepKernel.asThreadedValidation(this.validate))
-            new Global(
-              name,
-              execute,
-              (_ctx: MonorepoContext) => IO.unit,
-              isSelectionBoundary,
-              StepKernel.appendThreadedValidation(Some(preservedValidation), next)
-            )
-        }
-      else
-        new Global(name, execute, validate, isSelectionBoundary, validateWithContext)
+      new Global(name, execute, nextRawValidate, isSelectionBoundary, nextRawValidateWithContext)
     }
 
     private[monorepo] def threadedValidation: MonorepoContext => IO[MonorepoContext] =
@@ -219,32 +207,25 @@ object MonorepoStepIO {
           (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
         ] = MonorepoStepIO.UnspecifiedPerProjectValidateWithContext
     ): PerProject = {
-      val validateWasProvided =
-        !(validate eq MonorepoStepIO.UnspecifiedPerProjectValidate)
-      val validateWithContextWasProvided =
-        !(validateWithContext eq MonorepoStepIO.UnspecifiedPerProjectValidateWithContext)
+      val (nextRawValidate, nextRawValidateWithContext) =
+        StepKernel.resolveItemCopyFields(
+          currentRawValidate = rawValidate,
+          currentRawValidateWithContext = rawValidateWithContext,
+          currentValidate = this.validate,
+          currentNormalizedValidateWithContext = normalizedValidation._2,
+          requestedValidate = validate,
+          unspecifiedValidate = MonorepoStepIO.UnspecifiedPerProjectValidate,
+          requestedValidateWithContext = validateWithContext,
+          unspecifiedValidateWithContext = MonorepoStepIO.UnspecifiedPerProjectValidateWithContext
+        )
 
-      if (!validateWasProvided && !validateWithContextWasProvided)
-        new PerProject(name, execute, rawValidate, enableCrossBuild, rawValidateWithContext)
-      else if (validateWasProvided && !validateWithContextWasProvided)
-        new PerProject(name, execute, validate, enableCrossBuild, normalizedValidation._2)
-      else if (!validateWasProvided && validateWithContextWasProvided)
-        validateWithContext match {
-          case None       =>
-            new PerProject(name, execute, this.validate, enableCrossBuild, None)
-          case Some(next) =>
-            val preservedValidation =
-              normalizedValidation._2.getOrElse(StepKernel.asThreadedValidation(this.validate))
-            new PerProject(
-              name,
-              execute,
-              (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit,
-              enableCrossBuild,
-              StepKernel.appendThreadedValidation(Some(preservedValidation), next)
-            )
-        }
-      else
-        new PerProject(name, execute, validate, enableCrossBuild, validateWithContext)
+      new PerProject(
+        name,
+        execute,
+        nextRawValidate,
+        enableCrossBuild,
+        nextRawValidateWithContext
+      )
     }
 
     private[monorepo] def threadedValidation(

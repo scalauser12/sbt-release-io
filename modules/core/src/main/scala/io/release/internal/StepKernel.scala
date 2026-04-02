@@ -83,6 +83,88 @@ private[release] object StepKernel {
         )
     }
 
+  /** Resolve copy(...) validation arguments for single-context step wrappers while preserving the
+    * caller-visible omission and clear semantics.
+    */
+  def resolveSingleCopyFields[C](
+      currentRawValidate: C => IO[Unit],
+      currentRawValidateWithContext: Option[ThreadedValidation[C]],
+      currentValidate: C => IO[Unit],
+      currentNormalizedValidateWithContext: Option[ThreadedValidation[C]],
+      requestedValidate: C => IO[Unit],
+      unspecifiedValidate: C => IO[Unit],
+      requestedValidateWithContext: Option[ThreadedValidation[C]],
+      unspecifiedValidateWithContext: Option[ThreadedValidation[C]]
+  ): (
+      C => IO[Unit],
+      Option[ThreadedValidation[C]]
+  ) = {
+    val validateWasProvided            =
+      !(requestedValidate eq unspecifiedValidate)
+    val validateWithContextWasProvided =
+      !(requestedValidateWithContext eq unspecifiedValidateWithContext)
+    val noOpValidate: C => IO[Unit]    = (_: C) => IO.unit
+
+    if (!validateWasProvided && !validateWithContextWasProvided)
+      (currentRawValidate, currentRawValidateWithContext)
+    else if (validateWasProvided && !validateWithContextWasProvided)
+      (requestedValidate, currentNormalizedValidateWithContext)
+    else if (!validateWasProvided && validateWithContextWasProvided)
+      requestedValidateWithContext match {
+        case None       =>
+          (currentValidate, None)
+        case Some(next) =>
+          val preservedValidation =
+            currentNormalizedValidateWithContext.getOrElse(asThreadedValidation(currentValidate))
+          (
+            noOpValidate,
+            appendThreadedValidation(Some(preservedValidation), next)
+          )
+      }
+    else
+      (requestedValidate, requestedValidateWithContext)
+  }
+
+  /** Item-aware variant of [[resolveSingleCopyFields]] for per-item step wrappers. */
+  def resolveItemCopyFields[C, I](
+      currentRawValidate: (C, I) => IO[Unit],
+      currentRawValidateWithContext: Option[ThreadedItemValidation[C, I]],
+      currentValidate: (C, I) => IO[Unit],
+      currentNormalizedValidateWithContext: Option[ThreadedItemValidation[C, I]],
+      requestedValidate: (C, I) => IO[Unit],
+      unspecifiedValidate: (C, I) => IO[Unit],
+      requestedValidateWithContext: Option[ThreadedItemValidation[C, I]],
+      unspecifiedValidateWithContext: Option[ThreadedItemValidation[C, I]]
+  ): (
+      (C, I) => IO[Unit],
+      Option[ThreadedItemValidation[C, I]]
+  ) = {
+    val validateWasProvided              =
+      !(requestedValidate eq unspecifiedValidate)
+    val validateWithContextWasProvided   =
+      !(requestedValidateWithContext eq unspecifiedValidateWithContext)
+    val noOpValidate: (C, I) => IO[Unit] = (_: C, _: I) => IO.unit
+
+    if (!validateWasProvided && !validateWithContextWasProvided)
+      (currentRawValidate, currentRawValidateWithContext)
+    else if (validateWasProvided && !validateWithContextWasProvided)
+      (requestedValidate, currentNormalizedValidateWithContext)
+    else if (!validateWasProvided && validateWithContextWasProvided)
+      requestedValidateWithContext match {
+        case None       =>
+          (currentValidate, None)
+        case Some(next) =>
+          val preservedValidation =
+            currentNormalizedValidateWithContext.getOrElse(asThreadedValidation(currentValidate))
+          (
+            noOpValidate,
+            appendThreadedValidation(Some(preservedValidation), next)
+          )
+      }
+    else
+      (requestedValidate, requestedValidateWithContext)
+  }
+
   final case class SingleBuilderState[C](
       name: String,
       validateWithContext: Option[ThreadedValidation[C]],

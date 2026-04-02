@@ -95,10 +95,10 @@ class VcsStepsSpec extends CatsEffectSuite {
                         )
                       )
         localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
-        remoteHead <- IO.blocking(
-                        TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main")
-                          .trim
-                      )
+        remoteHead <-
+          IO.blocking(
+            TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+          )
         remoteTag  <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", "v1.0.1").trim)
       } yield {
         assert(!result.failed)

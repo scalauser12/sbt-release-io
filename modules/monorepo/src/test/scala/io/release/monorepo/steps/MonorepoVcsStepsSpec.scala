@@ -303,42 +303,42 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       val apiTag  = api.tagName.getOrElse(fail("Expected api tag name"))
 
       for {
-        _          <- IO.blocking {
-                        sbt.IO.write(new File(repo, "file.txt"), "updated")
-                        TestSupport.commitAll(repo, "Second commit")
-                        TestSupport.runGit(
-                          repo,
-                          "tag",
-                          "-a",
-                          coreTag,
-                          "-m",
-                          s"Release ${core.name} 1.0.0"
-                        )
-                        TestSupport.runGit(
-                          repo,
-                          "tag",
-                          "-a",
-                          apiTag,
-                          "-m",
-                          s"Release ${api.name} 2.0.0"
-                        )
-                        TestSupport.runGit(
-                          repo,
-                          "tag",
-                          "-a",
-                          "local-only",
-                          "-m",
-                          "Local only"
-                        )
-                      }
-        result     <- MonorepoVcsSteps.pushChanges.execute(ctx)
-        localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
-        remoteHead <- IO.blocking(
-                        TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main")
-                          .trim
-                      )
-        remoteCore <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", coreTag).trim)
-        remoteApi  <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", apiTag).trim)
+        _           <- IO.blocking {
+                         sbt.IO.write(new File(repo, "file.txt"), "updated")
+                         TestSupport.commitAll(repo, "Second commit")
+                         TestSupport.runGit(
+                           repo,
+                           "tag",
+                           "-a",
+                           coreTag,
+                           "-m",
+                           s"Release ${core.name} 1.0.0"
+                         )
+                         TestSupport.runGit(
+                           repo,
+                           "tag",
+                           "-a",
+                           apiTag,
+                           "-m",
+                           s"Release ${api.name} 2.0.0"
+                         )
+                         TestSupport.runGit(
+                           repo,
+                           "tag",
+                           "-a",
+                           "local-only",
+                           "-m",
+                           "Local only"
+                         )
+                       }
+        result      <- MonorepoVcsSteps.pushChanges.execute(ctx)
+        localHead   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        remoteHead  <-
+          IO.blocking(
+            TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+          )
+        remoteCore  <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", coreTag).trim)
+        remoteApi   <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", apiTag).trim)
         remoteExtra <- IO.blocking(
                          TestSupport.runGit(remoteRepo, "tag", "--list", "local-only").trim
                        )
@@ -348,7 +348,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         assertEquals(remoteCore, coreTag)
         assertEquals(remoteApi, apiTag)
         assertEquals(remoteExtra, "")
-        assertEquals(MonorepoSpecSupport.projectNamed(result.projects, "core").tagName, Some(coreTag))
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(result.projects, "core").tagName,
+          Some(coreTag)
+        )
         assertEquals(MonorepoSpecSupport.projectNamed(result.projects, "api").tagName, Some(apiTag))
       }
     }
@@ -558,16 +561,19 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   private val twoProjectPushContextResource
       : Resource[IO, (File, File, ProjectReleaseInfo, ProjectReleaseInfo, MonorepoContext)] =
     TestSupport
-      .gitRepoWithBareRemoteResource("monorepo-vcs-steps-push-spec", prepareRepo = repo =>
-        IO.blocking {
-          sbt.IO.write(new File(repo, "file.txt"), "initial")
-          val coreBase = new File(repo, "core")
-          val apiBase  = new File(repo, "api")
-          coreBase.mkdirs()
-          apiBase.mkdirs()
-          sbt.IO.write(new File(coreBase, "version.sbt"), """version := "1.0.0-SNAPSHOT"""" + "\n")
-          sbt.IO.write(new File(apiBase, "version.sbt"), """version := "2.0.0-SNAPSHOT"""" + "\n")
-        }
+      .gitRepoWithBareRemoteResource(
+        "monorepo-vcs-steps-push-spec",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(new File(repo, "file.txt"), "initial")
+            val coreBase = new File(repo, "core")
+            val apiBase  = new File(repo, "api")
+            coreBase.mkdirs()
+            apiBase.mkdirs()
+            sbt.IO
+              .write(new File(coreBase, "version.sbt"), """version := "1.0.0-SNAPSHOT"""" + "\n")
+            sbt.IO.write(new File(apiBase, "version.sbt"), """version := "2.0.0-SNAPSHOT"""" + "\n")
+          }
       )
       .evalMap { case (repo, remoteRepo) =>
         Vcs.detect(repo).flatMap {

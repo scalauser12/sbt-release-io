@@ -114,7 +114,7 @@ private[monorepo] object ChangeDetection {
     IO.blocking {
       val projectScopes = resolveProjectScopes(vcs, projects)
       logUnresolvedProjectScopes(state, projectScopes.unresolved)
-      val inputs = DetectionInputs(
+      val inputs        = DetectionInputs(
         vcs = vcs,
         state = state,
         globalExcludes = additionalExcludeFiles.flatMap(gitRelativize(vcs.baseDir, _)).toSet,
@@ -140,14 +140,12 @@ private[monorepo] object ChangeDetection {
     projects.foldLeft(
       ProjectScopeInputs(Vector.empty[ResolvedProjectScope], Vector.empty[UnresolvedProjectScope])
     ) { case (acc, project) =>
-        resolveDiffScope(vcs, project) match {
-          case Right(path) =>
-            acc.copy(resolved = acc.resolved :+ ResolvedProjectScope(project.name, path))
-          case Left(details) =>
-            acc.copy(unresolved =
-              acc.unresolved :+ UnresolvedProjectScope(project.name, details)
-            )
-        }
+      resolveDiffScope(vcs, project) match {
+        case Right(path)   =>
+          acc.copy(resolved = acc.resolved :+ ResolvedProjectScope(project.name, path))
+        case Left(details) =>
+          acc.copy(unresolved = acc.unresolved :+ UnresolvedProjectScope(project.name, details))
+      }
     }
 
   private def logUnresolvedProjectScopes(

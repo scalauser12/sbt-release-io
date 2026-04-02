@@ -12,8 +12,8 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val step = MonorepoStepIO.Global(
           name = "test-step",
-          validate = currentCtx =>
-            log.update(_ :+ s"validate:${currentCtx.state.onFailure.isDefined}"),
+          validate =
+            currentCtx => log.update(_ :+ s"validate:${currentCtx.state.onFailure.isDefined}"),
           execute = c => log.update(_ :+ "execute").as(c)
         )
 

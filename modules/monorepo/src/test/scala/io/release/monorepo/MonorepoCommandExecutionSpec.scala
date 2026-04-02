@@ -5,9 +5,7 @@ import cats.effect.Resource
 import io.release.internal.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 
-class MonorepoCommandExecutionSpec
-    extends CatsEffectSuite
-    with MonorepoReleasePluginSpecSupport {
+class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleasePluginSpecSupport {
 
   private def runtime(
       crossBuild: Boolean = false,

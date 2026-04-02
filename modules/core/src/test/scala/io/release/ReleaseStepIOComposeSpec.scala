@@ -2,6 +2,7 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.internal.CrossBuildExecution
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
@@ -247,7 +248,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     IO {
       val original = new RuntimeException("boom")
       val restore  = new IllegalStateException("restore failed")
-      val combined = ReleaseComposer.attachSuppressed(original, restore)
+      val combined = CrossBuildExecution.attachSuppressed(original, restore)
 
       assertEquals(combined, original)
       assertEquals(combined.getSuppressed.toSeq, Seq(restore))

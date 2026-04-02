@@ -156,11 +156,11 @@ private[monorepo] object MonorepoCommandExecution {
   ): IO[Either[State, PlannedCommand]] =
     for {
       flags   <- IO.blocking(resolveFlags(cleanState, args, runtime, interactiveEnabled))
-      defaults   = resolveDecisionDefaults(cleanState, args)
-      planned   <- MonorepoReleasePlan.build(
-                     cleanState,
-                     plannerInputs(args, flags, defaults, runtime.commandName)
-                   )
+      defaults = resolveDecisionDefaults(cleanState, args)
+      planned <- MonorepoReleasePlan.build(
+                   cleanState,
+                   plannerInputs(args, flags, defaults, runtime.commandName)
+                 )
     } yield planned.map(plan => PlannedCommand(cleanState, flags, plan))
 
   private def runMonorepoCommand[T](
