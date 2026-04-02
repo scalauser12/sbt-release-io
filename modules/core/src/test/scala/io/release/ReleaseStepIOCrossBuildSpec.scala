@@ -95,6 +95,55 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
     }
   }
 
+  test(
+    "compose - cross-build deduplicates configured Scala versions while preserving order"
+  ) {
+    loadedContextResource(
+      "release-step-io-dedup-cross",
+      _.settings(
+        Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
+        Keys.crossScalaVersions := Seq(
+          TestSupport.CurrentScalaVersion,
+          TestSupport.alternateScalaVersion,
+          TestSupport.CurrentScalaVersion
+        )
+      )
+    ).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val crossStep = ReleaseStepIO(
+          name = "cross-step",
+          execute =
+            c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
+          validate =
+            c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
+          enableCrossBuild = true
+        )
+        val plainStep = ReleaseStepIO.io("plain-step") { c =>
+          scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"plain:$v").as(c))
+        }
+
+        ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+          for {
+            events       <- observed.get
+            finalVersion <- scalaVersionOf(result.state)
+          } yield {
+            assertEquals(
+              events,
+              List(
+                s"validate:${TestSupport.CurrentScalaVersion}",
+                s"validate:${TestSupport.alternateScalaVersion}",
+                s"execute:${TestSupport.CurrentScalaVersion}",
+                s"execute:${TestSupport.alternateScalaVersion}",
+                s"plain:${TestSupport.CurrentScalaVersion}"
+              )
+            )
+            assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+          }
+        }
+      }
+    }
+  }
+
   test("compose - restore the entry state when no entry scalaVersion is defined") {
     val metadataKey = AttributeKey[String]("cross-build-no-entry-scala-version")
 

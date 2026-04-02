@@ -57,6 +57,8 @@ object MonorepoProjectResourceHookIO {
   * [[MonorepoReleasePluginLike.monorepoResourceHooks]].
   */
 case class MonorepoResourceHooks[T](
+    afterCleanCheckHooks: Seq[MonorepoGlobalResourceHookIO[T]] =
+      Seq.empty[MonorepoGlobalResourceHookIO[T]],
     beforeSelectionHooks: Seq[MonorepoGlobalResourceHookIO[T]] =
       Seq.empty[MonorepoGlobalResourceHookIO[T]],
     afterSelectionHooks: Seq[MonorepoGlobalResourceHookIO[T]] =
@@ -132,6 +134,7 @@ object MonorepoResourceHooks {
       enableTagging = true,
       enablePublish = true,
       enablePush = true,
+      afterCleanCheckHooks = hooks.afterCleanCheckHooks.map(globalHook),
       beforeSelectionHooks = hooks.beforeSelectionHooks.map(globalHook),
       afterSelectionHooks = hooks.afterSelectionHooks.map(globalHook),
       beforeVersionResolutionHooks = hooks.beforeVersionResolutionHooks.map(projectHook),

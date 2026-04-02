@@ -58,6 +58,9 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests                  := false,
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish                   := false,
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush                      := false,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck                  := Seq(
+        MonorepoGlobalHookIO.action("after-clean")(_ => IO.unit)
+      ),
       MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection                  := Seq(
         MonorepoGlobalHookIO.action("before-selection")(_ => IO.unit)
       ),
@@ -87,6 +90,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
           Seq(
             "initialize-vcs",
             "check-clean-working-dir",
+            "after-clean-check:after-clean",
             "resolve-release-order",
             "before-selection:before-selection",
             "detect-or-select-projects",
@@ -211,6 +215,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging                   := true,
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish                   := true,
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush                      := true,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck                  := Seq.empty,
       MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection                  := Seq.empty,
       MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection                   := Seq.empty,
       MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution          := Seq.empty,

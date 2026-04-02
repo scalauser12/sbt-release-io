@@ -145,6 +145,27 @@ object TestSupport {
           .as(repo)
     }
 
+  def gitRepoWithBareRemoteResource(
+      prefix: String,
+      prepareRepo: File => IO[Unit] = repo =>
+        IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "initial")),
+      commitMessage: String = "Initial commit"
+  ): Resource[IO, (File, File)] =
+    Resource
+      .both(
+        gitRepoWithCommitResource(prefix, prepareRepo, commitMessage),
+        tempDirResource(s"$prefix-remote")
+      )
+      .evalMap { case (repo, remoteRepo) =>
+        IO.blocking {
+          runGit(repo, "branch", "-M", "main")
+          runGit(repo, "init", "--bare", remoteRepo.getAbsolutePath)
+          runGit(repo, "remote", "add", "origin", remoteRepo.getAbsolutePath)
+          runGit(repo, "push", "-u", "origin", "main")
+          repo -> remoteRepo
+        }
+      }
+
   def dummyState(baseDir: File): State = {
     val logFile       = new File(baseDir, "sbt-test.log")
     val globalLogging =

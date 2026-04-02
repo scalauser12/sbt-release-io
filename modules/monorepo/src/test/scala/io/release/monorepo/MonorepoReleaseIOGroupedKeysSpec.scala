@@ -58,6 +58,10 @@ class MonorepoReleaseIOGroupedKeysSpec
       MonorepoReleaseIO.releaseIOMonorepoEnablePush,
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush
     ),
+    "hooks.afterCleanCheck"           -> (
+      MonorepoReleaseIO.releaseIOMonorepoAfterCleanCheckHooks,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck
+    ),
     "hooks.beforeSelection"           -> (
       MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks,
       MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection
@@ -207,6 +211,11 @@ class MonorepoReleaseIOGroupedKeysSpec
       MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish
     ),
     settingParity(
+      "hooks.afterCleanCheck",
+      MonorepoReleaseIO.releaseIOMonorepoAfterCleanCheckHooks,
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck
+    ),
+    settingParity(
       "hooks.beforeSelection",
       MonorepoReleaseIO.releaseIOMonorepoBeforeSelectionHooks,
       MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection
@@ -226,6 +235,7 @@ class MonorepoReleaseIOGroupedKeysSpec
     "releaseIOMonorepoEnableTagging"                   -> "releaseIOMonorepoPolicyEnableTagging",
     "releaseIOMonorepoEnablePublish"                   -> "releaseIOMonorepoPolicyEnablePublish",
     "releaseIOMonorepoEnablePush"                      -> "releaseIOMonorepoPolicyEnablePush",
+    "releaseIOMonorepoAfterCleanCheckHooks"            -> "releaseIOMonorepoHooksAfterCleanCheck",
     "releaseIOMonorepoBeforeSelectionHooks"            -> "releaseIOMonorepoHooksBeforeSelection",
     "releaseIOMonorepoAfterSelectionHooks"             -> "releaseIOMonorepoHooksAfterSelection",
     "releaseIOMonorepoBeforeVersionResolutionHooks"    -> "releaseIOMonorepoHooksBeforeVersionResolution",

@@ -11,7 +11,7 @@ name := "cross-build-setting-test"
 
 scalaVersion := Scala213
 
-crossScalaVersions := Seq(Scala213, Scala212)
+crossScalaVersions := Seq(Scala213, Scala212, Scala213)
 
 // Enable cross-build via the setting (not the CLI flag)
 releaseIOBehaviorCrossBuild := true
@@ -37,7 +37,7 @@ val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
 releaseIOHooksBeforePublish := Seq(crossBuildMarkerHook)
 
 val checkCrossBuildInvocations =
-  taskKey[Unit]("Verify cross-build ran exactly once per configured Scala version")
+  taskKey[Unit]("Verify cross-build ran exactly once per distinct configured Scala version")
 checkCrossBuildInvocations := {
   val markerDir    = baseDirectory.value / "marker"
   val built213     = markerDir / s"built-$Scala213"

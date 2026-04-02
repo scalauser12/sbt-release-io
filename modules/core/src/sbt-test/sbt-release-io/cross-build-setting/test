@@ -8,7 +8,7 @@ $ exec git commit -m "Initial commit"
 # Run release WITHOUT the cross CLI flag — cross-build should happen via setting
 > releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 
-# Verify both Scala versions were built exactly once and the release completed
+# Verify both distinct Scala versions were built exactly once and the release completed
 > checkCrossBuildInvocations
 > checkGitTag
 > checkPublished

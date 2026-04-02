@@ -53,6 +53,7 @@ private[monorepo] object MonorepoLifecycle {
     Seq(
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.initializeVcs),
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.checkCleanWorkingDir),
+      globalHookPhase("after-clean-check", _.afterCleanCheckHooks, AlwaysGlobal),
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.resolveReleaseOrder),
       globalHookPhase("before-selection", _.beforeSelectionHooks, AlwaysGlobal),
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.detectOrSelectProjects),

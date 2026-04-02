@@ -15,6 +15,7 @@ private[release] object MonorepoDefaultSettings {
     MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging                   := true,
     MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish                   := true,
     MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush                      := true,
+    MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck                  := Seq.empty,
     MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection                  := Seq.empty,
     MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection                   := Seq.empty,
     MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution          := Seq.empty,

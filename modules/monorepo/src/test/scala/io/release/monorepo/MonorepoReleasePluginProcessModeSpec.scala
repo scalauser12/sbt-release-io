@@ -99,6 +99,59 @@ class MonorepoReleasePluginProcessModeSpec
     }
   }
 
+  test("commandRuntime forwards a direct custom plugin's behavior overrides into flag resolution") {
+    stateResource("monorepo-plugin-behavior-overrides", BehaviorOverridePlugin).use { loaded =>
+      IO {
+        val flags = MonorepoCommandExecution.resolveFlags(
+          loaded.state,
+          Seq.empty,
+          BehaviorOverridePlugin.commandRuntime,
+          interactiveEnabled = true
+        )
+
+        assertEquals(
+          flags,
+          MonorepoCommandExecution.ReleaseFlags(
+            useDefaults = false,
+            skipTests = true,
+            crossBuild = true,
+            allChanged = false,
+            skipPublish = true,
+            interactive = true
+          )
+        )
+      }
+    }
+  }
+
+  test("commandRuntime forwards an inherited custom plugin's behavior overrides into flag resolution") {
+    stateResource(
+      "monorepo-plugin-inherited-behavior-overrides",
+      InheritedBehaviorOverridePlugin
+    ).use { loaded =>
+      IO {
+        val flags = MonorepoCommandExecution.resolveFlags(
+          loaded.state,
+          Seq.empty,
+          InheritedBehaviorOverridePlugin.commandRuntime,
+          interactiveEnabled = true
+        )
+
+        assertEquals(
+          flags,
+          MonorepoCommandExecution.ReleaseFlags(
+            useDefaults = false,
+            skipTests = true,
+            crossBuild = true,
+            allChanged = false,
+            skipPublish = true,
+            interactive = true
+          )
+        )
+      }
+    }
+  }
+
   test("resolveProcessMode always evaluates configured monorepo hooks for check mode") {
     stateResource(
       "monorepo-plugin-throwing-hooks",

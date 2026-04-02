@@ -78,6 +78,36 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("pushChanges.execute - push the tracked branch and follow tags to the remote") {
+    TestSupport.gitRepoWithBareRemoteResource(fixturePrefix).use { case (repo, remoteRepo) =>
+      for {
+        vcs        <- ReleaseTestSupport.detectVcs(repo)
+        _          <- IO.blocking {
+                        sbt.IO.write(new File(repo, "file.txt"), "updated")
+                        TestSupport.commitAll(repo, "Second commit")
+                      }
+        _          <- vcs.tag("v1.0.1", "Release 1.0.1", sign = false)
+        result     <- VcsSteps.pushChanges.execute(
+                        ReleaseContext(
+                          state = ReleaseTestSupport.gitRootState(repo),
+                          vcs = Some(vcs),
+                          interactive = false
+                        )
+                      )
+        localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        remoteHead <- IO.blocking(
+                        TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main")
+                          .trim
+                      )
+        remoteTag  <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", "v1.0.1").trim)
+      } yield {
+        assert(!result.failed)
+        assertEquals(remoteHead, localHead)
+        assertEquals(remoteTag, "v1.0.1")
+      }
+    }
+  }
+
   test("tagRelease.execute - abort in non-interactive mode when the tag already exists") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val state = ReleaseTestSupport.gitRootState(

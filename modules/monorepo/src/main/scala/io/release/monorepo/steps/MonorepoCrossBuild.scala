@@ -12,7 +12,7 @@ import sbt.{internal as _, *}
 /** Cross-build executor for monorepo per-project steps.
   *
   * When cross-build is active, each project's action is executed once per
-  * `crossScalaVersions` entry with Scala version switching and restore-on-error.
+  * distinct `crossScalaVersions` value with Scala version switching and restore-on-error.
   * FailureCommand detection and project-failure short-circuiting are handled
   * uniformly for both the project loop and the version loop.
   */
@@ -41,7 +41,7 @@ private[monorepo] object MonorepoCrossBuild {
   ): IO[Nothing] =
     IO.blocking {
       ctx.state.log.error(
-        s"$LogPrefix Failed to restore the entry Scala version after a cross-build failure: " +
+        s"$LogPrefix Failed to restore the entry Scala settings after a cross-build failure: " +
           s"${Option(restoreFailure.getMessage).getOrElse(restoreFailure.toString)}"
       )
       ReleaseComposer.attachSuppressed(original, restoreFailure)
@@ -60,7 +60,7 @@ private[monorepo] object MonorepoCrossBuild {
       MonorepoStepHelpers.runPerProject(ctx, action)
 
   /** Run a per-project validation with optional cross-build iteration.
-    * When cross-build is active, validation runs once per `crossScalaVersions` entry.
+    * When cross-build is active, validation runs once per distinct `crossScalaVersions` value.
     */
   def validatePerProjectWithCrossBuild(
       ctx: MonorepoContext,
@@ -105,11 +105,11 @@ private[monorepo] object MonorepoCrossBuild {
     IO.blocking {
       val extracted     = SbtRuntime.extracted(ctx.state)
       val crossVersions =
-        (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
-      val entryVersion  =
-        CrossBuildSupport.resolveEntryScalaVersion(extracted, project.ref)
-      (crossVersions, entryVersion, ctx.state)
-    }.flatMap { case (crossVersions, entryVersion, entryState) =>
+        CrossBuildSupport.distinctCrossScalaVersions(
+          (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
+        )
+      (crossVersions, ctx.state)
+    }.flatMap { case (crossVersions, entryState) =>
       if (crossVersions.isEmpty)
         IO.raiseError(
           new IllegalStateException(
@@ -117,14 +117,14 @@ private[monorepo] object MonorepoCrossBuild {
           )
         )
       else {
-        val switcher = new VersionSwitcher(project, entryState, entryVersion)
+        val switcher = new VersionSwitcher(project, entryState)
         iterateVersions(ctx, project, crossVersions, action, switcher)
       }
     }
   }
 
   /** Execute the action once per Scala version, with failure short-circuiting
-    * and entry-version restoration.
+    * and entry-state restoration.
     */
   private def iterateVersions(
       ctx: MonorepoContext,
@@ -164,19 +164,14 @@ private[monorepo] object MonorepoCrossBuild {
   /** Encapsulates Scala version switching and restoration for a single cross-build run. */
   private class VersionSwitcher(
       project: ProjectReleaseInfo,
-      entryState: State,
-      entryVersion: Option[String]
+      entryState: State
   ) {
 
     def switchTo(version: String)(ctx: MonorepoContext): IO[MonorepoContext] =
       SbtRuntime.switchScalaVersion(ctx.state, version).map(ctx.withState)
 
     def restoreEntry(ctx: MonorepoContext): IO[MonorepoContext] =
-      entryVersion match {
-        case Some(ver) => switchTo(ver)(ctx)
-        case None      =>
-          CrossBuildSupport.restoreEntryScalaSession(entryState, ctx.state).map(ctx.withState)
-      }
+      CrossBuildSupport.restoreEntryScalaSession(entryState, ctx.state).map(ctx.withState)
 
     def restoreAfterCompletion(ctx: MonorepoContext): IO[MonorepoContext] =
       restoreEntry(ctx).attempt.flatMap {
@@ -184,7 +179,7 @@ private[monorepo] object MonorepoCrossBuild {
         case Left(restoreErr)   =>
           IO.blocking {
             ctx.state.log.error(
-              s"$LogPrefix Failed to restore the entry Scala version after cross-building " +
+              s"$LogPrefix Failed to restore the entry Scala settings after cross-building " +
                 s"${project.name}: ${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
             )
           } *> IO.raiseError(restoreErr)

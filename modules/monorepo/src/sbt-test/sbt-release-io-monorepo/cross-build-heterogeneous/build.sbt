@@ -31,6 +31,16 @@ val crossBuildMarkerHook = MonorepoProjectHookIO.action("write-cross-markers") {
     IO.append(markerDir / "invocations.txt", sv + "\n")
   }
 }
+val checkRestoredVersionHook = MonorepoProjectHookIO.action("check-restored-version") {
+  (ctx, project) =>
+    _root_.cats.effect.IO.blocking {
+      val extracted = sbt.Project.extract(ctx.state)
+      val sv        = extracted.get(project.ref / scalaVersion)
+      val markerDir = project.baseDir / "marker"
+      IO.createDirectory(markerDir)
+      IO.append(markerDir / "restored-version.txt", sv + "\n")
+    }
+}
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
@@ -38,7 +48,8 @@ lazy val root = (project in file("."))
   .settings(
     name := "cross-build-heterogeneous-test",
 
-    releaseIOMonorepoHooksBeforePublish := Seq(crossBuildMarkerHook),
+    releaseIOMonorepoHooksBeforePublish          := Seq(crossBuildMarkerHook),
+    releaseIOMonorepoHooksBeforeNextVersionWrite := Seq(checkRestoredVersionHook),
     releaseIOVcsIgnoreUntrackedFiles       := true,
     releaseIOMonorepoPolicyEnablePush         := false,
     releaseIOMonorepoPolicyEnableRunClean     := false,
@@ -56,6 +67,11 @@ lazy val root = (project in file("."))
         coreInvocations.length == 2,
         s"core should have 2 cross-build invocations but had ${coreInvocations.length}: $coreInvocations"
       )
+      val coreRestored = IO.readLines(coreBase / "restored-version.txt").filter(_.nonEmpty)
+      assert(
+        coreRestored == List(Scala213),
+        s"core should restore to $Scala213 after cross-build but was: $coreRestored"
+      )
 
       // api has crossScalaVersions := Seq(2.12) → action runs once with correct version
       val apiBase        = file("api/marker")
@@ -67,6 +83,11 @@ lazy val root = (project in file("."))
       assert(
         apiInvocations.length == 1,
         s"api should have 1 cross-build invocation but had ${apiInvocations.length}: $apiInvocations"
+      )
+      val apiRestored = IO.readLines(apiBase / "restored-version.txt").filter(_.nonEmpty)
+      assert(
+        apiRestored == List(Scala212),
+        s"api should restore to $Scala212 after cross-build but was: $apiRestored"
       )
     }
   )

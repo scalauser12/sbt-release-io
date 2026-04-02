@@ -21,12 +21,18 @@ private[monorepo] object ChangeDetection {
   }
 
   private final case class ProjectTagLookup(pattern: String, result: TagLookupResult)
+  private final case class ResolvedProjectScope(name: String, path: String)
+  private final case class UnresolvedProjectScope(name: String, details: String)
+  private final case class ProjectScopeInputs(
+      resolved: Seq[ResolvedProjectScope],
+      unresolved: Seq[UnresolvedProjectScope]
+  )
 
   private final case class DetectionInputs(
       vcs: Vcs,
       state: State,
       globalExcludes: Set[String],
-      projectRelPaths: Seq[(String, String)],
+      projectScopes: Seq[ResolvedProjectScope],
       sharedPaths: Seq[String],
       tagNameFn: (String, String) => String
   )
@@ -106,12 +112,13 @@ private[monorepo] object ChangeDetection {
       sharedPaths: Seq[String] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     IO.blocking {
+      val projectScopes = resolveProjectScopes(vcs, projects)
+      logUnresolvedProjectScopes(state, projectScopes.unresolved)
       val inputs = DetectionInputs(
         vcs = vcs,
         state = state,
         globalExcludes = additionalExcludeFiles.flatMap(gitRelativize(vcs.baseDir, _)).toSet,
-        projectRelPaths =
-          projects.flatMap(p => gitRelativize(vcs.baseDir, p.baseDir).map(p.name -> _)),
+        projectScopes = projectScopes.resolved,
         sharedPaths = sharedPaths,
         tagNameFn = tagNameFn
       )
@@ -124,6 +131,40 @@ private[monorepo] object ChangeDetection {
         }
 
       changedProjects
+    }
+
+  private def resolveProjectScopes(
+      vcs: Vcs,
+      projects: Seq[ProjectReleaseInfo]
+  ): ProjectScopeInputs =
+    projects.foldLeft(
+      ProjectScopeInputs(Vector.empty[ResolvedProjectScope], Vector.empty[UnresolvedProjectScope])
+    ) { case (acc, project) =>
+        resolveDiffScope(vcs, project) match {
+          case Right(path) =>
+            acc.copy(resolved = acc.resolved :+ ResolvedProjectScope(project.name, path))
+          case Left(details) =>
+            acc.copy(unresolved =
+              acc.unresolved :+ UnresolvedProjectScope(project.name, details)
+            )
+        }
+    }
+
+  private def logUnresolvedProjectScopes(
+      state: State,
+      unresolvedProjectScopes: Seq[UnresolvedProjectScope]
+  ): Unit =
+    if (unresolvedProjectScopes.nonEmpty) {
+      val affectedProjects = unresolvedProjectScopes.map(_.name).mkString(", ")
+      val details          =
+        unresolvedProjectScopes
+          .map(scope => s"${scope.name}: ${scope.details}")
+          .mkString("; ")
+      state.log.warn(
+        s"${ReleaseLogPrefixes.Monorepo} Cannot resolve child diff scope for " +
+          s"project(s): $affectedProjects. Child-directory exclusion will be " +
+          s"incomplete for these project(s). Details: $details"
+      )
     }
 
   /** Evaluate a single project: look up its tag, check shared paths, diff project files.
@@ -189,8 +230,8 @@ private[monorepo] object ChangeDetection {
   ): Set[String] =
     resolveDiffScope(inputs.vcs, project) match {
       case Right(scope) =>
-        inputs.projectRelPaths.collect {
-          case (name, path)
+        inputs.projectScopes.collect {
+          case ResolvedProjectScope(name, path)
               if name != project.name && path != "." && path.nonEmpty &&
                 (scope == "." || path.startsWith(scope + "/")) =>
             path

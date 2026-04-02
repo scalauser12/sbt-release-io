@@ -271,6 +271,28 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
   }
 
   test(
+    "MonorepoResourceHooks.materialize - materializes after-clean-check global hooks"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        val resourceHook = MonorepoGlobalResourceHookIO.action[String]("after-clean-check") {
+          resource => _ =>
+            log.update(_ :+ resource)
+        }
+        val hooks        = MonorepoResourceHooks[String](afterCleanCheckHooks = Seq(resourceHook))
+        val config       = MonorepoResourceHooks.materialize(hooks, Some("my-resource"))
+
+        config.afterCleanCheckHooks.head.execute(ctx).flatMap { result =>
+          log.get.map { events =>
+            assertEquals(events, List("my-resource"))
+            assertEquals(result, ctx)
+          }
+        }
+      }
+    }
+  }
+
+  test(
     "MonorepoResourceHooks.materialize - with None global hook returns context unchanged without calling resource function"
   ) {
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
@@ -395,6 +417,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
       val config = MonorepoResourceHooks.materialize(MonorepoResourceHooks.empty[String], None)
 
       IO {
+        assert(config.afterCleanCheckHooks.isEmpty)
         assert(config.beforeSelectionHooks.isEmpty)
         assert(config.afterSelectionHooks.isEmpty)
         assert(config.beforeTagHooks.isEmpty)

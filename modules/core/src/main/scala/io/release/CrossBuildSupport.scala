@@ -12,6 +12,12 @@ import sbt.{internal as _, *}
   */
 private[release] object CrossBuildSupport {
 
+  /** Normalize configured cross-build versions by removing duplicates while preserving
+    * first-seen order.
+    */
+  def distinctCrossScalaVersions(versions: Seq[String]): Seq[String] =
+    versions.distinct
+
   /** Switch Scala version by fully reloading the project structure.
     * Based on `sbt.Cross.switchVersion` logic.
     * Wraps the entire operation in `IO.blocking` since it calls sbt internals
@@ -30,16 +36,10 @@ private[release] object CrossBuildSupport {
         GlobalScope / Keys.scalaHome    := None
       )
 
-      val cleared      = session.mergeSettings.filterNot(isScalaSessionSetting)
+      val cleared      = structure.settings.filterNot(isScalaSetting)
       val newStructure = LoadCompat.reapply(add ++ cleared, structure)
       Project.setProject(session, newStructure, state)
     }
-
-  /** Resolve the entry Scala version for a project-like scope, falling back to global scope. */
-  def resolveEntryScalaVersion(extracted: Extracted, ref: ProjectRef): Option[String] =
-    (ref / Keys.scalaVersion)
-      .get(extracted.structure.data)
-      .orElse((GlobalScope / Keys.scalaVersion).get(extracted.structure.data))
 
   /** Restore only the Scala-related session settings from the captured entry state.
     * Keeps the current session's non-Scala settings intact while reapplying the entry
@@ -52,16 +52,16 @@ private[release] object CrossBuildSupport {
       import currentExtracted.*
       implicit val showKey: Show[ScopedKey[?]] = currentExtracted.showKey
 
-      val currentSettingsWithoutScala = session.mergeSettings.filterNot(isScalaSessionSetting)
+      val currentSettingsWithoutScala = structure.settings.filterNot(isScalaSetting)
       val entryScalaSettings          =
-        entryExtracted.session.mergeSettings.filter(isScalaSessionSetting)
+        entryExtracted.structure.settings.filter(isScalaSetting)
       val newStructure                =
         LoadCompat.reapply(entryScalaSettings ++ currentSettingsWithoutScala, structure)
       Project.setProject(session, newStructure, currentState)
     }
 
-  /** Check if a setting is Scala-session state (`scalaVersion`, `scalaHome`). */
-  private def isScalaSessionSetting(s: Setting[?]): Boolean =
+  /** Check if a setting is Scala-related state (`scalaVersion`, `scalaHome`). */
+  private def isScalaSetting(s: Setting[?]): Boolean =
     s.key match {
       case ScopedKey(Scope(_, Zero, Zero, _), key)
           if key == Keys.scalaVersion.key || key == Keys.scalaHome.key =>

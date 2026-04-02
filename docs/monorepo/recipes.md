@@ -2,7 +2,8 @@
 
 ## Cross-build releases
 
-Enable cross-building so version-sensitive steps run once per `crossScalaVersions` for each selected project:
+Enable cross-building so version-sensitive steps run once per distinct
+`crossScalaVersions` value for each selected project:
 
 ```scala
 // build.sbt
@@ -29,8 +30,10 @@ sbt "releaseIOMonorepo cross"
 For each selected project, cross-built steps follow this lifecycle:
 
 1. The current Scala version is captured before the first iteration.
-2. For each version in `crossScalaVersions`, the project is reloaded with that version and the step runs.
-3. After all iterations (or on error), the entry Scala version is restored.
+2. The configured `crossScalaVersions` are normalized to distinct values while preserving
+   first-seen order.
+3. For each distinct version, the project is reloaded with that version and the step runs.
+4. After all iterations (or on error), the entry Scala version is restored.
 
 Both the `validate` and `execute` phases are cross-built.
 

@@ -17,6 +17,8 @@ private[monorepo] object MonorepoHookCompiler {
       enableTagging = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging),
       enablePublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish),
       enablePush = extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush),
+      afterCleanCheckHooks =
+        extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck),
       beforeSelectionHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection),
       afterSelectionHooks = extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection),
       beforeVersionResolutionHooks =

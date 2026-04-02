@@ -488,40 +488,58 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
 
   private val preflightFixtureResource: Resource[IO, (File, MonorepoContext, File)] =
     TestSupport.tempDirResource("monorepo-preflight-spec").evalMap { repo =>
-      IO.blocking {
-        val coreBase    = new File(repo, "core")
-        coreBase.mkdirs()
-        val versionFile = new File(coreBase, "version.sbt")
-        sbt.IO.write(new File(repo, "tracked.txt"), "initial")
-        sbt.IO.write(versionFile, """version := "0.1.0-SNAPSHOT"""" + "\n")
+      for {
+        fixture               <- IO.blocking {
+                                   val coreBase    = new File(repo, "core")
+                                   coreBase.mkdirs()
+                                   val versionFile = new File(coreBase, "version.sbt")
+                                   sbt.IO.write(new File(repo, "tracked.txt"), "initial")
+                                   sbt.IO.write(
+                                     versionFile,
+                                     """version := "0.1.0-SNAPSHOT"""" + "\n"
+                                   )
 
-        TestSupport.initGitRepo(repo)
-        TestSupport.commitAll(repo, "Initial commit")
+                                   TestSupport.initGitRepo(repo)
+                                   TestSupport.commitAll(repo, "Initial commit")
 
-        val projects = Seq(
-          MonorepoSpecSupport.monorepoRootProject(
-            repo,
-            projectIds = Seq("core"),
-            settings = Seq(io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true)
-          ),
-          MonorepoSpecSupport.versionedProject(
-            "core",
-            coreBase,
-            settings = Seq(
-              io.release.ReleaseIO.releaseIOVersioningReleaseVersion := ((version: String) =>
-                version.stripSuffix("-SNAPSHOT")
-              ),
-              io.release.ReleaseIO.releaseIOVersioningNextVersion    := ((_: String) =>
-                "0.2.0-SNAPSHOT"
-              )
-            )
-          )
+                                   val projects = Seq(
+                                     MonorepoSpecSupport.monorepoRootProject(
+                                       repo,
+                                       projectIds = Seq("core"),
+                                       settings =
+                                         Seq(
+                                           io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true
+                                         )
+                                     ),
+                                     MonorepoSpecSupport.versionedProject(
+                                       "core",
+                                       coreBase,
+                                       settings = Seq(
+                                         io.release.ReleaseIO.releaseIOVersioningReleaseVersion :=
+                                           ((version: String) => version.stripSuffix("-SNAPSHOT")),
+                                         io.release.ReleaseIO.releaseIOVersioningNextVersion    :=
+                                           ((_: String) => "0.2.0-SNAPSHOT")
+                                       )
+                                     )
+                                   )
+                                   val state    =
+                                     TestSupport.loadedState(
+                                       repo,
+                                       projects,
+                                       currentProjectId = Some("root")
+                                     )
+
+                                   (state, versionFile)
+                                 }
+        (state, versionFile) = fixture
+        resolved             <- MonorepoProjectResolver.resolveAll(state)
+      } yield {
+        val current = Seq(
+          resolved.find(_.name == "core").getOrElse {
+            fail("Expected resolved project 'core' in preflight fixture")
+          }
         )
-        val state    = TestSupport.loadedState(repo, projects, currentProjectId = Some("root"))
-        val current  = Seq(
-          MonorepoProjectResolver.resolveAll(state).unsafeRunSync().find(_.name == "core").get
-        )
-        val ctx      = MonorepoContext(
+        val ctx = MonorepoContext(
           state = state,
           projects = current,
           interactive = false
@@ -576,42 +594,56 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
 
   private val multiProjectPreflightFixtureResource: Resource[IO, (File, MonorepoContext)] =
     TestSupport.tempDirResource("monorepo-preflight-multi-spec").evalMap { repo =>
-      IO.blocking {
-        val coreBase = new File(repo, "core")
-        val apiBase  = new File(repo, "api")
-        coreBase.mkdirs()
-        apiBase.mkdirs()
+      for {
+        state   <- IO.blocking {
+                     val coreBase = new File(repo, "core")
+                     val apiBase  = new File(repo, "api")
+                     coreBase.mkdirs()
+                     apiBase.mkdirs()
 
-        sbt.IO.write(new File(repo, "tracked.txt"), "initial")
-        sbt.IO.write(new File(coreBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
-        sbt.IO.write(new File(apiBase, "version.sbt"), """version := "0.2.0-SNAPSHOT"""" + "\n")
+                     sbt.IO.write(new File(repo, "tracked.txt"), "initial")
+                     sbt.IO.write(
+                       new File(coreBase, "version.sbt"),
+                       """version := "0.1.0-SNAPSHOT"""" + "\n"
+                     )
+                     sbt.IO.write(
+                       new File(apiBase, "version.sbt"),
+                       """version := "0.2.0-SNAPSHOT"""" + "\n"
+                     )
 
-        TestSupport.initGitRepo(repo)
-        TestSupport.commitAll(repo, "Initial commit")
+                     TestSupport.initGitRepo(repo)
+                     TestSupport.commitAll(repo, "Initial commit")
 
-        val versionSettings = Seq(
-          io.release.ReleaseIO.releaseIOVersioningReleaseVersion := ((version: String) =>
-            version.stripSuffix("-SNAPSHOT")
-          ),
-          io.release.ReleaseIO.releaseIOVersioningNextVersion    := ((_: String) =>
-            "0.2.0-SNAPSHOT"
-          )
-        )
-        val projects         = Seq(
-          MonorepoSpecSupport.monorepoRootProject(
-            repo,
-            projectIds = Seq("core", "api"),
-            settings = Seq(io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true)
-          ),
-          MonorepoSpecSupport.versionedProject("core", coreBase, settings = versionSettings),
-          MonorepoSpecSupport.versionedProject("api", apiBase, settings = versionSettings)
-        )
-        val state            = TestSupport.loadedState(repo, projects, currentProjectId = Some("root"))
-        val current          = MonorepoProjectResolver
-          .resolveAll(state)
-          .unsafeRunSync()
-          .filter(project => Set("core", "api").contains(project.name))
-        val ctx              = MonorepoContext(
+                     val versionSettings = Seq(
+                       io.release.ReleaseIO.releaseIOVersioningReleaseVersion :=
+                         ((version: String) => version.stripSuffix("-SNAPSHOT")),
+                       io.release.ReleaseIO.releaseIOVersioningNextVersion    :=
+                         ((_: String) => "0.2.0-SNAPSHOT")
+                     )
+                     val projects         = Seq(
+                       MonorepoSpecSupport.monorepoRootProject(
+                         repo,
+                         projectIds = Seq("core", "api"),
+                         settings =
+                           Seq(io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true)
+                       ),
+                       MonorepoSpecSupport.versionedProject(
+                         "core",
+                         coreBase,
+                         settings = versionSettings
+                       ),
+                       MonorepoSpecSupport.versionedProject(
+                         "api",
+                         apiBase,
+                         settings = versionSettings
+                       )
+                     )
+                     TestSupport.loadedState(repo, projects, currentProjectId = Some("root"))
+                   }
+        resolved <- MonorepoProjectResolver.resolveAll(state)
+      } yield {
+        val current = resolved.filter(project => Set("core", "api").contains(project.name))
+        val ctx     = MonorepoContext(
           state = state,
           projects = current,
           interactive = false

@@ -190,14 +190,7 @@ class Git(val baseDir: File) extends Vcs {
       .map(_.stripPrefix("refs/heads/"))
 
   def pushChanges: IO[Unit] =
-    for {
-      info            <- branchInfo
-      (branch, remote) = info
-      upstream        <- upstreamBranch(branch)
-      _               <- runCmd("push", "--follow-tags", remote, s"$branch:$upstream")(
-                           "git push --follow-tags"
-                         )
-    } yield ()
+    GitPushSupport.pushTrackedBranch(this, followTags = true).map(_ => ())
 }
 
 object Git {

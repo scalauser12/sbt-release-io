@@ -9,12 +9,10 @@ import io.release.internal.SbtRuntime
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.required
-import io.release.steps.StepHelpers.runProcess
 import io.release.steps.StepHelpers.useDefaults
+import io.release.vcs.GitPushSupport
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
-
-import scala.sys.process.Process
 
 /** VCS-related monorepo release steps. */
 private[monorepo] object MonorepoVcsSteps {
@@ -26,48 +24,6 @@ private[monorepo] object MonorepoVcsSteps {
       rendered: String,
       status: String
   )
-
-  private final case class GitPushTarget(
-      remote: String,
-      localBranch: String,
-      upstreamBranch: String
-  )
-
-  private def resolveGitPushTarget(vcs: Vcs): IO[GitPushTarget] =
-    for {
-      localBranch   <- vcs.currentBranch
-      remote        <- vcs.trackingRemote
-      upstreamRef   <- IO.blocking(
-                         Process(
-                           Seq(
-                             "git",
-                             "rev-parse",
-                             "--abbrev-ref",
-                             "--symbolic-full-name",
-                             "@{upstream}"
-                           ),
-                           vcs.baseDir
-                         ).!!.trim
-                       )
-      remotePrefix   = s"$remote/"
-      _             <-
-        IO.raiseUnless(upstreamRef.startsWith(remotePrefix))(
-          new IllegalStateException(
-            s"Upstream '$upstreamRef' for branch '$localBranch' does not match tracking remote '$remote'."
-          )
-        )
-      upstreamBranch = upstreamRef.stripPrefix(remotePrefix)
-      _             <-
-        IO.raiseWhen(upstreamBranch.isEmpty)(
-          new IllegalStateException(
-            s"Unable to resolve upstream branch from '$upstreamRef' for tracking remote '$remote'."
-          )
-        )
-    } yield GitPushTarget(
-      remote = remote,
-      localBranch = localBranch,
-      upstreamBranch = upstreamBranch
-    )
 
   val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
     name = "initialize-vcs",
@@ -197,34 +153,16 @@ private[monorepo] object MonorepoVcsSteps {
   private def gitPush(ctx: MonorepoContext, vcs: Vcs): IO[MonorepoContext] = {
     val tags = ctx.currentProjects.flatMap(_.tagName).distinct
     for {
-      pushTarget <- resolveGitPushTarget(vcs)
+      pushTarget <- GitPushSupport.resolvePushTarget(vcs)
       _          <- logInfo(
                       ctx,
                       s"Pushing branch ${pushTarget.localBranch} " +
                         s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
                     )
-      _          <- runProcess(
-                      Process(
-                        Seq(
-                          "git",
-                          "push",
-                          pushTarget.remote,
-                          s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                        ),
-                        vcs.baseDir
-                      ),
-                      s"git push ${pushTarget.remote} " +
-                        s"${pushTarget.localBranch}:${pushTarget.upstreamBranch}"
-                    )
+      _          <- GitPushSupport.pushTrackedBranch(vcs, pushTarget, followTags = false)
       _          <- tags.toList.traverse_ { tag =>
                       logInfo(ctx, s"Pushing tag $tag") *>
-                        runProcess(
-                          Process(
-                            Seq("git", "push", pushTarget.remote, tag),
-                            vcs.baseDir
-                          ),
-                          s"git push tag '$tag'"
-                        )
+                        GitPushSupport.pushTag(vcs, pushTarget.remote, tag)
                     }
     } yield ctx
   }

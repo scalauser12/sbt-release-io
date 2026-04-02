@@ -8,6 +8,7 @@ private[monorepo] final case class MonorepoHookConfiguration(
     enableTagging: Boolean,
     enablePublish: Boolean,
     enablePush: Boolean,
+    afterCleanCheckHooks: Seq[MonorepoGlobalHookIO],
     beforeSelectionHooks: Seq[MonorepoGlobalHookIO],
     afterSelectionHooks: Seq[MonorepoGlobalHookIO],
     beforeVersionResolutionHooks: Seq[MonorepoProjectHookIO],
@@ -37,6 +38,7 @@ private[monorepo] final case class MonorepoHookConfiguration(
       enableTagging = enableTagging && other.enableTagging,
       enablePublish = enablePublish && other.enablePublish,
       enablePush = enablePush && other.enablePush,
+      afterCleanCheckHooks = afterCleanCheckHooks ++ other.afterCleanCheckHooks,
       beforeSelectionHooks = beforeSelectionHooks ++ other.beforeSelectionHooks,
       afterSelectionHooks = afterSelectionHooks ++ other.afterSelectionHooks,
       beforeVersionResolutionHooks =

@@ -1,0 +1,150 @@
+package io.release.monorepo
+
+import cats.effect.IO
+import cats.effect.Resource
+import io.release.internal.ReleaseLogPrefixes
+import munit.CatsEffectSuite
+
+class MonorepoCommandExecutionSpec
+    extends CatsEffectSuite
+    with MonorepoReleasePluginSpecSupport {
+
+  private def runtime(
+      crossBuild: Boolean = false,
+      skipTests: Boolean = false,
+      skipPublish: Boolean = false,
+      interactive: Boolean = false
+  ): MonorepoCommandExecution.CommandRuntime[Unit] =
+    MonorepoCommandExecution.CommandRuntime(
+      commandName = "releaseIOMonorepo",
+      resource = Resource.unit,
+      resolveResourceHooks = _ => MonorepoResourceHooks.empty,
+      resolveCrossBuildEnabled = _ => crossBuild,
+      resolveSkipTestsEnabled = _ => skipTests,
+      resolveSkipPublishEnabled = _ => skipPublish,
+      resolveInteractiveEnabled = _ => interactive
+    )
+
+  test("resolveFlags honors runtime resolvers when no CLI override is present") {
+    import MonorepoCli.Arg.*
+
+    stateResource("monorepo-command-flags-runtime", MonorepoReleasePlugin).use { loaded =>
+      IO {
+        val flags = MonorepoCommandExecution.resolveFlags(
+          loaded.state,
+          Seq(WithDefaults, AllChanged),
+          runtime(
+            crossBuild = true,
+            skipTests = true,
+            skipPublish = true,
+            interactive = true
+          ),
+          interactiveEnabled = true
+        )
+
+        assertEquals(
+          flags,
+          MonorepoCommandExecution.ReleaseFlags(
+            useDefaults = true,
+            skipTests = true,
+            crossBuild = true,
+            allChanged = true,
+            skipPublish = true,
+            interactive = true
+          )
+        )
+      }
+    }
+  }
+
+  test("resolveFlags lets CLI cross and skip-tests override false runtime resolvers") {
+    import MonorepoCli.Arg.*
+
+    stateResource("monorepo-command-flags-cli", MonorepoReleasePlugin).use { loaded =>
+      IO {
+        val flags = MonorepoCommandExecution.resolveFlags(
+          loaded.state,
+          Seq(CrossBuild, SkipTests),
+          runtime(),
+          interactiveEnabled = true
+        )
+
+        assertEquals(
+          flags,
+          MonorepoCommandExecution.ReleaseFlags(
+            useDefaults = false,
+            skipTests = true,
+            crossBuild = true,
+            allChanged = false,
+            skipPublish = false,
+            interactive = false
+          )
+        )
+      }
+    }
+  }
+
+  test("resolveFlags suppresses interactive mode when command execution disables prompting") {
+    stateResource("monorepo-command-flags-non-interactive", MonorepoReleasePlugin).use { loaded =>
+      IO {
+        val flags = MonorepoCommandExecution.resolveFlags(
+          loaded.state,
+          Seq.empty,
+          runtime(interactive = true),
+          interactiveEnabled = false
+        )
+
+        assertEquals(flags.interactive, false)
+      }
+    }
+  }
+
+  test("releaseStartLines include cross-build and skip messages when enabled") {
+    val lines = MonorepoCommandExecution.releaseStartLines(
+      stepCount = 12,
+      projectCount = 3,
+      flags = MonorepoCommandExecution.ReleaseFlags(
+        useDefaults = false,
+        skipTests = true,
+        crossBuild = true,
+        allChanged = false,
+        skipPublish = true,
+        interactive = true
+      )
+    )
+
+    assertEquals(
+      lines,
+      List(
+        s"${ReleaseLogPrefixes.Monorepo} Starting monorepo release...",
+        s"${ReleaseLogPrefixes.Monorepo} 12 steps, 3 project(s)",
+        s"${ReleaseLogPrefixes.Monorepo} Cross-build enabled",
+        s"${ReleaseLogPrefixes.Monorepo} Tests will be skipped",
+        s"${ReleaseLogPrefixes.Monorepo} Publish will be skipped"
+      )
+    )
+  }
+
+  test("releaseStartLines omit the cross-build message when cross-build is disabled") {
+    val lines = MonorepoCommandExecution.releaseStartLines(
+      stepCount = 4,
+      projectCount = 1,
+      flags = MonorepoCommandExecution.ReleaseFlags(
+        useDefaults = false,
+        skipTests = false,
+        crossBuild = false,
+        allChanged = false,
+        skipPublish = false,
+        interactive = false
+      )
+    )
+
+    assertEquals(
+      lines,
+      List(
+        s"${ReleaseLogPrefixes.Monorepo} Starting monorepo release...",
+        s"${ReleaseLogPrefixes.Monorepo} 4 steps, 1 project(s)"
+      )
+    )
+  }
+}

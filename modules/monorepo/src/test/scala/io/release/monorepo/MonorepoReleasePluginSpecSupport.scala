@@ -38,6 +38,40 @@ trait MonorepoReleasePluginSpecSupport {
 
   protected object InheritedHookFriendlyPlugin extends BaseHookFriendlyPlugin
 
+  protected object BehaviorOverridePlugin extends MonorepoReleasePluginLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseMonorepoBehaviorOverrides"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def crossBuildEnabled(state: State): Boolean = true
+
+    override protected def skipTestsEnabled(state: State): Boolean = true
+
+    override protected def skipPublishEnabled(state: State): Boolean = true
+
+    override protected def interactiveEnabled(state: State): Boolean = true
+  }
+
+  protected abstract class BaseBehaviorOverridePlugin extends MonorepoReleasePluginLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseMonorepoBehaviorOverridesInherited"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def crossBuildEnabled(state: State): Boolean = true
+
+    override protected def skipTestsEnabled(state: State): Boolean = true
+
+    override protected def skipPublishEnabled(state: State): Boolean = true
+
+    override protected def interactiveEnabled(state: State): Boolean = true
+  }
+
+  protected object InheritedBehaviorOverridePlugin extends BaseBehaviorOverridePlugin
+
   protected def resourceAwareHookPlugin(
       observed: Ref[IO, List[String]]
   ): MonorepoReleasePluginLike[Unit] =

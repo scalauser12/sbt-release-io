@@ -37,7 +37,7 @@ private[monorepo] object MonorepoComposer {
         for {
           setupCtx <- runSequentialValidateThenExecute(
                         setupSteps,
-                        ExecutionEngine.armOnFailure(initialCtx)
+                        initialCtx
                       )
           finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
                       else runMainSegment(mainSteps, setupCtx)
@@ -46,7 +46,7 @@ private[monorepo] object MonorepoComposer {
       case None =>
         runSequentialValidateThenExecute(
           steps,
-          ExecutionEngine.armOnFailure(initialCtx)
+          initialCtx
         )
     }
 

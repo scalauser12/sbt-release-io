@@ -22,7 +22,11 @@ private[monorepo] object MonorepoCommandExecution {
   final case class CommandRuntime[T](
       commandName: String,
       resource: Resource[IO, T],
-      resolveResourceHooks: State => MonorepoResourceHooks[T]
+      resolveResourceHooks: State => MonorepoResourceHooks[T],
+      resolveCrossBuildEnabled: State => Boolean,
+      resolveSkipTestsEnabled: State => Boolean,
+      resolveSkipPublishEnabled: State => Boolean,
+      resolveInteractiveEnabled: State => Boolean
   )
 
   final case class ReleaseFlags(
@@ -97,25 +101,21 @@ private[monorepo] object MonorepoCommandExecution {
       )
     )
 
-  private def parseFlags(
+  private[monorepo] def resolveFlags[T](
+      cleanState: State,
       args: Seq[MonorepoCli.Arg],
-      extracted: Extracted,
+      runtime: CommandRuntime[T],
       interactiveEnabled: Boolean
   ): ReleaseFlags = {
     import MonorepoCli.Arg.*
 
     ReleaseFlags(
       useDefaults = args.contains(WithDefaults),
-      skipTests = args.contains(SkipTests) || extracted.get(
-        MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests
-      ),
-      crossBuild = args.contains(CrossBuild) || extracted.get(
-        MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild
-      ),
+      skipTests = args.contains(SkipTests) || runtime.resolveSkipTestsEnabled(cleanState),
+      crossBuild = args.contains(CrossBuild) || runtime.resolveCrossBuildEnabled(cleanState),
       allChanged = args.contains(AllChanged),
-      skipPublish = extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish),
-      interactive =
-        interactiveEnabled && extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorInteractive)
+      skipPublish = runtime.resolveSkipPublishEnabled(cleanState),
+      interactive = interactiveEnabled && runtime.resolveInteractiveEnabled(cleanState)
     )
   }
 
@@ -148,19 +148,18 @@ private[monorepo] object MonorepoCommandExecution {
     )
   }
 
-  private def prepareCommand(
+  private def prepareCommand[T](
       cleanState: State,
       args: Seq[MonorepoCli.Arg],
-      interactiveEnabled: Boolean,
-      commandName: String
+      runtime: CommandRuntime[T],
+      interactiveEnabled: Boolean
   ): IO[Either[State, PlannedCommand]] =
     for {
-      extracted <- IO.blocking(Project.extract(cleanState))
-      flags     <- IO.blocking(parseFlags(args, extracted, interactiveEnabled))
+      flags   <- IO.blocking(resolveFlags(cleanState, args, runtime, interactiveEnabled))
       defaults   = resolveDecisionDefaults(cleanState, args)
       planned   <- MonorepoReleasePlan.build(
                      cleanState,
-                     plannerInputs(args, flags, defaults, commandName)
+                     plannerInputs(args, flags, defaults, runtime.commandName)
                    )
     } yield planned.map(plan => PlannedCommand(cleanState, flags, plan))
 
@@ -174,8 +173,8 @@ private[monorepo] object MonorepoCommandExecution {
     val program: IO[State] = prepareCommand(
       cleanState,
       args,
-      interactiveEnabled,
-      runtime.commandName
+      runtime,
+      interactiveEnabled
     ).flatMap {
       case Left(failedState) => IO.pure(failedState)
       case Right(command)    =>
@@ -254,17 +253,29 @@ private[monorepo] object MonorepoCommandExecution {
   private def loadedProjectRefs(state: State): Seq[ProjectRef] =
     SbtRuntime.extracted(state).structure.allProjectRefs
 
+  private[monorepo] def releaseStartLines(
+      stepCount: Int,
+      projectCount: Int,
+      flags: ReleaseFlags
+  ): List[String] = {
+    val prefix = ReleaseLogPrefixes.Monorepo
+
+    List(
+      s"$prefix Starting monorepo release...",
+      s"$prefix $stepCount steps, $projectCount project(s)"
+    ) ++
+      (if (flags.crossBuild) List(s"$prefix Cross-build enabled") else Nil) ++
+      (if (flags.skipTests) List(s"$prefix Tests will be skipped") else Nil) ++
+      (if (flags.skipPublish) List(s"$prefix Publish will be skipped") else Nil)
+  }
+
   private def logReleaseStart(
       state: State,
       stepCount: Int,
       projectCount: Int,
       flags: ReleaseFlags
-  ): Unit = {
-    state.log.info(s"${ReleaseLogPrefixes.Monorepo} Starting monorepo release...")
-    state.log.info(s"${ReleaseLogPrefixes.Monorepo} $stepCount steps, $projectCount project(s)")
-    if (flags.skipTests) state.log.info(s"${ReleaseLogPrefixes.Monorepo} Tests will be skipped")
-    if (flags.skipPublish) state.log.info(s"${ReleaseLogPrefixes.Monorepo} Publish will be skipped")
-  }
+  ): Unit =
+    releaseStartLines(stepCount, projectCount, flags).foreach(line => state.log.info(line))
 
   private def resolveDecisionDefaults(
       state: State,

@@ -58,6 +58,11 @@ trait MonorepoReleaseIO
   @deprecated("Use releaseIOMonorepoPolicyEnablePush instead.", "0.9.0")
   val releaseIOMonorepoEnablePush: SettingKey[Boolean] = releaseIOMonorepoPolicyEnablePush
 
+  /** Hooks that run after the clean-working-dir validation/check phase. */
+  @deprecated("Use releaseIOMonorepoHooksAfterCleanCheck instead.", "0.9.0")
+  val releaseIOMonorepoAfterCleanCheckHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    releaseIOMonorepoHooksAfterCleanCheck
+
   /** Hooks that run immediately before project selection/change detection. */
   @deprecated("Use releaseIOMonorepoHooksBeforeSelection instead.", "0.9.0")
   val releaseIOMonorepoBeforeSelectionHooks: SettingKey[Seq[MonorepoGlobalHookIO]] =
@@ -348,6 +353,13 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
     SettingKey[Boolean](
       "releaseIOMonorepoEnablePush",
       "Whether to include the push phase in the compiled hook process"
+    )
+
+  private[monorepo] lazy val _releaseIOMonorepoAfterCleanCheckHooks
+      : SettingKey[Seq[MonorepoGlobalHookIO]] =
+    SettingKey[Seq[MonorepoGlobalHookIO]](
+      "releaseIOMonorepoAfterCleanCheckHooks",
+      "Hooks that run after clean-working-dir validation/check"
     )
 
   private[monorepo] lazy val _releaseIOMonorepoBeforeSelectionHooks

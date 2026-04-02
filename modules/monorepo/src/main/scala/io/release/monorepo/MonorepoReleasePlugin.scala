@@ -49,6 +49,30 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
   protected def monorepoResourceHooks(state: State): MonorepoResourceHooks[T] =
     MonorepoResourceHooks.empty
 
+  /** Whether cross-building is enabled (before command-line args are applied).
+    * Defaults to reading from the `releaseIOMonorepoBehaviorCrossBuild` setting.
+    */
+  protected def crossBuildEnabled(state: State): Boolean =
+    Project.extract(state).get(releaseIOMonorepoBehaviorCrossBuild)
+
+  /** Whether tests should be skipped (before command-line args are applied).
+    * Defaults to reading from the `releaseIOMonorepoBehaviorSkipTests` setting.
+    */
+  protected def skipTestsEnabled(state: State): Boolean =
+    Project.extract(state).get(releaseIOMonorepoBehaviorSkipTests)
+
+  /** Whether to skip publish. Defaults to reading from the
+    * `releaseIOMonorepoBehaviorSkipPublish` setting.
+    */
+  protected def skipPublishEnabled(state: State): Boolean =
+    Project.extract(state).get(releaseIOMonorepoBehaviorSkipPublish)
+
+  /** Whether interactive prompts are enabled.
+    * Defaults to reading from the `releaseIOMonorepoBehaviorInteractive` setting.
+    */
+  protected def interactiveEnabled(state: State): Boolean =
+    Project.extract(state).get(releaseIOMonorepoBehaviorInteractive)
+
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
     */
@@ -74,7 +98,11 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
     MonorepoCommandExecution.CommandRuntime(
       commandName = commandName,
       resource = resource,
-      resolveResourceHooks = state => monorepoResourceHooks(state)
+      resolveResourceHooks = state => monorepoResourceHooks(state),
+      resolveCrossBuildEnabled = state => crossBuildEnabled(state),
+      resolveSkipTestsEnabled = state => skipTestsEnabled(state),
+      resolveSkipPublishEnabled = state => skipPublishEnabled(state),
+      resolveInteractiveEnabled = state => interactiveEnabled(state)
     )
 
   private def handleMonorepoRelease(state: State, tokens: Seq[String]): State =

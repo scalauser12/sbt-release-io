@@ -173,6 +173,149 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
     }
   }
 
+  test(
+    "compose - per-project cross-build deduplicates configured Scala versions and restores entry state for later steps"
+  ) {
+    loadedContextResource("monorepo-step-dedup-cross", Seq("core")) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"))
+          .settings(scalaVersion := TestSupport.CurrentScalaVersion),
+        Project("core", coreBase).settings(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion,
+            TestSupport.CurrentScalaVersion
+          )
+        )
+      )
+    }.use { ctx =>
+      val crossStep = MonorepoStepIO.PerProject(
+        name = "cross-step",
+        execute = (c, project) =>
+          appendCurrentScalaVersion(new File(project.baseDir, "cross-invocations.txt"), c.state)
+            .as(c),
+        enableCrossBuild = true
+      )
+      val plainStep = MonorepoStepIO.PerProject(
+        name = "plain-step",
+        execute = (c, project) =>
+          projectScalaVersionOf(c.state, project.ref).flatMap {
+            case Some(version) =>
+              IO.blocking {
+                sbt.IO.append(new File(project.baseDir, "plain-project-version.txt"), s"$version\n")
+              }.as(c)
+            case None          =>
+              IO.raiseError(
+                new RuntimeException(s"missing restored scalaVersion for ${project.name}")
+              )
+          }
+      )
+
+      MonorepoStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+        val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
+
+        for {
+          restoredVersion <- scalaVersionOf(result.state)
+          restoredCore    <- projectScalaVersionOf(result.state, core.ref)
+          crossInvocations <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "cross-invocations.txt"))
+          plainVersions   <- MonorepoSpecSupport.readNonEmptyLines(
+                               new File(core.baseDir, "plain-project-version.txt")
+                             )
+        } yield {
+          assertEquals(
+            crossInvocations,
+            List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+          )
+          assertEquals(plainVersions, List(TestSupport.CurrentScalaVersion))
+          assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+          assertEquals(restoredCore, Some(TestSupport.CurrentScalaVersion))
+        }
+      }
+    }
+  }
+
+  test(
+    "compose - heterogeneous project entry scalaVersions are restored before later plain per-project steps"
+  ) {
+    loadedContextResource("monorepo-step-heterogeneous-restore", Seq("core", "api")) { dir =>
+      val coreBase = new File(dir, "core")
+      val apiBase  = new File(dir, "api")
+      coreBase.mkdirs()
+      apiBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"), LocalProject("api"))
+          .settings(scalaVersion := TestSupport.CurrentScalaVersion),
+        Project("core", coreBase).settings(
+          scalaVersion           := TestSupport.CurrentScalaVersion,
+          crossScalaVersions     := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion
+          )
+        ),
+        Project("api", apiBase).settings(
+          scalaVersion           := TestSupport.alternateScalaVersion,
+          crossScalaVersions     := Seq(TestSupport.alternateScalaVersion)
+        )
+      )
+    }.use { ctx =>
+      val crossStep = MonorepoStepIO.PerProject(
+        name = "cross-step",
+        execute = (c, project) =>
+          appendCurrentScalaVersion(new File(project.baseDir, "cross-invocations.txt"), c.state)
+            .as(c),
+        enableCrossBuild = true
+      )
+      val plainStep = MonorepoStepIO.PerProject(
+        name = "plain-step",
+        execute = (c, project) =>
+          projectScalaVersionOf(c.state, project.ref).flatMap {
+            case Some(version) =>
+              IO.blocking {
+                sbt.IO.append(
+                  new File(project.baseDir, "plain-project-version.txt"),
+                  s"$version\n"
+                )
+              }.as(c)
+            case None          =>
+              IO.raiseError(
+                new RuntimeException(s"missing restored scalaVersion for ${project.name}")
+              )
+          }
+      )
+
+      MonorepoStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+        val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
+        val api  = MonorepoSpecSupport.projectNamed(result.projects, "api")
+
+        for {
+          restoredVersion <- scalaVersionOf(result.state)
+          restoredCore    <- projectScalaVersionOf(result.state, core.ref)
+          restoredApi     <- projectScalaVersionOf(result.state, api.ref)
+          corePlain       <- MonorepoSpecSupport.readNonEmptyLines(
+                               new File(core.baseDir, "plain-project-version.txt")
+                             )
+          apiPlain        <- MonorepoSpecSupport.readNonEmptyLines(
+                               new File(api.baseDir, "plain-project-version.txt")
+                             )
+        } yield {
+          assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+          assertEquals(restoredCore, Some(TestSupport.CurrentScalaVersion))
+          assertEquals(restoredApi, Some(TestSupport.alternateScalaVersion))
+          assertEquals(corePlain, List(TestSupport.CurrentScalaVersion))
+          assertEquals(apiPlain, List(TestSupport.alternateScalaVersion))
+        }
+      }
+    }
+  }
+
   test("compose - restore the entry state when no entry scalaVersion is defined") {
     val metadataKey = AttributeKey[String]("cross-build-no-entry-scala-version")
 

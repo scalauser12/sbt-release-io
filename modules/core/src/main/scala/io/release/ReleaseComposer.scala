@@ -91,24 +91,19 @@ private[release] object ReleaseComposer {
       action: ReleaseContext => IO[ReleaseContext]
   )(ctx: ReleaseContext): IO[ReleaseContext] = IO.defer {
     IO.blocking {
-      val entryState     = ctx.state
-      val extracted      = SbtRuntime.extracted(entryState)
-      val crossVersions  = extracted.get(crossScalaVersions)
-      val currentVersion =
-        CrossBuildSupport.resolveEntryScalaVersion(extracted, extracted.currentRef)
-      (crossVersions, currentVersion, entryState)
-    }.flatMap { case (crossVersions, currentVersion, entryState) =>
+      val entryState    = ctx.state
+      val extracted     = SbtRuntime.extracted(entryState)
+      val crossVersions =
+        CrossBuildSupport.distinctCrossScalaVersions(extracted.get(crossScalaVersions))
+      (crossVersions, entryState)
+    }.flatMap { case (crossVersions, entryState) =>
       def switchTo(version: String)(currentCtx: ReleaseContext): IO[ReleaseContext] =
         SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
 
       def restoreEntry(currentCtx: ReleaseContext): IO[ReleaseContext] =
-        currentVersion match {
-          case Some(ver) => switchTo(ver)(currentCtx)
-          case None      =>
-            CrossBuildSupport
-              .restoreEntryScalaSession(entryState, currentCtx.state)
-              .map(currentCtx.withState)
-        }
+        CrossBuildSupport
+          .restoreEntryScalaSession(entryState, currentCtx.state)
+          .map(currentCtx.withState)
 
       def restoreOnError(currentCtx: ReleaseContext, err: Throwable): IO[ReleaseContext] =
         restoreEntry(currentCtx).attempt.flatMap {
@@ -116,7 +111,7 @@ private[release] object ReleaseComposer {
           case Left(restoreErr) =>
             IO.blocking {
               currentCtx.state.log.error(
-                s"$LogPrefix Failed to restore the entry Scala version after a cross-build failure: " +
+                s"$LogPrefix Failed to restore the entry Scala settings after a cross-build failure: " +
                   s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
               )
               attachSuppressed(err, restoreErr)
@@ -129,7 +124,7 @@ private[release] object ReleaseComposer {
           case Left(restoreErr)   =>
             IO.blocking {
               currentCtx.state.log.error(
-                s"$LogPrefix Failed to restore the entry Scala version after cross-build completion: " +
+                s"$LogPrefix Failed to restore the entry Scala settings after cross-build completion: " +
                   s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
               )
             } *> IO.raiseError(restoreErr)

@@ -80,6 +80,56 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
     }
   }
 
+  test("detectChangedProjects - warn when child scope resolution is incomplete") {
+    Resource.both(repoResource, outsideDirResource).use { case (repo: File, outsideBaseDir: File) =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "external"))
+        sbt.IO.write(
+          new File(repo, "version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+        sbt.IO.write(
+          new File(repo, "external/version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "root-v0.1.0")
+        TestSupport.runGit(repo, "tag", "external-v0.1.0")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val root     = rootProject(repo)
+        val external = projectInfo(
+          repo,
+          name = "external",
+          baseDir = outsideBaseDir,
+          versionFile = new File(repo, "external/version.sbt")
+        )
+
+        detectChanged(vcs, Seq(root, external), env.state).flatMap { changed =>
+          readLogs(
+            env,
+            required = Seq(
+              "Cannot resolve child diff scope for project(s): external",
+              "Child-directory exclusion will be incomplete",
+              "root unchanged since root-v0.1.0",
+              "Cannot diff external: project baseDir"
+            )
+          ).map { logs =>
+            assertEquals(changed.map(_.name), Seq("external"))
+            assert(logs.contains(outsideBaseDir.getAbsolutePath))
+            assert(logs.contains(repo.getAbsolutePath))
+          }
+        }
+      }
+    }
+  }
+
   test("detectChangedProjects - mark all projects as changed when a shared path has changes") {
     repoResource.use { repo =>
       IO.blocking {

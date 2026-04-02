@@ -12,12 +12,17 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val step = MonorepoStepIO.Global(
           name = "test-step",
-          validate = _ => log.update(_ :+ "validate"),
+          validate = currentCtx =>
+            log.update(_ :+ s"validate:${currentCtx.state.onFailure.isDefined}"),
           execute = c => log.update(_ :+ "execute").as(c)
         )
 
-        MonorepoStepIO.compose(Seq(step))(ctx) *>
-          log.get.map(obs => assertEquals(obs, List("validate", "execute")))
+        MonorepoStepIO.compose(Seq(step))(ctx).flatMap { result =>
+          log.get.map { obs =>
+            assertEquals(obs, List("validate:false", "execute"))
+            assertEquals(result.state.onFailure, None)
+          }
+        }
       }
     }
   }
@@ -107,7 +112,8 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
 
         val setup       = MonorepoStepIO.Global(
           name = "custom-setup",
-          validate = _ => log.update(_ :+ "validate-setup"),
+          validate = currentCtx =>
+            log.update(_ :+ s"validate-setup:${currentCtx.state.onFailure.isDefined}"),
           execute = c => log.update(_ :+ "execute-setup").as(c)
         )
         val boundary    = MonorepoStepIO
@@ -125,21 +131,24 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           execute = c => log.update(_ :+ "execute-global").as(c)
         )
 
-        MonorepoStepIO.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx) *>
-          log.get.map { obs =>
-            assertEquals(
-              obs,
-              List(
-                "validate-setup",
-                "execute-setup",
-                "select",
-                "validate-project:api",
-                "validate-global",
-                "execute-project:api",
-                "execute-global"
+        MonorepoStepIO.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx).flatMap {
+          result =>
+            log.get.map { obs =>
+              assertEquals(
+                obs,
+                List(
+                  "validate-setup:false",
+                  "execute-setup",
+                  "select",
+                  "validate-project:api",
+                  "validate-global",
+                  "execute-project:api",
+                  "execute-global"
+                )
               )
-            )
-          }
+              assertEquals(result.state.onFailure, None)
+            }
+        }
       }
     }
   }

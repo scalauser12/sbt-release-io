@@ -62,6 +62,10 @@ trait MonorepoReleaseIOPolicyKeys {
 /** Grouped build-facing monorepo settings for lifecycle hooks. */
 trait MonorepoReleaseIOHookKeys {
 
+  /** Hooks that run after the clean-working-dir validation/check phase. */
+  val releaseIOMonorepoHooksAfterCleanCheck: SettingKey[Seq[MonorepoGlobalHookIO]] =
+    MonorepoReleaseIO._releaseIOMonorepoAfterCleanCheckHooks
+
   /** Hooks that run immediately before project selection/change detection. */
   val releaseIOMonorepoHooksBeforeSelection: SettingKey[Seq[MonorepoGlobalHookIO]] =
     MonorepoReleaseIO._releaseIOMonorepoBeforeSelectionHooks

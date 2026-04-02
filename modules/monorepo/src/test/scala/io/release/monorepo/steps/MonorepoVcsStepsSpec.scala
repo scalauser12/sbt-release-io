@@ -297,6 +297,63 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("pushChanges.execute - push the tracked branch and only recorded project tags") {
+    twoProjectPushContextResource.use { case (repo, remoteRepo, core, api, ctx) =>
+      val coreTag = core.tagName.getOrElse(fail("Expected core tag name"))
+      val apiTag  = api.tagName.getOrElse(fail("Expected api tag name"))
+
+      for {
+        _          <- IO.blocking {
+                        sbt.IO.write(new File(repo, "file.txt"), "updated")
+                        TestSupport.commitAll(repo, "Second commit")
+                        TestSupport.runGit(
+                          repo,
+                          "tag",
+                          "-a",
+                          coreTag,
+                          "-m",
+                          s"Release ${core.name} 1.0.0"
+                        )
+                        TestSupport.runGit(
+                          repo,
+                          "tag",
+                          "-a",
+                          apiTag,
+                          "-m",
+                          s"Release ${api.name} 2.0.0"
+                        )
+                        TestSupport.runGit(
+                          repo,
+                          "tag",
+                          "-a",
+                          "local-only",
+                          "-m",
+                          "Local only"
+                        )
+                      }
+        result     <- MonorepoVcsSteps.pushChanges.execute(ctx)
+        localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        remoteHead <- IO.blocking(
+                        TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main")
+                          .trim
+                      )
+        remoteCore <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", coreTag).trim)
+        remoteApi  <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", apiTag).trim)
+        remoteExtra <- IO.blocking(
+                         TestSupport.runGit(remoteRepo, "tag", "--list", "local-only").trim
+                       )
+      } yield {
+        assert(!result.failed)
+        assertEquals(remoteHead, localHead)
+        assertEquals(remoteCore, coreTag)
+        assertEquals(remoteApi, apiTag)
+        assertEquals(remoteExtra, "")
+        assertEquals(MonorepoSpecSupport.projectNamed(result.projects, "core").tagName, Some(coreTag))
+        assertEquals(MonorepoSpecSupport.projectNamed(result.projects, "api").tagName, Some(apiTag))
+      }
+    }
+  }
+
   test("pushChanges.validate - fail when VCS was not initialized by initializeVcs") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
       TestAssertions.assertFailure[IllegalStateException, Unit](
@@ -497,6 +554,65 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         )
       }
     }
+
+  private val twoProjectPushContextResource
+      : Resource[IO, (File, File, ProjectReleaseInfo, ProjectReleaseInfo, MonorepoContext)] =
+    TestSupport
+      .gitRepoWithBareRemoteResource("monorepo-vcs-steps-push-spec", prepareRepo = repo =>
+        IO.blocking {
+          sbt.IO.write(new File(repo, "file.txt"), "initial")
+          val coreBase = new File(repo, "core")
+          val apiBase  = new File(repo, "api")
+          coreBase.mkdirs()
+          apiBase.mkdirs()
+          sbt.IO.write(new File(coreBase, "version.sbt"), """version := "1.0.0-SNAPSHOT"""" + "\n")
+          sbt.IO.write(new File(apiBase, "version.sbt"), """version := "2.0.0-SNAPSHOT"""" + "\n")
+        }
+      )
+      .evalMap { case (repo, remoteRepo) =>
+        Vcs.detect(repo).flatMap {
+          case Some(vcs) =>
+            IO.blocking {
+              val coreBase = new File(repo, "core")
+              val apiBase  = new File(repo, "api")
+              val projects = Seq(
+                rootProject(repo, aggregateIds = Seq("core", "api")),
+                Project("core", coreBase).settings((releaseManifestSettings())*),
+                Project("api", apiBase).settings((releaseManifestSettings())*)
+              )
+              val state    = loadedState(repo, projects)
+              val core     = projectInfo(
+                state,
+                projects,
+                "core",
+                versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")
+              ).copy(tagName = Some("core-v1.0.0"))
+              val api      = projectInfo(
+                state,
+                projects,
+                "api",
+                versions = Some("2.0.0" -> "2.1.0-SNAPSHOT")
+              ).copy(tagName = Some("api-v2.0.0"))
+
+              (
+                repo,
+                remoteRepo,
+                core,
+                api,
+                MonorepoContext(
+                  state = state,
+                  vcs = Some(vcs),
+                  interactive = false,
+                  projects = Seq(core, api)
+                )
+              )
+            }
+          case None      =>
+            IO.raiseError(
+              new RuntimeException(s"Failed to detect VCS in ${repo.getAbsolutePath}")
+            )
+        }
+      }
 
   private def gitRepoWithVcsResource(
       prepareRepo: File => Unit

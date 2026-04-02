@@ -33,6 +33,7 @@ the underlying key instances were not renamed yet.
 | `releaseIOMonorepoDetectChanges` | `releaseIOMonorepoDetectionEnabled` |
 | `releaseIOMonorepoIncludeDownstream` | `releaseIOMonorepoDetectionIncludeDownstream` |
 | `releaseIOMonorepoEnablePush` | `releaseIOMonorepoPolicyEnablePush` |
+| `releaseIOMonorepoAfterCleanCheckHooks` | `releaseIOMonorepoHooksAfterCleanCheck` |
 | `releaseIOMonorepoBeforePublishHooks` | `releaseIOMonorepoHooksBeforePublish` |
 
 ## Selection settings
@@ -100,6 +101,7 @@ exist when it is `false`.
 | `releaseIOMonorepoPolicyEnableTagging` | `Boolean` | `true` | Include `tag-releases` |
 | `releaseIOMonorepoPolicyEnablePublish` | `Boolean` | `true` | Include `publish-artifacts` |
 | `releaseIOMonorepoPolicyEnablePush` | `Boolean` | `true` | Include `push-changes` |
+| `releaseIOMonorepoHooksAfterCleanCheck` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `check-clean-working-dir` and before `resolve-release-order` |
 | `releaseIOMonorepoHooksBeforeSelection` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks before `detect-or-select-projects` |
 | `releaseIOMonorepoHooksAfterSelection` | `Seq[MonorepoGlobalHookIO]` | `Seq.empty` | Hooks after `detect-or-select-projects` |
 | `releaseIOMonorepoHooksBeforeVersionResolution` | `Seq[MonorepoProjectHookIO]` | `Seq.empty` | Hooks before `inquire-versions` |
