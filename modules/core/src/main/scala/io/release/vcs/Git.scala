@@ -1,6 +1,7 @@
 package io.release.vcs
 
 import cats.effect.IO
+import cats.syntax.all.*
 
 import java.io.File
 import scala.concurrent.duration.*
@@ -143,7 +144,7 @@ class Git(val baseDir: File) extends Vcs {
       .map(_.stripPrefix("refs/heads/"))
 
   def pushChanges: IO[Unit] =
-    GitPushSupport.pushTrackedBranch(this, followTags = true).map(_ => ())
+    GitPushSupport.pushTrackedBranch(this, followTags = true).void
 }
 
 object Git {

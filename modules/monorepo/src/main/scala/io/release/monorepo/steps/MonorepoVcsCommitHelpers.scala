@@ -27,7 +27,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
 
   // ── VCS commit ────────────────────────────────────────────────────────
 
-  /** Stage version files, then commit if there are changes. */
+  /** Commit already-staged tracked changes when the tracked status is non-empty. */
   private[steps] def commitIfChanged(
       ctx: MonorepoContext,
       vcs: Vcs,

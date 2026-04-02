@@ -65,5 +65,8 @@ private[release] object GitPushSupport {
   }
 
   def pushTag(vcs: Vcs, remote: String, tag: String): IO[Unit] =
-    GitProcessSupport.runCmd(vcs.baseDir, Seq("push", remote, tag))(s"git push tag '$tag'")
+    IO.raiseWhen(tag.trim.isEmpty)(
+      new IllegalStateException("Tag name cannot be empty when pushing to the remote.")
+    ) *>
+      GitProcessSupport.runCmd(vcs.baseDir, Seq("push", remote, tag))(s"git push tag '$tag'")
 }

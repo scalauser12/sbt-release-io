@@ -1,6 +1,8 @@
 package io.release.vcs
 
+import cats.effect.Clock
 import cats.effect.IO
+import cats.syntax.all.*
 
 import java.io.File
 import java.lang.ProcessBuilder.Redirect
@@ -12,6 +14,7 @@ import scala.sys.process.ProcessLogger
 
 private[vcs] object GitProcessSupport {
   val DefaultDestroyGracePeriod: FiniteDuration = 1.second
+  private val ProcessPollInterval: FiniteDuration = 50.millis
 
   private lazy val exec: String = {
     val maybeWindows = sys.props.get("os.name").map(_.toLowerCase).exists(_.contains("windows"))
@@ -77,19 +80,52 @@ private[vcs] object GitProcessSupport {
       destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod,
       onStart: java.lang.Process => Unit = _ => ()
   ): IO[Option[Int]] =
-    IO.blocking {
-      val process = processBuilder.start()
-      onStart(process)
-
-      if (waitFor(process, timeout)) Some(process.exitValue())
-      else {
-        terminate(process, destroyGracePeriod)
-        None
+    startProcess(processBuilder, destroyGracePeriod, onStart).bracket { process =>
+      Clock[IO].monotonic.flatMap { startTime =>
+        waitForExit(process, startTime + timeout, destroyGracePeriod)
       }
+    }(terminateIfAlive(_, destroyGracePeriod))
+
+  private def startProcess(
+      processBuilder: => java.lang.ProcessBuilder,
+      destroyGracePeriod: FiniteDuration,
+      onStart: java.lang.Process => Unit
+  ): IO[java.lang.Process] =
+    IO.blocking(processBuilder.start()).flatMap { process =>
+      IO.blocking(onStart(process)).as(process).handleErrorWith { err =>
+        terminateIfAlive(process, destroyGracePeriod) *> IO.raiseError(err)
+      }
+    }
+
+  private def waitForExit(
+      process: java.lang.Process,
+      deadline: FiniteDuration,
+      destroyGracePeriod: FiniteDuration
+  ): IO[Option[Int]] =
+    IO.blocking(process.isAlive).flatMap {
+      case false => IO.blocking(process.exitValue()).map(Some(_))
+      case true  =>
+        Clock[IO].monotonic.flatMap { now =>
+          val remaining = deadline - now
+          if (remaining <= Duration.Zero)
+            IO.blocking(terminate(process, destroyGracePeriod)).as(None)
+          else
+            IO.sleep(remaining.min(ProcessPollInterval)) *>
+              waitForExit(process, deadline, destroyGracePeriod)
+        }
     }
 
   private def waitFor(process: java.lang.Process, timeout: FiniteDuration): Boolean =
     process.waitFor(timeout.toMillis.max(0L), TimeUnit.MILLISECONDS)
+
+  private def terminateIfAlive(
+      process: java.lang.Process,
+      destroyGracePeriod: FiniteDuration
+  ): IO[Unit] =
+    IO.blocking {
+      if (process.isAlive) terminate(process, destroyGracePeriod)
+      else ()
+    }
 
   private def terminate(process: java.lang.Process, destroyGracePeriod: FiniteDuration): Unit = {
     process.destroy()
