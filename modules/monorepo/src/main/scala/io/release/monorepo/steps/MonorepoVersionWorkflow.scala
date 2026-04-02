@@ -118,53 +118,47 @@ private[monorepo] object MonorepoVersionWorkflow {
       allowPrompts: Boolean
   ): IO[(MonorepoContext, ResolvedProjectVersions)] =
     for {
-      versionInputs                                 <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
-      _                                             <- ensureVersionFileExists(
-                                                         versionInputs,
-                                                         missingVersionFileMessage(
-                                                           project,
-                                                           versionInputs.versionFile,
-                                                           includeConfigurationGuidance = false
-                                                         )
-                                                       )
-      currentVersion                                <- versionInputs.readVersion(versionInputs.versionFile)
-      data                                          <- IO.blocking {
-                                                         val (updatedState, releaseVersionFn) =
-                                                           SbtRuntime.runTask(
-                                                             ctx.state,
-                                                             project.ref / releaseIOVersioningReleaseVersion
-                                                           )
-                                                         val (_, nextVersionFn)               =
-                                                           SbtRuntime.runTask(
-                                                             updatedState,
-                                                             project.ref / releaseIOVersioningNextVersion
-                                                           )
-                                                         val useDefaults                      =
-                                                           StepHelpers.useDefaults(ctx)
-
-                                                         (
-                                                           releaseVersionFn(currentVersion),
-                                                           nextVersionFn,
-                                                           useDefaults
-                                                         )
-                                                       }
-      (suggestedRelease, nextVersionFn, useDefaults) = data
-      releaseData                                   <- promptOrDefault(
-                                                         ctx,
-                                                         project.releaseVersion.filter(_.nonEmpty),
-                                                         suggestedRelease,
-                                                         s"Release version for ${project.name}",
-                                                         useDefaults,
-                                                         allowPrompts = allowPrompts
-                                                       )
-      nextData                                      <- promptOrDefault(
-                                                         releaseData._1,
-                                                         project.nextVersion.filter(_.nonEmpty),
-                                                         nextVersionFn(releaseData._2),
-                                                         s"Next version for ${project.name}",
-                                                         useDefaults,
-                                                         allowPrompts = allowPrompts
-                                                       )
+      versionInputs      <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
+      _                  <- ensureVersionFileExists(
+                              versionInputs,
+                              missingVersionFileMessage(
+                                project,
+                                versionInputs.versionFile,
+                                includeConfigurationGuidance = false
+                              )
+                            )
+      currentVersion     <- versionInputs.readVersion(versionInputs.versionFile)
+      releaseTaskData    <- StepHelpers.runTaskChecked(
+                              ctx.state,
+                              project.ref / releaseIOVersioningReleaseVersion,
+                              "inquire-versions"
+                            )
+      (s1, releaseFn)     = releaseTaskData
+      nextTaskData       <- StepHelpers.runTaskChecked(
+                              s1,
+                              project.ref / releaseIOVersioningNextVersion,
+                              "inquire-versions"
+                            )
+      (s2, nextVersionFn) = nextTaskData
+      updatedCtx          = ctx.withState(s2)
+      suggestedRelease    = releaseFn(currentVersion)
+      useDefaults         = StepHelpers.useDefaults(updatedCtx)
+      releaseData        <- promptOrDefault(
+                              updatedCtx,
+                              project.releaseVersion.filter(_.nonEmpty),
+                              suggestedRelease,
+                              s"Release version for ${project.name}",
+                              useDefaults,
+                              allowPrompts = allowPrompts
+                            )
+      nextData           <- promptOrDefault(
+                              releaseData._1,
+                              project.nextVersion.filter(_.nonEmpty),
+                              nextVersionFn(releaseData._2),
+                              s"Next version for ${project.name}",
+                              useDefaults,
+                              allowPrompts = allowPrompts
+                            )
     } yield (
       nextData._1,
       ResolvedProjectVersions(
@@ -199,32 +193,34 @@ private[monorepo] object MonorepoVersionWorkflow {
     * from `releaseIOMonorepoSelectionProjects`, not just the selected subset, so that a partial release
     * still detects a shared file that would be mutated for unreleased siblings.
     */
-  private def validateDistinctVersionFiles(runtime: MonorepoRuntime): IO[Unit] = {
-    val entries = runtime.extracted.get(MR.releaseIOMonorepoSelectionProjects).map { ref =>
-      ref.project -> MonorepoVersionFiles.resolve(runtime, ref).getCanonicalPath
-    }
-    val byPath  = entries.groupBy(_._2).filter(_._2.length > 1)
+  private def validateDistinctVersionFiles(runtime: MonorepoRuntime): IO[Unit] =
+    IO.blocking {
+      val entries = runtime.extracted.get(MR.releaseIOMonorepoSelectionProjects).map { ref =>
+        ref.project -> MonorepoVersionFiles.resolve(runtime, ref).getCanonicalPath
+      }
+      val byPath  = entries.groupBy(_._2).filter(_._2.length > 1)
 
-    if (byPath.isEmpty) IO.unit
-    else {
-      val details = byPath
-        .map { case (path, projects) =>
-          s"${projects.map(_._1).mkString(", ")} -> $path"
-        }
-        .mkString("; ")
-
-      IO.raiseError(
-        new IllegalStateException(
-          "Multiple projects resolve to the same version file: " + details + ". " +
-            "Each monorepo project needs its own version file. " +
-            "If you are upgrading from global version mode, " +
-            "create per-project version.sbt files and remove any " +
-            "`ThisBuild / releaseIOVersioningFile` override. " +
-            "See `releaseIOMonorepo help` for setup guidance."
+      byPath.headOption.map { _ =>
+        byPath
+          .map { case (path, projects) =>
+            s"${projects.map(_._1).mkString(", ")} -> $path"
+          }
+          .mkString("; ")
+      }
+    }.flatMap {
+      case Some(details) =>
+        IO.raiseError(
+          new IllegalStateException(
+            "Multiple projects resolve to the same version file: " + details + ". " +
+              "Each monorepo project needs its own version file. " +
+              "If you are upgrading from global version mode, " +
+              "create per-project version.sbt files and remove any " +
+              "`ThisBuild / releaseIOVersioningFile` override. " +
+              "See `releaseIOMonorepo help` for setup guidance."
+          )
         )
-      )
+      case None          => IO.unit
     }
-  }
 
   private def ensureVersionFilesValidated(
       ctx: MonorepoContext,

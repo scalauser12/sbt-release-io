@@ -2,11 +2,13 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.ReleaseIO.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.internal.HelpDocsLinks
 import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoReleaseSteps
+import io.release.monorepo.steps.MonorepoStepTestCompat
 import io.release.monorepo.steps.MonorepoVcsSteps
 import munit.CatsEffectSuite
 
@@ -131,6 +133,40 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
         assertEquals(beforeVersion, afterVersion)
         assertEquals(beforeTags.trim, afterTags.trim)
       }
+    }
+  }
+
+  test("check - fail when release version task reports FailureCommand during version snapshot") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val marker     = new File(repo, "preflight-release-version-task.marker")
+      val projectRef = MonorepoSpecSupport.projectNamed(ctx.projects, "core").ref
+
+      for {
+        mutatedState <- IO.blocking {
+                          SbtRuntime.appendWithSession(
+                            ctx.state,
+                            Seq(
+                              MonorepoStepTestCompat.failureCommandVersionTaskSetting(
+                                projectRef,
+                                marker
+                              )
+                            )
+                          )
+                        }
+        mutatedCtx    = ctx.withState(mutatedState)
+        session       = MonorepoPreparedSession(
+                          mutatedCtx.state,
+                          mutatedCtx.releasePlan.get,
+                          mutatedCtx
+                        )
+        _            <- assertFailure[IllegalStateException, MonorepoPreflight.Summary](
+                          MonorepoPreflight.check(session, Seq(MonorepoReleaseSteps.inquireVersions))
+                        ) { err =>
+                          assert(marker.exists())
+                          assert(err.getMessage.contains(releaseIOVersioningReleaseVersion.key.label))
+                          assert(err.getMessage.contains("FailureCommand"))
+                        }
+      } yield ()
     }
   }
 

@@ -14,6 +14,7 @@ import io.release.monorepo.MonorepoStepIO
 import io.release.monorepo.SelectionMode
 import io.release.monorepo.steps.MonorepoVersionStepsSpec.VersionFixture
 import munit.CatsEffectSuite
+import sbt.{Def, State}
 
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
@@ -58,6 +59,92 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
         assertEquals(updated.versions, Some("0.1.0" -> "0.2.0-SNAPSHOT"))
         assertEquals(updated.versionFile, fixture.versionFile)
+      }
+    }
+  }
+
+  test("inquireVersions.execute - fail when release version task reports FailureCommand") {
+    fixtureResource.use { fixture =>
+      val marker       = new File(fixture.loaded.dir, "release-version-task.marker")
+      val projectRef    = fixture.loaded.refsById("core")
+      val mutatedState = SbtRuntime.appendWithSession(
+        fixture.loaded.state,
+        Seq(MonorepoStepTestCompat.failureCommandVersionTaskSetting(projectRef, marker))
+      )
+      val ctx          = MonorepoSpecSupport
+        .withPlan(
+          fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        .withState(mutatedState)
+      val project      = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      assertFailure[IllegalStateException, MonorepoContext](
+        MonorepoVersionSteps.inquireVersions.execute(ctx, project)
+      ) { err =>
+        assert(marker.exists())
+        assert(err.getMessage.contains(releaseIOVersioningReleaseVersion.key.label))
+        assert(err.getMessage.contains("FailureCommand"))
+      }
+    }
+  }
+
+  test("inquireVersions.execute - fail when next version task reports FailureCommand") {
+    fixtureResource.use { fixture =>
+      val marker       = new File(fixture.loaded.dir, "next-version-task.marker")
+      val projectRef    = fixture.loaded.refsById("core")
+      val mutatedState = SbtRuntime.appendWithSession(
+        fixture.loaded.state,
+        Seq(MonorepoStepTestCompat.failureCommandNextVersionTaskSetting(projectRef, marker))
+      )
+      val ctx          = MonorepoSpecSupport
+        .withPlan(
+          fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        .withState(mutatedState)
+      val project      = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      assertFailure[IllegalStateException, MonorepoContext](
+        MonorepoVersionSteps.inquireVersions.execute(ctx, project)
+      ) { err =>
+        assert(marker.exists())
+        assert(err.getMessage.contains(releaseIOVersioningNextVersion.key.label))
+        assert(err.getMessage.contains("FailureCommand"))
+      }
+    }
+  }
+
+  test("inquireVersions.execute - keep state mutations from the next version task") {
+    fixtureResource.use { fixture =>
+      val projectRef       = fixture.loaded.refsById("core")
+      val mutatedState = SbtRuntime.appendWithSession(
+        fixture.loaded.state,
+        Seq(
+          MonorepoStepTestCompat.stateMutationNextVersionTaskSetting(
+            projectRef,
+            MonorepoVersionStepsSpec.versionTaskStateKey,
+            "next-version-task"
+          )
+        )
+      )
+      val ctx          = MonorepoSpecSupport
+        .withPlan(
+          fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        .withState(mutatedState)
+      val project      = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      MonorepoVersionSteps.inquireVersions.execute(ctx, project).map { result =>
+        assertEquals(
+          result.state.get(MonorepoVersionStepsSpec.versionTaskStateKey),
+          Some("next-version-task")
+        )
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(result.projects, "core").versions,
+          Some("0.1.0" -> "0.2.0-SNAPSHOT")
+        )
       }
     }
   }
@@ -260,6 +347,9 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
 }
 
 private object MonorepoVersionStepsSpec {
+  private val versionTaskStateKey =
+    sbt.AttributeKey[String]("monorepoVersionWorkflowStateMarker")
+
   final case class VersionFixture(
       loaded: MonorepoSpecSupport.LoadedFixture,
       versionFile: File

@@ -1,6 +1,6 @@
 package io.release.monorepo.steps
 
-import io.release.ReleaseIOCompat
+import io.release.{ReleaseIO, ReleaseIOCompat}
 import sbt.*
 import sbt.Keys.*
 import sbt.Setting
@@ -40,6 +40,51 @@ private[monorepo] object MonorepoStepTestCompat {
         )
       }
       .value
+
+  def failureCommandVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
+    project / ReleaseIO.releaseIOVersioningReleaseVersion := {
+      Def
+        .task(())
+        .updateState { (state: State, _: Unit) =>
+          state.copy(
+            remainingCommands =
+              _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+          )
+        }
+        .value
+      sbt.IO.write(marker, "ran")
+      (currentVersion: String) => currentVersion.stripSuffix("-SNAPSHOT")
+    }
+
+  def failureCommandNextVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
+    project / ReleaseIO.releaseIOVersioningNextVersion := {
+      Def
+        .task(())
+        .updateState { (state: State, _: Unit) =>
+          state.copy(
+            remainingCommands =
+              _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+          )
+        }
+        .value
+      sbt.IO.write(marker, "ran")
+      (_: String) => "0.2.0-SNAPSHOT"
+    }
+
+  def stateMutationNextVersionTaskSetting(
+    project: ProjectRef,
+    key: AttributeKey[String],
+    value: String
+  ): Setting[?] =
+    project / ReleaseIO.releaseIOVersioningNextVersion := {
+      Def
+        .task(())
+        .updateState { (state: State, _: Unit) =>
+          state.put(key, value)
+        }
+        .value
+      (_: String) => "0.2.0-SNAPSHOT"
+    }
 
   def throwingPublishSkipSetting: Setting[?] =
     publish / skip := { throw new RuntimeException("publish/skip eval error"); false }
