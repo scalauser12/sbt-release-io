@@ -1,7 +1,6 @@
 package io.release.vcs
 
 import cats.effect.IO
-import cats.syntax.all.*
 
 import java.io.File
 import scala.concurrent.duration.*
