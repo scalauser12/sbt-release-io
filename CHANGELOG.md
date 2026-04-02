@@ -4,6 +4,22 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## Unreleased
+
+### Breaking Changes
+
+- Make `io.release.vcs.Vcs.checkRemoteWithTimeout` an explicit adapter
+  responsibility. Custom VCS integrations must now implement timeout handling
+  and clean up any spawned processes before returning `None`.
+
+### Improvements
+
+- Consolidate internal Git process execution into a shared
+  `GitProcessSupport` helper used by both the core Git adapter and Git push
+  support.
+- Batch monorepo version-file staging into a single `vcs.add(...)` call while
+  preserving the previous no-op behavior when no version files are selected.
+
 ## v0.8.0
 
 Published: 2026-04-01

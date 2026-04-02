@@ -52,6 +52,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
     required(ctx.vcs, "VCS not initialized") { vcs =>
       for {
         paths                        <- resolveRelativePaths(ctx, vcs)
+        versionFilePaths              = paths.map(_._2).distinct
         settings                     <- IO.blocking {
                                           val extracted = SbtRuntime.extracted(ctx.state)
                                           (
@@ -62,7 +63,10 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                         }
         (sign, signOff, msgFormatter) = settings
         result                       <- IO.uncancelable { _ =>
-                                          paths.map(_._2).distinct.toList.traverse_(vcs.add(_)) *>
+                                          (
+                                            if (versionFilePaths.isEmpty) IO.unit
+                                            else vcs.add(versionFilePaths*)
+                                          ) *>
                                             {
                                               val summary = versionSummary(ctx, selector)
                                               commitIfChanged(

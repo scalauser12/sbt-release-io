@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import cats.effect.Ref
 import cats.effect.Resource
 import io.release.ReleaseIO
 import io.release.TestSupport
@@ -222,6 +223,61 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
     }
   }
 
+  test("commitVersions - stage all selected version files in a single add call") {
+    fixtureResource.use { fixture =>
+      Ref.of[IO, Vector[List[String]]](Vector.empty).flatMap { addCalls =>
+        val vcs = new RecordingVcs(fixture.dir, addCalls)
+        val ctx = fixture.context(
+          selectedProjectIds = Seq("core", "api"),
+          versionsById = Map(
+            "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+            "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
+          ),
+          vcs = Some(vcs)
+        )
+
+        MonorepoVcsCommitHelpers
+          .commitVersions(
+            ctx,
+            MonorepoReleaseIO.releaseIOMonorepoVcsReleaseCommitMessage,
+            { case (releaseVer, _) => releaseVer },
+            persistReleaseHash = false
+          )
+          .flatMap(_ => addCalls.get)
+          .map(seen =>
+            assertEquals(seen, Vector(List("core/version.sbt", "api/version.sbt")))
+          )
+      }
+    }
+  }
+
+  test("commitVersions - skip staging when there are no selected version files") {
+    fixtureResource.use { fixture =>
+      Ref.of[IO, Vector[List[String]]](Vector.empty).flatMap { addCalls =>
+        val vcs = new RecordingVcs(fixture.dir, addCalls)
+        val ctx = fixture.context(
+          selectedProjectIds = Nil,
+          versionsById = Map.empty,
+          vcs = Some(vcs)
+        )
+
+        MonorepoVcsCommitHelpers
+          .commitVersions(
+            ctx,
+            MonorepoReleaseIO.releaseIOMonorepoVcsReleaseCommitMessage,
+            { case (releaseVer, _) => releaseVer },
+            persistReleaseHash = false
+          )
+          .flatMap { result =>
+            addCalls.get.map { seen =>
+              assertEquals(result.currentProjects, Nil)
+              assertEquals(seen, Vector.empty)
+            }
+          }
+      }
+    }
+  }
+
   test(
     "clearReleaseManifestMetadata - remove project-scoped metadata and preserve unrelated package options"
   ) {
@@ -389,4 +445,52 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         ReleaseIO.releaseIOInternalReleaseTag.value
       )
     )
+}
+
+private final class RecordingVcs(
+    override val baseDir: File,
+    addCalls: Ref[IO, Vector[List[String]]]
+) extends Vcs {
+  override def commandName: String = "git"
+
+  override def currentHash: IO[String] = IO.pure("abc123")
+
+  override def currentBranch: IO[String] = IO.pure("main")
+
+  override def trackingRemote: IO[String] = IO.pure("origin")
+
+  override def upstreamTrackingHash: IO[Option[String]] = IO.pure(Some("origin/main"))
+
+  override def hasUpstream: IO[Boolean] = IO.pure(true)
+
+  override def isBehindRemote: IO[Boolean] = IO.pure(false)
+
+  override def existsTag(name: String): IO[Boolean] = IO.pure(false)
+
+  override def modifiedFiles: IO[Seq[String]] = IO.pure(Nil)
+
+  override def stagedFiles: IO[Seq[String]] = IO.pure(Nil)
+
+  override def untrackedFiles: IO[Seq[String]] = IO.pure(Nil)
+
+  override def status: IO[String] = IO.pure("")
+
+  override def checkRemote(remote: String): IO[Int] = IO.pure(0)
+
+  override def checkRemoteWithTimeout(
+      remote: String,
+      timeout: scala.concurrent.duration.FiniteDuration
+  ): IO[Option[Int]] =
+    checkRemote(remote).map(Some(_))
+
+  override def add(files: String*): IO[Unit] =
+    addCalls.update(_ :+ files.toList)
+
+  override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit] =
+    IO.unit
+
+  override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
+    IO.unit
+
+  override def pushChanges: IO[Unit] = IO.unit
 }

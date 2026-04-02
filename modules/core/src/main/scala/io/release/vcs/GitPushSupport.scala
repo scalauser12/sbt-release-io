@@ -2,10 +2,6 @@ package io.release.vcs
 
 import cats.effect.IO
 
-import java.io.File
-import scala.sys.process.Process
-import scala.sys.process.ProcessLogger
-
 private[release] object GitPushSupport {
 
   final case class GitPushTarget(
@@ -14,16 +10,11 @@ private[release] object GitPushSupport {
       upstreamBranch: String
   )
 
-  private lazy val exec: String = {
-    val maybeWindows = sys.props.get("os.name").map(_.toLowerCase).exists(_.contains("windows"))
-    if (maybeWindows) "git.exe" else "git"
-  }
-
   def resolvePushTarget(vcs: Vcs): IO[GitPushTarget] =
     for {
       localBranch   <- vcs.currentBranch
       remote        <- vcs.trackingRemote
-      upstreamRef   <- runSingleLine(
+      upstreamRef   <- GitProcessSupport.runSingleLine(
                          vcs.baseDir,
                          Seq(
                            "rev-parse",
@@ -61,7 +52,7 @@ private[release] object GitPushSupport {
       followTags: Boolean
   ): IO[Unit] = {
     val followTagArgs = if (followTags) Seq("--follow-tags") else Seq.empty
-    runCmd(
+    GitProcessSupport.runCmd(
       vcs.baseDir,
       Seq("push") ++ followTagArgs ++ Seq(
         target.remote,
@@ -74,49 +65,5 @@ private[release] object GitPushSupport {
   }
 
   def pushTag(vcs: Vcs, remote: String, tag: String): IO[Unit] =
-    runCmd(vcs.baseDir, Seq("push", remote, tag))(s"git push tag '$tag'")
-
-  private def runCmd(baseDir: File, args: Seq[String])(context: => String): IO[Unit] =
-    IO.blocking(Process(exec +: args, baseDir).!).flatMap { code =>
-      if (code != 0)
-        IO.raiseError(new IllegalStateException(s"$context failed with exit code $code"))
-      else IO.unit
-    }
-
-  private def runSingleLine(
-      baseDir: File,
-      args: Seq[String]
-  )(context: => String): IO[String] =
-    runLines(baseDir, args)(context).flatMap {
-      case head +: _ => IO.pure(head)
-      case _         =>
-        IO.raiseError(
-          new IllegalStateException(s"$context succeeded but returned no output")
-        )
-    }
-
-  private def runLines(
-      baseDir: File,
-      args: Seq[String]
-  )(context: => String): IO[Seq[String]] =
-    IO.blocking {
-      val stderr = new StringBuilder
-      val lines  = List.newBuilder[String]
-      val code   = Process(exec +: args, baseDir).!(
-        ProcessLogger(
-          line => { lines += line; () },
-          err => { stderr.append(err).append('\n'); () }
-        )
-      )
-      (code, lines.result(), stderr.toString.trim)
-    }.flatMap { case (code, result, stderr) =>
-      if (code != 0)
-        IO.raiseError(
-          new IllegalStateException(
-            s"$context failed with exit code $code" +
-              (if (stderr.nonEmpty) s": $stderr" else "")
-          )
-        )
-      else IO.pure(result)
-    }
+    GitProcessSupport.runCmd(vcs.baseDir, Seq("push", remote, tag))(s"git push tag '$tag'")
 }

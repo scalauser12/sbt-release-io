@@ -635,6 +635,11 @@ class VersionStepsSpec extends CatsEffectSuite {
       override def untrackedFiles: IO[Seq[String]]                                             = IO.pure(Nil)
       override def status: IO[String]                                                          = IO.pure("M version.sbt")
       override def checkRemote(remote: String): IO[Int]                                        = IO.pure(0)
+      override def checkRemoteWithTimeout(
+          remote: String,
+          timeout: scala.concurrent.duration.FiniteDuration
+      ): IO[Option[Int]]                                                                       =
+        checkRemote(remote).map(Some(_))
       override def add(files: String*): IO[Unit]                                               =
         addStarted.complete(()).void *> allowAddToFinish.get
       override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit]          =

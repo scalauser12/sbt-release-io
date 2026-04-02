@@ -16,7 +16,7 @@ class GitSpec extends CatsEffectSuite {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
-      Git
+      GitProcessSupport
         .runCommandWithTimeout(
           new java.lang.ProcessBuilder("/bin/sh", "-c", "exit 0")
             .directory(dir)
@@ -34,7 +34,7 @@ class GitSpec extends CatsEffectSuite {
     TestSupport.tempDirResource(s"$fixturePrefix-timeout").use { dir =>
       val pid = new AtomicLong(-1L)
 
-      Git
+      GitProcessSupport
         .runCommandWithTimeout(
           new java.lang.ProcessBuilder("/bin/sh", "-c", "exec sleep 5")
             .directory(dir)

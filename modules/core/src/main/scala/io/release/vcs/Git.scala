@@ -3,11 +3,7 @@ package io.release.vcs
 import cats.effect.IO
 
 import java.io.File
-import java.lang.ProcessBuilder.Redirect
-import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.*
-import scala.sys.process.Process
-import scala.sys.process.ProcessBuilder
 import scala.sys.process.ProcessLogger
 
 /** Git implementation of [[Vcs]] with all operations wrapped in `IO.blocking`. */
@@ -18,63 +14,16 @@ class Git(val baseDir: File) extends Vcs {
 
   val commandName: String = "git"
 
-  private lazy val exec: String = {
-    val maybeWindows = sys.props.get("os.name").map(_.toLowerCase).exists(_.contains("windows"))
-    if (maybeWindows) "git.exe" else "git"
-  }
-
-  private def cmd(args: String*): ProcessBuilder =
-    Process(exec +: args, baseDir)
-
-  private def javaCmd(args: String*): java.lang.ProcessBuilder =
-    new java.lang.ProcessBuilder((exec +: args)*)
-      .directory(baseDir)
-      .redirectOutput(Redirect.DISCARD)
-      .redirectError(Redirect.DISCARD)
-
-  private val devnull: ProcessLogger = new ProcessLogger {
-    override def out(s: => String): Unit = {}
-    override def err(s: => String): Unit = {}
-    override def buffer[T](f: => T): T   = f
-  }
+  private def cmd(args: String*) = GitProcessSupport.cmd(baseDir, args*)
 
   private def runCmd(args: String*)(context: => String): IO[Unit] =
-    IO.blocking(cmd(args*).!).flatMap { code =>
-      if (code != 0)
-        IO.raiseError(new IllegalStateException(s"$context failed with exit code $code"))
-      else IO.unit
-    }
+    GitProcessSupport.runCmd(baseDir, args)(context)
 
   private def runLines(args: String*)(context: => String): IO[Seq[String]] =
-    IO.blocking {
-      val sb    = new StringBuilder
-      val lines = List.newBuilder[String]
-      val code  = cmd(args*).!(
-        ProcessLogger(
-          line => { lines += line; () },
-          err => { sb.append(err).append('\n'); () }
-        )
-      )
-      (code, lines.result(), sb.toString.trim)
-    }.flatMap { case (code, result, stderr) =>
-      if (code != 0)
-        IO.raiseError(
-          new IllegalStateException(
-            s"$context failed with exit code $code" +
-              (if (stderr.nonEmpty) s": $stderr" else "")
-          )
-        )
-      else IO.pure(result)
-    }
+    GitProcessSupport.runLines(baseDir, args)(context)
 
   private def runSingleLine(args: String*)(context: => String): IO[String] =
-    runLines(args*)(context).flatMap {
-      case head +: _ => IO.pure(head)
-      case _         =>
-        IO.raiseError(
-          new IllegalStateException(s"$context succeeded but returned no output")
-        )
-    }
+    GitProcessSupport.runSingleLine(baseDir, args)(context)
 
   // ── Queries ──────────────────────────────────────────────────────────
 
@@ -107,8 +56,8 @@ class Git(val baseDir: File) extends Vcs {
   def hasUpstream: IO[Boolean] =
     currentBranch.flatMap { branch =>
       IO.blocking {
-        cmd("config", s"branch.$branch.remote").!(devnull) == 0 &&
-        cmd("config", s"branch.$branch.merge").!(devnull) == 0
+        cmd("config", s"branch.$branch.remote").!(GitProcessSupport.discardLogger) == 0 &&
+        cmd("config", s"branch.$branch.merge").!(GitProcessSupport.discardLogger) == 0
       }
     }
 
@@ -124,7 +73,8 @@ class Git(val baseDir: File) extends Vcs {
 
   def existsTag(name: String): IO[Boolean] =
     IO.blocking(
-      cmd("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name").!(devnull) == 0
+      cmd("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name")
+        .!(GitProcessSupport.discardLogger) == 0
     )
 
   def modifiedFiles: IO[Seq[String]] =
@@ -159,7 +109,10 @@ class Git(val baseDir: File) extends Vcs {
       remote: String,
       timeout: FiniteDuration
   ): IO[Option[Int]] =
-    Git.runCommandWithTimeout(javaCmd("fetch", remote), timeout)
+    GitProcessSupport.runCommandWithTimeout(
+      GitProcessSupport.javaCmd(baseDir, "fetch", remote),
+      timeout
+    )
 
   // ── Actions ──────────────────────────────────────────────────────────
 
@@ -195,37 +148,6 @@ class Git(val baseDir: File) extends Vcs {
 
 object Git {
   private val markerDirectory                                = ".git"
-  private[vcs] val DefaultDestroyGracePeriod: FiniteDuration = 1.second
-
-  private[vcs] def runCommandWithTimeout(
-      processBuilder: => java.lang.ProcessBuilder,
-      timeout: FiniteDuration,
-      destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod,
-      onStart: java.lang.Process => Unit = _ => ()
-  ): IO[Option[Int]] =
-    IO.blocking {
-      val process = processBuilder.start()
-      onStart(process)
-
-      if (waitFor(process, timeout)) Some(process.exitValue())
-      else {
-        terminate(process, destroyGracePeriod)
-        None
-      }
-    }
-
-  private def waitFor(process: java.lang.Process, timeout: FiniteDuration): Boolean =
-    process.waitFor(timeout.toMillis.max(0L), TimeUnit.MILLISECONDS)
-
-  private def terminate(process: java.lang.Process, destroyGracePeriod: FiniteDuration): Unit = {
-    process.destroy()
-
-    if (!waitFor(process, destroyGracePeriod) && process.isAlive) {
-      process.destroyForcibly()
-      waitFor(process, destroyGracePeriod)
-      ()
-    }
-  }
 
   def isRepository(dir: File): IO[Option[File]] = IO.blocking {
     def loop(d: File): Option[File] =

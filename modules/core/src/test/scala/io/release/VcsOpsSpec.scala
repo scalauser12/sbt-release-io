@@ -247,6 +247,32 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("StubVcs - fall back to checkRemote when no timeout override is provided") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
+        val vcs = new StubVcs(
+          dir,
+          recordedCalls0 = Some(calls),
+          checkRemote0 = IO.pure(0)
+        )
+
+        for {
+          result <- vcs.checkRemoteWithTimeout("origin", 5.millis)
+          seen   <- calls.get
+        } yield {
+          assertEquals(result, Some(0))
+          assertEquals(
+            seen,
+            Vector(
+              StubVcsCall.CheckRemoteWithTimeout("origin", 5.millis),
+              StubVcsCall.CheckRemote("origin")
+            )
+          )
+        }
+      }
+    }
+  }
+
   test("validatePushRemote - succeed when the tracking remote is reachable") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val ctx = VcsOpsSpec.promptContext(
@@ -745,7 +771,9 @@ private final class StubVcs(
 
   override def checkRemoteWithTimeout(remote: String, timeout: FiniteDuration): IO[Option[Int]] =
     record(StubVcsCall.CheckRemoteWithTimeout(remote, timeout)) *>
-      checkRemoteWithTimeout0.fold(super.checkRemoteWithTimeout(remote, timeout))(
+      checkRemoteWithTimeout0.fold(
+        checkRemote(remote).map(Some(_)).timeoutTo(timeout, IO.pure(None))
+      )(
         _.apply(remote, timeout)
       )
 
