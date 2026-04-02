@@ -241,6 +241,23 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
+  test("step.copy - omitting validation arguments preserves both validation branches") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = ReleaseStepIO
+          .step("copy-defaults")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
+          .validateOnly
+        val copied = step.copy()
+
+        copied.threadedValidation(ctx) *> events.get.map { obs =>
+          assertEquals(obs, List("validate", "context"))
+        }
+      }
+    }
+  }
+
   test("step.copy - replacing validateWithContext retains the plain validate branch") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
@@ -254,6 +271,33 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
         copied.threadedValidation(ctx) *> events.get
           .map(obs => assertEquals(obs, List("validate", "context")))
+      }
+    }
+  }
+
+  test(
+    "step.copy - validateWithContext = None clears the threaded branch but preserves public validate behavior"
+  ) {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val key = sbt.AttributeKey[String]("copy-validate-with-context-clear")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = ReleaseStepIO
+          .step("copy-validate-with-context-clear")
+          .withValidation(_ => events.update(_ :+ "validate"))
+          .withValidationContext(currentCtx =>
+            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "set"))
+          )
+          .validateOnly
+        val copied = step.copy(validateWithContext = None)
+
+        copied.threadedValidation(ctx).flatMap { result =>
+          events.get.map { obs =>
+            assertEquals(obs, List("validate", "context"))
+            assertEquals(result.metadata(key), None)
+            assertEquals(copied.validateWithContext, None)
+          }
+        }
       }
     }
   }

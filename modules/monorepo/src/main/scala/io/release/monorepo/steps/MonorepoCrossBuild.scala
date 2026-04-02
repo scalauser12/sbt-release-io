@@ -153,7 +153,7 @@ private[monorepo] object MonorepoCrossBuild {
             else
               switcher
                 .runIteration(currentCtx, version, action, project) {
-                  s"$LogPrefix Cross-building with Scala $version"
+                  s"$LogPrefix Cross-building ${project.name} with Scala $version"
                 }
                 .flatMap(detectFailure)
           }

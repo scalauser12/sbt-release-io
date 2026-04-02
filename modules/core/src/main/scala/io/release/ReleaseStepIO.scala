@@ -43,12 +43,14 @@ case class ReleaseStepIO private (
   def copy(
       name: String = this.name,
       execute: ReleaseContext => IO[ReleaseContext] = this.execute,
-      validate: ReleaseContext => IO[Unit] = null,
+      validate: ReleaseContext => IO[Unit] = ReleaseStepIO.UnspecifiedValidate,
       enableCrossBuild: Boolean = this.enableCrossBuild,
-      validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = null
+      validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] =
+        ReleaseStepIO.UnspecifiedValidateWithContext
   ): ReleaseStepIO = {
-    val validateWasProvided            = validate != null
-    val validateWithContextWasProvided = validateWithContext != null
+    val validateWasProvided            = !(validate eq ReleaseStepIO.UnspecifiedValidate)
+    val validateWithContextWasProvided =
+      !(validateWithContext eq ReleaseStepIO.UnspecifiedValidateWithContext)
 
     if (!validateWasProvided && !validateWithContextWasProvided)
       new ReleaseStepIO(name, execute, rawValidate, enableCrossBuild, rawValidateWithContext)
@@ -81,6 +83,25 @@ case class ReleaseStepIO private (
 object ReleaseStepIO {
 
   private type ThreadedValidation = StepKernel.ThreadedValidation[ReleaseContext]
+
+  private[release] val UnspecifiedValidate: ReleaseContext => IO[Unit] =
+    (_ctx: ReleaseContext) =>
+      IO.raiseError(
+        new IllegalStateException("ReleaseStepIO.copy validate sentinel should never execute")
+      )
+
+  private[release] val UnspecifiedValidateWithContextFn:
+    ReleaseContext => IO[ReleaseContext] =
+    (_ctx: ReleaseContext) =>
+      IO.raiseError(
+        new IllegalStateException(
+          "ReleaseStepIO.copy validateWithContext sentinel should never execute"
+        )
+      )
+
+  private[release] val UnspecifiedValidateWithContext:
+    Option[ReleaseContext => IO[ReleaseContext]] =
+    Some(UnspecifiedValidateWithContextFn)
 
   private[release] def build(
       name: String,

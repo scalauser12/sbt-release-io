@@ -27,6 +27,47 @@ object MonorepoStepIO {
   private type PerProjectThreadedValidation =
     StepKernel.ThreadedItemValidation[MonorepoContext, ProjectReleaseInfo]
 
+  private[monorepo] val UnspecifiedGlobalValidate: MonorepoContext => IO[Unit] =
+    (_ctx: MonorepoContext) =>
+      IO.raiseError(
+        new IllegalStateException("MonorepoStepIO.Global.copy validate sentinel should never run")
+      )
+
+  private[monorepo] val UnspecifiedGlobalValidateWithContextFn:
+    MonorepoContext => IO[MonorepoContext] =
+    (_ctx: MonorepoContext) =>
+      IO.raiseError(
+        new IllegalStateException(
+          "MonorepoStepIO.Global.copy validateWithContext sentinel should never run"
+        )
+      )
+
+  private[monorepo] val UnspecifiedGlobalValidateWithContext:
+    Option[MonorepoContext => IO[MonorepoContext]] =
+    Some(UnspecifiedGlobalValidateWithContextFn)
+
+  private[monorepo] val UnspecifiedPerProjectValidate:
+    (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+    (_ctx: MonorepoContext, _project: ProjectReleaseInfo) =>
+      IO.raiseError(
+        new IllegalStateException(
+          "MonorepoStepIO.PerProject.copy validate sentinel should never run"
+        )
+      )
+
+  private[monorepo] val UnspecifiedPerProjectValidateWithContextFn:
+    (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
+    (_ctx: MonorepoContext, _project: ProjectReleaseInfo) =>
+      IO.raiseError(
+        new IllegalStateException(
+          "MonorepoStepIO.PerProject.copy validateWithContext sentinel should never run"
+        )
+      )
+
+  private[monorepo] val UnspecifiedPerProjectValidateWithContext:
+    Option[(MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]] =
+    Some(UnspecifiedPerProjectValidateWithContextFn)
+
   private[monorepo] def buildGlobal(
       name: String,
       execute: MonorepoContext => IO[MonorepoContext],
@@ -72,12 +113,14 @@ object MonorepoStepIO {
     def copy(
         name: String = this.name,
         execute: MonorepoContext => IO[MonorepoContext] = this.execute,
-        validate: MonorepoContext => IO[Unit] = null,
+        validate: MonorepoContext => IO[Unit] = MonorepoStepIO.UnspecifiedGlobalValidate,
         isSelectionBoundary: Boolean = this.isSelectionBoundary,
-        validateWithContext: Option[MonorepoContext => IO[MonorepoContext]] = null
+        validateWithContext: Option[MonorepoContext => IO[MonorepoContext]] =
+          MonorepoStepIO.UnspecifiedGlobalValidateWithContext
     ): Global = {
-      val validateWasProvided            = validate != null
-      val validateWithContextWasProvided = validateWithContext != null
+      val validateWasProvided            = !(validate eq MonorepoStepIO.UnspecifiedGlobalValidate)
+      val validateWithContextWasProvided =
+        !(validateWithContext eq MonorepoStepIO.UnspecifiedGlobalValidateWithContext)
 
       if (!validateWasProvided && !validateWithContextWasProvided)
         new Global(name, execute, rawValidate, isSelectionBoundary, rawValidateWithContext)
@@ -169,14 +212,17 @@ object MonorepoStepIO {
     def copy(
         name: String = this.name,
         execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] = this.execute,
-        validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] = null,
+        validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+          MonorepoStepIO.UnspecifiedPerProjectValidate,
         enableCrossBuild: Boolean = this.enableCrossBuild,
         validateWithContext: Option[
           (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-        ] = null
+        ] = MonorepoStepIO.UnspecifiedPerProjectValidateWithContext
     ): PerProject = {
-      val validateWasProvided            = validate != null
-      val validateWithContextWasProvided = validateWithContext != null
+      val validateWasProvided =
+        !(validate eq MonorepoStepIO.UnspecifiedPerProjectValidate)
+      val validateWithContextWasProvided =
+        !(validateWithContext eq MonorepoStepIO.UnspecifiedPerProjectValidateWithContext)
 
       if (!validateWasProvided && !validateWithContextWasProvided)
         new PerProject(name, execute, rawValidate, enableCrossBuild, rawValidateWithContext)

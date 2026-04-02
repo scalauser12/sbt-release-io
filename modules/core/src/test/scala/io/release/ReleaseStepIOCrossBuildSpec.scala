@@ -2,9 +2,12 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.internal.SbtCompat
+import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.Keys
+import sbt.taskKey
 
 class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
 
@@ -282,6 +285,50 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
               )
             )
             assert(result.failureCause.exists(_.getMessage.contains("boom")))
+            assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "compose - cross-build task step short-circuits remaining versions when a version reports FailureCommand"
+  ) {
+    val failureCommandTask = taskKey[Unit](s"failureCommandCrossBuildTask${System.nanoTime()}")
+
+    loadedContextResource(
+      "release-step-io-cross-failure-command",
+      root =>
+        root.settings(
+          Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
+          Keys.crossScalaVersions := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion
+          ),
+          ReleaseStepIOCrossBuildCompat.failureCommandTaskSetting(
+            failureCommandTask,
+            new java.io.File(root.base, "failure-command-cross.txt")
+          )
+        )
+    ).use { ctx =>
+      val step = ReleaseStepIO.fromTask(failureCommandTask, enableCrossBuild = true)
+
+      ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        val marker =
+          new java.io.File(
+            SbtRuntime.extracted(result.state).get(Keys.baseDirectory),
+            "failure-command-cross.txt"
+          )
+
+        readFile(marker).flatMap { contents =>
+          scalaVersionOf(result.state).map { finalVersion =>
+            val executedVersions = contents.split('\n').toList.filter(_.nonEmpty)
+            assert(result.failed)
+            assertEquals(executedVersions, List(TestSupport.CurrentScalaVersion))
+            assert(
+              result.failureCause.exists(_.getMessage.contains("reported failure via FailureCommand"))
+            )
             assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
           }
         }

@@ -83,13 +83,14 @@ private[release] object ReleaseComposer {
       crossBuild: Boolean
   )(action: ReleaseContext => IO[ReleaseContext]): ReleaseContext => IO[ReleaseContext] =
     if (step.enableCrossBuild && crossBuild)
-      (ctx: ReleaseContext) => runCrossBuild(action)(ctx)
+      (ctx: ReleaseContext) => runCrossBuild(step.name, action)(ctx)
     else action
 
   /** Run a step function across all crossScalaVersions using proper project reload. */
   private def runCrossBuild(
+      stepName: String,
       action: ReleaseContext => IO[ReleaseContext]
-  )(ctx: ReleaseContext): IO[ReleaseContext] = IO.defer {
+  )(ctx: ReleaseContext): IO[ReleaseContext] =
     IO.blocking {
       val entryState    = ctx.state
       val extracted     = SbtRuntime.extracted(entryState)
@@ -130,6 +131,17 @@ private[release] object ReleaseComposer {
             } *> IO.raiseError(restoreErr)
         }
 
+      def detectIterationFailure(currentCtx: ReleaseContext): IO[ReleaseContext] = IO {
+        if (SbtRuntime.hasFailureCommand(currentCtx.state)) {
+          val cleaned = SbtRuntime.stripLeadingFailureCommand(currentCtx.state)
+          currentCtx
+            .withState(cleaned)
+            .failWith(
+              new IllegalStateException(s"$stepName: sbt task reported failure via FailureCommand")
+            )
+        } else currentCtx
+      }
+
       def runIteration(
           currentCtx: ReleaseContext,
           version: String,
@@ -141,7 +153,7 @@ private[release] object ReleaseComposer {
           result   <- action(switched).attempt.flatMap {
                         case Right(nextCtx) => IO.pure(nextCtx)
                         case Left(err)      => restoreOnError(switched, err)
-                      }
+                      }.flatMap(detectIterationFailure)
         } yield result
 
       if (crossVersions.isEmpty)
@@ -173,5 +185,4 @@ private[release] object ReleaseComposer {
           .flatMap(restoreAfterCompletion)
       }
     }
-  }
 }
