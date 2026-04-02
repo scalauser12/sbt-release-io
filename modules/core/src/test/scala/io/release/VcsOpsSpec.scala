@@ -794,7 +794,7 @@ private final class StubVcs(
   override def checkRemoteWithTimeout(remote: String, timeout: FiniteDuration): IO[Option[Int]] =
     record(StubVcsCall.CheckRemoteWithTimeout(remote, timeout)) *>
       checkRemoteWithTimeout0.fold(
-        checkRemote(remote).map(Some(_)).timeoutTo(timeout, IO.pure(None))
+        super.checkRemoteWithTimeout(remote, timeout)
       )(
         _.apply(remote, timeout)
       )

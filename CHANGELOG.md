@@ -6,17 +6,14 @@ This file is the canonical release history for the repository.
 
 ## Unreleased
 
-### Breaking Changes
-
-- Make `io.release.vcs.Vcs.checkRemoteWithTimeout` an explicit adapter
-  responsibility. Custom VCS integrations must now implement timeout handling
-  and clean up any spawned processes before returning `None`.
-
 ### Improvements
 
 - Consolidate internal Git process execution into a shared
   `GitProcessSupport` helper used by both the core Git adapter and Git push
   support.
+- Keep the default `io.release.vcs.Vcs.checkRemoteWithTimeout` fallback for
+  custom VCS adapters, while still letting concrete adapters like `Git`
+  override timeout handling to clean up spawned processes explicitly.
 - Batch monorepo version-file staging into a single `vcs.add(...)` call while
   preserving the previous no-op behavior when no version files are selected.
 
