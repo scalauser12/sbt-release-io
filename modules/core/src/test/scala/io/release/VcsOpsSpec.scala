@@ -459,6 +459,27 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("preparePushRelease - detect VCS when missing before checking push readiness") {
+    ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { baseCtx =>
+      val ctx = VcsOpsSpec.promptContext(
+        baseCtx.state,
+        interactive = false,
+        useDefaults = false,
+        decisionDefaults = ReleaseDecisionDefaults(
+          tagExistsAnswer = None,
+          snapshotDependenciesAnswer = None,
+          remoteCheckFailureAnswer = Some(true),
+          upstreamBehindAnswer = None,
+          pushAnswer = None
+        )
+      )
+
+      VcsOps.preparePushRelease(ctx, ReleaseLogPrefixes.Core).map { result =>
+        assertEquals(result.vcs.map(_.commandName), Some("git"))
+      }
+    }
+  }
+
   test("interactivePushAfterRemote - non-interactive runs doPush") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val ctx = VcsOpsSpec.promptContext(
@@ -673,7 +694,8 @@ private object VcsOpsSpec {
   def promptContext(
       state: State,
       interactive: Boolean,
-      useDefaults: Boolean
+      useDefaults: Boolean,
+      decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty
   ): ReleaseContext =
     ReleaseContext(state = state, interactive = interactive).withExecutionState(
       CoreExecutionState(
@@ -684,7 +706,7 @@ private object VcsOpsSpec {
           ),
           releaseVersionOverride = None,
           nextVersionOverride = None,
-          decisionDefaults = ReleaseDecisionDefaults.empty
+          decisionDefaults = decisionDefaults
         )
       )
     )

@@ -89,6 +89,30 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("checkSnapshotDependencies.validate - list duplicate aggregated snapshot coordinates once") {
+    val dep = "org.example" % "dep" % "1.0.0-SNAPSHOT"
+
+    multiProjectContextResource(
+      s"$fixturePrefix-snapshots-distinct",
+      rootSettings = Seq(
+        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
+      ),
+      childSettings = Seq(
+        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
+      )
+    ).use { case (ctx, _) =>
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.checkSnapshotDependencies.validate(ctx)
+      ) { err =>
+        assert(err.getMessage.contains("Snapshot dependencies found"))
+        assertEquals(
+          err.getMessage.linesIterator.count(_.contains("org.example:dep:1.0.0-SNAPSHOT")),
+          1
+        )
+      }
+    }
+  }
+
   test("publishArtifacts.validate - short-circuit when publishArtifactsChecks is false") {
     loadedContextResource(s"$fixturePrefix-val-off") { _ =>
       () -> Seq(ReleaseIO.releaseIOPublishChecks := false)

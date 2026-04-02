@@ -196,19 +196,10 @@ private[monorepo] object MonorepoPreflight {
       setupValidated <- validateSegment(checkSegments.setupSteps)(baseCtx)
       selected       <-
         resolveSelection(setupValidated, plan, checkSteps.shouldResolveSelection)
-      withVersions   <- resolveVersionSnapshot(selected.context, checkSteps.shouldResolveVersions)
-      validatedCtx   <- validateSegment(checkSegments.mainSteps)(withVersions)
-      tagOutcomes    <-
-        resolveTagSnapshot(
-          validatedCtx,
-          checkSteps.shouldPreflightTags,
-          checkSteps.shouldResolveVersions
-        )
-      summary        <- buildSummary(
+      summary        <- checkVersionAwareSegment(
+                          baseCtx = selected.context,
                           selectionMode = selected.selectionMode,
-                          ctx = validatedCtx,
-                          versionsResolved = checkSteps.shouldResolveVersions,
-                          tagOutcomes = tagOutcomes,
+                          normalizedSteps = checkSegments.mainSteps,
                           checkSteps = checkSteps,
                           crossBuildEnabled = crossBuildEnabled
                         )
@@ -223,6 +214,22 @@ private[monorepo] object MonorepoPreflight {
     val selectionMode =
       Evaluation.NotEvaluated(s"$DetectOrSelectProjectsStep not in check process")
 
+    checkVersionAwareSegment(
+      baseCtx = baseCtx,
+      selectionMode = selectionMode,
+      normalizedSteps = normalizedSteps,
+      checkSteps = checkSteps,
+      crossBuildEnabled = crossBuildEnabled
+    )
+  }
+
+  private def checkVersionAwareSegment(
+      baseCtx: MonorepoContext,
+      selectionMode: Evaluation[SelectionMode],
+      normalizedSteps: Seq[MonorepoProcessStep],
+      checkSteps: CheckSteps,
+      crossBuildEnabled: Boolean
+  ): IO[Summary] =
     splitAtBuiltInVersionResolution(normalizedSteps) match {
       case None =>
         for {
@@ -266,7 +273,6 @@ private[monorepo] object MonorepoPreflight {
                              )
         } yield summary
     }
-  }
 
   private def resolveBaseContext(
       ctx: MonorepoContext,

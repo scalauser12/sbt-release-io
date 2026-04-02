@@ -221,17 +221,8 @@ private[release] object VcsOps {
       logPrefix: String,
       remoteCheckLog: Option[String => Unit] = None
   ): IO[C] =
-    ensureVcs(ctx).flatMap { ctxWithVcs =>
-      ctxWithVcs.vcs match {
-        case Some(vcs) =>
-          refreshPushReadiness(ctxWithVcs, vcs, logPrefix, remoteCheckLog)
-        case None      =>
-          IO.raiseError(
-            new IllegalStateException(
-              "VCS not initialized. Ensure initializeVcs runs before this step."
-            )
-          )
-      }
+    ensureVcs(ctx).flatMap { case (ctxWithVcs, vcs) =>
+      refreshPushReadiness(ctxWithVcs, vcs, logPrefix, remoteCheckLog)
     }
 
   /** After a fresh remote check, optionally prompt before pushing (interactive mode).
@@ -246,10 +237,15 @@ private[release] object VcsOps {
       DecisionResolver.resolvePushDecision(validatedCtx, logPrefix)(doPush, onDeclinePush)
     }
 
-  private def ensureVcs[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+  private def ensureVcs[C <: ReleaseCtx[C]](ctx: C): IO[(C, Vcs)] =
     ctx.vcs match {
-      case Some(_) => IO.pure(ctx)
-      case None    => detectAndInit(ctx)
+      case Some(vcs) => IO.pure(ctx -> vcs)
+      case None      =>
+        detectAndInit(ctx).flatMap { detectedCtx =>
+          IO.fromOption(detectedCtx.vcs)(
+            new IllegalStateException("VCS not initialized. Ensure initializeVcs runs before this step.")
+          ).map(detectedCtx -> _)
+        }
     }
 
   private def refreshPushReadiness[C <: ReleaseCtx[C]](

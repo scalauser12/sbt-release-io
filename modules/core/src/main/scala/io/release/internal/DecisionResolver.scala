@@ -75,7 +75,7 @@ private[release] object DecisionResolver {
           IO.blocking(ctx.state.log.warn(s"$logPrefix $msg")).as(ctx)
         case Some(false) =>
           IO.raiseError(
-            new IllegalStateException(s"Aborting release due to snapshot dependencies$context.")
+            new IllegalStateException(snapshotDependenciesAbortMessage(context))
           )
         case None        =>
           if (!ctx.interactive)
@@ -87,7 +87,7 @@ private[release] object DecisionResolver {
                 configuredAnswer = None,
                 defaultYes = false,
                 prompt = "Do you want to continue (y/n)? [n] ",
-                abortMessage = s"Aborting release due to snapshot dependencies$context."
+                abortMessage = snapshotDependenciesAbortMessage(context)
               )
       }
     }
@@ -155,4 +155,9 @@ private[release] object DecisionResolver {
 
   private def forLabel(label: String): String =
     if (label.isEmpty) "" else s" for $label"
+
+  private def snapshotDependenciesAbortMessage(context: String): String =
+    "Aborting release due to snapshot dependencies" +
+      s"$context. To continue in non-interactive or with-defaults runs, " +
+      "pass 'default-snapshot-dependencies-answer y'."
 }

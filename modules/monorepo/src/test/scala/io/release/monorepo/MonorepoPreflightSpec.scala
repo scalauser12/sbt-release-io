@@ -210,6 +210,50 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
     }
   }
 
+  test("check - fail main-segment validations before built-in version resolution after selection") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val versionResolutionFailure = "version resolution should not run"
+      val validationFailure        = "after-selection validation failed"
+      val failAfterSelectionStep   = MonorepoStepIO
+        .global("fail-after-selection")
+        .withValidation(_ => IO.raiseError(new IllegalStateException(validationFailure)))
+        .validateOnly
+
+      for {
+        mutatedState <- IO.blocking {
+                          SbtRuntime.appendWithSession(
+                            ctx.state,
+                            Seq(
+                              MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion := {
+                                (_: File) =>
+                                  IO.raiseError(new IllegalStateException(versionResolutionFailure))
+                              }
+                            )
+                          )
+                        }
+        dirtyCtx      = ctx.withState(mutatedState)
+        session       = MonorepoPreparedSession(
+                          dirtyCtx.state,
+                          dirtyCtx.releasePlan.get,
+                          dirtyCtx
+                        )
+        _            <- assertFailure[IllegalStateException, MonorepoPreflight.Summary](
+                          MonorepoPreflight.check(
+                            session,
+                            Seq(
+                              MonorepoReleaseSteps.detectOrSelectProjects,
+                              failAfterSelectionStep,
+                              MonorepoReleaseSteps.inquireVersions
+                            )
+                          )
+                        ) { err =>
+                          assert(err.getMessage.contains(validationFailure))
+                          assert(!err.getMessage.contains(versionResolutionFailure))
+                        }
+      } yield ()
+    }
+  }
+
   test("check - render summary from the fully validated context") {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)

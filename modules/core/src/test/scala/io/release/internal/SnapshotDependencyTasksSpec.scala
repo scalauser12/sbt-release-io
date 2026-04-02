@@ -7,6 +7,8 @@ import io.release.TestSupport
 import munit.CatsEffectSuite
 import sbt.*
 
+import java.io.File
+
 class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   private val fixturePrefix = "snapshot-deps-spec"
 
@@ -25,6 +27,38 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
       }.flatMap { state =>
         SnapshotDependencyTasks.aggregatedSnapshotDependencies(state).map { result =>
           assertEquals(result, Right(Seq.empty[ModuleID]))
+        }
+      }
+    }
+  }
+
+  test("aggregatedSnapshotDependencies - deduplicate repeated dependencies in first-seen order") {
+    TestSupport.tempDirResource(s"$fixturePrefix-distinct").use { dir =>
+      val depA = "org.example" % "demo" % "1.0.0-SNAPSHOT"
+      val depB = "org.example" % "other" % "2.0.0-SNAPSHOT"
+
+      IO.blocking {
+        val childBase = new File(dir, "child")
+        childBase.mkdirs()
+
+        TestSupport.loadedState(
+          dir,
+          Seq(
+            Project("root", dir)
+              .aggregate(LocalProject("child"))
+              .settings(
+                ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(depA)
+              ),
+            Project("child", childBase)
+              .settings(
+                ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(depA, depB)
+              )
+          ),
+          currentProjectId = Some("root")
+        )
+      }.flatMap { state =>
+        SnapshotDependencyTasks.aggregatedSnapshotDependencies(state).map { result =>
+          assertEquals(result, Right(Seq(depA, depB)))
         }
       }
     }

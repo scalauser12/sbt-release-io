@@ -21,7 +21,7 @@ private[release] object SnapshotDependencyTasks {
       StepHelpers.aggregatedTaskValues(result) match {
         case Left(incomplete) =>
           Left("Error checking for snapshot dependencies: " + incomplete)
-        case Right(deps)      => Right(deps)
+        case Right(deps)      => Right(deps.distinct)
       }
     }
 

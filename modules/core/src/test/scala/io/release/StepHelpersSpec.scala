@@ -276,6 +276,44 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "StepHelpers.handleSnapshotDependencies - with-defaults abort mentions the snapshot override"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      assertFailure[IllegalStateException, ReleaseContext](
+        StepHelpers
+          .handleSnapshotDependencies(
+            promptContext(state, interactive = true, useDefaults = true),
+            deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+            logPrefix = "[test]"
+          )
+      ) { err =>
+        assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+        assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+      }
+    }
+  }
+
+  test(
+    "StepHelpers.handleSnapshotDependencies - interactive decline reuses the snapshot override hint"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      TestSupport.withInput("n\n") {
+        assertFailure[IllegalStateException, ReleaseContext](
+          StepHelpers
+            .handleSnapshotDependencies(
+              promptContext(state, interactive = true, useDefaults = false),
+              deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+              logPrefix = "[test]"
+            )
+        ) { err =>
+          assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+          assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+        }
+      }
+    }
+  }
+
   test("StepHelpers.aggregatedTaskValues - flatten aggregated successful task results") {
     val result =
       ResultTestCompat.aggregatedSuccess(Seq(Seq("core", "api"), Seq("monorepo")))
@@ -387,7 +425,8 @@ class StepHelpersSpec extends CatsEffectSuite {
   private def promptContext(
       state: State,
       interactive: Boolean,
-      useDefaults: Boolean
+      useDefaults: Boolean,
+      decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty
   ): ReleaseContext =
     ReleaseContext(state = state, interactive = interactive).withExecutionState(
       CoreExecutionState(
@@ -401,7 +440,7 @@ class StepHelpersSpec extends CatsEffectSuite {
           ),
           releaseVersionOverride = None,
           nextVersionOverride = None,
-          decisionDefaults = ReleaseDecisionDefaults.empty
+          decisionDefaults = decisionDefaults
         )
       )
     )
