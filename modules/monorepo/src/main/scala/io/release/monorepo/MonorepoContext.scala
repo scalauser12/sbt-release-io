@@ -17,8 +17,10 @@ import sbt.{internal as _, *}
   * @param name        project name (matches `ref.project`)
   * @param baseDir     project root directory
   * @param versionFile most recently resolved version-file path for this project
-  * @param versions    stored `(releaseVersion, nextVersion)` pair. During override merge, one
-  *                    side may be temporarily empty until `inquire-versions` resolves both.
+  * @param versions    stored `(releaseVersion, nextVersion)` pair.
+  *                    [[MonorepoProjectResolver.applyVersionOverrides]] may temporarily store `""`
+  *                    on one side to represent a partial CLI override; [[resolvedVersions]]
+  *                    remains empty until `inquire-versions` fills in both values.
   * @param tagName     VCS tag for this project's release, set by the tagging step
   * @param failed      set to true when this project's step action fails
   * @param failureCause throwable captured when this project's step action fails

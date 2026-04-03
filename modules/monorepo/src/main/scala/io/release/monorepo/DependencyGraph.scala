@@ -76,7 +76,10 @@ private[monorepo] object DependencyGraph {
           ref -> deps
         }.toMap
 
-        // Build reverse adjacency map with caller order as the stable tiebreaker.
+        // Build reverse adjacency map with caller order as the stable tiebreaker. The
+        // accumulator intentionally carries a default empty vector, so
+        // `updated(dependency, updated(dependency) :+ proj)` is safe on the first insert and
+        // preserves deterministic dependent ordering.
         val dependedOnBy: Map[ProjectRef, Vector[ProjectRef]] =
           uniqueProjects.foldLeft(Map.empty[ProjectRef, Vector[ProjectRef]].withDefaultValue(Vector.empty)) {
             case (acc, proj) =>

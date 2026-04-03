@@ -65,6 +65,13 @@ private[monorepo] object MonorepoProjectResolver {
     }
   }
 
+  /** Merge CLI version overrides into the current project snapshot.
+    *
+    * Partial overrides are preserved as a half-resolved `(releaseVersion, nextVersion)` pair.
+    * When a project has no current versions yet, the missing side is intentionally stored as `""`
+    * so `inquire-versions` can resolve it later. Callers that require both values should consult
+    * [[ProjectReleaseInfo.resolvedVersions]].
+    */
   def applyVersionOverrides(
       projects: Seq[ProjectReleaseInfo],
       plan: MonorepoReleasePlan
@@ -82,6 +89,8 @@ private[monorepo] object MonorepoProjectResolver {
                 nextOverride.getOrElse(currentNext)
             )
           case None                                =>
+            // Keep a partial CLI override visible to `inquire-versions` by leaving the
+            // unresolved side as `""` until both versions have been resolved.
             Some(
               releaseOverride.getOrElse("") ->
                 nextOverride.getOrElse("")
