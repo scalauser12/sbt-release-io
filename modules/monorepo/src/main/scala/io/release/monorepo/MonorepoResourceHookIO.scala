@@ -128,42 +128,42 @@ object MonorepoResourceHooks {
       )
 
     val withGlobalHooks = Seq(
-      MonorepoLifecycle.afterCleanCheckHooksBinding     -> hooks.afterCleanCheckHooks.map(globalHook),
-      MonorepoLifecycle.beforeSelectionHooksBinding     -> hooks.beforeSelectionHooks.map(globalHook),
-      MonorepoLifecycle.afterSelectionHooksBinding      -> hooks.afterSelectionHooks.map(globalHook),
-      MonorepoLifecycle.beforeReleaseCommitHooksBinding ->
+      MonorepoLifecycleSlots.afterCleanCheckHooks     -> hooks.afterCleanCheckHooks.map(globalHook),
+      MonorepoLifecycleSlots.beforeSelectionHooks     -> hooks.beforeSelectionHooks.map(globalHook),
+      MonorepoLifecycleSlots.afterSelectionHooks      -> hooks.afterSelectionHooks.map(globalHook),
+      MonorepoLifecycleSlots.beforeReleaseCommitHooks ->
         hooks.beforeReleaseCommitHooks.map(globalHook),
-      MonorepoLifecycle.afterReleaseCommitHooksBinding  ->
+      MonorepoLifecycleSlots.afterReleaseCommitHooks  ->
         hooks.afterReleaseCommitHooks.map(globalHook),
-      MonorepoLifecycle.beforeNextCommitHooksBinding    ->
+      MonorepoLifecycleSlots.beforeNextCommitHooks    ->
         hooks.beforeNextCommitHooks.map(globalHook),
-      MonorepoLifecycle.afterNextCommitHooksBinding     ->
+      MonorepoLifecycleSlots.afterNextCommitHooks     ->
         hooks.afterNextCommitHooks.map(globalHook),
-      MonorepoLifecycle.beforePushHooksBinding          -> hooks.beforePushHooks.map(globalHook),
-      MonorepoLifecycle.afterPushHooksBinding           -> hooks.afterPushHooks.map(globalHook)
-    ).foldLeft(MonorepoHookConfiguration.empty) { case (config, (binding, materializedHooks)) =>
-      binding.updated(config, materializedHooks)
+      MonorepoLifecycleSlots.beforePushHooks          -> hooks.beforePushHooks.map(globalHook),
+      MonorepoLifecycleSlots.afterPushHooks           -> hooks.afterPushHooks.map(globalHook)
+    ).foldLeft(MonorepoHookConfiguration.empty) { case (config, (slot, materializedHooks)) =>
+      slot.binding.updated(config, materializedHooks)
     }
 
     Seq(
-      MonorepoLifecycle.beforeVersionResolutionHooksBinding   ->
+      MonorepoLifecycleSlots.beforeVersionResolutionHooks   ->
         hooks.beforeVersionResolutionHooks.map(projectHook),
-      MonorepoLifecycle.afterVersionResolutionHooksBinding    ->
+      MonorepoLifecycleSlots.afterVersionResolutionHooks    ->
         hooks.afterVersionResolutionHooks.map(projectHook),
-      MonorepoLifecycle.beforeReleaseVersionWriteHooksBinding ->
+      MonorepoLifecycleSlots.beforeReleaseVersionWriteHooks ->
         hooks.beforeReleaseVersionWriteHooks.map(projectHook),
-      MonorepoLifecycle.afterReleaseVersionWriteHooksBinding  ->
+      MonorepoLifecycleSlots.afterReleaseVersionWriteHooks  ->
         hooks.afterReleaseVersionWriteHooks.map(projectHook),
-      MonorepoLifecycle.beforeTagHooksBinding                 -> hooks.beforeTagHooks.map(projectHook),
-      MonorepoLifecycle.afterTagHooksBinding                  -> hooks.afterTagHooks.map(projectHook),
-      MonorepoLifecycle.beforePublishHooksBinding             -> hooks.beforePublishHooks.map(projectHook),
-      MonorepoLifecycle.afterPublishHooksBinding              -> hooks.afterPublishHooks.map(projectHook),
-      MonorepoLifecycle.beforeNextVersionWriteHooksBinding    ->
+      MonorepoLifecycleSlots.beforeTagHooks                 -> hooks.beforeTagHooks.map(projectHook),
+      MonorepoLifecycleSlots.afterTagHooks                  -> hooks.afterTagHooks.map(projectHook),
+      MonorepoLifecycleSlots.beforePublishHooks             -> hooks.beforePublishHooks.map(projectHook),
+      MonorepoLifecycleSlots.afterPublishHooks              -> hooks.afterPublishHooks.map(projectHook),
+      MonorepoLifecycleSlots.beforeNextVersionWriteHooks    ->
         hooks.beforeNextVersionWriteHooks.map(projectHook),
-      MonorepoLifecycle.afterNextVersionWriteHooksBinding     ->
+      MonorepoLifecycleSlots.afterNextVersionWriteHooks     ->
         hooks.afterNextVersionWriteHooks.map(projectHook)
-    ).foldLeft(withGlobalHooks) { case (config, (binding, materializedHooks)) =>
-      binding.updated(config, materializedHooks)
+    ).foldLeft(withGlobalHooks) { case (config, (slot, materializedHooks)) =>
+      slot.binding.updated(config, materializedHooks)
     }
   }
 }

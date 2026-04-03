@@ -2,8 +2,8 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.CoreHookConfiguration
-import io.release.internal.CoreLifecycle
-import io.release.internal.LifecycleConfigCompiler
+import io.release.internal.CoreLifecycleSlots
+import io.release.internal.LifecycleSlotSupport
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -88,43 +88,43 @@ object ReleaseResourceHooks {
 
     val materializedHookBindings: Seq[
       (
-          LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO],
+          LifecycleSlotSupport.HookSlot[CoreHookConfiguration, ReleaseHookIO],
           Seq[ReleaseHookIO]
       )
     ] =
       Seq(
-        CoreLifecycle.afterCleanCheckHooksBinding           -> hooks.afterCleanCheckHooks.map(plainHook),
-        CoreLifecycle.beforeVersionResolutionHooksBinding   ->
+        CoreLifecycleSlots.afterCleanCheckHooks           -> hooks.afterCleanCheckHooks.map(plainHook),
+        CoreLifecycleSlots.beforeVersionResolutionHooks   ->
           hooks.beforeVersionResolutionHooks.map(plainHook),
-        CoreLifecycle.afterVersionResolutionHooksBinding    ->
+        CoreLifecycleSlots.afterVersionResolutionHooks    ->
           hooks.afterVersionResolutionHooks.map(plainHook),
-        CoreLifecycle.beforeReleaseVersionWriteHooksBinding ->
+        CoreLifecycleSlots.beforeReleaseVersionWriteHooks ->
           hooks.beforeReleaseVersionWriteHooks.map(plainHook),
-        CoreLifecycle.afterReleaseVersionWriteHooksBinding  ->
+        CoreLifecycleSlots.afterReleaseVersionWriteHooks  ->
           hooks.afterReleaseVersionWriteHooks.map(plainHook),
-        CoreLifecycle.beforeReleaseCommitHooksBinding       -> hooks.beforeReleaseCommitHooks.map(
+        CoreLifecycleSlots.beforeReleaseCommitHooks       -> hooks.beforeReleaseCommitHooks.map(
           plainHook
         ),
-        CoreLifecycle.afterReleaseCommitHooksBinding        -> hooks.afterReleaseCommitHooks.map(
+        CoreLifecycleSlots.afterReleaseCommitHooks        -> hooks.afterReleaseCommitHooks.map(
           plainHook
         ),
-        CoreLifecycle.beforeTagHooksBinding                 -> hooks.beforeTagHooks.map(plainHook),
-        CoreLifecycle.afterTagHooksBinding                  -> hooks.afterTagHooks.map(plainHook),
-        CoreLifecycle.beforePublishHooksBinding             -> hooks.beforePublishHooks.map(plainHook),
-        CoreLifecycle.afterPublishHooksBinding              -> hooks.afterPublishHooks.map(plainHook),
-        CoreLifecycle.beforeNextVersionWriteHooksBinding    ->
+        CoreLifecycleSlots.beforeTagHooks                 -> hooks.beforeTagHooks.map(plainHook),
+        CoreLifecycleSlots.afterTagHooks                  -> hooks.afterTagHooks.map(plainHook),
+        CoreLifecycleSlots.beforePublishHooks             -> hooks.beforePublishHooks.map(plainHook),
+        CoreLifecycleSlots.afterPublishHooks              -> hooks.afterPublishHooks.map(plainHook),
+        CoreLifecycleSlots.beforeNextVersionWriteHooks    ->
           hooks.beforeNextVersionWriteHooks.map(plainHook),
-        CoreLifecycle.afterNextVersionWriteHooksBinding     ->
+        CoreLifecycleSlots.afterNextVersionWriteHooks     ->
           hooks.afterNextVersionWriteHooks.map(plainHook),
-        CoreLifecycle.beforeNextCommitHooksBinding          -> hooks.beforeNextCommitHooks.map(plainHook),
-        CoreLifecycle.afterNextCommitHooksBinding           -> hooks.afterNextCommitHooks.map(plainHook),
-        CoreLifecycle.beforePushHooksBinding                -> hooks.beforePushHooks.map(plainHook),
-        CoreLifecycle.afterPushHooksBinding                 -> hooks.afterPushHooks.map(plainHook)
+        CoreLifecycleSlots.beforeNextCommitHooks          -> hooks.beforeNextCommitHooks.map(plainHook),
+        CoreLifecycleSlots.afterNextCommitHooks           -> hooks.afterNextCommitHooks.map(plainHook),
+        CoreLifecycleSlots.beforePushHooks                -> hooks.beforePushHooks.map(plainHook),
+        CoreLifecycleSlots.afterPushHooks                 -> hooks.afterPushHooks.map(plainHook)
       )
 
     materializedHookBindings.foldLeft(CoreHookConfiguration.empty) {
-      case (config, (binding, materializedHooks)) =>
-        binding.updated(config, materializedHooks)
+      case (config, (slot, materializedHooks)) =>
+        slot.binding.updated(config, materializedHooks)
     }
   }
 }
