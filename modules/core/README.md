@@ -29,8 +29,8 @@ sbt "releaseIO check with-defaults"
 
 Preferred customization keeps the built-in process intact and uses grouped
 `releaseIOPolicy*` keys, `releaseIOHooks*`, and resource-aware custom plugins when one shared
-resource is needed. The lower-level `ReleaseStepIO` DSL is deprecated and retained only for
-built-ins, tests, and internal composition. The older flat key names remain as deprecated aliases.
+resource is needed. The older flat key names and lower-level step DSL were removed in the
+breaking API cleanup.
 
 ## Read next
 

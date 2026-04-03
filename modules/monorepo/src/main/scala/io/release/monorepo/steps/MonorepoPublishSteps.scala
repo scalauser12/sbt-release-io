@@ -25,7 +25,6 @@ import scala.util.control.NonFatal
   * FailureCommand detection is handled centrally by [[MonorepoStepHelpers.runPerProject]].
   * Step implementations here just run their sbt tasks and return the updated context.
   */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoPublishSteps {
 
   private def runProjectTask[A](
@@ -136,31 +135,32 @@ private[monorepo] object MonorepoPublishSteps {
     * (via `.dependsOn()`) are resolved internally by sbt from compiled classes
     * and are not included in `releaseIODiagnosticsSnapshotDependencies`.
     */
-  val checkSnapshotDependencies: MonorepoStepIO.PerProject = MonorepoStepIO.buildPerProject(
-    name = "check-snapshot-dependencies",
-    // Snapshot checking is purely a pre-flight check; there is no release-time action.
-    execute = (ctx, _) => IO.pure(ctx),
-    validateWithContext = Some((ctx, project) =>
-      for {
-        externalSnapshots <- SnapshotDependencyTasks.projectSnapshotDependencies(
-                               ctx.state,
-                               project.ref,
-                               project.name
-                             )
-        updatedCtx        <-
-          DecisionResolver.handleSnapshotDependencies(
-            ctx,
-            externalSnapshots,
-            ReleaseLogPrefixes.Monorepo,
-            context = s" in ${project.name}"
-          )
-      } yield updatedCtx
-    ),
-    enableCrossBuild = true
-  )
+  val checkSnapshotDependencies: MonorepoProcessStep.PerProject =
+    MonorepoProcessStep.buildPerProject(
+      name = "check-snapshot-dependencies",
+      // Snapshot checking is purely a pre-flight check; there is no release-time action.
+      execute = (ctx, _) => IO.pure(ctx),
+      validateWithContext = Some((ctx, project) =>
+        for {
+          externalSnapshots <- SnapshotDependencyTasks.projectSnapshotDependencies(
+                                 ctx.state,
+                                 project.ref,
+                                 project.name
+                               )
+          updatedCtx        <-
+            DecisionResolver.handleSnapshotDependencies(
+              ctx,
+              externalSnapshots,
+              ReleaseLogPrefixes.Monorepo,
+              context = s" in ${project.name}"
+            )
+        } yield updatedCtx
+      ),
+      enableCrossBuild = true
+    )
 
   /** Run clean for each project. */
-  val runClean: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
+  val runClean: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
     name = "run-clean",
     execute = (ctx, project) =>
       IO.blocking {
@@ -170,7 +170,7 @@ private[monorepo] object MonorepoPublishSteps {
   )
 
   /** Run tests for each project. */
-  val runTests: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
+  val runTests: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
     name = "run-tests",
     execute = (ctx, project) =>
       if (ctx.skipTests)
@@ -181,7 +181,7 @@ private[monorepo] object MonorepoPublishSteps {
   )
 
   /** Publish artifacts for each project. */
-  val publishArtifacts: MonorepoStepIO.PerProject = MonorepoStepIO.PerProject(
+  val publishArtifacts: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
     name = "publish-artifacts",
     execute = (ctx, project) =>
       if (ctx.skipPublish)

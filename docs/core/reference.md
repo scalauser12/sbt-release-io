@@ -10,13 +10,12 @@ The hook/policy lifecycle is now the only supported build-facing customization s
 Migrate legacy step-list edits to grouped `releaseIOPolicy*` keys, `releaseIOHooks*`, and
 resource-aware custom plugins built around `releaseResourceHooks`.
 
-Use the grouped names in `build.sbt`. The older flat names remain as deprecated aliases in this
-release. `inspect`, `show`, and key index output still display the legacy sbt key labels because
-the underlying key instances were not renamed yet.
+Use the grouped names in `build.sbt`. The older flat names were removed in the breaking cleanup,
+and the grouped names are now the canonical sbt key labels.
 
 ## Grouped key migration
 
-| Old name | Preferred grouped name |
+| Removed name | Replacement |
 | -------- | ---------------------- |
 | `releaseIOCrossBuild` | `releaseIOBehaviorCrossBuild` |
 | `releaseIOSkipPublish` | `releaseIOBehaviorSkipPublish` |

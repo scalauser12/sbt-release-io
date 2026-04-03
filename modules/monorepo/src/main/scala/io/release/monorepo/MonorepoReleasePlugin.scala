@@ -8,9 +8,7 @@ import sbt.Keys.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
-/** Base trait for resource-parameterized monorepo release plugins. Each release step
-  * is a function `T => MonorepoStepIO` where `T` is a resource acquired once for the
-  * entire release process.
+/** Base trait for resource-parameterized monorepo release plugins.
   *
   * A release command (named by [[commandName]]) and default settings are registered automatically.
   *

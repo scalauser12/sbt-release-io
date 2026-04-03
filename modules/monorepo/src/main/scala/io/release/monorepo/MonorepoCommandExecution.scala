@@ -7,8 +7,8 @@ import io.release.internal.CommandRuntimeSupport
 import io.release.internal.DecisionDefaultsSupport
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
-import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.SharedCommandKernel
 import io.release.internal.SbtRuntime
 import sbt.{internal as _, *}
 
@@ -17,7 +17,6 @@ import sbt.{internal as _, *}
   * Public plugin extension points stay on [[MonorepoReleasePluginLike]]; this object owns the
   * private command plumbing so the plugin trait can read top-down.
   */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoCommandExecution {
 
   final case class CommandRuntime[T](
@@ -46,13 +45,15 @@ private[monorepo] object MonorepoCommandExecution {
   )
 
   final case class CompiledMonorepoSteps(
-      steps: Seq[MonorepoStepIO]
+      steps: Seq[MonorepoProcessStep]
   )
 
-  def doHelp(state: State, commandName: String): State = {
-    val program = logLines(state, MonorepoPreflight.helpLines(commandName))
-    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo)(program.as(state))
-  }
+  def doHelp(state: State, commandName: String): State =
+    SharedCommandKernel.doHelp(
+      state = state,
+      logPrefix = ReleaseLogPrefixes.Monorepo,
+      lines = MonorepoPreflight.helpLines(commandName)
+    )
 
   def doRelease[T](
       state: State,
@@ -102,17 +103,18 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
   ): IO[CompiledMonorepoSteps] =
-    IO.blocking(
-      CompiledMonorepoSteps(
-        steps = MonorepoHookCompiler.compile(
-          CommandRuntimeSupport.mergeMaterializedHooks(
-            MonorepoHookCompiler.resolve(state),
-            runtime.resolveResourceHooks(state),
-            maybeResource
-          )(MonorepoResourceHooks.materialize, (left, right) => left.mergeWith(right))
-        )
+    SharedCommandKernel
+      .compileMergedSteps(
+        state = state,
+        maybeResource = maybeResource,
+        resolveHooks = MonorepoHookCompiler.resolve,
+        resolveResourceHooks = runtime.resolveResourceHooks
+      )(
+        materialize = MonorepoResourceHooks.materialize,
+        merge = (left, right) => left.mergeWith(right),
+        compile = MonorepoHookCompiler.compile
       )
-    )
+      .map(steps => CompiledMonorepoSteps(steps = steps))
 
   private[monorepo] def resolveFlags[T](
       cleanState: State,
@@ -184,22 +186,27 @@ private[monorepo] object MonorepoCommandExecution {
       interactiveEnabled: Boolean,
       warnOnDuplicates: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
-    val cleanState         = CommandRuntimeSupport.cleanReleaseState(state, loadedProjectRefs(state))
-    val program: IO[State] = prepareCommand(
-      cleanState,
-      args,
-      runtime,
-      interactiveEnabled,
-      warnOnDuplicates
-    ).flatMap {
-      case Left(failedState) => IO.pure(failedState)
-      case Right(command)    =>
+    val cleanStateFn: State => State =
+      state => CommandRuntimeSupport.cleanReleaseState(state, loadedProjectRefs(state))
+
+    SharedCommandKernel.runPreparedCommand(
+      state = state,
+      logPrefix = ReleaseLogPrefixes.Monorepo,
+      cleanState = cleanStateFn
+    )(
+      cleanState =>
+        prepareCommand(
+          cleanState,
+          args,
+          runtime,
+          interactiveEnabled,
+          warnOnDuplicates
+        ),
+      (command: PlannedCommand) =>
         MonorepoPreparedSession.prepare(command.cleanState, command.plan).flatMap { session =>
           run(command, session)
         }
-    }
-
-    ReleaseCommandRunner.runSync(cleanState, ReleaseLogPrefixes.Monorepo)(program)
+    )
   }
 
   private def runPlannedRelease[T](
@@ -208,39 +215,38 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      finalCtx   <- runtime.resource.use { resourceValue =>
-                      for {
-                        runProcess  <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
-                        _           <- IO.blocking(
-                                         logReleaseStart(
-                                           session.cleanState,
-                                           runProcess.steps.length,
-                                           session.context.projects.length,
-                                           command.flags
-                                         )
+      finalCtx <- runtime.resource.use { resourceValue =>
+                    for {
+                      runProcess  <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
+                      _           <- IO.blocking(
+                                       logReleaseStart(
+                                         session.cleanState,
+                                         runProcess.steps.length,
+                                         session.context.projects.length,
+                                         command.flags
                                        )
-                        preparedCtx <-
-                          CommandRuntimeSupport.preparePushIfNeeded(
-                            session.context,
-                            runProcess.steps.map(_.name),
-                            ReleaseLogPrefixes.Monorepo
-                          )
-                        finalCtx    <-
-                          MonorepoStepIO.compose(runProcess.steps, command.flags.crossBuild)(
-                            preparedCtx
-                          )
-                      } yield finalCtx
-                    }
-      cleanedCtx <- IO.blocking(
-                      finalCtx.withState(
-                        CommandRuntimeSupport.cleanReleaseState(
-                          finalCtx.state,
-                          loadedProjectRefs(finalCtx.state)
+                                     )
+                      preparedCtx <-
+                        CommandRuntimeSupport.preparePushIfNeeded(
+                          session.context,
+                          runProcess.steps.map(_.name),
+                          ReleaseLogPrefixes.Monorepo
                         )
+                      finalCtx    <-
+                        MonorepoProcessStep.compose(runProcess.steps, command.flags.crossBuild)(
+                          preparedCtx
+                        )
+                    } yield finalCtx
+                  }
+      result   <- SharedCommandKernel.finalizeReleaseResult(
+                    ctx = finalCtx,
+                    logPrefix = ReleaseLogPrefixes.Monorepo,
+                    cleanState = state =>
+                      CommandRuntimeSupport.cleanReleaseState(
+                        state,
+                        loadedProjectRefs(state)
                       )
-                    )
-      result     <- ReleaseCommandRunner
-                      .handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Monorepo)
+                  )
     } yield result
 
   private def runPlannedCheck[T](

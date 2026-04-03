@@ -13,39 +13,39 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
 
   private val releaseIO = new MonorepoReleaseIO {}
 
-  test("MonorepoStepIO.global creates a Global step via execute") {
+  test("MonorepoProcessStep.global creates a Global step via execute") {
     val key  = AttributeKey[String]("key")
-    val step = MonorepoStepIO
+    val step = MonorepoProcessStep
       .global("my-global")
       .execute(ctx => IO.pure(ctx.withMetadata(key, "value")))
 
     assertEquals(step.name, "my-global")
-    assert(step.isInstanceOf[MonorepoStepIO.Global])
+    assert(step.isInstanceOf[MonorepoProcessStep.Global])
   }
 
-  test("MonorepoStepIO.perProject creates a PerProject step via execute") {
+  test("MonorepoProcessStep.perProject creates a PerProject step via execute") {
     val key  = AttributeKey[String]("project")
-    val step = MonorepoStepIO
+    val step = MonorepoProcessStep
       .perProject("my-pp")
       .execute((ctx, project) => IO.pure(ctx.withMetadata(key, project.name)))
 
     assertEquals(step.name, "my-pp")
-    assert(step.isInstanceOf[MonorepoStepIO.PerProject])
+    assert(step.isInstanceOf[MonorepoProcessStep.PerProject])
   }
 
   test("withCrossBuild sets enableCrossBuild") {
-    val step = MonorepoStepIO
+    val step = MonorepoProcessStep
       .perProject("cross-pp")
       .withCrossBuild
       .execute((ctx, _) => IO.pure(ctx))
 
-    assert(step.asInstanceOf[MonorepoStepIO.PerProject].enableCrossBuild)
+    assert(step.asInstanceOf[MonorepoProcessStep.PerProject].enableCrossBuild)
   }
 
   test("withValidation wires validation function on Global") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO
+        val step = MonorepoProcessStep
           .global("validated")
           .withValidation(_ => events.update(_ :+ "validate"))
           .execute(ctx => IO.pure(ctx))
@@ -59,7 +59,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("withValidation wires validation function on PerProject") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO
+        val step = MonorepoProcessStep
           .perProject("validated-pp")
           .withValidation((_, project) => events.update(_ :+ s"validate:${project.name}"))
           .execute((ctx, _) => IO.pure(ctx))
@@ -73,7 +73,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("withValidationContext wires threaded validation function on Global") {
     contextResource.use { ctx =>
       val key  = AttributeKey[String]("global-validation-context")
-      val step = MonorepoStepIO
+      val step = MonorepoProcessStep
         .global("validated-context")
         .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(key, "ok")))
         .validateOnly
@@ -85,7 +85,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("withValidationContext public validate runs threaded validation on Global") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO
+        val step = MonorepoProcessStep
           .global("validated-context-public")
           .withValidationContext(currentCtx => events.update(_ :+ "global-context").as(currentCtx))
           .validateOnly
@@ -100,7 +100,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val key = AttributeKey[String]("global-validation-context-getter")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO.Global(
+        val step = MonorepoProcessStep.Global(
           name = "validated-context-getter",
           execute = currentCtx => IO.pure(currentCtx),
           validate = _ => events.update(_ :+ "validate"),
@@ -128,7 +128,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val key = AttributeKey[String]("global-round-trip")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO
+        val step = MonorepoProcessStep
           .global("global-round-trip")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx =>
@@ -136,10 +136,10 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
           )
           .validateOnly
 
-        MonorepoStepIO.Global.unapply(step) match {
+        MonorepoProcessStep.Global.unapply(step) match {
           case Some((name, execute, validate, isSelectionBoundary, validateWithContext)) =>
             val rebuilt =
-              MonorepoStepIO.Global(
+              MonorepoProcessStep.Global(
                 name,
                 execute,
                 validate,
@@ -164,7 +164,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     contextResource.use { ctx =>
       val key     = AttributeKey[String]("project-validation-context")
       val project = dummyProject("core")
-      val step    = MonorepoStepIO
+      val step    = MonorepoProcessStep
         .perProject("validated-pp-context")
         .withValidationContext((currentCtx, currentProject) =>
           IO.pure(currentCtx.withMetadata(key, currentProject.name))
@@ -181,7 +181,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
         val project = dummyProject("core")
-        val step    = MonorepoStepIO
+        val step    = MonorepoProcessStep
           .perProject("validated-pp-field")
           .withValidationContext((currentCtx, currentProject) =>
             events.update(_ :+ s"context:${currentProject.name}").as(currentCtx)
@@ -200,7 +200,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO.PerProject(
+        val step = MonorepoProcessStep.PerProject(
           name = "validated-pp-getter",
           execute = (currentCtx, _) => IO.pure(currentCtx),
           validate = (_, currentProject) => events.update(_ :+ s"validate:${currentProject.name}"),
@@ -232,7 +232,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO
+        val step = MonorepoProcessStep
           .perProject("project-round-trip")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"validate:${currentProject.name}")
@@ -244,9 +244,9 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
           )
           .validateOnly
 
-        MonorepoStepIO.PerProject.unapply(step) match {
+        MonorepoProcessStep.PerProject.unapply(step) match {
           case Some((name, execute, validate, enableCrossBuild, validateWithContext)) =>
-            val rebuilt = MonorepoStepIO.PerProject(
+            val rebuilt = MonorepoProcessStep.PerProject(
               name,
               execute,
               validate,
@@ -272,7 +272,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val key = AttributeKey[String]("global-builder-order")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val forward = MonorepoStepIO
+        val forward = MonorepoProcessStep
           .global("global-forward")
           .withValidation(currentCtx =>
             events.update(_ :+ s"validate:${currentCtx.metadata(key).getOrElse("missing")}")
@@ -282,7 +282,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
           )
           .validateOnly
 
-        val reverse = MonorepoStepIO
+        val reverse = MonorepoProcessStep
           .global("global-reverse")
           .withValidationContext(currentCtx =>
             events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
@@ -312,7 +312,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val forward = MonorepoStepIO
+        val forward = MonorepoProcessStep
           .perProject("pp-forward")
           .withValidation((currentCtx, currentProject) =>
             events.update(
@@ -326,7 +326,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
           )
           .validateOnly
 
-        val reverse = MonorepoStepIO
+        val reverse = MonorepoProcessStep
           .perProject("pp-reverse")
           .withValidationContext((currentCtx, currentProject) =>
             events
@@ -359,7 +359,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val key = AttributeKey[String]("global-resource-builder-order")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val forward = MonorepoStepIO
+        val forward = MonorepoProcessStep
           .globalResource[String]("global-resource-forward")
           .withValidation(resource =>
             currentCtx =>
@@ -372,9 +372,9 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
               events.update(_ :+ s"context:$resource").as(currentCtx.withMetadata(key, "ok"))
           )
           .validateOnly("demo")
-          .asInstanceOf[MonorepoStepIO.Global]
+          .asInstanceOf[MonorepoProcessStep.Global]
 
-        val reverse = MonorepoStepIO
+        val reverse = MonorepoProcessStep
           .globalResource[String]("global-resource-reverse")
           .withValidationContext(resource =>
             currentCtx =>
@@ -387,7 +387,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
               )
           )
           .validateOnly("demo")
-          .asInstanceOf[MonorepoStepIO.Global]
+          .asInstanceOf[MonorepoProcessStep.Global]
 
         for {
           _ <- forward.threadedValidation(ctx)
@@ -409,7 +409,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val forward = MonorepoStepIO
+        val forward = MonorepoProcessStep
           .perProjectResource[String]("per-project-resource-forward")
           .withValidation(resource =>
             (currentCtx, currentProject) =>
@@ -424,9 +424,9 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
                 .as(currentCtx.withMetadata(key, "ok"))
           )
           .validateOnly("demo")
-          .asInstanceOf[MonorepoStepIO.PerProject]
+          .asInstanceOf[MonorepoProcessStep.PerProject]
 
-        val reverse = MonorepoStepIO
+        val reverse = MonorepoProcessStep
           .perProjectResource[String]("per-project-resource-reverse")
           .withValidationContext(resource =>
             (currentCtx, currentProject) =>
@@ -441,7 +441,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
               )
           )
           .validateOnly("demo")
-          .asInstanceOf[MonorepoStepIO.PerProject]
+          .asInstanceOf[MonorepoProcessStep.PerProject]
 
         for {
           _ <- forward.threadedValidation(ctx, project)
@@ -460,7 +460,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("Global.copy changing only isSelectionBoundary keeps threaded validation single-wrapped") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .global("copy-global-boundary")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
@@ -478,7 +478,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("Global.copy omitting validation arguments preserves both validation branches") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .global("copy-global-defaults")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
@@ -495,7 +495,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("Global.copy replacing validateWithContext retains the plain validate branch") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .global("copy-global-validate-with-context")
           .withValidation(_ => events.update(_ :+ "validate"))
           .validateOnly
@@ -516,7 +516,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val key = AttributeKey[String]("copy-global-validate-with-context-clear")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .global("copy-global-validate-with-context-clear")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx =>
@@ -541,7 +541,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val key = AttributeKey[String]("copy-global-validate-with-context-replacement")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .global("copy-global-validate-with-context-replacement")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx =>
@@ -569,7 +569,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("Global.copy replacing validate retains the threaded validation branch") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .global("copy-global-validate")
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
           .validateOnly
@@ -584,7 +584,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("Global.copy replacing validate does not retain the old plain validator") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .global("copy-global-validate-replace-plain-only")
           .withValidation(_ => events.update(_ :+ "old-validate"))
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
@@ -602,7 +602,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .perProject("copy-per-project-cross-build")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"validate:${currentProject.name}")
@@ -626,7 +626,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .perProject("copy-per-project-defaults")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"validate:${currentProject.name}")
@@ -649,7 +649,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .perProject("copy-per-project-validate-with-context")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"validate:${currentProject.name}")
@@ -675,7 +675,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .perProject("copy-per-project-validate-with-context-clear")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"validate:${currentProject.name}")
@@ -705,7 +705,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .perProject("copy-per-project-validate-with-context-replacement")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"validate:${currentProject.name}")
@@ -744,7 +744,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .perProject("copy-per-project-validate")
           .withValidationContext((currentCtx, currentProject) =>
             events.update(_ :+ s"context:${currentProject.name}").as(currentCtx)
@@ -765,7 +765,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       val project = dummyProject("core")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = MonorepoStepIO
+        val step   = MonorepoProcessStep
           .perProject("copy-per-project-validate-replace-plain-only")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"old-validate:${currentProject.name}")
@@ -788,7 +788,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("executeAction wraps IO[Unit] correctly for Global") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO
+        val step = MonorepoProcessStep
           .global("action-global")
           .executeAction(_ => events.update(_ :+ "execute"))
 
@@ -806,7 +806,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
         val project = dummyProject("core")
-        val step    = MonorepoStepIO
+        val step    = MonorepoProcessStep
           .perProject("action-pp")
           .executeAction((_, currentProject) =>
             events.update(_ :+ s"execute:${currentProject.name}")
@@ -823,45 +823,45 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   }
 
   test("withSelectionBoundary sets the flag") {
-    val step = MonorepoStepIO
+    val step = MonorepoProcessStep
       .global("boundary")
       .withSelectionBoundary
       .execute(ctx => IO.pure(ctx))
 
-    assert(step.asInstanceOf[MonorepoStepIO.Global].isSelectionBoundary)
+    assert(step.asInstanceOf[MonorepoProcessStep.Global].isSelectionBoundary)
   }
 
   test("built-in tag release surface exposes the per-project tagging step") {
     assertEquals(MonorepoReleaseSteps.tagReleasesPerProject.name, "tag-releases")
-    assert(MonorepoReleaseSteps.tagReleasesPerProject.isInstanceOf[MonorepoStepIO.PerProject])
+    assert(MonorepoReleaseSteps.tagReleasesPerProject.isInstanceOf[MonorepoProcessStep.PerProject])
     assert(MonorepoReleaseSteps.defaults.contains(MonorepoReleaseSteps.tagReleasesPerProject))
   }
 
-  test("globalResource produces T => MonorepoStepIO") {
-    val stepFn: String => MonorepoStepIO = MonorepoStepIO
+  test("globalResource produces T => MonorepoProcessStep") {
+    val stepFn: String => MonorepoProcessStep = MonorepoProcessStep
       .globalResource[String]("res-global")
       .execute(_ => ctx => IO.pure(ctx))
 
     val step = stepFn("test")
     assertEquals(step.name, "res-global")
-    assert(step.isInstanceOf[MonorepoStepIO.Global])
+    assert(step.isInstanceOf[MonorepoProcessStep.Global])
   }
 
-  test("perProjectResource produces T => MonorepoStepIO with crossBuild") {
-    val stepFn: String => MonorepoStepIO = MonorepoStepIO
+  test("perProjectResource produces T => MonorepoProcessStep with crossBuild") {
+    val stepFn: String => MonorepoProcessStep = MonorepoProcessStep
       .perProjectResource[String]("res-pp")
       .withCrossBuild
       .execute(_ => (ctx, _) => IO.pure(ctx))
 
     val step = stepFn("test")
     assertEquals(step.name, "res-pp")
-    assert(step.asInstanceOf[MonorepoStepIO.PerProject].enableCrossBuild)
+    assert(step.asInstanceOf[MonorepoProcessStep.PerProject].enableCrossBuild)
   }
 
   test("validateOnly creates a Global step with no-op execute") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = MonorepoStepIO
+        val step = MonorepoProcessStep
           .global("build-global")
           .withValidation(_ => events.update(_ :+ "validate"))
           .validateOnly
@@ -882,7 +882,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
         val project = dummyProject("core")
-        val step    = MonorepoStepIO
+        val step    = MonorepoProcessStep
           .perProject("build-pp")
           .withValidation((_, currentProject) =>
             events.update(_ :+ s"validate:${currentProject.name}")
@@ -904,11 +904,11 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("globalResource executeAction produces a step that runs the effect and passes context") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+        val stepFn: String => MonorepoProcessStep = MonorepoProcessStep
           .globalResource[String]("res-action")
           .executeAction(resource => resCtx => events.update(_ :+ s"action:$resource"))
 
-        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.Global]
+        val step = stepFn("myResource").asInstanceOf[MonorepoProcessStep.Global]
         step.execute(ctx).flatMap { result =>
           events.get.map { obs =>
             assertEquals(result, ctx)
@@ -922,12 +922,12 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("globalResource validateOnly produces a step with no-op execute") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+        val stepFn: String => MonorepoProcessStep = MonorepoProcessStep
           .globalResource[String]("res-validate")
           .withValidation(resource => resCtx => events.update(_ :+ s"validate:$resource"))
           .validateOnly
 
-        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.Global]
+        val step = stepFn("myResource").asInstanceOf[MonorepoProcessStep.Global]
         step.validate(ctx) *> step.execute(ctx).flatMap { result =>
           events.get.map { obs =>
             assertEquals(result, ctx)
@@ -941,14 +941,14 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("perProjectResource executeAction produces a step that runs the effect and passes context") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val project                          = dummyProject("core")
-        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+        val project                               = dummyProject("core")
+        val stepFn: String => MonorepoProcessStep = MonorepoProcessStep
           .perProjectResource[String]("res-pp-action")
           .executeAction(resource =>
             (resCtx, proj) => events.update(_ :+ s"action:$resource:${proj.name}")
           )
 
-        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.PerProject]
+        val step = stepFn("myResource").asInstanceOf[MonorepoProcessStep.PerProject]
         step.execute(ctx, project).flatMap { result =>
           events.get.map { obs =>
             assertEquals(result, ctx)
@@ -962,15 +962,15 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("perProjectResource validateOnly produces a step with no-op execute") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val project                          = dummyProject("core")
-        val stepFn: String => MonorepoStepIO = MonorepoStepIO
+        val project                               = dummyProject("core")
+        val stepFn: String => MonorepoProcessStep = MonorepoProcessStep
           .perProjectResource[String]("res-pp-validate")
           .withValidation(resource =>
             (resCtx, proj) => events.update(_ :+ s"validate:$resource:${proj.name}")
           )
           .validateOnly
 
-        val step = stepFn("myResource").asInstanceOf[MonorepoStepIO.PerProject]
+        val step = stepFn("myResource").asInstanceOf[MonorepoProcessStep.PerProject]
         step.validate(ctx, project) *> step.execute(ctx, project).flatMap { result =>
           events.get.map { obs =>
             assertEquals(result, ctx)

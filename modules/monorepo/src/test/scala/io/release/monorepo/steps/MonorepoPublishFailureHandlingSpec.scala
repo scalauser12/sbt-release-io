@@ -26,7 +26,7 @@ class MonorepoPublishFailureHandlingSpec
     ).use { fixture =>
       val ctx = fixture.context(Seq("core", "api"))
 
-      io.release.monorepo.MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map {
+      io.release.monorepo.MonorepoProcessStep.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map {
         result =>
           val coreRun   = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
@@ -61,7 +61,7 @@ class MonorepoPublishFailureHandlingSpec
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      io.release.monorepo.MonorepoStepIO.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map {
+      io.release.monorepo.MonorepoProcessStep.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map {
         result =>
           val coreRun   = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
@@ -92,7 +92,7 @@ class MonorepoPublishFailureHandlingSpec
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      io.release.monorepo.MonorepoStepIO
+      io.release.monorepo.MonorepoProcessStep
         .compose(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
         .map { result =>
           assert(result.failed)
@@ -112,13 +112,13 @@ class MonorepoPublishFailureHandlingSpec
     twoProjectFixtureResource("monorepo-publish-exception-isolation")().use { fixture =>
       val ctx = fixture.context(Seq("core", "api"))
 
-      val throwingStep = io.release.monorepo.MonorepoStepIO.PerProject(
+      val throwingStep = io.release.monorepo.MonorepoProcessStep.PerProject(
         name = "throwing-step",
         execute =
           (_, project) => IO.raiseError(new RuntimeException(s"${project.name} action blew up"))
       )
 
-      io.release.monorepo.MonorepoStepIO.compose(Seq(throwingStep))(ctx).map { result =>
+      io.release.monorepo.MonorepoProcessStep.compose(Seq(throwingStep))(ctx).map { result =>
         assert(result.failed)
         val aggregate = requireProjectFailures(result.failureCause)
         assertEquals(aggregate.failures.map(_.projectName), Seq("core", "api"))

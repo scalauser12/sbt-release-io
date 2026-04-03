@@ -4,7 +4,6 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
-import io.release.ReleaseStepIO
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
@@ -16,7 +15,6 @@ import sbt.Project
 
 import java.io.File
 
-@scala.annotation.nowarn("cat=deprecation")
 class CorePreflightSpec extends CatsEffectSuite {
 
   test("renderSummary - include resolved versions, tag status, and workflow flags") {
@@ -159,7 +157,7 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - fail fast when validation returns ctx.failWith before version resolution") {
     withInitialContext { case (_, _, initialCtx) =>
       val versionResolutionFailure = "version resolution should not run"
-      val failingStep              = ReleaseStepIO
+      val failingStep              = CoreProcessStep
         .step("validation-fail-with")
         .withValidationContext(currentCtx =>
           IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))
@@ -489,8 +487,8 @@ class CorePreflightSpec extends CatsEffectSuite {
       )
     )
 
-  private val skipPublishInValidationStep: ReleaseStepIO =
-    ReleaseStepIO
+  private val skipPublishInValidationStep: CoreProcessStep =
+    CoreProcessStep
       .step("skip-publish-in-validation")
       .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
       .validateOnly
@@ -498,8 +496,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   private def overrideVersionTasksInValidationStep(
       releaseVersion: String,
       nextVersion: String
-  ): ReleaseStepIO =
-    ReleaseStepIO
+  ): CoreProcessStep =
+    CoreProcessStep
       .step(s"override-version-tasks-$releaseVersion")
       .withValidationContext { currentCtx =>
         IO.blocking {

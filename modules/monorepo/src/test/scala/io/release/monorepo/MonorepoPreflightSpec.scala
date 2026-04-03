@@ -213,7 +213,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
   test("check - fail fast when validation returns ctx.failWith") {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session     = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
-      val failingStep = MonorepoStepIO
+      val failingStep = MonorepoProcessStep
         .global("validation-fail-with")
         .withValidationContext(currentCtx =>
           IO.pure(currentCtx.failWith(new RuntimeException("fatal stop")))
@@ -230,7 +230,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val versionResolutionFailure = "version resolution should not run"
       val validationFailure        = "after-selection validation failed"
-      val failAfterSelectionStep   = MonorepoStepIO
+      val failAfterSelectionStep   = MonorepoProcessStep
         .global("fail-after-selection")
         .withValidation(_ => IO.raiseError(new IllegalStateException(validationFailure)))
         .validateOnly
@@ -654,8 +654,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
       }
     }
 
-  private val requiresVcsValidationStep: MonorepoStepIO.Global =
-    MonorepoStepIO
+  private val requiresVcsValidationStep: MonorepoProcessStep.Global =
+    MonorepoProcessStep
       .global("requires-vcs")
       .withValidation(ctx =>
         IO.raiseUnless(ctx.vcs.nonEmpty)(
@@ -664,14 +664,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
       )
       .validateOnly
 
-  private val skipPublishInValidationStep: MonorepoStepIO.Global =
-    MonorepoStepIO
+  private val skipPublishInValidationStep: MonorepoProcessStep.Global =
+    MonorepoProcessStep
       .global("skip-publish-in-validation")
       .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
       .validateOnly
 
-  private val requiresResolvedVersionsValidationStep: MonorepoStepIO.Global =
-    MonorepoStepIO
+  private val requiresResolvedVersionsValidationStep: MonorepoProcessStep.Global =
+    MonorepoProcessStep
       .global("requires-resolved-versions")
       .withValidation(currentCtx =>
         IO.raiseUnless(
@@ -685,8 +685,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
       )
       .validateOnly
 
-  private def narrowProjectsInValidationStep(name: String): MonorepoStepIO.Global =
-    MonorepoStepIO
+  private def narrowProjectsInValidationStep(name: String): MonorepoProcessStep.Global =
+    MonorepoProcessStep
       .global(s"narrow-projects-to-$name")
       .withValidationContext(currentCtx =>
         IO.pure(currentCtx.withProjects(currentCtx.currentProjects.filter(_.name == name)))

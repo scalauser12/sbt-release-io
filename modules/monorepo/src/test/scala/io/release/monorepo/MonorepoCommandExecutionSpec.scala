@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.ReleaseKeys
 import io.release.internal.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 
@@ -93,6 +94,57 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
         )
 
         assertEquals(flags.interactive, false)
+      }
+    }
+  }
+
+  test("doRelease cleans release state before planning and preserves the original state") {
+    import MonorepoCli.Arg.*
+
+    stateResource("monorepo-command-release-clean-state", MonorepoReleasePlugin).use { loaded =>
+      IO {
+        val seededState = loaded.state.put(ReleaseKeys.versions, "1.0.0" -> "1.1.0-SNAPSHOT")
+        val result      = MonorepoCommandExecution.doRelease(
+          seededState,
+          Seq(WithDefaults, AllChanged, SelectProject("core")),
+          runtime()
+        )
+        val log         = loaded.consoleBuffer.toString("UTF-8")
+
+        assertEquals(
+          seededState.get(ReleaseKeys.versions),
+          Some("1.0.0" -> "1.1.0-SNAPSHOT")
+        )
+        assertEquals(result.get(ReleaseKeys.versions), None)
+        assert(
+          log.contains(
+            "Cannot combine 'all-changed' with explicit project selection. " +
+              "Either use 'all-changed' alone or specify projects explicitly."
+          )
+        )
+      }
+    }
+  }
+
+  test("doCheck logs the planning failure and skips the success line") {
+    import MonorepoCli.Arg.*
+
+    stateResource("monorepo-command-check-invalid-plan", MonorepoReleasePlugin).use { loaded =>
+      IO {
+        val _   = MonorepoCommandExecution.doCheck(
+          loaded.state,
+          Seq(AllChanged, SelectProject("core")),
+          runtime()
+        )
+        val log = loaded.consoleBuffer.toString("UTF-8")
+
+        assert(
+          log.contains(
+            "Cannot combine 'all-changed' with explicit project selection. " +
+              "Either use 'all-changed' alone or specify projects explicitly."
+          )
+        )
+        assert(!log.contains(s"${ReleaseLogPrefixes.Monorepo} Preflight checks passed."))
       }
     }
   }

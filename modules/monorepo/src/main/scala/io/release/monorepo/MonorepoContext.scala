@@ -9,8 +9,8 @@ import sbt.{internal as _, *}
 
 /** Metadata for a single subproject participating in a monorepo release.
   *
-  * Created by [[MonorepoReleasePluginLike]] during argument validation, then threaded
-  * through [[MonorepoStepIO.PerProject]] steps. Per-project failure is tracked here
+  * Created by [[MonorepoReleasePluginLike]] during argument validation and then threaded
+  * through the compiled per-project lifecycle. Per-project failure is tracked here
   * independently of the global [[MonorepoContext.failed]] flag.
   *
   * @param ref         sbt project reference
@@ -18,7 +18,7 @@ import sbt.{internal as _, *}
   * @param baseDir     project root directory
   * @param versionFile most recently resolved version-file path for this project
   * @param versions    stored `(releaseVersion, nextVersion)` pair.
-  *                    [[MonorepoProjectResolver.applyVersionOverrides]] may temporarily store `""`
+  *                    `MonorepoProjectResolver.applyVersionOverrides` may temporarily store `""`
   *                    on one side to represent a partial CLI override; [[resolvedVersions]]
   *                    remains empty until `inquire-versions` fills in both values.
   * @param tagName     VCS tag for this project's release, set by the tagging step

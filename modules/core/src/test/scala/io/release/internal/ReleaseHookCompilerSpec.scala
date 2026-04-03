@@ -5,7 +5,6 @@ import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
-import io.release.ReleaseStepIO
 import io.release.TestSupport
 import io.release.steps.ReleaseSteps
 import munit.CatsEffectSuite
@@ -14,7 +13,6 @@ import sbt.Keys.*
 
 import java.io.File
 
-@scala.annotation.nowarn("cat=deprecation")
 class ReleaseHookCompilerSpec extends CatsEffectSuite {
 
   test(
@@ -299,13 +297,13 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     )
 
   private def runPublishHooks(
-      steps: Seq[ReleaseStepIO],
+      steps: Seq[CoreProcessStep],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     validatePublishHooks(steps, ctx).flatMap(executePublishHooks(steps, _))
 
   private def validatePublishHooks(
-      steps: Seq[ReleaseStepIO],
+      steps: Seq[CoreProcessStep],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
@@ -313,7 +311,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     }
 
   private def executePublishHooks(
-      steps: Seq[ReleaseStepIO],
+      steps: Seq[CoreProcessStep],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>

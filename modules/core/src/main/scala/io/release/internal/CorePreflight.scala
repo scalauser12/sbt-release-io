@@ -3,7 +3,6 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseComposer
 import io.release.ReleaseContext
-import io.release.ReleaseStepIO
 import io.release.steps.ReleaseSteps
 import io.release.steps.VcsSteps
 import io.release.steps.VersionSteps
@@ -11,7 +10,6 @@ import io.release.steps.VersionSteps
 import java.io.File
 
 /** Preflight support for `releaseIO check` and command help text without release side effects. */
-@scala.annotation.nowarn("cat=deprecation")
 private[release] object CorePreflight {
 
   private val InquireVersionsStep  = ReleaseSteps.inquireVersions.name
@@ -28,7 +26,7 @@ private[release] object CorePreflight {
   )
 
   private object CheckSteps {
-    def apply(steps: Seq[ReleaseStepIO]): CheckSteps = {
+    def apply(steps: Seq[CoreProcessStep]): CheckSteps = {
       val stepNames = steps.map(_.name)
 
       CheckSteps(
@@ -129,7 +127,7 @@ private[release] object CorePreflight {
 
   def check(
       initialCtx: ReleaseContext,
-      steps: Seq[ReleaseStepIO],
+      steps: Seq[CoreProcessStep],
       crossBuild: Boolean
   ): IO[Summary] = {
     val checkSteps = CheckSteps(steps)

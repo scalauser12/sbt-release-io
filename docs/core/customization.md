@@ -40,13 +40,13 @@ Hook semantics:
 - `releaseIO check` validates the same lifecycle shape that `releaseIO` executes
 - hooks extend behavior, but they do not change phase ordering
 
-The older flat names remain as deprecated aliases in this release. Prefer the grouped names in
-`build.sbt`, even though `inspect` still prints the legacy sbt key labels.
+Prefer the grouped names in `build.sbt`; the breaking cleanup removed the older flat aliases and
+renamed the underlying sbt key labels to match.
 
 ## Key rename guide
 
-| Old name | Preferred grouped name |
-| -------- | ---------------------- |
+| Removed name | Replacement |
+| ------------ | ----------- |
 | `releaseIOEnablePush` | `releaseIOPolicyEnablePush` |
 | `releaseIOEnablePublish` | `releaseIOPolicyEnablePublish` |
 | `releaseIOEnableRunTests` | `releaseIOPolicyEnableRunTests` |
@@ -164,14 +164,11 @@ Notes:
 
 When updating older builds or plugins:
 
-- rename `step.check` to `step.validate`
-- rename `step.action` to `step.execute`
-- replace older convenience factories with `ReleaseHookIO` and `ReleaseResourceHookIO`
-- keep the deprecated `ReleaseStepIO` APIs only for built-ins, tests, and internal composition
+- replace flat `releaseIO*` key names with grouped `releaseIOBehavior*`, `releaseIODefaults*`,
+  `releaseIOPolicy*`, `releaseIOHooks*`, `releaseIOVersioning*`, `releaseIOVcs*`,
+  `releaseIOPublish*`, `releaseIORuntime*`, and `releaseIODiagnostics*`
+- replace older low-level step-list edits with `ReleaseHookIO`, `ReleaseResourceHookIO`,
+  grouped hook settings, and grouped policy settings
 
-## Lower-level step types
-
-`ReleaseStepIO` is deprecated and retained only as the lower-level step type used by built-ins,
-tests, and internal composition. It is no longer the supported build-facing customization path
-for changing the default release pipeline. Prefer hooks, resource hooks, and grouped
-hook/policy settings in `build.sbt`.
+The low-level `ReleaseStepIO` DSL was removed in the breaking API cleanup. Build-facing
+customization now goes through hooks, resource hooks, and grouped hook/policy settings only.

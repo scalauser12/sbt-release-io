@@ -5,9 +5,9 @@ Use this page for the core plugin's execution model and the conceptual differenc
 
 ## Validate / execute model
 
-Internally, the compiled core lifecycle is expressed in terms of `ReleaseStepIO`, the deprecated
-lower-level step type that built-ins, tests, and internal composition still use under the
-hook-first model. Each compiled step has two phases:
+Internally, the compiled core lifecycle is expressed in terms of `CoreProcessStep`, the internal
+validate/execute runtime model used under the hook-first lifecycle. Each compiled step has two
+phases:
 
 - `validate: ReleaseContext => IO[Unit]`
 - `execute: ReleaseContext => IO[ReleaseContext]`
@@ -38,7 +38,7 @@ commands such as `+publish`. The main difference is the effect model:
 ### What IO adds
 
 - **Resource safety**: `Resource.use` guarantees cleanup for shared resources
-- **Composability**: hooks and lower-level internal step helpers can use normal cats-effect combinators
+- **Composability**: hooks and internal process helpers can use normal cats-effect combinators
 - **Typed validation boundary**: `validate` returns `IO[Unit]`, so checks cannot mutate the release context
 - **Explicit blocking boundaries**: `IO.blocking` marks shell-outs and sbt task execution
 - **Typed context threading**: `ReleaseContext` carries versions, VCS state, flags, and typed metadata
@@ -55,7 +55,7 @@ commands such as `+publish`. The main difference is the effect model:
 | Aspect                  | sbt-release                                 | sbt-release-io                                    |
 | ----------------------- | ------------------------------------------- | ------------------------------------------------- |
 | Effect system           | Plain `State => State` via `Function.chain` | `IO`-wrapped via `unsafeRunSync`                  |
-| Internal step type      | `ReleaseStep(action, check)`                | `ReleaseStepIO(validate, execute)`                |
+| Internal step type      | `ReleaseStep(action, check)`                | `CoreProcessStep(validate, execute)`              |
 | Supported customization | Direct process editing and step surgery     | Hook-first policies, hooks, and resource hooks    |
 | Resource management     | Manual                                      | `Resource.use` with guaranteed cleanup            |
 | Cross-build validation  | Actions only                                | Both `validate` and `execute` phases              |

@@ -1,5 +1,7 @@
 package io.release
 
+import io.release.internal.CoreProcessStep
+
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.internal.CoreExecutionState
@@ -17,12 +19,12 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - run validations before executes and fail fast on validation error") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val step1 = ReleaseStepIO(
+        val step1 = CoreProcessStep(
           name = "step1",
           execute = c => observed.update(_ :+ "execute1").as(c),
           validate = _ => observed.update(_ :+ "validate1")
         )
-        val step2 = ReleaseStepIO(
+        val step2 = CoreProcessStep(
           name = "step2",
           execute = c => observed.update(_ :+ "execute2").as(c),
           validate = _ =>
@@ -30,7 +32,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
               IO.raiseError(new RuntimeException("validation failed"))
         )
 
-        ReleaseStepIO.compose(Seq(step1, step2), crossBuild = false)(ctx).attempt.flatMap {
+        CoreProcessStep.compose(Seq(step1, step2), crossBuild = false)(ctx).attempt.flatMap {
           result =>
             observed.get.map { events =>
               assert(result.isLeft)
@@ -50,14 +52,14 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - mark the release as failed when an execute throws") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val failing = ReleaseStepIO.io("failing") { _ =>
+        val failing = CoreProcessStep.io("failing") { _ =>
           observed.update(_ :+ "execute1") *> IO.raiseError(new RuntimeException("boom"))
         }
-        val skipped = ReleaseStepIO.io("skipped") { c =>
+        val skipped = CoreProcessStep.io("skipped") { c =>
           observed.update(_ :+ "execute2").as(c)
         }
 
-        ReleaseStepIO.compose(Seq(failing, skipped), crossBuild = false)(ctx).flatMap { result =>
+        CoreProcessStep.compose(Seq(failing, skipped), crossBuild = false)(ctx).flatMap { result =>
           observed.get.map { events =>
             assert(result.failed)
             assert(result.failureCause.isDefined)
@@ -70,10 +72,11 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
 
   test("compose - clear onFailure after successful compose") {
     contextResource.use { ctx =>
-      ReleaseStepIO.compose(Seq(ReleaseStepIO.io("noop")(IO.pure)), crossBuild = false)(ctx).map {
-        result =>
+      CoreProcessStep
+        .compose(Seq(CoreProcessStep.io("noop")(IO.pure)), crossBuild = false)(ctx)
+        .map { result =>
           assertEquals(result.state.onFailure, None)
-      }
+        }
     }
   }
 
@@ -81,13 +84,13 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     contextResource.use { baseCtx =>
       val metadataKey = AttributeKey[String]("validation-metadata")
       val ctx         = promptContext(baseCtx, interactive = false, useDefaults = false)
-      val step1       = ReleaseStepIO
+      val step1       = CoreProcessStep
         .step("seed-validation-metadata")
         .withValidationContext(currentCtx =>
           IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
         )
         .validateOnly
-      val step2       = ReleaseStepIO(
+      val step2       = CoreProcessStep(
         name = "observe-validation-metadata",
         execute = currentCtx =>
           if (currentCtx.metadata(metadataKey).contains("observed")) IO.pure(currentCtx)
@@ -100,7 +103,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         }
       )
 
-      ReleaseStepIO.compose(Seq(step1, step2), crossBuild = false)(ctx).map { result =>
+      CoreProcessStep.compose(Seq(step1, step2), crossBuild = false)(ctx).map { result =>
         assertEquals(result.metadata(metadataKey), Some("observed"))
       }
     }
@@ -109,7 +112,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - stop later validations and executes after ctx.failWith during validation") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val failing = ReleaseStepIO(
+        val failing = CoreProcessStep(
           name = "validation-fail-with",
           execute = c => observed.update(_ :+ "execute1").as(c),
           validateWithContext = Some(currentCtx =>
@@ -120,13 +123,13 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
               )
           )
         )
-        val skipped = ReleaseStepIO(
+        val skipped = CoreProcessStep(
           name = "validation-skipped",
           execute = c => observed.update(_ :+ "execute2").as(c),
           validateWithContext = Some(currentCtx => observed.update(_ :+ "validate2").as(currentCtx))
         )
 
-        ReleaseStepIO.compose(Seq(failing, skipped), crossBuild = false)(ctx).flatMap { result =>
+        CoreProcessStep.compose(Seq(failing, skipped), crossBuild = false)(ctx).flatMap { result =>
           observed.get.map { events =>
             assert(result.failed)
             assertEquals(
@@ -143,7 +146,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("validateOnly - stop later validations after ctx.failWith during validation") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val failing = ReleaseStepIO
+        val failing = CoreProcessStep
           .step("validation-fail-with")
           .withValidationContext(currentCtx =>
             observed
@@ -153,7 +156,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
               )
           )
           .validateOnly
-        val skipped = ReleaseStepIO
+        val skipped = CoreProcessStep
           .step("validation-skipped")
           .withValidationContext(currentCtx => observed.update(_ :+ "validate2").as(currentCtx))
           .validateOnly
@@ -177,7 +180,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     contextResource.use { baseCtx =>
       val answersKey = AttributeKey[List[Boolean]]("validation-answers")
       val ctx        = promptContext(baseCtx, interactive = true, useDefaults = false)
-      val firstStep  = ReleaseStepIO
+      val firstStep  = CoreProcessStep
         .step("first-validation-prompt")
         .withValidationContext { currentCtx =>
           StepHelpers
@@ -187,7 +190,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
             }
         }
         .validateOnly
-      val secondStep = ReleaseStepIO
+      val secondStep = CoreProcessStep
         .step("second-validation-prompt")
         .withValidationContext { currentCtx =>
           StepHelpers
@@ -200,7 +203,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         .validateOnly
 
       TestSupport.withInput("y\r\nn\r\n") {
-        ReleaseStepIO.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
+        CoreProcessStep.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
           assertEquals(result.metadata(answersKey), Some(List(true, false)))
         }
       }
@@ -212,7 +215,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       val validationKey = AttributeKey[Boolean]("validation-answer")
       val executionKey  = AttributeKey[Boolean]("execution-answer")
       val ctx           = promptContext(baseCtx, interactive = true, useDefaults = false)
-      val firstStep     = ReleaseStepIO
+      val firstStep     = CoreProcessStep
         .step("validation-prompt")
         .withValidationContext { currentCtx =>
           StepHelpers
@@ -222,7 +225,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
             }
         }
         .validateOnly
-      val secondStep    = ReleaseStepIO(
+      val secondStep    = CoreProcessStep(
         name = "execution-prompt",
         validate = currentCtx =>
           if (currentCtx.metadata(validationKey).contains(true)) IO.unit
@@ -236,7 +239,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       )
 
       TestSupport.withInput("y\r\nn\r\n") {
-        ReleaseStepIO.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
+        CoreProcessStep.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
           assertEquals(result.metadata(validationKey), Some(true))
           assertEquals(result.metadata(executionKey), Some(false))
         }
@@ -247,16 +250,16 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - detect FailureCommand sentinel and skip subsequent executes") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val injectFailure = ReleaseStepIO.io("inject-failure-command") { c =>
+        val injectFailure = CoreProcessStep.io("inject-failure-command") { c =>
           observed
             .update(_ :+ "execute1")
             .as(c.copy(state = c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)))
         }
-        val skipped       = ReleaseStepIO.io("skipped") { c =>
+        val skipped       = CoreProcessStep.io("skipped") { c =>
           observed.update(_ :+ "execute2").as(c)
         }
 
-        ReleaseStepIO.compose(Seq(injectFailure, skipped), crossBuild = false)(ctx).flatMap {
+        CoreProcessStep.compose(Seq(injectFailure, skipped), crossBuild = false)(ctx).flatMap {
           result =>
             observed.get.map { events =>
               assert(result.failed)

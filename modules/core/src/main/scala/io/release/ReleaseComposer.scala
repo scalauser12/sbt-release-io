@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.CoreProcessStep
 import io.release.internal.CrossBuildExecution
 import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
@@ -9,7 +10,7 @@ import io.release.internal.StepExecutionSupport
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
-/** Orchestrates the two-phase execution model for [[ReleaseStepIO]] sequences.
+/** Orchestrates the two-phase execution model for internal core process steps.
   *
   * '''Phase 1 — Validation:''' Each step's validation runs before execution and may thread
   * updated internal runtime metadata through the shared release context. Cross-build wrapping is
@@ -29,7 +30,7 @@ private[release] object ReleaseComposer {
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.
     */
-  def compose(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
+  def compose(steps: Seq[CoreProcessStep], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
     StepExecutionSupport.runMainSegment(
@@ -42,7 +43,7 @@ private[release] object ReleaseComposer {
   /** Run only the validation phase for the given steps.
     * Used by preflight checks to reuse the exact validation wiring without executing actions.
     */
-  def validateOnly(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
+  def validateOnly(steps: Seq[CoreProcessStep], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
     StepExecutionSupport.runValidationPhase(
@@ -52,13 +53,13 @@ private[release] object ReleaseComposer {
     )
 
   private def preparedSteps(
-      steps: Seq[ReleaseStepIO],
+      steps: Seq[CoreProcessStep],
       crossBuild: Boolean
   ): Seq[StepExecutionSupport.PreparedStep[ReleaseContext]] =
     steps.map(preparedStep(_, crossBuild))
 
   private def preparedStep(
-      step: ReleaseStepIO,
+      step: CoreProcessStep,
       crossBuild: Boolean
   ): StepExecutionSupport.PreparedStep[ReleaseContext] =
     StepExecutionSupport.PreparedStep(
@@ -73,7 +74,7 @@ private[release] object ReleaseComposer {
     )
 
   private def wrapWithCrossBuild(
-      step: ReleaseStepIO,
+      step: CoreProcessStep,
       crossBuild: Boolean
   )(action: ReleaseContext => IO[ReleaseContext]): ReleaseContext => IO[ReleaseContext] =
     if (step.enableCrossBuild && crossBuild)

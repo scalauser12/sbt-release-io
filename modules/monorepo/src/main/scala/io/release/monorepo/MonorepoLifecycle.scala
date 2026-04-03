@@ -1,11 +1,11 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.internal.HookStepCompilation
 import io.release.internal.LifecycleCompiler
 import io.release.monorepo.steps.{MonorepoPublishSteps, MonorepoReleaseSteps}
 
 /** Canonical monorepo lifecycle order and hook compilation. */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoLifecycle {
 
   private type ProjectGate = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]
@@ -23,7 +23,7 @@ private[monorepo] object MonorepoLifecycle {
   ): LifecycleCompiler.HookPhase[
     MonorepoHookConfiguration,
     MonorepoGlobalHookIO,
-    MonorepoStepIO
+    MonorepoProcessStep
   ] =
     LifecycleCompiler.HookPhase(
       phase = phase,
@@ -42,7 +42,7 @@ private[monorepo] object MonorepoLifecycle {
   ): LifecycleCompiler.HookPhase[
     MonorepoHookConfiguration,
     MonorepoProjectHookIO,
-    MonorepoStepIO
+    MonorepoProcessStep
   ] =
     LifecycleCompiler.HookPhase(
       phase = phase,
@@ -52,7 +52,7 @@ private[monorepo] object MonorepoLifecycle {
       enabled = enabled
     )
 
-  private val phases: Seq[LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoStepIO]] =
+  private val phases: Seq[LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoProcessStep]] =
     Seq(
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.initializeVcs),
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.checkCleanWorkingDir),
@@ -175,24 +175,42 @@ private[monorepo] object MonorepoLifecycle {
       )
     )
 
-  val defaults: Seq[MonorepoStepIO] =
+  val defaults: Seq[MonorepoProcessStep] =
     LifecycleCompiler.defaults(phases)
 
-  def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoStepIO] =
+  def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoProcessStep] =
     LifecycleCompiler.compile(hooks, phases)
 
   private def compileGlobalHooks(
       phase: String,
       hooks: Seq[MonorepoGlobalHookIO],
       gate: MonorepoContext => Boolean
-  ): Seq[MonorepoStepIO] =
-    hooks.map { hook =>
-      MonorepoStepIO.Global(
-        name = s"$phase:${hook.name}",
-        execute = ctx => if (gate(ctx)) hook.execute(ctx) else IO.pure(ctx),
-        validate = ctx => if (gate(ctx)) hook.validate(ctx) else IO.unit
-      )
-    }
+  ): Seq[MonorepoProcessStep] = {
+    val gateIo: MonorepoContext => IO[Boolean] =
+      ctx => IO.pure(gate(ctx))
+
+    HookStepCompilation.compileSingleContextHooks[
+      MonorepoContext,
+      MonorepoGlobalHookIO,
+      MonorepoProcessStep,
+      Nothing
+    ](
+      phase = phase,
+      hooks = hooks,
+      gate = gateIo
+    )(
+      _.name,
+      _.execute,
+      _.validate,
+      (name, execute, validate, validateWithContext) =>
+        MonorepoProcessStep.Global(
+          name = name,
+          execute = execute,
+          validate = validate,
+          validateWithContext = validateWithContext
+        )
+    )
+  }
 
   private def compileProjectHooks(
       phase: String,
@@ -200,42 +218,51 @@ private[monorepo] object MonorepoLifecycle {
       gate: ProjectGate,
       crossBuild: Boolean,
       freezeGateDecision: Boolean
-  ): Seq[MonorepoStepIO] =
-    hooks.zipWithIndex.map { case (hook, hookIndex) =>
-      val token = MonorepoPublishHookGateCache.HookToken(phase, hookIndex)
-
-      if (freezeGateDecision)
-        MonorepoStepIO.PerProject(
-          name = s"$phase:${hook.name}",
-          execute = (ctx, project) =>
-            MonorepoPublishHookGateCache
-              .resolveDecision(ctx, token, project, gate(ctx, project))
-              .flatMap {
-                case true  => hook.execute(ctx, project)
-                case false => IO.pure(ctx)
-              },
-          enableCrossBuild = crossBuild,
-          validateWithContext = Some((ctx, project) =>
-            MonorepoPublishHookGateCache.snapshotDecision(ctx, token, project, gate).flatMap {
-              case (updatedCtx, true)  => hook.validate(updatedCtx, project).as(updatedCtx)
-              case (updatedCtx, false) => IO.pure(updatedCtx)
-            }
+  ): Seq[MonorepoProcessStep] =
+    HookStepCompilation.compileItemHooks[
+      MonorepoContext,
+      ProjectReleaseInfo,
+      MonorepoProjectHookIO,
+      MonorepoProcessStep,
+      MonorepoPublishHookGateCache.HookToken
+    ](
+      phase = phase,
+      hooks = hooks,
+      gate = gate,
+      cachedGate =
+        if (freezeGateDecision)
+          Some(
+            HookStepCompilation
+              .CachedItemGate[
+                MonorepoContext,
+                ProjectReleaseInfo,
+                MonorepoPublishHookGateCache.HookToken
+              ](
+                tokenForIndex =
+                  hookIndex => MonorepoPublishHookGateCache.HookToken(phase, hookIndex),
+                resolveDecision = (ctx, token, project, decision) =>
+                  MonorepoPublishHookGateCache.resolveDecision(ctx, token, project, decision),
+                snapshotDecision = (ctx, token, project, evaluateGate) =>
+                  MonorepoPublishHookGateCache.snapshotDecision(
+                    ctx,
+                    token,
+                    project,
+                    evaluateGate
+                  )
+              )
           )
+        else None
+    )(
+      _.name,
+      _.execute,
+      _.validate,
+      (name, execute, validate, validateWithContext) =>
+        MonorepoProcessStep.PerProject(
+          name = name,
+          execute = execute,
+          validate = validate,
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContext
         )
-      else
-        MonorepoStepIO.PerProject(
-          name = s"$phase:${hook.name}",
-          execute = (ctx, project) =>
-            gate(ctx, project).flatMap {
-              case true  => hook.execute(ctx, project)
-              case false => IO.pure(ctx)
-            },
-          validate = (ctx, project) =>
-            gate(ctx, project).flatMap {
-              case true  => hook.validate(ctx, project)
-              case false => IO.unit
-            },
-          enableCrossBuild = crossBuild
-        )
-    }
+    )
 }

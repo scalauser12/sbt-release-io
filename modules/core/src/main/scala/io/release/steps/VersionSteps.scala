@@ -2,13 +2,12 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseStepIO
+import io.release.internal.CoreProcessStep
 import io.release.internal.VersionPlan
 import sbt.State
 import sbt.{internal as _, *}
 
 /** Version-related release steps: inquire, set, commit versions. */
-@scala.annotation.nowarn("cat=deprecation")
 private[release] object VersionSteps {
 
   private[steps] type ResolvedSettings = ReleaseVersionWorkflow.ResolvedSettings
@@ -62,25 +61,25 @@ private[release] object VersionSteps {
       IO.pure(s"""$key := "$ver"\n""")
     }
 
-  val inquireVersions: ReleaseStepIO = ReleaseStepIO(
+  val inquireVersions: CoreProcessStep = CoreProcessStep(
     name = "inquire-versions",
     validate = ReleaseVersionWorkflow.validateInquireVersions,
     execute = ReleaseVersionWorkflow.inquireVersions
   )
 
-  val setReleaseVersion: ReleaseStepIO =
-    ReleaseStepIO.io("set-release-version")(ReleaseVersionWorkflow.writeReleaseVersion)
+  val setReleaseVersion: CoreProcessStep =
+    CoreProcessStep.io("set-release-version")(ReleaseVersionWorkflow.writeReleaseVersion)
 
-  val setNextVersion: ReleaseStepIO =
-    ReleaseStepIO.io("set-next-version")(ReleaseVersionWorkflow.writeNextVersion)
+  val setNextVersion: CoreProcessStep =
+    CoreProcessStep.io("set-next-version")(ReleaseVersionWorkflow.writeNextVersion)
 
-  val commitReleaseVersion: ReleaseStepIO = ReleaseStepIO(
+  val commitReleaseVersion: CoreProcessStep = CoreProcessStep(
     name = "commit-release-version",
     validate = VcsSteps.validateCleanWorkingDir(_, logStartHash = false),
     execute = ReleaseVersionWorkflow.commitReleaseVersion
   )
 
-  val commitNextVersion: ReleaseStepIO = ReleaseStepIO(
+  val commitNextVersion: CoreProcessStep = CoreProcessStep(
     name = "commit-next-version",
     validate = VcsSteps.validateCleanWorkingDir(_, logStartHash = false),
     execute = ReleaseVersionWorkflow.commitNextVersion

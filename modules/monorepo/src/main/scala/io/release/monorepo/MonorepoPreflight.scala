@@ -6,10 +6,10 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionEngine
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.StepBoundarySupport
 import io.release.monorepo.steps.{MonorepoReleaseSteps, MonorepoVcsSteps}
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoPreflight {
 
   private val InitializeVcsStep          = MonorepoReleaseSteps.initializeVcs.name
@@ -30,7 +30,7 @@ private[monorepo] object MonorepoPreflight {
   )
 
   private object CheckSteps {
-    def apply(steps: Seq[MonorepoStepIO]): CheckSteps = {
+    def apply(steps: Seq[MonorepoProcessStep]): CheckSteps = {
       val stepNames              = steps.map(_.name)
       val shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep)
       val shouldResolveVersions  = stepNames.contains(InquireVersionsStep)
@@ -56,16 +56,13 @@ private[monorepo] object MonorepoPreflight {
   )
 
   private object CheckSegments {
-    def apply(steps: Seq[MonorepoStepIO], crossBuild: Boolean): CheckSegments = {
-      val normalized    = MonorepoProcessStep.normalize(steps, crossBuild)
-      val boundaryIndex = normalized.indexWhere(_.isSelectionBoundary)
-
-      if (boundaryIndex < 0) CheckSegments(Seq.empty, normalized)
-      else {
-        val (setupSteps, mainSteps) = normalized.splitAt(boundaryIndex + 1)
-        CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
+    def apply(steps: Seq[MonorepoProcessStep]): CheckSegments =
+      StepBoundarySupport.splitAfterBoundary(steps)(_.isSelectionBoundary) match {
+        case Some((setupSteps, mainSteps)) =>
+          CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
+        case None                          =>
+          CheckSegments(Seq.empty, steps)
       }
-    }
   }
 
   sealed trait Evaluation[+A]
@@ -160,10 +157,10 @@ private[monorepo] object MonorepoPreflight {
 
   def check(
       session: MonorepoPreparedSession,
-      steps: Seq[MonorepoStepIO]
+      steps: Seq[MonorepoProcessStep]
   ): IO[Summary] = {
     val checkSteps    = CheckSteps(steps)
-    val checkSegments = CheckSegments(steps, session.flags.crossBuild)
+    val checkSegments = CheckSegments(steps)
 
     for {
       baseCtx <- resolveBaseContext(session.context, checkSteps)
@@ -194,7 +191,7 @@ private[monorepo] object MonorepoPreflight {
       crossBuildEnabled: Boolean
   ): IO[Summary] =
     for {
-      setupValidated <- validateSegment(checkSegments.setupSteps)(baseCtx)
+      setupValidated <- validateSegment(checkSegments.setupSteps, crossBuildEnabled)(baseCtx)
       checkedSetup   <- ExecutionEngine.raiseIfFailed(setupValidated)
       selected       <-
         resolveSelection(checkedSetup, plan, checkSteps.shouldResolveSelection)
@@ -236,7 +233,7 @@ private[monorepo] object MonorepoPreflight {
     splitAtBuiltInVersionResolution(normalizedSteps) match {
       case None =>
         for {
-          validatedCtx <- validateSegment(normalizedSteps)(baseCtx)
+          validatedCtx <- validateSegment(normalizedSteps, crossBuildEnabled)(baseCtx)
           checkedCtx   <- ExecutionEngine.raiseIfFailed(validatedCtx)
           tagOutcomes  <-
             resolveTagSnapshot(
@@ -256,11 +253,11 @@ private[monorepo] object MonorepoPreflight {
 
       case Some((prefixSteps, suffixSteps)) =>
         for {
-          prefixValidated <- validateSegment(prefixSteps)(baseCtx)
+          prefixValidated <- validateSegment(prefixSteps, crossBuildEnabled)(baseCtx)
           checkedPrefix   <- ExecutionEngine.raiseIfFailed(prefixValidated)
           withVersions    <- resolveVersionSnapshot(checkedPrefix, shouldResolveVersions = true)
           checkedVersions <- ExecutionEngine.raiseIfFailed(withVersions)
-          validatedCtx    <- validateSegment(suffixSteps)(checkedVersions)
+          validatedCtx    <- validateSegment(suffixSteps, crossBuildEnabled)(checkedVersions)
           checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
           tagOutcomes     <-
             resolveTagSnapshot(
@@ -333,11 +330,12 @@ private[monorepo] object MonorepoPreflight {
       MonorepoVcsSteps.preflightTags(ctx).map(Evaluation.Resolved(_))
 
   private def validateSegment(
-      steps: Seq[MonorepoProcessStep]
+      steps: Seq[MonorepoProcessStep],
+      crossBuild: Boolean
   )(ctx: MonorepoContext): IO[MonorepoContext] =
     ExecutionEngine.runValidations(
       ReleaseLogPrefixes.Monorepo,
-      steps.map(_.validationStep),
+      steps.map(_.validationStep(crossBuild)),
       ctx
     )
 

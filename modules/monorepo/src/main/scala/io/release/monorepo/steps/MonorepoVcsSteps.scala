@@ -15,7 +15,6 @@ import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 
 /** VCS-related monorepo release steps. */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoVcsSteps {
 
   private val DefaultCommandName = "releaseIOMonorepo"
@@ -26,12 +25,12 @@ private[monorepo] object MonorepoVcsSteps {
       status: String
   )
 
-  val initializeVcs: MonorepoStepIO.Global = MonorepoStepIO.Global(
+  val initializeVcs: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
     name = "initialize-vcs",
     execute = ctx => VcsOps.detectAndInit(ctx)
   )
 
-  val checkCleanWorkingDir: MonorepoStepIO.Global = MonorepoStepIO.Global(
+  val checkCleanWorkingDir: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
     name = "check-clean-working-dir",
     execute = ctx => IO.pure(ctx),
     validate = ctx =>
@@ -108,8 +107,8 @@ private[monorepo] object MonorepoVcsSteps {
       }
     }
 
-  private[monorepo] val tagReleasesPerProject: MonorepoStepIO.PerProject =
-    MonorepoStepIO.PerProject(
+  private[monorepo] val tagReleasesPerProject: MonorepoProcessStep.PerProject =
+    MonorepoProcessStep.PerProject(
       name = "tag-releases",
       execute = (ctx, project) =>
         required(ctx.vcs, "VCS not initialized") { vcs =>
@@ -172,7 +171,7 @@ private[monorepo] object MonorepoVcsSteps {
     * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
     * users should verify their VCS behavior.
     */
-  val pushChanges: MonorepoStepIO.Global = MonorepoStepIO.buildGlobal(
+  val pushChanges: MonorepoProcessStep.Global = MonorepoProcessStep.buildGlobal(
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, MissingVcsMessage) { vcs =>

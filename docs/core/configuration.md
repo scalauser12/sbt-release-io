@@ -6,8 +6,8 @@ hook-first tutorial, see [Hook-first walkthrough](hook-first-walkthrough.md).
 
 Use the grouped `releaseIOBehavior*`, `releaseIODefaults*`, `releaseIOPolicy*`,
 `releaseIOHooks*`, `releaseIOVersioning*`, `releaseIOVcs*`, and `releaseIOPublish*` names in
-`build.sbt`. The older flat names remain as deprecated aliases, and `inspect` still prints the
-legacy sbt key labels in this release.
+`build.sbt`. The older flat names were removed in the breaking cleanup, and `inspect` now shows
+the grouped key labels directly.
 
 ## Starter configuration
 

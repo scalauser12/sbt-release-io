@@ -1,5 +1,7 @@
 package io.release
 
+import io.release.internal.CoreProcessStep
+
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.internal.SbtRuntime
@@ -33,13 +35,13 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
         )
         (ReleaseContext(state = state), buffered.consoleBuffer)
       }.flatMap { case (ctx, consoleBuffer) =>
-        val step = ReleaseStepIO(
+        val step = CoreProcessStep(
           name = "cross-step",
           execute = currentCtx => IO.pure(currentCtx),
           enableCrossBuild = true
         )
 
-        ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { _ =>
+        CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).flatMap { _ =>
           IO.blocking {
             val log = consoleBuffer.toString("UTF-8")
             assert(
@@ -69,7 +71,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val step = ReleaseStepIO(
+        val step = CoreProcessStep(
           name = "cross-step",
           execute =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
@@ -78,7 +80,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
           enableCrossBuild = true
         )
 
-        ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           for {
             events       <- observed.get
             finalVersion <- scalaVersionOf(result.state)
@@ -111,7 +113,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val crossStep = ReleaseStepIO(
+        val crossStep = CoreProcessStep(
           name = "cross-step",
           execute =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
@@ -119,27 +121,28 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
           enableCrossBuild = true
         )
-        val plainStep = ReleaseStepIO.io("plain-step") { c =>
+        val plainStep = CoreProcessStep.io("plain-step") { c =>
           scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"plain:$v").as(c))
         }
 
-        ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
-          for {
-            events       <- observed.get
-            finalVersion <- scalaVersionOf(result.state)
-          } yield {
-            assertEquals(
-              events,
-              List(
-                s"validate:${TestSupport.CurrentScalaVersion}",
-                s"validate:${TestSupport.alternateScalaVersion}",
-                s"execute:${TestSupport.CurrentScalaVersion}",
-                s"execute:${TestSupport.alternateScalaVersion}",
-                s"plain:${TestSupport.CurrentScalaVersion}"
+        CoreProcessStep.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
+          result =>
+            for {
+              events       <- observed.get
+              finalVersion <- scalaVersionOf(result.state)
+            } yield {
+              assertEquals(
+                events,
+                List(
+                  s"validate:${TestSupport.CurrentScalaVersion}",
+                  s"validate:${TestSupport.alternateScalaVersion}",
+                  s"execute:${TestSupport.CurrentScalaVersion}",
+                  s"execute:${TestSupport.alternateScalaVersion}",
+                  s"plain:${TestSupport.CurrentScalaVersion}"
+                )
               )
-            )
-            assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
-          }
+              assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+            }
         }
       }
     }
@@ -160,7 +163,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val crossStep = ReleaseStepIO(
+        val crossStep = CoreProcessStep(
           name = "cross-step",
           execute =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"execute:$v").as(c)),
@@ -168,27 +171,28 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
           enableCrossBuild = true
         )
-        val plainStep = ReleaseStepIO.io("plain-step") { c =>
+        val plainStep = CoreProcessStep.io("plain-step") { c =>
           scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"plain:$v").as(c))
         }
 
-        ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
-          for {
-            events       <- observed.get
-            finalVersion <- scalaVersionOf(result.state)
-          } yield {
-            assertEquals(
-              events,
-              List(
-                s"validate:${TestSupport.CurrentScalaVersion}",
-                s"validate:${TestSupport.alternateScalaVersion}",
-                s"execute:${TestSupport.CurrentScalaVersion}",
-                s"execute:${TestSupport.alternateScalaVersion}",
-                s"plain:${TestSupport.CurrentScalaVersion}"
+        CoreProcessStep.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
+          result =>
+            for {
+              events       <- observed.get
+              finalVersion <- scalaVersionOf(result.state)
+            } yield {
+              assertEquals(
+                events,
+                List(
+                  s"validate:${TestSupport.CurrentScalaVersion}",
+                  s"validate:${TestSupport.alternateScalaVersion}",
+                  s"execute:${TestSupport.CurrentScalaVersion}",
+                  s"execute:${TestSupport.alternateScalaVersion}",
+                  s"plain:${TestSupport.CurrentScalaVersion}"
+                )
               )
-            )
-            assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
-          }
+              assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+            }
         }
       }
     }
@@ -207,7 +211,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val crossStep = ReleaseStepIO(
+        val crossStep = CoreProcessStep(
           name = "cross-step",
           validate =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"cross-validate:$v")),
@@ -217,7 +221,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
             ),
           enableCrossBuild = true
         )
-        val plainStep = ReleaseStepIO(
+        val plainStep = CoreProcessStep(
           name = "plain-step",
           validate = c =>
             scopedScalaVersionOf(c.state)
@@ -232,7 +236,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
         )
 
         scopedScalaVersionOf(ctx.state).flatMap { initialVersion =>
-          ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
+          CoreProcessStep.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
             result =>
               for {
                 events          <- observed.get
@@ -268,13 +272,13 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { executed =>
-        val step = ReleaseStepIO(
+        val step = CoreProcessStep(
           name = "cross-step",
           execute = c => executed.set(true).as(c),
           enableCrossBuild = true
         )
 
-        ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).attempt.flatMap { result =>
+        CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).attempt.flatMap { result =>
           executed.get.map { didExecute =>
             result match {
               case Left(err: IllegalStateException) =>
@@ -304,7 +308,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val step = ReleaseStepIO
+        val step = CoreProcessStep
           .io("cross-step") { c =>
             scalaVersionOf(c.state).flatMap { version =>
               observed.update(_ :+ s"execute:$version") *>
@@ -315,7 +319,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
           }
           .copy(enableCrossBuild = true)
 
-        ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           for {
             events       <- observed.get
             finalVersion <- scalaVersionOf(result.state)
@@ -356,9 +360,9 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
           )
         )
     ).use { ctx =>
-      val step = ReleaseStepIO.fromTask(failureCommandTask, enableCrossBuild = true)
+      val step = CoreProcessStep.fromTask(failureCommandTask, enableCrossBuild = true)
 
-      ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         val marker =
           new java.io.File(
             SbtRuntime.extracted(result.state).get(Keys.baseDirectory),
@@ -395,7 +399,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val step = ReleaseStepIO(
+        val step = CoreProcessStep(
           name = "cross-step",
           execute = c =>
             scalaVersionOf(c.state).flatMap { version =>
@@ -408,7 +412,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
           enableCrossBuild = true
         )
 
-        ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           observed.get.map { events =>
             assert(result.failed)
             assertEquals(events, List(s"execute:${TestSupport.CurrentScalaVersion}"))
@@ -426,11 +430,11 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
         Keys.crossScalaVersions := Seq(TestSupport.alternateScalaVersion)
       )
     ).use { ctx =>
-      val step = ReleaseStepIO
+      val step = CoreProcessStep
         .io("cross-step")(_ => IO.raiseError(new RuntimeException("boom")))
         .copy(enableCrossBuild = true)
 
-      ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         scalaVersionOf(result.state).map { finalVersion =>
           assert(result.failed)
           assert(result.failureCause.exists(_.getMessage.contains("boom")))
@@ -451,13 +455,13 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
         )
       )
     ).use { ctx =>
-      val step = ReleaseStepIO(
+      val step = CoreProcessStep(
         name = "cross-step",
         execute = c => IO.pure(c.failWith(new IllegalStateException("fail on first version"))),
         enableCrossBuild = true
       )
 
-      ReleaseStepIO.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      CoreProcessStep.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         scalaVersionOf(result.state).map { finalVersion =>
           assert(result.failed)
           assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
@@ -478,21 +482,21 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val crossStep = ReleaseStepIO(
+        val crossStep = CoreProcessStep(
           name = "cross-step",
           execute = c => IO.pure(c),
           validate =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"cross-validate:$v")),
           enableCrossBuild = true
         )
-        val plainStep = ReleaseStepIO(
+        val plainStep = CoreProcessStep(
           name = "plain-step",
           execute = c => IO.pure(c),
           validate =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"plain-validate:$v"))
         )
 
-        ReleaseStepIO.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { _ =>
+        CoreProcessStep.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { _ =>
           observed.get.map { events =>
             assertEquals(
               events,
@@ -520,20 +524,20 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val step1 = ReleaseStepIO(
+        val step1 = CoreProcessStep(
           name = "cross-step-1",
           execute =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"step1:$v").as(c)),
           enableCrossBuild = true
         )
-        val step2 = ReleaseStepIO(
+        val step2 = CoreProcessStep(
           name = "cross-step-2",
           execute =
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"step2:$v").as(c)),
           enableCrossBuild = true
         )
 
-        ReleaseStepIO.compose(Seq(step1, step2), crossBuild = true)(ctx).flatMap { result =>
+        CoreProcessStep.compose(Seq(step1, step2), crossBuild = true)(ctx).flatMap { result =>
           for {
             events       <- observed.get
             finalVersion <- scalaVersionOf(result.state)

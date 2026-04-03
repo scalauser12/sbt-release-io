@@ -46,15 +46,14 @@ Hook semantics:
 - per-project lifecycle points use `MonorepoProjectHookIO`
 - `releaseIOMonorepo check` validates the same lifecycle shape that `releaseIOMonorepo` executes
 
-The tagging lifecycle phase is still named `tag-releases`, but the supported built-in step
-symbol is `MonorepoReleaseSteps.tagReleasesPerProject`.
+The tagging lifecycle phase is still named `tag-releases`. Customize around it with
+`releaseIOMonorepoHooksBeforeTag` and `releaseIOMonorepoHooksAfterTag`.
 
-The older flat names remain as deprecated aliases in this release. Prefer the grouped names in
-`build.sbt`, even though `inspect` still prints the legacy sbt key labels.
+Prefer the grouped names in `build.sbt`; the breaking cleanup removed the older flat aliases.
 
 ## Key rename guide
 
-| Old name | Preferred grouped name |
+| Removed name | Replacement |
 | -------- | ---------------------- |
 | `releaseIOMonorepoEnablePush` | `releaseIOMonorepoPolicyEnablePush` |
 | `releaseIOMonorepoEnablePublish` | `releaseIOMonorepoPolicyEnablePublish` |
@@ -189,14 +188,11 @@ Notes:
 
 When updating older builds or plugins:
 
-- rename `check` to `validate`
-- rename `action` to `execute`
-- replace older step convenience factories with the current hook/resource-hook builders
-- keep the deprecated `MonorepoStepIO` APIs only for built-ins, tests, and internal composition
+- replace flat `releaseIOMonorepo*` keys with grouped `releaseIOMonorepoSelection*`,
+  `releaseIOMonorepoBehavior*`, `releaseIOMonorepoPolicy*`, `releaseIOMonorepoHooks*`,
+  `releaseIOMonorepoVersioning*`, `releaseIOMonorepoDetection*`, `releaseIOMonorepoVcs*`, and
+  `releaseIOMonorepoPublish*`
+- replace lower-level step-list edits with hook/resource-hook builders plus grouped policy keys
 
-## Lower-level step types
-
-`MonorepoStepIO` is deprecated and retained only as the lower-level step type used by built-ins,
-tests, and internal composition. It is no longer the supported build-facing customization path
-for changing the monorepo pipeline. Prefer hooks, resource hooks, and grouped hook/policy
-settings in `build.sbt`.
+The low-level `MonorepoStepIO` DSL was removed in the breaking API cleanup. Build-facing
+customization now goes through monorepo hooks, resource hooks, and grouped hook/policy settings.

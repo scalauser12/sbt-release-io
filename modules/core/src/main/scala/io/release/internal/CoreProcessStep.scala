@@ -1,31 +1,12 @@
-package io.release
+package io.release.internal
 
 import cats.effect.IO
-import io.release.internal.SbtRuntime
-import io.release.internal.StepKernel
+import io.release.ReleaseComposer
+import io.release.ReleaseContext
 import sbt.{internal as _, *}
 
-/** A single release step with explicit validation and execution phases.
-  *
-  * Steps are executed in two phases by [[ReleaseStepIO.compose]]:
-  *  1. '''Validation phase''' — all validations run before execution and may thread updated
-  *     internal runtime metadata through the phase.
-  *  2. '''Execution phase''' — all `execute` functions run sequentially, threading context
-  *     through the release. Between each step, sbt's `FailureCommand` sentinel is inspected for
-  *     silent task failures.
-  *
-  * @param name                human-readable step name, used in log output
-  * @param execute             the main step logic; receives and returns a [[ReleaseContext]]
-  * @param validate            optional pre-flight validation; defaults to no-op
-  * @param enableCrossBuild    when true and cross-build is active, runs once per
-  *                            `crossScalaVersions`
-  * @param validateWithContext optional validation hook that can return an updated context
-  */
-@deprecated(
-  "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
-  "0.8.1"
-)
-case class ReleaseStepIO private (
+/** Internal core release step with explicit validation and execution phases. */
+private[release] final case class CoreProcessStep private (
     name: String,
     execute: ReleaseContext => IO[ReleaseContext],
     private val rawValidate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
@@ -33,28 +14,23 @@ case class ReleaseStepIO private (
     private val rawValidateWithContext: Option[ReleaseContext => IO[ReleaseContext]] = None
 ) {
 
-  // Keep the caller-provided validation inputs raw so apply(...), copy(...), and public
-  // round-tripping preserve the same invariants without double-wrapping already-composed
-  // validation functions.
   private lazy val normalizedValidation =
     StepKernel.normalizedValidationPair(rawValidate, rawValidateWithContext)
 
-  // Public validate exposes the normalized IO[Unit] view.
   def validate: ReleaseContext => IO[Unit] =
     normalizedValidation._1
 
-  // Public validateWithContext preserves the raw stored threaded hook for round-trips.
   def validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] =
     rawValidateWithContext
 
   def copy(
       name: String = this.name,
       execute: ReleaseContext => IO[ReleaseContext] = this.execute,
-      validate: ReleaseContext => IO[Unit] = ReleaseStepIO.UnspecifiedValidate,
+      validate: ReleaseContext => IO[Unit] = CoreProcessStep.UnspecifiedValidate,
       enableCrossBuild: Boolean = this.enableCrossBuild,
       validateWithContext: Option[ReleaseContext => IO[ReleaseContext]] =
-        ReleaseStepIO.UnspecifiedValidateWithContext
-  ): ReleaseStepIO = {
+        CoreProcessStep.UnspecifiedValidateWithContext
+  ): CoreProcessStep = {
     val (nextRawValidate, nextRawValidateWithContext) =
       StepKernel.resolveSingleCopyFields(
         currentRawValidate = rawValidate,
@@ -62,38 +38,39 @@ case class ReleaseStepIO private (
         currentValidate = this.validate,
         currentNormalizedValidateWithContext = normalizedValidation._2,
         requestedValidate = validate,
-        unspecifiedValidate = ReleaseStepIO.UnspecifiedValidate,
+        unspecifiedValidate = CoreProcessStep.UnspecifiedValidate,
         requestedValidateWithContext = validateWithContext,
-        unspecifiedValidateWithContext = ReleaseStepIO.UnspecifiedValidateWithContext
+        unspecifiedValidateWithContext = CoreProcessStep.UnspecifiedValidateWithContext
       )
 
-    new ReleaseStepIO(name, execute, nextRawValidate, enableCrossBuild, nextRawValidateWithContext)
+    new CoreProcessStep(
+      name,
+      execute,
+      nextRawValidate,
+      enableCrossBuild,
+      nextRawValidateWithContext
+    )
   }
 
   private[release] def threadedValidation: ReleaseContext => IO[ReleaseContext] =
     normalizedValidation._2.getOrElse(ctx => this.validate.apply(ctx).as(ctx))
 }
 
-@deprecated(
-  "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
-  "0.8.1"
-)
-@scala.annotation.nowarn("cat=deprecation")
-object ReleaseStepIO {
+private[release] object CoreProcessStep {
 
   private type ThreadedValidation = StepKernel.ThreadedValidation[ReleaseContext]
 
   private[release] val UnspecifiedValidate: ReleaseContext => IO[Unit] =
     (_ctx: ReleaseContext) =>
       IO.raiseError(
-        new IllegalStateException("ReleaseStepIO.copy validate sentinel should never execute")
+        new IllegalStateException("CoreProcessStep.copy validate sentinel should never execute")
       )
 
   private[release] val UnspecifiedValidateWithContextFn: ReleaseContext => IO[ReleaseContext] =
     (_ctx: ReleaseContext) =>
       IO.raiseError(
         new IllegalStateException(
-          "ReleaseStepIO.copy validateWithContext sentinel should never execute"
+          "CoreProcessStep.copy validateWithContext sentinel should never execute"
         )
       )
 
@@ -107,8 +84,8 @@ object ReleaseStepIO {
       validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
       enableCrossBuild: Boolean = false,
       validateWithContext: Option[ThreadedValidation] = None
-  ): ReleaseStepIO =
-    new ReleaseStepIO(
+  ): CoreProcessStep =
+    new CoreProcessStep(
       name = name,
       execute = execute,
       rawValidate = validate,
@@ -122,20 +99,17 @@ object ReleaseStepIO {
       validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
       enableCrossBuild: Boolean = false,
       validateWithContext: Option[ThreadedValidation] = None
-  ): ReleaseStepIO =
+  ): CoreProcessStep =
     build(name, execute, validate, enableCrossBuild, validateWithContext)
 
-  /** Create a step that transforms the context purely. */
-  def pure(name: String)(f: ReleaseContext => ReleaseContext): ReleaseStepIO =
-    ReleaseStepIO(name, ctx => IO(f(ctx)))
+  def pure(name: String)(f: ReleaseContext => ReleaseContext): CoreProcessStep =
+    CoreProcessStep(name, ctx => IO(f(ctx)))
 
-  /** Create a step from a side-effecting function. */
-  def io(name: String)(f: ReleaseContext => IO[ReleaseContext]): ReleaseStepIO =
-    ReleaseStepIO(name, f)
+  def io(name: String)(f: ReleaseContext => IO[ReleaseContext]): CoreProcessStep =
+    CoreProcessStep(name, f)
 
-  /** Create a step that runs a TaskKey. */
-  def fromTask[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
-    ReleaseStepIO(
+  def fromTask[T](key: TaskKey[T], enableCrossBuild: Boolean = false): CoreProcessStep =
+    CoreProcessStep(
       name = key.key.label,
       execute = ctx =>
         IO.blocking {
@@ -145,15 +119,12 @@ object ReleaseStepIO {
       enableCrossBuild = enableCrossBuild
     )
 
-  /** Create a step that runs an InputKey with optional string args. Empty string uses parser
-    * defaults. Mirrors sbt-release's `releaseStepInputTask`.
-    */
   def fromInputTask[T](
       key: InputKey[T],
       args: String = "",
       enableCrossBuild: Boolean = false
-  ): ReleaseStepIO =
-    ReleaseStepIO(
+  ): CoreProcessStep =
+    CoreProcessStep(
       name = key.key.label,
       execute = ctx =>
         IO.blocking {
@@ -163,12 +134,8 @@ object ReleaseStepIO {
       enableCrossBuild = enableCrossBuild
     )
 
-  /** Create a step that runs a TaskKey aggregated across all subprojects. Scopes the key to the
-    * current project ref so that aggregation follows the project's `aggregate` setting. Mirrors
-    * sbt-release's `releaseStepTaskAggregated`.
-    */
-  def fromTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): ReleaseStepIO =
-    ReleaseStepIO(
+  def fromTaskAggregated[T](key: TaskKey[T], enableCrossBuild: Boolean = false): CoreProcessStep =
+    CoreProcessStep(
       name = s"${key.key.label} (aggregated)",
       execute = ctx =>
         IO.blocking {
@@ -179,9 +146,8 @@ object ReleaseStepIO {
       enableCrossBuild = enableCrossBuild
     )
 
-  /** Create a step that runs an sbt command. */
-  def fromCommand(command: String): ReleaseStepIO =
-    ReleaseStepIO(
+  def fromCommand(command: String): CoreProcessStep =
+    CoreProcessStep(
       name = s"command: $command",
       execute = ctx =>
         IO.blocking {
@@ -189,12 +155,8 @@ object ReleaseStepIO {
         }
     )
 
-  /** Create a step that runs an sbt command and drains all follow-up commands. Matches upstream
-    * sbt-release's releaseStepCommandAndRemaining behavior, which is critical for commands like
-    * +publish that enqueue sub-commands.
-    */
-  def fromCommandAndRemaining(command: String): ReleaseStepIO =
-    ReleaseStepIO(
+  def fromCommandAndRemaining(command: String): CoreProcessStep =
+    CoreProcessStep(
       name = s"command+remaining: $command",
       execute = ctx =>
         IO.blocking {
@@ -202,22 +164,13 @@ object ReleaseStepIO {
         }
     )
 
-  // ── Builder API ──────────────────────────────────────────────────────
-
-  /** Start building a release step. */
   def step(name: String): StepBuilder =
     new StepBuilder(StepKernel.SingleBuilderState[ReleaseContext](name))
 
-  /** Start building a resource-aware release step. */
   def resourceStep[T](name: String): ResourceStepBuilder[T] =
     new ResourceStepBuilder[T](StepKernel.SingleResourceBuilderState[T, ReleaseContext](name))
 
-  /** Fluent builder for release steps. */
-  @deprecated(
-    "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
-    "0.8.1"
-  )
-  final class StepBuilder private[ReleaseStepIO] (
+  final class StepBuilder private[CoreProcessStep] (
       private val state: StepKernel.SingleBuilderState[ReleaseContext]
   ) {
 
@@ -230,7 +183,7 @@ object ReleaseStepIO {
     def withCrossBuild: StepBuilder =
       new StepBuilder(state.withFlag)
 
-    def execute(f: ReleaseContext => IO[ReleaseContext]): ReleaseStepIO =
+    def execute(f: ReleaseContext => IO[ReleaseContext]): CoreProcessStep =
       build(
         name = state.name,
         execute = f,
@@ -238,7 +191,7 @@ object ReleaseStepIO {
         validateWithContext = state.validateWithContext
       )
 
-    def executeAction(f: ReleaseContext => IO[Unit]): ReleaseStepIO =
+    def executeAction(f: ReleaseContext => IO[Unit]): CoreProcessStep =
       build(
         name = state.name,
         execute = ctx => f(ctx).as(ctx),
@@ -246,7 +199,7 @@ object ReleaseStepIO {
         validateWithContext = state.validateWithContext
       )
 
-    def validateOnly: ReleaseStepIO =
+    def validateOnly: CoreProcessStep =
       build(
         name = state.name,
         execute = ctx => IO.pure(ctx),
@@ -255,12 +208,7 @@ object ReleaseStepIO {
       )
   }
 
-  /** Fluent builder for resource-aware release steps. */
-  @deprecated(
-    "Use ReleaseHookIO/ReleaseResourceHookIO or grouped releaseIOHooks*/releaseIOPolicy* settings instead.",
-    "0.8.1"
-  )
-  final class ResourceStepBuilder[T] private[ReleaseStepIO] (
+  final class ResourceStepBuilder[T] private[CoreProcessStep] (
       private val state: StepKernel.SingleResourceBuilderState[T, ReleaseContext]
   ) {
 
@@ -275,7 +223,7 @@ object ReleaseStepIO {
     def withCrossBuild: ResourceStepBuilder[T] =
       new ResourceStepBuilder[T](state.withFlag)
 
-    def execute(f: T => ReleaseContext => IO[ReleaseContext]): T => ReleaseStepIO =
+    def execute(f: T => ReleaseContext => IO[ReleaseContext]): T => CoreProcessStep =
       resource =>
         build(
           name = state.name,
@@ -284,7 +232,7 @@ object ReleaseStepIO {
           validateWithContext = state.validateWithContext(resource)
         )
 
-    def executeAction(f: T => ReleaseContext => IO[Unit]): T => ReleaseStepIO =
+    def executeAction(f: T => ReleaseContext => IO[Unit]): T => CoreProcessStep =
       resource =>
         build(
           name = state.name,
@@ -293,7 +241,7 @@ object ReleaseStepIO {
           validateWithContext = state.validateWithContext(resource)
         )
 
-    def validateOnly: T => ReleaseStepIO =
+    def validateOnly: T => CoreProcessStep =
       resource =>
         build(
           name = state.name,
@@ -303,11 +251,7 @@ object ReleaseStepIO {
         )
   }
 
-  /** Compose a sequence of steps into a two-phase IO program.
-    * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
-    * executed once per `crossScalaVersions`.
-    */
-  def compose(steps: Seq[ReleaseStepIO], crossBuild: Boolean)(
+  def compose(steps: Seq[CoreProcessStep], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
     ReleaseComposer.compose(steps, crossBuild)(initialCtx)

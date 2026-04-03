@@ -4,6 +4,19 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## Unreleased
+
+### Breaking changes
+
+- Remove all deprecated flat key aliases from `ReleaseIO` and `MonorepoReleaseIO`; grouped
+  `releaseIO*` and `releaseIOMonorepo*` names are now the only supported public settings surface,
+  and the canonical sbt key labels were renamed to match those grouped names.
+- Remove the lower-level `ReleaseStepIO` and `MonorepoStepIO` DSLs, plus the public
+  `ReleaseSteps` and `MonorepoReleaseSteps` facades. Build-facing customization now goes through
+  grouped hook settings, grouped policy settings, and resource-hook custom plugins only.
+- Retire docs and examples built around step-list editing. Migration guidance now points to
+  grouped hook/policy settings and resource-aware hook plugins instead.
+
 ## v0.8.1
 
 Published: 2026-04-03

@@ -169,7 +169,7 @@ trait MonorepoReleasePluginSpecSupport {
 
   protected def checkSteps(
       processMode: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[MonorepoStepIO] =
+  ): Seq[MonorepoProcessStep] =
     processMode.steps
 
   protected def runStepNames(
@@ -179,7 +179,7 @@ trait MonorepoReleasePluginSpecSupport {
 
   protected def runSteps(
       runProcess: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[MonorepoStepIO] =
+  ): Seq[MonorepoProcessStep] =
     runProcess.steps
 
   protected def sampleProject(loaded: LoadedState): ProjectReleaseInfo =
@@ -201,7 +201,7 @@ trait MonorepoReleasePluginSpecSupport {
     )
 
   protected def runMonorepoCheckSteps(
-      steps: Seq[MonorepoStepIO],
+      steps: Seq[MonorepoProcessStep],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[Unit] =
@@ -212,9 +212,9 @@ trait MonorepoReleasePluginSpecSupport {
       .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
         ioCtx.flatMap { current =>
           step match {
-            case global: MonorepoStepIO.Global         =>
+            case global: MonorepoProcessStep.Global         =>
               global.validate(current) *> global.execute(current)
-            case perProject: MonorepoStepIO.PerProject =>
+            case perProject: MonorepoProcessStep.PerProject =>
               perProject.validate(current, project) *> perProject.execute(current, project)
           }
         }
@@ -222,7 +222,7 @@ trait MonorepoReleasePluginSpecSupport {
       .void
 
   protected def runMonorepoRunSteps(
-      steps: Seq[MonorepoStepIO],
+      steps: Seq[MonorepoProcessStep],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[Unit] =
