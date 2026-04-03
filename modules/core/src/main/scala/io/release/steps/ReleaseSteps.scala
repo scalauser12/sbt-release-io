@@ -1,10 +1,7 @@
 package io.release.steps
 
-import cats.effect.IO
-import io.release.ReleaseStepIO
 import io.release.internal.CoreLifecycle
-
-import java.io.File
+import io.release.internal.CoreProcessStep
 
 /** Facade re-exporting all built-in release steps and default sequences.
   *
@@ -13,40 +10,32 @@ import java.io.File
   *   - Version steps — version inquiry, setting, committing
   *   - Publish steps — snapshot dependency checks, publishing, tests, clean
   */
-@scala.annotation.nowarn("cat=deprecation")
-object ReleaseSteps {
+private[release] object ReleaseSteps {
 
   // ── VCS steps ───────────────────────────────────────────────────────────
 
-  val initializeVcs: ReleaseStepIO        = VcsSteps.initializeVcs
-  val checkCleanWorkingDir: ReleaseStepIO = VcsSteps.checkCleanWorkingDir
-  val tagRelease: ReleaseStepIO           = VcsSteps.tagRelease
-  val pushChanges: ReleaseStepIO          = VcsSteps.pushChanges
+  val initializeVcs: CoreProcessStep        = VcsSteps.initializeVcs
+  val checkCleanWorkingDir: CoreProcessStep = VcsSteps.checkCleanWorkingDir
+  val tagRelease: CoreProcessStep           = VcsSteps.tagRelease
+  val pushChanges: CoreProcessStep          = VcsSteps.pushChanges
 
   // ── Version steps ─────────────────────────────────────────────────────
 
-  val inquireVersions: ReleaseStepIO      = VersionSteps.inquireVersions
-  val setReleaseVersion: ReleaseStepIO    = VersionSteps.setReleaseVersion
-  val setNextVersion: ReleaseStepIO       = VersionSteps.setNextVersion
-  val commitReleaseVersion: ReleaseStepIO = VersionSteps.commitReleaseVersion
-  val commitNextVersion: ReleaseStepIO    = VersionSteps.commitNextVersion
+  val inquireVersions: CoreProcessStep      = VersionSteps.inquireVersions
+  val setReleaseVersion: CoreProcessStep    = VersionSteps.setReleaseVersion
+  val setNextVersion: CoreProcessStep       = VersionSteps.setNextVersion
+  val commitReleaseVersion: CoreProcessStep = VersionSteps.commitReleaseVersion
+  val commitNextVersion: CoreProcessStep    = VersionSteps.commitNextVersion
 
   // ── Publish & test steps ──────────────────────────────────────────────
 
-  val checkSnapshotDependencies: ReleaseStepIO = PublishSteps.checkSnapshotDependencies
-  val publishArtifacts: ReleaseStepIO          = PublishSteps.publishArtifacts
-  val runTests: ReleaseStepIO                  = PublishSteps.runTests
-  val runClean: ReleaseStepIO                  = PublishSteps.runClean
-
-  // ── Version file readers/writers ──────────────────────────────────────
-
-  val defaultReadVersion: File => IO[String] = VersionSteps.defaultReadVersion
-
-  def defaultWriteVersion(useGlobalVersion: Boolean): (File, String) => IO[String] =
-    VersionSteps.defaultWriteVersion(useGlobalVersion)
+  val checkSnapshotDependencies: CoreProcessStep = PublishSteps.checkSnapshotDependencies
+  val publishArtifacts: CoreProcessStep          = PublishSteps.publishArtifacts
+  val runTests: CoreProcessStep                  = PublishSteps.runTests
+  val runClean: CoreProcessStep                  = PublishSteps.runClean
 
   // ── Default step sequences ────────────────────────────────────────────
 
   /** Default ordered sequence of all release steps using IO-native implementations. */
-  lazy val defaults: Seq[ReleaseStepIO] = CoreLifecycle.defaults
+  lazy val defaults: Seq[CoreProcessStep] = CoreLifecycle.defaults
 }

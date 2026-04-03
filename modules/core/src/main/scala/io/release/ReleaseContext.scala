@@ -8,9 +8,9 @@ import sbt.{internal as _, *}
 
 /** Immutable context threaded through each release step during validation and execution.
   *
-  * Created by [[ReleasePluginIOLike.initialContext]] at the start of the release command,
-  * then passed through [[ReleaseStepIO.compose]] which threads it sequentially through
-  * every execute step. Steps return a new `ReleaseContext` with updated state, versions, or flags.
+  * Created by [[ReleasePluginIOLike.initialContext]] at the start of the release command and
+  * then threaded through the compiled release process. Steps return a new `ReleaseContext` with
+  * updated state, versions, or flags.
   * Internal startup metadata (command flags and CLI overrides) is threaded through
   * `metadataBag`; the only intentional mirror onto `sbt.State` is the
   * `ReleaseKeys.versions` attribute,

@@ -110,7 +110,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
     singleProjectFixtureResource("monorepo-publish-clean-ok")().use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      _root_.io.release.monorepo.MonorepoStepIO
+      _root_.io.release.monorepo.MonorepoProcessStep
         .compose(Seq(MonorepoPublishSteps.runClean))(ctx)
         .map { result =>
           assert(!result.failed)

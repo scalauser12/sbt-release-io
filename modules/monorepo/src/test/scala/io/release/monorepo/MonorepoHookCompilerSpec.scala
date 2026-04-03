@@ -29,7 +29,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val tagStep = MonorepoHookCompiler
           .compile(fixture.state)
           .collectFirst {
-            case step: MonorepoStepIO.PerProject if step.name == "tag-releases" =>
+            case step: MonorepoProcessStep.PerProject if step.name == "tag-releases" =>
               step
           }
           .getOrElse(fail("Expected canonical tag-releases step"))
@@ -122,7 +122,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val publishHookSteps = MonorepoHookCompiler
           .compile(fixture.state)
           .collect {
-            case step: MonorepoStepIO.PerProject
+            case step: MonorepoProcessStep.PerProject
                 if step.name
                   .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
               step
@@ -164,7 +164,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val publishHookSteps = MonorepoHookCompiler
           .compile(fixture.state)
           .collect {
-            case step: MonorepoStepIO.PerProject
+            case step: MonorepoProcessStep.PerProject
                 if step.name
                   .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
               step
@@ -196,7 +196,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val publishHookSteps = MonorepoHookCompiler
           .compile(fixture.state)
           .collect {
-            case step: MonorepoStepIO.PerProject
+            case step: MonorepoProcessStep.PerProject
                 if step.name
                   .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
               step
@@ -301,14 +301,14 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     )
 
   private def runPublishHooks(
-      steps: Seq[MonorepoStepIO.PerProject],
+      steps: Seq[MonorepoProcessStep.PerProject],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     validatePublishHooks(steps, ctx, project).flatMap(executePublishHooks(steps, _, project))
 
   private def validatePublishHooks(
-      steps: Seq[MonorepoStepIO.PerProject],
+      steps: Seq[MonorepoProcessStep.PerProject],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
@@ -317,7 +317,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     }
 
   private def executePublishHooks(
-      steps: Seq[MonorepoStepIO.PerProject],
+      steps: Seq[MonorepoProcessStep.PerProject],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =

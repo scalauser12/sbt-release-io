@@ -1,5 +1,7 @@
 package io.release
 
+import io.release.internal.CoreProcessStep
+
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
@@ -133,12 +135,12 @@ trait ReleasePluginIOSpecSupport {
 
   protected def checkSteps(
       processMode: CoreCommandExecution.CompiledSteps
-  ): Seq[ReleaseStepIO] =
+  ): Seq[CoreProcessStep] =
     processMode.steps
 
   protected def runStepNames(runProcess: CoreCommandExecution.CompiledSteps): Seq[String] =
     runProcess.steps.map(_.name)
 
-  protected def runSteps(runProcess: CoreCommandExecution.CompiledSteps): Seq[ReleaseStepIO] =
+  protected def runSteps(runProcess: CoreCommandExecution.CompiledSteps): Seq[CoreProcessStep] =
     runProcess.steps
 }

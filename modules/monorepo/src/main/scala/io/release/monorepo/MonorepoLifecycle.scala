@@ -5,7 +5,6 @@ import io.release.internal.LifecycleCompiler
 import io.release.monorepo.steps.{MonorepoPublishSteps, MonorepoReleaseSteps}
 
 /** Canonical monorepo lifecycle order and hook compilation. */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoLifecycle {
 
   private type ProjectGate = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]
@@ -23,7 +22,7 @@ private[monorepo] object MonorepoLifecycle {
   ): LifecycleCompiler.HookPhase[
     MonorepoHookConfiguration,
     MonorepoGlobalHookIO,
-    MonorepoStepIO
+    MonorepoProcessStep
   ] =
     LifecycleCompiler.HookPhase(
       phase = phase,
@@ -42,7 +41,7 @@ private[monorepo] object MonorepoLifecycle {
   ): LifecycleCompiler.HookPhase[
     MonorepoHookConfiguration,
     MonorepoProjectHookIO,
-    MonorepoStepIO
+    MonorepoProcessStep
   ] =
     LifecycleCompiler.HookPhase(
       phase = phase,
@@ -52,7 +51,7 @@ private[monorepo] object MonorepoLifecycle {
       enabled = enabled
     )
 
-  private val phases: Seq[LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoStepIO]] =
+  private val phases: Seq[LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoProcessStep]] =
     Seq(
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.initializeVcs),
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.checkCleanWorkingDir),
@@ -175,19 +174,19 @@ private[monorepo] object MonorepoLifecycle {
       )
     )
 
-  val defaults: Seq[MonorepoStepIO] =
+  val defaults: Seq[MonorepoProcessStep] =
     LifecycleCompiler.defaults(phases)
 
-  def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoStepIO] =
+  def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoProcessStep] =
     LifecycleCompiler.compile(hooks, phases)
 
   private def compileGlobalHooks(
       phase: String,
       hooks: Seq[MonorepoGlobalHookIO],
       gate: MonorepoContext => Boolean
-  ): Seq[MonorepoStepIO] =
+  ): Seq[MonorepoProcessStep] =
     hooks.map { hook =>
-      MonorepoStepIO.Global(
+      MonorepoProcessStep.Global(
         name = s"$phase:${hook.name}",
         execute = ctx => if (gate(ctx)) hook.execute(ctx) else IO.pure(ctx),
         validate = ctx => if (gate(ctx)) hook.validate(ctx) else IO.unit
@@ -200,12 +199,12 @@ private[monorepo] object MonorepoLifecycle {
       gate: ProjectGate,
       crossBuild: Boolean,
       freezeGateDecision: Boolean
-  ): Seq[MonorepoStepIO] =
+  ): Seq[MonorepoProcessStep] =
     hooks.zipWithIndex.map { case (hook, hookIndex) =>
       val token = MonorepoPublishHookGateCache.HookToken(phase, hookIndex)
 
       if (freezeGateDecision)
-        MonorepoStepIO.PerProject(
+        MonorepoProcessStep.PerProject(
           name = s"$phase:${hook.name}",
           execute = (ctx, project) =>
             MonorepoPublishHookGateCache
@@ -223,7 +222,7 @@ private[monorepo] object MonorepoLifecycle {
           )
         )
       else
-        MonorepoStepIO.PerProject(
+        MonorepoProcessStep.PerProject(
           name = s"$phase:${hook.name}",
           execute = (ctx, project) =>
             gate(ctx, project).flatMap {

@@ -36,9 +36,8 @@ sbt "releaseIOMonorepo check with-defaults"
 
 Preferred customization keeps the built-in process intact and uses
 grouped `releaseIOMonorepoPolicy*` keys, `releaseIOMonorepoHooks*`, and resource-aware custom
-plugins. The lower-level `MonorepoStepIO` DSL is deprecated and retained only for built-ins,
-tests, and internal composition. The older flat key names remain as deprecated aliases. Raw
-process override is no longer part of the supported public surface.
+plugins. The older flat key names and lower-level step DSL were removed in the breaking API
+cleanup. Raw process override is no longer part of the supported public surface.
 
 ## Read next
 

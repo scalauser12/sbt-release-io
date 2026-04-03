@@ -1,11 +1,9 @@
 package io.release.internal
 
 import io.release.ReleaseIO
-import io.release.ReleaseStepIO
 import sbt.State
 
 /** Compiles semantic core hook settings into the existing linear release engine. */
-@scala.annotation.nowarn("cat=deprecation")
 private[release] object ReleaseHookCompiler {
 
   def resolve(state: State): CoreHookConfiguration = {
@@ -41,9 +39,9 @@ private[release] object ReleaseHookCompiler {
     )
   }
 
-  def compile(state: State): Seq[ReleaseStepIO] =
+  def compile(state: State): Seq[CoreProcessStep] =
     compile(resolve(state))
 
-  def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO] =
+  def compile(hooks: CoreHookConfiguration): Seq[CoreProcessStep] =
     CoreLifecycle.compile(hooks)
 }

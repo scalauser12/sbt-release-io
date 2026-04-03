@@ -9,8 +9,8 @@ import sbt.{internal as _, *}
 
 /** Metadata for a single subproject participating in a monorepo release.
   *
-  * Created by [[MonorepoReleasePluginLike]] during argument validation, then threaded
-  * through [[MonorepoStepIO.PerProject]] steps. Per-project failure is tracked here
+  * Created by [[MonorepoReleasePluginLike]] during argument validation and then threaded
+  * through the compiled per-project lifecycle. Per-project failure is tracked here
   * independently of the global [[MonorepoContext.failed]] flag.
   *
   * @param ref         sbt project reference

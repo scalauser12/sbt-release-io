@@ -17,7 +17,6 @@ import sbt.{internal as _, *}
   * Public plugin extension points stay on [[MonorepoReleasePluginLike]]; this object owns the
   * private command plumbing so the plugin trait can read top-down.
   */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoCommandExecution {
 
   final case class CommandRuntime[T](
@@ -46,7 +45,7 @@ private[monorepo] object MonorepoCommandExecution {
   )
 
   final case class CompiledMonorepoSteps(
-      steps: Seq[MonorepoStepIO]
+      steps: Seq[MonorepoProcessStep]
   )
 
   def doHelp(state: State, commandName: String): State = {
@@ -226,7 +225,7 @@ private[monorepo] object MonorepoCommandExecution {
                             ReleaseLogPrefixes.Monorepo
                           )
                         finalCtx    <-
-                          MonorepoStepIO.compose(runProcess.steps, command.flags.crossBuild)(
+                          MonorepoProcessStep.compose(runProcess.steps, command.flags.crossBuild)(
                             preparedCtx
                           )
                       } yield finalCtx

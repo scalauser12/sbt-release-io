@@ -11,14 +11,14 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - run global validation before execute when no selection boundary exists") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
-        val step = MonorepoStepIO.Global(
+        val step = MonorepoProcessStep.Global(
           name = "test-step",
           validate =
             currentCtx => log.update(_ :+ s"validate:${currentCtx.state.onFailure.isDefined}"),
           execute = c => log.update(_ :+ "execute").as(c)
         )
 
-        MonorepoStepIO.compose(Seq(step))(ctx).flatMap { result =>
+        MonorepoProcessStep.compose(Seq(step))(ctx).flatMap { result =>
           log.get.map { obs =>
             assertEquals(obs, List("validate:false", "execute"))
             assertEquals(result.state.onFailure, None)
@@ -31,13 +31,13 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - abort on validation failure without running execute") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
-        val step = MonorepoStepIO.Global(
+        val step = MonorepoProcessStep.Global(
           name = "failing-validate",
           validate = _ => IO.raiseError(new RuntimeException("validate failed")),
           execute = c => log.update(_ :+ "execute").as(c)
         )
 
-        MonorepoStepIO.compose(Seq(step))(ctx).attempt.flatMap { result =>
+        MonorepoProcessStep.compose(Seq(step))(ctx).attempt.flatMap { result =>
           log.get.map { obs =>
             assert(result.isLeft)
             result.left.foreach {
@@ -58,12 +58,12 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         val projects = Seq(dummyProject("core"), dummyProject("api"))
         val pCtx     = ctx.withProjects(projects)
 
-        val step = MonorepoStepIO.PerProject(
+        val step = MonorepoProcessStep.PerProject(
           name = "per-project-step",
           execute = (c, proj) => log.update(_ :+ proj.name).as(c)
         )
 
-        MonorepoStepIO.compose(Seq(step))(pCtx) *>
+        MonorepoProcessStep.compose(Seq(step))(pCtx) *>
           log.get.map(obs => assertEquals(obs, List("core", "api")))
       }
     }
@@ -73,7 +73,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
         val pCtx = ctx.withProjects(Seq(dummyProject("core"), dummyProject("api")))
-        val step = MonorepoStepIO.PerProject(
+        val step = MonorepoProcessStep.PerProject(
           name = "validate-fail-with-step",
           validateWithContext = Some((currentCtx, project) =>
             observed.update(_ :+ s"validate:${project.name}").as {
@@ -86,7 +86,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
             (currentCtx, project) => observed.update(_ :+ s"execute:${project.name}").as(currentCtx)
         )
 
-        MonorepoStepIO.compose(Seq(step))(pCtx).flatMap { result =>
+        MonorepoProcessStep.compose(Seq(step))(pCtx).flatMap { result =>
           observed.get.map { obs =>
             assert(result.failed)
             assertEquals(obs, List("validate:core"))
@@ -104,23 +104,23 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         val selected = api
         val pCtx     = ctx.withProjects(Seq(core, api))
 
-        val setupStep = MonorepoStepIO
+        val setupStep = MonorepoProcessStep
           .global("detect-or-select-projects")
           .withSelectionBoundary
           .execute(c => log.update(_ :+ "setup").as(c.withProjects(Seq(selected))))
 
-        val stepA = MonorepoStepIO.PerProject(
+        val stepA = MonorepoProcessStep.PerProject(
           name = "step-a",
           validate = (_, project) => log.update(_ :+ s"validate-a:${project.name}"),
           execute = (c, project) => log.update(_ :+ s"execute-a:${project.name}").as(c)
         )
-        val stepB = MonorepoStepIO.PerProject(
+        val stepB = MonorepoProcessStep.PerProject(
           name = "step-b",
           validate = (_, project) => log.update(_ :+ s"validate-b:${project.name}"),
           execute = (c, project) => log.update(_ :+ s"execute-b:${project.name}").as(c)
         )
 
-        MonorepoStepIO.compose(Seq(setupStep, stepA, stepB))(pCtx) *>
+        MonorepoProcessStep.compose(Seq(setupStep, stepA, stepB))(pCtx) *>
           log.get.map { obs =>
             assertEquals(
               obs,
@@ -138,28 +138,28 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         val api  = dummyProject("api")
         val pCtx = ctx.withProjects(Seq(core, api))
 
-        val setup       = MonorepoStepIO.Global(
+        val setup       = MonorepoProcessStep.Global(
           name = "custom-setup",
           validate = currentCtx =>
             log.update(_ :+ s"validate-setup:${currentCtx.state.onFailure.isDefined}"),
           execute = c => log.update(_ :+ "execute-setup").as(c)
         )
-        val boundary    = MonorepoStepIO
+        val boundary    = MonorepoProcessStep
           .global("detect-or-select-projects")
           .withSelectionBoundary
           .execute(c => log.update(_ :+ "select").as(c.withProjects(Seq(api))))
-        val afterPer    = MonorepoStepIO.PerProject(
+        val afterPer    = MonorepoProcessStep.PerProject(
           name = "custom-project",
           validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
           execute = (c, project) => log.update(_ :+ s"execute-project:${project.name}").as(c)
         )
-        val afterGlobal = MonorepoStepIO.Global(
+        val afterGlobal = MonorepoProcessStep.Global(
           name = "custom-global",
           validate = _ => log.update(_ :+ "validate-global"),
           execute = c => log.update(_ :+ "execute-global").as(c)
         )
 
-        MonorepoStepIO.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx).flatMap {
+        MonorepoProcessStep.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx).flatMap {
           result =>
             log.get.map { obs =>
               assertEquals(
@@ -184,18 +184,18 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - thread MonorepoContext metadata through sequential execute steps") {
     contextResource.use { ctx =>
       val metadataKey = sbt.AttributeKey[String]("verified")
-      val step1       = MonorepoStepIO.Global(
+      val step1       = MonorepoProcessStep.Global(
         name = "set-metadata",
         execute = c => IO.pure(c.withMetadata(metadataKey, "true"))
       )
-      val step2       = MonorepoStepIO.Global(
+      val step2       = MonorepoProcessStep.Global(
         name = "read-metadata",
         execute = c =>
           if (c.metadata(metadataKey).contains("true")) IO.pure(c)
           else IO.raiseError(new RuntimeException("metadata not threaded"))
       )
 
-      MonorepoStepIO.compose(Seq(step1, step2))(ctx).map { result =>
+      MonorepoProcessStep.compose(Seq(step1, step2))(ctx).map { result =>
         assertEquals(result.metadata(metadataKey), Some("true"))
       }
     }
@@ -204,13 +204,13 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - thread validateWithContext results into later validation and execute") {
     contextResource.use { ctx =>
       val metadataKey = sbt.AttributeKey[String]("validation-metadata")
-      val step1       = MonorepoStepIO
+      val step1       = MonorepoProcessStep
         .global("seed-validation-metadata")
         .withValidationContext(currentCtx =>
           IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
         )
         .validateOnly
-      val step2       = MonorepoStepIO.Global(
+      val step2       = MonorepoProcessStep.Global(
         name = "observe-validation-metadata",
         execute = currentCtx =>
           if (currentCtx.metadata(metadataKey).contains("observed")) IO.pure(currentCtx)
@@ -224,7 +224,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         }
       )
 
-      MonorepoStepIO.compose(Seq(step1, step2))(ctx).map { result =>
+      MonorepoProcessStep.compose(Seq(step1, step2))(ctx).map { result =>
         assertEquals(result.metadata(metadataKey), Some("observed"))
       }
     }
@@ -232,12 +232,12 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
 
   test("compose - mark entire release as failed when a global execute fails") {
     contextResource.use { ctx =>
-      val step = MonorepoStepIO.Global(
+      val step = MonorepoProcessStep.Global(
         name = "global-fail",
         execute = _ => IO.raiseError(new RuntimeException("global failure"))
       )
 
-      MonorepoStepIO.compose(Seq(step))(ctx).map { result =>
+      MonorepoProcessStep.compose(Seq(step))(ctx).map { result =>
         assert(result.failed)
         result.failureCause match {
           case Some(err: RuntimeException) =>
@@ -254,7 +254,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       val projects = Seq(dummyProject("core"), dummyProject("api"))
       val pCtx     = ctx.withProjects(projects)
 
-      val failingStep = MonorepoStepIO.PerProject(
+      val failingStep = MonorepoProcessStep.PerProject(
         name = "failing-step",
         execute = (c, project) =>
           if (project.name == "core")
@@ -262,7 +262,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           else IO.pure(c)
       )
 
-      MonorepoStepIO.compose(Seq(failingStep))(pCtx).map { result =>
+      MonorepoProcessStep.compose(Seq(failingStep))(pCtx).map { result =>
         val aggregate = requireProjectFailures(result.failureCause)
         assert(result.failed)
         assert(aggregate.failures.map(_.projectName).contains("core"))
@@ -283,7 +283,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         val projects = Seq(dummyProject("core"), dummyProject("api"))
         val pCtx     = ctx.withProjects(projects)
 
-        val failStep = MonorepoStepIO.PerProject(
+        val failStep = MonorepoProcessStep.PerProject(
           name = "fail-with-step",
           execute = (c, project) =>
             observed.update(_ :+ project.name).as {
@@ -293,7 +293,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
             }
         )
 
-        MonorepoStepIO.compose(Seq(failStep))(pCtx).flatMap { result =>
+        MonorepoProcessStep.compose(Seq(failStep))(pCtx).flatMap { result =>
           observed.get.map { obs =>
             assert(result.failed)
             assertEquals(obs, List("core"))
@@ -311,7 +311,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         val projects = Seq(dummyProject("core"), dummyProject("api"))
         val pCtx     = ctx.withProjects(projects)
 
-        val injectFailure = MonorepoStepIO.PerProject(
+        val injectFailure = MonorepoProcessStep.PerProject(
           name = "inject-failure-command",
           execute = (c, project) =>
             observed.update(_ :+ project.name).as {
@@ -322,12 +322,12 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
               else c
             }
         )
-        val skipped       = MonorepoStepIO.Global(
+        val skipped       = MonorepoProcessStep.Global(
           name = "skipped-after-failure",
           execute = c => observed.update(_ :+ "after").as(c)
         )
 
-        MonorepoStepIO
+        MonorepoProcessStep
           .compose(Seq(injectFailure, skipped))(pCtx)
           .flatMap { result =>
             observed.get.map { obs =>

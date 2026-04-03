@@ -6,7 +6,7 @@ import io.release.ReleaseContext
 import io.release.ReleaseIO.releaseIOPublishAction
 import io.release.ReleaseIO.releaseIOPublishChecks
 import io.release.ReleaseIOCompat
-import io.release.ReleaseStepIO
+import io.release.internal.CoreProcessStep
 import io.release.internal.DecisionResolver
 import io.release.internal.PublishValidation
 import io.release.internal.ReleaseLogPrefixes
@@ -19,10 +19,9 @@ import sbt.{internal as _, *}
 import scala.util.control.NonFatal
 
 /** Publish, test, and dependency-related release steps. */
-@scala.annotation.nowarn("cat=deprecation")
 private[release] object PublishSteps {
 
-  val checkSnapshotDependencies: ReleaseStepIO = ReleaseStepIO.build(
+  val checkSnapshotDependencies: CoreProcessStep = CoreProcessStep.build(
     name = "check-snapshot-dependencies",
     execute = ctx => IO.pure(ctx),
     validateWithContext = Some(ctx =>
@@ -41,7 +40,7 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
-  val publishArtifacts: ReleaseStepIO = ReleaseStepIO(
+  val publishArtifacts: CoreProcessStep = CoreProcessStep(
     name = "publish-artifacts",
     execute = ctx =>
       if (ctx.skipPublish) {
@@ -91,7 +90,7 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
-  val runTests: ReleaseStepIO = ReleaseStepIO(
+  val runTests: CoreProcessStep = CoreProcessStep(
     name = "run-tests",
     execute = ctx =>
       if (ctx.skipTests) {
@@ -112,7 +111,7 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
-  val runClean: ReleaseStepIO = ReleaseStepIO(
+  val runClean: CoreProcessStep = CoreProcessStep(
     name = "run-clean",
     execute = ctx =>
       IO.blocking {

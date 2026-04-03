@@ -7,16 +7,15 @@ import io.release.internal.CoreDefaultSettings
 import io.release.internal.ReleaseCli
 import io.release.internal.ReleaseCommandParsers
 import io.release.internal.ReleaseLogPrefixes
-import io.release.steps.ReleaseSteps
 import io.release.steps.StepHelpers
+import io.release.steps.VersionSteps
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt.Keys.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
-/** Base trait for resource-parameterized release plugins. Each release step is a function
-  * `T => ReleaseStepIO` where `T` is a resource acquired once for the entire release process.
+/** Base trait for resource-parameterized release plugins.
   *
   * A release command (named by [[commandName]]) and default settings are registered automatically.
   *
@@ -80,8 +79,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] =
     CoreDefaultSettings.commandAndHookSettings ++ Seq(
-      releaseIOVersioningReadVersion    := ReleaseSteps.defaultReadVersion,
-      releaseIOVersioningFileContents   := ReleaseSteps.defaultWriteVersion(
+      releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+      releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
         releaseIOVersioningUseGlobal.value
       ),
       releaseIOVersioningFile           := baseDirectory.value / "version.sbt",

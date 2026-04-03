@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseContext
 import io.release.ReleaseResourceHooks
-import io.release.ReleaseStepIO
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for core command planning and execution.
@@ -12,7 +11,6 @@ import sbt.{internal as _, *}
   * Public plugin extension points stay on [[io.release.ReleasePluginIOLike]]; this object owns
   * the private command plumbing so the plugin trait can read top-down.
   */
-@scala.annotation.nowarn("cat=deprecation")
 private[release] object CoreCommandExecution {
 
   final case class CommandRuntime[T](
@@ -35,7 +33,7 @@ private[release] object CoreCommandExecution {
   )
 
   final case class CompiledSteps(
-      steps: Seq[ReleaseStepIO]
+      steps: Seq[CoreProcessStep]
   )
 
   def doHelp(state: State, commandName: String): State = {
@@ -254,7 +252,7 @@ private[release] object CoreCommandExecution {
                             runProcess.steps.map(_.name),
                             ReleaseLogPrefixes.Core
                           )
-                        finalCtx    <- ReleaseStepIO.compose(
+                        finalCtx    <- CoreProcessStep.compose(
                                          runProcess.steps,
                                          inputs.crossEnabled
                                        )(preparedCtx)

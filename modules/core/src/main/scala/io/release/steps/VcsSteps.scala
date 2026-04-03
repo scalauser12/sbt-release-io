@@ -10,8 +10,8 @@ import io.release.ReleaseIO.releaseIOVcsSign
 import io.release.ReleaseIO.releaseIOVersioningUseGlobal
 import io.release.ReleaseIO.releaseIOVersioningFile
 import io.release.ReleaseIO.releaseIOVersioningFileContents
-import io.release.ReleaseStepIO
 import io.release.VcsOps
+import io.release.internal.CoreProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.TagPlan
@@ -23,7 +23,6 @@ import sbt.Keys.*
 import sbt.{internal as _, *}
 
 /** VCS-related release steps: initialize, check, tag, push. */
-@scala.annotation.nowarn("cat=deprecation")
 private[release] object VcsSteps {
 
   private val DefaultCommandName = "releaseIO"
@@ -33,11 +32,11 @@ private[release] object VcsSteps {
       status: String
   )
 
-  val initializeVcs: ReleaseStepIO = ReleaseStepIO.io("initialize-vcs") { ctx =>
+  val initializeVcs: CoreProcessStep = CoreProcessStep.io("initialize-vcs") { ctx =>
     VcsOps.detectAndInit(ctx)
   }
 
-  val checkCleanWorkingDir: ReleaseStepIO = ReleaseStepIO(
+  val checkCleanWorkingDir: CoreProcessStep = CoreProcessStep(
     name = "check-clean-working-dir",
     execute = ctx => IO.pure(ctx),
     validate = validateCleanWorkingDir(_, logStartHash = true)
@@ -65,7 +64,7 @@ private[release] object VcsSteps {
   // No validation phase: the tag name depends on releaseIOVcsTagName, which is resolved from the
   // release version set by inquireVersions.execute. At validation time, that version is not yet
   // available, so tag-exists checks can only run during execution.
-  val tagRelease: ReleaseStepIO = ReleaseStepIO.io("tag-release") { ctx =>
+  val tagRelease: CoreProcessStep = CoreProcessStep.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
         params <- resolveTagPlan(ctx)
@@ -198,7 +197,7 @@ private[release] object VcsSteps {
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call.
-  val pushChanges: ReleaseStepIO = ReleaseStepIO.build(
+  val pushChanges: CoreProcessStep = CoreProcessStep.build(
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>

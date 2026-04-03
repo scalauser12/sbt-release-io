@@ -2,11 +2,10 @@ package io.release.internal
 
 import cats.effect.IO
 
-/** Shared internal step-building mechanics for core and monorepo step wrappers.
+/** Shared internal step-building mechanics for core and monorepo process steps.
   *
-  * The public DSLs stay type-specific (`ReleaseStepIO` and `MonorepoStepIO`), but both route
-  * validation chaining and builder-state mutation through this kernel so they stay behaviorally
-  * aligned.
+  * Both runtimes route validation chaining and builder-state mutation through this kernel so they
+  * stay behaviorally aligned.
   */
 private[release] object StepKernel {
 

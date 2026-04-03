@@ -3,11 +3,9 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleaseStepIO
 import io.release.steps.{PublishSteps, ReleaseSteps}
 
 /** Canonical core lifecycle order and hook compilation. */
-@scala.annotation.nowarn("cat=deprecation")
 private[release] object CoreLifecycle {
 
   private type Gate = ReleaseContext => IO[Boolean]
@@ -22,7 +20,7 @@ private[release] object CoreLifecycle {
       crossBuild: Boolean,
       enabled: CoreHookConfiguration => Boolean = _ => true,
       freezeGateDecision: Boolean = false
-  ): LifecycleCompiler.HookPhase[CoreHookConfiguration, ReleaseHookIO, ReleaseStepIO] =
+  ): LifecycleCompiler.HookPhase[CoreHookConfiguration, ReleaseHookIO, CoreProcessStep] =
     LifecycleCompiler.HookPhase(
       phase = phase,
       resolveHooks = resolveHooks,
@@ -31,7 +29,7 @@ private[release] object CoreLifecycle {
       enabled = enabled
     )
 
-  private val phases: Seq[LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseStepIO]] = Seq(
+  private val phases: Seq[LifecycleCompiler.Phase[CoreHookConfiguration, CoreProcessStep]] = Seq(
     LifecycleCompiler.BuiltInPhase(ReleaseSteps.initializeVcs),
     LifecycleCompiler.BuiltInPhase(ReleaseSteps.checkCleanWorkingDir),
     hookPhase("after-clean-check", _.afterCleanCheckHooks, Always, crossBuild = false),
@@ -155,10 +153,10 @@ private[release] object CoreLifecycle {
     )
   )
 
-  val defaults: Seq[ReleaseStepIO] =
+  val defaults: Seq[CoreProcessStep] =
     LifecycleCompiler.defaults(phases)
 
-  def compile(hooks: CoreHookConfiguration): Seq[ReleaseStepIO] =
+  def compile(hooks: CoreHookConfiguration): Seq[CoreProcessStep] =
     LifecycleCompiler.compile(hooks, phases)
 
   private def compileHooks(
@@ -167,12 +165,12 @@ private[release] object CoreLifecycle {
       gate: Gate,
       crossBuild: Boolean,
       freezeGateDecision: Boolean
-  ): Seq[ReleaseStepIO] =
+  ): Seq[CoreProcessStep] =
     hooks.zipWithIndex.map { case (hook, hookIndex) =>
       val token = CorePublishHookGateCache.HookToken(phase, hookIndex)
 
       if (freezeGateDecision)
-        ReleaseStepIO(
+        CoreProcessStep(
           name = s"$phase:${hook.name}",
           execute = ctx =>
             CorePublishHookGateCache.resolveDecision(ctx, token, gate(ctx)).flatMap {
@@ -188,7 +186,7 @@ private[release] object CoreLifecycle {
           )
         )
       else
-        ReleaseStepIO(
+        CoreProcessStep(
           name = s"$phase:${hook.name}",
           execute = ctx =>
             gate(ctx).flatMap {

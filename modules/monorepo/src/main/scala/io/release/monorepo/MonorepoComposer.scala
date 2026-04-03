@@ -6,11 +6,7 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.StepExecutionSupport
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
-  *
-  * Public `MonorepoStepIO` instances are first normalized into [[MonorepoProcessStep]]
-  * values. The composer then only owns sequencing and phase boundaries.
   */
-@scala.annotation.nowarn("cat=deprecation")
 private[monorepo] object MonorepoComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Monorepo
@@ -23,31 +19,26 @@ private[monorepo] object MonorepoComposer {
     */
   private[monorepo] val SelectionBoundary = "detect-or-select-projects"
 
-  def compose(steps: Seq[MonorepoStepIO], crossBuild: Boolean = false)(
+  def compose(steps: Seq[MonorepoProcessStep], crossBuild: Boolean = false)(
       initialCtx: MonorepoContext
   ): IO[MonorepoContext] =
-    composeNormalized(
-      MonorepoProcessStep.normalize(steps, crossBuild)
-    )(initialCtx)
-
-  private def composeNormalized(
-      steps: Seq[MonorepoProcessStep]
-  )(initialCtx: MonorepoContext): IO[MonorepoContext] =
     splitAtBoundary(steps) match {
       case Some((setupSteps, mainSteps)) =>
         for {
           setupCtx <- runSequentialValidateThenExecute(
                         setupSteps,
-                        initialCtx
+                        initialCtx,
+                        crossBuild
                       )
           finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
-                      else runMainSegment(mainSteps, setupCtx)
+                      else runMainSegment(mainSteps, setupCtx, crossBuild)
         } yield finalCtx
 
       case None =>
         runSequentialValidateThenExecute(
           steps,
-          initialCtx
+          initialCtx,
+          crossBuild
         )
     }
 
@@ -64,32 +55,35 @@ private[monorepo] object MonorepoComposer {
 
   private def runMainSegment(
       steps: Seq[MonorepoProcessStep],
-      startCtx: MonorepoContext
+      startCtx: MonorepoContext,
+      crossBuild: Boolean
   ): IO[MonorepoContext] =
     StepExecutionSupport.runMainSegment(
       logPrefix = LogPrefix,
-      steps = steps.map(asPreparedStep),
+      steps = steps.map(asPreparedStep(_, crossBuild)),
       startCtx = startCtx,
       armOnFailure = ExecutionEngine.armOnFailure[MonorepoContext]
     )
 
   private def runSequentialValidateThenExecute(
       steps: Seq[MonorepoProcessStep],
-      startCtx: MonorepoContext
+      startCtx: MonorepoContext,
+      crossBuild: Boolean
   ): IO[MonorepoContext] =
     StepExecutionSupport.runSequentialValidateThenExecute(
-      steps = steps.map(asPreparedStep),
+      steps = steps.map(asPreparedStep(_, crossBuild)),
       startCtx = startCtx,
       armOnFailure = ExecutionEngine.armOnFailure[MonorepoContext],
       hasFailed = (ctx: MonorepoContext) => ctx.failed
     )
 
   private def asPreparedStep(
-      step: MonorepoProcessStep
+      step: MonorepoProcessStep,
+      crossBuild: Boolean
   ): StepExecutionSupport.PreparedStep[MonorepoContext] =
     StepExecutionSupport.PreparedStep(
       name = step.name,
-      validate = step.validate,
-      execute = step.execute
+      validate = step.validationStep(crossBuild).run,
+      execute = step.actionStep(crossBuild).run
     )
 }

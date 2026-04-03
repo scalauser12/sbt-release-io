@@ -1,5 +1,7 @@
 package io.release
 
+import io.release.internal.CoreProcessStep
+
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
@@ -9,8 +11,8 @@ import munit.CatsEffectSuite
 class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   private val fixturePrefix = "sbt-release-io-builder-spec"
 
-  test("step.execute - creates a ReleaseStepIO with the correct name") {
-    val step = ReleaseStepIO
+  test("step.execute - creates a CoreProcessStep with the correct name") {
+    val step = CoreProcessStep
       .step("my-step")
       .execute(ctx => IO.pure(ctx))
 
@@ -19,7 +21,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("step.execute - runs the provided function") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val step = ReleaseStepIO
+      val step = CoreProcessStep
         .step("with-versions")
         .execute(c => IO.pure(c.withVersions("1.0.0", "1.1.0-SNAPSHOT")))
 
@@ -29,8 +31,8 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
-  test("step.executeAction - creates a ReleaseStepIO with the correct name") {
-    val step = ReleaseStepIO
+  test("step.executeAction - creates a CoreProcessStep with the correct name") {
+    val step = CoreProcessStep
       .step("action-step")
       .executeAction(_ => IO.unit)
 
@@ -39,14 +41,14 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("step.executeAction - passes context through unchanged") {
     assertPassesThrough(
-      ReleaseStepIO
+      CoreProcessStep
         .step("pass-through")
         .executeAction(_ => IO.unit)
     )
   }
 
   test("step.withCrossBuild.execute - sets enableCrossBuild = true") {
-    val step = ReleaseStepIO
+    val step = CoreProcessStep
       .step("cross-step")
       .withCrossBuild
       .execute(ctx => IO.pure(ctx))
@@ -55,7 +57,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("step.execute - without withCrossBuild enableCrossBuild defaults to false") {
-    val step = ReleaseStepIO
+    val step = CoreProcessStep
       .step("no-cross")
       .execute(ctx => IO.pure(ctx))
 
@@ -63,7 +65,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("step.withCrossBuild.executeAction - sets enableCrossBuild = true") {
-    val step = ReleaseStepIO
+    val step = CoreProcessStep
       .step("cross-action")
       .withCrossBuild
       .executeAction(_ => IO.unit)
@@ -73,7 +75,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("step.withValidation.execute - wires the validation function") {
     assertValidationRuns { validationRan =>
-      ReleaseStepIO
+      CoreProcessStep
         .step("validated-step")
         .withValidation(_ => validationRan.set(true))
         .execute(c => IO.pure(c))
@@ -82,7 +84,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("step.withValidation - validation error propagates") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val step = ReleaseStepIO
+      val step = CoreProcessStep
         .step("failing-validation")
         .withValidation(_ => IO.raiseError(new RuntimeException("validation failed")))
         .execute(c => IO.pure(c))
@@ -95,7 +97,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("step.withValidation - does not affect the execute function") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val step = ReleaseStepIO
+      val step = CoreProcessStep
         .step("validated-execute")
         .withValidation(_ => IO.raiseError(new RuntimeException("should not run here")))
         .execute(c => IO.pure(c.withVersions("2.0.0", "2.1.0-SNAPSHOT")))
@@ -109,7 +111,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.withValidationContext - wires threaded validation function") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val key  = sbt.AttributeKey[String]("validation-context")
-      val step = ReleaseStepIO
+      val step = CoreProcessStep
         .step("context-validation")
         .withValidationContext(currentCtx => IO.pure(currentCtx.withMetadata(key, "ok")))
         .validateOnly
@@ -121,7 +123,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.withValidationContext - public validate runs threaded validation") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = ReleaseStepIO
+        val step = CoreProcessStep
           .step("context-validation-public")
           .withValidationContext(currentCtx =>
             events.update(_ :+ "context-validation").as(currentCtx)
@@ -136,7 +138,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.validate function value - runs threaded validation from builder") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = ReleaseStepIO
+        val step = CoreProcessStep
           .step("context-validation-field")
           .withValidationContext(currentCtx =>
             events.update(_ :+ "field-validation").as(currentCtx)
@@ -154,7 +156,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
       val key = sbt.AttributeKey[String]("validation-context-getter")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = ReleaseStepIO(
+        val step = CoreProcessStep(
           name = "context-validation-getter",
           execute = currentCtx => IO.pure(currentCtx),
           validate = _ => events.update(_ :+ "validate"),
@@ -179,7 +181,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("step - default validate is a no-op") {
     assertNoOpValidate(
-      ReleaseStepIO
+      CoreProcessStep
         .step("no-validate")
         .execute(c => IO.pure(c))
     )
@@ -188,7 +190,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step - chaining withCrossBuild and withValidation preserves both") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>
-        val step = ReleaseStepIO
+        val step = CoreProcessStep
           .step("chain-step")
           .withValidation(_ => validationRan.set(true))
           .withCrossBuild
@@ -207,7 +209,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
       val key = sbt.AttributeKey[String]("step-builder-order-forward")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = ReleaseStepIO
+        val step = CoreProcessStep
           .step("chain-forward")
           .withValidation(currentCtx =>
             events.update(_ :+ s"validate:${currentCtx.metadata(key).getOrElse("missing")}")
@@ -232,7 +234,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
       val key = sbt.AttributeKey[String]("step-builder-order-reverse")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = ReleaseStepIO
+        val step = CoreProcessStep
           .step("chain-reverse")
           .withValidationContext(currentCtx =>
             events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
@@ -255,7 +257,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.copy - changing only enableCrossBuild keeps threaded validation single-wrapped") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = ReleaseStepIO
+        val step   = CoreProcessStep
           .step("copy-cross-build")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
@@ -273,7 +275,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.copy - omitting validation arguments preserves both validation branches") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = ReleaseStepIO
+        val step   = CoreProcessStep
           .step("copy-defaults")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
@@ -290,7 +292,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.copy - replacing validateWithContext retains the plain validate branch") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = ReleaseStepIO
+        val step   = CoreProcessStep
           .step("copy-validate-with-context")
           .withValidation(_ => events.update(_ :+ "validate"))
           .validateOnly
@@ -311,7 +313,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
       val key = sbt.AttributeKey[String]("copy-validate-with-context-clear")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = ReleaseStepIO
+        val step   = CoreProcessStep
           .step("copy-validate-with-context-clear")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx =>
@@ -336,7 +338,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
       val key = sbt.AttributeKey[String]("copy-validate-with-context-replacement")
 
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = ReleaseStepIO
+        val step   = CoreProcessStep
           .step("copy-validate-with-context-replacement")
           .withValidation(_ => events.update(_ :+ "validate"))
           .withValidationContext(currentCtx =>
@@ -364,7 +366,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.copy - replacing validate retains the threaded validation branch") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = ReleaseStepIO
+        val step   = CoreProcessStep
           .step("copy-validate")
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
           .validateOnly
@@ -379,7 +381,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.copy - replacing validate does not retain the old plain validator") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step   = ReleaseStepIO
+        val step   = CoreProcessStep
           .step("copy-validate-replace-plain-only")
           .withValidation(_ => events.update(_ :+ "old-validate"))
           .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
@@ -405,7 +407,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("step.validateOnly - creates a validation-only step with no-op execute") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>
-        val step = ReleaseStepIO
+        val step = CoreProcessStep
           .step("build-step")
           .withValidation(_ => validationRan.set(true))
           .validateOnly
@@ -422,8 +424,8 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
-  test("resourceStep.execute - returns a T => ReleaseStepIO function") {
-    val stepFn: String => ReleaseStepIO = ReleaseStepIO
+  test("resourceStep.execute - returns a T => CoreProcessStep function") {
+    val stepFn: String => CoreProcessStep = CoreProcessStep
       .resourceStep[String]("res-step")
       .execute(t => ctx => IO.pure(ctx))
 
@@ -433,8 +435,8 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep.execute - passes the resource value into the step function") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val key                             = sbt.AttributeKey[String]("res-key")
-      val stepFn: String => ReleaseStepIO = ReleaseStepIO
+      val key                               = sbt.AttributeKey[String]("res-key")
+      val stepFn: String => CoreProcessStep = CoreProcessStep
         .resourceStep[String]("res-execute")
         .execute(t => c => IO.pure(c.withMetadata(key, t)))
 
@@ -442,8 +444,8 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
-  test("resourceStep.executeAction - returns a T => ReleaseStepIO function") {
-    val stepFn: String => ReleaseStepIO = ReleaseStepIO
+  test("resourceStep.executeAction - returns a T => CoreProcessStep function") {
+    val stepFn: String => CoreProcessStep = CoreProcessStep
       .resourceStep[String]("res-action")
       .executeAction(_ => _ => IO.unit)
 
@@ -453,14 +455,14 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep.executeAction - passes context through unchanged") {
     assertPassesThrough(
-      ReleaseStepIO
+      CoreProcessStep
         .resourceStep[Int]("res-action-passthrough")
         .executeAction(_ => _ => IO.unit)(42)
     )
   }
 
-  test("resourceStep - each call produces an independent ReleaseStepIO") {
-    val stepFn: Int => ReleaseStepIO = ReleaseStepIO
+  test("resourceStep - each call produces an independent CoreProcessStep") {
+    val stepFn: Int => CoreProcessStep = CoreProcessStep
       .resourceStep[Int]("multi-resource")
       .execute(_ => ctx => IO.pure(ctx))
 
@@ -471,7 +473,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("resourceStep.withCrossBuild.execute - sets enableCrossBuild = true") {
-    val stepFn: String => ReleaseStepIO = ReleaseStepIO
+    val stepFn: String => CoreProcessStep = CoreProcessStep
       .resourceStep[String]("res-cross")
       .withCrossBuild
       .execute(_ => ctx => IO.pure(ctx))
@@ -480,7 +482,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("resourceStep - without withCrossBuild enableCrossBuild defaults to false") {
-    val stepFn: String => ReleaseStepIO = ReleaseStepIO
+    val stepFn: String => CoreProcessStep = CoreProcessStep
       .resourceStep[String]("res-no-cross")
       .execute(_ => ctx => IO.pure(ctx))
 
@@ -488,7 +490,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   }
 
   test("resourceStep.withCrossBuild.executeAction - sets enableCrossBuild = true") {
-    val stepFn: String => ReleaseStepIO = ReleaseStepIO
+    val stepFn: String => CoreProcessStep = CoreProcessStep
       .resourceStep[String]("res-cross-action")
       .withCrossBuild
       .executeAction(_ => _ => IO.unit)
@@ -498,7 +500,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep.withValidation.execute - wires the validation function") {
     assertResourceValidationCapture("my-val") { capturedResource =>
-      ReleaseStepIO
+      CoreProcessStep
         .resourceStep[String]("res-validated")
         .withValidation(t => _ => capturedResource.set(Some(t)))
         .execute(_ => c => IO.pure(c))
@@ -507,7 +509,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep.withValidation - validation error propagates") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val stepFn: String => ReleaseStepIO = ReleaseStepIO
+      val stepFn: String => CoreProcessStep = CoreProcessStep
         .resourceStep[String]("res-failing-val")
         .withValidation(t => _ => IO.raiseError(new RuntimeException(s"bad resource: $t")))
         .execute(_ => c => IO.pure(c))
@@ -520,8 +522,8 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep.withValidationContext - wires threaded validation function") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val key                             = sbt.AttributeKey[String]("resource-validation-context")
-      val stepFn: String => ReleaseStepIO = ReleaseStepIO
+      val key                               = sbt.AttributeKey[String]("resource-validation-context")
+      val stepFn: String => CoreProcessStep = CoreProcessStep
         .resourceStep[String]("res-context-validation")
         .withValidationContext(resource =>
           currentCtx => IO.pure(currentCtx.withMetadata(key, s"ok:$resource"))
@@ -538,7 +540,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val key = sbt.AttributeKey[String]("resource-builder-order-forward")
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val stepFn: String => ReleaseStepIO = ReleaseStepIO
+        val stepFn: String => CoreProcessStep = CoreProcessStep
           .resourceStep[String]("res-chain-forward")
           .withValidation(resource =>
             currentCtx =>
@@ -566,7 +568,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val key = sbt.AttributeKey[String]("resource-builder-order-reverse")
       Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val stepFn: String => ReleaseStepIO = ReleaseStepIO
+        val stepFn: String => CoreProcessStep = CoreProcessStep
           .resourceStep[String]("res-chain-reverse")
           .withValidationContext(resource =>
             currentCtx =>
@@ -592,7 +594,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   test("resourceStep - default validate is a no-op") {
     assertNoOpValidate(
-      ReleaseStepIO
+      CoreProcessStep
         .resourceStep[String]("res-no-validate")
         .execute(_ => c => IO.pure(c))("x")
     )
@@ -601,7 +603,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   test("resourceStep.validateOnly - creates a validation-only step with no-op execute") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { capturedResource =>
-        val stepFn: String => ReleaseStepIO = ReleaseStepIO
+        val stepFn: String => CoreProcessStep = CoreProcessStep
           .resourceStep[String]("res-build")
           .withValidation(t => _ => capturedResource.set(Some(t)))
           .validateOnly
@@ -619,15 +621,15 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
-  private def assertPassesThrough(step: ReleaseStepIO): IO[Unit] =
+  private def assertPassesThrough(step: CoreProcessStep): IO[Unit] =
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       step.execute(ctx).map(result => assertEquals(result, ctx))
     }
 
-  private def assertNoOpValidate(step: ReleaseStepIO): IO[Unit] =
+  private def assertNoOpValidate(step: CoreProcessStep): IO[Unit] =
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use(ctx => step.validate(ctx))
 
-  private def assertValidationRuns(buildStep: Ref[IO, Boolean] => ReleaseStepIO): IO[Unit] =
+  private def assertValidationRuns(buildStep: Ref[IO, Boolean] => CoreProcessStep): IO[Unit] =
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>
         buildStep(validationRan).validate(ctx) *> validationRan.get.map(assert(_))
@@ -636,7 +638,7 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
 
   private def assertResourceValidationCapture(
       resource: String
-  )(buildStep: Ref[IO, Option[String]] => String => ReleaseStepIO): IO[Unit] =
+  )(buildStep: Ref[IO, Option[String]] => String => CoreProcessStep): IO[Unit] =
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { capturedResource =>
         buildStep(capturedResource)(resource).validate(ctx) *> capturedResource.get.map {
