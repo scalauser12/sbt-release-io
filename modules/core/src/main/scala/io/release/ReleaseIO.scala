@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.CorePublicKeyCatalog
 import io.release.internal.SbtRuntime
 import io.release.version.Version
 import sbt.Package.ManifestAttributes
@@ -44,306 +45,173 @@ trait ReleaseIO
 object ReleaseIO extends ReleaseIO {
 
   // Canonical key definitions — created exactly once, shared across all mix-ins.
-  // Use explicit SettingKey constructors (not the settingKey macro) to decouple
-  // the key name from the val name.
+  // Labels, descriptions, and test inventory live in CorePublicKeyCatalog.
   private[release] lazy val _releaseIOBehaviorCrossBuild: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOBehaviorCrossBuild",
-      "Whether to enable cross-building during release"
-    )
+    CorePublicKeyCatalog.releaseIOBehaviorCrossBuild
 
   private[release] lazy val _releaseIOBehaviorSkipPublish: SettingKey[Boolean] =
-    SettingKey[Boolean]("releaseIOBehaviorSkipPublish", "Whether to skip publish during release")
+    CorePublicKeyCatalog.releaseIOBehaviorSkipPublish
 
   private[release] lazy val _releaseIOBehaviorInteractive: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOBehaviorInteractive",
-      "Whether to enable interactive prompts during release"
-    )
+    CorePublicKeyCatalog.releaseIOBehaviorInteractive
 
   private[release] lazy val _releaseIODefaultsTagExistsAnswer: SettingKey[Option[String]] =
-    SettingKey[Option[String]](
-      "releaseIODefaultsTagExistsAnswer",
-      "Default action when a release tag already exists"
-    )
+    CorePublicKeyCatalog.releaseIODefaultsTagExistsAnswer
 
   private[release] lazy val _releaseIODefaultsSnapshotDependenciesAnswer
       : SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsSnapshotDependenciesAnswer",
-      "Default decision for continuing when SNAPSHOT dependencies are detected"
-    )
+    CorePublicKeyCatalog.releaseIODefaultsSnapshotDependenciesAnswer
 
   private[release] lazy val _releaseIODefaultsRemoteCheckFailureAnswer
       : SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsRemoteCheckFailureAnswer",
-      "Default decision for continuing after a remote-check failure"
-    )
+    CorePublicKeyCatalog.releaseIODefaultsRemoteCheckFailureAnswer
 
   private[release] lazy val _releaseIODefaultsUpstreamBehindAnswer: SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsUpstreamBehindAnswer",
-      "Default decision for continuing when the local branch is behind upstream"
-    )
+    CorePublicKeyCatalog.releaseIODefaultsUpstreamBehindAnswer
 
   private[release] lazy val _releaseIODefaultsPushAnswer: SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsPushAnswer",
-      "Default decision for whether to push changes at the end of the release"
-    )
+    CorePublicKeyCatalog.releaseIODefaultsPushAnswer
 
   private[release] lazy val _releaseIOPolicyEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOPolicyEnableSnapshotDependenciesCheck",
-      "Whether to include the snapshot dependency validation phase in the compiled hook process"
-    )
+    CorePublicKeyCatalog.releaseIOPolicyEnableSnapshotDependenciesCheck
 
   private[release] lazy val _releaseIOPolicyEnableRunClean: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOPolicyEnableRunClean",
-      "Whether to include the clean phase in the compiled hook process"
-    )
+    CorePublicKeyCatalog.releaseIOPolicyEnableRunClean
 
   private[release] lazy val _releaseIOPolicyEnableRunTests: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOPolicyEnableRunTests",
-      "Whether to include the test phase in the compiled hook process"
-    )
+    CorePublicKeyCatalog.releaseIOPolicyEnableRunTests
 
   private[release] lazy val _releaseIOPolicyEnableTagging: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOPolicyEnableTagging",
-      "Whether to include the tag phase in the compiled hook process"
-    )
+    CorePublicKeyCatalog.releaseIOPolicyEnableTagging
 
   private[release] lazy val _releaseIOPolicyEnablePublish: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOPolicyEnablePublish",
-      "Whether to include the publish phase in the compiled hook process"
-    )
+    CorePublicKeyCatalog.releaseIOPolicyEnablePublish
 
   private[release] lazy val _releaseIOPolicyEnablePush: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOPolicyEnablePush",
-      "Whether to include the push phase in the compiled hook process"
-    )
+    CorePublicKeyCatalog.releaseIOPolicyEnablePush
 
   private[release] lazy val _releaseIOHooksAfterCleanCheck: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterCleanCheck",
-      "Hooks that run after the clean-working-dir check phase"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterCleanCheck
 
   private[release] lazy val _releaseIOHooksBeforeVersionResolution: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforeVersionResolution",
-      "Hooks that run before version resolution"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforeVersionResolution
 
   private[release] lazy val _releaseIOHooksAfterVersionResolution: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterVersionResolution",
-      "Hooks that run after version resolution"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterVersionResolution
 
   private[release] lazy val _releaseIOHooksBeforeReleaseVersionWrite
       : SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforeReleaseVersionWrite",
-      "Hooks that run before writing the release version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforeReleaseVersionWrite
 
   private[release] lazy val _releaseIOHooksAfterReleaseVersionWrite
       : SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterReleaseVersionWrite",
-      "Hooks that run after writing the release version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterReleaseVersionWrite
 
   private[release] lazy val _releaseIOHooksBeforeReleaseCommit: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforeReleaseCommit",
-      "Hooks that run before committing the release version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforeReleaseCommit
 
   private[release] lazy val _releaseIOHooksAfterReleaseCommit: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterReleaseCommit",
-      "Hooks that run after committing the release version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterReleaseCommit
 
   private[release] lazy val _releaseIOHooksBeforeTag: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforeTag",
-      "Hooks that run before tagging the release"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforeTag
 
   private[release] lazy val _releaseIOHooksAfterTag: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterTag",
-      "Hooks that run after tagging the release"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterTag
 
   private[release] lazy val _releaseIOHooksBeforePublish: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforePublish",
-      "Hooks that run before publish"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforePublish
 
   private[release] lazy val _releaseIOHooksAfterPublish: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterPublish",
-      "Hooks that run after publish"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterPublish
 
   private[release] lazy val _releaseIOHooksBeforeNextVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforeNextVersionWrite",
-      "Hooks that run before writing the next version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforeNextVersionWrite
 
   private[release] lazy val _releaseIOHooksAfterNextVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterNextVersionWrite",
-      "Hooks that run after writing the next version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterNextVersionWrite
 
   private[release] lazy val _releaseIOHooksBeforeNextCommit: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforeNextCommit",
-      "Hooks that run before committing the next version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforeNextCommit
 
   private[release] lazy val _releaseIOHooksAfterNextCommit: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterNextCommit",
-      "Hooks that run after committing the next version"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterNextCommit
 
   private[release] lazy val _releaseIOHooksBeforePush: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksBeforePush",
-      "Hooks that run before pushing release changes"
-    )
+    CorePublicKeyCatalog.releaseIOHooksBeforePush
 
   private[release] lazy val _releaseIOHooksAfterPush: SettingKey[Seq[ReleaseHookIO]] =
-    SettingKey[Seq[ReleaseHookIO]](
-      "releaseIOHooksAfterPush",
-      "Hooks that run after pushing release changes"
-    )
+    CorePublicKeyCatalog.releaseIOHooksAfterPush
 
   private[release] lazy val _releaseIOVersioningReadVersion: SettingKey[File => IO[String]] =
-    SettingKey[File => IO[String]](
-      "releaseIOVersioningReadVersion",
-      "Function to read the current version from the version file"
-    )
+    CorePublicKeyCatalog.releaseIOVersioningReadVersion
 
   private[release] lazy val _releaseIOVersioningFileContents
       : SettingKey[(File, String) => IO[String]] =
-    SettingKey[(File, String) => IO[String]](
-      "releaseIOVersioningFileContents",
-      "Function that produces version file contents: (file, version) => IO[contents]"
-    )
+    CorePublicKeyCatalog.releaseIOVersioningFileContents
 
   // ── Forked sbt-release keys ──────────────────────────────────────────────
 
   private[release] lazy val _releaseIOVersioningFile: SettingKey[File] =
-    SettingKey[File]("releaseIOVersioningFile", "Path to the version file")
+    CorePublicKeyCatalog.releaseIOVersioningFile
 
   private[release] lazy val _releaseIOVersioningUseGlobal: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOVersioningUseGlobal",
-      "Whether the version file uses ThisBuild / version"
-    )
+    CorePublicKeyCatalog.releaseIOVersioningUseGlobal
 
   private[release] lazy val _releaseIOVcsSign: SettingKey[Boolean] =
-    SettingKey[Boolean]("releaseIOVcsSign", "Whether VCS tags and commits are GPG-signed")
+    CorePublicKeyCatalog.releaseIOVcsSign
 
   private[release] lazy val _releaseIOVcsSignOff: SettingKey[Boolean] =
-    SettingKey[Boolean]("releaseIOVcsSignOff", "Whether VCS commits include a Signed-off-by line")
+    CorePublicKeyCatalog.releaseIOVcsSignOff
 
   private[release] lazy val _releaseIOVcsIgnoreUntrackedFiles: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOVcsIgnoreUntrackedFiles",
-      "Whether untracked files are ignored during clean working dir check"
-    )
+    CorePublicKeyCatalog.releaseIOVcsIgnoreUntrackedFiles
 
   private[release] lazy val _releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
-    SettingKey[FiniteDuration](
-      "releaseIOVcsRemoteCheckTimeout",
-      "Timeout for the remote reachability check performed before push"
-    )
+    CorePublicKeyCatalog.releaseIOVcsRemoteCheckTimeout
 
   @transient
   private[release] lazy val _releaseIORuntimeCurrentVersion: TaskKey[String] =
-    TaskKey[String](
-      "releaseIORuntimeCurrentVersion",
-      "The current version at evaluation time (used by tag/commit message tasks)"
-    )
+    CorePublicKeyCatalog.releaseIORuntimeCurrentVersion
 
   @transient
   private[release] lazy val _releaseIOVcsTagName: TaskKey[String] =
-    TaskKey[String]("releaseIOVcsTagName", "Tag name for the release")
+    CorePublicKeyCatalog.releaseIOVcsTagName
 
   @transient
   private[release] lazy val _releaseIOVcsTagComment: TaskKey[String] =
-    TaskKey[String]("releaseIOVcsTagComment", "Tag comment for the release")
+    CorePublicKeyCatalog.releaseIOVcsTagComment
 
   @transient
   private[release] lazy val _releaseIOVcsReleaseCommitMessage: TaskKey[String] =
-    TaskKey[String](
-      "releaseIOVcsReleaseCommitMessage",
-      "Commit message for the release version commit"
-    )
+    CorePublicKeyCatalog.releaseIOVcsReleaseCommitMessage
 
   @transient
   private[release] lazy val _releaseIOVcsNextCommitMessage: TaskKey[String] =
-    TaskKey[String](
-      "releaseIOVcsNextCommitMessage",
-      "Commit message for the next snapshot version commit"
-    )
+    CorePublicKeyCatalog.releaseIOVcsNextCommitMessage
 
   @transient
   private[release] lazy val _releaseIOVersioningReleaseVersion: TaskKey[String => String] =
-    TaskKey[String => String](
-      "releaseIOVersioningReleaseVersion",
-      "Function that computes the release version from the current version"
-    )
+    CorePublicKeyCatalog.releaseIOVersioningReleaseVersion
 
   @transient
   private[release] lazy val _releaseIOVersioningNextVersion: TaskKey[String => String] =
-    TaskKey[String => String](
-      "releaseIOVersioningNextVersion",
-      "Function that computes the next development version from the release version"
-    )
+    CorePublicKeyCatalog.releaseIOVersioningNextVersion
 
   @transient
   private[release] lazy val _releaseIOVersioningBump: TaskKey[Version.Bump] =
-    TaskKey[Version.Bump](
-      "releaseIOVersioningBump",
-      "Version bump strategy"
-    )
+    CorePublicKeyCatalog.releaseIOVersioningBump
 
   @transient
   private[release] lazy val _releaseIODiagnosticsSnapshotDependencies: TaskKey[Seq[ModuleID]] =
-    TaskKey[Seq[ModuleID]](
-      "releaseIODiagnosticsSnapshotDependencies",
-      "Task that resolves SNAPSHOT dependencies for validation"
-    )
+    CorePublicKeyCatalog.releaseIODiagnosticsSnapshotDependencies
 
   @transient
   private[release] lazy val _releaseIOPublishAction: TaskKey[Unit] =
-    TaskKey[Unit](
-      "releaseIOPublishAction",
-      "Task that performs the actual publish action"
-    )
+    CorePublicKeyCatalog.releaseIOPublishAction
 
   private[release] lazy val _releaseIOPublishChecks: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOPublishChecks",
-      "Whether to run publishTo validation checks for the publish step"
-    )
+    CorePublicKeyCatalog.releaseIOPublishChecks
 
   private[release] lazy val _releaseIOInternalReleaseHash: SettingKey[Option[String]] =
     SettingKey[Option[String]](
