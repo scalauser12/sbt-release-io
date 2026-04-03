@@ -58,6 +58,9 @@ clearer build-facing customization guidance.
   manifest metadata.
 - Add scripted coverage for grouped-key configuration and missing configured
   version-file scenarios, plus resource-hook materialization tests.
+- Serialize unit-test execution and run unit suites in isolated JVMs so
+  stdin-driven prompt tests and shared-state suites stay deterministic on the
+  sbt 2 lane.
 
 ### Verification
 

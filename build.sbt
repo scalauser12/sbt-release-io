@@ -60,6 +60,8 @@ lazy val commonSettings = Seq(
   },
   scriptedBufferLog             := true,
   scriptedParallelInstances     := 4,
+  Test / fork                   := true,
+  Test / parallelExecution      := false,
   testFrameworks += new TestFramework("munit.Framework")
 )
 
@@ -107,3 +109,7 @@ Global / excludeLintKeys ++= Set(
   monorepo / git.gitDescribedVersion,
   root / git.gitDescribedVersion
 )
+
+// Some test suites redirect System.in or exercise shared sbt state, so keep
+// unit-test execution deterministic across aggregated projects as well.
+Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
