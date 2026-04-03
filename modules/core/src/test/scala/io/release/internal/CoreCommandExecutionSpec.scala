@@ -50,4 +50,28 @@ class CoreCommandExecutionSpec extends CatsEffectSuite with ReleasePluginIOSpecS
       }
     }
   }
+
+  test("doCheck logs failure and skips the success line when initial context is already failed") {
+    stateResource("core-command-check-failed-context", HookFriendlyPlugin).use { loaded =>
+      IO {
+        val runtime = CoreCommandExecution.CommandRuntime(
+          commandName = "releaseIO",
+          resource = Resource.unit,
+          resolveResourceHooks = _ => ReleaseResourceHooks.empty[Unit],
+          resolveCrossBuildEnabled = _ => false,
+          resolveSkipPublishEnabled = _ => false,
+          resolveInteractiveEnabled = _ => false,
+          initialContext = (state, _skipTests, _skipPublish, _interactive) =>
+            IO.pure(
+              ReleaseContext(state = state).failWith(new RuntimeException("startup check failed"))
+            )
+        )
+        val _       = CoreCommandExecution.doCheck(loaded.state, Seq.empty, runtime)
+        val log     = loaded.consoleBuffer.toString("UTF-8")
+
+        assert(log.contains(s"${ReleaseLogPrefixes.Core} Release failed: startup check failed"))
+        assert(!log.contains(s"${ReleaseLogPrefixes.Core} Preflight checks passed."))
+      }
+    }
+  }
 }

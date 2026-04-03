@@ -156,6 +156,42 @@ class CorePreflightSpec extends CatsEffectSuite {
     }
   }
 
+  test("check - fail fast when validation returns ctx.failWith before version resolution") {
+    withInitialContext { case (_, _, initialCtx) =>
+      val versionResolutionFailure = "version resolution should not run"
+      val failingStep             = ReleaseStepIO
+        .step("validation-fail-with")
+        .withValidationContext(currentCtx =>
+          IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))
+        )
+        .validateOnly
+
+      for {
+        mutatedState <- IO.blocking {
+                          SbtRuntime.appendWithSession(
+                            initialCtx.state,
+                            Seq(
+                              ReleaseIO.releaseIOVersioningReadVersion := { (_: File) =>
+                                IO.raiseError(new IllegalStateException(versionResolutionFailure))
+                              }
+                            )
+                          )
+                        }
+        mutatedCtx    = initialCtx.withState(mutatedState)
+        _            <- assertFailure[RuntimeException, CorePreflight.Summary](
+                          CorePreflight.check(
+                            mutatedCtx,
+                            Seq(failingStep, VersionSteps.inquireVersions),
+                            crossBuild = false
+                          )
+                        ) { err =>
+                          assert(err.getMessage.contains("stop validation"))
+                          assert(!err.getMessage.contains(versionResolutionFailure))
+                        }
+      } yield ()
+    }
+  }
+
   test("check - render publish summary from the validated context") {
     withInitialContext { case (_, _, initialCtx) =>
       CorePreflight

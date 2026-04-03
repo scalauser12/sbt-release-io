@@ -136,15 +136,17 @@ private[release] object CorePreflight {
 
     for {
       validatedCtx    <- ReleaseComposer.validateOnly(steps, crossBuild)(initialCtx)
-      versionSnapshot <- resolveVersionSnapshot(validatedCtx, checkSteps)
-      tagSummary      <- resolveTagSummary(versionSnapshot, checkSteps)
+      checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
+      versionSnapshot <- resolveVersionSnapshot(checkedCtx, checkSteps)
+      snapshotCtx     <- ExecutionEngine.raiseIfFailed(versionSnapshot.context)
+      tagSummary      <- resolveTagSummary(versionSnapshot.copy(context = snapshotCtx), checkSteps)
       summary          = Summary(
                            versions = versionSnapshot.summary,
                            tag = tagSummary,
                            crossBuildEnabled = crossBuild,
                            publishSummary = CheckModeOutput.publishStatus(
                              publishConfigured = checkSteps.publishConfigured,
-                             skipPublish = versionSnapshot.context.skipPublish,
+                             skipPublish = snapshotCtx.skipPublish,
                              skippedMessage = "skipped via releaseIOBehaviorSkipPublish := true"
                            ),
                            pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),

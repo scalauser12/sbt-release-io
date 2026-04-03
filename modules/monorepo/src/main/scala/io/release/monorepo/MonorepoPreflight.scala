@@ -167,9 +167,10 @@ private[monorepo] object MonorepoPreflight {
 
     for {
       baseCtx <- resolveBaseContext(session.context, checkSteps)
+      checked <- ExecutionEngine.raiseIfFailed(baseCtx)
       summary <- if (checkSegments.setupSteps.nonEmpty)
                    checkWithSelectionBoundary(
-                     baseCtx,
+                     checked,
                      session.plan,
                      checkSegments,
                      checkSteps,
@@ -177,7 +178,7 @@ private[monorepo] object MonorepoPreflight {
                    )
                  else
                    checkWithoutSelectionBoundary(
-                     baseCtx,
+                     checked,
                      checkSegments.mainSteps,
                      checkSteps,
                      session.flags.crossBuild
@@ -194,10 +195,12 @@ private[monorepo] object MonorepoPreflight {
   ): IO[Summary] =
     for {
       setupValidated <- validateSegment(checkSegments.setupSteps)(baseCtx)
+      checkedSetup   <- ExecutionEngine.raiseIfFailed(setupValidated)
       selected       <-
-        resolveSelection(setupValidated, plan, checkSteps.shouldResolveSelection)
+        resolveSelection(checkedSetup, plan, checkSteps.shouldResolveSelection)
+      checkedSelect  <- ExecutionEngine.raiseIfFailed(selected.context)
       summary        <- checkVersionAwareSegment(
-                          baseCtx = selected.context,
+                          baseCtx = checkedSelect,
                           selectionMode = selected.selectionMode,
                           normalizedSteps = checkSegments.mainSteps,
                           checkSteps = checkSteps,
@@ -234,15 +237,16 @@ private[monorepo] object MonorepoPreflight {
       case None =>
         for {
           validatedCtx <- validateSegment(normalizedSteps)(baseCtx)
+          checkedCtx   <- ExecutionEngine.raiseIfFailed(validatedCtx)
           tagOutcomes  <-
             resolveTagSnapshot(
-              validatedCtx,
+              checkedCtx,
               checkSteps.shouldPreflightTags,
               builtInVersionsResolved = false
             )
           summary      <- buildSummary(
                             selectionMode = selectionMode,
-                            ctx = validatedCtx,
+                            ctx = checkedCtx,
                             versionsResolved = false,
                             tagOutcomes = tagOutcomes,
                             checkSteps = checkSteps,
@@ -253,11 +257,14 @@ private[monorepo] object MonorepoPreflight {
       case Some((prefixSteps, suffixSteps)) =>
         for {
           prefixValidated <- validateSegment(prefixSteps)(baseCtx)
-          withVersions    <- resolveVersionSnapshot(prefixValidated, shouldResolveVersions = true)
-          validatedCtx    <- validateSegment(suffixSteps)(withVersions)
+          checkedPrefix   <- ExecutionEngine.raiseIfFailed(prefixValidated)
+          withVersions    <- resolveVersionSnapshot(checkedPrefix, shouldResolveVersions = true)
+          checkedVersions <- ExecutionEngine.raiseIfFailed(withVersions)
+          validatedCtx    <- validateSegment(suffixSteps)(checkedVersions)
+          checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
           tagOutcomes     <-
             resolveTagSnapshot(
-              validatedCtx,
+              checkedCtx,
               checkSteps.shouldPreflightTags,
               builtInVersionsResolved = builtInTagPreflightFollowsVersionResolution(
                 normalizedSteps
@@ -265,7 +272,7 @@ private[monorepo] object MonorepoPreflight {
             )
           summary         <- buildSummary(
                                selectionMode = selectionMode,
-                               ctx = validatedCtx,
+                               ctx = checkedCtx,
                                versionsResolved = true,
                                tagOutcomes = tagOutcomes,
                                checkSteps = checkSteps,

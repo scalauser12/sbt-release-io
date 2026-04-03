@@ -54,6 +54,15 @@ private[release] object ExecutionEngine {
     ctx.withState(cleaned.copy(onFailure = None))
   }
 
+  def raiseIfFailed[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+    if (ctx.failed)
+      IO.raiseError(
+        ctx.failureCause.getOrElse(
+          new IllegalStateException("release context marked as failed without a recorded cause")
+        )
+      )
+    else IO.pure(ctx)
+
   def withErrorRecovery[C <: ReleaseCtx[C]](logPrefix: String)(
       f: C => IO[C]
   ): C => IO[C] =

@@ -210,6 +210,22 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
     }
   }
 
+  test("check - fail fast when validation returns ctx.failWith") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session     = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+      val failingStep = MonorepoStepIO
+        .global("validation-fail-with")
+        .withValidationContext(currentCtx =>
+          IO.pure(currentCtx.failWith(new RuntimeException("fatal stop")))
+        )
+        .validateOnly
+
+      assertFailure[RuntimeException, MonorepoPreflight.Summary](
+        MonorepoPreflight.check(session, Seq(failingStep))
+      )(err => assert(err.getMessage.contains("fatal stop")))
+    }
+  }
+
   test("check - fail main-segment validations before built-in version resolution after selection") {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val versionResolutionFailure = "version resolution should not run"
