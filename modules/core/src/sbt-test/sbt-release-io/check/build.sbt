@@ -152,6 +152,7 @@ expectCheckSuccess := {
 expectCheckMissingVersionFileFailure := {
   assertNestedRun(
     commands = Seq(
+      """set releaseIOVersioningFile := baseDirectory.value / "missing-version.sbt"""",
       "releaseIO check with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT"
     ),
     outputFile = target.value / "check-missing-version-file.log",

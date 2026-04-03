@@ -24,6 +24,5 @@ $ exec git tag v0.1.0
 > expectCheckTagCollisionFailure
 $ exec git tag -d v0.1.0
 
-# Missing version files should still produce the new onboarding guidance
-$ exec rm version.sbt
+# Missing configured version files should still produce the new onboarding guidance
 > expectCheckMissingVersionFileFailure
