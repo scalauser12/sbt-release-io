@@ -476,7 +476,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
               io.release.ReleaseIO.releaseIOVcsSign            := false
             )
           ),
-          Project("core", coreBase).settings((releaseManifestSettings())*)
+          versionedProject(coreBase, "core")
         )
         val state    = loadedState(repo, projects)
         val project  = projectInfo(
@@ -527,8 +527,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
               io.release.ReleaseIO.releaseIOVcsSign            := false
             )
           ),
-          Project("core", coreBase).settings((releaseManifestSettings())*),
-          Project("api", apiBase).settings((releaseManifestSettings())*)
+          versionedProject(coreBase, "core"),
+          versionedProject(apiBase, "api")
         )
         val state    = loadedState(repo, projects)
         val core     = projectInfo(
@@ -583,8 +583,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
               val apiBase  = new File(repo, "api")
               val projects = Seq(
                 rootProject(repo, aggregateIds = Seq("core", "api")),
-                Project("core", coreBase).settings((releaseManifestSettings())*),
-                Project("api", apiBase).settings((releaseManifestSettings())*)
+                versionedProject(coreBase, "core"),
+                versionedProject(apiBase, "api")
               )
               val state    = loadedState(repo, projects)
               val core     = projectInfo(
@@ -654,9 +654,25 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       else Project("root", repo)
 
     aggregated.settings(
-      (Seq(io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false) ++ settings)*
+      (
+        MonorepoReleaseIO.monorepoDefaultSettings ++
+          Seq(
+            io.release.ReleaseIO.releaseIOVersioningFile := new File(repo, "version.sbt"),
+            io.release.ReleaseIO.releaseIOVcsSign        := false,
+            io.release.ReleaseIO.releaseIOVcsSignOff     := false,
+            io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false
+          ) ++
+          settings
+      )*
     )
   }
+
+  private def versionedProject(base: File, id: String): Project =
+    MonorepoSpecSupport.versionedProject(
+      id,
+      base,
+      settings = releaseManifestSettings()
+    )
 
   private def projectInfo(
       state: State,
