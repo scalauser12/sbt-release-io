@@ -84,6 +84,32 @@ class MonorepoVcsCommitHelpersSpec extends CatsEffectSuite {
     }
   }
 
+  test("commitIfChanged - skips commit when tracked files are modified but not staged") {
+    gitRepoWithVcsResource.use { case (repo, vcs) =>
+      IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified but not staged")).flatMap {
+        _ =>
+          val state = loadedState(repo)
+          val ctx   = MonorepoContext(state = state, vcs = Some(vcs))
+
+          for {
+            commitsBefore <- IO.blocking(TestSupport.runGit(repo, "log", "--oneline"))
+            result        <- MonorepoVcsCommitHelpers.commitIfChanged(
+                               ctx,
+                               vcs,
+                               msg = "chore: should not appear",
+                               sign = false,
+                               signOff = false
+                             )
+            commitsAfter  <- IO.blocking(TestSupport.runGit(repo, "log", "--oneline"))
+          } yield {
+            assertEquals(result, ctx)
+            assertEquals(commitsAfter.trim, commitsBefore.trim)
+            assert(!commitsAfter.contains("chore: should not appear"))
+          }
+      }
+    }
+  }
+
   private def gitRepoWithVcsResource: Resource[IO, (File, Vcs)] =
     TestSupport.tempDirResource("monorepo-vcs-commit-helpers-spec").evalMap { repo =>
       IO.blocking {

@@ -35,8 +35,8 @@ private[monorepo] object MonorepoVcsCommitHelpers {
       sign: Boolean,
       signOff: Boolean
   ): IO[MonorepoContext] =
-    VcsOps.trackedStatus(vcs).flatMap { trackedStatus =>
-      if (trackedStatus.nonEmpty)
+    vcs.stagedFiles.flatMap { stagedFiles =>
+      if (stagedFiles.nonEmpty)
         vcs.commit(msg, sign, signOff) *> logInfo(ctx, s"Committed: $msg").as(ctx)
       else
         IO.pure(ctx)
