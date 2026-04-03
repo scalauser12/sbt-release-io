@@ -2,7 +2,8 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.internal.CoreProcessStep
+import io.release.internal.CoreStepFactory
+import io.release.internal.ProcessStep
 import io.release.internal.VersionPlan
 import sbt.State
 import sbt.{internal as _, *}
@@ -61,25 +62,25 @@ private[release] object VersionSteps {
       IO.pure(s"""$key := "$ver"\n""")
     }
 
-  val inquireVersions: CoreProcessStep = CoreProcessStep(
+  val inquireVersions: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "inquire-versions",
     validate = ReleaseVersionWorkflow.validateInquireVersions,
     execute = ReleaseVersionWorkflow.inquireVersions
   )
 
-  val setReleaseVersion: CoreProcessStep =
-    CoreProcessStep.io("set-release-version")(ReleaseVersionWorkflow.writeReleaseVersion)
+  val setReleaseVersion: ProcessStep.Single[ReleaseContext] =
+    CoreStepFactory.io("set-release-version")(ReleaseVersionWorkflow.writeReleaseVersion)
 
-  val setNextVersion: CoreProcessStep =
-    CoreProcessStep.io("set-next-version")(ReleaseVersionWorkflow.writeNextVersion)
+  val setNextVersion: ProcessStep.Single[ReleaseContext] =
+    CoreStepFactory.io("set-next-version")(ReleaseVersionWorkflow.writeNextVersion)
 
-  val commitReleaseVersion: CoreProcessStep = CoreProcessStep(
+  val commitReleaseVersion: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "commit-release-version",
     validate = VcsSteps.validateCleanWorkingDir(_, logStartHash = false),
     execute = ReleaseVersionWorkflow.commitReleaseVersion
   )
 
-  val commitNextVersion: CoreProcessStep = CoreProcessStep(
+  val commitNextVersion: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "commit-next-version",
     validate = VcsSteps.validateCleanWorkingDir(_, logStartHash = false),
     execute = ReleaseVersionWorkflow.commitNextVersion

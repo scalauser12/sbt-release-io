@@ -1,8 +1,7 @@
 package io.release
 
-import io.release.internal.CoreProcessStep
-
 import io.release.TestAssertions.assertFailure
+import io.release.internal.CoreStepFactory
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Def._
@@ -19,7 +18,7 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
   test("command steps - surface command parse failures for fromCommand") {
     contextResource.use { ctx =>
       assertFailure[RuntimeException, ReleaseContext](
-        CoreProcessStep.fromCommand("this-command-does-not-exist").execute(ctx)
+        CoreStepFactory.fromCommand("this-command-does-not-exist").execute(ctx)
       )(err => assert(err.getMessage.contains("Failed to parse command")))
     }
   }
@@ -27,7 +26,7 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
   test("command steps - surface command parse failures for fromCommandAndRemaining") {
     contextResource.use { ctx =>
       assertFailure[RuntimeException, ReleaseContext](
-        CoreProcessStep.fromCommandAndRemaining("this-command-does-not-exist").execute(ctx)
+        CoreStepFactory.fromCommandAndRemaining("this-command-does-not-exist").execute(ctx)
       )(err => assert(err.getMessage.contains("Failed to parse command")))
     }
   }
@@ -43,7 +42,7 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
         }
       )
     ).use { ctx =>
-      CoreProcessStep.fromTask(stateUpdateTask).execute(ctx).flatMap { result =>
+      CoreStepFactory.fromTask(stateUpdateTask).execute(ctx).flatMap { result =>
         val marker =
           new File(SbtRuntime.extracted(result.state).get(Keys.baseDirectory), "from-task.txt")
         readFile(marker).map(content => assertEquals(content, "task-ran"))
@@ -63,7 +62,7 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
         }
       )
     ).use { ctx =>
-      CoreProcessStep
+      CoreStepFactory
         .fromInputTask(stateUpdateInputTask, args = " alpha beta")
         .execute(ctx)
         .flatMap { result =>
@@ -113,7 +112,7 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
 
       Seq(root, api, core)
     }.use { ctx =>
-      CoreProcessStep.fromTaskAggregated(aggregatedTask).execute(ctx).flatMap { result =>
+      CoreStepFactory.fromTaskAggregated(aggregatedTask).execute(ctx).flatMap { result =>
         val extracted = SbtRuntime.extracted(result.state)
 
         for {
@@ -175,7 +174,7 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
 
       Seq(root, api, core)
     }.use { ctx =>
-      CoreProcessStep.fromTaskAggregated(aggregatedTask).execute(ctx).flatMap { result =>
+      CoreStepFactory.fromTaskAggregated(aggregatedTask).execute(ctx).flatMap { result =>
         val extracted = SbtRuntime.extracted(result.state)
 
         readFile(new File(extracted.get(Keys.baseDirectory), "aggregated-task-root.txt")).map {

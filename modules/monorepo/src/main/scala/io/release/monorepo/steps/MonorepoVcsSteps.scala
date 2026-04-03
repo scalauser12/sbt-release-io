@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseIO
 import io.release.VcsOps
+import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.*
@@ -25,12 +26,12 @@ private[monorepo] object MonorepoVcsSteps {
       status: String
   )
 
-  val initializeVcs: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
+  val initializeVcs: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
     name = "initialize-vcs",
     execute = ctx => VcsOps.detectAndInit(ctx)
   )
 
-  val checkCleanWorkingDir: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
+  val checkCleanWorkingDir: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
     name = "check-clean-working-dir",
     execute = ctx => IO.pure(ctx),
     validate = ctx =>
@@ -107,8 +108,9 @@ private[monorepo] object MonorepoVcsSteps {
       }
     }
 
-  private[monorepo] val tagReleasesPerProject: MonorepoProcessStep.PerProject =
-    MonorepoProcessStep.PerProject(
+  private[monorepo] val tagReleasesPerProject
+      : ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+    ProcessStep.PerItem(
       name = "tag-releases",
       execute = (ctx, project) =>
         required(ctx.vcs, "VCS not initialized") { vcs =>
@@ -171,7 +173,7 @@ private[monorepo] object MonorepoVcsSteps {
     * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
     * users should verify their VCS behavior.
     */
-  val pushChanges: MonorepoProcessStep.Global = MonorepoProcessStep.buildGlobal(
+  val pushChanges: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, MissingVcsMessage) { vcs =>

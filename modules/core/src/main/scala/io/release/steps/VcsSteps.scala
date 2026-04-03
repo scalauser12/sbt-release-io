@@ -11,7 +11,8 @@ import io.release.ReleaseIO.releaseIOVersioningUseGlobal
 import io.release.ReleaseIO.releaseIOVersioningFile
 import io.release.ReleaseIO.releaseIOVersioningFileContents
 import io.release.VcsOps
-import io.release.internal.CoreProcessStep
+import io.release.internal.CoreStepFactory
+import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.TagPlan
@@ -32,11 +33,12 @@ private[release] object VcsSteps {
       status: String
   )
 
-  val initializeVcs: CoreProcessStep = CoreProcessStep.io("initialize-vcs") { ctx =>
-    VcsOps.detectAndInit(ctx)
+  val initializeVcs: ProcessStep.Single[ReleaseContext] = CoreStepFactory.io("initialize-vcs") {
+    ctx =>
+      VcsOps.detectAndInit(ctx)
   }
 
-  val checkCleanWorkingDir: CoreProcessStep = CoreProcessStep(
+  val checkCleanWorkingDir: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "check-clean-working-dir",
     execute = ctx => IO.pure(ctx),
     validate = validateCleanWorkingDir(_, logStartHash = true)
@@ -64,7 +66,7 @@ private[release] object VcsSteps {
   // No validation phase: the tag name depends on releaseIOVcsTagName, which is resolved from the
   // release version set by inquireVersions.execute. At validation time, that version is not yet
   // available, so tag-exists checks can only run during execution.
-  val tagRelease: CoreProcessStep = CoreProcessStep.io("tag-release") { ctx =>
+  val tagRelease: ProcessStep.Single[ReleaseContext] = CoreStepFactory.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
         params <- resolveTagPlan(ctx)
@@ -197,7 +199,7 @@ private[release] object VcsSteps {
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call.
-  val pushChanges: CoreProcessStep = CoreProcessStep.build(
+  val pushChanges: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>

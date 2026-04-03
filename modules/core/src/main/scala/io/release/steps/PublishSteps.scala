@@ -6,8 +6,8 @@ import io.release.ReleaseContext
 import io.release.ReleaseIO.releaseIOPublishAction
 import io.release.ReleaseIO.releaseIOPublishChecks
 import io.release.ReleaseIOCompat
-import io.release.internal.CoreProcessStep
 import io.release.internal.DecisionResolver
+import io.release.internal.ProcessStep
 import io.release.internal.PublishValidation
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 /** Publish, test, and dependency-related release steps. */
 private[release] object PublishSteps {
 
-  val checkSnapshotDependencies: CoreProcessStep = CoreProcessStep.build(
+  val checkSnapshotDependencies: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "check-snapshot-dependencies",
     execute = ctx => IO.pure(ctx),
     validateWithContext = Some(ctx =>
@@ -40,7 +40,7 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
-  val publishArtifacts: CoreProcessStep = CoreProcessStep(
+  val publishArtifacts: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "publish-artifacts",
     execute = ctx =>
       if (ctx.skipPublish) {
@@ -90,7 +90,7 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
-  val runTests: CoreProcessStep = CoreProcessStep(
+  val runTests: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "run-tests",
     execute = ctx =>
       if (ctx.skipTests) {
@@ -111,7 +111,7 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
-  val runClean: CoreProcessStep = CoreProcessStep(
+  val runClean: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
     name = "run-clean",
     execute = ctx =>
       IO.blocking {

@@ -1,9 +1,9 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.CoreProcessStep
 import io.release.internal.CrossBuildExecution
 import io.release.internal.ExecutionEngine
+import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.StepExecutionSupport
@@ -30,7 +30,7 @@ private[release] object ReleaseComposer {
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.
     */
-  def compose(steps: Seq[CoreProcessStep], crossBuild: Boolean)(
+  def compose(steps: Seq[ProcessStep.Single[ReleaseContext]], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
     StepExecutionSupport.runMainSegment(
@@ -43,7 +43,7 @@ private[release] object ReleaseComposer {
   /** Run only the validation phase for the given steps.
     * Used by preflight checks to reuse the exact validation wiring without executing actions.
     */
-  def validateOnly(steps: Seq[CoreProcessStep], crossBuild: Boolean)(
+  def validateOnly(steps: Seq[ProcessStep.Single[ReleaseContext]], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
     StepExecutionSupport.runValidationPhase(
@@ -53,13 +53,13 @@ private[release] object ReleaseComposer {
     )
 
   private def preparedSteps(
-      steps: Seq[CoreProcessStep],
+      steps: Seq[ProcessStep.Single[ReleaseContext]],
       crossBuild: Boolean
   ): Seq[StepExecutionSupport.PreparedStep[ReleaseContext]] =
     steps.map(preparedStep(_, crossBuild))
 
   private def preparedStep(
-      step: CoreProcessStep,
+      step: ProcessStep.Single[ReleaseContext],
       crossBuild: Boolean
   ): StepExecutionSupport.PreparedStep[ReleaseContext] =
     StepExecutionSupport.PreparedStep(
@@ -74,7 +74,7 @@ private[release] object ReleaseComposer {
     )
 
   private def wrapWithCrossBuild(
-      step: CoreProcessStep,
+      step: ProcessStep.Single[ReleaseContext],
       crossBuild: Boolean
   )(action: ReleaseContext => IO[ReleaseContext]): ReleaseContext => IO[ReleaseContext] =
     if (step.enableCrossBuild && crossBuild)

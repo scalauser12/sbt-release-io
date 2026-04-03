@@ -1,11 +1,10 @@
 package io.release
 
-import io.release.internal.CoreProcessStep
-
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
 import io.release.internal.CoreCommandExecution
+import io.release.internal.ProcessStep
 import sbt.Project
 import sbt.Setting
 import sbt.State
@@ -135,12 +134,14 @@ trait ReleasePluginIOSpecSupport {
 
   protected def checkSteps(
       processMode: CoreCommandExecution.CompiledSteps
-  ): Seq[CoreProcessStep] =
+  ): Seq[ProcessStep.Single[ReleaseContext]] =
     processMode.steps
 
   protected def runStepNames(runProcess: CoreCommandExecution.CompiledSteps): Seq[String] =
     runProcess.steps.map(_.name)
 
-  protected def runSteps(runProcess: CoreCommandExecution.CompiledSteps): Seq[CoreProcessStep] =
+  protected def runSteps(
+      runProcess: CoreCommandExecution.CompiledSteps
+  ): Seq[ProcessStep.Single[ReleaseContext]] =
     runProcess.steps
 }

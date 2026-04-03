@@ -8,6 +8,7 @@ import io.release.ReleaseIO.releaseIOInternalReleaseTag
 import io.release.ReleaseIO.releaseIOPublishAction
 import io.release.ReleaseIOCompat
 import io.release.internal.DecisionResolver
+import io.release.internal.ProcessStep
 import io.release.internal.PublishValidation
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
@@ -135,8 +136,8 @@ private[monorepo] object MonorepoPublishSteps {
     * (via `.dependsOn()`) are resolved internally by sbt from compiled classes
     * and are not included in `releaseIODiagnosticsSnapshotDependencies`.
     */
-  val checkSnapshotDependencies: MonorepoProcessStep.PerProject =
-    MonorepoProcessStep.buildPerProject(
+  val checkSnapshotDependencies: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+    ProcessStep.PerItem(
       name = "check-snapshot-dependencies",
       // Snapshot checking is purely a pre-flight check; there is no release-time action.
       execute = (ctx, _) => IO.pure(ctx),
@@ -160,7 +161,7 @@ private[monorepo] object MonorepoPublishSteps {
     )
 
   /** Run clean for each project. */
-  val runClean: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
+  val runClean: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] = ProcessStep.PerItem(
     name = "run-clean",
     execute = (ctx, project) =>
       IO.blocking {
@@ -170,7 +171,7 @@ private[monorepo] object MonorepoPublishSteps {
   )
 
   /** Run tests for each project. */
-  val runTests: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
+  val runTests: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] = ProcessStep.PerItem(
     name = "run-tests",
     execute = (ctx, project) =>
       if (ctx.skipTests)
@@ -181,39 +182,40 @@ private[monorepo] object MonorepoPublishSteps {
   )
 
   /** Publish artifacts for each project. */
-  val publishArtifacts: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
-    name = "publish-artifacts",
-    execute = (ctx, project) =>
-      if (ctx.skipPublish)
-        logInfo(ctx, s"Skipping publish for ${project.name}").as(ctx)
-      else
-        evaluatePublishSkip(ctx, project).flatMap { skipped =>
-          if (skipped)
-            logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
-          else
-            withProjectReleaseState(ctx, project).flatMap(publishCtx =>
-              runProjectTask(publishCtx, project.ref / releaseIOPublishAction)
-            )
-        },
-    validate = (ctx, project) =>
-      if (ctx.skipPublish) IO.unit
-      else
-        IO.blocking(
-          Project.extract(ctx.state).get(releaseIOMonorepoPublishChecks)
-        ).flatMap {
-          case false => IO.unit
-          case true  =>
-            for {
-              publishSkipped <- evaluatePublishSkip(ctx, project)
-              publishTarget  <-
-                if (publishSkipped) IO.pure(Option.empty[Resolver])
-                else evaluatePublishTarget(ctx, project)
-              result         <- PublishValidation.requirePublishTarget(project.ref.project)(
-                                  publishSkipped,
-                                  publishTarget.isEmpty
-                                )
-            } yield result
-        },
-    enableCrossBuild = true
-  )
+  val publishArtifacts: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+    ProcessStep.PerItem(
+      name = "publish-artifacts",
+      execute = (ctx, project) =>
+        if (ctx.skipPublish)
+          logInfo(ctx, s"Skipping publish for ${project.name}").as(ctx)
+        else
+          evaluatePublishSkip(ctx, project).flatMap { skipped =>
+            if (skipped)
+              logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
+            else
+              withProjectReleaseState(ctx, project).flatMap(publishCtx =>
+                runProjectTask(publishCtx, project.ref / releaseIOPublishAction)
+              )
+          },
+      validate = (ctx, project) =>
+        if (ctx.skipPublish) IO.unit
+        else
+          IO.blocking(
+            Project.extract(ctx.state).get(releaseIOMonorepoPublishChecks)
+          ).flatMap {
+            case false => IO.unit
+            case true  =>
+              for {
+                publishSkipped <- evaluatePublishSkip(ctx, project)
+                publishTarget  <-
+                  if (publishSkipped) IO.pure(Option.empty[Resolver])
+                  else evaluatePublishTarget(ctx, project)
+                result         <- PublishValidation.requirePublishTarget(project.ref.project)(
+                                    publishSkipped,
+                                    publishTarget.isEmpty
+                                  )
+              } yield result
+          },
+      enableCrossBuild = true
+    )
 }

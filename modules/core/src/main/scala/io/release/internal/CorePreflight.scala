@@ -26,7 +26,7 @@ private[release] object CorePreflight {
   )
 
   private object CheckSteps {
-    def apply(steps: Seq[CoreProcessStep]): CheckSteps = {
+    def apply(steps: Seq[ProcessStep.Single[ReleaseContext]]): CheckSteps = {
       val stepNames = steps.map(_.name)
 
       CheckSteps(
@@ -127,7 +127,7 @@ private[release] object CorePreflight {
 
   def check(
       initialCtx: ReleaseContext,
-      steps: Seq[CoreProcessStep],
+      steps: Seq[ProcessStep.Single[ReleaseContext]],
       crossBuild: Boolean
   ): IO[Summary] = {
     val checkSteps = CheckSteps(steps)

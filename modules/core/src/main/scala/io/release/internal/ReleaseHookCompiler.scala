@@ -39,9 +39,9 @@ private[release] object ReleaseHookCompiler {
     )
   }
 
-  def compile(state: State): Seq[CoreProcessStep] =
+  def compile(state: State): Seq[ProcessStep.Single[io.release.ReleaseContext]] =
     compile(resolve(state))
 
-  def compile(hooks: CoreHookConfiguration): Seq[CoreProcessStep] =
+  def compile(hooks: CoreHookConfiguration): Seq[ProcessStep.Single[io.release.ReleaseContext]] =
     CoreLifecycle.compile(hooks)
 }

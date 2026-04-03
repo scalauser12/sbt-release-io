@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestSupport
+import io.release.internal.ProcessStep
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.Keys.*
@@ -29,8 +30,8 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val tagStep = MonorepoHookCompiler
           .compile(fixture.state)
           .collectFirst {
-            case step: MonorepoProcessStep.PerProject if step.name == "tag-releases" =>
-              step
+            case step: ProcessStep.PerItem[?, ?] @unchecked if step.name == "tag-releases" =>
+              step.asInstanceOf[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]]
           }
           .getOrElse(fail("Expected canonical tag-releases step"))
 
@@ -122,10 +123,10 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val publishHookSteps = MonorepoHookCompiler
           .compile(fixture.state)
           .collect {
-            case step: MonorepoProcessStep.PerProject
+            case step: ProcessStep.PerItem[?, ?] @unchecked
                 if step.name
                   .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-              step
+              step.asInstanceOf[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]]
           }
 
         val skippedCtx          = fixture.context(selectedProjectIds = Seq("core"), skipPublish = true)
@@ -164,10 +165,10 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val publishHookSteps = MonorepoHookCompiler
           .compile(fixture.state)
           .collect {
-            case step: MonorepoProcessStep.PerProject
+            case step: ProcessStep.PerItem[?, ?] @unchecked
                 if step.name
                   .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-              step
+              step.asInstanceOf[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]]
           }
         val enabledCtx       = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
         val project          = fixture.projectInfo("core")
@@ -196,10 +197,10 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
         val publishHookSteps = MonorepoHookCompiler
           .compile(fixture.state)
           .collect {
-            case step: MonorepoProcessStep.PerProject
+            case step: ProcessStep.PerItem[?, ?] @unchecked
                 if step.name
                   .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-              step
+              step.asInstanceOf[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]]
           }
         val project          = fixture.projectInfo("core")
         val skippedState     = TestSupport.appendSessionSettings(
@@ -301,14 +302,14 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     )
 
   private def runPublishHooks(
-      steps: Seq[MonorepoProcessStep.PerProject],
+      steps: Seq[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     validatePublishHooks(steps, ctx, project).flatMap(executePublishHooks(steps, _, project))
 
   private def validatePublishHooks(
-      steps: Seq[MonorepoProcessStep.PerProject],
+      steps: Seq[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
@@ -317,7 +318,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     }
 
   private def executePublishHooks(
-      steps: Seq[MonorepoProcessStep.PerProject],
+      steps: Seq[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =

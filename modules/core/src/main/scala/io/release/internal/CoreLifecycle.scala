@@ -20,7 +20,11 @@ private[release] object CoreLifecycle {
       crossBuild: Boolean,
       enabled: CoreHookConfiguration => Boolean = _ => true,
       freezeGateDecision: Boolean = false
-  ): LifecycleCompiler.HookPhase[CoreHookConfiguration, ReleaseHookIO, CoreProcessStep] =
+  ): LifecycleCompiler.HookPhase[
+    CoreHookConfiguration,
+    ReleaseHookIO,
+    ProcessStep.Single[ReleaseContext]
+  ] =
     LifecycleCompiler.HookPhase(
       phase = phase,
       resolveHooks = resolveHooks,
@@ -29,7 +33,9 @@ private[release] object CoreLifecycle {
       enabled = enabled
     )
 
-  private val phases: Seq[LifecycleCompiler.Phase[CoreHookConfiguration, CoreProcessStep]] = Seq(
+  private val phases: Seq[
+    LifecycleCompiler.Phase[CoreHookConfiguration, ProcessStep.Single[ReleaseContext]]
+  ] = Seq(
     LifecycleCompiler.BuiltInPhase(ReleaseSteps.initializeVcs),
     LifecycleCompiler.BuiltInPhase(ReleaseSteps.checkCleanWorkingDir),
     hookPhase("after-clean-check", _.afterCleanCheckHooks, Always, crossBuild = false),
@@ -153,10 +159,10 @@ private[release] object CoreLifecycle {
     )
   )
 
-  val defaults: Seq[CoreProcessStep] =
+  val defaults: Seq[ProcessStep.Single[ReleaseContext]] =
     LifecycleCompiler.defaults(phases)
 
-  def compile(hooks: CoreHookConfiguration): Seq[CoreProcessStep] =
+  def compile(hooks: CoreHookConfiguration): Seq[ProcessStep.Single[ReleaseContext]] =
     LifecycleCompiler.compile(hooks, phases)
 
   private def compileHooks(
@@ -165,7 +171,7 @@ private[release] object CoreLifecycle {
       gate: Gate,
       crossBuild: Boolean,
       freezeGateDecision: Boolean
-  ): Seq[CoreProcessStep] =
+  ): Seq[ProcessStep.Single[ReleaseContext]] =
     HookStepCompilation.compileSingleContextHooks(
       phase = phase,
       hooks = hooks,
@@ -188,7 +194,7 @@ private[release] object CoreLifecycle {
       executeOf = _.execute,
       validateOf = _.validate,
       buildStep = (name, execute, validate, validateWithContext) =>
-        CoreProcessStep(
+        ProcessStep.Single(
           name = name,
           execute = execute,
           validate = validate,
