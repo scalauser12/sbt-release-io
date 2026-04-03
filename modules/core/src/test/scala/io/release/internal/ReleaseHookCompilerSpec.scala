@@ -36,6 +36,38 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolve - read lifecycle policy and hook settings from state") {
+    val settings: Seq[Setting[?]] = Seq(
+      ReleaseIO.releaseIOPolicyEnableRunTests := false,
+      ReleaseIO.releaseIOPolicyEnablePublish  := false,
+      ReleaseIO.releaseIOHooksBeforeTag       := Seq(
+        ReleaseHookIO.action("before-tag")(_ => IO.unit)
+      ),
+      ReleaseIO.releaseIOHooksAfterNextCommit := Seq(
+        ReleaseHookIO.action("after-next-commit")(_ => IO.unit)
+      )
+    )
+
+    hookStateResource("release-hook-compiler-resolve", settings).use { state =>
+      IO {
+        val config = ReleaseHookCompiler.resolve(state)
+
+        assert(!config.enableRunTests)
+        assert(!config.enablePublish)
+        assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
+        assertEquals(config.afterNextCommitHooks.map(_.name), Seq("after-next-commit"))
+      }
+    }
+  }
+
+  test("resolve - generated lifecycle defaults produce the empty hook configuration") {
+    hookStateResource("release-hook-compiler-generated-defaults").use { state =>
+      IO {
+        assertEquals(ReleaseHookCompiler.resolve(state), CoreHookConfiguration.empty)
+      }
+    }
+  }
+
   test("compile - apply policy flags and lifecycle hooks around the remaining built-in phases") {
     val settings: Seq[Setting[?]] = Seq(
       ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck := false,
@@ -250,31 +282,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     }
 
   private def hookSettingsDefaults: Seq[Setting[?]] =
-    Seq(
-      ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck := true,
-      ReleaseIO.releaseIOPolicyEnableRunClean                  := true,
-      ReleaseIO.releaseIOPolicyEnableRunTests                  := true,
-      ReleaseIO.releaseIOPolicyEnableTagging                   := true,
-      ReleaseIO.releaseIOPolicyEnablePublish                   := true,
-      ReleaseIO.releaseIOPolicyEnablePush                      := true,
-      ReleaseIO.releaseIOHooksAfterCleanCheck                  := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeVersionResolution          := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterVersionResolution           := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite        := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterReleaseVersionWrite         := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeReleaseCommit              := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterReleaseCommit               := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeTag                        := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterTag                         := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforePublish                    := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterPublish                     := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeNextVersionWrite           := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterNextVersionWrite            := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeNextCommit                 := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterNextCommit                  := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforePush                       := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterPush                        := Seq.empty
-    )
+    CoreLifecycle.configDefaultSettings
 
   private def publishHookSettings(
       observed: Ref[IO, List[String]]

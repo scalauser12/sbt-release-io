@@ -1,5 +1,8 @@
 package io.release.monorepo
 
+import io.release.internal.LifecycleConfigCompiler
+import sbt.State
+
 /** Monorepo hook/policy settings resolved from a single sbt state snapshot. */
 private[monorepo] final case class MonorepoHookConfiguration(
     enableSnapshotDependenciesCheck: Boolean,
@@ -30,37 +33,43 @@ private[monorepo] final case class MonorepoHookConfiguration(
 ) {
 
   def mergeWith(other: MonorepoHookConfiguration): MonorepoHookConfiguration =
+    LifecycleConfigCompiler.merge(this, other, MonorepoLifecycle.phases)
+
+  def hasCustomizations: Boolean =
+    LifecycleConfigCompiler.hasCustomizations(this, MonorepoLifecycle.phases)
+}
+
+private[monorepo] object MonorepoHookConfiguration {
+
+  val empty: MonorepoHookConfiguration =
     MonorepoHookConfiguration(
-      enableSnapshotDependenciesCheck =
-        enableSnapshotDependenciesCheck && other.enableSnapshotDependenciesCheck,
-      enableRunClean = enableRunClean && other.enableRunClean,
-      enableRunTests = enableRunTests && other.enableRunTests,
-      enableTagging = enableTagging && other.enableTagging,
-      enablePublish = enablePublish && other.enablePublish,
-      enablePush = enablePush && other.enablePush,
-      afterCleanCheckHooks = afterCleanCheckHooks ++ other.afterCleanCheckHooks,
-      beforeSelectionHooks = beforeSelectionHooks ++ other.beforeSelectionHooks,
-      afterSelectionHooks = afterSelectionHooks ++ other.afterSelectionHooks,
-      beforeVersionResolutionHooks =
-        beforeVersionResolutionHooks ++ other.beforeVersionResolutionHooks,
-      afterVersionResolutionHooks =
-        afterVersionResolutionHooks ++ other.afterVersionResolutionHooks,
-      beforeReleaseVersionWriteHooks =
-        beforeReleaseVersionWriteHooks ++ other.beforeReleaseVersionWriteHooks,
-      afterReleaseVersionWriteHooks =
-        afterReleaseVersionWriteHooks ++ other.afterReleaseVersionWriteHooks,
-      beforeReleaseCommitHooks = beforeReleaseCommitHooks ++ other.beforeReleaseCommitHooks,
-      afterReleaseCommitHooks = afterReleaseCommitHooks ++ other.afterReleaseCommitHooks,
-      beforeTagHooks = beforeTagHooks ++ other.beforeTagHooks,
-      afterTagHooks = afterTagHooks ++ other.afterTagHooks,
-      beforePublishHooks = beforePublishHooks ++ other.beforePublishHooks,
-      afterPublishHooks = afterPublishHooks ++ other.afterPublishHooks,
-      beforeNextVersionWriteHooks =
-        beforeNextVersionWriteHooks ++ other.beforeNextVersionWriteHooks,
-      afterNextVersionWriteHooks = afterNextVersionWriteHooks ++ other.afterNextVersionWriteHooks,
-      beforeNextCommitHooks = beforeNextCommitHooks ++ other.beforeNextCommitHooks,
-      afterNextCommitHooks = afterNextCommitHooks ++ other.afterNextCommitHooks,
-      beforePushHooks = beforePushHooks ++ other.beforePushHooks,
-      afterPushHooks = afterPushHooks ++ other.afterPushHooks
+      enableSnapshotDependenciesCheck = true,
+      enableRunClean = true,
+      enableRunTests = true,
+      enableTagging = true,
+      enablePublish = true,
+      enablePush = true,
+      afterCleanCheckHooks = Seq.empty,
+      beforeSelectionHooks = Seq.empty,
+      afterSelectionHooks = Seq.empty,
+      beforeVersionResolutionHooks = Seq.empty,
+      afterVersionResolutionHooks = Seq.empty,
+      beforeReleaseVersionWriteHooks = Seq.empty,
+      afterReleaseVersionWriteHooks = Seq.empty,
+      beforeReleaseCommitHooks = Seq.empty,
+      afterReleaseCommitHooks = Seq.empty,
+      beforeTagHooks = Seq.empty,
+      afterTagHooks = Seq.empty,
+      beforePublishHooks = Seq.empty,
+      afterPublishHooks = Seq.empty,
+      beforeNextVersionWriteHooks = Seq.empty,
+      afterNextVersionWriteHooks = Seq.empty,
+      beforeNextCommitHooks = Seq.empty,
+      afterNextCommitHooks = Seq.empty,
+      beforePushHooks = Seq.empty,
+      afterPushHooks = Seq.empty
     )
+
+  def resolve(state: State): MonorepoHookConfiguration =
+    LifecycleConfigCompiler.resolve(state, empty, MonorepoLifecycle.phases)
 }

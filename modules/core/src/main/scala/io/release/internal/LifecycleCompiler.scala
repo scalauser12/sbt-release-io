@@ -5,13 +5,15 @@ import cats.effect.IO
 private[release] object LifecycleCompiler {
 
   sealed trait Phase[Config, C, I] {
+    def configBindings: Seq[LifecycleConfigCompiler.Binding[Config]]
     def rawSteps: Seq[ProcessStep[C, I]]
     def compile(config: Config): Seq[ProcessStep[C, I]]
   }
 
   final case class SingleBuiltInPhase[Config, C, I](
       step: ProcessStep.Single[C],
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ) extends Phase[Config, C, I] {
     override val rawSteps: Seq[ProcessStep[C, I]] = Seq(step)
 
@@ -21,7 +23,8 @@ private[release] object LifecycleCompiler {
 
   final case class PerItemBuiltInPhase[Config, C, I](
       step: ProcessStep.PerItem[C, I],
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ) extends Phase[Config, C, I] {
     override val rawSteps: Seq[ProcessStep[C, I]] = Seq(step)
 
@@ -38,7 +41,8 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
       cachedGate: Option[HookStepCompilation.CachedSingleGate[C, Token]] = None,
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ) extends Phase[Config, C, I] {
     override val rawSteps: Seq[ProcessStep[C, I]] = Seq.empty
 
@@ -74,7 +78,8 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
       cachedGate: Option[HookStepCompilation.CachedItemGate[C, I, Token]] = None,
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ) extends Phase[Config, C, I] {
     override val rawSteps: Seq[ProcessStep[C, I]] = Seq.empty
 
@@ -103,20 +108,24 @@ private[release] object LifecycleCompiler {
 
   def singleBuiltIn[Config, C, I](
       step: ProcessStep.Single[C],
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     SingleBuiltInPhase(
       step = step,
-      enabled = enabled
+      enabled = enabled,
+      configBindings = configBindings
     )
 
   def perItemBuiltIn[Config, C, I](
       step: ProcessStep.PerItem[C, I],
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     PerItemBuiltInPhase(
       step = step,
-      enabled = enabled
+      enabled = enabled,
+      configBindings = configBindings
     )
 
   def singleHookPhase[Config, C, I, Hook, Token](
@@ -128,7 +137,8 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
       cachedGate: Option[HookStepCompilation.CachedSingleGate[C, Token]] = None,
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     SingleHookPhase(
       phase = phase,
@@ -139,7 +149,8 @@ private[release] object LifecycleCompiler {
       validateOf = validateOf,
       crossBuild = crossBuild,
       cachedGate = cachedGate,
-      enabled = enabled
+      enabled = enabled,
+      configBindings = configBindings
     )
 
   def perItemHookPhase[Config, C, I, Hook, Token](
@@ -151,7 +162,8 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
       cachedGate: Option[HookStepCompilation.CachedItemGate[C, I, Token]] = None,
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     PerItemHookPhase(
       phase = phase,
@@ -162,7 +174,8 @@ private[release] object LifecycleCompiler {
       validateOf = validateOf,
       crossBuild = crossBuild,
       cachedGate = cachedGate,
-      enabled = enabled
+      enabled = enabled,
+      configBindings = configBindings
     )
 
   def defaults[Config, C, I](phases: Seq[Phase[Config, C, I]]): Seq[ProcessStep[C, I]] =
