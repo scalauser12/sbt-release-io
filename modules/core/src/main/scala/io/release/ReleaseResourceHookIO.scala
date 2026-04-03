@@ -3,7 +3,7 @@ package io.release
 import cats.effect.IO
 import io.release.internal.CoreHookConfiguration
 import io.release.internal.CoreLifecycleSlots
-import io.release.internal.LifecycleSlotSupport
+import io.release.internal.HookMaterializationSupport
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -70,6 +70,27 @@ case class ReleaseResourceHooks[T](
 object ReleaseResourceHooks {
   def empty[T]: ReleaseResourceHooks[T] = ReleaseResourceHooks[T]()
 
+  private def hookBuckets[T](hooks: ReleaseResourceHooks[T]): Seq[Seq[ReleaseResourceHookIO[T]]] =
+    Seq(
+      hooks.afterCleanCheckHooks,
+      hooks.beforeVersionResolutionHooks,
+      hooks.afterVersionResolutionHooks,
+      hooks.beforeReleaseVersionWriteHooks,
+      hooks.afterReleaseVersionWriteHooks,
+      hooks.beforeReleaseCommitHooks,
+      hooks.afterReleaseCommitHooks,
+      hooks.beforeTagHooks,
+      hooks.afterTagHooks,
+      hooks.beforePublishHooks,
+      hooks.afterPublishHooks,
+      hooks.beforeNextVersionWriteHooks,
+      hooks.afterNextVersionWriteHooks,
+      hooks.beforeNextCommitHooks,
+      hooks.afterNextCommitHooks,
+      hooks.beforePushHooks,
+      hooks.afterPushHooks
+    )
+
   /** Convert resource-aware hooks into plain hooks by optionally binding the resource value.
     * Boolean policies default to `true` so the result is neutral when merged via
     * [[CoreHookConfiguration.mergeWith]].
@@ -86,45 +107,20 @@ object ReleaseResourceHooks {
         validate = hook.validate
       )
 
-    val materializedHookBindings: Seq[
-      (
-          LifecycleSlotSupport.HookSlot[CoreHookConfiguration, ReleaseHookIO],
-          Seq[ReleaseHookIO]
-      )
-    ] =
-      Seq(
-        CoreLifecycleSlots.afterCleanCheckHooks           -> hooks.afterCleanCheckHooks.map(plainHook),
-        CoreLifecycleSlots.beforeVersionResolutionHooks   ->
-          hooks.beforeVersionResolutionHooks.map(plainHook),
-        CoreLifecycleSlots.afterVersionResolutionHooks    ->
-          hooks.afterVersionResolutionHooks.map(plainHook),
-        CoreLifecycleSlots.beforeReleaseVersionWriteHooks ->
-          hooks.beforeReleaseVersionWriteHooks.map(plainHook),
-        CoreLifecycleSlots.afterReleaseVersionWriteHooks  ->
-          hooks.afterReleaseVersionWriteHooks.map(plainHook),
-        CoreLifecycleSlots.beforeReleaseCommitHooks       -> hooks.beforeReleaseCommitHooks.map(
-          plainHook
-        ),
-        CoreLifecycleSlots.afterReleaseCommitHooks        -> hooks.afterReleaseCommitHooks.map(
-          plainHook
-        ),
-        CoreLifecycleSlots.beforeTagHooks                 -> hooks.beforeTagHooks.map(plainHook),
-        CoreLifecycleSlots.afterTagHooks                  -> hooks.afterTagHooks.map(plainHook),
-        CoreLifecycleSlots.beforePublishHooks             -> hooks.beforePublishHooks.map(plainHook),
-        CoreLifecycleSlots.afterPublishHooks              -> hooks.afterPublishHooks.map(plainHook),
-        CoreLifecycleSlots.beforeNextVersionWriteHooks    ->
-          hooks.beforeNextVersionWriteHooks.map(plainHook),
-        CoreLifecycleSlots.afterNextVersionWriteHooks     ->
-          hooks.afterNextVersionWriteHooks.map(plainHook),
-        CoreLifecycleSlots.beforeNextCommitHooks          -> hooks.beforeNextCommitHooks.map(plainHook),
-        CoreLifecycleSlots.afterNextCommitHooks           -> hooks.afterNextCommitHooks.map(plainHook),
-        CoreLifecycleSlots.beforePushHooks                -> hooks.beforePushHooks.map(plainHook),
-        CoreLifecycleSlots.afterPushHooks                 -> hooks.afterPushHooks.map(plainHook)
-      )
-
-    materializedHookBindings.foldLeft(CoreHookConfiguration.empty) {
-      case (config, (slot, materializedHooks)) =>
-        slot.binding.updated(config, materializedHooks)
-    }
+    HookMaterializationSupport.applyAssignments(
+      CoreHookConfiguration.empty,
+      hookAssignments(hooks, plainHook)
+    )
   }
+
+  private[release] def hookAssignments[T](
+      hooks: ReleaseResourceHooks[T],
+      materialize: ReleaseResourceHookIO[T] => ReleaseHookIO
+  ): Seq[HookMaterializationSupport.HookAssignment[CoreHookConfiguration, ReleaseHookIO]] =
+    HookMaterializationSupport.materializedAssignments(
+      CoreLifecycleSlots.hookSlots,
+      hookBuckets(hooks)
+    )(
+      materialize
+    )
 }

@@ -27,14 +27,15 @@ private[release] object CorePreflight {
 
   private object CheckSteps {
     def apply(steps: Seq[ProcessStep.Single[ReleaseContext]]): CheckSteps = {
-      val stepNames = steps.map(_.name)
+      val inventory = PreflightSupport.StepInventory.fromSteps(steps)(_.name)
+      val stepNames = inventory.stepNames
 
       CheckSteps(
         stepNames = stepNames,
-        pushConfigured = stepNames.contains(PushChangesStep),
-        publishConfigured = stepNames.contains(PublishArtifactsStep),
-        shouldResolveVersions = stepNames.contains(InquireVersionsStep),
-        shouldPreflightTag = stepNames.contains(TagReleaseStep)
+        pushConfigured = inventory.contains(PushChangesStep),
+        publishConfigured = inventory.contains(PublishArtifactsStep),
+        shouldResolveVersions = inventory.contains(InquireVersionsStep),
+        shouldPreflightTag = inventory.contains(TagReleaseStep)
       )
     }
   }
@@ -142,12 +143,12 @@ private[release] object CorePreflight {
                            versions = versionSnapshot.summary,
                            tag = tagSummary,
                            crossBuildEnabled = crossBuild,
-                           publishSummary = CheckModeOutput.publishStatus(
+                           publishSummary = PreflightSupport.publishSummary(
                              publishConfigured = checkSteps.publishConfigured,
                              skipPublish = snapshotCtx.skipPublish,
                              skippedMessage = "skipped via releaseIOBehaviorSkipPublish := true"
                            ),
-                           pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
+                           pushSummary = PreflightSupport.pushSummary(checkSteps.pushConfigured),
                            stepNames = checkSteps.stepNames
                          )
     } yield summary

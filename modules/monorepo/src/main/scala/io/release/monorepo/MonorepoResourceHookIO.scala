@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.internal.HookMaterializationSupport
 
 /** A resource-aware global hook for custom monorepo plugins with a shared resource `T`.
   *
@@ -100,6 +101,37 @@ case class MonorepoResourceHooks[T](
 object MonorepoResourceHooks {
   def empty[T]: MonorepoResourceHooks[T] = MonorepoResourceHooks[T]()
 
+  private def globalHookBuckets[T](
+      hooks: MonorepoResourceHooks[T]
+  ): Seq[Seq[MonorepoGlobalResourceHookIO[T]]] =
+    Seq(
+      hooks.afterCleanCheckHooks,
+      hooks.beforeSelectionHooks,
+      hooks.afterSelectionHooks,
+      hooks.beforeReleaseCommitHooks,
+      hooks.afterReleaseCommitHooks,
+      hooks.beforeNextCommitHooks,
+      hooks.afterNextCommitHooks,
+      hooks.beforePushHooks,
+      hooks.afterPushHooks
+    )
+
+  private def projectHookBuckets[T](
+      hooks: MonorepoResourceHooks[T]
+  ): Seq[Seq[MonorepoProjectResourceHookIO[T]]] =
+    Seq(
+      hooks.beforeVersionResolutionHooks,
+      hooks.afterVersionResolutionHooks,
+      hooks.beforeReleaseVersionWriteHooks,
+      hooks.afterReleaseVersionWriteHooks,
+      hooks.beforeTagHooks,
+      hooks.afterTagHooks,
+      hooks.beforePublishHooks,
+      hooks.afterPublishHooks,
+      hooks.beforeNextVersionWriteHooks,
+      hooks.afterNextVersionWriteHooks
+    )
+
   /** Convert resource-aware hooks into plain hooks by binding the resource value.
     * Boolean policies default to `true` so they are neutral when merged via
     * [[MonorepoHookConfiguration.mergeWith]].
@@ -127,43 +159,36 @@ object MonorepoResourceHooks {
         validate = hook.validate
       )
 
-    val withGlobalHooks = Seq(
-      MonorepoLifecycleSlots.afterCleanCheckHooks     -> hooks.afterCleanCheckHooks.map(globalHook),
-      MonorepoLifecycleSlots.beforeSelectionHooks     -> hooks.beforeSelectionHooks.map(globalHook),
-      MonorepoLifecycleSlots.afterSelectionHooks      -> hooks.afterSelectionHooks.map(globalHook),
-      MonorepoLifecycleSlots.beforeReleaseCommitHooks ->
-        hooks.beforeReleaseCommitHooks.map(globalHook),
-      MonorepoLifecycleSlots.afterReleaseCommitHooks  ->
-        hooks.afterReleaseCommitHooks.map(globalHook),
-      MonorepoLifecycleSlots.beforeNextCommitHooks    ->
-        hooks.beforeNextCommitHooks.map(globalHook),
-      MonorepoLifecycleSlots.afterNextCommitHooks     ->
-        hooks.afterNextCommitHooks.map(globalHook),
-      MonorepoLifecycleSlots.beforePushHooks          -> hooks.beforePushHooks.map(globalHook),
-      MonorepoLifecycleSlots.afterPushHooks           -> hooks.afterPushHooks.map(globalHook)
-    ).foldLeft(MonorepoHookConfiguration.empty) { case (config, (slot, materializedHooks)) =>
-      slot.binding.updated(config, materializedHooks)
-    }
+    val withGlobalHooks = HookMaterializationSupport.applyAssignments(
+      MonorepoHookConfiguration.empty,
+      globalHookAssignments(hooks, globalHook)
+    )
 
-    Seq(
-      MonorepoLifecycleSlots.beforeVersionResolutionHooks   ->
-        hooks.beforeVersionResolutionHooks.map(projectHook),
-      MonorepoLifecycleSlots.afterVersionResolutionHooks    ->
-        hooks.afterVersionResolutionHooks.map(projectHook),
-      MonorepoLifecycleSlots.beforeReleaseVersionWriteHooks ->
-        hooks.beforeReleaseVersionWriteHooks.map(projectHook),
-      MonorepoLifecycleSlots.afterReleaseVersionWriteHooks  ->
-        hooks.afterReleaseVersionWriteHooks.map(projectHook),
-      MonorepoLifecycleSlots.beforeTagHooks                 -> hooks.beforeTagHooks.map(projectHook),
-      MonorepoLifecycleSlots.afterTagHooks                  -> hooks.afterTagHooks.map(projectHook),
-      MonorepoLifecycleSlots.beforePublishHooks             -> hooks.beforePublishHooks.map(projectHook),
-      MonorepoLifecycleSlots.afterPublishHooks              -> hooks.afterPublishHooks.map(projectHook),
-      MonorepoLifecycleSlots.beforeNextVersionWriteHooks    ->
-        hooks.beforeNextVersionWriteHooks.map(projectHook),
-      MonorepoLifecycleSlots.afterNextVersionWriteHooks     ->
-        hooks.afterNextVersionWriteHooks.map(projectHook)
-    ).foldLeft(withGlobalHooks) { case (config, (slot, materializedHooks)) =>
-      slot.binding.updated(config, materializedHooks)
-    }
+    HookMaterializationSupport.applyAssignments(
+      withGlobalHooks,
+      projectHookAssignments(hooks, projectHook)
+    )
   }
+
+  private[monorepo] def globalHookAssignments[T](
+      hooks: MonorepoResourceHooks[T],
+      materialize: MonorepoGlobalResourceHookIO[T] => MonorepoGlobalHookIO
+  ): Seq[
+    HookMaterializationSupport.HookAssignment[MonorepoHookConfiguration, MonorepoGlobalHookIO]
+  ] =
+    HookMaterializationSupport.materializedAssignments(
+      MonorepoLifecycleSlots.globalHookSlots,
+      globalHookBuckets(hooks)
+    )(materialize)
+
+  private[monorepo] def projectHookAssignments[T](
+      hooks: MonorepoResourceHooks[T],
+      materialize: MonorepoProjectResourceHookIO[T] => MonorepoProjectHookIO
+  ): Seq[
+    HookMaterializationSupport.HookAssignment[MonorepoHookConfiguration, MonorepoProjectHookIO]
+  ] =
+    HookMaterializationSupport.materializedAssignments(
+      MonorepoLifecycleSlots.projectHookSlots,
+      projectHookBuckets(hooks)
+    )(materialize)
 }

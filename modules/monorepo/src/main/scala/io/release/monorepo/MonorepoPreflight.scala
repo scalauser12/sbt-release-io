@@ -5,6 +5,7 @@ import io.release.VcsOps
 import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionEngine
 import io.release.internal.HelpDocsLinks
+import io.release.internal.PreflightSupport
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.StepBoundarySupport
@@ -32,16 +33,17 @@ private[monorepo] object MonorepoPreflight {
 
   private object CheckSteps {
     def apply(steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]): CheckSteps = {
-      val stepNames              = steps.map(_.name)
-      val shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep)
-      val shouldResolveVersions  = stepNames.contains(InquireVersionsStep)
-      val shouldPreflightTags    = stepNames.contains(TagReleasesStep)
+      val inventory              = PreflightSupport.StepInventory.fromSteps(steps)(_.name)
+      val stepNames              = inventory.stepNames
+      val shouldResolveSelection = inventory.contains(DetectOrSelectProjectsStep)
+      val shouldResolveVersions  = inventory.contains(InquireVersionsStep)
+      val shouldPreflightTags    = inventory.contains(TagReleasesStep)
 
       CheckSteps(
         stepNames = stepNames,
-        pushConfigured = stepNames.contains(PushChangesStep),
-        publishConfigured = stepNames.contains(PublishArtifactsStep),
-        shouldBootstrapVcs = stepNames.contains(InitializeVcsStep) ||
+        pushConfigured = inventory.contains(PushChangesStep),
+        publishConfigured = inventory.contains(PublishArtifactsStep),
+        shouldBootstrapVcs = inventory.contains(InitializeVcsStep) ||
           shouldResolveSelection ||
           (shouldPreflightTags && shouldResolveVersions),
         shouldResolveSelection = shouldResolveSelection,
@@ -69,10 +71,10 @@ private[monorepo] object MonorepoPreflight {
       }
   }
 
-  sealed trait Evaluation[+A]
+  type Evaluation[+A] = PreflightSupport.Evaluation[A]
   object Evaluation {
-    final case class Resolved[A](value: A)        extends Evaluation[A]
-    final case class NotEvaluated(reason: String) extends Evaluation[Nothing]
+    val Resolved     = PreflightSupport.Evaluation.Resolved
+    val NotEvaluated = PreflightSupport.Evaluation.NotEvaluated
   }
 
   final case class ProjectVersions(releaseVersion: String, nextVersion: String)
@@ -301,7 +303,7 @@ private[monorepo] object MonorepoPreflight {
       IO.pure(
         SelectionSnapshot(
           ctx,
-          Evaluation.NotEvaluated(s"$DetectOrSelectProjectsStep not in check process")
+          PreflightSupport.notEvaluated(s"$DetectOrSelectProjectsStep not in check process")
         )
       )
     else
@@ -327,9 +329,9 @@ private[monorepo] object MonorepoPreflight {
       builtInVersionsResolved: Boolean
   ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
     if (!shouldPreflightTags)
-      IO.pure(Evaluation.NotEvaluated(s"$TagReleasesStep not in check process"))
+      IO.pure(PreflightSupport.notEvaluated(s"$TagReleasesStep not in check process"))
     else if (!builtInVersionsResolved)
-      IO.pure(Evaluation.NotEvaluated("tags depend on runtime/custom version setup"))
+      IO.pure(PreflightSupport.notEvaluated("tags depend on runtime/custom version setup"))
     else
       MonorepoVcsSteps.preflightTags(ctx).map(Evaluation.Resolved(_))
 
@@ -337,11 +339,9 @@ private[monorepo] object MonorepoPreflight {
       steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
       crossBuild: Boolean
   )(ctx: MonorepoContext): IO[MonorepoContext] =
-    ExecutionEngine.runValidations(
+    PreflightSupport.validatePreparedSegment(
       ReleaseLogPrefixes.Monorepo,
-      MonorepoComposer
-        .preparedSteps(steps, crossBuild)
-        .map(step => ExecutionEngine.ValidationStep(step.name, step.validate)),
+      MonorepoComposer.preparedSteps(steps, crossBuild),
       ctx
     )
 
@@ -381,12 +381,12 @@ private[monorepo] object MonorepoPreflight {
         selectionMode = selectionMode,
         projects = projects,
         crossBuildEnabled = crossBuildEnabled,
-        publishSummary = CheckModeOutput.publishStatus(
+        publishSummary = PreflightSupport.publishSummary(
           publishConfigured = checkSteps.publishConfigured,
           skipPublish = ctx.skipPublish,
           skippedMessage = "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
         ),
-        pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
+        pushSummary = PreflightSupport.pushSummary(checkSteps.pushConfigured),
         stepNames = checkSteps.stepNames
       )
     }
@@ -438,22 +438,21 @@ private[monorepo] object MonorepoPreflight {
     }
 
   private def renderSelectionMode(mode: Evaluation[SelectionMode]): String =
-    mode match {
-      case Evaluation.Resolved(SelectionMode.ExplicitSelection) => "explicit selection"
-      case Evaluation.Resolved(SelectionMode.AllChanged)        => "all changed"
-      case Evaluation.Resolved(SelectionMode.DetectChanges)     => "detect changes"
-      case Evaluation.NotEvaluated(reason)                      => s"not evaluated ($reason)"
+    PreflightSupport.renderEvaluation(mode) {
+      case SelectionMode.ExplicitSelection => "explicit selection"
+      case SelectionMode.AllChanged        => "all changed"
+      case SelectionMode.DetectChanges     => "detect changes"
     }
 
   private def renderProject(project: ProjectSummary): String = {
-    val versionText = project.versions match {
-      case Evaluation.Resolved(v)     => s"release ${v.releaseVersion}, next ${v.nextVersion}"
-      case Evaluation.NotEvaluated(r) => s"release not evaluated ($r), next not evaluated ($r)"
-    }
-    val tagText     = project.tag match {
-      case Evaluation.Resolved(t)     => s"tag ${t.tagName} (${t.tagStatus})"
-      case Evaluation.NotEvaluated(r) => s"tag not evaluated ($r)"
-    }
+    val versionText = PreflightSupport.renderEvaluation(project.versions)(
+      v => s"release ${v.releaseVersion}, next ${v.nextVersion}",
+      reason => s"release not evaluated ($reason), next not evaluated ($reason)"
+    )
+    val tagText     = PreflightSupport.renderEvaluation(project.tag)(
+      t => s"tag ${t.tagName} (${t.tagStatus})",
+      reason => s"tag not evaluated ($reason)"
+    )
     s"    - ${project.name}: $versionText, $tagText"
   }
 }

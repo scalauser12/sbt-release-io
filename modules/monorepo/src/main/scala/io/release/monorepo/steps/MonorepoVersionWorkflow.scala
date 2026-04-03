@@ -3,13 +3,11 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIOVersioningNextVersion
 import io.release.ReleaseIO.releaseIOVersioningReleaseVersion
-import io.release.internal.DecisionResolver
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.internal.VersionFileSupport
+import io.release.internal.VersionWorkflowSupport
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
-import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -117,54 +115,35 @@ private[monorepo] object MonorepoVersionWorkflow {
       allowPrompts: Boolean
   ): IO[(MonorepoContext, ResolvedProjectVersions)] =
     for {
-      versionInputs      <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
-      _                  <- ensureVersionFileExists(
-                              versionInputs,
-                              missingVersionFileMessage(
-                                project,
-                                versionInputs.versionFile,
-                                includeConfigurationGuidance = false
-                              )
-                            )
-      currentVersion     <- versionInputs.readVersion(versionInputs.versionFile)
-      releaseTaskData    <- StepHelpers.runTaskChecked(
-                              ctx.state,
-                              project.ref / releaseIOVersioningReleaseVersion,
-                              "inquire-versions"
-                            )
-      (s1, releaseFn)     = releaseTaskData
-      nextTaskData       <- StepHelpers.runTaskChecked(
-                              s1,
-                              project.ref / releaseIOVersioningNextVersion,
-                              "inquire-versions"
-                            )
-      (s2, nextVersionFn) = nextTaskData
-      updatedCtx          = ctx.withState(s2)
-      suggestedRelease    = releaseFn(currentVersion)
-      useDefaults         = StepHelpers.useDefaults(updatedCtx)
-      releaseData        <- promptOrDefault(
-                              updatedCtx,
-                              project.releaseVersion,
-                              suggestedRelease,
-                              s"Release version for ${project.name}",
-                              useDefaults,
-                              allowPrompts = allowPrompts
-                            )
-      nextData           <- promptOrDefault(
-                              releaseData._1,
-                              project.nextVersion,
-                              nextVersionFn(releaseData._2),
-                              s"Next version for ${project.name}",
-                              useDefaults,
-                              allowPrompts = allowPrompts
-                            )
+      versionInputs  <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
+      _              <- ensureVersionFileExists(
+                          versionInputs,
+                          missingVersionFileMessage(
+                            project,
+                            versionInputs.versionFile,
+                            includeConfigurationGuidance = false
+                          )
+                        )
+      currentVersion <- versionInputs.readVersion(versionInputs.versionFile)
+      resolvedInputs <- VersionWorkflowSupport.resolveVersionInputsFromTasks(
+                          ctx = ctx,
+                          currentVersion = currentVersion,
+                          releaseVersionTask = project.ref / releaseIOVersioningReleaseVersion,
+                          nextVersionTask = project.ref / releaseIOVersioningNextVersion,
+                          releaseVersionOverride = project.releaseVersion,
+                          nextVersionOverride = project.nextVersion,
+                          logPrefix = ReleaseLogPrefixes.Monorepo,
+                          releaseLabel = s"Release version for ${project.name}",
+                          nextLabel = s"Next version for ${project.name}",
+                          allowPrompts = allowPrompts
+                        )
     } yield (
-      nextData._1,
+      resolvedInputs.context,
       ResolvedProjectVersions(
         versionFile = versionInputs.versionFile,
         currentVersion = currentVersion,
-        releaseVersion = releaseData._2,
-        nextVersion = nextData._2
+        releaseVersion = resolvedInputs.releaseVersion,
+        nextVersion = resolvedInputs.nextVersion
       )
     )
 
@@ -181,7 +160,7 @@ private[monorepo] object MonorepoVersionWorkflow {
       versionInputs: MonorepoVersionFiles.VersionInputs,
       notFoundMessage: String
   ): IO[Unit] =
-    VersionFileSupport.ensureExists(versionInputs.versionFile, notFoundMessage)
+    VersionWorkflowSupport.ensureVersionFileExists(versionInputs.versionFile, notFoundMessage)
 
   /** Fail fast when any configured monorepo projects resolve to the same physical version file.
     * Runs once at the start of each version-write phase so it sees the current state after any
@@ -242,8 +221,11 @@ private[monorepo] object MonorepoVersionWorkflow {
                         ctx.currentProjects.map(_.ref)
                       )
       versionFile   = versionInputs.versionFile
-      contents     <- versionInputs.versionFileContents(versionFile, versionValue)
-      _            <- VersionFileSupport.writeUtf8(versionFile, contents)
+      _            <- VersionWorkflowSupport.writeVersionFile(
+                        versionFile,
+                        versionValue,
+                        versionInputs.versionFileContents
+                      )
       newState     <- IO.blocking {
                         SbtRuntime.appendWithSession(
                           ctx.state,
@@ -260,25 +242,6 @@ private[monorepo] object MonorepoVersionWorkflow {
                         s"Wrote version $versionValue to ${versionFile.getPath} for ${project.name}"
                       )
     } yield updated
-
-  /** Resolve a version from an override, a default, or an interactive prompt. */
-  private def promptOrDefault(
-      ctx: MonorepoContext,
-      override_ : Option[String],
-      suggested: String,
-      label: String,
-      useDefaults: Boolean,
-      allowPrompts: Boolean
-  ): IO[(MonorepoContext, String)] =
-    DecisionResolver.resolveVersionInput(
-      ctx,
-      override_ = override_.filter(_.nonEmpty),
-      suggested = suggested,
-      logPrefix = ReleaseLogPrefixes.Monorepo,
-      prompt = s"$label [$suggested] : ",
-      promptContext = label,
-      allowPrompts = allowPrompts && !useDefaults
-    )
 
   private def missingVersionFileMessage(
       project: ProjectReleaseInfo,
