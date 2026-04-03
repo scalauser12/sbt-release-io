@@ -8,9 +8,7 @@ import io.release.internal.ReleaseCli
 import io.release.internal.ReleaseCommandParsers
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers
-import io.release.steps.VersionSteps
 import io.release.vcs.Vcs
-import io.release.version.Version
 import sbt.Keys.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
@@ -78,63 +76,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
 
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] =
-    CoreDefaultSettings.commandAndHookSettings ++ Seq(
-      releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
-      releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
-        releaseIOVersioningUseGlobal.value
-      ),
-      releaseIOVersioningFile           := baseDirectory.value / "version.sbt",
-      releaseIOVersioningUseGlobal      := true,
-      releaseIOVcsSign                  := false,
-      releaseIOVcsSignOff               := false,
-      releaseIOVcsIgnoreUntrackedFiles  := false,
-      releaseIOInternalReleaseHash      := None,
-      releaseIOInternalReleaseTag       := None,
-      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-        releaseIOInternalReleaseHash.value,
-        releaseIOInternalReleaseTag.value
-      ),
-      releaseIORuntimeCurrentVersion    := {
-        if (releaseIOVersioningUseGlobal.value) (ThisBuild / Keys.version).value
-        else Keys.version.value
-      },
-      releaseIOVcsTagName               := s"v${releaseIORuntimeCurrentVersion.value}",
-      releaseIOVcsTagComment            := s"Releasing ${releaseIORuntimeCurrentVersion.value}",
-      releaseIOVcsReleaseCommitMessage  := s"Setting version to ${releaseIORuntimeCurrentVersion.value}",
-      releaseIOVcsNextCommitMessage     := s"Setting version to ${releaseIORuntimeCurrentVersion.value}",
-      releaseIOVersioningBump           := Version.Bump.default,
-      releaseIOVersioningReleaseVersion := {
-        val bump = releaseIOVersioningBump.value
-        ver =>
-          Version(ver)
-            .map { v =>
-              bump match {
-                case Version.Bump.Next =>
-                  if (v.isSnapshot) v.withoutSnapshot.render
-                  else
-                    throw new IllegalArgumentException(
-                      s"Expected snapshot version, got: $ver"
-                    )
-                case _                 => v.withoutQualifier.render
-              }
-            }
-            .getOrElse(
-              throw new IllegalArgumentException(s"Cannot parse version: $ver")
-            )
-      },
-      releaseIOVersioningNextVersion    := {
-        val bump = releaseIOVersioningBump.value
-        ver =>
-          Version(ver)
-            .map(_.bump(bump).asSnapshot.render)
-            .getOrElse(
-              throw new IllegalArgumentException(s"Cannot parse version: $ver")
-            )
-      },
-      ReleaseIOCompat.snapshotDependenciesSetting,
-      releaseIOPublishChecks            := true,
-      releaseIOPublishAction            := publish.value
-    )
+    CoreDefaultSettings.pluginDefaultSettings
 
   override lazy val projectSettings: Seq[Setting[?]] =
     baseReleaseSettings

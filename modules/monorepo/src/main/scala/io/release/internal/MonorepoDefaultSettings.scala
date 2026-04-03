@@ -1,17 +1,78 @@
 package io.release.internal
 
-import io.release.monorepo.MonorepoLifecycle
-import io.release.monorepo.MonorepoReleaseIO
-import sbt.Setting
+import cats.effect.IO
+import _root_.io.release.ReleaseIO.releaseIOVersioningFile
+import _root_.io.release.monorepo.MonorepoLifecycle
+import _root_.io.release.monorepo.MonorepoReleaseIO
+import _root_.io.release.steps.VersionSteps
+import sbt.Keys.*
+import sbt.*
 
 private[release] object MonorepoDefaultSettings {
 
-  def commandAndHookSettings: Seq[Setting[?]] = Seq(
+  lazy val pluginDefaultSettings: Seq[Setting[?]] =
+    DefaultSettingSupport.combine(
+      behaviorDefaults,
+      MonorepoLifecycle.configDefaultSettings,
+      selectionAndDetectionDefaults,
+      versioningAndVcsDefaults,
+      publishDefaults
+    )
+
+  private lazy val behaviorDefaults: Seq[Setting[?]] = Seq(
     MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild  := false,
     MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests   := false,
-    MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish := false
-  ) ++ MonorepoLifecycle.configDefaultSettings ++ Seq(
-    MonorepoReleaseIO.releaseIOMonorepoPublishChecks       := true,
+    MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish := false,
     MonorepoReleaseIO.releaseIOMonorepoBehaviorInteractive := false
+  )
+
+  private lazy val selectionAndDetectionDefaults: Seq[Setting[?]] = Seq(
+    MonorepoReleaseIO.releaseIOMonorepoDetectionEnabled           := true,
+    MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := false,
+    MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector    := None,
+    MonorepoReleaseIO.releaseIOMonorepoDetectionExcludes          := Seq.empty,
+    MonorepoReleaseIO.releaseIOMonorepoDetectionSharedPaths       := Seq("build.sbt", "project/"),
+    MonorepoReleaseIO.releaseIOMonorepoSelectionProjects          := {
+      val build      = loadedBuild.value
+      val root       = thisProjectRef.value
+      val projectMap = build.allProjectRefs.map { case (ref, proj) =>
+        ref -> proj.aggregate
+      }.toMap
+
+      def transitive(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
+        if (visited.contains(ref)) Seq.empty
+        else {
+          val directAggs = projectMap.getOrElse(ref, Seq.empty)
+          directAggs.flatMap(agg => agg +: transitive(agg, visited + ref))
+        }
+
+      transitive(root, Set.empty).distinct
+    }
+  )
+
+  private lazy val versioningAndVcsDefaults: Seq[Setting[?]] = Seq(
+    MonorepoReleaseIO.releaseIOMonorepoVcsReleaseCommitMessage := ((summary: String) =>
+      s"Setting release versions: $summary"
+    ),
+    MonorepoReleaseIO.releaseIOMonorepoVcsNextCommitMessage    := ((summary: String) =>
+      s"Setting next versions: $summary"
+    ),
+    MonorepoReleaseIO.releaseIOMonorepoVcsTagName              := ((name: String, ver: String) =>
+      s"$name/v$ver"
+    ),
+    MonorepoReleaseIO.releaseIOMonorepoVcsTagComment           := ((name: String, ver: String) =>
+      s"Release $name $ver"
+    ),
+    MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion   := VersionSteps.defaultReadVersion,
+    MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents  := { (_, ver) =>
+      IO.pure(s"""version := "$ver"\n""")
+    },
+    MonorepoReleaseIO.releaseIOMonorepoVersioningFile          := { (ref: ProjectRef, state: State) =>
+      Project.extract(state).get(ref / releaseIOVersioningFile)
+    }
+  )
+
+  private lazy val publishDefaults: Seq[Setting[?]] = Seq(
+    MonorepoReleaseIO.releaseIOMonorepoPublishChecks := true
   )
 }

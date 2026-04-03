@@ -99,10 +99,11 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
       val labels = BaseReleaseSettingsPlugin.settingsForTests.map(_.key.key.label).toSet
 
       assert(labels.contains("commands"))
-      assert(labels.contains("releaseIOBehaviorCrossBuild"))
-      assert(labels.contains("releaseIOPolicyEnablePush"))
-      assert(labels.contains("releaseIOVcsRemoteCheckTimeout"))
-      assert(labels.contains("releaseIOHooksBeforeTag"))
+      assert(
+        io.release.internal.CoreDefaultSettings.pluginDefaultSettings
+          .map(_.key.key.label)
+          .forall(labels.contains)
+      )
     }
   }
 }
