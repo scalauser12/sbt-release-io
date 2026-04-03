@@ -7,13 +7,11 @@ import io.release.internal.DecisionResolver
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
+import io.release.internal.VersionFileSupport
 import io.release.internal.VersionPlan
 import io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.{internal as _, *}
-
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 
 /** Shared internal workflow for version resolution, version-file writes, and commit state
   * updates.
@@ -241,18 +239,13 @@ private[release] object ReleaseVersionWorkflow {
     }
 
   private def ensureVersionFileExists(versionFile: File): IO[Unit] =
-    IO.blocking(versionFile.exists()).flatMap { exists =>
-      if (exists) IO.unit
-      else
-        IO.raiseError(
-          new IllegalStateException(
-            s"Version file not found: ${versionFile.getPath}. " +
-              "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, " +
-              "or configure `releaseIOVersioningFile`, `releaseIOVersioningReadVersion`, and " +
-              "`releaseIOVersioningFileContents`. See `releaseIO help` for setup details."
-          )
-        )
-    }
+    VersionFileSupport.ensureExists(
+      versionFile,
+      s"Version file not found: ${versionFile.getPath}. " +
+        "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, " +
+        "or configure `releaseIOVersioningFile`, `releaseIOVersioningReadVersion`, and " +
+        "`releaseIOVersioningFileContents`. See `releaseIO help` for setup details."
+    )
 
   private def commitVersionNative(
       ctx: ReleaseContext,
@@ -296,15 +289,12 @@ private[release] object ReleaseVersionWorkflow {
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx))
       contents    <- versionPlan.versionFileContents(versionPlan.versionFile, versionValue)
-      _           <- IO.blocking {
-                       Files.write(
-                         versionPlan.versionFile.toPath,
-                         contents.getBytes(StandardCharsets.UTF_8)
-                       )
+      _           <- VersionFileSupport.writeUtf8(versionPlan.versionFile, contents)
+      _           <- IO.blocking(
                        ctx.state.log.info(
                          s"${ReleaseLogPrefixes.Core} Wrote version $versionValue to ${versionPlan.versionFile.getName}"
                        )
-                     }
+                     )
       result      <- IO.blocking {
                        val newState = SbtRuntime.appendWithSession(
                          ctx.state,

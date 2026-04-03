@@ -6,6 +6,7 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.ExecutionEngine
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ReleaseLogPrefixes
+import io.release.internal.StepBoundarySupport
 import io.release.monorepo.steps.{MonorepoReleaseSteps, MonorepoVcsSteps}
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
@@ -55,15 +56,13 @@ private[monorepo] object MonorepoPreflight {
   )
 
   private object CheckSegments {
-    def apply(steps: Seq[MonorepoProcessStep]): CheckSegments = {
-      val boundaryIndex = steps.indexWhere(_.isSelectionBoundary)
-
-      if (boundaryIndex < 0) CheckSegments(Seq.empty, steps)
-      else {
-        val (setupSteps, mainSteps) = steps.splitAt(boundaryIndex + 1)
-        CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
+    def apply(steps: Seq[MonorepoProcessStep]): CheckSegments =
+      StepBoundarySupport.splitAfterBoundary(steps)(_.isSelectionBoundary) match {
+        case Some((setupSteps, mainSteps)) =>
+          CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
+        case None                         =>
+          CheckSegments(Seq.empty, steps)
       }
-    }
   }
 
   sealed trait Evaluation[+A]

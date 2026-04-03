@@ -36,46 +36,62 @@ private[release] object CoreCommandExecution {
       steps: Seq[CoreProcessStep]
   )
 
-  def doHelp(state: State, commandName: String): State = {
-    val program = logLines(state, CorePreflight.helpLines(commandName))
-    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core)(program.as(state))
-  }
+  def doHelp(state: State, commandName: String): State =
+    SharedCommandKernel.doHelp(
+      state = state,
+      logPrefix = ReleaseLogPrefixes.Core,
+      lines = CorePreflight.helpLines(commandName)
+    )
 
   def doRelease[T](
       state: State,
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
-  ): State = {
-    val cleanState = CommandRuntimeSupport.cleanReleaseState(state)
-    val inputs     = buildCommandInputs(
-      cleanState,
-      args,
-      warnOnDuplicates = true,
-      interactiveEnabled = runtime.resolveInteractiveEnabled(cleanState),
-      runtime
+  ): State =
+    SharedCommandKernel.runPreparedCommand(
+      state = state,
+      logPrefix = ReleaseLogPrefixes.Core,
+      cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
+    )(
+      cleanState =>
+        IO.pure(
+          Right(
+            buildCommandInputs(
+              cleanState,
+              args,
+              warnOnDuplicates = true,
+              interactiveEnabled = runtime.resolveInteractiveEnabled(cleanState),
+              runtime
+            )
+          )
+        ),
+      (inputs: CoreCommandInputs) => runPlannedRelease(inputs, runtime)
     )
-    val program    = runPlannedRelease(inputs, runtime)
-
-    ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
-  }
 
   def doCheck[T](
       state: State,
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
-  ): State = {
-    val cleanState = CommandRuntimeSupport.cleanReleaseState(state)
-    val inputs     = buildCommandInputs(
-      cleanState,
-      args,
-      warnOnDuplicates = false,
-      interactiveEnabled = false,
-      runtime
+  ): State =
+    SharedCommandKernel.runPreparedCommand(
+      state = state,
+      logPrefix = ReleaseLogPrefixes.Core,
+      cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
+    )(
+      cleanState =>
+        IO.pure(
+          Right(
+            buildCommandInputs(
+              cleanState,
+              args,
+              warnOnDuplicates = false,
+              interactiveEnabled = false,
+              runtime
+            )
+          )
+        ),
+      (inputs: CoreCommandInputs) => runPlannedCheck(inputs, runtime)
     )
-    val program    = runPlannedCheck(inputs, runtime)
-
-    ReleaseCommandRunner.runSync(inputs.cleanState, ReleaseLogPrefixes.Core)(program)
-  }
 
   def resolveProcessMode[T](
       state: State,
@@ -95,17 +111,18 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
   ): IO[CompiledSteps] =
-    IO.blocking(
-      CompiledSteps(
-        steps = ReleaseHookCompiler.compile(
-          CommandRuntimeSupport.mergeMaterializedHooks(
-            ReleaseHookCompiler.resolve(state),
-            runtime.resolveResourceHooks(state),
-            maybeResource = maybeResource
-          )(ReleaseResourceHooks.materialize, (left, right) => left.mergeWith(right))
-        )
+    SharedCommandKernel
+      .compileMergedSteps(
+        state = state,
+        maybeResource = maybeResource,
+        resolveHooks = ReleaseHookCompiler.resolve,
+        resolveResourceHooks = runtime.resolveResourceHooks
+      )(
+        materialize = ReleaseResourceHooks.materialize,
+        merge = (left, right) => left.mergeWith(right),
+        compile = ReleaseHookCompiler.compile
       )
-    )
+      .map(steps => CompiledSteps(steps = steps))
 
   private def buildCommandInputs[T](
       cleanState: State,
@@ -258,13 +275,11 @@ private[release] object CoreCommandExecution {
                                        )(preparedCtx)
                       } yield finalCtx
                     }
-      cleanedCtx <- IO.blocking(
-                      finalCtx.withState(
-                        CommandRuntimeSupport.cleanReleaseState(finalCtx.state)
-                      )
+      result     <- SharedCommandKernel.finalizeReleaseResult(
+                      ctx = finalCtx,
+                      logPrefix = ReleaseLogPrefixes.Core,
+                      cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
                     )
-      result     <- ReleaseCommandRunner
-                      .handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Core)
     } yield result
 
   private def runPlannedCheck[T](

@@ -166,39 +166,33 @@ private[release] object CoreLifecycle {
       crossBuild: Boolean,
       freezeGateDecision: Boolean
   ): Seq[CoreProcessStep] =
-    hooks.zipWithIndex.map { case (hook, hookIndex) =>
-      val token = CorePublishHookGateCache.HookToken(phase, hookIndex)
-
-      if (freezeGateDecision)
-        CoreProcessStep(
-          name = s"$phase:${hook.name}",
-          execute = ctx =>
-            CorePublishHookGateCache.resolveDecision(ctx, token, gate(ctx)).flatMap {
-              case true  => hook.execute(ctx)
-              case false => IO.pure(ctx)
-            },
-          enableCrossBuild = crossBuild,
-          validateWithContext = Some(ctx =>
-            CorePublishHookGateCache.snapshotDecision(ctx, token, gate).flatMap {
-              case (updatedCtx, true)  => hook.validate(updatedCtx).as(updatedCtx)
-              case (updatedCtx, false) => IO.pure(updatedCtx)
-            }
+    HookStepCompilation.compileSingleContextHooks(
+      phase = phase,
+      hooks = hooks,
+      gate = gate,
+      cachedGate =
+        if (freezeGateDecision)
+          Some(
+            HookStepCompilation.CachedSingleGate[ReleaseContext, CorePublishHookGateCache.HookToken](
+              tokenForIndex = hookIndex => CorePublishHookGateCache.HookToken(phase, hookIndex),
+              resolveDecision = (ctx, token, decision) =>
+                CorePublishHookGateCache.resolveDecision(ctx, token, decision),
+              snapshotDecision = (ctx, token, evaluateGate) =>
+                CorePublishHookGateCache.snapshotDecision(ctx, token, evaluateGate)
+            )
           )
-        )
-      else
+        else None
+    )(
+      nameOf = _.name,
+      executeOf = _.execute,
+      validateOf = _.validate,
+      buildStep = (name, execute, validate, validateWithContext) =>
         CoreProcessStep(
-          name = s"$phase:${hook.name}",
-          execute = ctx =>
-            gate(ctx).flatMap {
-              case true  => hook.execute(ctx)
-              case false => IO.pure(ctx)
-            },
-          validate = ctx =>
-            gate(ctx).flatMap {
-              case true  => hook.validate(ctx)
-              case false => IO.unit
-            },
-          enableCrossBuild = crossBuild
+          name = name,
+          execute = execute,
+          validate = validate,
+          enableCrossBuild = crossBuild,
+          validateWithContext = validateWithContext
         )
-    }
+    )
 }

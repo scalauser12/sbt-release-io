@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.StepExecutionSupport
+import io.release.internal.StepBoundarySupport
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
   */
@@ -47,11 +48,8 @@ private[monorepo] object MonorepoComposer {
     */
   private def splitAtBoundary(
       steps: Seq[MonorepoProcessStep]
-  ): Option[(Seq[MonorepoProcessStep], Seq[MonorepoProcessStep])] = {
-    val boundaryIndex = steps.indexWhere(_.isSelectionBoundary)
-    if (boundaryIndex < 0) None
-    else Some(steps.splitAt(boundaryIndex + 1))
-  }
+  ): Option[(Seq[MonorepoProcessStep], Seq[MonorepoProcessStep])] =
+    StepBoundarySupport.splitAfterBoundary(steps)(_.isSelectionBoundary)
 
   private def runMainSegment(
       steps: Seq[MonorepoProcessStep],

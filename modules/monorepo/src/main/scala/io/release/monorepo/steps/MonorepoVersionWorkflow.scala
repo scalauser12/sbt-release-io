@@ -6,14 +6,12 @@ import io.release.ReleaseIO.releaseIOVersioningReleaseVersion
 import io.release.internal.DecisionResolver
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
+import io.release.internal.VersionFileSupport
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.{internal as _, *}
-
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 
 /** Shared internal workflow for monorepo version-resolution and version-file writes.
   *
@@ -183,10 +181,7 @@ private[monorepo] object MonorepoVersionWorkflow {
       versionInputs: MonorepoVersionFiles.VersionInputs,
       notFoundMessage: String
   ): IO[Unit] =
-    IO.blocking(versionInputs.versionFile.exists()).flatMap { exists =>
-      if (exists) IO.unit
-      else IO.raiseError(new IllegalStateException(notFoundMessage))
-    }
+    VersionFileSupport.ensureExists(versionInputs.versionFile, notFoundMessage)
 
   /** Fail fast when any configured monorepo projects resolve to the same physical version file.
     * Runs once at the start of each version-write phase so it sees the current state after any
@@ -248,12 +243,7 @@ private[monorepo] object MonorepoVersionWorkflow {
                       )
       versionFile   = versionInputs.versionFile
       contents     <- versionInputs.versionFileContents(versionFile, versionValue)
-      _            <- IO.blocking {
-                        Files.write(
-                          versionFile.toPath,
-                          contents.getBytes(StandardCharsets.UTF_8)
-                        )
-                      }
+      _            <- VersionFileSupport.writeUtf8(versionFile, contents)
       newState     <- IO.blocking {
                         SbtRuntime.appendWithSession(
                           ctx.state,
