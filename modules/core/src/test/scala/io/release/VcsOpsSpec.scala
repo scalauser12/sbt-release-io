@@ -401,7 +401,8 @@ class VcsOpsSpec extends CatsEffectSuite {
             interactive = false,
             useDefaults = false
           ),
-          new StubVcs(dir, hasUpstream0 = IO.pure(false), currentBranch0 = IO.pure("feature"))
+          new StubVcs(dir, hasUpstream0 = IO.pure(false), currentBranch0 = IO.pure("feature")),
+          ReleaseLogPrefixes.Core
         )
       )(err => assert(err.getMessage.contains("No tracking branch configured for 'feature'")))
     }
@@ -420,7 +421,7 @@ class VcsOpsSpec extends CatsEffectSuite {
 
       IO.blocking(TestSupport.runGit(repo, "checkout", "--detach", "HEAD")) *>
         assertIllegalStateMessage(
-          VcsOps.validatePushReadiness(ctx, vcs),
+          VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Core),
           "HEAD is detached. release-io branch-based VCS operations require a checked-out branch."
         )
     }
@@ -435,7 +436,8 @@ class VcsOpsSpec extends CatsEffectSuite {
             interactive = false,
             useDefaults = false
           ),
-          new StubVcs(dir, isBehindRemote0 = IO.pure(true))
+          new StubVcs(dir, isBehindRemote0 = IO.pure(true)),
+          ReleaseLogPrefixes.Core
         ),
         "Merge the upstream commits and run release again."
       )
@@ -453,7 +455,8 @@ class VcsOpsSpec extends CatsEffectSuite {
       VcsOps
         .validatePushReadiness(
           ctx,
-          new StubVcs(dir, isBehindRemote0 = IO.raiseError(new RuntimeException("boom")))
+          new StubVcs(dir, isBehindRemote0 = IO.raiseError(new RuntimeException("boom"))),
+          ReleaseLogPrefixes.Core
         )
         .map(result => assertEquals(result, ctx))
     }

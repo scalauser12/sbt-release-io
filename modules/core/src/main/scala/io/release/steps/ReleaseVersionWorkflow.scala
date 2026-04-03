@@ -215,6 +215,7 @@ private[release] object ReleaseVersionWorkflow {
       ctx,
       override_ = data.releaseVersionArg,
       suggested = data.suggestedRelease,
+      logPrefix = ReleaseLogPrefixes.Core,
       prompt = s"Release version [${data.suggestedRelease}] : ",
       promptContext = "Release version",
       allowPrompts = allowPrompts,
@@ -232,6 +233,7 @@ private[release] object ReleaseVersionWorkflow {
         ctx,
         override_ = data.nextVersionArg,
         suggested = suggestedNext,
+        logPrefix = ReleaseLogPrefixes.Core,
         prompt = s"Next version [$suggestedNext] : ",
         promptContext = "Next version",
         allowPrompts = allowPrompts

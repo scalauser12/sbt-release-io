@@ -279,17 +279,51 @@ class StepHelpersSpec extends CatsEffectSuite {
   test(
     "StepHelpers.handleSnapshotDependencies - with-defaults abort mentions the snapshot override"
   ) {
-    TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      assertFailure[IllegalStateException, ReleaseContext](
-        StepHelpers
-          .handleSnapshotDependencies(
-            promptContext(state, interactive = true, useDefaults = true),
-            deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
-            logPrefix = "[test]"
-          )
-      ) { err =>
-        assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
-        assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val buffered = TestSupport.bufferedState(dir)
+
+      for {
+        _   <- assertFailure[IllegalStateException, ReleaseContext](
+                 StepHelpers
+                   .handleSnapshotDependencies(
+                     promptContext(buffered.state, interactive = true, useDefaults = true),
+                     deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                     logPrefix = "[test]"
+                   )
+               ) { err =>
+                 assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                 assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertNoEofWarning(log)
+      }
+    }
+  }
+
+  test(
+    "StepHelpers.handleSnapshotDependencies - interactive EOF warns once and reuses the snapshot override hint"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val buffered = TestSupport.bufferedState(dir)
+
+      for {
+        _   <- TestSupport.withInput("") {
+                 assertFailure[IllegalStateException, ReleaseContext](
+                   StepHelpers
+                     .handleSnapshotDependencies(
+                       promptContext(buffered.state, interactive = true, useDefaults = false),
+                       deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                       logPrefix = "[test]"
+                     )
+                 ) { err =>
+                   assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                   assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+                 }
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertEquals(warningCount(log, snapshotDependencyEofWarning), 1)
       }
     }
   }
@@ -297,19 +331,85 @@ class StepHelpersSpec extends CatsEffectSuite {
   test(
     "StepHelpers.handleSnapshotDependencies - interactive decline reuses the snapshot override hint"
   ) {
-    TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      TestSupport.withInput("n\n") {
-        assertFailure[IllegalStateException, ReleaseContext](
-          StepHelpers
-            .handleSnapshotDependencies(
-              promptContext(state, interactive = true, useDefaults = false),
-              deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
-              logPrefix = "[test]"
-            )
-        ) { err =>
-          assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
-          assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
-        }
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val buffered = TestSupport.bufferedState(dir)
+
+      for {
+        _   <- TestSupport.withInput("n\n") {
+                 assertFailure[IllegalStateException, ReleaseContext](
+                   StepHelpers
+                     .handleSnapshotDependencies(
+                       promptContext(buffered.state, interactive = true, useDefaults = false),
+                       deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                       logPrefix = "[test]"
+                     )
+                 ) { err =>
+                   assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                   assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+                 }
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertNoEofWarning(log)
+      }
+    }
+  }
+
+  test(
+    "StepHelpers.handleSnapshotDependencies - interactive blank default aborts without an EOF warning"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val buffered = TestSupport.bufferedState(dir)
+
+      for {
+        _   <- TestSupport.withInput("\n") {
+                 assertFailure[IllegalStateException, ReleaseContext](
+                   StepHelpers
+                     .handleSnapshotDependencies(
+                       promptContext(buffered.state, interactive = true, useDefaults = false),
+                       deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                       logPrefix = "[test]"
+                     )
+                 ) { err =>
+                   assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                   assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+                 }
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertNoEofWarning(log)
+      }
+    }
+  }
+
+  test(
+    "StepHelpers.handleSnapshotDependencies - configured decline aborts without an EOF warning"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val buffered = TestSupport.bufferedState(dir)
+      val ctx      = promptContext(
+        buffered.state,
+        interactive = true,
+        useDefaults = false,
+        decisionDefaults = ReleaseDecisionDefaults.empty.copy(
+          snapshotDependenciesAnswer = Some(false)
+        )
+      )
+
+      for {
+        _   <- assertFailure[IllegalStateException, ReleaseContext](
+                 StepHelpers.handleSnapshotDependencies(
+                   ctx,
+                   deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                   logPrefix = "[test]"
+                 )
+               ) { err =>
+                 assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                 assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertNoEofWarning(log)
       }
     }
   }
@@ -474,4 +574,13 @@ class StepHelpersSpec extends CatsEffectSuite {
         IO.unit
       override def pushChanges: IO[Unit]                                                       = IO.unit
     }
+
+  private val snapshotDependencyEofWarning =
+    "[test] Standard input closed before snapshot dependency confirmation. Aborting."
+
+  private def assertNoEofWarning(log: String): Unit =
+    assert(!log.contains(snapshotDependencyEofWarning), s"Did not expect EOF warning in log: $log")
+
+  private def warningCount(log: String, warning: String): Int =
+    log.sliding(warning.length).count(_ == warning)
 }

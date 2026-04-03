@@ -166,6 +166,8 @@ private[release] object VcsOps {
                            .confirmOrAbort(
                              ctx,
                              configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
+                             logPrefix = logPrefix,
+                             eofContext = "remote check confirmation",
                              defaultYes = false,
                              prompt = "Error while checking remote. Still continue (y/n)? [n] ",
                              abortMessage = "Aborting the release due to remote check failure."
@@ -181,6 +183,8 @@ private[release] object VcsOps {
                              .confirmOrAbort(
                                ctx,
                                configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
+                               logPrefix = logPrefix,
+                               eofContext = "remote check confirmation",
                                defaultYes = false,
                                prompt = "Error while checking remote. Still continue (y/n)? [n] ",
                                abortMessage = "Aborting the release due to remote check failure."
@@ -194,7 +198,8 @@ private[release] object VcsOps {
     */
   def validatePushReadiness[C <: ReleaseCtx[C]](
       ctx: C,
-      vcs: Vcs
+      vcs: Vcs,
+      logPrefix: String
   ): IO[C] =
     for {
       hasUp     <- vcs.hasUpstream
@@ -209,7 +214,7 @@ private[release] object VcsOps {
               )
             )
           }
-      resultCtx <- confirmUpstreamReadiness(ctx, vcs)
+      resultCtx <- confirmUpstreamReadiness(ctx, vcs, logPrefix)
     } yield resultCtx
 
   /** Refresh the tracking remote before any release actions that may later push.
@@ -243,7 +248,9 @@ private[release] object VcsOps {
       case None      =>
         detectAndInit(ctx).flatMap { detectedCtx =>
           IO.fromOption(detectedCtx.vcs)(
-            new IllegalStateException("VCS not initialized. Ensure initializeVcs runs before this step.")
+            new IllegalStateException(
+              "VCS not initialized. Ensure initializeVcs runs before this step."
+            )
           ).map(detectedCtx -> _)
         }
     }
@@ -256,7 +263,7 @@ private[release] object VcsOps {
   ): IO[C] =
     checkPushRemote(ctx, vcs, logPrefix, remoteCheckLog).flatMap {
       case RemoteCheckResult(currentCtx, refreshed) =>
-        if (refreshed) confirmUpstreamReadiness(currentCtx, vcs)
+        if (refreshed) confirmUpstreamReadiness(currentCtx, vcs, logPrefix)
         else IO.pure(currentCtx)
     }
 
@@ -265,7 +272,8 @@ private[release] object VcsOps {
   // and let the actual push surface the real failure.
   private def confirmUpstreamReadiness[C <: ReleaseCtx[C]](
       ctx: C,
-      vcs: Vcs
+      vcs: Vcs,
+      logPrefix: String
   ): IO[C] =
     vcs.isBehindRemote.handleError(_ => false).flatMap {
       case false => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))
@@ -278,6 +286,8 @@ private[release] object VcsOps {
               .confirmOrAbort(
                 ctx,
                 configuredAnswer = ctx.decisionDefaults.upstreamBehindAnswer,
+                logPrefix = logPrefix,
+                eofContext = "upstream confirmation",
                 defaultYes = false,
                 prompt = "The upstream branch has unmerged commits. " +
                   "A subsequent push may fail! Continue (y/n)? [n] ",

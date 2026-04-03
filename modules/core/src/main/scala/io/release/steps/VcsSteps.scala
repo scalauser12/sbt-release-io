@@ -202,7 +202,7 @@ private[release] object VcsSteps {
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-        VcsOps.validatePushReadiness(ctx, vcs)
+        VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Core)
       }
     ),
     execute = ctx =>

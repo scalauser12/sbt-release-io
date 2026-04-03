@@ -176,7 +176,7 @@ private[monorepo] object MonorepoVcsSteps {
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, MissingVcsMessage) { vcs =>
-        VcsOps.validatePushReadiness(ctx, vcs)
+        VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Monorepo)
       }
     ),
     execute = ctx =>

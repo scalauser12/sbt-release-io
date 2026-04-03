@@ -6,6 +6,7 @@ import io.release.ReleaseIO.*
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
@@ -15,6 +16,7 @@ import io.release.monorepo.SelectionMode
 import io.release.monorepo.steps.MonorepoVersionStepsSpec.VersionFixture
 import munit.CatsEffectSuite
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -65,7 +67,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
   test("inquireVersions.execute - fail when release version task reports FailureCommand") {
     fixtureResource.use { fixture =>
       val marker       = new File(fixture.loaded.dir, "release-version-task.marker")
-      val projectRef    = fixture.loaded.refsById("core")
+      val projectRef   = fixture.loaded.refsById("core")
       val mutatedState = SbtRuntime.appendWithSession(
         fixture.loaded.state,
         Seq(MonorepoStepTestCompat.failureCommandVersionTaskSetting(projectRef, marker))
@@ -91,7 +93,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
   test("inquireVersions.execute - fail when next version task reports FailureCommand") {
     fixtureResource.use { fixture =>
       val marker       = new File(fixture.loaded.dir, "next-version-task.marker")
-      val projectRef    = fixture.loaded.refsById("core")
+      val projectRef   = fixture.loaded.refsById("core")
       val mutatedState = SbtRuntime.appendWithSession(
         fixture.loaded.state,
         Seq(MonorepoStepTestCompat.failureCommandNextVersionTaskSetting(projectRef, marker))
@@ -116,7 +118,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
   test("inquireVersions.execute - keep state mutations from the next version task") {
     fixtureResource.use { fixture =>
-      val projectRef       = fixture.loaded.refsById("core")
+      val projectRef   = fixture.loaded.refsById("core")
       val mutatedState = SbtRuntime.appendWithSession(
         fixture.loaded.state,
         Seq(
@@ -150,28 +152,44 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
   test("inquireVersions.execute - fail when stdin closes before the release version prompt") {
     fixtureResource.use { fixture =>
-      val ctx     = MonorepoVersionStepsSpec.promptingContext(fixture)
-      val project = fixture.projectInfo("core")
+      val buffered = MonorepoVersionStepsSpec.bufferedFixture(fixture)
+      val ctx      = MonorepoVersionStepsSpec.promptingContext(buffered.fixture)
+      val project  = buffered.fixture.projectInfo("core")
 
-      TestSupport.withInput("") {
-        assertIllegalStateMessage(
-          MonorepoVersionSteps.inquireVersions.execute(ctx, project),
-          "Standard input closed while waiting for Release version for core."
-        )
+      for {
+        _   <- TestSupport.withInput("") {
+                 assertIllegalStateMessage(
+                   MonorepoVersionSteps.inquireVersions.execute(ctx, project),
+                   "Standard input closed while waiting for Release version for core."
+                 )
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        val warning =
+          s"${ReleaseLogPrefixes.Monorepo} Standard input closed while waiting for Release version for core. Aborting."
+        assertEquals(MonorepoVersionStepsSpec.warningCount(log, warning), 1)
       }
     }
   }
 
   test("inquireVersions.execute - fail when stdin closes before the next version prompt") {
     fixtureResource.use { fixture =>
-      val ctx     = MonorepoVersionStepsSpec.promptingContext(fixture)
-      val project = fixture.projectInfo("core")
+      val buffered = MonorepoVersionStepsSpec.bufferedFixture(fixture)
+      val ctx      = MonorepoVersionStepsSpec.promptingContext(buffered.fixture)
+      val project  = buffered.fixture.projectInfo("core")
 
-      TestSupport.withInput("1.0.0\n") {
-        assertIllegalStateMessage(
-          MonorepoVersionSteps.inquireVersions.execute(ctx, project),
-          "Standard input closed while waiting for Next version for core."
-        )
+      for {
+        _   <- TestSupport.withInput("1.0.0\n") {
+                 assertIllegalStateMessage(
+                   MonorepoVersionSteps.inquireVersions.execute(ctx, project),
+                   "Standard input closed while waiting for Next version for core."
+                 )
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        val warning =
+          s"${ReleaseLogPrefixes.Monorepo} Standard input closed while waiting for Next version for core. Aborting."
+        assertEquals(MonorepoVersionStepsSpec.warningCount(log, warning), 1)
       }
     }
   }
@@ -295,9 +313,9 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
               sbt.IO.read(new File(new File(fixture.dir, "api"), "version.sbt")),
               """version := "2.0.0"""" + "\n"
             )
+          }
         }
       }
-    }
   }
 
   test("inquireVersions.execute - keep a release-only override and compute the next version") {
@@ -344,7 +362,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
     fixtureResource.use { fixture =>
       val releaseMarker = new File(fixture.loaded.dir, "release-version-bypass.marker")
       val nextMarker    = new File(fixture.loaded.dir, "next-version-bypass.marker")
-      val projectRef     = fixture.loaded.refsById("core")
+      val projectRef    = fixture.loaded.refsById("core")
       val mutatedState  = SbtRuntime.appendWithSession(
         fixture.loaded.state,
         Seq(
@@ -367,7 +385,10 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val updated = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
         assertEquals(updated.versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
-        assert(!releaseMarker.exists(), "release version task should not run for resolved overrides")
+        assert(
+          !releaseMarker.exists(),
+          "release version task should not run for resolved overrides"
+        )
         assert(!nextMarker.exists(), "next version task should not run for resolved overrides")
       }
     }
@@ -422,6 +443,11 @@ private object MonorepoVersionStepsSpec {
   private val versionTaskStateKey =
     sbt.AttributeKey[String]("monorepoVersionWorkflowStateMarker")
 
+  final case class BufferedVersionFixture(
+      fixture: VersionFixture,
+      consoleBuffer: ByteArrayOutputStream
+  )
+
   final case class VersionFixture(
       loaded: MonorepoSpecSupport.LoadedFixture,
       versionFile: File
@@ -435,6 +461,31 @@ private object MonorepoVersionStepsSpec {
     def projectInfo(id: String) = loaded.projectInfo(id)
   }
 
+  def bufferedFixture(fixture: VersionFixture): BufferedVersionFixture = {
+    val buffered = TestSupport.bufferedState(fixture.loaded.dir)
+    val state    = sbt.TestBuildState(
+      baseState = buffered.state,
+      baseDir = fixture.loaded.dir,
+      projects = fixture.loaded.projects,
+      currentProjectId = Some("root")
+    )
+    val refsById =
+      SbtRuntime.extracted(state).structure.allProjectRefs.map(ref => ref.project -> ref).toMap
+
+    BufferedVersionFixture(
+      fixture = VersionFixture(
+        loaded = MonorepoSpecSupport.LoadedFixture(
+          dir = fixture.loaded.dir,
+          state = state,
+          projects = fixture.loaded.projects,
+          refsById = refsById
+        ),
+        versionFile = fixture.versionFile
+      ),
+      consoleBuffer = buffered.consoleBuffer
+    )
+  }
+
   def promptingContext(fixture: VersionFixture): MonorepoContext =
     MonorepoSpecSupport.withPlan(
       fixture.loaded.context(Seq("core"), interactive = true),
@@ -443,4 +494,7 @@ private object MonorepoVersionStepsSpec {
         flags = MonorepoSpecSupport.defaultFlags.copy(interactive = true)
       )
     )
+
+  def warningCount(log: String, warning: String): Int =
+    log.sliding(warning.length).count(_ == warning)
 }

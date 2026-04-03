@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseIO.releaseIOVersioningNextVersion
 import io.release.ReleaseIO.releaseIOVersioningReleaseVersion
 import io.release.internal.DecisionResolver
+import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
@@ -64,7 +65,7 @@ private[monorepo] object MonorepoVersionWorkflow {
               )
             )
         }
-      case _                                                                                      =>
+      case _                                   =>
         resolveProjectVersions(ctx, project, allowPrompts = true).flatMap {
           case (updatedCtx, resolved) =>
             logInfo(
@@ -283,6 +284,7 @@ private[monorepo] object MonorepoVersionWorkflow {
       ctx,
       override_ = override_.filter(_.nonEmpty),
       suggested = suggested,
+      logPrefix = ReleaseLogPrefixes.Monorepo,
       prompt = s"$label [$suggested] : ",
       promptContext = label,
       allowPrompts = allowPrompts && !useDefaults

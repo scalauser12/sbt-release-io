@@ -12,6 +12,7 @@ import io.release.TestSupport
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.SbtRuntime
 import io.release.vcs.Vcs
@@ -234,26 +235,33 @@ class VersionStepsSpec extends CatsEffectSuite {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
         versionFile =>
-          val state = TestSupport.loadedState(
+          val buffered = bufferedLoadedState(
             dir,
             Seq(
-              Project("root", dir).settings(
-                releaseIOVersioningFile           := versionFile,
-                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
-                releaseIOVersioningFileContents   := VersionSteps
-                  .defaultWriteVersion(useGlobalVersion = true),
-                releaseIOVersioningUseGlobal      := true,
-                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
-                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
-              )
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
+                useGlobalVersion = true
+              ),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+              releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
             )
           )
 
-          TestSupport.withInput("") {
-            TestAssertions.assertIllegalStateMessage(
-              VersionSteps.resolveVersions(promptingContext(state), allowPrompts = true),
-              "Standard input closed while waiting for Release version."
-            )
+          for {
+            _   <- TestSupport.withInput("") {
+                     TestAssertions.assertIllegalStateMessage(
+                       VersionSteps
+                         .resolveVersions(promptingContext(buffered.state), allowPrompts = true),
+                       "Standard input closed while waiting for Release version."
+                     )
+                   }
+            log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+          } yield {
+            val warning =
+              s"${ReleaseLogPrefixes.Core} Standard input closed while waiting for Release version. Aborting."
+            assertEquals(warningCount(log, warning), 1)
           }
       }
     }
@@ -263,26 +271,33 @@ class VersionStepsSpec extends CatsEffectSuite {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
         versionFile =>
-          val state = TestSupport.loadedState(
+          val buffered = bufferedLoadedState(
             dir,
             Seq(
-              Project("root", dir).settings(
-                releaseIOVersioningFile           := versionFile,
-                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
-                releaseIOVersioningFileContents   := VersionSteps
-                  .defaultWriteVersion(useGlobalVersion = true),
-                releaseIOVersioningUseGlobal      := true,
-                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
-                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
-              )
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
+                useGlobalVersion = true
+              ),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+              releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
             )
           )
 
-          TestSupport.withInput("1.0.0\n") {
-            TestAssertions.assertIllegalStateMessage(
-              VersionSteps.resolveVersions(promptingContext(state), allowPrompts = true),
-              "Standard input closed while waiting for Next version."
-            )
+          for {
+            _   <- TestSupport.withInput("1.0.0\n") {
+                     TestAssertions.assertIllegalStateMessage(
+                       VersionSteps
+                         .resolveVersions(promptingContext(buffered.state), allowPrompts = true),
+                       "Standard input closed while waiting for Next version."
+                     )
+                   }
+            log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+          } yield {
+            val warning =
+              s"${ReleaseLogPrefixes.Core} Standard input closed while waiting for Next version. Aborting."
+            assertEquals(warningCount(log, warning), 1)
           }
       }
     }
@@ -604,6 +619,24 @@ class VersionStepsSpec extends CatsEffectSuite {
         )
       )
     )
+
+  private def bufferedLoadedState(
+      dir: File,
+      rootSettings: Seq[sbt.Setting[?]]
+  ): TestSupport.BufferedState = {
+    val buffered = TestSupport.bufferedState(dir)
+    val state    = sbt.TestBuildState(
+      baseState = buffered.state,
+      baseDir = dir,
+      projects = Seq(Project("root", dir).settings(rootSettings*)),
+      currentProjectId = Some("root")
+    )
+
+    buffered.copy(state = state)
+  }
+
+  private def warningCount(log: String, warning: String): Int =
+    log.sliding(warning.length).count(_ == warning)
 
   private def writeVersionFile(dir: File, content: String): IO[File] = {
     val file = new File(dir, "version.sbt")

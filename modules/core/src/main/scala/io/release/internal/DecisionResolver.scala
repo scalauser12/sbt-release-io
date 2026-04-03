@@ -16,6 +16,7 @@ private[release] object DecisionResolver {
       ctx: C,
       override_ : Option[String],
       suggested: String,
+      logPrefix: String,
       prompt: String,
       promptContext: String,
       allowPrompts: Boolean,
@@ -29,15 +30,26 @@ private[release] object DecisionResolver {
         else
           beforePrompt *>
             PromptAdapter
-              .promptRequiredLine(ctx, prompt, promptContext)
-              .flatMap { case (nextCtx, raw) =>
-                StepHelpers.parseVersionInput(raw, suggested).map(nextCtx -> _)
+              .promptLine(ctx, prompt)
+              .flatMap {
+                case (nextCtx, Some(raw)) =>
+                  StepHelpers.parseVersionInput(raw, suggested).map(nextCtx -> _)
+                case (nextCtx, None)      =>
+                  IO.blocking(
+                    nextCtx.state.log.warn(
+                      s"$logPrefix ${stdinClosedWhileWaitingWarning(promptContext)}"
+                    )
+                  ) *> IO.raiseError(
+                    new IllegalStateException(stdinClosedWhileWaitingMessage(promptContext))
+                  )
               }
     }
 
   def confirmOrAbort[C <: ReleaseCtx[C]](
       ctx: C,
       configuredAnswer: Option[Boolean],
+      logPrefix: String,
+      eofContext: String,
       defaultYes: Boolean,
       prompt: String,
       abortMessage: String
@@ -50,9 +62,13 @@ private[release] object DecisionResolver {
         if (!ctx.interactive)
           IO.raiseError(new IllegalStateException(abortMessage))
         else
-          PromptAdapter.promptYesNo(ctx, prompt, defaultYes).flatMap { case (nextCtx, continue) =>
-            if (continue) IO.pure(nextCtx)
-            else IO.raiseError(new IllegalStateException(abortMessage))
+          PromptAdapter.promptYesNoOrEof(ctx, prompt, defaultYes).flatMap {
+            case (nextCtx, Some(true))  => IO.pure(nextCtx)
+            case (nextCtx, Some(false)) => IO.raiseError(new IllegalStateException(abortMessage))
+            case (nextCtx, None)        =>
+              IO.blocking(
+                nextCtx.state.log.warn(s"$logPrefix ${stdinClosedBeforeWarning(eofContext)}")
+              ) *> IO.raiseError(new IllegalStateException(abortMessage))
           }
     }
 
@@ -85,6 +101,8 @@ private[release] object DecisionResolver {
               confirmOrAbort(
                 ctx,
                 configuredAnswer = None,
+                logPrefix = logPrefix,
+                eofContext = s"snapshot dependency confirmation$context",
                 defaultYes = false,
                 prompt = "Do you want to continue (y/n)? [n] ",
                 abortMessage = snapshotDependenciesAbortMessage(context)
@@ -150,11 +168,28 @@ private[release] object DecisionResolver {
               s"Tag [$tagName] exists${forLabel(label)}! " +
                 "Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
             )
-            .map { case (nextCtx, raw) => nextCtx -> raw.getOrElse("") }
+            .flatMap {
+              case (nextCtx, Some(raw)) => IO.pure(nextCtx -> raw)
+              case (nextCtx, None)      =>
+                IO.blocking(
+                  nextCtx.state.log.warn(
+                    s"$logPrefix ${stdinClosedBeforeWarning(s"tag conflict resolution${forLabel(label)}")}"
+                  )
+                ).as(nextCtx -> "a")
+            }
     }
 
   private def forLabel(label: String): String =
     if (label.isEmpty) "" else s" for $label"
+
+  private def stdinClosedBeforeWarning(context: String): String =
+    s"Standard input closed before $context. Aborting."
+
+  private def stdinClosedWhileWaitingMessage(context: String): String =
+    s"Standard input closed while waiting for $context."
+
+  private def stdinClosedWhileWaitingWarning(context: String): String =
+    s"${stdinClosedWhileWaitingMessage(context)} Aborting."
 
   private def snapshotDependenciesAbortMessage(context: String): String =
     "Aborting release due to snapshot dependencies" +

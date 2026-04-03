@@ -11,10 +11,12 @@ import io.release.TestSupport
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
+import sbt.Project
 
 import java.io.File
 import java.io.IOException
@@ -253,7 +255,7 @@ class VcsStepsSpec extends CatsEffectSuite {
 
   test("tagRelease.execute - treat EOF as the default abort answer when the tag already exists") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
-      val state = ReleaseTestSupport.gitRootState(
+      val buffered = bufferedGitRootState(
         repo,
         Seq(
           io.release.ReleaseIO.releaseIOVcsSign       := false,
@@ -262,15 +264,22 @@ class VcsStepsSpec extends CatsEffectSuite {
         )
       )
 
-      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
-        TestSupport.withInput("") {
-          TestAssertions.assertIllegalStateMessage(
-            VcsSteps.tagRelease.execute(
-              ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
-            ),
-            "Tag [v1.0.0] already exists. Aborting release!"
-          )
-        }
+      for {
+        _   <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        _   <- TestSupport.withInput("") {
+                 TestAssertions.assertIllegalStateMessage(
+                   VcsSteps.tagRelease.execute(
+                     ReleaseContext(state = buffered.state, vcs = Some(vcs), interactive = true)
+                   ),
+                   "Tag [v1.0.0] already exists. Aborting release!"
+                 )
+               }
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        val warning =
+          s"${ReleaseLogPrefixes.Core} Standard input closed before tag conflict resolution. Aborting."
+        assertEquals(warningCount(log, warning), 1)
+      }
     }
   }
 
@@ -496,4 +505,26 @@ class VcsStepsSpec extends CatsEffectSuite {
         releaseIOInternalReleaseTag.value
       )
     )
+
+  private def bufferedGitRootState(
+      repo: File,
+      rootSettings: Seq[sbt.Setting[?]]
+  ): TestSupport.BufferedState = {
+    val buffered = TestSupport.bufferedState(repo)
+    val state    = sbt.TestBuildState(
+      baseState = buffered.state,
+      baseDir = repo,
+      projects = Seq(
+        Project("root", repo).settings(
+          (Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false) ++ rootSettings)*
+        )
+      ),
+      currentProjectId = Some("root")
+    )
+
+    buffered.copy(state = state)
+  }
+
+  private def warningCount(log: String, warning: String): Int =
+    log.sliding(warning.length).count(_ == warning)
 }
