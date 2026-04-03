@@ -127,32 +127,43 @@ object MonorepoResourceHooks {
         validate = hook.validate
       )
 
-    MonorepoHookConfiguration(
-      enableSnapshotDependenciesCheck = true,
-      enableRunClean = true,
-      enableRunTests = true,
-      enableTagging = true,
-      enablePublish = true,
-      enablePush = true,
-      afterCleanCheckHooks = hooks.afterCleanCheckHooks.map(globalHook),
-      beforeSelectionHooks = hooks.beforeSelectionHooks.map(globalHook),
-      afterSelectionHooks = hooks.afterSelectionHooks.map(globalHook),
-      beforeVersionResolutionHooks = hooks.beforeVersionResolutionHooks.map(projectHook),
-      afterVersionResolutionHooks = hooks.afterVersionResolutionHooks.map(projectHook),
-      beforeReleaseVersionWriteHooks = hooks.beforeReleaseVersionWriteHooks.map(projectHook),
-      afterReleaseVersionWriteHooks = hooks.afterReleaseVersionWriteHooks.map(projectHook),
-      beforeReleaseCommitHooks = hooks.beforeReleaseCommitHooks.map(globalHook),
-      afterReleaseCommitHooks = hooks.afterReleaseCommitHooks.map(globalHook),
-      beforeTagHooks = hooks.beforeTagHooks.map(projectHook),
-      afterTagHooks = hooks.afterTagHooks.map(projectHook),
-      beforePublishHooks = hooks.beforePublishHooks.map(projectHook),
-      afterPublishHooks = hooks.afterPublishHooks.map(projectHook),
-      beforeNextVersionWriteHooks = hooks.beforeNextVersionWriteHooks.map(projectHook),
-      afterNextVersionWriteHooks = hooks.afterNextVersionWriteHooks.map(projectHook),
-      beforeNextCommitHooks = hooks.beforeNextCommitHooks.map(globalHook),
-      afterNextCommitHooks = hooks.afterNextCommitHooks.map(globalHook),
-      beforePushHooks = hooks.beforePushHooks.map(globalHook),
-      afterPushHooks = hooks.afterPushHooks.map(globalHook)
-    )
+    val withGlobalHooks = Seq(
+      MonorepoLifecycle.afterCleanCheckHooksBinding     -> hooks.afterCleanCheckHooks.map(globalHook),
+      MonorepoLifecycle.beforeSelectionHooksBinding     -> hooks.beforeSelectionHooks.map(globalHook),
+      MonorepoLifecycle.afterSelectionHooksBinding      -> hooks.afterSelectionHooks.map(globalHook),
+      MonorepoLifecycle.beforeReleaseCommitHooksBinding ->
+        hooks.beforeReleaseCommitHooks.map(globalHook),
+      MonorepoLifecycle.afterReleaseCommitHooksBinding  ->
+        hooks.afterReleaseCommitHooks.map(globalHook),
+      MonorepoLifecycle.beforeNextCommitHooksBinding    ->
+        hooks.beforeNextCommitHooks.map(globalHook),
+      MonorepoLifecycle.afterNextCommitHooksBinding     ->
+        hooks.afterNextCommitHooks.map(globalHook),
+      MonorepoLifecycle.beforePushHooksBinding          -> hooks.beforePushHooks.map(globalHook),
+      MonorepoLifecycle.afterPushHooksBinding           -> hooks.afterPushHooks.map(globalHook)
+    ).foldLeft(MonorepoHookConfiguration.empty) { case (config, (binding, materializedHooks)) =>
+      binding.updated(config, materializedHooks)
+    }
+
+    Seq(
+      MonorepoLifecycle.beforeVersionResolutionHooksBinding   ->
+        hooks.beforeVersionResolutionHooks.map(projectHook),
+      MonorepoLifecycle.afterVersionResolutionHooksBinding    ->
+        hooks.afterVersionResolutionHooks.map(projectHook),
+      MonorepoLifecycle.beforeReleaseVersionWriteHooksBinding ->
+        hooks.beforeReleaseVersionWriteHooks.map(projectHook),
+      MonorepoLifecycle.afterReleaseVersionWriteHooksBinding  ->
+        hooks.afterReleaseVersionWriteHooks.map(projectHook),
+      MonorepoLifecycle.beforeTagHooksBinding                 -> hooks.beforeTagHooks.map(projectHook),
+      MonorepoLifecycle.afterTagHooksBinding                  -> hooks.afterTagHooks.map(projectHook),
+      MonorepoLifecycle.beforePublishHooksBinding             -> hooks.beforePublishHooks.map(projectHook),
+      MonorepoLifecycle.afterPublishHooksBinding              -> hooks.afterPublishHooks.map(projectHook),
+      MonorepoLifecycle.beforeNextVersionWriteHooksBinding    ->
+        hooks.beforeNextVersionWriteHooks.map(projectHook),
+      MonorepoLifecycle.afterNextVersionWriteHooksBinding     ->
+        hooks.afterNextVersionWriteHooks.map(projectHook)
+    ).foldLeft(withGlobalHooks) { case (config, (binding, materializedHooks)) =>
+      binding.updated(config, materializedHooks)
+    }
   }
 }

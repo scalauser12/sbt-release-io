@@ -51,6 +51,38 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolve - read monorepo lifecycle policy and hook settings from state") {
+    val settings: Seq[Setting[?]] = Seq(
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests       := false,
+      MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish        := false,
+      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection       := Seq(
+        MonorepoGlobalHookIO.action("before-selection")(_ => IO.unit)
+      ),
+      MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite := Seq(
+        MonorepoProjectHookIO.action("after-next-version")((_, _) => IO.unit)
+      )
+    )
+
+    hookFixtureResource("monorepo-hook-compiler-resolve", settings).use { fixture =>
+      IO {
+        val config = MonorepoHookCompiler.resolve(fixture.state)
+
+        assert(!config.enableRunTests)
+        assert(!config.enablePublish)
+        assertEquals(config.beforeSelectionHooks.map(_.name), Seq("before-selection"))
+        assertEquals(config.afterNextVersionWriteHooks.map(_.name), Seq("after-next-version"))
+      }
+    }
+  }
+
+  test("resolve - generated monorepo lifecycle defaults produce the empty hook configuration") {
+    hookFixtureResource("monorepo-hook-compiler-generated-defaults").use { fixture =>
+      IO {
+        assertEquals(MonorepoHookCompiler.resolve(fixture.state), MonorepoHookConfiguration.empty)
+      }
+    }
+  }
+
   test(
     "compile - apply monorepo policies and lifecycle hooks around the remaining built-in phases"
   ) {
@@ -253,33 +285,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     }
 
   private def hookSettingsDefaults: Seq[Setting[?]] =
-    Seq(
-      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := true,
-      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean                  := true,
-      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests                  := true,
-      MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging                   := true,
-      MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish                   := true,
-      MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush                      := true,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck                  := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection                  := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection                   := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution          := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution           := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseVersionWrite        := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseVersionWrite         := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit              := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit               := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeTag                        := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag                         := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforePublish                    := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterPublish                     := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextVersionWrite           := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite            := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit                 := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit                  := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush                       := Seq.empty,
-      MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush                        := Seq.empty
-    )
+    MonorepoLifecycle.configDefaultSettings
 
   private def publishHookSettings(
       observed: Ref[IO, List[String]]

@@ -2,6 +2,8 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.CoreHookConfiguration
+import io.release.internal.CoreLifecycle
+import io.release.internal.LifecycleConfigCompiler
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -84,30 +86,45 @@ object ReleaseResourceHooks {
         validate = hook.validate
       )
 
-    CoreHookConfiguration(
-      enableSnapshotDependenciesCheck = true,
-      enableRunClean = true,
-      enableRunTests = true,
-      enableTagging = true,
-      enablePublish = true,
-      enablePush = true,
-      afterCleanCheckHooks = hooks.afterCleanCheckHooks.map(plainHook),
-      beforeVersionResolutionHooks = hooks.beforeVersionResolutionHooks.map(plainHook),
-      afterVersionResolutionHooks = hooks.afterVersionResolutionHooks.map(plainHook),
-      beforeReleaseVersionWriteHooks = hooks.beforeReleaseVersionWriteHooks.map(plainHook),
-      afterReleaseVersionWriteHooks = hooks.afterReleaseVersionWriteHooks.map(plainHook),
-      beforeReleaseCommitHooks = hooks.beforeReleaseCommitHooks.map(plainHook),
-      afterReleaseCommitHooks = hooks.afterReleaseCommitHooks.map(plainHook),
-      beforeTagHooks = hooks.beforeTagHooks.map(plainHook),
-      afterTagHooks = hooks.afterTagHooks.map(plainHook),
-      beforePublishHooks = hooks.beforePublishHooks.map(plainHook),
-      afterPublishHooks = hooks.afterPublishHooks.map(plainHook),
-      beforeNextVersionWriteHooks = hooks.beforeNextVersionWriteHooks.map(plainHook),
-      afterNextVersionWriteHooks = hooks.afterNextVersionWriteHooks.map(plainHook),
-      beforeNextCommitHooks = hooks.beforeNextCommitHooks.map(plainHook),
-      afterNextCommitHooks = hooks.afterNextCommitHooks.map(plainHook),
-      beforePushHooks = hooks.beforePushHooks.map(plainHook),
-      afterPushHooks = hooks.afterPushHooks.map(plainHook)
-    )
+    val materializedHookBindings: Seq[
+      (
+          LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO],
+          Seq[ReleaseHookIO]
+      )
+    ] =
+      Seq(
+        CoreLifecycle.afterCleanCheckHooksBinding           -> hooks.afterCleanCheckHooks.map(plainHook),
+        CoreLifecycle.beforeVersionResolutionHooksBinding   ->
+          hooks.beforeVersionResolutionHooks.map(plainHook),
+        CoreLifecycle.afterVersionResolutionHooksBinding    ->
+          hooks.afterVersionResolutionHooks.map(plainHook),
+        CoreLifecycle.beforeReleaseVersionWriteHooksBinding ->
+          hooks.beforeReleaseVersionWriteHooks.map(plainHook),
+        CoreLifecycle.afterReleaseVersionWriteHooksBinding  ->
+          hooks.afterReleaseVersionWriteHooks.map(plainHook),
+        CoreLifecycle.beforeReleaseCommitHooksBinding       -> hooks.beforeReleaseCommitHooks.map(
+          plainHook
+        ),
+        CoreLifecycle.afterReleaseCommitHooksBinding        -> hooks.afterReleaseCommitHooks.map(
+          plainHook
+        ),
+        CoreLifecycle.beforeTagHooksBinding                 -> hooks.beforeTagHooks.map(plainHook),
+        CoreLifecycle.afterTagHooksBinding                  -> hooks.afterTagHooks.map(plainHook),
+        CoreLifecycle.beforePublishHooksBinding             -> hooks.beforePublishHooks.map(plainHook),
+        CoreLifecycle.afterPublishHooksBinding              -> hooks.afterPublishHooks.map(plainHook),
+        CoreLifecycle.beforeNextVersionWriteHooksBinding    ->
+          hooks.beforeNextVersionWriteHooks.map(plainHook),
+        CoreLifecycle.afterNextVersionWriteHooksBinding     ->
+          hooks.afterNextVersionWriteHooks.map(plainHook),
+        CoreLifecycle.beforeNextCommitHooksBinding          -> hooks.beforeNextCommitHooks.map(plainHook),
+        CoreLifecycle.afterNextCommitHooksBinding           -> hooks.afterNextCommitHooks.map(plainHook),
+        CoreLifecycle.beforePushHooksBinding                -> hooks.beforePushHooks.map(plainHook),
+        CoreLifecycle.afterPushHooksBinding                 -> hooks.afterPushHooks.map(plainHook)
+      )
+
+    materializedHookBindings.foldLeft(CoreHookConfiguration.empty) {
+      case (config, (binding, materializedHooks)) =>
+        binding.updated(config, materializedHooks)
+    }
   }
 }
