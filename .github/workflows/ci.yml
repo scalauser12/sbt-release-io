@@ -45,7 +45,7 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       - name: Run unit tests on ${{ matrix.sbt-line == 'sbt2' && format('sbt {0}', env.SBT2_VERSION) || 'sbt 1.12.3' }}
-        run: sbt ${{ matrix.sbt-line == 'sbt2' && format('-Dsbt.version={0}', env.SBT2_VERSION) || '-Dsbt.version=1.12.3' }} test
+        run: ${{ matrix.sbt-line == 'sbt2' && './bin/sbt2-clean test' || 'sbt -Dsbt.version=1.12.3 test' }}
 
   core-scripted:
     runs-on: ubuntu-latest

@@ -21,10 +21,12 @@ import sbt.LocalProject
 import sbt.Project
 import sbt.ProjectRef
 import sbt.State
+import sbt.settingKey
 
 import java.io.File
 
 class MonorepoVcsStepsSpec extends CatsEffectSuite {
+  private val fixtureNonce = settingKey[String]("Unique nonce for monorepo VCS manifest tests")
 
   test("initializeVcs.execute - detect Git from the loaded project base") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
@@ -671,7 +673,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     MonorepoSpecSupport.versionedProject(
       id,
       base,
-      settings = releaseManifestSettings()
+      settings = releaseManifestSettings(nonce = base.getAbsolutePath)
     )
 
   private def projectInfo(
@@ -745,15 +747,23 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   }
 
   private def releaseManifestSettings(
-      basePackageOptions: Seq[sbt.PackageOption] = Seq(ManifestAttributes("Existing" -> "kept"))
+      basePackageOptions: Seq[sbt.PackageOption] = Seq(ManifestAttributes("Existing" -> "kept")),
+      nonce: String
   ): Seq[sbt.Setting[?]] =
     Seq(
-      packageOptions                         := basePackageOptions,
+      fixtureNonce                           := nonce,
+      packageOptions                         := {
+        val _ = fixtureNonce.value
+        basePackageOptions
+      },
       ReleaseIO.releaseIOInternalReleaseHash := None,
       ReleaseIO.releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-        ReleaseIO.releaseIOInternalReleaseHash.value,
-        ReleaseIO.releaseIOInternalReleaseTag.value
-      )
+      packageOptions ++= {
+        val _ = fixtureNonce.value
+        ReleaseIO.releaseManifestPackageOptions(
+          ReleaseIO.releaseIOInternalReleaseHash.value,
+          ReleaseIO.releaseIOInternalReleaseTag.value
+        )
+      }
     )
 }

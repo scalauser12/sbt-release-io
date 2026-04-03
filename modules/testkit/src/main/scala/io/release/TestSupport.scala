@@ -79,9 +79,9 @@ object TestSupport {
   }
 
   def tempDirResource(prefix: String): Resource[IO, File] =
-    Resource.make(IO.blocking(Files.createTempDirectory(prefix).toFile))(dir =>
-      IO.blocking(deleteRecursively(dir))
-    )
+    Resource.make {
+      IO.blocking(Files.createTempDirectory(prefix).toFile)
+    }(dir => IO.blocking(deleteRecursively(dir)))
 
   def loadedStateResource(
       prefix: String,

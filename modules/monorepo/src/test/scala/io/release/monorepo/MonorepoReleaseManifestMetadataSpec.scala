@@ -14,11 +14,13 @@ import sbt.Keys.{packageOptions, version}
 import sbt.Package.ManifestAttributes
 import sbt.ProjectRef
 import sbt.State
+import sbt.settingKey
 
 import java.io.File
 
 class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
   private val fixturePrefix = "monorepo-release-manifest-metadata-spec"
+  private val fixtureNonce  = settingKey[String]("Unique nonce for monorepo manifest metadata tests")
 
   test("commitVersions - add the release hash to each selected project's packageOptions") {
     gitFixtureResource.use { case (fixture, vcs) =>
@@ -372,12 +374,12 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         MonorepoSpecSupport.versionedProject(
           "core",
           coreBase,
-          settings = releaseManifestSettings()
+          settings = releaseManifestSettings(nonce = coreBase.getAbsolutePath)
         ),
         MonorepoSpecSupport.versionedProject(
           "api",
           apiBase,
-          settings = releaseManifestSettings()
+          settings = releaseManifestSettings(nonce = apiBase.getAbsolutePath)
         )
       )
     }
@@ -432,16 +434,24 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
   }
 
   private def releaseManifestSettings(
-      basePackageOptions: Seq[sbt.PackageOption] = Seq(ManifestAttributes("Existing" -> "kept"))
+      basePackageOptions: Seq[sbt.PackageOption] = Seq(ManifestAttributes("Existing" -> "kept")),
+      nonce: String
   ): Seq[sbt.Setting[?]] =
     Seq(
-      packageOptions                         := basePackageOptions,
+      fixtureNonce                           := nonce,
+      packageOptions                         := {
+        val _ = fixtureNonce.value
+        basePackageOptions
+      },
       ReleaseIO.releaseIOInternalReleaseHash := None,
       ReleaseIO.releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-        ReleaseIO.releaseIOInternalReleaseHash.value,
-        ReleaseIO.releaseIOInternalReleaseTag.value
-      )
+      packageOptions ++= {
+        val _ = fixtureNonce.value
+        ReleaseIO.releaseManifestPackageOptions(
+          ReleaseIO.releaseIOInternalReleaseHash.value,
+          ReleaseIO.releaseIOInternalReleaseTag.value
+        )
+      }
     )
 }
 

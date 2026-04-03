@@ -8,9 +8,12 @@ import sbt.Keys.packageOptions
 import sbt.Package.ManifestAttributes
 import sbt.Project
 import sbt.State
+import sbt.settingKey
 
 class ReleaseManifestMetadataSpec extends CatsEffectSuite {
   private val fixturePrefix = "release-manifest-metadata-spec"
+  private val projectId     = "manifest-root"
+  private val fixtureNonce  = settingKey[String]("Unique nonce for manifest metadata test tasks")
 
   test(
     "clearReleaseManifestMetadata - remove release-only manifest metadata and preserve other package options"
@@ -75,11 +78,14 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
       TestSupport.loadedState(
         dir,
         Seq(
-          Project("root", dir).settings(
-            (releaseManifestSettings(Seq(ManifestAttributes("Existing" -> "kept"))))*
+          Project(projectId, dir).settings(
+            (releaseManifestSettings(
+              Seq(ManifestAttributes("Existing" -> "kept")),
+              dir.getAbsolutePath
+            ))*
           )
         ),
-        currentProjectId = Some("root")
+        currentProjectId = Some(projectId)
       )
     }
 
@@ -100,15 +106,23 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
   }
 
   private def releaseManifestSettings(
-      basePackageOptions: Seq[sbt.PackageOption]
+      basePackageOptions: Seq[sbt.PackageOption],
+      nonce: String
   ): Seq[sbt.Setting[?]] =
     Seq(
-      packageOptions                         := basePackageOptions,
+      fixtureNonce                           := nonce,
+      packageOptions                         := {
+        val _ = fixtureNonce.value
+        basePackageOptions
+      },
       ReleaseIO.releaseIOInternalReleaseHash := None,
       ReleaseIO.releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-        ReleaseIO.releaseIOInternalReleaseHash.value,
-        ReleaseIO.releaseIOInternalReleaseTag.value
-      )
+      packageOptions ++= {
+        val _ = fixtureNonce.value
+        ReleaseIO.releaseManifestPackageOptions(
+          ReleaseIO.releaseIOInternalReleaseHash.value,
+          ReleaseIO.releaseIOInternalReleaseTag.value
+        )
+      }
     )
 }
