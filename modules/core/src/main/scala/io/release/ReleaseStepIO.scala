@@ -222,7 +222,7 @@ object ReleaseStepIO {
   ) {
 
     def withValidation(f: ReleaseContext => IO[Unit]): StepBuilder =
-      new StepBuilder(state.appendValidation(StepKernel.asThreadedValidation(f)))
+      new StepBuilder(state.appendPlainValidation(f))
 
     def withValidationContext(f: ReleaseContext => IO[ReleaseContext]): StepBuilder =
       new StepBuilder(state.appendValidation(f))
@@ -265,9 +265,7 @@ object ReleaseStepIO {
   ) {
 
     def withValidation(f: T => ReleaseContext => IO[Unit]): ResourceStepBuilder[T] =
-      new ResourceStepBuilder[T](
-        state.appendValidation(resource => StepKernel.asThreadedValidation(f(resource)))
-      )
+      new ResourceStepBuilder[T](state.appendPlainValidation(f))
 
     def withValidationContext(
         f: T => ReleaseContext => IO[ReleaseContext]

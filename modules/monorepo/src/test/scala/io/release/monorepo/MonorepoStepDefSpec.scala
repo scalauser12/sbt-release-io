@@ -577,6 +577,22 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
     }
   }
 
+  test("Global.copy replacing validate does not retain the old plain validator") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .global("copy-global-validate-replace-plain-only")
+          .withValidation(_ => events.update(_ :+ "old-validate"))
+          .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
+          .validateOnly
+        val copied = step.copy(validate = _ => events.update(_ :+ "new-validate"))
+
+        copied.threadedValidation(ctx) *> events.get
+          .map(obs => assertEquals(obs, List("new-validate", "context")))
+      }
+    }
+  }
+
   test("PerProject.copy changing only enableCrossBuild keeps threaded validation single-wrapped") {
     contextResource.use { ctx =>
       val project = dummyProject("core")
@@ -736,6 +752,31 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
 
         copied.threadedValidation(ctx, project) *> events.get
           .map(obs => assertEquals(obs, List("validate:core", "context:core")))
+      }
+    }
+  }
+
+  test("PerProject.copy replacing validate does not retain the old plain validator") {
+    contextResource.use { ctx =>
+      val project = dummyProject("core")
+
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = MonorepoStepIO
+          .perProject("copy-per-project-validate-replace-plain-only")
+          .withValidation((_, currentProject) =>
+            events.update(_ :+ s"old-validate:${currentProject.name}")
+          )
+          .withValidationContext((currentCtx, currentProject) =>
+            events.update(_ :+ s"context:${currentProject.name}").as(currentCtx)
+          )
+          .validateOnly
+        val copied = step.copy(
+          validate = (_, currentProject) =>
+            events.update(_ :+ s"new-validate:${currentProject.name}")
+        )
+
+        copied.threadedValidation(ctx, project) *> events.get
+          .map(obs => assertEquals(obs, List("new-validate:core", "context:core")))
       }
     }
   }

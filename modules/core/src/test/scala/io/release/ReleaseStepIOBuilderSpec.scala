@@ -377,6 +377,32 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
+  test("step.copy - replacing validate does not retain the old plain validator") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { events =>
+        val step   = ReleaseStepIO
+          .step("copy-validate-replace-plain-only")
+          .withValidation(_ => events.update(_ :+ "old-validate"))
+          .withValidationContext(currentCtx => events.update(_ :+ "context").as(currentCtx))
+          .validateOnly
+        val copied = step.copy(validate = _ => events.update(_ :+ "new-validate"))
+
+        for {
+          _ <- copied.validateWithContext match {
+                 case Some(validateWithContext) =>
+                   validateWithContext(ctx) *> events.get
+                     .map(obs => assertEquals(obs, List("context")))
+                 case None                      =>
+                   IO.raiseError(new AssertionError("expected validateWithContext to be defined"))
+               }
+          _ <- events.set(Nil)
+          _ <- copied.threadedValidation(ctx)
+          a <- events.get
+        } yield assertEquals(a, List("new-validate", "context"))
+      }
+    }
+  }
+
   test("step.validateOnly - creates a validation-only step with no-op execute") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>

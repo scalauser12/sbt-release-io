@@ -13,6 +13,60 @@ private[release] object StepKernel {
   type ThreadedValidation[C]        = C => IO[C]
   type ThreadedItemValidation[C, I] = (C, I) => IO[C]
 
+  sealed trait ValidationOp[C] {
+    def apply(ctx: C): IO[C]
+  }
+
+  final case class PlainValidationOp[C](
+      validate: C => IO[Unit]
+  ) extends ValidationOp[C] {
+    def apply(ctx: C): IO[C] =
+      validate(ctx).as(ctx)
+  }
+
+  final case class ThreadedValidationOp[C](
+      validate: ThreadedValidation[C]
+  ) extends ValidationOp[C] {
+    def apply(ctx: C): IO[C] =
+      validate(ctx)
+  }
+
+  sealed trait ItemValidationOp[C, I] {
+    def apply(ctx: C, item: I): IO[C]
+  }
+
+  final case class PlainItemValidationOp[C, I](
+      validate: (C, I) => IO[Unit]
+  ) extends ItemValidationOp[C, I] {
+    def apply(ctx: C, item: I): IO[C] =
+      validate(ctx, item).as(ctx)
+  }
+
+  final case class ThreadedItemValidationOp[C, I](
+      validate: ThreadedItemValidation[C, I]
+  ) extends ItemValidationOp[C, I] {
+    def apply(ctx: C, item: I): IO[C] =
+      validate(ctx, item)
+  }
+
+  final case class ComposedValidation[C](
+      ops: Vector[ValidationOp[C]]
+  ) extends ThreadedValidation[C] {
+    def apply(ctx: C): IO[C] =
+      ops.foldLeft(IO.pure(ctx)) { (ioCtx, op) =>
+        ioCtx.flatMap(op.apply)
+      }
+  }
+
+  final case class ComposedItemValidation[C, I](
+      ops: Vector[ItemValidationOp[C, I]]
+  ) extends ThreadedItemValidation[C, I] {
+    def apply(ctx: C, item: I): IO[C] =
+      ops.foldLeft(IO.pure(ctx)) { (ioCtx, op) =>
+        ioCtx.flatMap(currentCtx => op(currentCtx, item))
+      }
+  }
+
   /** Lift a `Unit`-returning validation into a threaded validation that preserves the input
     * context unchanged when the validation succeeds.
     */
@@ -42,6 +96,42 @@ private[release] object StepKernel {
         (ctx, item) => current(ctx, item).flatMap(updatedCtx => next(updatedCtx, item))
       )
     )
+
+  private def composeValidationOps[C](
+      ops: Vector[ValidationOp[C]]
+  ): Option[ThreadedValidation[C]] =
+    if (ops.isEmpty) None else Some(ComposedValidation(ops))
+
+  private def composeItemValidationOps[C, I](
+      ops: Vector[ItemValidationOp[C, I]]
+  ): Option[ThreadedItemValidation[C, I]] =
+    if (ops.isEmpty) None else Some(ComposedItemValidation(ops))
+
+  private def preserveThreadedValidationOnly[C](
+      existing: Option[ThreadedValidation[C]]
+  ): Option[ThreadedValidation[C]] =
+    existing match {
+      case Some(composed: ComposedValidation[_]) =>
+        composeValidationOps(
+          composed.ops.collect { case op: ThreadedValidationOp[_] =>
+            op.asInstanceOf[ThreadedValidationOp[C]]
+          }
+        )
+      case _                                     => existing
+    }
+
+  private def preserveThreadedItemValidationOnly[C, I](
+      existing: Option[ThreadedItemValidation[C, I]]
+  ): Option[ThreadedItemValidation[C, I]] =
+    existing match {
+      case Some(composed: ComposedItemValidation[_, _]) =>
+        composeItemValidationOps(
+          composed.ops.collect { case op: ThreadedItemValidationOp[_, _] =>
+            op.asInstanceOf[ThreadedItemValidationOp[C, I]]
+          }
+        )
+      case _                                          => existing
+    }
 
   /** Merge plain validation and threaded validation into a normalized pair.
     *
@@ -108,7 +198,12 @@ private[release] object StepKernel {
     if (!validateWasProvided && !validateWithContextWasProvided)
       (currentRawValidate, currentRawValidateWithContext)
     else if (validateWasProvided && !validateWithContextWasProvided)
-      (requestedValidate, currentNormalizedValidateWithContext)
+      // Keep the raw threaded hook so replacing plain validate does not retain the old plain
+      // validator through a previously normalized composed chain.
+      (
+        requestedValidate,
+        preserveThreadedValidationOnly(currentRawValidateWithContext)
+      )
     else if (!validateWasProvided && validateWithContextWasProvided)
       requestedValidateWithContext match {
         case None       =>
@@ -148,7 +243,12 @@ private[release] object StepKernel {
     if (!validateWasProvided && !validateWithContextWasProvided)
       (currentRawValidate, currentRawValidateWithContext)
     else if (validateWasProvided && !validateWithContextWasProvided)
-      (requestedValidate, currentNormalizedValidateWithContext)
+      // Keep the raw threaded hook so replacing plain validate does not retain the old plain
+      // validator through a previously normalized composed chain.
+      (
+        requestedValidate,
+        preserveThreadedItemValidationOnly(currentRawValidateWithContext)
+      )
     else if (!validateWasProvided && validateWithContextWasProvided)
       requestedValidateWithContext match {
         case None       =>
@@ -167,16 +267,22 @@ private[release] object StepKernel {
 
   final case class SingleBuilderState[C](
       name: String,
-      validateWithContext: Option[ThreadedValidation[C]],
+      validations: Vector[ValidationOp[C]],
       flagEnabled: Boolean
   ) {
+
+    def validateWithContext: Option[ThreadedValidation[C]] =
+      composeValidationOps(validations)
 
     def appendValidation(
         validation: ThreadedValidation[C]
     ): SingleBuilderState[C] =
-      copy(validateWithContext =
-        StepKernel.appendThreadedValidation(validateWithContext, validation)
-      )
+      copy(validations = validations :+ ThreadedValidationOp(validation))
+
+    def appendPlainValidation(
+        validation: C => IO[Unit]
+    ): SingleBuilderState[C] =
+      copy(validations = validations :+ PlainValidationOp(validation))
 
     def withFlag: SingleBuilderState[C] =
       copy(flagEnabled = true)
@@ -184,21 +290,27 @@ private[release] object StepKernel {
 
   object SingleBuilderState {
     def apply[C](name: String): SingleBuilderState[C] =
-      new SingleBuilderState(name, None, flagEnabled = false)
+      new SingleBuilderState(name, Vector.empty, flagEnabled = false)
   }
 
   final case class ItemBuilderState[C, I](
       name: String,
-      validateWithContext: Option[ThreadedItemValidation[C, I]],
+      validations: Vector[ItemValidationOp[C, I]],
       flagEnabled: Boolean
   ) {
+
+    def validateWithContext: Option[ThreadedItemValidation[C, I]] =
+      composeItemValidationOps(validations)
 
     def appendValidation(
         validation: ThreadedItemValidation[C, I]
     ): ItemBuilderState[C, I] =
-      copy(validateWithContext =
-        StepKernel.appendThreadedValidation(validateWithContext, validation)
-      )
+      copy(validations = validations :+ ThreadedItemValidationOp(validation))
+
+    def appendPlainValidation(
+        validation: (C, I) => IO[Unit]
+    ): ItemBuilderState[C, I] =
+      copy(validations = validations :+ PlainItemValidationOp(validation))
 
     def withFlag: ItemBuilderState[C, I] =
       copy(flagEnabled = true)
@@ -206,24 +318,30 @@ private[release] object StepKernel {
 
   object ItemBuilderState {
     def apply[C, I](name: String): ItemBuilderState[C, I] =
-      new ItemBuilderState(name, None, flagEnabled = false)
+      new ItemBuilderState(name, Vector.empty, flagEnabled = false)
   }
 
   final case class SingleResourceBuilderState[T, C](
       name: String,
-      validateWithContext: T => Option[ThreadedValidation[C]],
+      validations: T => Vector[ValidationOp[C]],
       flagEnabled: Boolean
   ) {
+
+    def validateWithContext(resource: T): Option[ThreadedValidation[C]] =
+      composeValidationOps(validations(resource))
 
     def appendValidation(
         validation: T => ThreadedValidation[C]
     ): SingleResourceBuilderState[T, C] =
-      copy(validateWithContext =
-        resource =>
-          StepKernel.appendThreadedValidation(
-            validateWithContext(resource),
-            validation(resource)
-          )
+      copy(validations =
+        resource => validations(resource) :+ ThreadedValidationOp(validation(resource))
+      )
+
+    def appendPlainValidation(
+        validation: T => C => IO[Unit]
+    ): SingleResourceBuilderState[T, C] =
+      copy(validations =
+        resource => validations(resource) :+ PlainValidationOp(validation(resource))
       )
 
     def withFlag: SingleResourceBuilderState[T, C] =
@@ -232,24 +350,30 @@ private[release] object StepKernel {
 
   object SingleResourceBuilderState {
     def apply[T, C](name: String): SingleResourceBuilderState[T, C] =
-      new SingleResourceBuilderState(name, _ => None, flagEnabled = false)
+      new SingleResourceBuilderState(name, _ => Vector.empty, flagEnabled = false)
   }
 
   final case class ItemResourceBuilderState[T, C, I](
       name: String,
-      validateWithContext: T => Option[ThreadedItemValidation[C, I]],
+      validations: T => Vector[ItemValidationOp[C, I]],
       flagEnabled: Boolean
   ) {
+
+    def validateWithContext(resource: T): Option[ThreadedItemValidation[C, I]] =
+      composeItemValidationOps(validations(resource))
 
     def appendValidation(
         validation: T => ThreadedItemValidation[C, I]
     ): ItemResourceBuilderState[T, C, I] =
-      copy(validateWithContext =
-        resource =>
-          StepKernel.appendThreadedValidation(
-            validateWithContext(resource),
-            validation(resource)
-          )
+      copy(validations =
+        resource => validations(resource) :+ ThreadedItemValidationOp(validation(resource))
+      )
+
+    def appendPlainValidation(
+        validation: T => (C, I) => IO[Unit]
+    ): ItemResourceBuilderState[T, C, I] =
+      copy(validations =
+        resource => validations(resource) :+ PlainItemValidationOp(validation(resource))
       )
 
     def withFlag: ItemResourceBuilderState[T, C, I] =
@@ -258,6 +382,6 @@ private[release] object StepKernel {
 
   object ItemResourceBuilderState {
     def apply[T, C, I](name: String): ItemResourceBuilderState[T, C, I] =
-      new ItemResourceBuilderState(name, _ => None, flagEnabled = false)
+      new ItemResourceBuilderState(name, _ => Vector.empty, flagEnabled = false)
   }
 }

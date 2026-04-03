@@ -332,7 +332,7 @@ object MonorepoStepIO {
   ) {
 
     def withValidation(f: MonorepoContext => IO[Unit]): GlobalBuilder =
-      new GlobalBuilder(state.appendValidation(StepKernel.asThreadedValidation(f)))
+      new GlobalBuilder(state.appendPlainValidation(f))
 
     def withValidationContext(
         f: MonorepoContext => IO[MonorepoContext]
@@ -382,7 +382,7 @@ object MonorepoStepIO {
     def withValidation(
         f: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): PerProjectBuilder =
-      new PerProjectBuilder(state.appendValidation(StepKernel.asThreadedValidation(f)))
+      new PerProjectBuilder(state.appendPlainValidation(f))
 
     def withValidationContext(
         f: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
@@ -428,9 +428,7 @@ object MonorepoStepIO {
   ) {
 
     def withValidation(f: T => MonorepoContext => IO[Unit]): ResourceGlobalBuilder[T] =
-      new ResourceGlobalBuilder[T](
-        state.appendValidation(resource => StepKernel.asThreadedValidation(f(resource)))
-      )
+      new ResourceGlobalBuilder[T](state.appendPlainValidation(f))
 
     def withValidationContext(
         f: T => MonorepoContext => IO[MonorepoContext]
@@ -487,9 +485,7 @@ object MonorepoStepIO {
     def withValidation(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
     ): ResourcePerProjectBuilder[T] =
-      new ResourcePerProjectBuilder[T](
-        state.appendValidation(resource => StepKernel.asThreadedValidation(f(resource)))
-      )
+      new ResourcePerProjectBuilder[T](state.appendPlainValidation(f))
 
     def withValidationContext(
         f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
