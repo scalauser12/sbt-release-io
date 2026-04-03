@@ -50,7 +50,7 @@ private[release] object HookStepCompilation {
             )
           )
 
-        case None        =>
+        case None =>
           buildStep(
             stepName,
             ctx =>
@@ -106,7 +106,7 @@ private[release] object HookStepCompilation {
             )
           )
 
-        case None        =>
+        case None =>
           buildStep(
             stepName,
             (ctx, item) =>

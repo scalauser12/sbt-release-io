@@ -131,7 +131,7 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
 
     stateResource("monorepo-command-check-invalid-plan", MonorepoReleasePlugin).use { loaded =>
       IO {
-        val _ = MonorepoCommandExecution.doCheck(
+        val _   = MonorepoCommandExecution.doCheck(
           loaded.state,
           Seq(AllChanged, SelectProject("core")),
           runtime()

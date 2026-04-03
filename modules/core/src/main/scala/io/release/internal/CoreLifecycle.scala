@@ -173,13 +173,14 @@ private[release] object CoreLifecycle {
       cachedGate =
         if (freezeGateDecision)
           Some(
-            HookStepCompilation.CachedSingleGate[ReleaseContext, CorePublishHookGateCache.HookToken](
-              tokenForIndex = hookIndex => CorePublishHookGateCache.HookToken(phase, hookIndex),
-              resolveDecision = (ctx, token, decision) =>
-                CorePublishHookGateCache.resolveDecision(ctx, token, decision),
-              snapshotDecision = (ctx, token, evaluateGate) =>
-                CorePublishHookGateCache.snapshotDecision(ctx, token, evaluateGate)
-            )
+            HookStepCompilation
+              .CachedSingleGate[ReleaseContext, CorePublishHookGateCache.HookToken](
+                tokenForIndex = hookIndex => CorePublishHookGateCache.HookToken(phase, hookIndex),
+                resolveDecision = (ctx, token, decision) =>
+                  CorePublishHookGateCache.resolveDecision(ctx, token, decision),
+                snapshotDecision = (ctx, token, evaluateGate) =>
+                  CorePublishHookGateCache.snapshotDecision(ctx, token, evaluateGate)
+              )
           )
         else None
     )(

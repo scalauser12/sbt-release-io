@@ -60,7 +60,7 @@ private[monorepo] object MonorepoPreflight {
       StepBoundarySupport.splitAfterBoundary(steps)(_.isSelectionBoundary) match {
         case Some((setupSteps, mainSteps)) =>
           CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
-        case None                         =>
+        case None                          =>
           CheckSegments(Seq.empty, steps)
       }
   }

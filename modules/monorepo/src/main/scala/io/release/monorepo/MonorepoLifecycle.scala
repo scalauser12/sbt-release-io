@@ -233,8 +233,13 @@ private[monorepo] object MonorepoLifecycle {
         if (freezeGateDecision)
           Some(
             HookStepCompilation
-              .CachedItemGate[MonorepoContext, ProjectReleaseInfo, MonorepoPublishHookGateCache.HookToken](
-                tokenForIndex = hookIndex => MonorepoPublishHookGateCache.HookToken(phase, hookIndex),
+              .CachedItemGate[
+                MonorepoContext,
+                ProjectReleaseInfo,
+                MonorepoPublishHookGateCache.HookToken
+              ](
+                tokenForIndex =
+                  hookIndex => MonorepoPublishHookGateCache.HookToken(phase, hookIndex),
                 resolveDecision = (ctx, token, project, decision) =>
                   MonorepoPublishHookGateCache.resolveDecision(ctx, token, project, decision),
                 snapshotDecision = (ctx, token, project, evaluateGate) =>

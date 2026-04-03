@@ -244,42 +244,42 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      finalCtx   <- runtime.resource.use { resourceValue =>
-                      for {
-                        runProcess  <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
-                        _           <- IO.blocking(
-                                         logReleaseStart(
-                                           inputs.cleanState,
-                                           runProcess.steps.length,
-                                           inputs.crossEnabled
-                                         )
-                                       )
-                        initialCtx  <- runtime.initialContext(
+      finalCtx <- runtime.resource.use { resourceValue =>
+                    for {
+                      runProcess  <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
+                      _           <- IO.blocking(
+                                       logReleaseStart(
                                          inputs.cleanState,
-                                         inputs.skipTests,
-                                         inputs.skipPublish,
-                                         inputs.interactive
-                                       )
-                        seededCtx    = initialCtx.withExecutionState(
-                                         CoreExecutionState(inputs.plan)
-                                       )
-                        preparedCtx <-
-                          CommandRuntimeSupport.preparePushIfNeeded(
-                            seededCtx,
-                            runProcess.steps.map(_.name),
-                            ReleaseLogPrefixes.Core
-                          )
-                        finalCtx    <- CoreProcessStep.compose(
-                                         runProcess.steps,
+                                         runProcess.steps.length,
                                          inputs.crossEnabled
-                                       )(preparedCtx)
-                      } yield finalCtx
-                    }
-      result     <- SharedCommandKernel.finalizeReleaseResult(
-                      ctx = finalCtx,
-                      logPrefix = ReleaseLogPrefixes.Core,
-                      cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
-                    )
+                                       )
+                                     )
+                      initialCtx  <- runtime.initialContext(
+                                       inputs.cleanState,
+                                       inputs.skipTests,
+                                       inputs.skipPublish,
+                                       inputs.interactive
+                                     )
+                      seededCtx    = initialCtx.withExecutionState(
+                                       CoreExecutionState(inputs.plan)
+                                     )
+                      preparedCtx <-
+                        CommandRuntimeSupport.preparePushIfNeeded(
+                          seededCtx,
+                          runProcess.steps.map(_.name),
+                          ReleaseLogPrefixes.Core
+                        )
+                      finalCtx    <- CoreProcessStep.compose(
+                                       runProcess.steps,
+                                       inputs.crossEnabled
+                                     )(preparedCtx)
+                    } yield finalCtx
+                  }
+      result   <- SharedCommandKernel.finalizeReleaseResult(
+                    ctx = finalCtx,
+                    logPrefix = ReleaseLogPrefixes.Core,
+                    cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
+                  )
     } yield result
 
   private def runPlannedCheck[T](

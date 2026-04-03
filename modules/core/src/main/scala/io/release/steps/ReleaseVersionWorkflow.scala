@@ -290,11 +290,12 @@ private[release] object ReleaseVersionWorkflow {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx))
       contents    <- versionPlan.versionFileContents(versionPlan.versionFile, versionValue)
       _           <- VersionFileSupport.writeUtf8(versionPlan.versionFile, contents)
-      _           <- IO.blocking(
-                       ctx.state.log.info(
-                         s"${ReleaseLogPrefixes.Core} Wrote version $versionValue to ${versionPlan.versionFile.getName}"
-                       )
-                     )
+      _           <-
+        IO.blocking(
+          ctx.state.log.info(
+            s"${ReleaseLogPrefixes.Core} Wrote version $versionValue to ${versionPlan.versionFile.getName}"
+          )
+        )
       result      <- IO.blocking {
                        val newState = SbtRuntime.appendWithSession(
                          ctx.state,
