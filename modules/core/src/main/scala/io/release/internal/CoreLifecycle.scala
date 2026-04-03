@@ -8,198 +8,176 @@ import io.release.steps.{PublishSteps, ReleaseSteps}
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
 
-  private type Gate = ReleaseContext => IO[Boolean]
+  private type Gate  = ReleaseContext => IO[Boolean]
+  private type Phase =
+    LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]
 
   private val Always: Gate      = _ => IO.pure(true)
   private val PublishGate: Gate = PublishSteps.shouldRunPublishHooks
+
+  private def publishCachedGate(
+      phase: String
+  ): HookStepCompilation.CachedSingleGate[ReleaseContext, CorePublishHookGateCache.HookToken] =
+    HookStepCompilation
+      .CachedSingleGate[ReleaseContext, CorePublishHookGateCache.HookToken](
+        tokenForIndex = hookIndex => CorePublishHookGateCache.HookToken(phase, hookIndex),
+        resolveDecision =
+          (ctx, token, decision) => CorePublishHookGateCache.resolveDecision(ctx, token, decision),
+        snapshotDecision = (ctx, token, evaluateGate) =>
+          CorePublishHookGateCache.snapshotDecision(ctx, token, evaluateGate)
+      )
+
+  private def builtIn(
+      step: ProcessStep.Single[ReleaseContext],
+      enabled: CoreHookConfiguration => Boolean = _ => true
+  ): Phase =
+    LifecycleCompiler.singleBuiltIn(
+      step = step,
+      enabled = enabled
+    )
 
   private def hookPhase(
       phase: String,
       resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],
       gate: Gate,
-      crossBuild: Boolean,
-      enabled: CoreHookConfiguration => Boolean = _ => true,
-      freezeGateDecision: Boolean = false
-  ): LifecycleCompiler.HookPhase[
-    CoreHookConfiguration,
-    ReleaseHookIO,
-    ProcessStep.Single[ReleaseContext]
-  ] =
-    LifecycleCompiler.HookPhase(
+      crossBuild: Boolean = false,
+      cachedGate: Option[
+        HookStepCompilation.CachedSingleGate[
+          ReleaseContext,
+          CorePublishHookGateCache.HookToken
+        ]
+      ] = None,
+      enabled: CoreHookConfiguration => Boolean = _ => true
+  ): Phase =
+    LifecycleCompiler.singleHookPhase(
       phase = phase,
       resolveHooks = resolveHooks,
-      buildSteps =
-        (phaseName, hooks) => compileHooks(phaseName, hooks, gate, crossBuild, freezeGateDecision),
+      gate = gate,
+      nameOf = (hook: ReleaseHookIO) => hook.name,
+      executeOf = (hook: ReleaseHookIO) => hook.execute,
+      validateOf = (hook: ReleaseHookIO) => hook.validate,
+      crossBuild = crossBuild,
+      cachedGate = cachedGate,
       enabled = enabled
     )
 
-  private val phases: Seq[
-    LifecycleCompiler.Phase[CoreHookConfiguration, ProcessStep.Single[ReleaseContext]]
-  ] = Seq(
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.initializeVcs),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.checkCleanWorkingDir),
-    hookPhase("after-clean-check", _.afterCleanCheckHooks, Always, crossBuild = false),
-    LifecycleCompiler.BuiltInPhase(
+  private val phases: Seq[Phase] = Seq(
+    builtIn(ReleaseSteps.initializeVcs),
+    builtIn(ReleaseSteps.checkCleanWorkingDir),
+    hookPhase(
+      phase = "after-clean-check",
+      resolveHooks = _.afterCleanCheckHooks,
+      gate = Always
+    ),
+    builtIn(
       ReleaseSteps.checkSnapshotDependencies,
       _.enableSnapshotDependenciesCheck
     ),
     hookPhase(
       "before-version-resolution",
       _.beforeVersionResolutionHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.inquireVersions),
+    builtIn(ReleaseSteps.inquireVersions),
     hookPhase(
       "after-version-resolution",
       _.afterVersionResolutionHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.runClean, _.enableRunClean),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.runTests, _.enableRunTests),
+    builtIn(ReleaseSteps.runClean, _.enableRunClean),
+    builtIn(ReleaseSteps.runTests, _.enableRunTests),
     hookPhase(
       "before-release-version-write",
       _.beforeReleaseVersionWriteHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.setReleaseVersion),
+    builtIn(ReleaseSteps.setReleaseVersion),
     hookPhase(
       "after-release-version-write",
       _.afterReleaseVersionWriteHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
     hookPhase(
       "before-release-commit",
       _.beforeReleaseCommitHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.commitReleaseVersion),
+    builtIn(ReleaseSteps.commitReleaseVersion),
     hookPhase(
       "after-release-commit",
       _.afterReleaseCommitHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
     hookPhase(
       "before-tag",
       _.beforeTagHooks,
       Always,
-      crossBuild = false,
       enabled = _.enableTagging
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.tagRelease, _.enableTagging),
+    builtIn(ReleaseSteps.tagRelease, _.enableTagging),
     hookPhase(
       "after-tag",
       _.afterTagHooks,
       Always,
-      crossBuild = false,
       enabled = _.enableTagging
     ),
     hookPhase(
       "before-publish",
       _.beforePublishHooks,
       PublishGate,
-      ReleaseSteps.publishArtifacts.enableCrossBuild,
-      enabled = _.enablePublish,
-      freezeGateDecision = true
+      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      cachedGate = Some(publishCachedGate("before-publish")),
+      enabled = _.enablePublish
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.publishArtifacts, _.enablePublish),
+    builtIn(ReleaseSteps.publishArtifacts, _.enablePublish),
     hookPhase(
       "after-publish",
       _.afterPublishHooks,
       PublishGate,
-      ReleaseSteps.publishArtifacts.enableCrossBuild,
-      enabled = _.enablePublish,
-      freezeGateDecision = true
+      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      cachedGate = Some(publishCachedGate("after-publish")),
+      enabled = _.enablePublish
     ),
     hookPhase(
       "before-next-version-write",
       _.beforeNextVersionWriteHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.setNextVersion),
+    builtIn(ReleaseSteps.setNextVersion),
     hookPhase(
       "after-next-version-write",
       _.afterNextVersionWriteHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
     hookPhase(
       "before-next-commit",
       _.beforeNextCommitHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.commitNextVersion),
+    builtIn(ReleaseSteps.commitNextVersion),
     hookPhase(
       "after-next-commit",
       _.afterNextCommitHooks,
-      Always,
-      crossBuild = false
+      Always
     ),
     hookPhase(
       "before-push",
       _.beforePushHooks,
       Always,
-      crossBuild = false,
       enabled = _.enablePush
     ),
-    LifecycleCompiler.BuiltInPhase(ReleaseSteps.pushChanges, _.enablePush),
+    builtIn(ReleaseSteps.pushChanges, _.enablePush),
     hookPhase(
       "after-push",
       _.afterPushHooks,
       Always,
-      crossBuild = false,
       enabled = _.enablePush
     )
   )
 
   val defaults: Seq[ProcessStep.Single[ReleaseContext]] =
-    LifecycleCompiler.defaults(phases)
+    LifecycleCompiler.defaultsSingle(phases)
 
   def compile(hooks: CoreHookConfiguration): Seq[ProcessStep.Single[ReleaseContext]] =
-    LifecycleCompiler.compile(hooks, phases)
-
-  private def compileHooks(
-      phase: String,
-      hooks: Seq[ReleaseHookIO],
-      gate: Gate,
-      crossBuild: Boolean,
-      freezeGateDecision: Boolean
-  ): Seq[ProcessStep.Single[ReleaseContext]] =
-    HookStepCompilation.compileSingleContextHooks(
-      phase = phase,
-      hooks = hooks,
-      gate = gate,
-      cachedGate =
-        if (freezeGateDecision)
-          Some(
-            HookStepCompilation
-              .CachedSingleGate[ReleaseContext, CorePublishHookGateCache.HookToken](
-                tokenForIndex = hookIndex => CorePublishHookGateCache.HookToken(phase, hookIndex),
-                resolveDecision = (ctx, token, decision) =>
-                  CorePublishHookGateCache.resolveDecision(ctx, token, decision),
-                snapshotDecision = (ctx, token, evaluateGate) =>
-                  CorePublishHookGateCache.snapshotDecision(ctx, token, evaluateGate)
-              )
-          )
-        else None
-    )(
-      nameOf = _.name,
-      executeOf = _.execute,
-      validateOf = _.validate,
-      buildStep = (name, execute, validate, validateWithContext) =>
-        ProcessStep.Single(
-          name = name,
-          execute = execute,
-          validate = validate,
-          enableCrossBuild = crossBuild,
-          validateWithContext = validateWithContext
-        )
-    )
+    LifecycleCompiler.compileSingle(hooks, phases)
 }

@@ -6,7 +6,6 @@ import io.release.ReleaseIO.*
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
