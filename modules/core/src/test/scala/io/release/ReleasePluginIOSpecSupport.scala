@@ -53,6 +53,20 @@ trait ReleasePluginIOSpecSupport {
 
   protected object InheritedHookFriendlyPlugin extends BaseHookFriendlyPlugin
 
+  protected object BehaviorOverridePlugin extends ReleasePluginIOLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseBehaviorOverrides"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override protected def crossBuildEnabled(state: State): Boolean = true
+
+    override protected def skipPublishEnabled(state: State): Boolean = true
+
+    override protected def interactiveEnabled(state: State): Boolean = true
+  }
+
   protected object BaseReleaseSettingsPlugin extends ReleasePluginIOLike[Unit] {
     override def trigger = noTrigger
 

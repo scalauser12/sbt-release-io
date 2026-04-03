@@ -2,6 +2,8 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.internal.CoreCommandExecution
+import io.release.internal.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.Setting
 
@@ -94,6 +96,34 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
     }
   }
 
+  test(
+    "commandRuntime forwards a direct custom plugin's behavior overrides into release planning"
+  ) {
+    stateResource("release-plugin-behavior-overrides", BehaviorOverridePlugin).use { loaded =>
+      Ref.of[IO, Option[(Boolean, Boolean)]](None).flatMap { observedFlags =>
+        IO {
+          val runtime = BehaviorOverridePlugin.commandRuntime.copy(
+            initialContext = (_state, _skipTests, skipPublish, interactive) =>
+              observedFlags
+                .set(Some(skipPublish -> interactive))
+                .flatMap(_ =>
+                  IO.raiseError[ReleaseContext](new RuntimeException("sentinel-initial-context"))
+                )
+          )
+          val result  = CoreCommandExecution.doRelease(loaded.state, Seq.empty, runtime)
+
+          result -> loaded.consoleBuffer.toString("UTF-8")
+        }.flatMap { case (result, log) =>
+          observedFlags.get.map { flags =>
+            assertEquals(flags, Some(true -> true))
+            assertEquals(result.get(ReleaseKeys.versions), None)
+            assert(log.contains(s"${ReleaseLogPrefixes.Core} Cross-build enabled"))
+          }
+        }
+      }
+    }
+  }
+
   test("custom plugins can build projectSettings from baseReleaseSettings") {
     IO {
       val labels = BaseReleaseSettingsPlugin.settingsForTests.map(_.key.key.label).toSet
@@ -104,6 +134,21 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
           .map(_.key.key.label)
           .forall(labels.contains)
       )
+    }
+  }
+
+  test("invalid core CLI input logs the core prefix and fails state") {
+    stateResource("release-plugin-invalid-cli", ReleasePluginIO).use { loaded =>
+      IO {
+        val result = ReleasePluginIO.handleReleaseCommandTokens(loaded.state, Seq("help", "extra"))
+        val log    = loaded.consoleBuffer.toString("UTF-8")
+        val failed = loaded.state.fail
+
+        assertEquals(result.next.getClass.getName, failed.next.getClass.getName)
+        assertEquals(result.remainingCommands, failed.remainingCommands)
+        assert(log.contains(ReleaseLogPrefixes.Core))
+        assert(log.contains("Unexpected arguments after 'help'."))
+      }
     }
   }
 }
