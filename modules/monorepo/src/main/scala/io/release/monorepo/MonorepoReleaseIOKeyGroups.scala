@@ -8,7 +8,7 @@ trait MonorepoReleaseIOSelectionKeys {
 
   /** Which subprojects participate in monorepo releases. Default: all transitively aggregated projects. */
   val releaseIOMonorepoSelectionProjects: SettingKey[Seq[ProjectRef]] =
-    MonorepoReleaseIO._releaseIOMonorepoSelectionProjects
+    MonorepoPublicKeyCatalog.releaseIOMonorepoSelectionProjects
 }
 
 /** Grouped build-facing monorepo settings for command behavior. */
@@ -16,19 +16,19 @@ trait MonorepoReleaseIOBehaviorKeys {
 
   /** Cross-build enabled. Default: false. */
   val releaseIOMonorepoBehaviorCrossBuild: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoBehaviorCrossBuild
+    MonorepoPublicKeyCatalog.releaseIOMonorepoBehaviorCrossBuild
 
   /** Skip tests. Default: false. */
   val releaseIOMonorepoBehaviorSkipTests: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoBehaviorSkipTests
+    MonorepoPublicKeyCatalog.releaseIOMonorepoBehaviorSkipTests
 
   /** Skip publish. Default: false. */
   val releaseIOMonorepoBehaviorSkipPublish: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoBehaviorSkipPublish
+    MonorepoPublicKeyCatalog.releaseIOMonorepoBehaviorSkipPublish
 
   /** Interactive mode. Default: false. */
   val releaseIOMonorepoBehaviorInteractive: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoBehaviorInteractive
+    MonorepoPublicKeyCatalog.releaseIOMonorepoBehaviorInteractive
 }
 
 /** Grouped build-facing monorepo settings for lifecycle policy toggles. */
@@ -36,27 +36,27 @@ trait MonorepoReleaseIOPolicyKeys {
 
   /** When false, omits the snapshot-dependency validation phase from the compiled hook process. */
   val releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck
+    MonorepoPublicKeyCatalog.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck
 
   /** When false, omits the `run-clean` phase from the compiled hook process. */
   val releaseIOMonorepoPolicyEnableRunClean: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoPolicyEnableRunClean
+    MonorepoPublicKeyCatalog.releaseIOMonorepoPolicyEnableRunClean
 
   /** When false, omits the `run-tests` phase from the compiled hook process. */
   val releaseIOMonorepoPolicyEnableRunTests: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoPolicyEnableRunTests
+    MonorepoPublicKeyCatalog.releaseIOMonorepoPolicyEnableRunTests
 
   /** When false, omits the `tag-releases` phase from the compiled hook process. */
   val releaseIOMonorepoPolicyEnableTagging: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoPolicyEnableTagging
+    MonorepoPublicKeyCatalog.releaseIOMonorepoPolicyEnableTagging
 
   /** When false, omits the `publish-artifacts` phase from the compiled hook process. */
   val releaseIOMonorepoPolicyEnablePublish: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoPolicyEnablePublish
+    MonorepoPublicKeyCatalog.releaseIOMonorepoPolicyEnablePublish
 
   /** When false, omits the `push-changes` phase from the compiled hook process. */
   val releaseIOMonorepoPolicyEnablePush: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoPolicyEnablePush
+    MonorepoPublicKeyCatalog.releaseIOMonorepoPolicyEnablePush
 }
 
 /** Grouped build-facing monorepo settings for lifecycle hooks. */
@@ -64,79 +64,79 @@ trait MonorepoReleaseIOHookKeys {
 
   /** Hooks that run after the clean-working-dir validation/check phase. */
   val releaseIOMonorepoHooksAfterCleanCheck: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterCleanCheck
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterCleanCheck
 
   /** Hooks that run immediately before project selection/change detection. */
   val releaseIOMonorepoHooksBeforeSelection: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforeSelection
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforeSelection
 
   /** Hooks that run immediately after project selection/change detection. */
   val releaseIOMonorepoHooksAfterSelection: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterSelection
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterSelection
 
   /** Hooks that run immediately before `inquire-versions`. */
   val releaseIOMonorepoHooksBeforeVersionResolution: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforeVersionResolution
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforeVersionResolution
 
   /** Hooks that run immediately after `inquire-versions`. */
   val releaseIOMonorepoHooksAfterVersionResolution: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterVersionResolution
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterVersionResolution
 
   /** Hooks that run immediately before `set-release-version`. */
   val releaseIOMonorepoHooksBeforeReleaseVersionWrite: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforeReleaseVersionWrite
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforeReleaseVersionWrite
 
   /** Hooks that run immediately after `set-release-version`. */
   val releaseIOMonorepoHooksAfterReleaseVersionWrite: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterReleaseVersionWrite
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterReleaseVersionWrite
 
   /** Hooks that run immediately before `commit-release-versions`. */
   val releaseIOMonorepoHooksBeforeReleaseCommit: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforeReleaseCommit
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforeReleaseCommit
 
   /** Hooks that run immediately after `commit-release-versions`. */
   val releaseIOMonorepoHooksAfterReleaseCommit: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterReleaseCommit
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterReleaseCommit
 
   /** Hooks that run immediately before `tag-releases`. */
   val releaseIOMonorepoHooksBeforeTag: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforeTag
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforeTag
 
   /** Hooks that run immediately after `tag-releases`. */
   val releaseIOMonorepoHooksAfterTag: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterTag
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterTag
 
   /** Hooks that run immediately before `publish-artifacts`. */
   val releaseIOMonorepoHooksBeforePublish: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforePublish
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforePublish
 
   /** Hooks that run immediately after `publish-artifacts`. */
   val releaseIOMonorepoHooksAfterPublish: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterPublish
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterPublish
 
   /** Hooks that run immediately before `set-next-version`. */
   val releaseIOMonorepoHooksBeforeNextVersionWrite: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforeNextVersionWrite
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforeNextVersionWrite
 
   /** Hooks that run immediately after `set-next-version`. */
   val releaseIOMonorepoHooksAfterNextVersionWrite: SettingKey[Seq[MonorepoProjectHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterNextVersionWrite
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterNextVersionWrite
 
   /** Hooks that run immediately before `commit-next-versions`. */
   val releaseIOMonorepoHooksBeforeNextCommit: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforeNextCommit
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforeNextCommit
 
   /** Hooks that run immediately after `commit-next-versions`. */
   val releaseIOMonorepoHooksAfterNextCommit: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterNextCommit
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterNextCommit
 
   /** Hooks that run immediately before `push-changes`. */
   val releaseIOMonorepoHooksBeforePush: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksBeforePush
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksBeforePush
 
   /** Hooks that run immediately after `push-changes`. */
   val releaseIOMonorepoHooksAfterPush: SettingKey[Seq[MonorepoGlobalHookIO]] =
-    MonorepoReleaseIO._releaseIOMonorepoHooksAfterPush
+    MonorepoPublicKeyCatalog.releaseIOMonorepoHooksAfterPush
 }
 
 /** Grouped build-facing monorepo settings for version file handling. */
@@ -144,15 +144,15 @@ trait MonorepoReleaseIOVersioningKeys {
 
   /** Per-project version file resolver. Default: scoped `releaseIOVersioningFile`. */
   val releaseIOMonorepoVersioningFile: SettingKey[MonorepoReleaseIO.MonorepoVersionFileResolver] =
-    MonorepoReleaseIO._releaseIOMonorepoVersioningFile
+    MonorepoPublicKeyCatalog.releaseIOMonorepoVersioningFile
 
   /** Per-project version reader. Default: same regex as core `defaultReadVersion`. */
   val releaseIOMonorepoVersioningReadVersion: SettingKey[File => IO[String]] =
-    MonorepoReleaseIO._releaseIOMonorepoVersioningReadVersion
+    MonorepoPublicKeyCatalog.releaseIOMonorepoVersioningReadVersion
 
   /** Per-project version writer. Default: produces `version := "x.y.z"\n`. */
   val releaseIOMonorepoVersioningFileContents: SettingKey[(File, String) => IO[String]] =
-    MonorepoReleaseIO._releaseIOMonorepoVersioningFileContents
+    MonorepoPublicKeyCatalog.releaseIOMonorepoVersioningFileContents
 }
 
 /** Grouped build-facing monorepo settings for change detection. */
@@ -160,24 +160,24 @@ trait MonorepoReleaseIODetectionKeys {
 
   /** Whether to use git-based change detection. Default: true. */
   val releaseIOMonorepoDetectionEnabled: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoDetectionEnabled
+    MonorepoPublicKeyCatalog.releaseIOMonorepoDetectionEnabled
 
   /** When true and change detection is enabled, include downstream dependents of changed projects. */
   val releaseIOMonorepoDetectionIncludeDownstream: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoDetectionIncludeDownstream
+    MonorepoPublicKeyCatalog.releaseIOMonorepoDetectionIncludeDownstream
 
   /** Custom change detection function. When set, replaces the built-in git diff logic. */
   val releaseIOMonorepoDetectionChangeDetector
       : SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]] =
-    MonorepoReleaseIO._releaseIOMonorepoDetectionChangeDetector
+    MonorepoPublicKeyCatalog.releaseIOMonorepoDetectionChangeDetector
 
   /** Additional files to exclude from change detection (absolute paths). */
   val releaseIOMonorepoDetectionExcludes: SettingKey[Seq[File]] =
-    MonorepoReleaseIO._releaseIOMonorepoDetectionExcludes
+    MonorepoPublicKeyCatalog.releaseIOMonorepoDetectionExcludes
 
   /** Root-level paths (relative to the repo root) checked for changes during detection. */
   val releaseIOMonorepoDetectionSharedPaths: SettingKey[Seq[String]] =
-    MonorepoReleaseIO._releaseIOMonorepoDetectionSharedPaths
+    MonorepoPublicKeyCatalog.releaseIOMonorepoDetectionSharedPaths
 }
 
 /** Grouped build-facing monorepo settings for VCS-derived formatting. */
@@ -185,19 +185,19 @@ trait MonorepoReleaseIOVcsKeys {
 
   /** Tag name formatter for per-project tags. (projectName, version) => tagName. */
   val releaseIOMonorepoVcsTagName: SettingKey[(String, String) => String] =
-    MonorepoReleaseIO._releaseIOMonorepoVcsTagName
+    MonorepoPublicKeyCatalog.releaseIOMonorepoVcsTagName
 
   /** Tag comment formatter for per-project tags. (projectName, version) => comment. */
   val releaseIOMonorepoVcsTagComment: SettingKey[(String, String) => String] =
-    MonorepoReleaseIO._releaseIOMonorepoVcsTagComment
+    MonorepoPublicKeyCatalog.releaseIOMonorepoVcsTagComment
 
   /** Commit message formatter for release version commits. */
   val releaseIOMonorepoVcsReleaseCommitMessage: SettingKey[String => String] =
-    MonorepoReleaseIO._releaseIOMonorepoVcsReleaseCommitMessage
+    MonorepoPublicKeyCatalog.releaseIOMonorepoVcsReleaseCommitMessage
 
   /** Commit message formatter for next version commits. */
   val releaseIOMonorepoVcsNextCommitMessage: SettingKey[String => String] =
-    MonorepoReleaseIO._releaseIOMonorepoVcsNextCommitMessage
+    MonorepoPublicKeyCatalog.releaseIOMonorepoVcsNextCommitMessage
 }
 
 /** Grouped build-facing monorepo settings for publish behavior. */
@@ -205,5 +205,5 @@ trait MonorepoReleaseIOPublishKeys {
 
   /** When false, skips publishTo/skip validation in the monorepo publishArtifacts step. */
   val releaseIOMonorepoPublishChecks: SettingKey[Boolean] =
-    MonorepoReleaseIO._releaseIOMonorepoPublishChecks
+    MonorepoPublicKeyCatalog.releaseIOMonorepoPublishChecks
 }
