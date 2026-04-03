@@ -3,226 +3,21 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
 import io.release.steps.{PublishSteps, ReleaseSteps}
 import sbt.Setting
 
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
 
-  private type Gate  = ReleaseContext => IO[Boolean]
-  private type Phase =
+  private type Gate       = ReleaseContext => IO[Boolean]
+  private type Phase      =
     LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]
+  private type Slot       = LifecycleSlotSupport.Slot[CoreHookConfiguration]
+  private type PolicySlot = LifecycleSlotSupport.PolicySlot[CoreHookConfiguration]
+  private type HookSlot   = LifecycleSlotSupport.HookSlot[CoreHookConfiguration, ReleaseHookIO]
 
   private val Always: Gate      = _ => IO.pure(true)
   private val PublishGate: Gate = PublishSteps.shouldRunPublishHooks
-
-  private[release] val enableSnapshotDependenciesCheckBinding
-      : LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
-      id = ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck.key.label,
-      key = ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck,
-      get = _.enableSnapshotDependenciesCheck,
-      updated = (config, value) => config.copy(enableSnapshotDependenciesCheck = value)
-    )
-
-  private[release] val enableRunCleanBinding
-      : LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
-      id = ReleaseIO.releaseIOPolicyEnableRunClean.key.label,
-      key = ReleaseIO.releaseIOPolicyEnableRunClean,
-      get = _.enableRunClean,
-      updated = (config, value) => config.copy(enableRunClean = value)
-    )
-
-  private[release] val enableRunTestsBinding
-      : LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
-      id = ReleaseIO.releaseIOPolicyEnableRunTests.key.label,
-      key = ReleaseIO.releaseIOPolicyEnableRunTests,
-      get = _.enableRunTests,
-      updated = (config, value) => config.copy(enableRunTests = value)
-    )
-
-  private[release] val enableTaggingBinding
-      : LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
-      id = ReleaseIO.releaseIOPolicyEnableTagging.key.label,
-      key = ReleaseIO.releaseIOPolicyEnableTagging,
-      get = _.enableTagging,
-      updated = (config, value) => config.copy(enableTagging = value)
-    )
-
-  private[release] val enablePublishBinding
-      : LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
-      id = ReleaseIO.releaseIOPolicyEnablePublish.key.label,
-      key = ReleaseIO.releaseIOPolicyEnablePublish,
-      get = _.enablePublish,
-      updated = (config, value) => config.copy(enablePublish = value)
-    )
-
-  private[release] val enablePushBinding
-      : LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
-      id = ReleaseIO.releaseIOPolicyEnablePush.key.label,
-      key = ReleaseIO.releaseIOPolicyEnablePush,
-      get = _.enablePush,
-      updated = (config, value) => config.copy(enablePush = value)
-    )
-
-  private[release] val afterCleanCheckHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterCleanCheck.key.label,
-      key = ReleaseIO.releaseIOHooksAfterCleanCheck,
-      get = _.afterCleanCheckHooks,
-      updated = (config, hooks) => config.copy(afterCleanCheckHooks = hooks)
-    )
-
-  private[release] val beforeVersionResolutionHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforeVersionResolution.key.label,
-      key = ReleaseIO.releaseIOHooksBeforeVersionResolution,
-      get = _.beforeVersionResolutionHooks,
-      updated = (config, hooks) => config.copy(beforeVersionResolutionHooks = hooks)
-    )
-
-  private[release] val afterVersionResolutionHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterVersionResolution.key.label,
-      key = ReleaseIO.releaseIOHooksAfterVersionResolution,
-      get = _.afterVersionResolutionHooks,
-      updated = (config, hooks) => config.copy(afterVersionResolutionHooks = hooks)
-    )
-
-  private[release] val beforeReleaseVersionWriteHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite.key.label,
-      key = ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite,
-      get = _.beforeReleaseVersionWriteHooks,
-      updated = (config, hooks) => config.copy(beforeReleaseVersionWriteHooks = hooks)
-    )
-
-  private[release] val afterReleaseVersionWriteHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterReleaseVersionWrite.key.label,
-      key = ReleaseIO.releaseIOHooksAfterReleaseVersionWrite,
-      get = _.afterReleaseVersionWriteHooks,
-      updated = (config, hooks) => config.copy(afterReleaseVersionWriteHooks = hooks)
-    )
-
-  private[release] val beforeReleaseCommitHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforeReleaseCommit.key.label,
-      key = ReleaseIO.releaseIOHooksBeforeReleaseCommit,
-      get = _.beforeReleaseCommitHooks,
-      updated = (config, hooks) => config.copy(beforeReleaseCommitHooks = hooks)
-    )
-
-  private[release] val afterReleaseCommitHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterReleaseCommit.key.label,
-      key = ReleaseIO.releaseIOHooksAfterReleaseCommit,
-      get = _.afterReleaseCommitHooks,
-      updated = (config, hooks) => config.copy(afterReleaseCommitHooks = hooks)
-    )
-
-  private[release] val beforeTagHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforeTag.key.label,
-      key = ReleaseIO.releaseIOHooksBeforeTag,
-      get = _.beforeTagHooks,
-      updated = (config, hooks) => config.copy(beforeTagHooks = hooks)
-    )
-
-  private[release] val afterTagHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterTag.key.label,
-      key = ReleaseIO.releaseIOHooksAfterTag,
-      get = _.afterTagHooks,
-      updated = (config, hooks) => config.copy(afterTagHooks = hooks)
-    )
-
-  private[release] val beforePublishHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforePublish.key.label,
-      key = ReleaseIO.releaseIOHooksBeforePublish,
-      get = _.beforePublishHooks,
-      updated = (config, hooks) => config.copy(beforePublishHooks = hooks)
-    )
-
-  private[release] val afterPublishHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterPublish.key.label,
-      key = ReleaseIO.releaseIOHooksAfterPublish,
-      get = _.afterPublishHooks,
-      updated = (config, hooks) => config.copy(afterPublishHooks = hooks)
-    )
-
-  private[release] val beforeNextVersionWriteHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforeNextVersionWrite.key.label,
-      key = ReleaseIO.releaseIOHooksBeforeNextVersionWrite,
-      get = _.beforeNextVersionWriteHooks,
-      updated = (config, hooks) => config.copy(beforeNextVersionWriteHooks = hooks)
-    )
-
-  private[release] val afterNextVersionWriteHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterNextVersionWrite.key.label,
-      key = ReleaseIO.releaseIOHooksAfterNextVersionWrite,
-      get = _.afterNextVersionWriteHooks,
-      updated = (config, hooks) => config.copy(afterNextVersionWriteHooks = hooks)
-    )
-
-  private[release] val beforeNextCommitHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforeNextCommit.key.label,
-      key = ReleaseIO.releaseIOHooksBeforeNextCommit,
-      get = _.beforeNextCommitHooks,
-      updated = (config, hooks) => config.copy(beforeNextCommitHooks = hooks)
-    )
-
-  private[release] val afterNextCommitHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterNextCommit.key.label,
-      key = ReleaseIO.releaseIOHooksAfterNextCommit,
-      get = _.afterNextCommitHooks,
-      updated = (config, hooks) => config.copy(afterNextCommitHooks = hooks)
-    )
-
-  private[release] val beforePushHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksBeforePush.key.label,
-      key = ReleaseIO.releaseIOHooksBeforePush,
-      get = _.beforePushHooks,
-      updated = (config, hooks) => config.copy(beforePushHooks = hooks)
-    )
-
-  private[release] val afterPushHooksBinding
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
-      id = ReleaseIO.releaseIOHooksAfterPush.key.label,
-      key = ReleaseIO.releaseIOHooksAfterPush,
-      get = _.afterPushHooks,
-      updated = (config, hooks) => config.copy(afterPushHooks = hooks)
-    )
 
   private def publishCachedGate(
       phase: String
@@ -239,17 +34,27 @@ private[release] object CoreLifecycle {
   private def builtIn(
       step: ProcessStep.Single[ReleaseContext],
       enabled: CoreHookConfiguration => Boolean = _ => true,
-      configBindings: Seq[LifecycleConfigCompiler.Binding[CoreHookConfiguration]] = Nil
+      slots: Seq[Slot] = Nil
   ): Phase =
     LifecycleCompiler.singleBuiltIn(
       step = step,
       enabled = enabled,
-      configBindings = configBindings
+      configBindings = LifecycleSlotSupport.configBindings(slots)
+    )
+
+  private def builtIn(
+      step: ProcessStep.Single[ReleaseContext],
+      policySlot: PolicySlot
+  ): Phase =
+    builtIn(
+      step = step,
+      enabled = policySlot.enabled,
+      slots = Seq(policySlot)
     )
 
   private def hookPhase(
       phase: String,
-      resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],
+      hookSlot: HookSlot,
       gate: Gate,
       crossBuild: Boolean = false,
       cachedGate: Option[
@@ -259,11 +64,11 @@ private[release] object CoreLifecycle {
         ]
       ] = None,
       enabled: CoreHookConfiguration => Boolean = _ => true,
-      configBindings: Seq[LifecycleConfigCompiler.Binding[CoreHookConfiguration]] = Nil
+      additionalSlots: Seq[Slot] = Nil
   ): Phase =
     LifecycleCompiler.singleHookPhase(
       phase = phase,
-      resolveHooks = resolveHooks,
+      resolveHooks = hookSlot.resolveHooks,
       gate = gate,
       nameOf = (hook: ReleaseHookIO) => hook.name,
       executeOf = (hook: ReleaseHookIO) => hook.execute,
@@ -271,7 +76,7 @@ private[release] object CoreLifecycle {
       crossBuild = crossBuild,
       cachedGate = cachedGate,
       enabled = enabled,
-      configBindings = configBindings
+      configBindings = LifecycleSlotSupport.configBindings(hookSlot +: additionalSlots)
     )
 
   private[release] val phases: Seq[Phase] = Seq(
@@ -279,130 +84,118 @@ private[release] object CoreLifecycle {
     builtIn(ReleaseSteps.checkCleanWorkingDir),
     hookPhase(
       phase = "after-clean-check",
-      resolveHooks = _.afterCleanCheckHooks,
-      gate = Always,
-      configBindings = Seq(afterCleanCheckHooksBinding)
+      hookSlot = CoreLifecycleSlots.afterCleanCheckHooks,
+      gate = Always
     ),
     builtIn(
       ReleaseSteps.checkSnapshotDependencies,
-      _.enableSnapshotDependenciesCheck,
-      configBindings = Seq(enableSnapshotDependenciesCheckBinding)
+      CoreLifecycleSlots.enableSnapshotDependenciesCheck
     ),
     hookPhase(
-      "before-version-resolution",
-      _.beforeVersionResolutionHooks,
-      Always,
-      configBindings = Seq(beforeVersionResolutionHooksBinding)
+      phase = "before-version-resolution",
+      hookSlot = CoreLifecycleSlots.beforeVersionResolutionHooks,
+      gate = Always
     ),
     builtIn(ReleaseSteps.inquireVersions),
     hookPhase(
-      "after-version-resolution",
-      _.afterVersionResolutionHooks,
-      Always,
-      configBindings = Seq(afterVersionResolutionHooksBinding)
+      phase = "after-version-resolution",
+      hookSlot = CoreLifecycleSlots.afterVersionResolutionHooks,
+      gate = Always
     ),
-    builtIn(ReleaseSteps.runClean, _.enableRunClean, Seq(enableRunCleanBinding)),
-    builtIn(ReleaseSteps.runTests, _.enableRunTests, Seq(enableRunTestsBinding)),
+    builtIn(ReleaseSteps.runClean, CoreLifecycleSlots.enableRunClean),
+    builtIn(ReleaseSteps.runTests, CoreLifecycleSlots.enableRunTests),
     hookPhase(
-      "before-release-version-write",
-      _.beforeReleaseVersionWriteHooks,
-      Always,
-      configBindings = Seq(beforeReleaseVersionWriteHooksBinding)
+      phase = "before-release-version-write",
+      hookSlot = CoreLifecycleSlots.beforeReleaseVersionWriteHooks,
+      gate = Always
     ),
     builtIn(ReleaseSteps.setReleaseVersion),
     hookPhase(
-      "after-release-version-write",
-      _.afterReleaseVersionWriteHooks,
-      Always,
-      configBindings = Seq(afterReleaseVersionWriteHooksBinding)
+      phase = "after-release-version-write",
+      hookSlot = CoreLifecycleSlots.afterReleaseVersionWriteHooks,
+      gate = Always
     ),
     hookPhase(
-      "before-release-commit",
-      _.beforeReleaseCommitHooks,
-      Always,
-      configBindings = Seq(beforeReleaseCommitHooksBinding)
+      phase = "before-release-commit",
+      hookSlot = CoreLifecycleSlots.beforeReleaseCommitHooks,
+      gate = Always
     ),
     builtIn(ReleaseSteps.commitReleaseVersion),
     hookPhase(
-      "after-release-commit",
-      _.afterReleaseCommitHooks,
-      Always,
-      configBindings = Seq(afterReleaseCommitHooksBinding)
+      phase = "after-release-commit",
+      hookSlot = CoreLifecycleSlots.afterReleaseCommitHooks,
+      gate = Always
     ),
     hookPhase(
-      "before-tag",
-      _.beforeTagHooks,
-      Always,
-      enabled = _.enableTagging,
-      configBindings = Seq(beforeTagHooksBinding, enableTaggingBinding)
+      phase = "before-tag",
+      hookSlot = CoreLifecycleSlots.beforeTagHooks,
+      gate = Always,
+      enabled = CoreLifecycleSlots.enableTagging.enabled,
+      additionalSlots = Seq(CoreLifecycleSlots.enableTagging)
     ),
-    builtIn(ReleaseSteps.tagRelease, _.enableTagging, Seq(enableTaggingBinding)),
+    builtIn(ReleaseSteps.tagRelease, CoreLifecycleSlots.enableTagging),
     hookPhase(
-      "after-tag",
-      _.afterTagHooks,
-      Always,
-      enabled = _.enableTagging,
-      configBindings = Seq(afterTagHooksBinding, enableTaggingBinding)
+      phase = "after-tag",
+      hookSlot = CoreLifecycleSlots.afterTagHooks,
+      gate = Always,
+      enabled = CoreLifecycleSlots.enableTagging.enabled,
+      additionalSlots = Seq(CoreLifecycleSlots.enableTagging)
     ),
     hookPhase(
-      "before-publish",
-      _.beforePublishHooks,
-      PublishGate,
+      phase = "before-publish",
+      hookSlot = CoreLifecycleSlots.beforePublishHooks,
+      gate = PublishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGate = Some(publishCachedGate("before-publish")),
-      enabled = _.enablePublish,
-      configBindings = Seq(beforePublishHooksBinding, enablePublishBinding)
+      enabled = CoreLifecycleSlots.enablePublish.enabled,
+      additionalSlots = Seq(CoreLifecycleSlots.enablePublish)
     ),
-    builtIn(ReleaseSteps.publishArtifacts, _.enablePublish, Seq(enablePublishBinding)),
+    builtIn(ReleaseSteps.publishArtifacts, CoreLifecycleSlots.enablePublish),
     hookPhase(
-      "after-publish",
-      _.afterPublishHooks,
-      PublishGate,
+      phase = "after-publish",
+      hookSlot = CoreLifecycleSlots.afterPublishHooks,
+      gate = PublishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGate = Some(publishCachedGate("after-publish")),
-      enabled = _.enablePublish,
-      configBindings = Seq(afterPublishHooksBinding, enablePublishBinding)
+      enabled = CoreLifecycleSlots.enablePublish.enabled,
+      additionalSlots = Seq(CoreLifecycleSlots.enablePublish)
     ),
     hookPhase(
-      "before-next-version-write",
-      _.beforeNextVersionWriteHooks,
-      Always,
-      configBindings = Seq(beforeNextVersionWriteHooksBinding)
+      phase = "before-next-version-write",
+      hookSlot = CoreLifecycleSlots.beforeNextVersionWriteHooks,
+      gate = Always
     ),
     builtIn(ReleaseSteps.setNextVersion),
     hookPhase(
-      "after-next-version-write",
-      _.afterNextVersionWriteHooks,
-      Always,
-      configBindings = Seq(afterNextVersionWriteHooksBinding)
+      phase = "after-next-version-write",
+      hookSlot = CoreLifecycleSlots.afterNextVersionWriteHooks,
+      gate = Always
     ),
     hookPhase(
-      "before-next-commit",
-      _.beforeNextCommitHooks,
-      Always,
-      configBindings = Seq(beforeNextCommitHooksBinding)
+      phase = "before-next-commit",
+      hookSlot = CoreLifecycleSlots.beforeNextCommitHooks,
+      gate = Always
     ),
     builtIn(ReleaseSteps.commitNextVersion),
     hookPhase(
-      "after-next-commit",
-      _.afterNextCommitHooks,
-      Always,
-      configBindings = Seq(afterNextCommitHooksBinding)
+      phase = "after-next-commit",
+      hookSlot = CoreLifecycleSlots.afterNextCommitHooks,
+      gate = Always
     ),
     hookPhase(
-      "before-push",
-      _.beforePushHooks,
-      Always,
-      enabled = _.enablePush,
-      configBindings = Seq(beforePushHooksBinding, enablePushBinding)
+      phase = "before-push",
+      hookSlot = CoreLifecycleSlots.beforePushHooks,
+      gate = Always,
+      enabled = CoreLifecycleSlots.enablePush.enabled,
+      additionalSlots = Seq(CoreLifecycleSlots.enablePush)
     ),
-    builtIn(ReleaseSteps.pushChanges, _.enablePush, Seq(enablePushBinding)),
+    builtIn(ReleaseSteps.pushChanges, CoreLifecycleSlots.enablePush),
     hookPhase(
-      "after-push",
-      _.afterPushHooks,
-      Always,
-      enabled = _.enablePush,
-      configBindings = Seq(afterPushHooksBinding, enablePushBinding)
+      phase = "after-push",
+      hookSlot = CoreLifecycleSlots.afterPushHooks,
+      gate = Always,
+      enabled = CoreLifecycleSlots.enablePush.enabled,
+      additionalSlots = Seq(CoreLifecycleSlots.enablePush)
     )
   )
 
