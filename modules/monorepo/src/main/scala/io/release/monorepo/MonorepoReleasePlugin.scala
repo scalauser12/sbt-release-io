@@ -3,8 +3,8 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleasePluginIO
+import io.release.internal.PluginEntrypointSupport
 import io.release.internal.ReleaseLogPrefixes
-import sbt.Keys.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
@@ -51,25 +51,25 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
     * Defaults to reading from the `releaseIOMonorepoBehaviorCrossBuild` setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOMonorepoBehaviorCrossBuild)
+    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorCrossBuild)
 
   /** Whether tests should be skipped (before command-line args are applied).
     * Defaults to reading from the `releaseIOMonorepoBehaviorSkipTests` setting.
     */
   protected def skipTestsEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOMonorepoBehaviorSkipTests)
+    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorSkipTests)
 
   /** Whether to skip publish. Defaults to reading from the
     * `releaseIOMonorepoBehaviorSkipPublish` setting.
     */
   protected def skipPublishEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOMonorepoBehaviorSkipPublish)
+    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorSkipPublish)
 
   /** Whether interactive prompts are enabled.
     * Defaults to reading from the `releaseIOMonorepoBehaviorInteractive` setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOMonorepoBehaviorInteractive)
+    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorInteractive)
 
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
@@ -77,8 +77,12 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
   protected def commandName: String = "releaseIOMonorepo"
 
   override lazy val projectSettings: Seq[Setting[?]] =
-    MonorepoReleaseIO.monorepoDefaultSettings ++ Seq(
-      commands += Command(commandName)(monorepoParser)(handleMonorepoRelease)
+    PluginEntrypointSupport.pluginSettings(
+      MonorepoReleaseIO.monorepoDefaultSettings,
+      PluginEntrypointSupport.commandSetting(commandName)(
+        monorepoParser,
+        (state, tokens) => handleMonorepoCommandTokens(state, tokens)
+      )
     )
 
   // ── Parser ──────────────────────────────────────────────────────────
@@ -103,18 +107,40 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
       resolveInteractiveEnabled = state => interactiveEnabled(state)
     )
 
-  private def handleMonorepoRelease(state: State, tokens: Seq[String]): State =
-    MonorepoCli.parse(tokens, commandName) match {
-      case Left(message) =>
-        state.log.error(s"${ReleaseLogPrefixes.Monorepo} $message")
-        state.fail
-      case Right(parsed) =>
-        parsed.mode match {
-          case MonorepoCli.CommandMode.Help  => doMonorepoHelp(state)
-          case MonorepoCli.CommandMode.Check => doMonorepoCheck(state, parsed.args)
-          case MonorepoCli.CommandMode.Run   => doMonorepoRelease(state, parsed.args)
-        }
+  private def monorepoDispatch: PluginEntrypointSupport.DispatchAdapter[MonorepoCli.Arg] =
+    PluginEntrypointSupport.DispatchAdapter(
+      parse = parseMonorepoTokens,
+      help = state => doMonorepoHelp(state),
+      check = (state, args) => doMonorepoCheck(state, args),
+      run = (state, args) => doMonorepoRelease(state, args)
+    )
+
+  private def parseMonorepoTokens(
+      tokens: Seq[String],
+      commandName: String
+  ): Either[String, PluginEntrypointSupport.ParsedCommand[MonorepoCli.Arg]] =
+    MonorepoCli.parse(tokens, commandName).map { parsed =>
+      PluginEntrypointSupport.ParsedCommand(
+        mode = parsed.mode match {
+          case MonorepoCli.CommandMode.Help  => PluginEntrypointSupport.CommandMode.Help
+          case MonorepoCli.CommandMode.Check => PluginEntrypointSupport.CommandMode.Check
+          case MonorepoCli.CommandMode.Run   => PluginEntrypointSupport.CommandMode.Run
+        },
+        args = parsed.args
+      )
     }
+
+  private[monorepo] final def handleMonorepoCommandTokens(
+      state: State,
+      tokens: Seq[String]
+  ): State =
+    PluginEntrypointSupport.handleTokens(
+      state = state,
+      tokens = tokens,
+      logPrefix = ReleaseLogPrefixes.Monorepo,
+      commandName = commandName,
+      dispatch = monorepoDispatch
+    )
 
   protected def doMonorepoHelp(state: State): State =
     MonorepoCommandExecution.doHelp(state, commandName)

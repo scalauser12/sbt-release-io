@@ -4,12 +4,12 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.internal.CoreCommandExecution
 import io.release.internal.CoreDefaultSettings
+import io.release.internal.PluginEntrypointSupport
 import io.release.internal.ReleaseCli
 import io.release.internal.ReleaseCommandParsers
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers
 import io.release.vcs.Vcs
-import sbt.Keys.*
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
@@ -55,24 +55,24 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     * Defaults to reading from the `releaseIOBehaviorCrossBuild` setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOBehaviorCrossBuild)
+    PluginEntrypointSupport.settingValue(state, releaseIOBehaviorCrossBuild)
 
   /** Whether to skip publish. Defaults to reading from the `releaseIOBehaviorSkipPublish` setting. */
   protected def skipPublishEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOBehaviorSkipPublish)
+    PluginEntrypointSupport.settingValue(state, releaseIOBehaviorSkipPublish)
 
   /** Whether interactive prompts are enabled.
     * Defaults to reading from the `releaseIOBehaviorInteractive` setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    Project.extract(state).get(releaseIOBehaviorInteractive)
+    PluginEntrypointSupport.settingValue(state, releaseIOBehaviorInteractive)
 
   /** Base settings that include all default `releaseIO*` values plus command registration.
     * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`
     * so the release command and required default keys stay defined.
     */
   protected def baseReleaseSettings: Seq[Setting[?]] =
-    defaultSettingsValues ++ Seq(releaseIOCommand)
+    PluginEntrypointSupport.pluginSettings(defaultSettingsValues, releaseIOCommand)
 
   /** Default values for the release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] =
@@ -96,7 +96,10 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
 
   /** Setting that registers the release command. Uses [[commandName]]. */
   protected def releaseIOCommand: Setting[?] =
-    commands += Command(commandName)(_ => releaseParser)(handleReleaseIO)
+    PluginEntrypointSupport.commandSetting(commandName)(
+      _ => releaseParser,
+      (state, tokens) => handleReleaseCommandTokens(state, tokens)
+    )
 
   /** Build the initial release context from the current state.
     *
@@ -145,18 +148,40 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
         this.initialContext(state, skipTests, skipPublish, interactive)
     )
 
-  private def handleReleaseIO(state: State, tokens: Seq[String]): State =
-    ReleaseCli.parse(tokens, commandName) match {
-      case Left(message) =>
-        state.log.error(s"${ReleaseLogPrefixes.Core} $message")
-        state.fail
-      case Right(parsed) =>
-        parsed.mode match {
-          case ReleaseCli.CommandMode.Help  => doReleaseHelp(state)
-          case ReleaseCli.CommandMode.Check => doReleaseCheck(state, parsed.args)
-          case ReleaseCli.CommandMode.Run   => doReleaseIO(state, parsed.args)
-        }
+  private def releaseDispatch: PluginEntrypointSupport.DispatchAdapter[ReleaseCli.Arg] =
+    PluginEntrypointSupport.DispatchAdapter(
+      parse = parseReleaseTokens,
+      help = state => doReleaseHelp(state),
+      check = (state, args) => doReleaseCheck(state, args),
+      run = (state, args) => doReleaseIO(state, args)
+    )
+
+  private def parseReleaseTokens(
+      tokens: Seq[String],
+      commandName: String
+  ): Either[String, PluginEntrypointSupport.ParsedCommand[ReleaseCli.Arg]] =
+    ReleaseCli.parse(tokens, commandName).map { parsed =>
+      PluginEntrypointSupport.ParsedCommand(
+        mode = parsed.mode match {
+          case ReleaseCli.CommandMode.Help  => PluginEntrypointSupport.CommandMode.Help
+          case ReleaseCli.CommandMode.Check => PluginEntrypointSupport.CommandMode.Check
+          case ReleaseCli.CommandMode.Run   => PluginEntrypointSupport.CommandMode.Run
+        },
+        args = parsed.args
+      )
     }
+
+  private[release] final def handleReleaseCommandTokens(
+      state: State,
+      tokens: Seq[String]
+  ): State =
+    PluginEntrypointSupport.handleTokens(
+      state = state,
+      tokens = tokens,
+      logPrefix = ReleaseLogPrefixes.Core,
+      commandName = commandName,
+      dispatch = releaseDispatch
+    )
 
   protected def doReleaseHelp(state: State): State =
     CoreCommandExecution.doHelp(state, commandName)

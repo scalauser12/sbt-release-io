@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.internal.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.Setting
 
@@ -178,6 +179,22 @@ class MonorepoReleasePluginProcessModeSpec
           .map(_.key.key.label)
           .forall(labels.contains)
       )
+    }
+  }
+
+  test("invalid monorepo CLI input logs the monorepo prefix and fails state") {
+    stateResource("monorepo-plugin-invalid-cli", MonorepoReleasePlugin).use { loaded =>
+      IO {
+        val result =
+          MonorepoReleasePlugin.handleMonorepoCommandTokens(loaded.state, Seq("help", "extra"))
+        val log    = loaded.consoleBuffer.toString("UTF-8")
+        val failed = loaded.state.fail
+
+        assertEquals(result.next.getClass.getName, failed.next.getClass.getName)
+        assertEquals(result.remainingCommands, failed.remainingCommands)
+        assert(log.contains(ReleaseLogPrefixes.Monorepo))
+        assert(log.contains("Unexpected arguments after 'help'."))
+      }
     }
   }
 }
