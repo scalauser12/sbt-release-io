@@ -147,7 +147,7 @@ class Git(val baseDir: File) extends Vcs {
 }
 
 object Git {
-  private val markerDirectory                                = ".git"
+  private val markerDirectory = ".git"
 
   def isRepository(dir: File): IO[Option[File]] = IO.blocking {
     def loop(d: File): Option[File] =

@@ -97,7 +97,7 @@ class GitSpec extends CatsEffectSuite {
 
   private def waitForProcessToExit(pid: Long, remaining: FiniteDuration): IO[Boolean] =
     processAlive(pid).flatMap {
-      case false => IO.pure(false)
+      case false                              => IO.pure(false)
       case true if remaining <= Duration.Zero =>
         IO.pure(true)
       case true                               =>

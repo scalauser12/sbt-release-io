@@ -193,21 +193,21 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       )
 
       for {
-        switchedState     <- CrossBuildSupport.switchScalaVersion(entryState, switchedScala)
-        switchedVersion   <- projectTestScalaVersionOf(switchedState, coreRef)
-        switchedHome      <- projectTestScalaHomeOf(switchedState, coreRef)
-        currentState       = TestSupport.appendSessionSettings(
-                               switchedState,
-                               Seq(coreRef / name := retainedName)
-                             )
-        currentName       <- projectNameOf(currentState, coreRef)
-        restoredState     <- CrossBuildSupport.restoreEntryScalaSession(
-                               entryState,
-                               currentState
-                             )
-        restoredVersion   <- projectTestScalaVersionOf(restoredState, coreRef)
-        restoredHome      <- projectTestScalaHomeOf(restoredState, coreRef)
-        restoredName      <- projectNameOf(restoredState, coreRef)
+        switchedState   <- CrossBuildSupport.switchScalaVersion(entryState, switchedScala)
+        switchedVersion <- projectTestScalaVersionOf(switchedState, coreRef)
+        switchedHome    <- projectTestScalaHomeOf(switchedState, coreRef)
+        currentState     = TestSupport.appendSessionSettings(
+                             switchedState,
+                             Seq(coreRef / name := retainedName)
+                           )
+        currentName     <- projectNameOf(currentState, coreRef)
+        restoredState   <- CrossBuildSupport.restoreEntryScalaSession(
+                             entryState,
+                             currentState
+                           )
+        restoredVersion <- projectTestScalaVersionOf(restoredState, coreRef)
+        restoredHome    <- projectTestScalaHomeOf(restoredState, coreRef)
+        restoredName    <- projectNameOf(restoredState, coreRef)
       } yield {
         assertEquals(
           switchedVersion,

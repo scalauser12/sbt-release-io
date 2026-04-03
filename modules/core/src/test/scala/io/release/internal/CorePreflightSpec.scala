@@ -159,7 +159,7 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - fail fast when validation returns ctx.failWith before version resolution") {
     withInitialContext { case (_, _, initialCtx) =>
       val versionResolutionFailure = "version resolution should not run"
-      val failingStep             = ReleaseStepIO
+      val failingStep              = ReleaseStepIO
         .step("validation-fail-with")
         .withValidationContext(currentCtx =>
           IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))

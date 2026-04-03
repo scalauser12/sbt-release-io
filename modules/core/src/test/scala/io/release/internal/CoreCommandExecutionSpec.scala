@@ -34,7 +34,7 @@ class CoreCommandExecutionSpec extends CatsEffectSuite with ReleasePluginIOSpecS
                   )
                 )
           )
-          val result: State = CoreCommandExecution.doRelease(seededState, Seq.empty, runtime)
+          val result: State      = CoreCommandExecution.doRelease(seededState, Seq.empty, runtime)
 
           (seededState, result)
         }.flatMap { case (seededState, result) =>

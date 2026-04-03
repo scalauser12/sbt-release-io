@@ -244,9 +244,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
             persistReleaseHash = false
           )
           .flatMap(_ => addCalls.get)
-          .map(seen =>
-            assertEquals(seen, Vector(List("core/version.sbt", "api/version.sbt")))
-          )
+          .map(seen => assertEquals(seen, Vector(List("core/version.sbt", "api/version.sbt"))))
       }
     }
   }

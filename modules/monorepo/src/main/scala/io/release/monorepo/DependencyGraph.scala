@@ -60,9 +60,9 @@ private[monorepo] object DependencyGraph {
     if (uniqueProjects.isEmpty) IO.pure(Seq.empty)
     else
       IO.blocking {
-        val extracted  = Project.extract(state)
-        val structure  = extracted.structure
-        val projectSet = uniqueProjects.toSet
+        val extracted    = Project.extract(state)
+        val structure    = extracted.structure
+        val projectSet   = uniqueProjects.toSet
         val projectOrder = uniqueProjects.zipWithIndex.toMap
 
         // Build adjacency map: project -> set of projects it depends on (within our set)
@@ -81,13 +81,16 @@ private[monorepo] object DependencyGraph {
         // `updated(dependency, updated(dependency) :+ proj)` is safe on the first insert and
         // preserves deterministic dependent ordering.
         val dependedOnBy: Map[ProjectRef, Vector[ProjectRef]] =
-          uniqueProjects.foldLeft(Map.empty[ProjectRef, Vector[ProjectRef]].withDefaultValue(Vector.empty)) {
-            case (acc, proj) =>
-              dependsOn.getOrElse(proj, Set.empty).toVector
-                .sortBy(projectOrder)
-                .foldLeft(acc) { case (updated, dependency) =>
-                  updated.updated(dependency, updated(dependency) :+ proj)
-                }
+          uniqueProjects.foldLeft(
+            Map.empty[ProjectRef, Vector[ProjectRef]].withDefaultValue(Vector.empty)
+          ) { case (acc, proj) =>
+            dependsOn
+              .getOrElse(proj, Set.empty)
+              .toVector
+              .sortBy(projectOrder)
+              .foldLeft(acc) { case (updated, dependency) =>
+                updated.updated(dependency, updated(dependency) :+ proj)
+              }
           }
 
         // Kahn's algorithm — pure tail-recursive implementation
@@ -102,7 +105,7 @@ private[monorepo] object DependencyGraph {
         ): Vector[ProjectRef] =
           if (queue.isEmpty) acc
           else {
-            val (current, rest)       = queue.dequeue
+            val (current, rest)        = queue.dequeue
             val (newQueue, newDegrees) = dependedOnBy(current).foldLeft((rest, degrees)) {
               case ((q, d), dependent) =>
                 val nd = d(dependent) - 1

@@ -80,8 +80,10 @@ private[monorepo] object MonorepoCrossBuild {
       enableCrossBuild: Boolean
   ): IO[MonorepoContext] =
     if (crossBuild && enableCrossBuild)
-      foldCurrentProjects(ctx, (currentCtx, currentProject) =>
-        runCrossBuildForProject(currentCtx, currentProject, validate)
+      foldCurrentProjects(
+        ctx,
+        (currentCtx, currentProject) =>
+          runCrossBuildForProject(currentCtx, currentProject, validate)
       )
     else
       foldCurrentProjects(ctx, validate)

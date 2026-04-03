@@ -34,7 +34,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
 
   test("aggregatedSnapshotDependencies - deduplicate repeated dependencies in first-seen order") {
     TestSupport.tempDirResource(s"$fixturePrefix-distinct").use { dir =>
-      val depA = "org.example" % "demo" % "1.0.0-SNAPSHOT"
+      val depA = "org.example" % "demo"  % "1.0.0-SNAPSHOT"
       val depB = "org.example" % "other" % "2.0.0-SNAPSHOT"
 
       IO.blocking {

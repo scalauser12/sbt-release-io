@@ -130,7 +130,7 @@ private[release] object StepKernel {
             op.asInstanceOf[ThreadedItemValidationOp[C, I]]
           }
         )
-      case _                                          => existing
+      case _                                            => existing
     }
 
   /** Merge plain validation and threaded validation into a normalized pair.

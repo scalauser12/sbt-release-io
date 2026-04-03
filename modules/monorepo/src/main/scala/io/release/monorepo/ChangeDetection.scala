@@ -125,10 +125,11 @@ private[monorepo] object ChangeDetection {
       )
 
       val (_, changedProjects) =
-        projects.foldLeft(Map.empty[SharedPathCacheKey, Boolean] -> Vector.empty[ProjectReleaseInfo]) {
-          case ((cache, acc), project) =>
-            val (updatedCache, changed) = processProject(inputs, project, cache)
-            updatedCache -> (if (changed) acc :+ project else acc)
+        projects.foldLeft(
+          Map.empty[SharedPathCacheKey, Boolean] -> Vector.empty[ProjectReleaseInfo]
+        ) { case ((cache, acc), project) =>
+          val (updatedCache, changed) = processProject(inputs, project, cache)
+          updatedCache -> (if (changed) acc :+ project else acc)
         }
 
       changedProjects

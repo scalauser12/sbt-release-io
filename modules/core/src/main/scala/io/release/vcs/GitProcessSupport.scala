@@ -13,7 +13,7 @@ import scala.sys.process.ProcessBuilder as ScalaProcessBuilder
 import scala.sys.process.ProcessLogger
 
 private[vcs] object GitProcessSupport {
-  val DefaultDestroyGracePeriod: FiniteDuration = 1.second
+  val DefaultDestroyGracePeriod: FiniteDuration   = 1.second
   private val ProcessPollInterval: FiniteDuration = 50.millis
 
   private lazy val exec: String = {

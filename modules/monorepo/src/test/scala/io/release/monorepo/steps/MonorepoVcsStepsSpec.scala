@@ -657,9 +657,9 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       (
         MonorepoReleaseIO.monorepoDefaultSettings ++
           Seq(
-            io.release.ReleaseIO.releaseIOVersioningFile := new File(repo, "version.sbt"),
-            io.release.ReleaseIO.releaseIOVcsSign        := false,
-            io.release.ReleaseIO.releaseIOVcsSignOff     := false,
+            io.release.ReleaseIO.releaseIOVersioningFile          := new File(repo, "version.sbt"),
+            io.release.ReleaseIO.releaseIOVcsSign                 := false,
+            io.release.ReleaseIO.releaseIOVcsSignOff              := false,
             io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false
           ) ++
           settings

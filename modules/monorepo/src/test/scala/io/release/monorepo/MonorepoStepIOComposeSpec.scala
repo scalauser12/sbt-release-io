@@ -82,8 +82,8 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
               else currentCtx
             }
           ),
-          execute = (currentCtx, project) =>
-            observed.update(_ :+ s"execute:${project.name}").as(currentCtx)
+          execute =
+            (currentCtx, project) => observed.update(_ :+ s"execute:${project.name}").as(currentCtx)
         )
 
         MonorepoStepIO.compose(Seq(step))(pCtx).flatMap { result =>

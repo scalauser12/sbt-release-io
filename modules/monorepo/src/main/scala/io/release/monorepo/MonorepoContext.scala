@@ -40,10 +40,9 @@ case class ProjectReleaseInfo(
 
   def resolvedVersions: Option[(String, String)] =
     versions.flatMap {
-      case (releaseVersion, nextVersion)
-          if releaseVersion.nonEmpty && nextVersion.nonEmpty =>
+      case (releaseVersion, nextVersion) if releaseVersion.nonEmpty && nextVersion.nonEmpty =>
         Some((releaseVersion, nextVersion))
-      case _                                                => None
+      case _                                                                                => None
     }
 }
 

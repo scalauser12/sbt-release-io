@@ -72,9 +72,9 @@ private[monorepo] object MonorepoStepTestCompat {
     }
 
   def stateMutationNextVersionTaskSetting(
-    project: ProjectRef,
-    key: AttributeKey[String],
-    value: String
+      project: ProjectRef,
+      key: AttributeKey[String],
+      value: String
   ): Setting[?] =
     project / ReleaseIO.releaseIOVersioningNextVersion := {
       val _ = Def

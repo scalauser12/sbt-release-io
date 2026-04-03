@@ -160,31 +160,30 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val settings = publishHookSettings(observed)
 
-      hookFixtureResource("monorepo-hook-compiler-publish-cache-enabled", settings).use {
-        fixture =>
-          val publishHookSteps = MonorepoHookCompiler
-            .compile(fixture.state)
-            .collect {
-              case step: MonorepoStepIO.PerProject
-                  if step.name
-                    .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-                step
-            }
-          val enabledCtx       = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
-          val project          = fixture.projectInfo("core")
+      hookFixtureResource("monorepo-hook-compiler-publish-cache-enabled", settings).use { fixture =>
+        val publishHookSteps = MonorepoHookCompiler
+          .compile(fixture.state)
+          .collect {
+            case step: MonorepoStepIO.PerProject
+                if step.name
+                  .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
+              step
+          }
+        val enabledCtx       = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
+        val project          = fixture.projectInfo("core")
 
-          for {
-            validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx, project)
-            _            <- executePublishHooks(
-                              publishHookSteps,
-                              validatedCtx.copy(skipPublish = true),
-                              project
-                            )
-            events       <- observed.get
-          } yield assertEquals(
-            events,
-            List("validate-before", "validate-after", "execute-before", "execute-after")
-          )
+        for {
+          validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx, project)
+          _            <- executePublishHooks(
+                            publishHookSteps,
+                            validatedCtx.copy(skipPublish = true),
+                            project
+                          )
+          events       <- observed.get
+        } yield assertEquals(
+          events,
+          List("validate-before", "validate-after", "execute-before", "execute-after")
+        )
       }
     }
   }
@@ -193,34 +192,33 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val settings = publishHookSettings(observed)
 
-      hookFixtureResource("monorepo-hook-compiler-publish-cache-skipped", settings).use {
-        fixture =>
-          val publishHookSteps = MonorepoHookCompiler
-            .compile(fixture.state)
-            .collect {
-              case step: MonorepoStepIO.PerProject
-                  if step.name
-                    .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-                step
-            }
-          val project          = fixture.projectInfo("core")
-          val skippedState     = TestSupport.appendSessionSettings(
-            fixture.state,
-            Seq(project.ref / publish / skip := true)
-          )
-          val skippedCtx       = fixture
-            .context(selectedProjectIds = Seq("core"), skipPublish = false)
-            .withState(skippedState)
+      hookFixtureResource("monorepo-hook-compiler-publish-cache-skipped", settings).use { fixture =>
+        val publishHookSteps = MonorepoHookCompiler
+          .compile(fixture.state)
+          .collect {
+            case step: MonorepoStepIO.PerProject
+                if step.name
+                  .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
+              step
+          }
+        val project          = fixture.projectInfo("core")
+        val skippedState     = TestSupport.appendSessionSettings(
+          fixture.state,
+          Seq(project.ref / publish / skip := true)
+        )
+        val skippedCtx       = fixture
+          .context(selectedProjectIds = Seq("core"), skipPublish = false)
+          .withState(skippedState)
 
-          for {
-            validatedCtx <- validatePublishHooks(publishHookSteps, skippedCtx, project)
-            _            <- executePublishHooks(
-                              publishHookSteps,
-                              validatedCtx.withState(fixture.state),
-                              project
-                            )
-            events       <- observed.get
-          } yield assertEquals(events, Nil)
+        for {
+          validatedCtx <- validatePublishHooks(publishHookSteps, skippedCtx, project)
+          _            <- executePublishHooks(
+                            publishHookSteps,
+                            validatedCtx.withState(fixture.state),
+                            project
+                          )
+          events       <- observed.get
+        } yield assertEquals(events, Nil)
       }
     }
   }

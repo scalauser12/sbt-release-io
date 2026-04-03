@@ -158,9 +158,8 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
           name = "context-validation-getter",
           execute = currentCtx => IO.pure(currentCtx),
           validate = _ => events.update(_ :+ "validate"),
-          validateWithContext = Some(currentCtx =>
-            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
-          )
+          validateWithContext =
+            Some(currentCtx => events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok")))
         )
 
         step.validateWithContext match {

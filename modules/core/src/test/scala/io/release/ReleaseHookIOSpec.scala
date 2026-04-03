@@ -284,7 +284,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
 
   test("ReleaseResourceHooks.materialize - preserves hook names during materialization") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
-      val beforeTagHook = ReleaseResourceHookIO.io[String]("named-before-tag-hook")(_ => IO.pure)
+      val beforeTagHook  = ReleaseResourceHookIO.io[String]("named-before-tag-hook")(_ => IO.pure)
       val afterCleanHook =
         ReleaseResourceHookIO.io[String]("named-after-clean-hook")(_ => IO.pure)
       val hooks          =

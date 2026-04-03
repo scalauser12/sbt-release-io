@@ -104,9 +104,8 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
           name = "validated-context-getter",
           execute = currentCtx => IO.pure(currentCtx),
           validate = _ => events.update(_ :+ "validate"),
-          validateWithContext = Some(currentCtx =>
-            events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok"))
-          )
+          validateWithContext =
+            Some(currentCtx => events.update(_ :+ "context").as(currentCtx.withMetadata(key, "ok")))
         )
 
         step.validateWithContext match {
@@ -140,7 +139,13 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
         MonorepoStepIO.Global.unapply(step) match {
           case Some((name, execute, validate, isSelectionBoundary, validateWithContext)) =>
             val rebuilt =
-              MonorepoStepIO.Global(name, execute, validate, isSelectionBoundary, validateWithContext)
+              MonorepoStepIO.Global(
+                name,
+                execute,
+                validate,
+                isSelectionBoundary,
+                validateWithContext
+              )
 
             rebuilt.threadedValidation(ctx).flatMap { result =>
               events.get.map { obs =>
@@ -148,7 +153,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
                 assertEquals(result.metadata(key), Some("ok"))
               }
             }
-          case None                                                                    =>
+          case None                                                                      =>
             IO.raiseError(new AssertionError("expected Global.unapply to succeed"))
         }
       }
@@ -198,8 +203,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
         val step = MonorepoStepIO.PerProject(
           name = "validated-pp-getter",
           execute = (currentCtx, _) => IO.pure(currentCtx),
-          validate = (_, currentProject) =>
-            events.update(_ :+ s"validate:${currentProject.name}"),
+          validate = (_, currentProject) => events.update(_ :+ s"validate:${currentProject.name}"),
           validateWithContext = Some((currentCtx, currentProject) =>
             events
               .update(_ :+ s"context:${currentProject.name}")
@@ -771,8 +775,8 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
           )
           .validateOnly
         val copied = step.copy(
-          validate = (_, currentProject) =>
-            events.update(_ :+ s"new-validate:${currentProject.name}")
+          validate =
+            (_, currentProject) => events.update(_ :+ s"new-validate:${currentProject.name}")
         )
 
         copied.threadedValidation(ctx, project) *> events.get
