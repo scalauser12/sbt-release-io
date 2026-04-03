@@ -2,6 +2,7 @@ package io.release.monorepo.steps
 
 import io.release.ReleaseIO
 import io.release.TestAssertions.assertFailure
+import io.release.monorepo.MonorepoComposer
 import munit.CatsEffectSuite
 import sbt.*
 
@@ -110,7 +111,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
     singleProjectFixtureResource("monorepo-publish-clean-ok")().use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      _root_.io.release.monorepo.MonorepoProcessStep
+      MonorepoComposer
         .compose(Seq(MonorepoPublishSteps.runClean))(ctx)
         .map { result =>
           assert(!result.failed)

@@ -1,6 +1,10 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
+import io.release.internal.ProcessStep
+import io.release.monorepo.MonorepoComposer
+import io.release.monorepo.MonorepoContext
+import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.MonorepoSpecSupport
 import munit.CatsEffectSuite
 
@@ -26,27 +30,26 @@ class MonorepoPublishFailureHandlingSpec
     ).use { fixture =>
       val ctx = fixture.context(Seq("core", "api"))
 
-      io.release.monorepo.MonorepoProcessStep.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map {
-        result =>
-          val coreRun   = new File(
-            MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
-            "test-ran.txt"
+      MonorepoComposer.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map { result =>
+        val coreRun   = new File(
+          MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
+          "test-ran.txt"
+        )
+        val apiRun    = new File(
+          MonorepoSpecSupport.projectNamed(result.projects, "api").baseDir,
+          "test-ran.txt"
+        )
+        assert(result.failed)
+        assert(coreRun.exists())
+        assert(apiRun.exists())
+        assertEquals(result.state.remainingCommands, Nil)
+        val aggregate = requireProjectFailures(result.failureCause)
+        assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+        assert(
+          aggregate.failures.head.cause.exists(
+            _.getMessage.contains("core: sbt task reported failure via FailureCommand")
           )
-          val apiRun    = new File(
-            MonorepoSpecSupport.projectNamed(result.projects, "api").baseDir,
-            "test-ran.txt"
-          )
-          assert(result.failed)
-          assert(coreRun.exists())
-          assert(apiRun.exists())
-          assertEquals(result.state.remainingCommands, Nil)
-          val aggregate = requireProjectFailures(result.failureCause)
-          assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
-          assert(
-            aggregate.failures.head.cause.exists(
-              _.getMessage.contains("core: sbt task reported failure via FailureCommand")
-            )
-          )
+        )
       }
     }
   }
@@ -61,22 +64,21 @@ class MonorepoPublishFailureHandlingSpec
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      io.release.monorepo.MonorepoProcessStep.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map {
-        result =>
-          val coreRun   = new File(
-            MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
-            "clean-ran.txt"
+      MonorepoComposer.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map { result =>
+        val coreRun   = new File(
+          MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
+          "clean-ran.txt"
+        )
+        assert(result.failed)
+        assert(coreRun.exists())
+        assertEquals(result.state.remainingCommands, Nil)
+        val aggregate = requireProjectFailures(result.failureCause)
+        assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+        assert(
+          aggregate.failures.head.cause.exists(
+            _.getMessage.contains("core: sbt task reported failure via FailureCommand")
           )
-          assert(result.failed)
-          assert(coreRun.exists())
-          assertEquals(result.state.remainingCommands, Nil)
-          val aggregate = requireProjectFailures(result.failureCause)
-          assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
-          assert(
-            aggregate.failures.head.cause.exists(
-              _.getMessage.contains("core: sbt task reported failure via FailureCommand")
-            )
-          )
+        )
       }
     }
   }
@@ -92,7 +94,7 @@ class MonorepoPublishFailureHandlingSpec
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      io.release.monorepo.MonorepoProcessStep
+      MonorepoComposer
         .compose(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
         .map { result =>
           assert(result.failed)
@@ -112,13 +114,13 @@ class MonorepoPublishFailureHandlingSpec
     twoProjectFixtureResource("monorepo-publish-exception-isolation")().use { fixture =>
       val ctx = fixture.context(Seq("core", "api"))
 
-      val throwingStep = io.release.monorepo.MonorepoProcessStep.PerProject(
+      val throwingStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "throwing-step",
         execute =
           (_, project) => IO.raiseError(new RuntimeException(s"${project.name} action blew up"))
       )
 
-      io.release.monorepo.MonorepoProcessStep.compose(Seq(throwingStep))(ctx).map { result =>
+      MonorepoComposer.compose(Seq(throwingStep))(ctx).map { result =>
         assert(result.failed)
         val aggregate = requireProjectFailures(result.failureCause)
         assertEquals(aggregate.failures.map(_.projectName), Seq("core", "api"))

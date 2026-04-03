@@ -1,30 +1,38 @@
 package io.release.monorepo.steps
 
+import io.release.internal.ProcessStep
 import io.release.monorepo.*
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 
 /** Facade re-exporting all built-in monorepo release steps and default sequences. */
 private[monorepo] object MonorepoReleaseSteps {
 
-  val initializeVcs: MonorepoProcessStep.Global        = MonorepoVcsSteps.initializeVcs
-  val checkCleanWorkingDir: MonorepoProcessStep.Global = MonorepoVcsSteps.checkCleanWorkingDir
-  val pushChanges: MonorepoProcessStep.Global          = MonorepoVcsSteps.pushChanges
+  val initializeVcs: ProcessStep.Single[MonorepoContext]        = MonorepoVcsSteps.initializeVcs
+  val checkCleanWorkingDir: ProcessStep.Single[MonorepoContext] =
+    MonorepoVcsSteps.checkCleanWorkingDir
+  val pushChanges: ProcessStep.Single[MonorepoContext]          = MonorepoVcsSteps.pushChanges
 
-  val inquireVersions: MonorepoProcessStep.PerProject    = MonorepoVersionSteps.inquireVersions
-  val setReleaseVersions: MonorepoProcessStep.PerProject = MonorepoVersionSteps.setReleaseVersions
-  val setNextVersions: MonorepoProcessStep.PerProject    = MonorepoVersionSteps.setNextVersions
-  val commitReleaseVersions: MonorepoProcessStep.Global  =
+  val inquireVersions: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]    =
+    MonorepoVersionSteps.inquireVersions
+  val setReleaseVersions: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+    MonorepoVersionSteps.setReleaseVersions
+  val setNextVersions: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]    =
+    MonorepoVersionSteps.setNextVersions
+  val commitReleaseVersions: ProcessStep.Single[MonorepoContext]                   =
     MonorepoVersionSteps.commitReleaseVersions
-  val commitNextVersions: MonorepoProcessStep.Global     = MonorepoVersionSteps.commitNextVersions
+  val commitNextVersions: ProcessStep.Single[MonorepoContext]                      =
+    MonorepoVersionSteps.commitNextVersions
 
-  val checkSnapshotDependencies: MonorepoProcessStep.PerProject =
+  val checkSnapshotDependencies: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
     MonorepoPublishSteps.checkSnapshotDependencies
-  val publishArtifacts: MonorepoProcessStep.PerProject          =
+  val publishArtifacts: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]          =
     MonorepoPublishSteps.publishArtifacts
-  val runTests: MonorepoProcessStep.PerProject                  = MonorepoPublishSteps.runTests
-  val runClean: MonorepoProcessStep.PerProject                  = MonorepoPublishSteps.runClean
+  val runTests: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]                  =
+    MonorepoPublishSteps.runTests
+  val runClean: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]                  =
+    MonorepoPublishSteps.runClean
 
-  val resolveReleaseOrder: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
+  val resolveReleaseOrder: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
     name = "resolve-release-order",
     execute = ctx =>
       MonorepoProjectResolver.resolveOrdered(ctx.state).flatMap { resolved =>
@@ -36,7 +44,7 @@ private[monorepo] object MonorepoReleaseSteps {
       }
   )
 
-  val detectOrSelectProjects: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
+  val detectOrSelectProjects: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
     name = MonorepoComposer.SelectionBoundary,
     isSelectionBoundary = true,
     execute = ctx =>
@@ -52,8 +60,9 @@ private[monorepo] object MonorepoReleaseSteps {
   )
 
   /** Per-project tagging step aligned with the `tag-releases` lifecycle phase. */
-  val tagReleasesPerProject: MonorepoProcessStep.PerProject =
+  val tagReleasesPerProject: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
     MonorepoVcsSteps.tagReleasesPerProject
 
-  lazy val defaults: Seq[MonorepoProcessStep] = MonorepoLifecycle.defaults
+  lazy val defaults: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
+    MonorepoLifecycle.defaults
 }

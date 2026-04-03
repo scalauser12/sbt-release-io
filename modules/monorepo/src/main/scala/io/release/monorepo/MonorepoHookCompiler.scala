@@ -1,5 +1,6 @@
 package io.release.monorepo
 
+import io.release.internal.ProcessStep
 import io.release.internal.SbtRuntime
 import sbt.State
 
@@ -48,9 +49,11 @@ private[monorepo] object MonorepoHookCompiler {
     )
   }
 
-  def compile(state: State): Seq[MonorepoProcessStep] =
+  def compile(state: State): Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
     compile(resolve(state))
 
-  def compile(hooks: MonorepoHookConfiguration): Seq[MonorepoProcessStep] =
+  def compile(
+      hooks: MonorepoHookConfiguration
+  ): Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
     MonorepoLifecycle.compile(hooks)
 }

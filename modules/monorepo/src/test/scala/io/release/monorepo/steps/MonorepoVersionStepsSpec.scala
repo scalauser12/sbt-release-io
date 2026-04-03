@@ -6,12 +6,13 @@ import io.release.ReleaseIO.*
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
+import io.release.monorepo.MonorepoComposer
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoSpecSupport
-import io.release.monorepo.MonorepoProcessStep
 import io.release.monorepo.SelectionMode
 import io.release.monorepo.steps.MonorepoVersionStepsSpec.VersionFixture
 import munit.CatsEffectSuite
@@ -302,19 +303,18 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
           )
           .withState(countingState)
 
-        MonorepoProcessStep.compose(Seq(MonorepoVersionSteps.setReleaseVersions))(ctx).flatMap {
-          _ =>
-            IO.blocking {
-              assertEquals(resolverCalls.get(), 4)
-              assertEquals(
-                sbt.IO.read(new File(new File(fixture.dir, "core"), "version.sbt")),
-                """version := "1.0.0"""" + "\n"
-              )
-              assertEquals(
-                sbt.IO.read(new File(new File(fixture.dir, "api"), "version.sbt")),
-                """version := "2.0.0"""" + "\n"
-              )
-            }
+        MonorepoComposer.compose(Seq(MonorepoVersionSteps.setReleaseVersions))(ctx).flatMap { _ =>
+          IO.blocking {
+            assertEquals(resolverCalls.get(), 4)
+            assertEquals(
+              sbt.IO.read(new File(new File(fixture.dir, "core"), "version.sbt")),
+              """version := "1.0.0"""" + "\n"
+            )
+            assertEquals(
+              sbt.IO.read(new File(new File(fixture.dir, "api"), "version.sbt")),
+              """version := "2.0.0"""" + "\n"
+            )
+          }
         }
       }
   }

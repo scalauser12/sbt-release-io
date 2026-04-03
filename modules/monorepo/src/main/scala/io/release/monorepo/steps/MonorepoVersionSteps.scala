@@ -1,5 +1,6 @@
 package io.release.monorepo.steps
 
+import io.release.internal.ProcessStep
 import io.release.monorepo.steps.MonorepoVcsCommitHelpers.commitVersions
 import io.release.monorepo.{MonorepoReleaseIO as MR, *}
 
@@ -10,26 +11,29 @@ private[monorepo] object MonorepoVersionSteps {
     * If both versions are already resolved (for example from CLI overrides or a prior step),
     * those are used directly without prompting or computing.
     */
-  val inquireVersions: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
-    name = "inquire-versions",
-    validate = MonorepoVersionWorkflow.validateInquireVersions,
-    execute = MonorepoVersionWorkflow.inquireVersions
-  )
+  val inquireVersions: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+    ProcessStep.PerItem(
+      name = "inquire-versions",
+      validate = MonorepoVersionWorkflow.validateInquireVersions,
+      execute = MonorepoVersionWorkflow.inquireVersions
+    )
 
   /** Write release versions to per-project version files. */
-  val setReleaseVersions: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
-    name = "set-release-version",
-    execute = MonorepoVersionWorkflow.writeReleaseVersion
-  )
+  val setReleaseVersions: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+    ProcessStep.PerItem(
+      name = "set-release-version",
+      execute = MonorepoVersionWorkflow.writeReleaseVersion
+    )
 
   /** Write next snapshot versions to per-project version files. */
-  val setNextVersions: MonorepoProcessStep.PerProject = MonorepoProcessStep.PerProject(
-    name = "set-next-version",
-    execute = MonorepoVersionWorkflow.writeNextVersion
-  )
+  val setNextVersions: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+    ProcessStep.PerItem(
+      name = "set-next-version",
+      execute = MonorepoVersionWorkflow.writeNextVersion
+    )
 
   /** Single commit for all release version files. */
-  val commitReleaseVersions: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
+  val commitReleaseVersions: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
     name = "commit-release-versions",
     execute = ctx =>
       commitVersions(
@@ -41,7 +45,7 @@ private[monorepo] object MonorepoVersionSteps {
   )
 
   /** Single commit for all next version files. */
-  val commitNextVersions: MonorepoProcessStep.Global = MonorepoProcessStep.Global(
+  val commitNextVersions: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
     name = "commit-next-versions",
     execute = ctx =>
       commitVersions(

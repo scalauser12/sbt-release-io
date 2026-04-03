@@ -157,8 +157,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - fail fast when validation returns ctx.failWith before version resolution") {
     withInitialContext { case (_, _, initialCtx) =>
       val versionResolutionFailure = "version resolution should not run"
-      val failingStep              = CoreProcessStep
-        .step("validation-fail-with")
+      val failingStep              = ProcessStep
+        .single[ReleaseContext]("validation-fail-with")
         .withValidationContext(currentCtx =>
           IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))
         )
@@ -487,18 +487,18 @@ class CorePreflightSpec extends CatsEffectSuite {
       )
     )
 
-  private val skipPublishInValidationStep: CoreProcessStep =
-    CoreProcessStep
-      .step("skip-publish-in-validation")
+  private val skipPublishInValidationStep: ProcessStep.Single[ReleaseContext] =
+    ProcessStep
+      .single[ReleaseContext]("skip-publish-in-validation")
       .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
       .validateOnly
 
   private def overrideVersionTasksInValidationStep(
       releaseVersion: String,
       nextVersion: String
-  ): CoreProcessStep =
-    CoreProcessStep
-      .step(s"override-version-tasks-$releaseVersion")
+  ): ProcessStep.Single[ReleaseContext] =
+    ProcessStep
+      .single[ReleaseContext](s"override-version-tasks-$releaseVersion")
       .withValidationContext { currentCtx =>
         IO.blocking {
           val newState = SbtRuntime.appendWithSession(

@@ -6,6 +6,7 @@ import io.release.internal.CheckModeOutput
 import io.release.internal.CommandRuntimeSupport
 import io.release.internal.DecisionDefaultsSupport
 import io.release.internal.ExecutionFlags
+import io.release.internal.ProcessStep
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SharedCommandKernel
@@ -45,7 +46,7 @@ private[monorepo] object MonorepoCommandExecution {
   )
 
   final case class CompiledMonorepoSteps(
-      steps: Seq[MonorepoProcessStep]
+      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
   )
 
   def doHelp(state: State, commandName: String): State =
@@ -233,7 +234,7 @@ private[monorepo] object MonorepoCommandExecution {
                           ReleaseLogPrefixes.Monorepo
                         )
                       finalCtx    <-
-                        MonorepoProcessStep.compose(runProcess.steps, command.flags.crossBuild)(
+                        MonorepoComposer.compose(runProcess.steps, command.flags.crossBuild)(
                           preparedCtx
                         )
                     } yield finalCtx

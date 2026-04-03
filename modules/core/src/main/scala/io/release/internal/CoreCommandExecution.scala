@@ -2,6 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.ReleaseComposer
 import io.release.ReleaseContext
 import io.release.ReleaseResourceHooks
 import sbt.{internal as _, *}
@@ -33,7 +34,7 @@ private[release] object CoreCommandExecution {
   )
 
   final case class CompiledSteps(
-      steps: Seq[CoreProcessStep]
+      steps: Seq[ProcessStep.Single[ReleaseContext]]
   )
 
   def doHelp(state: State, commandName: String): State =
@@ -269,7 +270,7 @@ private[release] object CoreCommandExecution {
                           runProcess.steps.map(_.name),
                           ReleaseLogPrefixes.Core
                         )
-                      finalCtx    <- CoreProcessStep.compose(
+                      finalCtx    <- ReleaseComposer.compose(
                                        runProcess.steps,
                                        inputs.crossEnabled
                                      )(preparedCtx)

@@ -297,13 +297,13 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     )
 
   private def runPublishHooks(
-      steps: Seq[CoreProcessStep],
+      steps: Seq[ProcessStep.Single[ReleaseContext]],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     validatePublishHooks(steps, ctx).flatMap(executePublishHooks(steps, _))
 
   private def validatePublishHooks(
-      steps: Seq[CoreProcessStep],
+      steps: Seq[ProcessStep.Single[ReleaseContext]],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
@@ -311,7 +311,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     }
 
   private def executePublishHooks(
-      steps: Seq[CoreProcessStep],
+      steps: Seq[ProcessStep.Single[ReleaseContext]],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
