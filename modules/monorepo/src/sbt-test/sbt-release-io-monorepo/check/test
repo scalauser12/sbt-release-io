@@ -16,10 +16,8 @@ $ exec git tag core/v0.1.0
 > expectTagCollisionFailure
 $ exec git tag -d core/v0.1.0
 
-# Missing version files should still leave the repository unchanged
-$ exec rm core/version.sbt
+# Missing version-file configuration should still leave the repository unchanged
 > expectMissingVersionFileFailure
-$ exec git checkout -- core/version.sbt
 
 # With all projects already tagged and no new commits, change detection should report nothing to release
 $ exec git tag core/v0.1.0

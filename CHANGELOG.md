@@ -4,18 +4,70 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
-## Unreleased
+## v0.8.1
+
+Published: 2026-04-03
+GitHub release:
+[v0.8.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.8.1)
+
+`v0.8.1` hardens release execution across both plugins with more reliable
+validation and preflight handling, sturdier cross-build and VCS execution, and
+clearer build-facing customization guidance.
+
+### Fixes
+
+- Fail check mode earlier and more consistently when validation/preflight
+  reports `ctx.failWith(...)`.
+- Preserve threaded validation when replacing plain step validation in both the
+  core and monorepo step DSLs.
+- Fix the core scripted `check` scenario for configured-but-missing version
+  files.
 
 ### Improvements
 
-- Consolidate internal Git process execution into a shared
-  `GitProcessSupport` helper used by both the core Git adapter and Git push
-  support.
-- Keep the default `io.release.vcs.Vcs.checkRemoteWithTimeout` fallback for
-  custom VCS adapters, while still letting concrete adapters like `Git`
-  override timeout handling to clean up spawned processes explicitly.
-- Batch monorepo version-file staging into a single `vcs.add(...)` call while
-  preserving the previous no-op behavior when no version files are selected.
+- Add grouped setting-key traits for the core and monorepo plugins so build-
+  facing settings are organized by behavior, defaults, policy, hooks,
+  versioning, and VCS while keeping the existing lower-level surface available
+  as deprecated aliases.
+- Rework cross-build execution, Scala version switching, and version inquiry
+  handling so validation, logging, state restoration, and failure reporting are
+  more reliable across both plugins.
+- Freeze publish-hook gate decisions at validation time so publish behavior
+  remains stable for the rest of the release run.
+- Consolidate Git command execution into shared process helpers, improve
+  timeout/process cleanup and tag-push validation, and keep custom VCS adapter
+  timeout behavior compatible with the existing fallback.
+- Improve monorepo change detection, dependency ordering, and resolved-version
+  handling with better caching, deterministic project ordering, and clearer
+  version state.
+
+### Documentation
+
+- Deprecate the lower-level `ReleaseStepIO` and `MonorepoStepIO` DSLs in docs
+  and examples in favor of hooks, policies, and resource-aware customization.
+- Update the root README, module READMEs, and getting-started guides to
+  reference `0.8.1`.
+- Clarify hook behavior for cross-build publish phases and document custom VCS
+  timeout responsibilities more explicitly.
+
+### Tests
+
+- Expand coverage around grouped keys, step validation composition, publish-hook
+  gating, cross-build execution/restoration, Git process handling, tag pushing,
+  version inquiry failures, monorepo change detection, dependency ordering, and
+  manifest metadata.
+- Add scripted coverage for grouped-key configuration and missing configured
+  version-file scenarios, plus resource-hook materialization tests.
+
+### Verification
+
+- sbt 1.12.3: `sbt scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt test`
+- sbt 1.12.3: `sbt core/scripted`
+- sbt 1.12.3: `sbt monorepo/scripted`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean core/scripted`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean monorepo/scripted`
 
 ## v0.8.0
 

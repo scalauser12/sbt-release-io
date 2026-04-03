@@ -201,12 +201,16 @@ lazy val root = (project in file("."))
     expectMissingVersionFileFailure := {
       assertNestedRun(
         commands = Seq(
+          """set releaseIOMonorepoVersioningFile := { (_: ProjectRef, _: State) =>
+            |  baseDirectory.value / "missing-version.sbt"
+            |}""".stripMargin,
           "releaseIOMonorepo check core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT"
         ),
         outputFile = target.value / "missing-version-file.log",
         shouldSucceed = false,
         expectedSubstrings = Seq(
           "Version file not found for core",
+          "releaseIOMonorepoVersioningFile",
           "releaseIOMonorepo help"
         ),
         sbtVersion0 = sbtVersion.value,
