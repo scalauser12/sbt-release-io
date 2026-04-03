@@ -9,12 +9,25 @@ import sbt.Project
 import sbt.ProjectRef
 import sbt.Setting
 import sbt.State
+import sbt.*
 
 import java.io.ByteArrayOutputStream
 import java.io.File
 
 @scala.annotation.nowarn("cat=deprecation")
 trait MonorepoReleasePluginSpecSupport {
+
+  private val settingsDefaults: Seq[Setting[?]] = Seq(
+    MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild  := false,
+    MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests   := false,
+    MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish := false
+  ) ++ MonorepoLifecycle.configDefaultSettings ++ Seq(
+    MonorepoReleaseIO.releaseIOMonorepoPublishChecks           := true,
+    MonorepoReleaseIO.releaseIOMonorepoBehaviorInteractive     := false,
+    _root_.io.release.ReleaseIO.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
+      .DurationInt(60)
+      .seconds
+  )
 
   protected final class LoadedState(
       val dir: File,
@@ -143,13 +156,6 @@ trait MonorepoReleasePluginSpecSupport {
         new LoadedState(dir, state, buffered.consoleBuffer)
       }
     }
-
-  protected def settingsDefaults: Seq[Setting[?]] =
-    _root_.io.release.internal.MonorepoDefaultSettings.commandAndHookSettings ++ Seq(
-      _root_.io.release.ReleaseIO.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
-        .DurationInt(60)
-        .seconds
-    )
 
   protected def resolveProcessMode(
       plugin: MonorepoReleasePluginLike[Unit],

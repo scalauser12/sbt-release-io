@@ -1,9 +1,6 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.ReleaseIO.releaseIOVersioningFile
-import io.release.steps.VersionSteps
-import sbt.Keys.*
 import sbt.{internal as _, *}
 
 /** Setting keys and process helpers for the monorepo release plugin.
@@ -27,44 +24,7 @@ trait MonorepoReleaseIO
   // ── Default settings ──────────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] =
-    _root_.io.release.internal.MonorepoDefaultSettings.commandAndHookSettings ++ Seq(
-      releaseIOMonorepoVcsReleaseCommitMessage    := ((summary: String) =>
-        s"Setting release versions: $summary"
-      ),
-      releaseIOMonorepoVcsNextCommitMessage       := ((summary: String) =>
-        s"Setting next versions: $summary"
-      ),
-      releaseIOMonorepoDetectionEnabled           := true,
-      releaseIOMonorepoDetectionIncludeDownstream := false,
-      releaseIOMonorepoDetectionChangeDetector    := None,
-      releaseIOMonorepoDetectionExcludes          := Seq.empty,
-      releaseIOMonorepoDetectionSharedPaths       := Seq("build.sbt", "project/"),
-      releaseIOMonorepoVcsTagName                 := ((name: String, ver: String) => s"$name/v$ver"),
-      releaseIOMonorepoVcsTagComment              := ((name: String, ver: String) => s"Release $name $ver"),
-      releaseIOMonorepoVersioningReadVersion      := VersionSteps.defaultReadVersion,
-      releaseIOMonorepoVersioningFileContents     := { (_, ver) =>
-        IO.pure(s"""version := "$ver"\n""")
-      },
-      releaseIOMonorepoVersioningFile             := { (ref: ProjectRef, state: State) =>
-        Project.extract(state).get(ref / releaseIOVersioningFile)
-      },
-      releaseIOMonorepoSelectionProjects          := {
-        val build      = loadedBuild.value
-        val root       = thisProjectRef.value
-        val projectMap = build.allProjectRefs.map { case (ref, proj) =>
-          ref -> proj.aggregate
-        }.toMap
-
-        def transitive(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
-          if (visited.contains(ref)) Seq.empty
-          else {
-            val directAggs = projectMap.getOrElse(ref, Seq.empty)
-            directAggs.flatMap(agg => agg +: transitive(agg, visited + ref))
-          }
-
-        transitive(root, Set.empty).distinct
-      }
-    )
+    _root_.io.release.internal.MonorepoDefaultSettings.pluginDefaultSettings
 }
 
 object MonorepoReleaseIO extends MonorepoReleaseIO {

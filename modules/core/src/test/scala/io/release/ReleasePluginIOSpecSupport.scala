@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
 import io.release.internal.CoreCommandExecution
+import io.release.internal.CoreLifecycle
 import io.release.internal.ProcessStep
 import sbt.Project
 import sbt.Setting
@@ -14,6 +15,19 @@ import java.io.File
 
 @scala.annotation.nowarn("cat=deprecation")
 trait ReleasePluginIOSpecSupport {
+
+  private val settingsDefaults: Seq[Setting[?]] = Seq(
+    ReleaseIO.releaseIOBehaviorCrossBuild                 := false,
+    ReleaseIO.releaseIOBehaviorSkipPublish                := false,
+    ReleaseIO.releaseIOBehaviorInteractive                := false,
+    ReleaseIO.releaseIODefaultsTagExistsAnswer            := None,
+    ReleaseIO.releaseIODefaultsSnapshotDependenciesAnswer := None,
+    ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer   := None,
+    ReleaseIO.releaseIODefaultsUpstreamBehindAnswer       := None,
+    ReleaseIO.releaseIODefaultsPushAnswer                 := None
+  ) ++ CoreLifecycle.configDefaultSettings ++ Seq(
+    ReleaseIO.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(60).seconds
+  )
 
   protected final class LoadedState(
       val dir: File,
@@ -111,9 +125,6 @@ trait ReleasePluginIOSpecSupport {
         new LoadedState(dir, state, buffered.consoleBuffer)
       }
     }
-
-  protected def settingsDefaults: Seq[Setting[?]] =
-    io.release.internal.CoreDefaultSettings.commandAndHookSettings
 
   protected def resolveProcessMode(
       plugin: ReleasePluginIOLike[Unit],

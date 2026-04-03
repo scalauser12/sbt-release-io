@@ -1,11 +1,23 @@
 package io.release.internal
 
-import io.release.ReleaseIO
-import sbt.Setting
+import _root_.io.release.ReleaseIO
+import _root_.io.release.ReleaseIOCompat
+import _root_.io.release.steps.VersionSteps
+import _root_.io.release.version.Version
+import sbt.Keys.*
+import sbt.*
 
 private[release] object CoreDefaultSettings {
 
-  def commandAndHookSettings: Seq[Setting[?]] = Seq(
+  lazy val pluginDefaultSettings: Seq[Setting[?]] =
+    DefaultSettingSupport.combine(
+      behaviorAndDecisionDefaults,
+      CoreLifecycle.configDefaultSettings,
+      versioningAndRuntimeDefaults,
+      vcsAndPublishDefaults
+    )
+
+  private lazy val behaviorAndDecisionDefaults: Seq[Setting[?]] = Seq(
     ReleaseIO.releaseIOBehaviorCrossBuild                 := false,
     ReleaseIO.releaseIOBehaviorSkipPublish                := false,
     ReleaseIO.releaseIOBehaviorInteractive                := false,
@@ -14,7 +26,67 @@ private[release] object CoreDefaultSettings {
     ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer   := None,
     ReleaseIO.releaseIODefaultsUpstreamBehindAnswer       := None,
     ReleaseIO.releaseIODefaultsPushAnswer                 := None
-  ) ++ CoreLifecycle.configDefaultSettings ++ Seq(
-    ReleaseIO.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(60).seconds
+  )
+
+  private lazy val versioningAndRuntimeDefaults: Seq[Setting[?]] = Seq(
+    ReleaseIO.releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+    ReleaseIO.releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
+      ReleaseIO.releaseIOVersioningUseGlobal.value
+    ),
+    ReleaseIO.releaseIOVersioningFile           := baseDirectory.value / "version.sbt",
+    ReleaseIO.releaseIOVersioningUseGlobal      := true,
+    ReleaseIO.releaseIOInternalReleaseHash      := None,
+    ReleaseIO.releaseIOInternalReleaseTag       := None,
+    packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
+      ReleaseIO.releaseIOInternalReleaseHash.value,
+      ReleaseIO.releaseIOInternalReleaseTag.value
+    ),
+    ReleaseIO.releaseIORuntimeCurrentVersion    := {
+      if (ReleaseIO.releaseIOVersioningUseGlobal.value) (ThisBuild / version).value
+      else version.value
+    },
+    ReleaseIO.releaseIOVersioningBump           := Version.Bump.default,
+    ReleaseIO.releaseIOVersioningReleaseVersion := {
+      val bump = ReleaseIO.releaseIOVersioningBump.value
+      ver =>
+        Version(ver)
+          .map { v =>
+            bump match {
+              case Version.Bump.Next =>
+                if (v.isSnapshot) v.withoutSnapshot.render
+                else
+                  throw new IllegalArgumentException(
+                    s"Expected snapshot version, got: $ver"
+                  )
+              case _                 => v.withoutQualifier.render
+            }
+          }
+          .getOrElse(
+            throw new IllegalArgumentException(s"Cannot parse version: $ver")
+          )
+    },
+    ReleaseIO.releaseIOVersioningNextVersion    := {
+      val bump = ReleaseIO.releaseIOVersioningBump.value
+      ver =>
+        Version(ver)
+          .map(_.bump(bump).asSnapshot.render)
+          .getOrElse(
+            throw new IllegalArgumentException(s"Cannot parse version: $ver")
+          )
+    },
+    ReleaseIOCompat.snapshotDependenciesSetting
+  )
+
+  private lazy val vcsAndPublishDefaults: Seq[Setting[?]] = Seq(
+    ReleaseIO.releaseIOVcsSign                 := false,
+    ReleaseIO.releaseIOVcsSignOff              := false,
+    ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false,
+    ReleaseIO.releaseIOVcsRemoteCheckTimeout   := scala.concurrent.duration.DurationInt(60).seconds,
+    ReleaseIO.releaseIOVcsTagName              := s"v${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
+    ReleaseIO.releaseIOVcsTagComment           := s"Releasing ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
+    ReleaseIO.releaseIOVcsReleaseCommitMessage := s"Setting version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
+    ReleaseIO.releaseIOVcsNextCommitMessage    := s"Setting version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
+    ReleaseIO.releaseIOPublishChecks           := true,
+    ReleaseIO.releaseIOPublishAction           := publish.value
   )
 }
