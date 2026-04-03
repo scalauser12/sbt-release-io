@@ -5,29 +5,29 @@ import sbt.State
 
 /** Core hook/policy settings resolved from a single sbt state snapshot. */
 private[release] final case class CoreHookConfiguration(
-    enableSnapshotDependenciesCheck: Boolean,
-    enableRunClean: Boolean,
-    enableRunTests: Boolean,
-    enableTagging: Boolean,
-    enablePublish: Boolean,
-    enablePush: Boolean,
-    afterCleanCheckHooks: Seq[ReleaseHookIO],
-    beforeVersionResolutionHooks: Seq[ReleaseHookIO],
-    afterVersionResolutionHooks: Seq[ReleaseHookIO],
-    beforeReleaseVersionWriteHooks: Seq[ReleaseHookIO],
-    afterReleaseVersionWriteHooks: Seq[ReleaseHookIO],
-    beforeReleaseCommitHooks: Seq[ReleaseHookIO],
-    afterReleaseCommitHooks: Seq[ReleaseHookIO],
-    beforeTagHooks: Seq[ReleaseHookIO],
-    afterTagHooks: Seq[ReleaseHookIO],
-    beforePublishHooks: Seq[ReleaseHookIO],
-    afterPublishHooks: Seq[ReleaseHookIO],
-    beforeNextVersionWriteHooks: Seq[ReleaseHookIO],
-    afterNextVersionWriteHooks: Seq[ReleaseHookIO],
-    beforeNextCommitHooks: Seq[ReleaseHookIO],
-    afterNextCommitHooks: Seq[ReleaseHookIO],
-    beforePushHooks: Seq[ReleaseHookIO],
-    afterPushHooks: Seq[ReleaseHookIO]
+    enableSnapshotDependenciesCheck: Boolean = true,
+    enableRunClean: Boolean = true,
+    enableRunTests: Boolean = true,
+    enableTagging: Boolean = true,
+    enablePublish: Boolean = true,
+    enablePush: Boolean = true,
+    afterCleanCheckHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforeVersionResolutionHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterVersionResolutionHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforeReleaseVersionWriteHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterReleaseVersionWriteHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforeReleaseCommitHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterReleaseCommitHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforeTagHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterTagHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforePublishHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterPublishHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforeNextVersionWriteHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterNextVersionWriteHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforeNextCommitHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterNextCommitHooks: Seq[ReleaseHookIO] = Seq.empty,
+    beforePushHooks: Seq[ReleaseHookIO] = Seq.empty,
+    afterPushHooks: Seq[ReleaseHookIO] = Seq.empty
 ) {
 
   def hasCustomizations: Boolean =
@@ -39,32 +39,7 @@ private[release] final case class CoreHookConfiguration(
 
 private[release] object CoreHookConfiguration {
 
-  val empty: CoreHookConfiguration =
-    CoreHookConfiguration(
-      enableSnapshotDependenciesCheck = true,
-      enableRunClean = true,
-      enableRunTests = true,
-      enableTagging = true,
-      enablePublish = true,
-      enablePush = true,
-      afterCleanCheckHooks = Seq.empty,
-      beforeVersionResolutionHooks = Seq.empty,
-      afterVersionResolutionHooks = Seq.empty,
-      beforeReleaseVersionWriteHooks = Seq.empty,
-      afterReleaseVersionWriteHooks = Seq.empty,
-      beforeReleaseCommitHooks = Seq.empty,
-      afterReleaseCommitHooks = Seq.empty,
-      beforeTagHooks = Seq.empty,
-      afterTagHooks = Seq.empty,
-      beforePublishHooks = Seq.empty,
-      afterPublishHooks = Seq.empty,
-      beforeNextVersionWriteHooks = Seq.empty,
-      afterNextVersionWriteHooks = Seq.empty,
-      beforeNextCommitHooks = Seq.empty,
-      afterNextCommitHooks = Seq.empty,
-      beforePushHooks = Seq.empty,
-      afterPushHooks = Seq.empty
-    )
+  val empty: CoreHookConfiguration = CoreHookConfiguration()
 
   def resolve(state: State): CoreHookConfiguration =
     LifecycleConfigCompiler.resolve(state, empty, CoreLifecycle.phases)

@@ -3,12 +3,11 @@ package io.release.steps
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseIO.*
-import io.release.internal.DecisionResolver
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.internal.VersionFileSupport
 import io.release.internal.VersionPlan
+import io.release.internal.VersionWorkflowSupport
 import io.release.steps.StepHelpers.*
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -33,16 +32,6 @@ private[release] object ReleaseVersionWorkflow {
       currentVersion: String,
       releaseVersion: String,
       nextVersion: String
-  )
-
-  private final case class InquireData(
-      state: State,
-      currentVersion: String,
-      suggestedRelease: String,
-      nextVersionFn: String => String,
-      releaseVersionArg: Option[String],
-      nextVersionArg: Option[String],
-      useDefaults: Boolean
   )
 
   private[steps] def resolveCurrentSettings(state: State): ResolvedSettings =
@@ -157,33 +146,31 @@ private[release] object ReleaseVersionWorkflow {
       allowPrompts: Boolean
   ): IO[(ReleaseContext, ResolvedVersions)] =
     for {
-      versionPlan     <- IO.blocking(resolveVersionPlan(ctx))
-      _               <- ensureVersionFileExists(versionPlan.versionFile)
-      currentVer      <- versionPlan.readVersion(versionPlan.versionFile)
-      releaseTaskData <-
-        runTaskChecked(ctx.state, releaseIOVersioningReleaseVersion, "inquire-versions")
-      (s1, releaseFn)  = releaseTaskData
-      nextTaskData    <- runTaskChecked(s1, releaseIOVersioningNextVersion, "inquire-versions")
-      (s2, nextFn)     = nextTaskData
-      updatedCtx       = ctx.withState(s2)
-      data             = InquireData(
-                           state = s2,
-                           currentVersion = currentVer,
-                           suggestedRelease = releaseFn(currentVer),
-                           nextVersionFn = nextFn,
-                           releaseVersionArg = versionPlan.releaseVersionOverride,
-                           nextVersionArg = versionPlan.nextVersionOverride,
-                           useDefaults = useDefaults(updatedCtx)
-                         )
-      releaseData     <- resolveReleaseVersion(updatedCtx, data, allowPrompts)
-      nextData        <- resolveNextVersion(releaseData._1, data, releaseData._2, allowPrompts)
+      versionPlan    <- IO.blocking(resolveVersionPlan(ctx))
+      _              <- ensureVersionFileExists(versionPlan.versionFile)
+      currentVer     <- versionPlan.readVersion(versionPlan.versionFile)
+      resolvedInputs <- VersionWorkflowSupport.resolveVersionInputsFromTasks(
+                          ctx = ctx,
+                          currentVersion = currentVer,
+                          releaseVersionTask = releaseIOVersioningReleaseVersion,
+                          nextVersionTask = releaseIOVersioningNextVersion,
+                          releaseVersionOverride = versionPlan.releaseVersionOverride,
+                          nextVersionOverride = versionPlan.nextVersionOverride,
+                          logPrefix = ReleaseLogPrefixes.Core,
+                          releaseLabel = "Release version",
+                          nextLabel = "Next version",
+                          allowPrompts = allowPrompts,
+                          beforeReleasePrompt = IO.blocking(
+                            ctx.state.log.info("Press enter to use the default value")
+                          )
+                        )
     } yield (
-      nextData._1,
+      resolvedInputs.context,
       ResolvedVersions(
         versionFile = versionPlan.versionFile,
         currentVersion = currentVer,
-        releaseVersion = releaseData._2,
-        nextVersion = nextData._2
+        releaseVersion = resolvedInputs.releaseVersion,
+        nextVersion = resolvedInputs.nextVersion
       )
     )
 
@@ -204,42 +191,8 @@ private[release] object ReleaseVersionWorkflow {
     )
   }
 
-  private def resolveReleaseVersion(
-      ctx: ReleaseContext,
-      data: InquireData,
-      allowPrompts: Boolean
-  ): IO[(ReleaseContext, String)] =
-    DecisionResolver.resolveVersionInput(
-      ctx,
-      override_ = data.releaseVersionArg,
-      suggested = data.suggestedRelease,
-      logPrefix = ReleaseLogPrefixes.Core,
-      prompt = s"Release version [${data.suggestedRelease}] : ",
-      promptContext = "Release version",
-      allowPrompts = allowPrompts,
-      beforePrompt = IO.blocking(data.state.log.info("Press enter to use the default value"))
-    )
-
-  private def resolveNextVersion(
-      ctx: ReleaseContext,
-      data: InquireData,
-      releaseVersion: String,
-      allowPrompts: Boolean
-  ): IO[(ReleaseContext, String)] =
-    IO(data.nextVersionFn(releaseVersion)).flatMap { suggestedNext =>
-      DecisionResolver.resolveVersionInput(
-        ctx,
-        override_ = data.nextVersionArg,
-        suggested = suggestedNext,
-        logPrefix = ReleaseLogPrefixes.Core,
-        prompt = s"Next version [$suggestedNext] : ",
-        promptContext = "Next version",
-        allowPrompts = allowPrompts
-      )
-    }
-
   private def ensureVersionFileExists(versionFile: File): IO[Unit] =
-    VersionFileSupport.ensureExists(
+    VersionWorkflowSupport.ensureVersionFileExists(
       versionFile,
       s"Version file not found: ${versionFile.getPath}. " +
         "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, " +
@@ -288,8 +241,11 @@ private[release] object ReleaseVersionWorkflow {
   private def writeVersion(ctx: ReleaseContext, versionValue: String): IO[ReleaseContext] =
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx))
-      contents    <- versionPlan.versionFileContents(versionPlan.versionFile, versionValue)
-      _           <- VersionFileSupport.writeUtf8(versionPlan.versionFile, contents)
+      _           <- VersionWorkflowSupport.writeVersionFile(
+                       versionPlan.versionFile,
+                       versionValue,
+                       versionPlan.versionFileContents
+                     )
       _           <-
         IO.blocking(
           ctx.state.log.info(

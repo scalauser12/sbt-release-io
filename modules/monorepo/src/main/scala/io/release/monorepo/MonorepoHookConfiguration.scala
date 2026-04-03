@@ -5,31 +5,31 @@ import sbt.State
 
 /** Monorepo hook/policy settings resolved from a single sbt state snapshot. */
 private[monorepo] final case class MonorepoHookConfiguration(
-    enableSnapshotDependenciesCheck: Boolean,
-    enableRunClean: Boolean,
-    enableRunTests: Boolean,
-    enableTagging: Boolean,
-    enablePublish: Boolean,
-    enablePush: Boolean,
-    afterCleanCheckHooks: Seq[MonorepoGlobalHookIO],
-    beforeSelectionHooks: Seq[MonorepoGlobalHookIO],
-    afterSelectionHooks: Seq[MonorepoGlobalHookIO],
-    beforeVersionResolutionHooks: Seq[MonorepoProjectHookIO],
-    afterVersionResolutionHooks: Seq[MonorepoProjectHookIO],
-    beforeReleaseVersionWriteHooks: Seq[MonorepoProjectHookIO],
-    afterReleaseVersionWriteHooks: Seq[MonorepoProjectHookIO],
-    beforeReleaseCommitHooks: Seq[MonorepoGlobalHookIO],
-    afterReleaseCommitHooks: Seq[MonorepoGlobalHookIO],
-    beforeTagHooks: Seq[MonorepoProjectHookIO],
-    afterTagHooks: Seq[MonorepoProjectHookIO],
-    beforePublishHooks: Seq[MonorepoProjectHookIO],
-    afterPublishHooks: Seq[MonorepoProjectHookIO],
-    beforeNextVersionWriteHooks: Seq[MonorepoProjectHookIO],
-    afterNextVersionWriteHooks: Seq[MonorepoProjectHookIO],
-    beforeNextCommitHooks: Seq[MonorepoGlobalHookIO],
-    afterNextCommitHooks: Seq[MonorepoGlobalHookIO],
-    beforePushHooks: Seq[MonorepoGlobalHookIO],
-    afterPushHooks: Seq[MonorepoGlobalHookIO]
+    enableSnapshotDependenciesCheck: Boolean = true,
+    enableRunClean: Boolean = true,
+    enableRunTests: Boolean = true,
+    enableTagging: Boolean = true,
+    enablePublish: Boolean = true,
+    enablePush: Boolean = true,
+    afterCleanCheckHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    beforeSelectionHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    afterSelectionHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    beforeVersionResolutionHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    afterVersionResolutionHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    beforeReleaseVersionWriteHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    afterReleaseVersionWriteHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    beforeReleaseCommitHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    afterReleaseCommitHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    beforeTagHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    afterTagHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    beforePublishHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    afterPublishHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    beforeNextVersionWriteHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    afterNextVersionWriteHooks: Seq[MonorepoProjectHookIO] = Seq.empty,
+    beforeNextCommitHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    afterNextCommitHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    beforePushHooks: Seq[MonorepoGlobalHookIO] = Seq.empty,
+    afterPushHooks: Seq[MonorepoGlobalHookIO] = Seq.empty
 ) {
 
   def mergeWith(other: MonorepoHookConfiguration): MonorepoHookConfiguration =
@@ -41,34 +41,7 @@ private[monorepo] final case class MonorepoHookConfiguration(
 
 private[monorepo] object MonorepoHookConfiguration {
 
-  val empty: MonorepoHookConfiguration =
-    MonorepoHookConfiguration(
-      enableSnapshotDependenciesCheck = true,
-      enableRunClean = true,
-      enableRunTests = true,
-      enableTagging = true,
-      enablePublish = true,
-      enablePush = true,
-      afterCleanCheckHooks = Seq.empty,
-      beforeSelectionHooks = Seq.empty,
-      afterSelectionHooks = Seq.empty,
-      beforeVersionResolutionHooks = Seq.empty,
-      afterVersionResolutionHooks = Seq.empty,
-      beforeReleaseVersionWriteHooks = Seq.empty,
-      afterReleaseVersionWriteHooks = Seq.empty,
-      beforeReleaseCommitHooks = Seq.empty,
-      afterReleaseCommitHooks = Seq.empty,
-      beforeTagHooks = Seq.empty,
-      afterTagHooks = Seq.empty,
-      beforePublishHooks = Seq.empty,
-      afterPublishHooks = Seq.empty,
-      beforeNextVersionWriteHooks = Seq.empty,
-      afterNextVersionWriteHooks = Seq.empty,
-      beforeNextCommitHooks = Seq.empty,
-      afterNextCommitHooks = Seq.empty,
-      beforePushHooks = Seq.empty,
-      afterPushHooks = Seq.empty
-    )
+  val empty: MonorepoHookConfiguration = MonorepoHookConfiguration()
 
   def resolve(state: State): MonorepoHookConfiguration =
     LifecycleConfigCompiler.resolve(state, empty, MonorepoLifecycle.phases)

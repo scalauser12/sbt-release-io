@@ -2,6 +2,8 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.internal.CoreHookConfiguration
+import io.release.internal.CoreLifecycleSlots
 import munit.CatsEffectSuite
 
 class ReleaseHookIOSpec extends CatsEffectSuite {
@@ -316,6 +318,36 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
     }
   }
 
+  test("ReleaseResourceHooks.materialize - empty hooks produce the neutral configuration") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
+      IO(
+        assertEquals(
+          ReleaseResourceHooks.materialize(ReleaseResourceHooks.empty[String], None),
+          CoreHookConfiguration.empty
+        )
+      )
+    }
+  }
+
+  test("ReleaseResourceHooks.materialize - populated hooks only fill the intended slot") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
+      val hook   = ReleaseResourceHookIO.action[String]("before-tag")(_ => _ => IO.unit)
+      val config = ReleaseResourceHooks.materialize(
+        ReleaseResourceHooks[String](beforeTagHooks = Seq(hook)),
+        None
+      )
+
+      IO {
+        val populatedSlots =
+          CoreLifecycleSlots.hookSlots
+            .filter(slot => slot.resolveHooks(config).nonEmpty)
+            .map(_.keyLabel)
+        assertEquals(populatedSlots, Seq(CoreLifecycleSlots.beforeTagHooks.keyLabel))
+        assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
+      }
+    }
+  }
+
   test("ReleaseResourceHooks.materialize - preserves validate function from resource hook") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
@@ -334,28 +366,16 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
     }
   }
 
-  test("ReleaseResourceHooks.materialize - empty hooks produce empty hook sequences") {
+  test("ReleaseResourceHooks.hookAssignments covers every hook slot exactly once") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
-      val config = ReleaseResourceHooks.materialize(ReleaseResourceHooks.empty[String], None)
-
       IO {
-        assert(config.afterCleanCheckHooks.isEmpty)
-        assert(config.beforeVersionResolutionHooks.isEmpty)
-        assert(config.afterVersionResolutionHooks.isEmpty)
-        assert(config.beforeReleaseVersionWriteHooks.isEmpty)
-        assert(config.afterReleaseVersionWriteHooks.isEmpty)
-        assert(config.beforeReleaseCommitHooks.isEmpty)
-        assert(config.afterReleaseCommitHooks.isEmpty)
-        assert(config.beforeTagHooks.isEmpty)
-        assert(config.afterTagHooks.isEmpty)
-        assert(config.beforePublishHooks.isEmpty)
-        assert(config.afterPublishHooks.isEmpty)
-        assert(config.beforeNextVersionWriteHooks.isEmpty)
-        assert(config.afterNextVersionWriteHooks.isEmpty)
-        assert(config.beforeNextCommitHooks.isEmpty)
-        assert(config.afterNextCommitHooks.isEmpty)
-        assert(config.beforePushHooks.isEmpty)
-        assert(config.afterPushHooks.isEmpty)
+        val assignments =
+          ReleaseResourceHooks.hookAssignments(
+            ReleaseResourceHooks.empty[String],
+            (resourceHook: ReleaseResourceHookIO[String]) =>
+              ReleaseHookIO.action(resourceHook.name)(_ => IO.unit)
+          )
+        assertEquals(assignments.map(_._1.keyLabel), CoreLifecycleSlots.hookSlots.map(_.keyLabel))
       }
     }
   }
