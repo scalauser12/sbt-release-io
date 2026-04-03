@@ -37,7 +37,8 @@ private[monorepo] object MonorepoLifecycle {
       resolveHooks: MonorepoHookConfiguration => Seq[MonorepoProjectHookIO],
       gate: ProjectGate,
       crossBuild: Boolean,
-      enabled: MonorepoHookConfiguration => Boolean = _ => true
+      enabled: MonorepoHookConfiguration => Boolean = _ => true,
+      freezeGateDecision: Boolean = false
   ): LifecycleCompiler.HookPhase[
     MonorepoHookConfiguration,
     MonorepoProjectHookIO,
@@ -46,7 +47,8 @@ private[monorepo] object MonorepoLifecycle {
     LifecycleCompiler.HookPhase(
       phase = phase,
       resolveHooks = resolveHooks,
-      buildSteps = (phaseName, hooks) => compileProjectHooks(phaseName, hooks, gate, crossBuild),
+      buildSteps = (phaseName, hooks) =>
+        compileProjectHooks(phaseName, hooks, gate, crossBuild, freezeGateDecision),
       enabled = enabled
     )
 
@@ -122,7 +124,8 @@ private[monorepo] object MonorepoLifecycle {
         _.beforePublishHooks,
         PublishProject,
         MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
-        enabled = _.enablePublish
+        enabled = _.enablePublish,
+        freezeGateDecision = true
       ),
       LifecycleCompiler.BuiltInPhase(MonorepoReleaseSteps.publishArtifacts, _.enablePublish),
       projectHookPhase(
@@ -130,7 +133,8 @@ private[monorepo] object MonorepoLifecycle {
         _.afterPublishHooks,
         PublishProject,
         MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
-        enabled = _.enablePublish
+        enabled = _.enablePublish,
+        freezeGateDecision = true
       ),
       projectHookPhase(
         "before-next-version-write",
@@ -194,22 +198,44 @@ private[monorepo] object MonorepoLifecycle {
       phase: String,
       hooks: Seq[MonorepoProjectHookIO],
       gate: ProjectGate,
-      crossBuild: Boolean
+      crossBuild: Boolean,
+      freezeGateDecision: Boolean
   ): Seq[MonorepoStepIO] =
-    hooks.map { hook =>
-      MonorepoStepIO.PerProject(
-        name = s"$phase:${hook.name}",
-        execute = (ctx, project) =>
-          gate(ctx, project).flatMap {
-            case true  => hook.execute(ctx, project)
-            case false => IO.pure(ctx)
-          },
-        validate = (ctx, project) =>
-          gate(ctx, project).flatMap {
-            case true  => hook.validate(ctx, project)
-            case false => IO.unit
-          },
-        enableCrossBuild = crossBuild
-      )
+    hooks.zipWithIndex.map { case (hook, hookIndex) =>
+      val token = MonorepoPublishHookGateCache.HookToken(phase, hookIndex)
+
+      if (freezeGateDecision)
+        MonorepoStepIO.PerProject(
+          name = s"$phase:${hook.name}",
+          execute = (ctx, project) =>
+            MonorepoPublishHookGateCache
+              .resolveDecision(ctx, token, project, gate(ctx, project))
+              .flatMap {
+                case true  => hook.execute(ctx, project)
+                case false => IO.pure(ctx)
+              },
+          enableCrossBuild = crossBuild,
+          validateWithContext = Some((ctx, project) =>
+            MonorepoPublishHookGateCache.snapshotDecision(ctx, token, project, gate).flatMap {
+              case (updatedCtx, true)  => hook.validate(updatedCtx, project).as(updatedCtx)
+              case (updatedCtx, false) => IO.pure(updatedCtx)
+            }
+          )
+        )
+      else
+        MonorepoStepIO.PerProject(
+          name = s"$phase:${hook.name}",
+          execute = (ctx, project) =>
+            gate(ctx, project).flatMap {
+              case true  => hook.execute(ctx, project)
+              case false => IO.pure(ctx)
+            },
+          validate = (ctx, project) =>
+            gate(ctx, project).flatMap {
+              case true  => hook.validate(ctx, project)
+              case false => IO.unit
+            },
+          enableCrossBuild = crossBuild
+        )
     }
 }

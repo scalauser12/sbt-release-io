@@ -5,6 +5,7 @@ import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
+import io.release.ReleaseStepIO
 import io.release.TestSupport
 import io.release.steps.ReleaseSteps
 import munit.CatsEffectSuite
@@ -13,6 +14,7 @@ import sbt.Keys.*
 
 import java.io.File
 
+@scala.annotation.nowarn("cat=deprecation")
 class ReleaseHookCompilerSpec extends CatsEffectSuite {
 
   test(
@@ -90,22 +92,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
 
   test("compile - skip publish hook validation and execution when publish is skipped at runtime") {
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
-      val settings: Seq[Setting[?]] = Seq(
-        ReleaseIO.releaseIOHooksBeforePublish := Seq(
-          ReleaseHookIO(
-            name = "before-publish",
-            execute = ctx => observed.update(_ :+ "execute-before").as(ctx),
-            validate = _ => observed.update(_ :+ "validate-before")
-          )
-        ),
-        ReleaseIO.releaseIOHooksAfterPublish  := Seq(
-          ReleaseHookIO(
-            name = "after-publish",
-            execute = ctx => observed.update(_ :+ "execute-after").as(ctx),
-            validate = _ => observed.update(_ :+ "validate-after")
-          )
-        )
-      )
+      val settings = publishHookSettings(observed)
 
       hookStateResource("release-hook-compiler-publish-gate", settings).use { state =>
         val publishHookSteps    = ReleaseHookCompiler
@@ -122,25 +109,18 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
         val publishSkippedCtx   = ReleaseContext(state = publishSkippedState, skipPublish = false)
         val enabledCtx          = ReleaseContext(state = state, skipPublish = false)
 
-        def runPublishHooks(ctx: ReleaseContext): IO[Unit] =
-          publishHookSteps
-            .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
-              ioCtx.flatTap(step.validate).flatMap(step.execute)
-            }
-            .void
-
         for {
-          _              <- runPublishHooks(skippedCtx)
+          _              <- runPublishHooks(publishHookSteps, skippedCtx)
           skipped        <- observed.get
           _               = assertEquals(skipped, Nil)
-          _              <- runPublishHooks(publishSkippedCtx)
+          _              <- runPublishHooks(publishHookSteps, publishSkippedCtx)
           publishSkipped <- observed.get
           _               = assertEquals(publishSkipped, Nil)
-          _              <- runPublishHooks(enabledCtx)
+          _              <- runPublishHooks(publishHookSteps, enabledCtx)
           events         <- observed.get
         } yield assertEquals(
           events,
-          List("validate-before", "execute-before", "validate-after", "execute-after")
+          List("validate-before", "validate-after", "execute-before", "execute-after")
         )
       }
     }
@@ -150,22 +130,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
     "compile - run publish hooks when aggregated publish still includes a non-skipped project"
   ) {
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
-      val settings: Seq[Setting[?]] = Seq(
-        ReleaseIO.releaseIOHooksBeforePublish := Seq(
-          ReleaseHookIO(
-            name = "before-publish",
-            execute = ctx => observed.update(_ :+ "execute-before").as(ctx),
-            validate = _ => observed.update(_ :+ "validate-before")
-          )
-        ),
-        ReleaseIO.releaseIOHooksAfterPublish  := Seq(
-          ReleaseHookIO(
-            name = "after-publish",
-            execute = ctx => observed.update(_ :+ "execute-after").as(ctx),
-            validate = _ => observed.update(_ :+ "validate-after")
-          )
-        )
-      )
+      val settings = publishHookSettings(observed)
 
       multiProjectHookStateResource(
         "release-hook-compiler-aggregate-publish-gate",
@@ -179,17 +144,70 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
           )
         val ctx              = ReleaseContext(state = state, skipPublish = false)
 
-        publishHookSteps
-          .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
-            ioCtx.flatTap(step.validate).flatMap(step.execute)
-          }
+        runPublishHooks(publishHookSteps, ctx)
           .flatMap(_ => observed.get)
           .map(events =>
             assertEquals(
               events,
-              List("validate-before", "execute-before", "validate-after", "execute-after")
+              List("validate-before", "validate-after", "execute-before", "execute-after")
             )
           )
+      }
+    }
+  }
+
+  test("compile - publish hook execute reuses cached enabled decisions from validation") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed)
+
+      hookStateResource("release-hook-compiler-publish-cache-enabled", settings).use { state =>
+        val publishHookSteps = ReleaseHookCompiler
+          .compile(state)
+          .filter(step =>
+            step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
+          )
+        val enabledCtx       = ReleaseContext(state = state, skipPublish = false)
+
+        for {
+          validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx)
+          _            <- executePublishHooks(
+                            publishHookSteps,
+                            validatedCtx.copy(skipPublish = true)
+                          )
+          events       <- observed.get
+        } yield assertEquals(
+          events,
+          List("validate-before", "validate-after", "execute-before", "execute-after")
+        )
+      }
+    }
+  }
+
+  test("compile - publish hook execute reuses cached skipped decisions from validation") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed)
+
+      hookStateResource("release-hook-compiler-publish-cache-skipped", settings).use { state =>
+        val publishHookSteps    = ReleaseHookCompiler
+          .compile(state)
+          .filter(step =>
+            step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
+          )
+        val publishSkippedState =
+          TestSupport.appendSessionSettings(
+            state,
+            Seq(publish / skip := true)
+          )
+        val skippedCtx          = ReleaseContext(state = publishSkippedState, skipPublish = false)
+
+        for {
+          validatedCtx <- validatePublishHooks(publishHookSteps, skippedCtx)
+          _            <- executePublishHooks(
+                            publishHookSteps,
+                            validatedCtx.withState(state)
+                          )
+          events       <- observed.get
+        } yield assertEquals(events, Nil)
       }
     }
   }
@@ -259,4 +277,46 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
       ReleaseIO.releaseIOHooksBeforePush                       := Seq.empty,
       ReleaseIO.releaseIOHooksAfterPush                        := Seq.empty
     )
+
+  private def publishHookSettings(
+      observed: Ref[IO, List[String]]
+  ): Seq[Setting[?]] =
+    Seq(
+      ReleaseIO.releaseIOHooksBeforePublish := Seq(
+        ReleaseHookIO(
+          name = "before-publish",
+          execute = ctx => observed.update(_ :+ "execute-before").as(ctx),
+          validate = _ => observed.update(_ :+ "validate-before")
+        )
+      ),
+      ReleaseIO.releaseIOHooksAfterPublish  := Seq(
+        ReleaseHookIO(
+          name = "after-publish",
+          execute = ctx => observed.update(_ :+ "execute-after").as(ctx),
+          validate = _ => observed.update(_ :+ "validate-after")
+        )
+      )
+    )
+
+  private def runPublishHooks(
+      steps: Seq[ReleaseStepIO],
+      ctx: ReleaseContext
+  ): IO[ReleaseContext] =
+    validatePublishHooks(steps, ctx).flatMap(executePublishHooks(steps, _))
+
+  private def validatePublishHooks(
+      steps: Seq[ReleaseStepIO],
+      ctx: ReleaseContext
+  ): IO[ReleaseContext] =
+    steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
+      ioCtx.flatMap(step.threadedValidation)
+    }
+
+  private def executePublishHooks(
+      steps: Seq[ReleaseStepIO],
+      ctx: ReleaseContext
+  ): IO[ReleaseContext] =
+    steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
+      ioCtx.flatMap(step.execute)
+    }
 }
