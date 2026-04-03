@@ -154,4 +154,17 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
       )
     }
   }
+
+  test("ReleaseIO source no longer defines private catalog-forwarding aliases") {
+    assert(
+      !releaseIOSource.contains("CorePublicKeyCatalog."),
+      "Expected ReleaseIO.scala to stop forwarding catalog-backed public keys"
+    )
+    assert(
+      !raw"private\[release\]\s+lazy val _releaseIO(?!InternalReleaseHash|InternalReleaseTag)".r
+        .findFirstIn(releaseIOSource)
+        .isDefined,
+      "Expected only internal manifest helper keys to remain as _releaseIO private vals"
+    )
+  }
 }

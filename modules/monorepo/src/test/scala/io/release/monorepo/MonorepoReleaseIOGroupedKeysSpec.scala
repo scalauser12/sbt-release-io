@@ -147,4 +147,17 @@ class MonorepoReleaseIOGroupedKeysSpec
       )
     }
   }
+
+  test("MonorepoReleaseIO source no longer defines private catalog-forwarding aliases") {
+    assert(
+      !monorepoReleaseIOSource.contains("MonorepoPublicKeyCatalog."),
+      "Expected MonorepoReleaseIO.scala to stop forwarding catalog-backed public keys"
+    )
+    assert(
+      !raw"private\[monorepo\]\s+lazy val _releaseIOMonorepo".r
+        .findFirstIn(monorepoReleaseIOSource)
+        .isDefined,
+      "Expected MonorepoReleaseIO.scala to remove private _releaseIOMonorepo forwarding aliases"
+    )
+  }
 }
