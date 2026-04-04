@@ -8,7 +8,6 @@ import io.release.internal.HelpDocsLinks
 import io.release.internal.PreflightSupport
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
-import io.release.internal.StepBoundarySupport
 import io.release.monorepo.steps.{MonorepoReleaseSteps, MonorepoVcsSteps}
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
@@ -59,16 +58,17 @@ private[monorepo] object MonorepoPreflight {
   )
 
   private object CheckSegments {
-    def apply(steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]): CheckSegments =
-      StepBoundarySupport.splitAfterBoundary(steps) {
+    def apply(steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]): CheckSegments = {
+      val boundaryIndex = steps.indexWhere {
         case step: ProcessStep.Single[?] => step.isSelectionBoundary
         case _                           => false
-      } match {
-        case Some((setupSteps, mainSteps)) =>
-          CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
-        case None                          =>
-          CheckSegments(Seq.empty, steps)
       }
+      if (boundaryIndex < 0) CheckSegments(Seq.empty, steps)
+      else {
+        val (setupSteps, mainSteps) = steps.splitAt(boundaryIndex + 1)
+        CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
+      }
+    }
   }
 
   type Evaluation[+A] = PreflightSupport.Evaluation[A]

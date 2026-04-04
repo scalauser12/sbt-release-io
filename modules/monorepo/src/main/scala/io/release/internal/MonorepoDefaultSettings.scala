@@ -11,13 +11,13 @@ import sbt.*
 private[release] object MonorepoDefaultSettings {
 
   lazy val pluginDefaultSettings: Seq[Setting[?]] =
-    DefaultSettingSupport.combine(
+    Seq(
       behaviorDefaults,
       MonorepoLifecycle.configDefaultSettings,
       selectionAndDetectionDefaults,
       versioningAndVcsDefaults,
       publishDefaults
-    )
+    ).flatten
 
   private lazy val behaviorDefaults: Seq[Setting[?]] = Seq(
     MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild  := false,

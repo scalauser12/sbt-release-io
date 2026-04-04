@@ -5,7 +5,6 @@ import io.release.internal.ExecutionEngine
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.StepExecutionSupport
-import io.release.internal.StepBoundarySupport
 import io.release.monorepo.steps.MonorepoCrossBuild
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
@@ -58,11 +57,14 @@ private[monorepo] object MonorepoComposer {
         Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
         Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
     )
-  ] =
-    StepBoundarySupport.splitAfterBoundary(steps) {
+  ] = {
+    val boundaryIndex = steps.indexWhere {
       case step: ProcessStep.Single[?] => step.isSelectionBoundary
       case _                           => false
     }
+    if (boundaryIndex < 0) None
+    else Some(steps.splitAt(boundaryIndex + 1))
+  }
 
   private def runMainSegment(
       steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
