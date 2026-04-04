@@ -2,12 +2,11 @@ package io.release.internal
 
 import cats.effect.IO
 import cats.effect.Ref
-import munit.CatsEffectSuite
-
 import io.release.internal.LifecycleCompilerSpec.ItemHook
 import io.release.internal.LifecycleCompilerSpec.SingleHook
 import io.release.internal.LifecycleCompilerSpec.TestConfig
 import io.release.internal.LifecycleCompilerSpec.TestContext
+import munit.CatsEffectSuite
 
 class LifecycleCompilerSpec extends CatsEffectSuite {
 

@@ -4,8 +4,8 @@ import _root_.io.release.ReleaseIO
 import _root_.io.release.ReleaseIOCompat
 import _root_.io.release.steps.VersionSteps
 import _root_.io.release.version.Version
-import sbt.Keys.*
 import sbt.*
+import sbt.Keys.*
 
 private[release] object CoreDefaultSettings {
 

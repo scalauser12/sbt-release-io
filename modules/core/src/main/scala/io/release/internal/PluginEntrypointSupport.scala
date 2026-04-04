@@ -1,8 +1,8 @@
 package io.release.internal
 
-import sbt.complete.Parser
-import sbt.Keys.*
 import sbt.*
+import sbt.Keys.*
+import sbt.complete.Parser
 
 /** Shared plugin-entrypoint helpers for the public release plugins.
   *

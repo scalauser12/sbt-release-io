@@ -9,9 +9,9 @@ import io.release.monorepo.steps.MonorepoPublishSteps
 import io.release.monorepo.steps.MonorepoStepTestCompat
 import munit.CatsEffectSuite
 import sbt.AttributeKey
+import sbt.Keys.*
 import sbt.LocalProject
 import sbt.Project
-import sbt.Keys.*
 
 import java.io.File
 

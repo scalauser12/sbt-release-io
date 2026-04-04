@@ -4,7 +4,7 @@ import io.release.TestAssertions.assertFailure
 import io.release.internal.CoreStepFactory
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
-import sbt.Def._
+import sbt.Def.*
 import sbt.Keys
 import sbt.LocalProject
 import sbt.Project

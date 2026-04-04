@@ -2,9 +2,9 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.ReleaseIO
 import io.release.TestAssertions
 import io.release.TestSupport
-import io.release.ReleaseIO
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
@@ -16,8 +16,8 @@ import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Def
 import sbt.Keys.packageOptions
-import sbt.Package.ManifestAttributes
 import sbt.LocalProject
+import sbt.Package.ManifestAttributes
 import sbt.Project
 import sbt.ProjectRef
 import sbt.State

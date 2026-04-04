@@ -4,6 +4,7 @@ import sbt.Keys
 import sbt.{Def, Setting, State, TaskKey, *}
 
 import java.io.File
+import _root_.io.release.internal.SbtCompat
 
 private[release] object ReleaseStepIOCrossBuildCompat:
 
@@ -15,7 +16,7 @@ private[release] object ReleaseStepIOCrossBuildCompat:
       .updateState { (state: State, _: Unit) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value

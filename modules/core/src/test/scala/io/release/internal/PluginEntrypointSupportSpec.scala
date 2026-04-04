@@ -1,11 +1,11 @@
 package io.release.internal
 
 import cats.effect.IO
-import io.release.TestSupport
 import io.release.TestRepoFiles
+import io.release.TestSupport
 import munit.CatsEffectSuite
-import sbt.complete.DefaultParsers.success
 import sbt.*
+import sbt.complete.DefaultParsers.success
 
 class PluginEntrypointSupportSpec extends CatsEffectSuite {
   import PluginEntrypointSupport.CommandMode

@@ -3,13 +3,13 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseIO.*
-import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestAssertions.assertFailure
+import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoComposer
+import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.SelectionMode

@@ -1,11 +1,12 @@
 package io.release
 
+import _root_.io.release.internal.SbtCompat
+import sbt.*
 import sbt.Def
 import sbt.Keys
 import sbt.Setting
 import sbt.State
 import sbt.TaskKey
-import sbt.*
 
 import java.io.File
 
@@ -19,7 +20,7 @@ private[release] object ReleaseStepIOCrossBuildCompat {
       .updateState { (state: State, _: Unit) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value

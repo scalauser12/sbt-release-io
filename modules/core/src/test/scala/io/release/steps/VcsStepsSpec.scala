@@ -11,8 +11,8 @@ import io.release.TestSupport
 import io.release.internal.CoreExecutionState
 import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
-import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.ReleaseDecisionDefaults
+import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions

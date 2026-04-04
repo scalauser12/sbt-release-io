@@ -1,7 +1,7 @@
 package io.release
 
-import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ExecutionFlags
+import io.release.internal.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import sbt.AttributeKey
 import sbt.AttributeMap

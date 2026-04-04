@@ -7,7 +7,8 @@ import io.release.internal.ExecutionEngine
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
-import io.release.monorepo.steps.{MonorepoReleaseSteps, MonorepoVcsSteps}
+import io.release.monorepo.steps.MonorepoReleaseSteps
+import io.release.monorepo.steps.MonorepoVcsSteps
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {

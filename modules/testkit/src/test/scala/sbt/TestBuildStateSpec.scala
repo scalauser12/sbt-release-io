@@ -1,7 +1,7 @@
 package sbt
 
-import _root_.io.release.TestkitSbtCompat
 import _root_.io.release.TestSupport
+import _root_.io.release.TestkitSbtCompat
 import cats.effect.IO as CEIO
 import cats.effect.Resource
 import munit.CatsEffectSuite

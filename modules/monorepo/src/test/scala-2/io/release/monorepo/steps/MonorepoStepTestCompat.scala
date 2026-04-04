@@ -1,6 +1,8 @@
 package io.release.monorepo.steps
 
-import io.release.{ReleaseIO, ReleaseIOCompat}
+import _root_.io.release.internal.SbtCompat
+import io.release.ReleaseIO
+import io.release.ReleaseIOCompat
 import sbt.*
 import sbt.Keys.*
 import sbt.Setting
@@ -23,7 +25,7 @@ private[monorepo] object MonorepoStepTestCompat {
       .updateState { (state: State, _: Unit) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -36,7 +38,7 @@ private[monorepo] object MonorepoStepTestCompat {
       .updateState { (state: State, _: Unit) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -48,7 +50,7 @@ private[monorepo] object MonorepoStepTestCompat {
         .updateState { (state: State, _: Unit) =>
           state.copy(
             remainingCommands =
-              _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+              SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value
@@ -63,7 +65,7 @@ private[monorepo] object MonorepoStepTestCompat {
         .updateState { (state: State, _: Unit) =>
           state.copy(
             remainingCommands =
-              _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+              SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value

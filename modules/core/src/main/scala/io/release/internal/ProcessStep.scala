@@ -176,7 +176,7 @@ private[release] object ProcessStep {
   ) {
 
     def withCrossBuild: PerItemBuilder[C, I] =
-      new PerItemBuilder(state.withFlag)
+      new PerItemBuilder(state.withCrossBuild)
 
     def withValidation(
         f: (C, I) => IO[Unit]
@@ -194,7 +194,7 @@ private[release] object ProcessStep {
       PerItem(
         name = state.name,
         execute = f,
-        enableCrossBuild = state.flagEnabled,
+        enableCrossBuild = state.crossBuildEnabled,
         validateWithContext = state.validateWithContext
       )
 
@@ -204,7 +204,7 @@ private[release] object ProcessStep {
       PerItem(
         name = state.name,
         execute = (ctx, item) => f(ctx, item).as(ctx),
-        enableCrossBuild = state.flagEnabled,
+        enableCrossBuild = state.crossBuildEnabled,
         validateWithContext = state.validateWithContext
       )
 
@@ -212,7 +212,7 @@ private[release] object ProcessStep {
       PerItem(
         name = state.name,
         execute = (ctx, _) => IO.pure(ctx),
-        enableCrossBuild = state.flagEnabled,
+        enableCrossBuild = state.crossBuildEnabled,
         validateWithContext = state.validateWithContext
       )
   }
@@ -281,7 +281,7 @@ private[release] object ProcessStep {
   ) {
 
     def withCrossBuild: PerItemResourceBuilder[T, C, I] =
-      new PerItemResourceBuilder[T, C, I](state.withFlag)
+      new PerItemResourceBuilder[T, C, I](state.withCrossBuild)
 
     def withValidation(
         f: T => (C, I) => IO[Unit]
@@ -300,7 +300,7 @@ private[release] object ProcessStep {
         PerItem(
           name = state.name,
           execute = f(resource),
-          enableCrossBuild = state.flagEnabled,
+          enableCrossBuild = state.crossBuildEnabled,
           validateWithContext = state.validateWithContext(resource)
         )
 
@@ -311,7 +311,7 @@ private[release] object ProcessStep {
         PerItem(
           name = state.name,
           execute = (ctx, item) => f(resource)(ctx, item).as(ctx),
-          enableCrossBuild = state.flagEnabled,
+          enableCrossBuild = state.crossBuildEnabled,
           validateWithContext = state.validateWithContext(resource)
         )
 
@@ -320,7 +320,7 @@ private[release] object ProcessStep {
         PerItem(
           name = state.name,
           execute = (ctx, _) => IO.pure(ctx),
-          enableCrossBuild = state.flagEnabled,
+          enableCrossBuild = state.crossBuildEnabled,
           validateWithContext = state.validateWithContext(resource)
         )
   }

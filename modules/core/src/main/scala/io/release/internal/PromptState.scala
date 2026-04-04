@@ -1,7 +1,8 @@
 package io.release.internal
 
-import java.io.InputStream
 import sbt.AttributeKey
+
+import java.io.InputStream
 
 /** Internal prompt-reading state threaded through release contexts.
   *

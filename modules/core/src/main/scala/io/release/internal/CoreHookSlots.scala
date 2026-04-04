@@ -1,141 +1,132 @@
 package io.release.internal
 
-import io.release.{ReleaseHookIO, ReleaseIO}
+import io.release.ReleaseHookIO
+import io.release.ReleaseIO
+import io.release.internal.LifecycleConfigCompiler.HookBinding
+import io.release.internal.LifecycleConfigCompiler.hookBinding
 
 private[release] object CoreHookSlots {
 
-  val afterCleanCheckHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterCleanCheckHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterCleanCheck,
       get = _.afterCleanCheckHooks,
       updated = (config, hooks) => config.copy(afterCleanCheckHooks = hooks)
     )
 
-  val beforeVersionResolutionHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeVersionResolutionHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforeVersionResolution,
       get = _.beforeVersionResolutionHooks,
       updated = (config, hooks) => config.copy(beforeVersionResolutionHooks = hooks)
     )
 
-  val afterVersionResolutionHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterVersionResolutionHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterVersionResolution,
       get = _.afterVersionResolutionHooks,
       updated = (config, hooks) => config.copy(afterVersionResolutionHooks = hooks)
     )
 
-  val beforeReleaseVersionWriteHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeReleaseVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite,
       get = _.beforeReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeReleaseVersionWriteHooks = hooks)
     )
 
-  val afterReleaseVersionWriteHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterReleaseVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterReleaseVersionWrite,
       get = _.afterReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterReleaseVersionWriteHooks = hooks)
     )
 
-  val beforeReleaseCommitHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeReleaseCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforeReleaseCommit,
       get = _.beforeReleaseCommitHooks,
       updated = (config, hooks) => config.copy(beforeReleaseCommitHooks = hooks)
     )
 
-  val afterReleaseCommitHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterReleaseCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterReleaseCommit,
       get = _.afterReleaseCommitHooks,
       updated = (config, hooks) => config.copy(afterReleaseCommitHooks = hooks)
     )
 
-  val beforeTagHooks: LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeTagHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforeTag,
       get = _.beforeTagHooks,
       updated = (config, hooks) => config.copy(beforeTagHooks = hooks)
     )
 
-  val afterTagHooks: LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterTagHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterTag,
       get = _.afterTagHooks,
       updated = (config, hooks) => config.copy(afterTagHooks = hooks)
     )
 
-  val beforePublishHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforePublishHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforePublish,
       get = _.beforePublishHooks,
       updated = (config, hooks) => config.copy(beforePublishHooks = hooks)
     )
 
-  val afterPublishHooks: LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterPublishHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterPublish,
       get = _.afterPublishHooks,
       updated = (config, hooks) => config.copy(afterPublishHooks = hooks)
     )
 
-  val beforeNextVersionWriteHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeNextVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforeNextVersionWrite,
       get = _.beforeNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeNextVersionWriteHooks = hooks)
     )
 
-  val afterNextVersionWriteHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterNextVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterNextVersionWrite,
       get = _.afterNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterNextVersionWriteHooks = hooks)
     )
 
-  val beforeNextCommitHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeNextCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforeNextCommit,
       get = _.beforeNextCommitHooks,
       updated = (config, hooks) => config.copy(beforeNextCommitHooks = hooks)
     )
 
-  val afterNextCommitHooks
-      : LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterNextCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterNextCommit,
       get = _.afterNextCommitHooks,
       updated = (config, hooks) => config.copy(afterNextCommitHooks = hooks)
     )
 
-  val beforePushHooks: LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforePushHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksBeforePush,
       get = _.beforePushHooks,
       updated = (config, hooks) => config.copy(beforePushHooks = hooks)
     )
 
-  val afterPushHooks: LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterPushHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
+    hookBinding(
       key = ReleaseIO.releaseIOHooksAfterPush,
       get = _.afterPushHooks,
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
     )
 
-  val hookSlots: Vector[LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO]] =
+  val hookSlots: Vector[HookBinding[CoreHookConfiguration, ReleaseHookIO]] =
     Vector(
       afterCleanCheckHooks,
       beforeVersionResolutionHooks,

@@ -1,12 +1,15 @@
 package io.release.internal
 
 import cats.effect.IO
+import io.release.internal.HookStepCompilation.CachedItemGate
+import io.release.internal.HookStepCompilation.CachedSingleGate
+import io.release.internal.LifecycleConfigCompiler.Binding
 
 private[release] object LifecycleCompiler {
 
   final case class Phase[Config, C, I](
       phaseName: Option[String],
-      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]],
+      configBindings: Seq[Binding[Config]],
       rawSteps: Seq[ProcessStep[C, I]],
       compileSteps: Config => Seq[ProcessStep[C, I]]
   ) {
@@ -17,7 +20,7 @@ private[release] object LifecycleCompiler {
   def singleBuiltIn[Config, C, I](
       step: ProcessStep.Single[C],
       enabled: Config => Boolean = (_: Config) => true,
-      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
+      configBindings: Seq[Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     Phase(
       phaseName = None,
@@ -29,7 +32,7 @@ private[release] object LifecycleCompiler {
   def perItemBuiltIn[Config, C, I](
       step: ProcessStep.PerItem[C, I],
       enabled: Config => Boolean = (_: Config) => true,
-      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
+      configBindings: Seq[Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     Phase(
       phaseName = None,
@@ -46,9 +49,9 @@ private[release] object LifecycleCompiler {
       executeOf: Hook => C => IO[C],
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
-      cachedGate: Option[HookStepCompilation.CachedSingleGate[C, Token]] = None,
+      cachedGate: Option[CachedSingleGate[C, Token]] = None,
       enabled: Config => Boolean = (_: Config) => true,
-      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
+      configBindings: Seq[Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     Phase(
       phaseName = Some(phase),
@@ -85,9 +88,9 @@ private[release] object LifecycleCompiler {
       executeOf: Hook => (C, I) => IO[C],
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
-      cachedGate: Option[HookStepCompilation.CachedItemGate[C, I, Token]] = None,
+      cachedGate: Option[CachedItemGate[C, I, Token]] = None,
       enabled: Config => Boolean = (_: Config) => true,
-      configBindings: Seq[LifecycleConfigCompiler.Binding[Config]] = Nil
+      configBindings: Seq[Binding[Config]] = Nil
   ): Phase[Config, C, I] =
     Phase(
       phaseName = Some(phase),

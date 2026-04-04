@@ -7,6 +7,7 @@ import sbt.{Def, Setting, State, *}
 import sbt.protocol.testing.codec.TestResultFormats
 
 import java.io.File
+import _root_.io.release.internal.SbtCompat
 
 private[steps] object CoreStepTestCompat:
 
@@ -21,7 +22,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: Unit) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -36,7 +37,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: sbt.protocol.testing.TestResult) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -52,7 +53,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: String => String) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -67,7 +68,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: String => String) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -81,7 +82,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: String) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -95,7 +96,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: String) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -109,7 +110,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: String) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -123,7 +124,7 @@ private[steps] object CoreStepTestCompat:
       .updateState { (state: State, _: String) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value

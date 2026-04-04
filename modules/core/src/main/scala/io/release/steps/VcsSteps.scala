@@ -2,14 +2,14 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseIO.releaseIOVcsTagComment
 import io.release.ReleaseIO.releaseIOInternalReleaseTag
-import io.release.ReleaseIO.releaseIOVcsTagName
-import io.release.ReleaseIO.releaseIOVersioningReadVersion
 import io.release.ReleaseIO.releaseIOVcsSign
-import io.release.ReleaseIO.releaseIOVersioningUseGlobal
+import io.release.ReleaseIO.releaseIOVcsTagComment
+import io.release.ReleaseIO.releaseIOVcsTagName
 import io.release.ReleaseIO.releaseIOVersioningFile
 import io.release.ReleaseIO.releaseIOVersioningFileContents
+import io.release.ReleaseIO.releaseIOVersioningReadVersion
+import io.release.ReleaseIO.releaseIOVersioningUseGlobal
 import io.release.VcsOps
 import io.release.internal.CoreStepFactory
 import io.release.internal.ProcessStep

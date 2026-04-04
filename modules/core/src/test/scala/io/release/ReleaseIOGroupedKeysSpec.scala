@@ -2,7 +2,8 @@ package io.release
 
 import cats.effect.IO
 import munit.CatsEffectSuite
-import sbt.{SettingKey, TaskKey}
+import sbt.SettingKey
+import sbt.TaskKey
 
 class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecSupport {
 

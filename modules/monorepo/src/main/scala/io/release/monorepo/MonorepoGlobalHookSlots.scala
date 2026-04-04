@@ -1,83 +1,75 @@
 package io.release.monorepo
 
-import io.release.internal.LifecycleConfigCompiler
+import io.release.internal.LifecycleConfigCompiler.HookBinding
+import io.release.internal.LifecycleConfigCompiler.hookBinding
 
 private[release] object MonorepoGlobalHookSlots {
 
-  val afterCleanCheckHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterCleanCheckHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck,
       get = _.afterCleanCheckHooks,
       updated = (config, hooks) => config.copy(afterCleanCheckHooks = hooks)
     )
 
-  val beforeSelectionHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeSelectionHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection,
       get = _.beforeSelectionHooks,
       updated = (config, hooks) => config.copy(beforeSelectionHooks = hooks)
     )
 
-  val afterSelectionHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterSelectionHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection,
       get = _.afterSelectionHooks,
       updated = (config, hooks) => config.copy(afterSelectionHooks = hooks)
     )
 
-  val beforeReleaseCommitHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeReleaseCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit,
       get = _.beforeReleaseCommitHooks,
       updated = (config, hooks) => config.copy(beforeReleaseCommitHooks = hooks)
     )
 
-  val afterReleaseCommitHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterReleaseCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit,
       get = _.afterReleaseCommitHooks,
       updated = (config, hooks) => config.copy(afterReleaseCommitHooks = hooks)
     )
 
-  val beforeNextCommitHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforeNextCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit,
       get = _.beforeNextCommitHooks,
       updated = (config, hooks) => config.copy(beforeNextCommitHooks = hooks)
     )
 
-  val afterNextCommitHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterNextCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit,
       get = _.afterNextCommitHooks,
       updated = (config, hooks) => config.copy(afterNextCommitHooks = hooks)
     )
 
-  val beforePushHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val beforePushHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush,
       get = _.beforePushHooks,
       updated = (config, hooks) => config.copy(beforePushHooks = hooks)
     )
 
-  val afterPushHooks
-      : LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    LifecycleConfigCompiler.hookBinding(
+  val afterPushHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
+    hookBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush,
       get = _.afterPushHooks,
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
     )
 
   val globalHookSlots: Vector[
-    LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
+    HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
   ] =
     Vector(
       afterCleanCheckHooks,

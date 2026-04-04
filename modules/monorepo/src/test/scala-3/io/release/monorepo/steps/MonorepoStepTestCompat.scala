@@ -7,6 +7,7 @@ import sbt.{Setting, *}
 import sbt.protocol.testing.codec.TestResultFormats
 
 import java.io.File
+import _root_.io.release.internal.SbtCompat
 
 // Source-split because sbt 1 and sbt 2 expose different test task result types and caching needs.
 private[monorepo] object MonorepoStepTestCompat:
@@ -32,7 +33,7 @@ private[monorepo] object MonorepoStepTestCompat:
       }
       .updateState { (state: State, _: sbt.protocol.testing.TestResult) =>
         state.copy(
-          remainingCommands = _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -45,7 +46,7 @@ private[monorepo] object MonorepoStepTestCompat:
       .updateState { (state: State, _: Unit) =>
         state.copy(
           remainingCommands =
-            _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+            SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -57,7 +58,7 @@ private[monorepo] object MonorepoStepTestCompat:
         .updateState { (state: State, _: Unit) =>
           state.copy(
             remainingCommands =
-              _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+              SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value
@@ -73,7 +74,7 @@ private[monorepo] object MonorepoStepTestCompat:
         .updateState { (state: State, _: Unit) =>
           state.copy(
             remainingCommands =
-              _root_.io.release.internal.SbtCompat.FailureCommand :: state.remainingCommands
+              SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value

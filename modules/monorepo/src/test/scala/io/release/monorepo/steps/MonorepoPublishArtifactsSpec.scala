@@ -3,14 +3,14 @@ package io.release.monorepo.steps
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseIO
-import io.release.TestSupport
 import io.release.TestAssertions.assertIllegalStateMessage
+import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
 import munit.CatsEffectSuite
 import sbt.*
-import sbt.Resolver
 import sbt.Keys.*
+import sbt.Resolver
 
 import java.io.File
 

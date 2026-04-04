@@ -4,8 +4,9 @@ import io.release.ReleaseContext
 import io.release.ReleaseIO
 import io.release.TestRepoFiles
 import io.release.steps.ReleaseSteps
-import java.nio.file.Files
 import munit.FunSuite
+
+import java.nio.file.Files
 
 class CoreLifecycleSlotsSpec extends FunSuite {
 
