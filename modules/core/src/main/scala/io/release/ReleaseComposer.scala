@@ -6,7 +6,6 @@ import io.release.internal.ExecutionEngine
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.internal.StepExecutionSupport
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -33,7 +32,7 @@ private[release] object ReleaseComposer {
   def compose(steps: Seq[ProcessStep.Single[ReleaseContext]], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
-    StepExecutionSupport.runMainSegment(
+    ExecutionEngine.runMainSegment(
       logPrefix = LogPrefix,
       steps = preparedSteps(steps, crossBuild),
       startCtx = initialCtx,
@@ -46,7 +45,7 @@ private[release] object ReleaseComposer {
   def validateOnly(steps: Seq[ProcessStep.Single[ReleaseContext]], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
-    StepExecutionSupport.runValidationPhase(
+    ExecutionEngine.runValidations(
       logPrefix = LogPrefix,
       steps = preparedSteps(steps, crossBuild),
       initialCtx = initialCtx
@@ -55,14 +54,14 @@ private[release] object ReleaseComposer {
   private def preparedSteps(
       steps: Seq[ProcessStep.Single[ReleaseContext]],
       crossBuild: Boolean
-  ): Seq[StepExecutionSupport.PreparedStep[ReleaseContext]] =
+  ): Seq[ExecutionEngine.PreparedStep[ReleaseContext]] =
     steps.map(preparedStep(_, crossBuild))
 
   private def preparedStep(
       step: ProcessStep.Single[ReleaseContext],
       crossBuild: Boolean
-  ): StepExecutionSupport.PreparedStep[ReleaseContext] =
-    StepExecutionSupport.PreparedStep(
+  ): ExecutionEngine.PreparedStep[ReleaseContext] =
+    ExecutionEngine.PreparedStep(
       name = step.name,
       validate = wrapWithCrossBuild(step, crossBuild)(step.threadedValidation),
       execute = ExecutionEngine.withErrorRecovery(LogPrefix)(

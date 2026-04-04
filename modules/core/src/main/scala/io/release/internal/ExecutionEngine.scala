@@ -2,11 +2,53 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
-import io.release.internal.StepExecutionSupport.PreparedStep
 import io.release.steps.StepHelpers
 
 /** Shared two-phase execution and failure-detection helpers used by core and monorepo composers. */
 private[release] object ExecutionEngine {
+
+  final case class PreparedStep[C](
+      name: String,
+      validate: C => IO[C],
+      execute: C => IO[C]
+  )
+
+  // ── Orchestration ───────────────────────────────────────────────────
+
+  def runMainSegment[C <: ReleaseCtx[C]](
+      logPrefix: String,
+      steps: Seq[PreparedStep[C]],
+      startCtx: C,
+      armOnFailure: C => C
+  ): IO[C] =
+    for {
+      validatedCtx <- runValidations(logPrefix, steps, startCtx)
+      resultCtx    <-
+        if (validatedCtx.failed) IO.pure(validatedCtx)
+        else runActions(steps, armOnFailure(validatedCtx))
+    } yield resultCtx
+
+  def runSequentialValidateThenExecute[C <: ReleaseCtx[C]](
+      steps: Seq[PreparedStep[C]],
+      startCtx: C,
+      armOnFailure: C => C,
+      hasFailed: C => Boolean
+  ): IO[C] =
+    steps.foldLeft(IO.pure(startCtx)) { (ioCtx, step) =>
+      ioCtx.flatMap { currentCtx =>
+        if (hasFailed(currentCtx)) IO.pure(currentCtx)
+        else {
+          for {
+            validatedCtx <- step.validate(currentCtx)
+            nextCtx      <-
+              if (hasFailed(validatedCtx)) IO.pure(validatedCtx)
+              else runActionPhase(Seq(step))(armOnFailure(validatedCtx))
+          } yield nextCtx
+        }
+      }
+    }
+
+  // ── Validation ──────────────────────────────────────────────────────
 
   def runValidations[C <: ReleaseCtx[C]](
       logPrefix: String,
