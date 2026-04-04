@@ -1,10 +1,10 @@
 package io.release.internal
 
-import scala.annotation.nowarn
-
 import io.release.ReleaseContext
 import io.release.ReleaseIO
+import io.release.TestRepoFiles
 import io.release.steps.ReleaseSteps
+import java.nio.file.Files
 import munit.FunSuite
 
 class CoreLifecycleSlotsSpec extends FunSuite {
@@ -53,6 +53,15 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     )
   }
 
+  test("slot catalog - grouped inventories concatenate into the aggregate inventory in order") {
+    assertEquals(CoreLifecycleSlots.policySlots, CorePolicySlots.policySlots)
+    assertEquals(CoreLifecycleSlots.hookSlots, CoreHookSlots.hookSlots)
+    assertEquals(
+      CoreLifecycleSlots.slots,
+      CorePolicySlots.policySlots ++ CoreHookSlots.hookSlots
+    )
+  }
+
   test("slot-backed phases - preserve canonical phase and built-in step names") {
     assertEquals(hookPhaseNames(CoreLifecycle.phases), CoreLifecycleSlotsSpec.expectedHookPhases)
     assertEquals(
@@ -61,21 +70,40 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     )
   }
 
-  @nowarn("cat=unchecked")
+  test("source cleanup - standalone lifecycle slot and hook materialization helpers are gone") {
+    val repoRoot = TestRepoFiles.resolve("build.sbt").getParent
+
+    assert(
+      Files.notExists(
+        repoRoot.resolve(
+          "modules/core/src/main/scala/io/release/internal/LifecycleSlotSupport.scala"
+        )
+      )
+    )
+    assert(
+      Files.notExists(
+        repoRoot.resolve(
+          "modules/core/src/main/scala/io/release/internal/HookMaterializationSupport.scala"
+        )
+      )
+    )
+    val topLevelSource =
+      TestRepoFiles.readString(
+        "modules/core/src/main/scala/io/release/internal/CoreLifecycleSlots.scala"
+      )
+    assert(!topLevelSource.contains("policySlot("))
+    assert(!topLevelSource.contains("hookSlot("))
+  }
+
   private def hookPhaseNames(
       phases: Seq[LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]]
   ): Seq[String] =
-    phases.collect { case phase: LifecycleCompiler.SingleHookPhase[?, ?, ?, ?, ?] @unchecked =>
-      phase.phase
-    }
+    phases.flatMap(_.phaseName)
 
-  @nowarn("cat=unchecked")
   private def builtInStepNames(
       phases: Seq[LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]]
   ): Seq[String] =
-    phases.collect { case phase: LifecycleCompiler.SingleBuiltInPhase[?, ?, ?] @unchecked =>
-      phase.step.name
-    }
+    LifecycleCompiler.defaultsSingle(phases).map(_.name)
 }
 
 object CoreLifecycleSlotsSpec {

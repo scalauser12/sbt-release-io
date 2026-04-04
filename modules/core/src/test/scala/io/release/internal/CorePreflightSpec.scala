@@ -287,7 +287,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         )
       )
     ) { case (_, versionFile, initialCtx) =>
-      val steps = ReleaseHookCompiler.compile(initialCtx.state)
+      val steps = CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state))
 
       CorePreflight
         .check(initialCtx, steps, crossBuild = false)

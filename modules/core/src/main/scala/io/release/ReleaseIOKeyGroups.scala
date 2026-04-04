@@ -1,7 +1,15 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.CorePublicKeyCatalog
+import io.release.internal.CoreBehaviorPublicKeys
+import io.release.internal.CoreDefaultsPublicKeys
+import io.release.internal.CoreDiagnosticsPublicKeys
+import io.release.internal.CoreHookPublicKeys
+import io.release.internal.CorePolicyPublicKeys
+import io.release.internal.CorePublishPublicKeys
+import io.release.internal.CoreRuntimePublicKeys
+import io.release.internal.CoreVcsPublicKeys
+import io.release.internal.CoreVersioningPublicKeys
 import io.release.version.Version
 import sbt.{internal as _, *}
 
@@ -14,15 +22,15 @@ trait ReleaseIOBehaviorKeys {
     * `crossScalaVersions`. Can also be enabled via the `cross` command-line argument.
     */
   val releaseIOBehaviorCrossBuild: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOBehaviorCrossBuild
+    CoreBehaviorPublicKeys.releaseIOBehaviorCrossBuild
 
   /** When `true`, the `publishArtifacts` step is skipped entirely. */
   val releaseIOBehaviorSkipPublish: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOBehaviorSkipPublish
+    CoreBehaviorPublicKeys.releaseIOBehaviorSkipPublish
 
   /** When `true`, release steps may prompt for confirmation/input (versions, push, etc.). */
   val releaseIOBehaviorInteractive: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOBehaviorInteractive
+    CoreBehaviorPublicKeys.releaseIOBehaviorInteractive
 }
 
 /** Grouped build-facing release settings for default decision answers. */
@@ -32,23 +40,23 @@ trait ReleaseIODefaultsKeys {
     * Supported values: `o` (overwrite), `k` (keep), `a` (abort), or a replacement tag name.
     */
   val releaseIODefaultsTagExistsAnswer: SettingKey[Option[String]] =
-    CorePublicKeyCatalog.releaseIODefaultsTagExistsAnswer
+    CoreDefaultsPublicKeys.releaseIODefaultsTagExistsAnswer
 
   /** Default decision for continuing when SNAPSHOT dependencies are detected. */
   val releaseIODefaultsSnapshotDependenciesAnswer: SettingKey[Option[Boolean]] =
-    CorePublicKeyCatalog.releaseIODefaultsSnapshotDependenciesAnswer
+    CoreDefaultsPublicKeys.releaseIODefaultsSnapshotDependenciesAnswer
 
   /** Default decision for continuing after a remote-check failure before push. */
   val releaseIODefaultsRemoteCheckFailureAnswer: SettingKey[Option[Boolean]] =
-    CorePublicKeyCatalog.releaseIODefaultsRemoteCheckFailureAnswer
+    CoreDefaultsPublicKeys.releaseIODefaultsRemoteCheckFailureAnswer
 
   /** Default decision for continuing when the local branch is behind upstream. */
   val releaseIODefaultsUpstreamBehindAnswer: SettingKey[Option[Boolean]] =
-    CorePublicKeyCatalog.releaseIODefaultsUpstreamBehindAnswer
+    CoreDefaultsPublicKeys.releaseIODefaultsUpstreamBehindAnswer
 
   /** Default decision for whether to push changes at the end of the release. */
   val releaseIODefaultsPushAnswer: SettingKey[Option[Boolean]] =
-    CorePublicKeyCatalog.releaseIODefaultsPushAnswer
+    CoreDefaultsPublicKeys.releaseIODefaultsPushAnswer
 }
 
 /** Grouped build-facing release settings for lifecycle policy toggles. */
@@ -56,27 +64,27 @@ trait ReleaseIOPolicyKeys {
 
   /** When `false`, the snapshot-dependency validation phase is omitted from the compiled process. */
   val releaseIOPolicyEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOPolicyEnableSnapshotDependenciesCheck
+    CorePolicyPublicKeys.releaseIOPolicyEnableSnapshotDependenciesCheck
 
   /** When `false`, the `run-clean` phase is omitted from the compiled process. */
   val releaseIOPolicyEnableRunClean: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOPolicyEnableRunClean
+    CorePolicyPublicKeys.releaseIOPolicyEnableRunClean
 
   /** When `false`, the `run-tests` phase is omitted from the compiled process. */
   val releaseIOPolicyEnableRunTests: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOPolicyEnableRunTests
+    CorePolicyPublicKeys.releaseIOPolicyEnableRunTests
 
   /** When `false`, the `tag-release` phase is omitted from the compiled process. */
   val releaseIOPolicyEnableTagging: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOPolicyEnableTagging
+    CorePolicyPublicKeys.releaseIOPolicyEnableTagging
 
   /** When `false`, the `publish-artifacts` phase is omitted from the compiled process. */
   val releaseIOPolicyEnablePublish: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOPolicyEnablePublish
+    CorePolicyPublicKeys.releaseIOPolicyEnablePublish
 
   /** When `false`, the `push-changes` phase is omitted from the compiled process. */
   val releaseIOPolicyEnablePush: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOPolicyEnablePush
+    CorePolicyPublicKeys.releaseIOPolicyEnablePush
 }
 
 /** Grouped build-facing release settings for lifecycle hooks. */
@@ -84,71 +92,71 @@ trait ReleaseIOHookKeys {
 
   /** Hooks that run after the clean-working-dir validation/check phase. */
   val releaseIOHooksAfterCleanCheck: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterCleanCheck
+    CoreHookPublicKeys.releaseIOHooksAfterCleanCheck
 
   /** Hooks that run immediately before version resolution. */
   val releaseIOHooksBeforeVersionResolution: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforeVersionResolution
+    CoreHookPublicKeys.releaseIOHooksBeforeVersionResolution
 
   /** Hooks that run immediately after version resolution. */
   val releaseIOHooksAfterVersionResolution: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterVersionResolution
+    CoreHookPublicKeys.releaseIOHooksAfterVersionResolution
 
   /** Hooks that run immediately before writing the release version. */
   val releaseIOHooksBeforeReleaseVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforeReleaseVersionWrite
+    CoreHookPublicKeys.releaseIOHooksBeforeReleaseVersionWrite
 
   /** Hooks that run immediately after writing the release version. */
   val releaseIOHooksAfterReleaseVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterReleaseVersionWrite
+    CoreHookPublicKeys.releaseIOHooksAfterReleaseVersionWrite
 
   /** Hooks that run immediately before committing the release version. */
   val releaseIOHooksBeforeReleaseCommit: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforeReleaseCommit
+    CoreHookPublicKeys.releaseIOHooksBeforeReleaseCommit
 
   /** Hooks that run immediately after committing the release version. */
   val releaseIOHooksAfterReleaseCommit: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterReleaseCommit
+    CoreHookPublicKeys.releaseIOHooksAfterReleaseCommit
 
   /** Hooks that run immediately before tagging the release. */
   val releaseIOHooksBeforeTag: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforeTag
+    CoreHookPublicKeys.releaseIOHooksBeforeTag
 
   /** Hooks that run immediately after tagging the release. */
   val releaseIOHooksAfterTag: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterTag
+    CoreHookPublicKeys.releaseIOHooksAfterTag
 
   /** Hooks that run immediately before publish. */
   val releaseIOHooksBeforePublish: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforePublish
+    CoreHookPublicKeys.releaseIOHooksBeforePublish
 
   /** Hooks that run immediately after publish. */
   val releaseIOHooksAfterPublish: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterPublish
+    CoreHookPublicKeys.releaseIOHooksAfterPublish
 
   /** Hooks that run immediately before writing the next version. */
   val releaseIOHooksBeforeNextVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforeNextVersionWrite
+    CoreHookPublicKeys.releaseIOHooksBeforeNextVersionWrite
 
   /** Hooks that run immediately after writing the next version. */
   val releaseIOHooksAfterNextVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterNextVersionWrite
+    CoreHookPublicKeys.releaseIOHooksAfterNextVersionWrite
 
   /** Hooks that run immediately before committing the next version. */
   val releaseIOHooksBeforeNextCommit: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforeNextCommit
+    CoreHookPublicKeys.releaseIOHooksBeforeNextCommit
 
   /** Hooks that run immediately after committing the next version. */
   val releaseIOHooksAfterNextCommit: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterNextCommit
+    CoreHookPublicKeys.releaseIOHooksAfterNextCommit
 
   /** Hooks that run immediately before pushing release changes. */
   val releaseIOHooksBeforePush: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksBeforePush
+    CoreHookPublicKeys.releaseIOHooksBeforePush
 
   /** Hooks that run immediately after pushing release changes. */
   val releaseIOHooksAfterPush: SettingKey[Seq[ReleaseHookIO]] =
-    CorePublicKeyCatalog.releaseIOHooksAfterPush
+    CoreHookPublicKeys.releaseIOHooksAfterPush
 }
 
 /** Grouped build-facing release settings for version-file and version-computation concerns. */
@@ -158,70 +166,71 @@ trait ReleaseIOVersioningKeys {
     * Default parses the standard sbt `[ThisBuild /] version := "x.y.z"` format.
     */
   val releaseIOVersioningReadVersion: SettingKey[File => IO[String]] =
-    CorePublicKeyCatalog.releaseIOVersioningReadVersion
+    CoreVersioningPublicKeys.releaseIOVersioningReadVersion
 
   /** Function that produces the version file contents for a given version.
     * Receives `(versionFile, newVersion)` and returns `IO[newFileContents]`.
     */
   val releaseIOVersioningFileContents: SettingKey[(File, String) => IO[String]] =
-    CorePublicKeyCatalog.releaseIOVersioningFileContents
+    CoreVersioningPublicKeys.releaseIOVersioningFileContents
 
   /** Path to the version file (e.g. `version.sbt`). */
-  val releaseIOVersioningFile: SettingKey[File] = CorePublicKeyCatalog.releaseIOVersioningFile
+  val releaseIOVersioningFile: SettingKey[File] = CoreVersioningPublicKeys.releaseIOVersioningFile
 
   /** When `true`, the version file uses `ThisBuild / version` instead of `version`. */
   val releaseIOVersioningUseGlobal: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOVersioningUseGlobal
+    CoreVersioningPublicKeys.releaseIOVersioningUseGlobal
 
   /** Function that computes the release version from the current version. */
   @transient
   val releaseIOVersioningReleaseVersion: TaskKey[String => String] =
-    CorePublicKeyCatalog.releaseIOVersioningReleaseVersion
+    CoreVersioningPublicKeys.releaseIOVersioningReleaseVersion
 
   /** Function that computes the next development version from the release version. */
   @transient
   val releaseIOVersioningNextVersion: TaskKey[String => String] =
-    CorePublicKeyCatalog.releaseIOVersioningNextVersion
+    CoreVersioningPublicKeys.releaseIOVersioningNextVersion
 
   /** Version bump strategy. */
   @transient
-  val releaseIOVersioningBump: TaskKey[Version.Bump] = CorePublicKeyCatalog.releaseIOVersioningBump
+  val releaseIOVersioningBump: TaskKey[Version.Bump] =
+    CoreVersioningPublicKeys.releaseIOVersioningBump
 }
 
 /** Grouped build-facing release settings for VCS behavior and messages. */
 trait ReleaseIOVcsKeys {
 
   /** When `true`, VCS tags and commits are GPG-signed. */
-  val releaseIOVcsSign: SettingKey[Boolean] = CorePublicKeyCatalog.releaseIOVcsSign
+  val releaseIOVcsSign: SettingKey[Boolean] = CoreVcsPublicKeys.releaseIOVcsSign
 
   /** When `true`, VCS commits include a `Signed-off-by` line. */
-  val releaseIOVcsSignOff: SettingKey[Boolean] = CorePublicKeyCatalog.releaseIOVcsSignOff
+  val releaseIOVcsSignOff: SettingKey[Boolean] = CoreVcsPublicKeys.releaseIOVcsSignOff
 
   /** When `true`, untracked files do not cause the clean-working-dir check to fail. */
   val releaseIOVcsIgnoreUntrackedFiles: SettingKey[Boolean] =
-    CorePublicKeyCatalog.releaseIOVcsIgnoreUntrackedFiles
+    CoreVcsPublicKeys.releaseIOVcsIgnoreUntrackedFiles
 
   /** Timeout for the remote reachability check (`git fetch`) used before push. */
   val releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
-    CorePublicKeyCatalog.releaseIOVcsRemoteCheckTimeout
+    CoreVcsPublicKeys.releaseIOVcsRemoteCheckTimeout
 
   /** Tag name for the release. Default: `s"v$$version"`. */
   @transient
-  val releaseIOVcsTagName: TaskKey[String] = CorePublicKeyCatalog.releaseIOVcsTagName
+  val releaseIOVcsTagName: TaskKey[String] = CoreVcsPublicKeys.releaseIOVcsTagName
 
   /** Tag comment. Default: `s"Releasing $$version"`. */
   @transient
-  val releaseIOVcsTagComment: TaskKey[String] = CorePublicKeyCatalog.releaseIOVcsTagComment
+  val releaseIOVcsTagComment: TaskKey[String] = CoreVcsPublicKeys.releaseIOVcsTagComment
 
   /** Commit message for the release version commit. */
   @transient
   val releaseIOVcsReleaseCommitMessage: TaskKey[String] =
-    CorePublicKeyCatalog.releaseIOVcsReleaseCommitMessage
+    CoreVcsPublicKeys.releaseIOVcsReleaseCommitMessage
 
   /** Commit message for the next snapshot version commit. */
   @transient
   val releaseIOVcsNextCommitMessage: TaskKey[String] =
-    CorePublicKeyCatalog.releaseIOVcsNextCommitMessage
+    CoreVcsPublicKeys.releaseIOVcsNextCommitMessage
 }
 
 /** Grouped build-facing release settings for publish behavior. */
@@ -229,10 +238,10 @@ trait ReleaseIOPublishKeys {
 
   /** Task that performs the actual publish action. Default: `publish`. */
   @transient
-  val releaseIOPublishAction: TaskKey[Unit] = CorePublicKeyCatalog.releaseIOPublishAction
+  val releaseIOPublishAction: TaskKey[Unit] = CorePublishPublicKeys.releaseIOPublishAction
 
   /** When false, skips publishTo/skip validation in the publishArtifacts step. */
-  val releaseIOPublishChecks: SettingKey[Boolean] = CorePublicKeyCatalog.releaseIOPublishChecks
+  val releaseIOPublishChecks: SettingKey[Boolean] = CorePublishPublicKeys.releaseIOPublishChecks
 }
 
 /** Grouped lower-level runtime task keys for release-aware state. */
@@ -241,7 +250,7 @@ trait ReleaseIORuntimeKeys {
   /** The current version at evaluation time. Useful for tag/commit message tasks. */
   @transient
   val releaseIORuntimeCurrentVersion: TaskKey[String] =
-    CorePublicKeyCatalog.releaseIORuntimeCurrentVersion
+    CoreRuntimePublicKeys.releaseIORuntimeCurrentVersion
 }
 
 /** Grouped lower-level diagnostic task keys. */
@@ -250,5 +259,5 @@ trait ReleaseIODiagnosticsKeys {
   /** Task that resolves SNAPSHOT dependencies for validation. */
   @transient
   val releaseIODiagnosticsSnapshotDependencies: TaskKey[Seq[ModuleID]] =
-    CorePublicKeyCatalog.releaseIODiagnosticsSnapshotDependencies
+    CoreDiagnosticsPublicKeys.releaseIODiagnosticsSnapshotDependencies
 }

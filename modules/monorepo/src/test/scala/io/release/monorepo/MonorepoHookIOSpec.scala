@@ -417,7 +417,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
         val populatedSlots = MonorepoLifecycleSlots.globalHookSlots
           .filter(slot => slot.resolveHooks(config).nonEmpty)
           .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(MonorepoLifecycleSlots.beforeSelectionHooks.keyLabel))
+        assertEquals(populatedSlots, Seq(MonorepoGlobalHookSlots.beforeSelectionHooks.keyLabel))
         assertEquals(config.beforeSelectionHooks.map(_.name), Seq("before-selection"))
       }
     }
@@ -435,7 +435,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite {
         val populatedSlots = MonorepoLifecycleSlots.projectHookSlots
           .filter(slot => slot.resolveHooks(config).nonEmpty)
           .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(MonorepoLifecycleSlots.beforeTagHooks.keyLabel))
+        assertEquals(populatedSlots, Seq(MonorepoProjectHookSlots.beforeTagHooks.keyLabel))
         assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
       }
     }

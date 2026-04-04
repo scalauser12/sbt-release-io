@@ -108,12 +108,12 @@ private[monorepo] object MonorepoCommandExecution {
       .compileMergedSteps(
         state = state,
         maybeResource = maybeResource,
-        resolveHooks = MonorepoHookCompiler.resolve,
+        resolveHooks = MonorepoHookConfiguration.resolve,
         resolveResourceHooks = runtime.resolveResourceHooks
       )(
         materialize = MonorepoResourceHooks.materialize,
         merge = (left, right) => left.mergeWith(right),
-        compile = MonorepoHookCompiler.compile
+        compile = MonorepoLifecycle.compile
       )
       .map(steps => CompiledMonorepoSteps(steps = steps))
 

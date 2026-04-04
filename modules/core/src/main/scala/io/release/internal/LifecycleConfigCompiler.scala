@@ -48,6 +48,33 @@ private[release] object LifecycleConfigCompiler {
       get(config).nonEmpty
   }
 
+  sealed trait Slot[Config] {
+    def id: String
+    def keyLabel: String
+    def binding: Binding[Config]
+  }
+
+  final case class PolicySlot[Config](
+      binding: PolicyBinding[Config]
+  ) extends Slot[Config] {
+    override val id: String       = binding.id
+    override val keyLabel: String = binding.key.key.label
+
+    val enabled: Config => Boolean = binding.get
+  }
+
+  final case class HookSlot[Config, Hook](
+      binding: HookBinding[Config, Hook]
+  ) extends Slot[Config] {
+    override val id: String       = binding.id
+    override val keyLabel: String = binding.key.key.label
+
+    val resolveHooks: Config => Seq[Hook] = binding.get
+
+    def updated(config: Config, hooks: Seq[Hook]): Config =
+      binding.updated(config, hooks)
+  }
+
   def policyBinding[Config](
       id: String,
       key: SettingKey[Boolean],
@@ -73,6 +100,45 @@ private[release] object LifecycleConfigCompiler {
       get = get,
       updated = updated
     )
+
+  def policySlot[Config](
+      key: SettingKey[Boolean],
+      get: Config => Boolean,
+      updated: (Config, Boolean) => Config
+  ): PolicySlot[Config] =
+    PolicySlot(
+      policyBinding(
+        id = key.key.label,
+        key = key,
+        get = get,
+        updated = updated
+      )
+    )
+
+  def hookSlot[Config, Hook](
+      key: SettingKey[Seq[Hook]],
+      get: Config => Seq[Hook],
+      updated: (Config, Seq[Hook]) => Config
+  ): HookSlot[Config, Hook] =
+    HookSlot(
+      hookBinding(
+        id = key.key.label,
+        key = key,
+        get = get,
+        updated = updated
+      )
+    )
+
+  def configBindings[Config](
+      slots: Seq[Slot[Config]]
+  ): Seq[Binding[Config]] =
+    slots.map(_.binding)
+
+  def configBindings[Config](
+      first: Slot[Config],
+      rest: Slot[Config]*
+  ): Seq[Binding[Config]] =
+    first.binding +: rest.map(_.binding)
 
   def defaultSettings[Config, C, I](
       phases: Seq[LifecycleCompiler.Phase[Config, C, I]]

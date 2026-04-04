@@ -104,9 +104,13 @@ class MonorepoReleaseIOGroupedKeysSpec
     "releaseIOMonorepoNextCommitMessage"
   )
 
-  private lazy val monorepoReleaseIOSource =
+  private lazy val monorepoReleaseIOSource          =
     TestRepoFiles.readString(
       "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleaseIO.scala"
+    )
+  private lazy val monorepoReleaseIOKeyGroupsSource =
+    TestRepoFiles.readString(
+      "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleaseIOKeyGroups.scala"
     )
 
   test("grouped monorepo keys cover the full catalog and expose exact catalog-backed instances") {
@@ -159,5 +163,9 @@ class MonorepoReleaseIOGroupedKeysSpec
         .isDefined,
       "Expected MonorepoReleaseIO.scala to remove private _releaseIOMonorepo forwarding aliases"
     )
+  }
+
+  test("MonorepoReleaseIOKeyGroups source points directly at grouped key modules") {
+    assert(!monorepoReleaseIOKeyGroupsSource.contains("MonorepoPublicKeyCatalog."))
   }
 }

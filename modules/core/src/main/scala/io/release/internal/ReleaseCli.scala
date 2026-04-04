@@ -7,12 +7,7 @@ package io.release.internal
   */
 private[release] object ReleaseCli {
 
-  sealed trait CommandMode
-  object CommandMode {
-    case object Run   extends CommandMode
-    case object Help  extends CommandMode
-    case object Check extends CommandMode
-  }
+  import PluginEntrypointSupport.CommandMode
 
   sealed trait Arg
   object Arg {

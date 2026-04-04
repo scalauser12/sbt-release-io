@@ -12,26 +12,43 @@ import sbt.*
 import sbt.Keys.*
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 
-class ReleaseHookCompilerSpec extends CatsEffectSuite {
+class CoreLifecycleCompilationSpec extends CatsEffectSuite {
 
   test(
     "compile - match the built-in release steps when no hook or policy customization is present"
   ) {
     hookStateResource("release-hook-compiler-defaults").use { state =>
       IO {
-        assertEquals(ReleaseHookCompiler.compile(state), ReleaseSteps.defaults)
+        assertEquals(compileLifecycle(state), ReleaseSteps.defaults)
       }
     }
   }
 
-  test("compile(configuration) - match compile(state) for the same resolved hook configuration") {
+  test("production sources no longer reference thin core hook compiler or merge wrapper") {
     hookStateResource("release-hook-compiler-overload").use { state =>
       IO {
-        assertEquals(
-          ReleaseHookCompiler.compile(ReleaseHookCompiler.resolve(state)).map(_.name),
-          ReleaseHookCompiler.compile(state).map(_.name)
+        val commandExecution = Files.readString(
+          repoPath("modules/core/src/main/scala/io/release/internal/CoreCommandExecution.scala")
         )
+        val sharedKernel     = Files.readString(
+          repoPath("modules/core/src/main/scala/io/release/internal/SharedCommandKernel.scala")
+        )
+        val runtimeSupport   = Files.readString(
+          repoPath("modules/core/src/main/scala/io/release/internal/CommandRuntimeSupport.scala")
+        )
+
+        assertEquals(compileLifecycle(state).map(_.name), ReleaseSteps.defaults.map(_.name))
+        assert(
+          !Files.exists(
+            repoPath("modules/core/src/main/scala/io/release/internal/ReleaseHookCompiler.scala")
+          )
+        )
+        assert(!commandExecution.contains("ReleaseHookCompiler"))
+        assert(!sharedKernel.contains("mergeMaterializedHooks("))
+        assert(!runtimeSupport.contains("mergeMaterializedHooks("))
       }
     }
   }
@@ -50,7 +67,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
 
     hookStateResource("release-hook-compiler-resolve", settings).use { state =>
       IO {
-        val config = ReleaseHookCompiler.resolve(state)
+        val config = CoreHookConfiguration.resolve(state)
 
         assert(!config.enableRunTests)
         assert(!config.enablePublish)
@@ -63,7 +80,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
   test("resolve - generated lifecycle defaults produce the empty hook configuration") {
     hookStateResource("release-hook-compiler-generated-defaults").use { state =>
       IO {
-        assertEquals(ReleaseHookCompiler.resolve(state), CoreHookConfiguration.empty)
+        assertEquals(CoreHookConfiguration.resolve(state), CoreHookConfiguration.empty)
       }
     }
   }
@@ -94,7 +111,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
 
     hookStateResource("release-hook-compiler-order", settings).use { state =>
       IO {
-        val stepNames = ReleaseHookCompiler.compile(state).map(_.name)
+        val stepNames = compileLifecycle(state).map(_.name)
 
         assertEquals(
           stepNames,
@@ -125,8 +142,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookStateResource("release-hook-compiler-publish-gate", settings).use { state =>
-        val publishHookSteps    = ReleaseHookCompiler
-          .compile(state)
+        val publishHookSteps    = compileLifecycle(state)
           .filter(step =>
             step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
           )
@@ -167,8 +183,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
         rootSettings = settings ++ Seq(publish / skip := true),
         childSettings = Seq(publish / skip := false)
       ).use { state =>
-        val publishHookSteps = ReleaseHookCompiler
-          .compile(state)
+        val publishHookSteps = compileLifecycle(state)
           .filter(step =>
             step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
           )
@@ -191,8 +206,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookStateResource("release-hook-compiler-publish-cache-enabled", settings).use { state =>
-        val publishHookSteps = ReleaseHookCompiler
-          .compile(state)
+        val publishHookSteps = compileLifecycle(state)
           .filter(step =>
             step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
           )
@@ -218,8 +232,7 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookStateResource("release-hook-compiler-publish-cache-skipped", settings).use { state =>
-        val publishHookSteps    = ReleaseHookCompiler
-          .compile(state)
+        val publishHookSteps    = compileLifecycle(state)
           .filter(step =>
             step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
           )
@@ -283,6 +296,20 @@ class ReleaseHookCompilerSpec extends CatsEffectSuite {
 
   private def hookSettingsDefaults: Seq[Setting[?]] =
     CoreLifecycle.configDefaultSettings
+
+  private def compileLifecycle(state: State): Seq[ProcessStep.Single[ReleaseContext]] =
+    CoreLifecycle.compile(CoreHookConfiguration.resolve(state))
+
+  private def repoPath(relative: String): Path = {
+    @scala.annotation.tailrec
+    def loop(path: Path): Path =
+      if (path == null) sys.error("Could not locate repository root")
+      else if (Files.exists(path.resolve("build.sbt")) && Files.exists(path.resolve("modules")))
+        path
+      else loop(path.getParent)
+
+    loop(Path.of("").toAbsolutePath.normalize).resolve(relative)
+  }
 
   private def publishHookSettings(
       observed: Ref[IO, List[String]]

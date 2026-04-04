@@ -12,12 +12,7 @@ package io.release.monorepo
   */
 private[monorepo] object MonorepoCli {
 
-  sealed trait CommandMode
-  object CommandMode {
-    case object Run   extends CommandMode
-    case object Help  extends CommandMode
-    case object Check extends CommandMode
-  }
+  import io.release.internal.PluginEntrypointSupport.CommandMode
 
   sealed trait Arg
   object Arg {

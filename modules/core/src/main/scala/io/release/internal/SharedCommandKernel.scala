@@ -49,13 +49,11 @@ private[release] object SharedCommandKernel {
       compile: Config => Seq[Step]
   ): IO[Seq[Step]] =
     IO.blocking {
-      compile(
-        CommandRuntimeSupport.mergeMaterializedHooks(
-          plainHooks = resolveHooks(state),
-          resourceHooks = resolveResourceHooks(state),
-          maybeResource = maybeResource
-        )(materialize, merge)
-      )
+      val resolvedHooks     = resolveHooks(state)
+      val resourceHooks     = resolveResourceHooks(state)
+      val materializedHooks = materialize(resourceHooks, maybeResource)
+
+      compile(merge(resolvedHooks, materializedHooks))
     }
 
   def finalizeReleaseResult[C <: ReleaseCtx[C]](

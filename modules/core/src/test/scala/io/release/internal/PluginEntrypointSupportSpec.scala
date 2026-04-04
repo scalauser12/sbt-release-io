@@ -2,6 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.TestSupport
+import io.release.TestRepoFiles
 import munit.CatsEffectSuite
 import sbt.complete.DefaultParsers.success
 import sbt.*
@@ -123,6 +124,18 @@ class PluginEntrypointSupportSpec extends CatsEffectSuite {
         )
       )
       assertEquals(labels.count(_ == "commands"), 1)
+    }
+  }
+
+  test("source cleanup - only the shared plugin shell declares CommandMode") {
+    IO {
+      val commandModeOccurrences = Seq(
+        "modules/core/src/main/scala/io/release/internal/PluginEntrypointSupport.scala",
+        "modules/core/src/main/scala/io/release/internal/ReleaseCli.scala",
+        "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoCli.scala"
+      ).map(TestRepoFiles.readString).map(_.split("sealed trait CommandMode", -1).length - 1).sum
+
+      assertEquals(commandModeOccurrences, 1)
     }
   }
 }

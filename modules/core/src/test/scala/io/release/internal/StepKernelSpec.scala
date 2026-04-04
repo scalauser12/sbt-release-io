@@ -2,6 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.TestRepoFiles
 import munit.CatsEffectSuite
 
 class StepKernelSpec extends CatsEffectSuite {
@@ -117,6 +118,16 @@ class StepKernelSpec extends CatsEffectSuite {
         assertEquals(resourceResult, 3)
         assertEquals(resourceSeen, List("resource:first:demo:api:1", "resource:second:demo:api:2"))
       }
+    }
+  }
+
+  test("source cleanup - wrapper-era copy helpers are gone") {
+    IO {
+      val source =
+        TestRepoFiles.readString("modules/core/src/main/scala/io/release/internal/StepKernel.scala")
+
+      assert(!source.contains("resolveSingleCopyFields"))
+      assert(!source.contains("resolveItemCopyFields"))
     }
   }
 }
