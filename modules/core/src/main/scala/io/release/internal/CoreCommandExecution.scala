@@ -224,18 +224,16 @@ private[release] object CoreCommandExecution {
       skipPublish = skipPublish,
       interactive = interactive,
       crossEnabled = crossEnabled,
-      plan = CoreReleasePlan.build(
-        CoreReleasePlan.Inputs(
-          useDefaults = useDefaults,
-          skipTests = skipTests,
-          skipPublish = skipPublish,
-          interactive = interactive,
-          crossBuild = crossEnabled,
-          releaseVersionOverride = releaseVersionArg,
-          nextVersionOverride = nextVersionArg,
-          decisionDefaults = ReleaseDecisionDefaults.merge(cliDefaults, settings),
-          commandName = runtime.commandName
-        )
+      plan = CoreReleasePlan.fromFlags(
+        useDefaults = useDefaults,
+        skipTests = skipTests,
+        skipPublish = skipPublish,
+        interactive = interactive,
+        crossBuild = crossEnabled,
+        releaseVersionOverride = releaseVersionArg,
+        nextVersionOverride = nextVersionArg,
+        decisionDefaults = ReleaseDecisionDefaults.merge(cliDefaults, settings),
+        commandName = runtime.commandName
       )
     )
   }
@@ -313,7 +311,7 @@ private[release] object CoreCommandExecution {
     } yield inputs.cleanState
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
-    CommandRuntimeSupport.logLines(state, ReleaseLogPrefixes.Core, lines)
+    ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)
 
   private def logReleaseStart(
       state: State,

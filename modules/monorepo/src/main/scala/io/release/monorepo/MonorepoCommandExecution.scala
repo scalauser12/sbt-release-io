@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.internal.CheckModeOutput
 import io.release.internal.CommandRuntimeSupport
+import io.release.internal.ReleaseCommandRunner
 import io.release.internal.DecisionDefaultsSupport
 import io.release.internal.ExecutionFlags
 import io.release.internal.ProcessStep
@@ -271,7 +272,7 @@ private[monorepo] object MonorepoCommandExecution {
     } yield command.cleanState
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
-    CommandRuntimeSupport.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
+    ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
 
   private def loadedProjectRefs(state: State): Seq[ProjectRef] =
     SbtRuntime.extracted(state).structure.allProjectRefs

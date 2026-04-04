@@ -32,10 +32,9 @@ private[release] final case class CoreReleasePlan(
     commandName: String = "releaseIO"
 )
 
-/** Builds the typed execution plan for the core release command. */
 private[release] object CoreReleasePlan {
 
-  final case class Inputs(
+  def fromFlags(
       useDefaults: Boolean,
       skipTests: Boolean,
       skipPublish: Boolean,
@@ -45,22 +44,18 @@ private[release] object CoreReleasePlan {
       nextVersionOverride: Option[String],
       decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty,
       commandName: String = "releaseIO"
-  )
-
-  def build(inputs: Inputs): CoreReleasePlan = {
-    val flags = ExecutionFlags(
-      useDefaults = inputs.useDefaults,
-      skipTests = inputs.skipTests,
-      skipPublish = inputs.skipPublish,
-      interactive = inputs.interactive,
-      crossBuild = inputs.crossBuild
-    )
+  ): CoreReleasePlan =
     CoreReleasePlan(
-      flags = flags,
-      releaseVersionOverride = inputs.releaseVersionOverride,
-      nextVersionOverride = inputs.nextVersionOverride,
-      decisionDefaults = inputs.decisionDefaults,
-      commandName = inputs.commandName
+      flags = ExecutionFlags(
+        useDefaults = useDefaults,
+        skipTests = skipTests,
+        skipPublish = skipPublish,
+        interactive = interactive,
+        crossBuild = crossBuild
+      ),
+      releaseVersionOverride = releaseVersionOverride,
+      nextVersionOverride = nextVersionOverride,
+      decisionDefaults = decisionDefaults,
+      commandName = commandName
     )
-  }
 }

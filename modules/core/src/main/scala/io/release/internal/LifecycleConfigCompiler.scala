@@ -134,12 +134,6 @@ private[release] object LifecycleConfigCompiler {
   ): Seq[Binding[Config]] =
     slots.map(_.binding)
 
-  def configBindings[Config](
-      first: Slot[Config],
-      rest: Slot[Config]*
-  ): Seq[Binding[Config]] =
-    first.binding +: rest.map(_.binding)
-
   def defaultSettings[Config, C, I](
       phases: Seq[LifecycleCompiler.Phase[Config, C, I]]
   ): Seq[Setting[?]] =

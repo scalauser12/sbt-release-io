@@ -4,8 +4,8 @@ import munit.FunSuite
 
 class CoreReleasePlanSpec extends FunSuite {
 
-  test("CoreReleasePlan.build - carry only stable flags and CLI overrides into the plan") {
-    val inputs = CoreReleasePlan.Inputs(
+  test("CoreReleasePlan - carry only stable flags and CLI overrides into the plan") {
+    val plan = CoreReleasePlan.fromFlags(
       useDefaults = true,
       skipTests = true,
       skipPublish = false,
@@ -16,8 +16,6 @@ class CoreReleasePlanSpec extends FunSuite {
       decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k")),
       commandName = "releaseCustom"
     )
-
-    val plan = CoreReleasePlan.build(inputs)
 
     assertEquals(
       plan.flags,
@@ -35,18 +33,16 @@ class CoreReleasePlanSpec extends FunSuite {
     assertEquals(plan.commandName, "releaseCustom")
   }
 
-  test("CoreReleasePlan.build - leave optional overrides empty when they are not provided") {
-    val plan = CoreReleasePlan.build(
-      CoreReleasePlan.Inputs(
-        useDefaults = false,
-        skipTests = false,
-        skipPublish = true,
-        interactive = false,
-        crossBuild = false,
-        releaseVersionOverride = None,
-        nextVersionOverride = None,
-        decisionDefaults = ReleaseDecisionDefaults.empty
-      )
+  test("CoreReleasePlan - leave optional overrides empty when they are not provided") {
+    val plan = CoreReleasePlan.fromFlags(
+      useDefaults = false,
+      skipTests = false,
+      skipPublish = true,
+      interactive = false,
+      crossBuild = false,
+      releaseVersionOverride = None,
+      nextVersionOverride = None,
+      decisionDefaults = ReleaseDecisionDefaults.empty
     )
 
     assertEquals(plan.releaseVersionOverride, None)

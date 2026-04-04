@@ -18,7 +18,7 @@ private[release] object SharedCommandKernel {
       lines: Seq[String]
   ): State =
     ReleaseCommandRunner.runSync(state, logPrefix) {
-      CommandRuntimeSupport.logLines(state, logPrefix, lines).as(state)
+      ReleaseCommandRunner.logLines(state, logPrefix, lines).as(state)
     }
 
   def runPreparedCommand[Inputs](
