@@ -10,7 +10,6 @@ import munit.CatsEffectSuite
 
 import java.io.File
 
-@scala.annotation.nowarn("cat=deprecation")
 class MonorepoPublishFailureHandlingSpec
     extends CatsEffectSuite
     with MonorepoPublishStepsSpecSupport {

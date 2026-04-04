@@ -7,7 +7,6 @@ import io.release.internal.ProcessStep
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
-@scala.annotation.nowarn("cat=deprecation")
 class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
   private val fixturePrefix = "sbt-release-io-builder-spec"
 

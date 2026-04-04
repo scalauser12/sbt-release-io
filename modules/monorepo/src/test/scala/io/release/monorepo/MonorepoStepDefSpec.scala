@@ -7,9 +7,6 @@ import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
-import scala.annotation.nowarn
-
-@nowarn("cat=deprecation")
 class MonorepoStepDefSpec extends CatsEffectSuite {
 
   test("single builder creates a selection-aware global step") {

@@ -15,7 +15,6 @@ import sbt.Project
 
 import java.io.File
 
-@scala.annotation.nowarn("cat=deprecation")
 class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSpecSupport {
 
   test(

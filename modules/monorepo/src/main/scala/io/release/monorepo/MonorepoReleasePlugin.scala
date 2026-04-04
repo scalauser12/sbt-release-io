@@ -95,7 +95,6 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
   protected def monorepoParser(state: State): Parser[Seq[String]] =
     MonorepoCommandParsers.buildFromState(state, commandName)
 
-  @scala.annotation.nowarn("cat=deprecation")
   private[monorepo] final def commandRuntime: MonorepoCommandExecution.CommandRuntime[T] =
     MonorepoCommandExecution.CommandRuntime(
       commandName = commandName,

@@ -212,7 +212,6 @@ trait MonorepoReleaseIO {
     MonorepoDefaultSettings.pluginDefaultSettings
 }
 
-@scala.annotation.nowarn("cat=deprecation")
 object MonorepoReleaseIO extends MonorepoReleaseIO {
 
   override type MonorepoVersionFileResolver = (ProjectRef, State) => File
