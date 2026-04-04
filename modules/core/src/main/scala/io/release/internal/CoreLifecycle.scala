@@ -3,8 +3,65 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
+import io.release.ReleaseIO
 import io.release.steps.{PublishSteps, ReleaseSteps}
 import sbt.Setting
+
+private[release] object CorePolicySlots {
+
+  val enableSnapshotDependenciesCheck
+      : LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
+      key = ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck,
+      get = _.enableSnapshotDependenciesCheck,
+      updated = (config, value) => config.copy(enableSnapshotDependenciesCheck = value)
+    )
+
+  val enableRunClean: LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
+      key = ReleaseIO.releaseIOPolicyEnableRunClean,
+      get = _.enableRunClean,
+      updated = (config, value) => config.copy(enableRunClean = value)
+    )
+
+  val enableRunTests: LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
+      key = ReleaseIO.releaseIOPolicyEnableRunTests,
+      get = _.enableRunTests,
+      updated = (config, value) => config.copy(enableRunTests = value)
+    )
+
+  val enableTagging: LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
+      key = ReleaseIO.releaseIOPolicyEnableTagging,
+      get = _.enableTagging,
+      updated = (config, value) => config.copy(enableTagging = value)
+    )
+
+  val enablePublish: LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
+      key = ReleaseIO.releaseIOPolicyEnablePublish,
+      get = _.enablePublish,
+      updated = (config, value) => config.copy(enablePublish = value)
+    )
+
+  val enablePush: LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
+      key = ReleaseIO.releaseIOPolicyEnablePush,
+      get = _.enablePush,
+      updated = (config, value) => config.copy(enablePush = value)
+    )
+
+  val policySlots: Vector[LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration]] =
+    Vector(
+      enableSnapshotDependenciesCheck,
+      enableRunClean,
+      enableRunTests,
+      enableTagging,
+      enablePublish,
+      enablePush
+    )
+}
 
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
@@ -207,4 +264,16 @@ private[release] object CoreLifecycle {
 
   def compile(hooks: CoreHookConfiguration): Seq[ProcessStep.Single[ReleaseContext]] =
     LifecycleCompiler.compileSingle(hooks, phases)
+}
+
+private[release] object CoreLifecycleSlots {
+
+  val policySlots: Vector[LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration]] =
+    CorePolicySlots.policySlots
+
+  val hookSlots: Vector[LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO]] =
+    CoreHookSlots.hookSlots
+
+  val slots: Vector[LifecycleConfigCompiler.Binding[CoreHookConfiguration]] =
+    policySlots ++ hookSlots
 }

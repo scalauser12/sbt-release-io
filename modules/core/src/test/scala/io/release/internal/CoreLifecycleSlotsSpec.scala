@@ -89,7 +89,7 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     )
     val topLevelSource =
       TestRepoFiles.readString(
-        "modules/core/src/main/scala/io/release/internal/CoreLifecycleSlots.scala"
+        "modules/core/src/main/scala/io/release/internal/CoreLifecycle.scala"
       )
     assert(!topLevelSource.contains("policySlot("))
     assert(!topLevelSource.contains("hookSlot("))
