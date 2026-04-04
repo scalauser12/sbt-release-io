@@ -16,6 +16,18 @@ import sbt.{internal as _, *}
 
 /** Internal runtime helpers for monorepo command planning and execution.
   *
+  * == Monorepo command path ==
+  *
+  * {{{
+  * sbt "releaseIOMonorepo [projects] [flags]"
+  *   → MonorepoReleasePlugin registers the sbt command
+  *   → MonorepoCommandExecution.buildCommandInputs   (parse CLI into MonorepoReleasePlan)
+  *   → SharedCommandKernel.runPreparedCommand         (resolve hooks, compile into steps)
+  *   → MonorepoComposer.compose                       (split at selection boundary)
+  *       ├─ setup segment  → ExecutionEngine.runSequentialValidateThenExecute
+  *       └─ main segment   → ExecutionEngine.runMainSegment
+  * }}}
+  *
   * Public plugin extension points stay on [[MonorepoReleasePluginLike]]; this object owns the
   * private command plumbing so the plugin trait can read top-down.
   */

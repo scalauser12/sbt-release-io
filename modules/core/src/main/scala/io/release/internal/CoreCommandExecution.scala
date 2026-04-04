@@ -9,6 +9,17 @@ import sbt.{internal as _, *}
 
 /** Internal runtime helpers for core command planning and execution.
   *
+  * == Core command path ==
+  *
+  * {{{
+  * sbt "releaseIO [flags]"
+  *   → ReleasePluginIO registers the sbt command
+  *   → CoreCommandExecution.buildCommandInputs   (parse CLI flags into CoreReleasePlan)
+  *   → SharedCommandKernel.runPreparedCommand     (resolve hooks, compile into steps)
+  *   → ReleaseComposer.compose                    (wrap steps as PreparedStep, cross-build)
+  *   → ExecutionEngine.runMainSegment             (validate all, then execute all)
+  * }}}
+  *
   * Public plugin extension points stay on [[io.release.ReleasePluginIOLike]]; this object owns
   * the private command plumbing so the plugin trait can read top-down.
   */
