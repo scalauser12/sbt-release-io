@@ -208,7 +208,7 @@ trait MonorepoReleaseIO {
   // ── Default settings ──────────────────────────────────────────────
 
   lazy val monorepoDefaultSettings: Seq[Setting[?]] =
-    _root_.io.release.internal.MonorepoDefaultSettings.pluginDefaultSettings
+    MonorepoDefaultSettings.pluginDefaultSettings
 }
 
 @scala.annotation.nowarn("cat=deprecation")

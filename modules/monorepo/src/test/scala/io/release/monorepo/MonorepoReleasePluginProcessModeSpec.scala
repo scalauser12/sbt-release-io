@@ -175,7 +175,7 @@ class MonorepoReleasePluginProcessModeSpec
 
       assert(labels.contains("commands"))
       assert(
-        io.release.internal.MonorepoDefaultSettings.pluginDefaultSettings
+        MonorepoDefaultSettings.pluginDefaultSettings
           .map(_.key.key.label)
           .forall(labels.contains)
       )
