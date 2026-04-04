@@ -1,69 +1,118 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.CorePublicKeyCatalog
 import munit.CatsEffectSuite
 import sbt.{SettingKey, TaskKey}
 
 class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecSupport {
 
-  private def groupedKeyRef[A](key: SettingKey[A]): (String, AnyRef) =
-    key.key.label -> key.asInstanceOf[AnyRef]
+  private def keyLabel[A](key: SettingKey[A]): String = key.key.label
+  private def keyLabel[A](key: TaskKey[A]): String    = key.key.label
 
-  private def groupedKeyRef[A](key: TaskKey[A]): (String, AnyRef) =
-    key.key.label -> key.asInstanceOf[AnyRef]
+  private val expectedLabels = Set(
+    "releaseIOBehaviorCrossBuild",
+    "releaseIOBehaviorSkipPublish",
+    "releaseIOBehaviorInteractive",
+    "releaseIODefaultsTagExistsAnswer",
+    "releaseIODefaultsSnapshotDependenciesAnswer",
+    "releaseIODefaultsRemoteCheckFailureAnswer",
+    "releaseIODefaultsUpstreamBehindAnswer",
+    "releaseIODefaultsPushAnswer",
+    "releaseIOPolicyEnableSnapshotDependenciesCheck",
+    "releaseIOPolicyEnableRunClean",
+    "releaseIOPolicyEnableRunTests",
+    "releaseIOPolicyEnableTagging",
+    "releaseIOPolicyEnablePublish",
+    "releaseIOPolicyEnablePush",
+    "releaseIOHooksAfterCleanCheck",
+    "releaseIOHooksBeforeVersionResolution",
+    "releaseIOHooksAfterVersionResolution",
+    "releaseIOHooksBeforeReleaseVersionWrite",
+    "releaseIOHooksAfterReleaseVersionWrite",
+    "releaseIOHooksBeforeReleaseCommit",
+    "releaseIOHooksAfterReleaseCommit",
+    "releaseIOHooksBeforeTag",
+    "releaseIOHooksAfterTag",
+    "releaseIOHooksBeforePublish",
+    "releaseIOHooksAfterPublish",
+    "releaseIOHooksBeforeNextVersionWrite",
+    "releaseIOHooksAfterNextVersionWrite",
+    "releaseIOHooksBeforeNextCommit",
+    "releaseIOHooksAfterNextCommit",
+    "releaseIOHooksBeforePush",
+    "releaseIOHooksAfterPush",
+    "releaseIOVersioningReadVersion",
+    "releaseIOVersioningFileContents",
+    "releaseIOVersioningFile",
+    "releaseIOVersioningUseGlobal",
+    "releaseIOVersioningReleaseVersion",
+    "releaseIOVersioningNextVersion",
+    "releaseIOVersioningBump",
+    "releaseIOVcsSign",
+    "releaseIOVcsSignOff",
+    "releaseIOVcsIgnoreUntrackedFiles",
+    "releaseIOVcsRemoteCheckTimeout",
+    "releaseIOVcsTagName",
+    "releaseIOVcsTagComment",
+    "releaseIOVcsReleaseCommitMessage",
+    "releaseIOVcsNextCommitMessage",
+    "releaseIOPublishAction",
+    "releaseIOPublishChecks",
+    "releaseIORuntimeCurrentVersion",
+    "releaseIODiagnosticsSnapshotDependencies"
+  )
 
-  private val groupedPublicKeys = Vector(
-    groupedKeyRef(ReleaseIO.releaseIOBehaviorCrossBuild),
-    groupedKeyRef(ReleaseIO.releaseIOBehaviorSkipPublish),
-    groupedKeyRef(ReleaseIO.releaseIOBehaviorInteractive),
-    groupedKeyRef(ReleaseIO.releaseIODefaultsTagExistsAnswer),
-    groupedKeyRef(ReleaseIO.releaseIODefaultsSnapshotDependenciesAnswer),
-    groupedKeyRef(ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer),
-    groupedKeyRef(ReleaseIO.releaseIODefaultsUpstreamBehindAnswer),
-    groupedKeyRef(ReleaseIO.releaseIODefaultsPushAnswer),
-    groupedKeyRef(ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck),
-    groupedKeyRef(ReleaseIO.releaseIOPolicyEnableRunClean),
-    groupedKeyRef(ReleaseIO.releaseIOPolicyEnableRunTests),
-    groupedKeyRef(ReleaseIO.releaseIOPolicyEnableTagging),
-    groupedKeyRef(ReleaseIO.releaseIOPolicyEnablePublish),
-    groupedKeyRef(ReleaseIO.releaseIOPolicyEnablePush),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterCleanCheck),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforeVersionResolution),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterVersionResolution),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterReleaseVersionWrite),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforeReleaseCommit),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterReleaseCommit),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforeTag),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterTag),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforePublish),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterPublish),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforeNextVersionWrite),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterNextVersionWrite),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforeNextCommit),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterNextCommit),
-    groupedKeyRef(ReleaseIO.releaseIOHooksBeforePush),
-    groupedKeyRef(ReleaseIO.releaseIOHooksAfterPush),
-    groupedKeyRef(ReleaseIO.releaseIOVersioningReadVersion),
-    groupedKeyRef(ReleaseIO.releaseIOVersioningFileContents),
-    groupedKeyRef(ReleaseIO.releaseIOVersioningFile),
-    groupedKeyRef(ReleaseIO.releaseIOVersioningUseGlobal),
-    groupedKeyRef(ReleaseIO.releaseIOVersioningReleaseVersion),
-    groupedKeyRef(ReleaseIO.releaseIOVersioningNextVersion),
-    groupedKeyRef(ReleaseIO.releaseIOVersioningBump),
-    groupedKeyRef(ReleaseIO.releaseIOVcsSign),
-    groupedKeyRef(ReleaseIO.releaseIOVcsSignOff),
-    groupedKeyRef(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles),
-    groupedKeyRef(ReleaseIO.releaseIOVcsRemoteCheckTimeout),
-    groupedKeyRef(ReleaseIO.releaseIOVcsTagName),
-    groupedKeyRef(ReleaseIO.releaseIOVcsTagComment),
-    groupedKeyRef(ReleaseIO.releaseIOVcsReleaseCommitMessage),
-    groupedKeyRef(ReleaseIO.releaseIOVcsNextCommitMessage),
-    groupedKeyRef(ReleaseIO.releaseIOPublishAction),
-    groupedKeyRef(ReleaseIO.releaseIOPublishChecks),
-    groupedKeyRef(ReleaseIO.releaseIORuntimeCurrentVersion),
-    groupedKeyRef(ReleaseIO.releaseIODiagnosticsSnapshotDependencies)
+  private val actualLabels = Set(
+    keyLabel(ReleaseIO.releaseIOBehaviorCrossBuild),
+    keyLabel(ReleaseIO.releaseIOBehaviorSkipPublish),
+    keyLabel(ReleaseIO.releaseIOBehaviorInteractive),
+    keyLabel(ReleaseIO.releaseIODefaultsTagExistsAnswer),
+    keyLabel(ReleaseIO.releaseIODefaultsSnapshotDependenciesAnswer),
+    keyLabel(ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer),
+    keyLabel(ReleaseIO.releaseIODefaultsUpstreamBehindAnswer),
+    keyLabel(ReleaseIO.releaseIODefaultsPushAnswer),
+    keyLabel(ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck),
+    keyLabel(ReleaseIO.releaseIOPolicyEnableRunClean),
+    keyLabel(ReleaseIO.releaseIOPolicyEnableRunTests),
+    keyLabel(ReleaseIO.releaseIOPolicyEnableTagging),
+    keyLabel(ReleaseIO.releaseIOPolicyEnablePublish),
+    keyLabel(ReleaseIO.releaseIOPolicyEnablePush),
+    keyLabel(ReleaseIO.releaseIOHooksAfterCleanCheck),
+    keyLabel(ReleaseIO.releaseIOHooksBeforeVersionResolution),
+    keyLabel(ReleaseIO.releaseIOHooksAfterVersionResolution),
+    keyLabel(ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite),
+    keyLabel(ReleaseIO.releaseIOHooksAfterReleaseVersionWrite),
+    keyLabel(ReleaseIO.releaseIOHooksBeforeReleaseCommit),
+    keyLabel(ReleaseIO.releaseIOHooksAfterReleaseCommit),
+    keyLabel(ReleaseIO.releaseIOHooksBeforeTag),
+    keyLabel(ReleaseIO.releaseIOHooksAfterTag),
+    keyLabel(ReleaseIO.releaseIOHooksBeforePublish),
+    keyLabel(ReleaseIO.releaseIOHooksAfterPublish),
+    keyLabel(ReleaseIO.releaseIOHooksBeforeNextVersionWrite),
+    keyLabel(ReleaseIO.releaseIOHooksAfterNextVersionWrite),
+    keyLabel(ReleaseIO.releaseIOHooksBeforeNextCommit),
+    keyLabel(ReleaseIO.releaseIOHooksAfterNextCommit),
+    keyLabel(ReleaseIO.releaseIOHooksBeforePush),
+    keyLabel(ReleaseIO.releaseIOHooksAfterPush),
+    keyLabel(ReleaseIO.releaseIOVersioningReadVersion),
+    keyLabel(ReleaseIO.releaseIOVersioningFileContents),
+    keyLabel(ReleaseIO.releaseIOVersioningFile),
+    keyLabel(ReleaseIO.releaseIOVersioningUseGlobal),
+    keyLabel(ReleaseIO.releaseIOVersioningReleaseVersion),
+    keyLabel(ReleaseIO.releaseIOVersioningNextVersion),
+    keyLabel(ReleaseIO.releaseIOVersioningBump),
+    keyLabel(ReleaseIO.releaseIOVcsSign),
+    keyLabel(ReleaseIO.releaseIOVcsSignOff),
+    keyLabel(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles),
+    keyLabel(ReleaseIO.releaseIOVcsRemoteCheckTimeout),
+    keyLabel(ReleaseIO.releaseIOVcsTagName),
+    keyLabel(ReleaseIO.releaseIOVcsTagComment),
+    keyLabel(ReleaseIO.releaseIOVcsReleaseCommitMessage),
+    keyLabel(ReleaseIO.releaseIOVcsNextCommitMessage),
+    keyLabel(ReleaseIO.releaseIOPublishAction),
+    keyLabel(ReleaseIO.releaseIOPublishChecks),
+    keyLabel(ReleaseIO.releaseIORuntimeCurrentVersion),
+    keyLabel(ReleaseIO.releaseIODiagnosticsSnapshotDependencies)
   )
 
   private val removedAliases = Seq(
@@ -116,20 +165,12 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     "releaseIOPublishArtifactsChecks"
   )
 
-  private lazy val releaseIOSource          =
+  private lazy val releaseIOSource =
     TestRepoFiles.readString("modules/core/src/main/scala/io/release/ReleaseIO.scala")
-  private lazy val releaseIOKeyGroupsSource =
-    TestRepoFiles.readString("modules/core/src/main/scala/io/release/ReleaseIOKeyGroups.scala")
 
-  test("grouped core keys cover the full catalog and expose exact catalog-backed instances") {
-    val groupedByLabel = groupedPublicKeys.toMap
-
-    assertEquals(groupedPublicKeys.map(_._1), CorePublicKeyCatalog.publicEntries.map(_.label))
-    assertEquals(groupedByLabel.keySet, CorePublicKeyCatalog.publicEntries.map(_.label).toSet)
-
-    CorePublicKeyCatalog.publicEntries.foreach { entry =>
-      assert(groupedByLabel(entry.label) eq entry.keyRef, entry.label)
-    }
+  test("ReleaseIO exposes the full set of 50 expected public keys") {
+    assertEquals(actualLabels, expectedLabels)
+    assertEquals(actualLabels.size, 50)
   }
 
   test("grouped core settings resolve expected defaults") {
@@ -151,26 +192,20 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     assert(!releaseIOSource.contains("@deprecated("))
     removedAliases.foreach { name =>
       assert(
-        !releaseIOSource.contains(s"val $name"),
+        !s"(?m)^\\s+(?:lazy\\s+)?val ${java.util.regex.Pattern.quote(name)}\\b".r
+          .findFirstIn(releaseIOSource)
+          .isDefined,
         s"Expected $name to be removed from ReleaseIO.scala"
       )
     }
   }
 
-  test("ReleaseIO source no longer defines private catalog-forwarding aliases") {
-    assert(
-      !releaseIOSource.contains("CorePublicKeyCatalog."),
-      "Expected ReleaseIO.scala to stop forwarding catalog-backed public keys"
-    )
+  test("ReleaseIO source has no private forwarding aliases except internal manifest keys") {
     assert(
       !raw"private\[release\]\s+lazy val _releaseIO(?!InternalReleaseHash|InternalReleaseTag)".r
         .findFirstIn(releaseIOSource)
         .isDefined,
       "Expected only internal manifest helper keys to remain as _releaseIO private vals"
     )
-  }
-
-  test("ReleaseIOKeyGroups source points directly at grouped key modules") {
-    assert(!releaseIOKeyGroupsSource.contains("CorePublicKeyCatalog."))
   }
 }
