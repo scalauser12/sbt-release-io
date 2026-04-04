@@ -4,7 +4,10 @@ import cats.effect.IO
 import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.monorepo.*
+import io.release.monorepo.MonorepoContext
+import io.release.monorepo.MonorepoProjectFailure
+import io.release.monorepo.MonorepoProjectFailures
+import io.release.monorepo.ProjectReleaseInfo
 import io.release.steps.StepHelpers.errorMessage
 
 import scala.util.control.NonFatal

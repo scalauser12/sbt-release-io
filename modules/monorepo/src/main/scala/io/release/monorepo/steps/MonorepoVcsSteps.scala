@@ -7,7 +7,10 @@ import io.release.VcsOps
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.monorepo.*
+import io.release.monorepo.MonorepoContext
+import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoVersionFiles
+import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.required
 import io.release.steps.StepHelpers.useDefaults

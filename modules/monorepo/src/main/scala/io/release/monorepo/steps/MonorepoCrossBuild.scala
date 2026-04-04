@@ -5,7 +5,8 @@ import io.release.CrossBuildSupport
 import io.release.internal.CrossBuildExecution
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.monorepo.*
+import io.release.monorepo.MonorepoContext
+import io.release.monorepo.ProjectReleaseInfo
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
