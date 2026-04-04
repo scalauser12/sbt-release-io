@@ -135,7 +135,6 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     )
   }
 
-  @scala.annotation.nowarn("cat=deprecation")
   private[release] final def commandRuntime: CoreCommandExecution.CommandRuntime[T] =
     CoreCommandExecution.CommandRuntime(
       commandName = commandName,

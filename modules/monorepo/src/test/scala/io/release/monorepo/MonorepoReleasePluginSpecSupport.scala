@@ -14,7 +14,6 @@ import sbt.State
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-@scala.annotation.nowarn("cat=deprecation")
 trait MonorepoReleasePluginSpecSupport {
 
   private val settingsDefaults: Seq[Setting[?]] = Seq(

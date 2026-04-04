@@ -273,7 +273,6 @@ trait ReleaseIO {
 
 }
 
-@scala.annotation.nowarn("cat=deprecation")
 object ReleaseIO extends ReleaseIO {
 
   // ── Behavior keys ───────────────────────────────────────────────────

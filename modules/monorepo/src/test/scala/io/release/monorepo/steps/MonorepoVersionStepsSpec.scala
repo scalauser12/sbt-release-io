@@ -20,7 +20,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
-@scala.annotation.nowarn("cat=deprecation")
 class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
   test("inquireVersions.validate - fail when the resolved version file does not exist") {

@@ -13,7 +13,6 @@ import io.release.steps.StepHelpers
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
-@scala.annotation.nowarn("cat=deprecation")
 class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
 
   test("compose - run validations before executes and fail fast on validation error") {
