@@ -1,6 +1,5 @@
 package io.release.monorepo
 
-import io.release.monorepo.MonorepoDefaultSettings
 import munit.FunSuite
 
 class MonorepoDefaultSettingsSpec extends FunSuite {
