@@ -84,8 +84,8 @@ private[release] object CoreDefaultSettings {
     ReleaseIO.releaseIOVcsRemoteCheckTimeout   := scala.concurrent.duration.DurationInt(60).seconds,
     ReleaseIO.releaseIOVcsTagName              := s"v${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
     ReleaseIO.releaseIOVcsTagComment           := s"Releasing ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
-    ReleaseIO.releaseIOVcsReleaseCommitMessage := s"Setting version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
-    ReleaseIO.releaseIOVcsNextCommitMessage    := s"Setting version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
+    ReleaseIO.releaseIOVcsReleaseCommitMessage := s"Setting release version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
+    ReleaseIO.releaseIOVcsNextCommitMessage    := s"Setting next version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
     ReleaseIO.releaseIOPublishChecks           := true,
     ReleaseIO.releaseIOPublishAction           := publish.value
   )

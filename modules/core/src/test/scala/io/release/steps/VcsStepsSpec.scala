@@ -94,6 +94,21 @@ class VcsStepsSpec extends CatsEffectSuite {
                           state = ReleaseTestSupport.gitRootState(repo),
                           vcs = Some(vcs),
                           interactive = false
+                        ).withExecutionState(
+                          CoreExecutionState(
+                            CoreReleasePlan(
+                              flags = ExecutionFlags(
+                                useDefaults = true,
+                                skipTests = false,
+                                skipPublish = false,
+                                interactive = false,
+                                crossBuild = false
+                              ),
+                              releaseVersionOverride = None,
+                              nextVersionOverride = None,
+                              decisionDefaults = ReleaseDecisionDefaults.empty
+                            )
+                          )
                         )
                       )
         localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)

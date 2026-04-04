@@ -119,7 +119,7 @@ private[release] object DecisionResolver {
       case Some(true)  => doPush(ctx)
       case Some(false) => onDeclinePush(ctx)
       case None        =>
-        if (!ctx.interactive) doPush(ctx)
+        if (!ctx.interactive) onDeclinePush(ctx)
         else
           PromptAdapter
             .promptYesNoOrEof(
