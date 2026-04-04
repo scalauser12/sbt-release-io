@@ -4,8 +4,8 @@ import cats.effect.IO
 import io.release.internal.ProcessStep
 import io.release.monorepo.MonorepoComposer
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.ProjectReleaseInfo
 import munit.CatsEffectSuite
 
 import java.io.File

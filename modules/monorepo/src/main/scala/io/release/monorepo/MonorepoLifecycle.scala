@@ -1,59 +1,63 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.internal.HookStepCompilation
+import io.release.internal.HookStepCompilation.CachedItemGate
 import io.release.internal.LifecycleCompiler
 import io.release.internal.LifecycleConfigCompiler
+import io.release.internal.LifecycleConfigCompiler.Binding
+import io.release.internal.LifecycleConfigCompiler.HookBinding
+import io.release.internal.LifecycleConfigCompiler.PolicyBinding
+import io.release.internal.LifecycleConfigCompiler.policyBinding
 import io.release.internal.ProcessStep
-import io.release.monorepo.steps.{MonorepoPublishSteps, MonorepoReleaseSteps}
+import io.release.monorepo.steps.MonorepoPublishSteps
+import io.release.monorepo.steps.MonorepoReleaseSteps
 import sbt.Setting
 
 private[release] object MonorepoPolicySlots {
 
-  val enableSnapshotDependenciesCheck
-      : LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
+  val enableSnapshotDependenciesCheck: PolicyBinding[MonorepoHookConfiguration] =
+    policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck,
       get = _.enableSnapshotDependenciesCheck,
       updated = (config, value) => config.copy(enableSnapshotDependenciesCheck = value)
     )
 
-  val enableRunClean: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
+  val enableRunClean: PolicyBinding[MonorepoHookConfiguration] =
+    policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean,
       get = _.enableRunClean,
       updated = (config, value) => config.copy(enableRunClean = value)
     )
 
-  val enableRunTests: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
+  val enableRunTests: PolicyBinding[MonorepoHookConfiguration] =
+    policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests,
       get = _.enableRunTests,
       updated = (config, value) => config.copy(enableRunTests = value)
     )
 
-  val enableTagging: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
+  val enableTagging: PolicyBinding[MonorepoHookConfiguration] =
+    policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging,
       get = _.enableTagging,
       updated = (config, value) => config.copy(enableTagging = value)
     )
 
-  val enablePublish: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
+  val enablePublish: PolicyBinding[MonorepoHookConfiguration] =
+    policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish,
       get = _.enablePublish,
       updated = (config, value) => config.copy(enablePublish = value)
     )
 
-  val enablePush: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policyBinding(
+  val enablePush: PolicyBinding[MonorepoHookConfiguration] =
+    policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush,
       get = _.enablePush,
       updated = (config, value) => config.copy(enablePush = value)
     )
 
-  val policySlots: Vector[LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]] =
+  val policySlots: Vector[PolicyBinding[MonorepoHookConfiguration]] =
     Vector(
       enableSnapshotDependenciesCheck,
       enableRunClean,
@@ -67,14 +71,16 @@ private[release] object MonorepoPolicySlots {
 /** Canonical monorepo lifecycle order and hook compilation. */
 private[release] object MonorepoLifecycle {
 
-  private type ProjectGate     = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]
-  private type Phase           =
+  private type ProjectGate        = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]
+  private type Phase              =
     LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoContext, ProjectReleaseInfo]
-  private type Slot            = LifecycleConfigCompiler.Binding[MonorepoHookConfiguration]
-  private type PolicySlot      = LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]
-  private type GlobalHookSlot  =
+  private type Binding            =
+    LifecycleConfigCompiler.Binding[MonorepoHookConfiguration]
+  private type PolicyBinding      =
+    LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]
+  private type GlobalHookBinding  =
     LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
-  private type ProjectHookSlot =
+  private type ProjectHookBinding =
     LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoProjectHookIO]
 
   private val AlwaysGlobal: MonorepoContext => IO[Boolean] = _ => IO.pure(true)
@@ -84,107 +90,106 @@ private[release] object MonorepoLifecycle {
 
   private def publishCachedGate(
       phase: String
-  ): HookStepCompilation.CachedItemGate[
+  ): CachedItemGate[
     MonorepoContext,
     ProjectReleaseInfo,
     MonorepoPublishHookGateCache.HookToken
   ] =
-    HookStepCompilation
-      .CachedItemGate[
-        MonorepoContext,
-        ProjectReleaseInfo,
-        MonorepoPublishHookGateCache.HookToken
-      ](
-        tokenForIndex = hookIndex => MonorepoPublishHookGateCache.HookToken(phase, hookIndex),
-        resolveDecision = (ctx, token, project, decision) =>
-          MonorepoPublishHookGateCache.resolveDecision(ctx, token, project, decision),
-        snapshotDecision = (ctx, token, project, evaluateGate) =>
-          MonorepoPublishHookGateCache.snapshotDecision(
-            ctx,
-            token,
-            project,
-            evaluateGate
-          )
-      )
+    CachedItemGate[
+      MonorepoContext,
+      ProjectReleaseInfo,
+      MonorepoPublishHookGateCache.HookToken
+    ](
+      tokenForIndex = hookIndex => MonorepoPublishHookGateCache.HookToken(phase, hookIndex),
+      resolveDecision = (ctx, token, project, decision) =>
+        MonorepoPublishHookGateCache.resolveDecision(ctx, token, project, decision),
+      snapshotDecision = (ctx, token, project, evaluateGate) =>
+        MonorepoPublishHookGateCache.snapshotDecision(
+          ctx,
+          token,
+          project,
+          evaluateGate
+        )
+    )
 
   private def singleBuiltIn(
       step: ProcessStep.Single[MonorepoContext],
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      slots: Seq[Slot] = Nil
+      bindings: Seq[Binding] = Nil
   ): Phase =
     LifecycleCompiler.singleBuiltIn(
       step = step,
       enabled = enabled,
-      configBindings = slots
+      configBindings = bindings
     )
 
   private def singleBuiltIn(
       step: ProcessStep.Single[MonorepoContext],
-      policySlot: PolicySlot
+      policyBinding: PolicyBinding
   ): Phase =
     singleBuiltIn(
       step = step,
-      enabled = policySlot.enabled,
-      slots = Seq(policySlot)
+      enabled = policyBinding.enabled,
+      bindings = Seq(policyBinding)
     )
 
   private def perItemBuiltIn(
       step: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo],
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      slots: Seq[Slot] = Nil
+      bindings: Seq[Binding] = Nil
   ): Phase =
     LifecycleCompiler.perItemBuiltIn(
       step = step,
       enabled = enabled,
-      configBindings = slots
+      configBindings = bindings
     )
 
   private def perItemBuiltIn(
       step: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo],
-      policySlot: PolicySlot
+      policyBinding: PolicyBinding
   ): Phase =
     perItemBuiltIn(
       step = step,
-      enabled = policySlot.enabled,
-      slots = Seq(policySlot)
+      enabled = policyBinding.enabled,
+      bindings = Seq(policyBinding)
     )
 
   private def globalHookPhase(
       phase: String,
-      hookSlot: GlobalHookSlot,
+      hookBinding: GlobalHookBinding,
       gate: MonorepoContext => IO[Boolean],
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      additionalSlots: Seq[Slot] = Nil
+      additionalBindings: Seq[Binding] = Nil
   ): Phase =
     LifecycleCompiler.singleHookPhase(
       phase = phase,
-      resolveHooks = hookSlot.resolveHooks,
+      resolveHooks = hookBinding.resolveHooks,
       gate = gate,
       nameOf = (hook: MonorepoGlobalHookIO) => hook.name,
       executeOf = (hook: MonorepoGlobalHookIO) => hook.execute,
       validateOf = (hook: MonorepoGlobalHookIO) => hook.validate,
       enabled = enabled,
-      configBindings = hookSlot +: additionalSlots
+      configBindings = hookBinding +: additionalBindings
     )
 
   private def projectHookPhase(
       phase: String,
-      hookSlot: ProjectHookSlot,
+      hookBinding: ProjectHookBinding,
       gate: ProjectGate,
       crossBuild: Boolean = false,
       cachedGate: Option[
-        HookStepCompilation.CachedItemGate[
+        CachedItemGate[
           MonorepoContext,
           ProjectReleaseInfo,
           MonorepoPublishHookGateCache.HookToken
         ]
       ] = None,
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      additionalSlots: Seq[Slot] = Nil
+      additionalBindings: Seq[Binding] = Nil
   ): Phase =
     LifecycleCompiler.perItemHookPhase(
       phase = phase,
-      resolveHooks = hookSlot.resolveHooks,
+      resolveHooks = hookBinding.resolveHooks,
       gate = gate,
       nameOf = (hook: MonorepoProjectHookIO) => hook.name,
       executeOf = (hook: MonorepoProjectHookIO) => hook.execute,
@@ -192,7 +197,7 @@ private[release] object MonorepoLifecycle {
       crossBuild = crossBuild,
       cachedGate = cachedGate,
       enabled = enabled,
-      configBindings = hookSlot +: additionalSlots
+      configBindings = hookBinding +: additionalBindings
     )
 
   private[release] val phases: Seq[Phase] = Seq(
@@ -200,19 +205,19 @@ private[release] object MonorepoLifecycle {
     singleBuiltIn(MonorepoReleaseSteps.checkCleanWorkingDir),
     globalHookPhase(
       phase = "after-clean-check",
-      hookSlot = MonorepoGlobalHookSlots.afterCleanCheckHooks,
+      hookBinding = MonorepoGlobalHookSlots.afterCleanCheckHooks,
       gate = AlwaysGlobal
     ),
     singleBuiltIn(MonorepoReleaseSteps.resolveReleaseOrder),
     globalHookPhase(
       phase = "before-selection",
-      hookSlot = MonorepoGlobalHookSlots.beforeSelectionHooks,
+      hookBinding = MonorepoGlobalHookSlots.beforeSelectionHooks,
       gate = AlwaysGlobal
     ),
     singleBuiltIn(MonorepoReleaseSteps.detectOrSelectProjects),
     globalHookPhase(
       phase = "after-selection",
-      hookSlot = MonorepoGlobalHookSlots.afterSelectionHooks,
+      hookBinding = MonorepoGlobalHookSlots.afterSelectionHooks,
       gate = AlwaysGlobal
     ),
     perItemBuiltIn(
@@ -221,14 +226,14 @@ private[release] object MonorepoLifecycle {
     ),
     projectHookPhase(
       phase = "before-version-resolution",
-      hookSlot = MonorepoProjectHookSlots.beforeVersionResolutionHooks,
+      hookBinding = MonorepoProjectHookSlots.beforeVersionResolutionHooks,
       gate = AlwaysProject,
       crossBuild = MonorepoReleaseSteps.inquireVersions.enableCrossBuild
     ),
     perItemBuiltIn(MonorepoReleaseSteps.inquireVersions),
     projectHookPhase(
       phase = "after-version-resolution",
-      hookSlot = MonorepoProjectHookSlots.afterVersionResolutionHooks,
+      hookBinding = MonorepoProjectHookSlots.afterVersionResolutionHooks,
       gate = AlwaysProject,
       crossBuild = MonorepoReleaseSteps.inquireVersions.enableCrossBuild
     ),
@@ -236,34 +241,34 @@ private[release] object MonorepoLifecycle {
     perItemBuiltIn(MonorepoReleaseSteps.runTests, MonorepoPolicySlots.enableRunTests),
     projectHookPhase(
       phase = "before-release-version-write",
-      hookSlot = MonorepoProjectHookSlots.beforeReleaseVersionWriteHooks,
+      hookBinding = MonorepoProjectHookSlots.beforeReleaseVersionWriteHooks,
       gate = AlwaysProject,
       crossBuild = MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
     ),
     perItemBuiltIn(MonorepoReleaseSteps.setReleaseVersions),
     projectHookPhase(
       phase = "after-release-version-write",
-      hookSlot = MonorepoProjectHookSlots.afterReleaseVersionWriteHooks,
+      hookBinding = MonorepoProjectHookSlots.afterReleaseVersionWriteHooks,
       gate = AlwaysProject,
       crossBuild = MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
     ),
     globalHookPhase(
       phase = "before-release-commit",
-      hookSlot = MonorepoGlobalHookSlots.beforeReleaseCommitHooks,
+      hookBinding = MonorepoGlobalHookSlots.beforeReleaseCommitHooks,
       gate = AlwaysGlobal
     ),
     singleBuiltIn(MonorepoReleaseSteps.commitReleaseVersions),
     globalHookPhase(
       phase = "after-release-commit",
-      hookSlot = MonorepoGlobalHookSlots.afterReleaseCommitHooks,
+      hookBinding = MonorepoGlobalHookSlots.afterReleaseCommitHooks,
       gate = AlwaysGlobal
     ),
     projectHookPhase(
       phase = "before-tag",
-      hookSlot = MonorepoProjectHookSlots.beforeTagHooks,
+      hookBinding = MonorepoProjectHookSlots.beforeTagHooks,
       gate = AlwaysProject,
       enabled = MonorepoPolicySlots.enableTagging.enabled,
-      additionalSlots = Seq(MonorepoPolicySlots.enableTagging)
+      additionalBindings = Seq(MonorepoPolicySlots.enableTagging)
     ),
     perItemBuiltIn(
       MonorepoReleaseSteps.tagReleasesPerProject,
@@ -271,19 +276,19 @@ private[release] object MonorepoLifecycle {
     ),
     projectHookPhase(
       phase = "after-tag",
-      hookSlot = MonorepoProjectHookSlots.afterTagHooks,
+      hookBinding = MonorepoProjectHookSlots.afterTagHooks,
       gate = AlwaysProject,
       enabled = MonorepoPolicySlots.enableTagging.enabled,
-      additionalSlots = Seq(MonorepoPolicySlots.enableTagging)
+      additionalBindings = Seq(MonorepoPolicySlots.enableTagging)
     ),
     projectHookPhase(
       phase = "before-publish",
-      hookSlot = MonorepoProjectHookSlots.beforePublishHooks,
+      hookBinding = MonorepoProjectHookSlots.beforePublishHooks,
       gate = PublishProject,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGate = Some(publishCachedGate("before-publish")),
       enabled = MonorepoPolicySlots.enablePublish.enabled,
-      additionalSlots = Seq(MonorepoPolicySlots.enablePublish)
+      additionalBindings = Seq(MonorepoPolicySlots.enablePublish)
     ),
     perItemBuiltIn(
       MonorepoReleaseSteps.publishArtifacts,
@@ -291,51 +296,51 @@ private[release] object MonorepoLifecycle {
     ),
     projectHookPhase(
       phase = "after-publish",
-      hookSlot = MonorepoProjectHookSlots.afterPublishHooks,
+      hookBinding = MonorepoProjectHookSlots.afterPublishHooks,
       gate = PublishProject,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGate = Some(publishCachedGate("after-publish")),
       enabled = MonorepoPolicySlots.enablePublish.enabled,
-      additionalSlots = Seq(MonorepoPolicySlots.enablePublish)
+      additionalBindings = Seq(MonorepoPolicySlots.enablePublish)
     ),
     projectHookPhase(
       phase = "before-next-version-write",
-      hookSlot = MonorepoProjectHookSlots.beforeNextVersionWriteHooks,
+      hookBinding = MonorepoProjectHookSlots.beforeNextVersionWriteHooks,
       gate = AlwaysProject,
       crossBuild = MonorepoReleaseSteps.setNextVersions.enableCrossBuild
     ),
     perItemBuiltIn(MonorepoReleaseSteps.setNextVersions),
     projectHookPhase(
       phase = "after-next-version-write",
-      hookSlot = MonorepoProjectHookSlots.afterNextVersionWriteHooks,
+      hookBinding = MonorepoProjectHookSlots.afterNextVersionWriteHooks,
       gate = AlwaysProject,
       crossBuild = MonorepoReleaseSteps.setNextVersions.enableCrossBuild
     ),
     globalHookPhase(
       phase = "before-next-commit",
-      hookSlot = MonorepoGlobalHookSlots.beforeNextCommitHooks,
+      hookBinding = MonorepoGlobalHookSlots.beforeNextCommitHooks,
       gate = AlwaysGlobal
     ),
     singleBuiltIn(MonorepoReleaseSteps.commitNextVersions),
     globalHookPhase(
       phase = "after-next-commit",
-      hookSlot = MonorepoGlobalHookSlots.afterNextCommitHooks,
+      hookBinding = MonorepoGlobalHookSlots.afterNextCommitHooks,
       gate = AlwaysGlobal
     ),
     globalHookPhase(
       phase = "before-push",
-      hookSlot = MonorepoGlobalHookSlots.beforePushHooks,
+      hookBinding = MonorepoGlobalHookSlots.beforePushHooks,
       gate = AlwaysGlobal,
       enabled = MonorepoPolicySlots.enablePush.enabled,
-      additionalSlots = Seq(MonorepoPolicySlots.enablePush)
+      additionalBindings = Seq(MonorepoPolicySlots.enablePush)
     ),
     singleBuiltIn(MonorepoReleaseSteps.pushChanges, MonorepoPolicySlots.enablePush),
     globalHookPhase(
       phase = "after-push",
-      hookSlot = MonorepoGlobalHookSlots.afterPushHooks,
+      hookBinding = MonorepoGlobalHookSlots.afterPushHooks,
       gate = AlwaysGlobal,
       enabled = MonorepoPolicySlots.enablePush.enabled,
-      additionalSlots = Seq(MonorepoPolicySlots.enablePush)
+      additionalBindings = Seq(MonorepoPolicySlots.enablePush)
     )
   )
 
@@ -353,19 +358,19 @@ private[release] object MonorepoLifecycle {
 
 private[release] object MonorepoLifecycleSlots {
 
-  val policySlots: Vector[LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]] =
+  val policySlots: Vector[PolicyBinding[MonorepoHookConfiguration]] =
     MonorepoPolicySlots.policySlots
 
   val globalHookSlots: Vector[
-    LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
+    HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
   ] =
     MonorepoGlobalHookSlots.globalHookSlots
 
   val projectHookSlots: Vector[
-    LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoProjectHookIO]
+    HookBinding[MonorepoHookConfiguration, MonorepoProjectHookIO]
   ] =
     MonorepoProjectHookSlots.projectHookSlots
 
-  val slots: Vector[LifecycleConfigCompiler.Binding[MonorepoHookConfiguration]] =
+  val slots: Vector[Binding[MonorepoHookConfiguration]] =
     policySlots ++ globalHookSlots ++ projectHookSlots
 }

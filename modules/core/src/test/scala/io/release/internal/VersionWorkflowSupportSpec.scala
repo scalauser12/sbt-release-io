@@ -7,7 +7,10 @@ import io.release.ReleaseIO.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import munit.CatsEffectSuite
-import sbt.{Def, Project, State, *}
+import sbt.*
+import sbt.Def
+import sbt.Project
+import sbt.State
 
 import java.io.File
 

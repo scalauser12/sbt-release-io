@@ -97,7 +97,7 @@ private[release] object StepKernel {
   final case class SingleBuilderState[C](
       name: String,
       validations: Vector[ThreadedValidation[C]],
-      flagEnabled: Boolean
+      crossBuildEnabled: Boolean
   ) {
 
     def validateWithContext: Option[ThreadedValidation[C]] =
@@ -113,19 +113,19 @@ private[release] object StepKernel {
     ): SingleBuilderState[C] =
       appendValidation(asThreadedValidation(validation))
 
-    def withFlag: SingleBuilderState[C] =
-      copy(flagEnabled = true)
+    def withCrossBuild: SingleBuilderState[C] =
+      copy(crossBuildEnabled = true)
   }
 
   object SingleBuilderState {
     def apply[C](name: String): SingleBuilderState[C] =
-      new SingleBuilderState(name, Vector.empty, flagEnabled = false)
+      new SingleBuilderState(name, Vector.empty, crossBuildEnabled = false)
   }
 
   final case class ItemBuilderState[C, I](
       name: String,
       validations: Vector[ThreadedItemValidation[C, I]],
-      flagEnabled: Boolean
+      crossBuildEnabled: Boolean
   ) {
 
     def validateWithContext: Option[ThreadedItemValidation[C, I]] =
@@ -141,19 +141,19 @@ private[release] object StepKernel {
     ): ItemBuilderState[C, I] =
       appendValidation(asThreadedValidation(validation))
 
-    def withFlag: ItemBuilderState[C, I] =
-      copy(flagEnabled = true)
+    def withCrossBuild: ItemBuilderState[C, I] =
+      copy(crossBuildEnabled = true)
   }
 
   object ItemBuilderState {
     def apply[C, I](name: String): ItemBuilderState[C, I] =
-      new ItemBuilderState(name, Vector.empty, flagEnabled = false)
+      new ItemBuilderState(name, Vector.empty, crossBuildEnabled = false)
   }
 
   final case class SingleResourceBuilderState[T, C](
       name: String,
       validations: T => Vector[ThreadedValidation[C]],
-      flagEnabled: Boolean
+      crossBuildEnabled: Boolean
   ) {
 
     def validateWithContext(resource: T): Option[ThreadedValidation[C]] =
@@ -169,19 +169,19 @@ private[release] object StepKernel {
     ): SingleResourceBuilderState[T, C] =
       appendValidation(resource => asThreadedValidation(validation(resource)))
 
-    def withFlag: SingleResourceBuilderState[T, C] =
-      copy(flagEnabled = true)
+    def withCrossBuild: SingleResourceBuilderState[T, C] =
+      copy(crossBuildEnabled = true)
   }
 
   object SingleResourceBuilderState {
     def apply[T, C](name: String): SingleResourceBuilderState[T, C] =
-      new SingleResourceBuilderState(name, _ => Vector.empty, flagEnabled = false)
+      new SingleResourceBuilderState(name, _ => Vector.empty, crossBuildEnabled = false)
   }
 
   final case class ItemResourceBuilderState[T, C, I](
       name: String,
       validations: T => Vector[ThreadedItemValidation[C, I]],
-      flagEnabled: Boolean
+      crossBuildEnabled: Boolean
   ) {
 
     def validateWithContext(resource: T): Option[ThreadedItemValidation[C, I]] =
@@ -197,12 +197,12 @@ private[release] object StepKernel {
     ): ItemResourceBuilderState[T, C, I] =
       appendValidation(resource => asThreadedValidation(validation(resource)))
 
-    def withFlag: ItemResourceBuilderState[T, C, I] =
-      copy(flagEnabled = true)
+    def withCrossBuild: ItemResourceBuilderState[T, C, I] =
+      copy(crossBuildEnabled = true)
   }
 
   object ItemResourceBuilderState {
     def apply[T, C, I](name: String): ItemResourceBuilderState[T, C, I] =
-      new ItemResourceBuilderState(name, _ => Vector.empty, flagEnabled = false)
+      new ItemResourceBuilderState(name, _ => Vector.empty, crossBuildEnabled = false)
   }
 }

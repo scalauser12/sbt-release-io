@@ -57,7 +57,7 @@ case class ProjectReleaseInfo(
   *
   * ==State vectors==
   *
-  * Three pieces carry mutable state through the release:
+  * Four pieces carry mutable state through the release:
   *
   *  - '''`state: State`''' — sbt's native state, threaded because sbt commands are
   *    `State => State`. Updated for session settings (version reloads), sbt task

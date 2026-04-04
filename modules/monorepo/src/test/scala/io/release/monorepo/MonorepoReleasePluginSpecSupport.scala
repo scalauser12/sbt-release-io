@@ -3,13 +3,13 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
-import io.release.internal.ProcessStep
 import io.release.TestSupport
+import io.release.internal.ProcessStep
+import sbt.*
 import sbt.Project
 import sbt.ProjectRef
 import sbt.Setting
 import sbt.State
-import sbt.*
 
 import java.io.ByteArrayOutputStream
 import java.io.File

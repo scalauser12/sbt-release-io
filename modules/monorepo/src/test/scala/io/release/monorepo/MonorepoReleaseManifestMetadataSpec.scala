@@ -10,7 +10,8 @@ import io.release.monorepo.steps.MonorepoVcsCommitHelpers
 import io.release.monorepo.steps.MonorepoVersionSteps
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.Keys.{packageOptions, version}
+import sbt.Keys.packageOptions
+import sbt.Keys.version
 import sbt.Package.ManifestAttributes
 import sbt.ProjectRef
 import sbt.State

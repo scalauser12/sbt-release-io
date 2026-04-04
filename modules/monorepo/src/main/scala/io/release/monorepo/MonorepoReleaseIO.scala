@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.ReleaseIO as CoreReleaseIO
 import sbt.{internal as _, *}
 
 /** Setting keys and process helpers for the monorepo release plugin.
@@ -515,7 +516,7 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
       ResolvedMonorepoTagSettings(
         perProjectTagName = extracted.get(releaseIOMonorepoVcsTagName),
         tagComment = extracted.get(releaseIOMonorepoVcsTagComment),
-        sign = extracted.get(_root_.io.release.ReleaseIO.releaseIOVcsSign)
+        sign = extracted.get(CoreReleaseIO.releaseIOVcsSign)
       )
     }
 }

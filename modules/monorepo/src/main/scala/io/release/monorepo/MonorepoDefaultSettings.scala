@@ -3,8 +3,8 @@ package io.release.monorepo
 import cats.effect.IO
 import io.release.ReleaseIO.releaseIOVersioningFile
 import io.release.steps.VersionSteps
-import sbt.Keys.*
 import sbt.*
+import sbt.Keys.*
 
 private[monorepo] object MonorepoDefaultSettings {
 

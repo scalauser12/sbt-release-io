@@ -1,7 +1,7 @@
 package io.release.monorepo
 
-import io.release.internal.LifecycleCompiler
 import io.release.TestRepoFiles
+import io.release.internal.LifecycleCompiler
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.FunSuite
 
