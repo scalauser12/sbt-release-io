@@ -2,6 +2,7 @@ package io.release.vcs
 
 import cats.effect.Clock
 import cats.effect.IO
+import cats.effect.Resource
 import cats.syntax.all.*
 
 import java.io.File
@@ -80,11 +81,15 @@ private[vcs] object GitProcessSupport {
       destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod,
       onStart: java.lang.Process => Unit = _ => ()
   ): IO[Option[Int]] =
-    startProcess(processBuilder, destroyGracePeriod, onStart).bracket { process =>
-      Clock[IO].monotonic.flatMap { startTime =>
-        waitForExit(process, startTime + timeout, destroyGracePeriod)
+    Resource
+      .make(startProcess(processBuilder, destroyGracePeriod, onStart))(
+        terminateIfAlive(_, destroyGracePeriod)
+      )
+      .use { process =>
+        Clock[IO].monotonic.flatMap { startTime =>
+          waitForExit(process, startTime + timeout, destroyGracePeriod)
+        }
       }
-    }(terminateIfAlive(_, destroyGracePeriod))
 
   private def startProcess(
       processBuilder: => java.lang.ProcessBuilder,

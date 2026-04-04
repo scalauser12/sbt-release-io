@@ -191,7 +191,8 @@ object MonorepoResourceHooks {
 
     require(
       slots.length == buckets.length,
-      s"Expected ${slots.length} hook buckets but received ${buckets.length}"
+      s"BUG: Expected ${slots.length} global hook buckets " +
+        s"but received ${buckets.length}"
     )
 
     slots.zip(buckets).map { case (slot, hooksAtSlot) =>
@@ -208,7 +209,8 @@ object MonorepoResourceHooks {
 
     require(
       slots.length == buckets.length,
-      s"Expected ${slots.length} hook buckets but received ${buckets.length}"
+      s"BUG: Expected ${slots.length} project hook buckets " +
+        s"but received ${buckets.length}"
     )
 
     slots.zip(buckets).map { case (slot, hooksAtSlot) =>
