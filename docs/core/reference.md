@@ -68,8 +68,8 @@ and the grouped names are now the canonical sbt key labels.
 | ------- | ---- | ------- | ----------- |
 | `releaseIOVcsTagName` | `String` | `s"v${version.value}"` | Git tag name |
 | `releaseIOVcsTagComment` | `String` | `s"Releasing ${version.value}"` | Git tag comment |
-| `releaseIOVcsReleaseCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Release-version commit message |
-| `releaseIOVcsNextCommitMessage` | `String` | `s"Setting version to ${version.value}"` | Next-version commit message |
+| `releaseIOVcsReleaseCommitMessage` | `String` | `s"Setting release version to ${version.value}"` | Release-version commit message |
+| `releaseIOVcsNextCommitMessage` | `String` | `s"Setting next version to ${version.value}"` | Next-version commit message |
 | `releaseIOVcsSign` | `Boolean` | `false` | GPG-sign tags and commits |
 | `releaseIOVcsSignOff` | `Boolean` | `false` | Add `Signed-off-by` to commits |
 | `releaseIOVcsIgnoreUntrackedFiles` | `Boolean` | `false` | Ignore untracked files in the clean check |

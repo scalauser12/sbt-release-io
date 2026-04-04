@@ -483,7 +483,7 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
-  test("interactivePushAfterRemote - non-interactive runs doPush") {
+  test("interactivePushAfterRemote - non-interactive without defaults declines push") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val ctx = VcsOpsSpec.promptContext(
         VcsOpsSpec.bufferedState(dir).state,
@@ -507,8 +507,8 @@ class VcsOpsSpec extends CatsEffectSuite {
         didPush    <- pushed.get
         didDecline <- declined.get
       } yield {
-        assertEquals(didPush, true)
-        assertEquals(didDecline, false)
+        assertEquals(didPush, false)
+        assertEquals(didDecline, true)
       }
     }
   }

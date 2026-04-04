@@ -607,11 +607,16 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                 remoteRepo,
                 core,
                 api,
-                MonorepoContext(
-                  state = state,
-                  vcs = Some(vcs),
-                  interactive = false,
-                  projects = Seq(core, api)
+                MonorepoSpecSupport.withPlan(
+                  MonorepoContext(
+                    state = state,
+                    vcs = Some(vcs),
+                    interactive = false,
+                    projects = Seq(core, api)
+                  ),
+                  MonorepoSpecSupport.releasePlan(
+                    flags = MonorepoSpecSupport.defaultFlags.copy(useDefaults = true)
+                  )
                 )
               )
             }
