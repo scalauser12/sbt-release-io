@@ -107,7 +107,8 @@ case class MonorepoContext(
   )(f: ProjectReleaseInfo => ProjectReleaseInfo): MonorepoContext = {
     require(
       projects.exists(_.ref == ref),
-      s"updateProject called with unknown ref: $ref (known: ${projects.map(_.ref.project).mkString(", ")})"
+      s"BUG: updateProject called with unknown ref: $ref " +
+        s"(known: ${projects.map(_.ref.project).mkString(", ")})"
     )
     copy(projects = projects.map(p => if (p.ref == ref) f(p) else p))
   }

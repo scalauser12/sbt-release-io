@@ -208,15 +208,14 @@ private[monorepo] object MonorepoSelectionResolver {
       if (newlyIncluded.isEmpty) IO.pure(detected)
       else {
         val selectedRefs = detectedRefs ++ newlyIncluded.map(_.ref).toSet
-        newlyIncluded.toList
-          .traverse_(p =>
-            IO.blocking(
-              ctx.state.log.info(
-                s"${ReleaseLogPrefixes.Monorepo} Including ${p.name} (downstream dependent of changed project)"
-              )
+        IO.blocking {
+          newlyIncluded.foreach(p =>
+            ctx.state.log.info(
+              s"${ReleaseLogPrefixes.Monorepo} Including ${p.name}" +
+                s" (downstream dependent of changed project)"
             )
           )
-          .as(allOrdered.filter(p => selectedRefs.contains(p.ref)))
+        }.as(allOrdered.filter(p => selectedRefs.contains(p.ref)))
       }
     }
 
@@ -322,15 +321,14 @@ private[monorepo] object MonorepoSelectionResolver {
     if (forceInclude.isEmpty) IO.pure(detected)
     else {
       val selectedNames = detectedNames ++ forceInclude.map(_.name)
-      forceInclude.toList
-        .traverse_(p =>
-          IO.blocking(
-            ctx.state.log.info(
-              s"${ReleaseLogPrefixes.Monorepo} Including ${p.name} (unchanged but has version override)"
-            )
+      IO.blocking {
+        forceInclude.foreach(p =>
+          ctx.state.log.info(
+            s"${ReleaseLogPrefixes.Monorepo} Including ${p.name}" +
+              s" (unchanged but has version override)"
           )
         )
-        .as(allOrdered.filter(p => selectedNames.contains(p.name)))
+      }.as(allOrdered.filter(p => selectedNames.contains(p.name)))
     }
   }
 

@@ -6,6 +6,7 @@ import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.monorepo.MonorepoStepAliases.AnyStep
 import io.release.monorepo.MonorepoStepAliases.GlobalStep
+import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.steps.MonorepoCrossBuild
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
@@ -112,8 +113,9 @@ private[monorepo] object MonorepoComposer {
           )
         )
 
+      // Safe: AnyStep is sealed with Single and PerItem; Single matched above.
       case perItem: ProcessStep.PerItem[?, ?] =>
-        val typed                                                                = perItem.asInstanceOf[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]]
+        val typed: ProjectStep                                                   = perItem.asInstanceOf[ProjectStep]
         val logged: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
           (currentCtx, project) =>
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
