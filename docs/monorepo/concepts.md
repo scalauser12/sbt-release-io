@@ -61,6 +61,8 @@ During `run-tests`, `api` throws an exception. The error is logged and `api` is 
 
 > **Note:** There is no dependency-aware cascade. If `web` depends on `api`, `web` is not automatically marked failed — it continues in the current step.
 
+> **Note:** The isolation model above applies to the **execution** phase only. During the **main validation** segment, a failure in any project's validation immediately stops the entire release — there is no per-project isolation for validation. This fail-fast design ensures that no mutations begin if any project has a detectable problem.
+
 A **Global** step failure immediately marks the context as failed and skips all subsequent steps.
 
 ### Topological ordering

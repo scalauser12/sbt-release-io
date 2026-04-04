@@ -11,6 +11,8 @@
 - **Optional interactive mode**: Enable sbt-release-compatible prompts for versions, confirmation, and push
 - **Configurable**: Comprehensive settings for commit messages, signing, version bumping, etc.
 
+> **Note:** This plugin supports Git only. If your project uses Mercurial or Subversion, see [sbt-release](https://github.com/sbt/sbt-release).
+
 ## Installation
 
 Add to `project/plugins.sbt`:
