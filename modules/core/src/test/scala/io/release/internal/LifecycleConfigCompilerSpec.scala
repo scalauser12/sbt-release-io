@@ -143,7 +143,6 @@ object LifecycleConfigCompilerSpec {
     )
 
   private val PublishBinding = LifecycleConfigCompiler.policyBinding[TestConfig](
-    id = "test-enable-publish",
     key = EnablePublishKey,
     get = _.enablePublish,
     updated = (config, value) =>
@@ -154,14 +153,12 @@ object LifecycleConfigCompilerSpec {
   )
 
   private val BeforeHooksBinding = LifecycleConfigCompiler.hookBinding[TestConfig, String](
-    id = "test-before-hooks",
     key = BeforeHooksKey,
     get = _.beforeHooks,
     updated = (config, hooks) => config.copy(beforeHooks = hooks)
   )
 
   private val AfterHooksBinding = LifecycleConfigCompiler.hookBinding[TestConfig, String](
-    id = "test-after-hooks",
     key = AfterHooksKey,
     get = _.afterHooks,
     updated = (config, hooks) => config.copy(afterHooks = hooks)

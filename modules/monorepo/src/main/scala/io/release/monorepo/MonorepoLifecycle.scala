@@ -14,12 +14,12 @@ private[release] object MonorepoLifecycle {
   private type ProjectGate     = (MonorepoContext, ProjectReleaseInfo) => IO[Boolean]
   private type Phase           =
     LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoContext, ProjectReleaseInfo]
-  private type Slot            = LifecycleConfigCompiler.Slot[MonorepoHookConfiguration]
-  private type PolicySlot      = LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration]
+  private type Slot            = LifecycleConfigCompiler.Binding[MonorepoHookConfiguration]
+  private type PolicySlot      = LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]
   private type GlobalHookSlot  =
-    LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoGlobalHookIO]
+    LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
   private type ProjectHookSlot =
-    LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoProjectHookIO]
+    LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoProjectHookIO]
 
   private val AlwaysGlobal: MonorepoContext => IO[Boolean] = _ => IO.pure(true)
   private val AlwaysProject: ProjectGate                   = (_, _) => IO.pure(true)
@@ -59,7 +59,7 @@ private[release] object MonorepoLifecycle {
     LifecycleCompiler.singleBuiltIn(
       step = step,
       enabled = enabled,
-      configBindings = LifecycleConfigCompiler.configBindings(slots)
+      configBindings = slots
     )
 
   private def singleBuiltIn(
@@ -80,7 +80,7 @@ private[release] object MonorepoLifecycle {
     LifecycleCompiler.perItemBuiltIn(
       step = step,
       enabled = enabled,
-      configBindings = LifecycleConfigCompiler.configBindings(slots)
+      configBindings = slots
     )
 
   private def perItemBuiltIn(
@@ -108,7 +108,7 @@ private[release] object MonorepoLifecycle {
       executeOf = (hook: MonorepoGlobalHookIO) => hook.execute,
       validateOf = (hook: MonorepoGlobalHookIO) => hook.validate,
       enabled = enabled,
-      configBindings = LifecycleConfigCompiler.configBindings(hookSlot +: additionalSlots)
+      configBindings = hookSlot +: additionalSlots
     )
 
   private def projectHookPhase(
@@ -136,7 +136,7 @@ private[release] object MonorepoLifecycle {
       crossBuild = crossBuild,
       cachedGate = cachedGate,
       enabled = enabled,
-      configBindings = LifecycleConfigCompiler.configBindings(hookSlot +: additionalSlots)
+      configBindings = hookSlot +: additionalSlots
     )
 
   private[release] val phases: Seq[Phase] = Seq(

@@ -5,54 +5,55 @@ import io.release.internal.LifecycleConfigCompiler
 private[release] object MonorepoPolicySlots {
 
   val enableSnapshotDependenciesCheck
-      : LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policySlot(
+      : LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck,
       get = _.enableSnapshotDependenciesCheck,
       updated = (config, value) => config.copy(enableSnapshotDependenciesCheck = value)
     )
 
-  val enableRunClean: LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policySlot(
+  val enableRunClean: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean,
       get = _.enableRunClean,
       updated = (config, value) => config.copy(enableRunClean = value)
     )
 
-  val enableRunTests: LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policySlot(
+  val enableRunTests: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests,
       get = _.enableRunTests,
       updated = (config, value) => config.copy(enableRunTests = value)
     )
 
-  val enableTagging: LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policySlot(
+  val enableTagging: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging,
       get = _.enableTagging,
       updated = (config, value) => config.copy(enableTagging = value)
     )
 
-  val enablePublish: LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policySlot(
+  val enablePublish: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish,
       get = _.enablePublish,
       updated = (config, value) => config.copy(enablePublish = value)
     )
 
-  val enablePush: LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration] =
-    LifecycleConfigCompiler.policySlot(
+  val enablePush: LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration] =
+    LifecycleConfigCompiler.policyBinding(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush,
       get = _.enablePush,
       updated = (config, value) => config.copy(enablePush = value)
     )
 
-  val policySlots: Vector[LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration]] = Vector(
-    enableSnapshotDependenciesCheck,
-    enableRunClean,
-    enableRunTests,
-    enableTagging,
-    enablePublish,
-    enablePush
-  )
+  val policySlots: Vector[LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]] =
+    Vector(
+      enableSnapshotDependenciesCheck,
+      enableRunClean,
+      enableRunTests,
+      enableTagging,
+      enablePublish,
+      enablePush
+    )
 }

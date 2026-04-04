@@ -103,12 +103,12 @@ object MonorepoResourceHooks {
 
   private type GlobalHookAssignment  =
     (
-        LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoGlobalHookIO],
+        LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO],
         Seq[MonorepoGlobalHookIO]
     )
   private type ProjectHookAssignment =
     (
-        LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoProjectHookIO],
+        LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoProjectHookIO],
         Seq[MonorepoProjectHookIO]
     )
 

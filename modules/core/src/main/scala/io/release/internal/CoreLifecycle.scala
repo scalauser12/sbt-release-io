@@ -12,9 +12,9 @@ private[release] object CoreLifecycle {
   private type Gate       = ReleaseContext => IO[Boolean]
   private type Phase      =
     LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]
-  private type Slot       = LifecycleConfigCompiler.Slot[CoreHookConfiguration]
-  private type PolicySlot = LifecycleConfigCompiler.PolicySlot[CoreHookConfiguration]
-  private type HookSlot   = LifecycleConfigCompiler.HookSlot[CoreHookConfiguration, ReleaseHookIO]
+  private type Slot       = LifecycleConfigCompiler.Binding[CoreHookConfiguration]
+  private type PolicySlot = LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration]
+  private type HookSlot   = LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO]
 
   private val Always: Gate      = _ => IO.pure(true)
   private val PublishGate: Gate = PublishSteps.shouldRunPublishHooks
@@ -39,7 +39,7 @@ private[release] object CoreLifecycle {
     LifecycleCompiler.singleBuiltIn(
       step = step,
       enabled = enabled,
-      configBindings = LifecycleConfigCompiler.configBindings(slots)
+      configBindings = slots
     )
 
   private def builtIn(
@@ -76,7 +76,7 @@ private[release] object CoreLifecycle {
       crossBuild = crossBuild,
       cachedGate = cachedGate,
       enabled = enabled,
-      configBindings = LifecycleConfigCompiler.configBindings(hookSlot +: additionalSlots)
+      configBindings = hookSlot +: additionalSlots
     )
 
   private[release] val phases: Seq[Phase] = Seq(
