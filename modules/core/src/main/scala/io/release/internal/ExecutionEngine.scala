@@ -2,27 +2,18 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.internal.StepExecutionSupport.PreparedStep
 import io.release.steps.StepHelpers
 
 /** Shared two-phase execution and failure-detection helpers used by core and monorepo composers. */
 private[release] object ExecutionEngine {
 
-  final case class ValidationStep[C <: ReleaseCtx[C]](
-      name: String,
-      run: C => IO[C]
-  )
-
-  final case class ActionStep[C <: ReleaseCtx[C]](
-      name: String,
-      run: C => IO[C]
-  )
-
   def runValidations[C <: ReleaseCtx[C]](
       logPrefix: String,
-      validations: Seq[ValidationStep[C]],
+      steps: Seq[PreparedStep[C]],
       initialCtx: C
   ): IO[C] =
-    validations.foldLeft(IO.pure(initialCtx)) { (ioCtx, step) =>
+    steps.foldLeft(IO.pure(initialCtx)) { (ioCtx, step) =>
       ioCtx.flatMap { currentCtx =>
         if (currentCtx.failed) IO.pure(currentCtx)
         else runValidationStep(logPrefix, step, currentCtx)
@@ -30,10 +21,10 @@ private[release] object ExecutionEngine {
     }
 
   def runActions[C <: ReleaseCtx[C]](
-      actions: Seq[ActionStep[C]],
+      steps: Seq[PreparedStep[C]],
       startCtx: C
   ): IO[C] =
-    runActionPhase(actions)(startCtx)
+    runActionPhase(steps)(startCtx)
 
   def armOnFailure[C <: ReleaseCtx[C]](ctx: C): C =
     ctx.withState(ctx.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
@@ -76,14 +67,14 @@ private[release] object ExecutionEngine {
       }
 
   def runActionPhase[C <: ReleaseCtx[C]](
-      actions: Seq[ActionStep[C]]
+      steps: Seq[PreparedStep[C]]
   )(startCtx: C): IO[C] = {
     // After each action, check whether sbt injected a FailureCommand into
     // remainingCommands (e.g. from a failed task). If so, mark the context
     // as failed so subsequent steps are skipped.
-    val interleavedSteps = actions.flatMap { step =>
+    val interleavedSteps = steps.flatMap { step =>
       Seq(
-        (ctx: C) => if (ctx.failed) IO.pure(ctx) else step.run(ctx),
+        (ctx: C) => if (ctx.failed) IO.pure(ctx) else step.execute(ctx),
         (ctx: C) => detectSbtFailure(step.name, ctx)
       )
     }
@@ -95,9 +86,9 @@ private[release] object ExecutionEngine {
 
   private def runValidationStep[C <: ReleaseCtx[C]](
       logPrefix: String,
-      step: ValidationStep[C],
+      step: PreparedStep[C],
       currentCtx: C
   ): IO[C] =
     IO.blocking(currentCtx.state.log.info(s"$logPrefix Validating step: ${step.name}")) *>
-      step.run(currentCtx)
+      step.validate(currentCtx)
 }

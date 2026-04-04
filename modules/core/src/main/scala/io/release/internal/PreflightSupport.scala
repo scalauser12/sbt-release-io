@@ -50,9 +50,5 @@ private[release] object PreflightSupport {
       preparedSteps: Seq[StepExecutionSupport.PreparedStep[Ctx]],
       ctx: Ctx
   ): IO[Ctx] =
-    ExecutionEngine.runValidations(
-      logPrefix,
-      preparedSteps.map(step => ExecutionEngine.ValidationStep(step.name, step.validate)),
-      ctx
-    )
+    ExecutionEngine.runValidations(logPrefix, preparedSteps, ctx)
 }

@@ -21,11 +21,7 @@ private[release] object StepExecutionSupport {
       steps: Seq[PreparedStep[C]],
       initialCtx: C
   ): IO[C] =
-    ExecutionEngine.runValidations(
-      logPrefix = logPrefix,
-      validations = steps.map(step => ExecutionEngine.ValidationStep(step.name, step.validate)),
-      initialCtx = initialCtx
-    )
+    ExecutionEngine.runValidations(logPrefix, steps, initialCtx)
 
   def runMainSegment[C <: ReleaseCtx[C]](
       logPrefix: String,
@@ -38,10 +34,7 @@ private[release] object StepExecutionSupport {
       resultCtx    <-
         if (validatedCtx.failed) IO.pure(validatedCtx)
         else
-          ExecutionEngine.runActions(
-            steps.map(actionStep),
-            armOnFailure(validatedCtx)
-          )
+          ExecutionEngine.runActions(steps, armOnFailure(validatedCtx))
     } yield resultCtx
 
   def runSequentialValidateThenExecute[C <: ReleaseCtx[C]](
@@ -69,10 +62,5 @@ private[release] object StepExecutionSupport {
       ctx: C,
       armOnFailure: C => C
   ): IO[C] =
-    ExecutionEngine.runActionPhase(Seq(actionStep(step)))(armOnFailure(ctx))
-
-  private def actionStep[C <: ReleaseCtx[C]](
-      step: PreparedStep[C]
-  ): ExecutionEngine.ActionStep[C] =
-    ExecutionEngine.ActionStep(step.name, step.execute)
+    ExecutionEngine.runActionPhase(Seq(step))(armOnFailure(ctx))
 }
