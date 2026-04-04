@@ -4,7 +4,6 @@ import cats.effect.IO
 import io.release.internal.ExecutionEngine
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
-import io.release.internal.StepExecutionSupport
 import io.release.monorepo.steps.MonorepoCrossBuild
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
@@ -71,7 +70,7 @@ private[monorepo] object MonorepoComposer {
       startCtx: MonorepoContext,
       crossBuild: Boolean
   ): IO[MonorepoContext] =
-    StepExecutionSupport.runMainSegment(
+    ExecutionEngine.runMainSegment(
       logPrefix = LogPrefix,
       steps = preparedSteps(steps, crossBuild),
       startCtx = startCtx,
@@ -83,7 +82,7 @@ private[monorepo] object MonorepoComposer {
       startCtx: MonorepoContext,
       crossBuild: Boolean
   ): IO[MonorepoContext] =
-    StepExecutionSupport.runSequentialValidateThenExecute(
+    ExecutionEngine.runSequentialValidateThenExecute(
       steps = preparedSteps(steps, crossBuild),
       startCtx = startCtx,
       armOnFailure = ExecutionEngine.armOnFailure[MonorepoContext],
@@ -93,16 +92,16 @@ private[monorepo] object MonorepoComposer {
   private[monorepo] def preparedSteps(
       steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
       crossBuild: Boolean
-  ): Seq[StepExecutionSupport.PreparedStep[MonorepoContext]] =
+  ): Seq[ExecutionEngine.PreparedStep[MonorepoContext]] =
     steps.map(asPreparedStep(_, crossBuild))
 
   private def asPreparedStep(
       step: ProcessStep[MonorepoContext, ProjectReleaseInfo],
       crossBuild: Boolean
-  ): StepExecutionSupport.PreparedStep[MonorepoContext] =
+  ): ExecutionEngine.PreparedStep[MonorepoContext] =
     step match {
       case single: ProcessStep.Single[MonorepoContext] =>
-        StepExecutionSupport.PreparedStep(
+        ExecutionEngine.PreparedStep(
           name = single.name,
           validate = single.threadedValidation,
           execute = ExecutionEngine.withErrorRecovery(LogPrefix)(currentCtx =>
@@ -118,7 +117,7 @@ private[monorepo] object MonorepoComposer {
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
               typed.execute(currentCtx, project)
 
-        StepExecutionSupport.PreparedStep(
+        ExecutionEngine.PreparedStep(
           name = typed.name,
           validate = ctx =>
             MonorepoCrossBuild.validatePerProjectWithCrossBuild(
