@@ -5,7 +5,7 @@ Use this page for the core plugin's execution model and the conceptual differenc
 
 ## Validate / execute model
 
-Internally, the compiled core lifecycle is expressed in terms of `CoreProcessStep`, the internal
+Internally, the compiled core lifecycle is expressed in terms of `ProcessStep`, the internal
 validate/execute runtime model used under the hook-first lifecycle. Each compiled step has two
 phases:
 
@@ -55,7 +55,7 @@ commands such as `+publish`. The main difference is the effect model:
 | Aspect                  | sbt-release                                 | sbt-release-io                                    |
 | ----------------------- | ------------------------------------------- | ------------------------------------------------- |
 | Effect system           | Plain `State => State` via `Function.chain` | `IO`-wrapped via `unsafeRunSync`                  |
-| Internal step type      | `ReleaseStep(action, check)`                | `CoreProcessStep(validate, execute)`              |
+| Internal step type      | `ReleaseStep(action, check)`                | `ProcessStep(validate, execute)`              |
 | Supported customization | Direct process editing and step surgery     | Hook-first policies, hooks, and resource hooks    |
 | Resource management     | Manual                                      | `Resource.use` with guaranteed cleanup            |
 | Cross-build validation  | Actions only                                | Both `validate` and `execute` phases              |
