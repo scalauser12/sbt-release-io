@@ -140,6 +140,10 @@ private[release] object ProcessStep {
     def withCrossBuild: SingleBuilder[C] =
       new SingleBuilder(state, enableCrossBuild = true, isSelectionBoundary)
 
+    /** Mark this step as the selection boundary. Only honored by the monorepo composer,
+      * which splits the process into a sequential setup segment (before boundary) and a
+      * two-phase main segment (after boundary). Has no effect in the core composer.
+      */
     def withSelectionBoundary: SingleBuilder[C] =
       new SingleBuilder(state, enableCrossBuild, isSelectionBoundary = true)
 
@@ -242,6 +246,7 @@ private[release] object ProcessStep {
     def withCrossBuild: SingleResourceBuilder[T, C] =
       new SingleResourceBuilder[T, C](state, enableCrossBuild = true, isSelectionBoundary)
 
+    /** Mark this step as the selection boundary. Only honored by the monorepo composer. */
     def withSelectionBoundary: SingleResourceBuilder[T, C] =
       new SingleResourceBuilder[T, C](state, enableCrossBuild, isSelectionBoundary = true)
 

@@ -101,6 +101,52 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
   ): Seq[String] =
     LifecycleCompiler.defaults(phases).map(_.name)
 
+  test("slot catalog - every MonorepoHookConfiguration field has a corresponding binding") {
+    val configFieldCount =
+      classOf[MonorepoHookConfiguration].getDeclaredFields.count(!_.isSynthetic)
+    val bindingCount     = MonorepoLifecycleSlots.slots.size
+
+    assertEquals(
+      bindingCount,
+      configFieldCount,
+      s"MonorepoHookConfiguration has $configFieldCount fields but there are $bindingCount bindings"
+    )
+  }
+
+  test("slot catalog - each policy binding round-trips through its get/updated accessors") {
+    MonorepoPolicySlots.policySlots.foreach { binding =>
+      val toggled = binding.updated(MonorepoHookConfiguration.empty, false)
+      assert(
+        !binding.get(toggled),
+        s"Policy binding '${binding.id}' did not round-trip"
+      )
+    }
+  }
+
+  test("slot catalog - each global hook binding round-trips through its get/updated accessors") {
+    val sentinel = Seq(MonorepoGlobalHookIO("sentinel", ctx => cats.effect.IO.pure(ctx)))
+    MonorepoGlobalHookSlots.globalHookSlots.foreach { binding =>
+      val updated   = binding.updated(MonorepoHookConfiguration.empty, sentinel)
+      val retrieved = binding.get(updated)
+      assert(
+        retrieved.nonEmpty,
+        s"Global hook binding '${binding.id}' did not round-trip"
+      )
+    }
+  }
+
+  test("slot catalog - each project hook binding round-trips through its get/updated accessors") {
+    val sentinel = Seq(MonorepoProjectHookIO("sentinel", (ctx, _) => cats.effect.IO.pure(ctx)))
+    MonorepoProjectHookSlots.projectHookSlots.foreach { binding =>
+      val updated   = binding.updated(MonorepoHookConfiguration.empty, sentinel)
+      val retrieved = binding.get(updated)
+      assert(
+        retrieved.nonEmpty,
+        s"Project hook binding '${binding.id}' did not round-trip"
+      )
+    }
+  }
+
   test("source cleanup - top-level slot facade no longer defines slots inline") {
     val topLevelSource =
       TestRepoFiles.readString(

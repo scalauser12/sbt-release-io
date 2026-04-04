@@ -102,8 +102,15 @@ case class MonorepoContext(
   def currentProjects: Seq[ProjectReleaseInfo] =
     projects.filterNot(_.failed)
 
-  def updateProject(ref: ProjectRef)(f: ProjectReleaseInfo => ProjectReleaseInfo): MonorepoContext =
+  def updateProject(
+      ref: ProjectRef
+  )(f: ProjectReleaseInfo => ProjectReleaseInfo): MonorepoContext = {
+    require(
+      projects.exists(_.ref == ref),
+      s"updateProject called with unknown ref: $ref (known: ${projects.map(_.ref.project).mkString(", ")})"
+    )
     copy(projects = projects.map(p => if (p.ref == ref) f(p) else p))
+  }
 
   def withState(s: State): MonorepoContext = copy(state = s)
 
