@@ -104,7 +104,7 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
   test("source cleanup - top-level slot facade no longer defines slots inline") {
     val topLevelSource =
       TestRepoFiles.readString(
-        "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoLifecycleSlots.scala"
+        "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoLifecycle.scala"
       )
 
     assert(!topLevelSource.contains("policySlot("))

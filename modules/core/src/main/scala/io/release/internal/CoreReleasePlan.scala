@@ -3,6 +3,15 @@ package io.release.internal
 import cats.effect.IO
 import sbt.{internal as _, *}
 
+/** Normalized execution flags shared by core and monorepo planners. */
+private[release] final case class ExecutionFlags(
+    useDefaults: Boolean,
+    skipTests: Boolean,
+    skipPublish: Boolean,
+    interactive: Boolean,
+    crossBuild: Boolean
+)
+
 /** Resolved versioning inputs for the core release flow. */
 private[release] final case class VersionPlan(
     versionFile: File,
@@ -58,4 +67,13 @@ private[release] object CoreReleasePlan {
       decisionDefaults = decisionDefaults,
       commandName = commandName
     )
+}
+
+/** Internal runtime metadata threaded through [[io.release.ReleaseContext]]. */
+private[release] final case class CoreExecutionState(plan: CoreReleasePlan)
+
+private[release] object CoreExecutionState {
+
+  val key: AttributeKey[CoreExecutionState] =
+    AttributeKey[CoreExecutionState]("releaseIOInternalCoreExecutionState")
 }
