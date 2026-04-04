@@ -4,7 +4,31 @@ import cats.effect.IO
 import io.release.ReleaseCtx
 import io.release.steps.StepHelpers
 
-/** Shared two-phase execution and failure-detection helpers used by core and monorepo composers. */
+/** Shared execution engine used by both core and monorepo composers.
+  *
+  * == Execution flow ==
+  *
+  * {{{
+  * sbt command
+  *   → CoreCommandExecution / MonorepoCommandExecution   (parse CLI, build plan)
+  *   → SharedCommandKernel.runPreparedCommand             (compile hooks into steps)
+  *   → ReleaseComposer / MonorepoComposer                 (wrap steps as PreparedStep)
+  *   → ExecutionEngine                                    (validate + execute)
+  * }}}
+  *
+  * == Two orchestration modes ==
+  *
+  *   - '''`runMainSegment`''' — validate all steps upfront, then execute all sequentially.
+  *     Used by core (always) and monorepo (for steps after the selection boundary).
+  *     This ensures the release is fully validated before any mutations begin.
+  *
+  *   - '''`runSequentialValidateThenExecute`''' — validate and execute each step before
+  *     moving to the next. Used by monorepo for the setup segment (VCS init, working-dir
+  *     check, project selection) where later steps depend on earlier execution results.
+  *
+  * Both modes interleave sbt `FailureCommand` detection between actions and short-circuit
+  * on the first failure.
+  */
 private[release] object ExecutionEngine {
 
   final case class PreparedStep[C](
