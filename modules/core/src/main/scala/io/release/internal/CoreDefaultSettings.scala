@@ -10,12 +10,12 @@ import sbt.*
 private[release] object CoreDefaultSettings {
 
   lazy val pluginDefaultSettings: Seq[Setting[?]] =
-    DefaultSettingSupport.combine(
+    Seq(
       behaviorAndDecisionDefaults,
       CoreLifecycle.configDefaultSettings,
       versioningAndRuntimeDefaults,
       vcsAndPublishDefaults
-    )
+    ).flatten
 
   private lazy val behaviorAndDecisionDefaults: Seq[Setting[?]] = Seq(
     ReleaseIO.releaseIOBehaviorCrossBuild                 := false,
