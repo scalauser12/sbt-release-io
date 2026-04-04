@@ -1,14 +1,12 @@
-package io.release.internal
+package io.release.monorepo
 
 import cats.effect.IO
-import _root_.io.release.ReleaseIO.releaseIOVersioningFile
-import _root_.io.release.monorepo.MonorepoLifecycle
-import _root_.io.release.monorepo.MonorepoReleaseIO
-import _root_.io.release.steps.VersionSteps
+import io.release.ReleaseIO.releaseIOVersioningFile
+import io.release.steps.VersionSteps
 import sbt.Keys.*
 import sbt.*
 
-private[release] object MonorepoDefaultSettings {
+private[monorepo] object MonorepoDefaultSettings {
 
   lazy val pluginDefaultSettings: Seq[Setting[?]] =
     Seq(
