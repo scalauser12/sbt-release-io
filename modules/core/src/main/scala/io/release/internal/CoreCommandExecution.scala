@@ -155,19 +155,11 @@ private[release] object CoreCommandExecution {
     val skipPublish   = runtime.resolveSkipPublishEnabled(cleanState)
     val interactive   = interactiveEnabled
 
-    val releaseVersionMatches = allArgs { case ReleaseVersion(value) => value }
-    val nextVersionMatches    = allArgs { case NextVersion(value) => value }
-    val tagDefaultMatches     = allArgs { case TagDefault(value) => value }
-    val snapshotMatches       = allArgs { case SnapshotDependenciesDefault(value) => value }
-    val remoteMatches         = allArgs { case RemoteCheckFailureDefault(value) => value }
-    val upstreamMatches       = allArgs { case UpstreamBehindDefault(value) => value }
-    val pushMatches           = allArgs { case PushDefault(value) => value }
-
     val releaseVersionArg = DecisionDefaultsSupport.resolveLast(
       cleanState,
       ReleaseLogPrefixes.Core,
       "release-version",
-      releaseVersionMatches,
+      allArgs { case ReleaseVersion(value) => value },
       (value: String) => value,
       warnOnDuplicates
     )
@@ -175,58 +167,22 @@ private[release] object CoreCommandExecution {
       cleanState,
       ReleaseLogPrefixes.Core,
       "next-version",
-      nextVersionMatches,
+      allArgs { case NextVersion(value) => value },
       (value: String) => value,
-      warnOnDuplicates
-    )
-    val tagDefaultArg     = DecisionDefaultsSupport.resolveLast(
-      cleanState,
-      ReleaseLogPrefixes.Core,
-      "default-tag-exists-answer",
-      tagDefaultMatches,
-      (value: String) => value,
-      warnOnDuplicates
-    )
-    val snapshotDefault   = DecisionDefaultsSupport.resolveLast(
-      cleanState,
-      ReleaseLogPrefixes.Core,
-      "default-snapshot-dependencies-answer",
-      snapshotMatches,
-      DecisionDefaultsSupport.renderYesNo,
-      warnOnDuplicates
-    )
-    val remoteDefault     = DecisionDefaultsSupport.resolveLast(
-      cleanState,
-      ReleaseLogPrefixes.Core,
-      "default-remote-check-failure-answer",
-      remoteMatches,
-      DecisionDefaultsSupport.renderYesNo,
-      warnOnDuplicates
-    )
-    val upstreamDefault   = DecisionDefaultsSupport.resolveLast(
-      cleanState,
-      ReleaseLogPrefixes.Core,
-      "default-upstream-behind-answer",
-      upstreamMatches,
-      DecisionDefaultsSupport.renderYesNo,
-      warnOnDuplicates
-    )
-    val pushDefault       = DecisionDefaultsSupport.resolveLast(
-      cleanState,
-      ReleaseLogPrefixes.Core,
-      "default-push-answer",
-      pushMatches,
-      DecisionDefaultsSupport.renderYesNo,
       warnOnDuplicates
     )
 
     val settings    = ReleaseDecisionDefaults.fromState(cleanState)
-    val cliDefaults = ReleaseDecisionDefaults(
-      tagExistsAnswer = tagDefaultArg,
-      snapshotDependenciesAnswer = snapshotDefault,
-      remoteCheckFailureAnswer = remoteDefault,
-      upstreamBehindAnswer = upstreamDefault,
-      pushAnswer = pushDefault
+    val cliDefaults = ReleaseDecisionDefaults.resolveFromCli(
+      cleanState,
+      ReleaseLogPrefixes.Core,
+      warnOnDuplicates
+    )(
+      tagExistsMatches = allArgs { case TagDefault(value) => value },
+      snapshotMatches = allArgs { case SnapshotDependenciesDefault(value) => value },
+      remoteMatches = allArgs { case RemoteCheckFailureDefault(value) => value },
+      upstreamMatches = allArgs { case UpstreamBehindDefault(value) => value },
+      pushMatches = allArgs { case PushDefault(value) => value }
     )
 
     CoreCommandInputs(

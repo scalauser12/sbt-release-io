@@ -105,14 +105,10 @@ private[release] object LifecycleConfigCompiler {
       phases: Seq[LifecycleCompiler.Phase[Config, C, I]]
   ): Seq[Binding[Config]] =
     phases
+      .flatMap(_.configBindings)
       .foldLeft((Vector.empty[Binding[Config]], Set.empty[String])) {
-        case ((bindings, seen), phase) =>
-          phase.configBindings.foldLeft((bindings, seen)) {
-            case ((accBindings, accSeen), binding) if accSeen.contains(binding.id) =>
-              accBindings -> accSeen
-            case ((accBindings, accSeen), binding)                                 =>
-              (accBindings :+ binding) -> (accSeen + binding.id)
-          }
+        case ((acc, seen), binding) if seen.contains(binding.id) => (acc, seen)
+        case ((acc, seen), binding)                              => (acc :+ binding, seen + binding.id)
       }
       ._1
 }
