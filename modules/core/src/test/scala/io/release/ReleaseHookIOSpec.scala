@@ -3,6 +3,7 @@ package io.release
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.internal.CoreHookConfiguration
+import io.release.internal.CoreHookSlots
 import io.release.internal.CoreLifecycleSlots
 import munit.CatsEffectSuite
 
@@ -342,7 +343,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
           CoreLifecycleSlots.hookSlots
             .filter(slot => slot.resolveHooks(config).nonEmpty)
             .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(CoreLifecycleSlots.beforeTagHooks.keyLabel))
+        assertEquals(populatedSlots, Seq(CoreHookSlots.beforeTagHooks.keyLabel))
         assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
       }
     }

@@ -12,9 +12,9 @@ private[release] object CoreLifecycle {
   private type Gate       = ReleaseContext => IO[Boolean]
   private type Phase      =
     LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]
-  private type Slot       = LifecycleSlotSupport.Slot[CoreHookConfiguration]
-  private type PolicySlot = LifecycleSlotSupport.PolicySlot[CoreHookConfiguration]
-  private type HookSlot   = LifecycleSlotSupport.HookSlot[CoreHookConfiguration, ReleaseHookIO]
+  private type Slot       = LifecycleConfigCompiler.Slot[CoreHookConfiguration]
+  private type PolicySlot = LifecycleConfigCompiler.PolicySlot[CoreHookConfiguration]
+  private type HookSlot   = LifecycleConfigCompiler.HookSlot[CoreHookConfiguration, ReleaseHookIO]
 
   private val Always: Gate      = _ => IO.pure(true)
   private val PublishGate: Gate = PublishSteps.shouldRunPublishHooks
@@ -39,7 +39,7 @@ private[release] object CoreLifecycle {
     LifecycleCompiler.singleBuiltIn(
       step = step,
       enabled = enabled,
-      configBindings = LifecycleSlotSupport.configBindings(slots)
+      configBindings = LifecycleConfigCompiler.configBindings(slots)
     )
 
   private def builtIn(
@@ -76,7 +76,7 @@ private[release] object CoreLifecycle {
       crossBuild = crossBuild,
       cachedGate = cachedGate,
       enabled = enabled,
-      configBindings = LifecycleSlotSupport.configBindings(hookSlot +: additionalSlots)
+      configBindings = LifecycleConfigCompiler.configBindings(hookSlot +: additionalSlots)
     )
 
   private[release] val phases: Seq[Phase] = Seq(
@@ -84,118 +84,118 @@ private[release] object CoreLifecycle {
     builtIn(ReleaseSteps.checkCleanWorkingDir),
     hookPhase(
       phase = "after-clean-check",
-      hookSlot = CoreLifecycleSlots.afterCleanCheckHooks,
+      hookSlot = CoreHookSlots.afterCleanCheckHooks,
       gate = Always
     ),
     builtIn(
       ReleaseSteps.checkSnapshotDependencies,
-      CoreLifecycleSlots.enableSnapshotDependenciesCheck
+      CorePolicySlots.enableSnapshotDependenciesCheck
     ),
     hookPhase(
       phase = "before-version-resolution",
-      hookSlot = CoreLifecycleSlots.beforeVersionResolutionHooks,
+      hookSlot = CoreHookSlots.beforeVersionResolutionHooks,
       gate = Always
     ),
     builtIn(ReleaseSteps.inquireVersions),
     hookPhase(
       phase = "after-version-resolution",
-      hookSlot = CoreLifecycleSlots.afterVersionResolutionHooks,
+      hookSlot = CoreHookSlots.afterVersionResolutionHooks,
       gate = Always
     ),
-    builtIn(ReleaseSteps.runClean, CoreLifecycleSlots.enableRunClean),
-    builtIn(ReleaseSteps.runTests, CoreLifecycleSlots.enableRunTests),
+    builtIn(ReleaseSteps.runClean, CorePolicySlots.enableRunClean),
+    builtIn(ReleaseSteps.runTests, CorePolicySlots.enableRunTests),
     hookPhase(
       phase = "before-release-version-write",
-      hookSlot = CoreLifecycleSlots.beforeReleaseVersionWriteHooks,
+      hookSlot = CoreHookSlots.beforeReleaseVersionWriteHooks,
       gate = Always
     ),
     builtIn(ReleaseSteps.setReleaseVersion),
     hookPhase(
       phase = "after-release-version-write",
-      hookSlot = CoreLifecycleSlots.afterReleaseVersionWriteHooks,
+      hookSlot = CoreHookSlots.afterReleaseVersionWriteHooks,
       gate = Always
     ),
     hookPhase(
       phase = "before-release-commit",
-      hookSlot = CoreLifecycleSlots.beforeReleaseCommitHooks,
+      hookSlot = CoreHookSlots.beforeReleaseCommitHooks,
       gate = Always
     ),
     builtIn(ReleaseSteps.commitReleaseVersion),
     hookPhase(
       phase = "after-release-commit",
-      hookSlot = CoreLifecycleSlots.afterReleaseCommitHooks,
+      hookSlot = CoreHookSlots.afterReleaseCommitHooks,
       gate = Always
     ),
     hookPhase(
       phase = "before-tag",
-      hookSlot = CoreLifecycleSlots.beforeTagHooks,
+      hookSlot = CoreHookSlots.beforeTagHooks,
       gate = Always,
-      enabled = CoreLifecycleSlots.enableTagging.enabled,
-      additionalSlots = Seq(CoreLifecycleSlots.enableTagging)
+      enabled = CorePolicySlots.enableTagging.enabled,
+      additionalSlots = Seq(CorePolicySlots.enableTagging)
     ),
-    builtIn(ReleaseSteps.tagRelease, CoreLifecycleSlots.enableTagging),
+    builtIn(ReleaseSteps.tagRelease, CorePolicySlots.enableTagging),
     hookPhase(
       phase = "after-tag",
-      hookSlot = CoreLifecycleSlots.afterTagHooks,
+      hookSlot = CoreHookSlots.afterTagHooks,
       gate = Always,
-      enabled = CoreLifecycleSlots.enableTagging.enabled,
-      additionalSlots = Seq(CoreLifecycleSlots.enableTagging)
+      enabled = CorePolicySlots.enableTagging.enabled,
+      additionalSlots = Seq(CorePolicySlots.enableTagging)
     ),
     hookPhase(
       phase = "before-publish",
-      hookSlot = CoreLifecycleSlots.beforePublishHooks,
+      hookSlot = CoreHookSlots.beforePublishHooks,
       gate = PublishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGate = Some(publishCachedGate("before-publish")),
-      enabled = CoreLifecycleSlots.enablePublish.enabled,
-      additionalSlots = Seq(CoreLifecycleSlots.enablePublish)
+      enabled = CorePolicySlots.enablePublish.enabled,
+      additionalSlots = Seq(CorePolicySlots.enablePublish)
     ),
-    builtIn(ReleaseSteps.publishArtifacts, CoreLifecycleSlots.enablePublish),
+    builtIn(ReleaseSteps.publishArtifacts, CorePolicySlots.enablePublish),
     hookPhase(
       phase = "after-publish",
-      hookSlot = CoreLifecycleSlots.afterPublishHooks,
+      hookSlot = CoreHookSlots.afterPublishHooks,
       gate = PublishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGate = Some(publishCachedGate("after-publish")),
-      enabled = CoreLifecycleSlots.enablePublish.enabled,
-      additionalSlots = Seq(CoreLifecycleSlots.enablePublish)
+      enabled = CorePolicySlots.enablePublish.enabled,
+      additionalSlots = Seq(CorePolicySlots.enablePublish)
     ),
     hookPhase(
       phase = "before-next-version-write",
-      hookSlot = CoreLifecycleSlots.beforeNextVersionWriteHooks,
+      hookSlot = CoreHookSlots.beforeNextVersionWriteHooks,
       gate = Always
     ),
     builtIn(ReleaseSteps.setNextVersion),
     hookPhase(
       phase = "after-next-version-write",
-      hookSlot = CoreLifecycleSlots.afterNextVersionWriteHooks,
+      hookSlot = CoreHookSlots.afterNextVersionWriteHooks,
       gate = Always
     ),
     hookPhase(
       phase = "before-next-commit",
-      hookSlot = CoreLifecycleSlots.beforeNextCommitHooks,
+      hookSlot = CoreHookSlots.beforeNextCommitHooks,
       gate = Always
     ),
     builtIn(ReleaseSteps.commitNextVersion),
     hookPhase(
       phase = "after-next-commit",
-      hookSlot = CoreLifecycleSlots.afterNextCommitHooks,
+      hookSlot = CoreHookSlots.afterNextCommitHooks,
       gate = Always
     ),
     hookPhase(
       phase = "before-push",
-      hookSlot = CoreLifecycleSlots.beforePushHooks,
+      hookSlot = CoreHookSlots.beforePushHooks,
       gate = Always,
-      enabled = CoreLifecycleSlots.enablePush.enabled,
-      additionalSlots = Seq(CoreLifecycleSlots.enablePush)
+      enabled = CorePolicySlots.enablePush.enabled,
+      additionalSlots = Seq(CorePolicySlots.enablePush)
     ),
-    builtIn(ReleaseSteps.pushChanges, CoreLifecycleSlots.enablePush),
+    builtIn(ReleaseSteps.pushChanges, CorePolicySlots.enablePush),
     hookPhase(
       phase = "after-push",
-      hookSlot = CoreLifecycleSlots.afterPushHooks,
+      hookSlot = CoreHookSlots.afterPushHooks,
       gate = Always,
-      enabled = CoreLifecycleSlots.enablePush.enabled,
-      additionalSlots = Seq(CoreLifecycleSlots.enablePush)
+      enabled = CorePolicySlots.enablePush.enabled,
+      additionalSlots = Seq(CorePolicySlots.enablePush)
     )
   )
 

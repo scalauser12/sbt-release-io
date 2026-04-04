@@ -3,7 +3,7 @@ package io.release
 import cats.effect.IO
 import io.release.internal.CoreHookConfiguration
 import io.release.internal.CoreLifecycleSlots
-import io.release.internal.HookMaterializationSupport
+import io.release.internal.LifecycleConfigCompiler
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -70,6 +70,9 @@ case class ReleaseResourceHooks[T](
 object ReleaseResourceHooks {
   def empty[T]: ReleaseResourceHooks[T] = ReleaseResourceHooks[T]()
 
+  private type HookAssignment =
+    (LifecycleConfigCompiler.HookSlot[CoreHookConfiguration, ReleaseHookIO], Seq[ReleaseHookIO])
+
   private def hookBuckets[T](hooks: ReleaseResourceHooks[T]): Seq[Seq[ReleaseResourceHookIO[T]]] =
     Seq(
       hooks.afterCleanCheckHooks,
@@ -107,20 +110,26 @@ object ReleaseResourceHooks {
         validate = hook.validate
       )
 
-    HookMaterializationSupport.applyAssignments(
-      CoreHookConfiguration.empty,
-      hookAssignments(hooks, plainHook)
-    )
+    hookAssignments(hooks, plainHook).foldLeft(CoreHookConfiguration.empty) {
+      case (config, (slot, materializedHooks)) =>
+        slot.updated(config, materializedHooks)
+    }
   }
 
   private[release] def hookAssignments[T](
       hooks: ReleaseResourceHooks[T],
       materialize: ReleaseResourceHookIO[T] => ReleaseHookIO
-  ): Seq[HookMaterializationSupport.HookAssignment[CoreHookConfiguration, ReleaseHookIO]] =
-    HookMaterializationSupport.materializedAssignments(
-      CoreLifecycleSlots.hookSlots,
-      hookBuckets(hooks)
-    )(
-      materialize
+  ): Seq[HookAssignment] = {
+    val slots   = CoreLifecycleSlots.hookSlots
+    val buckets = hookBuckets(hooks)
+
+    require(
+      slots.length == buckets.length,
+      s"Expected ${slots.length} hook buckets but received ${buckets.length}"
     )
+
+    slots.zip(buckets).map { case (slot, hooksAtSlot) =>
+      slot -> hooksAtSlot.map(materialize)
+    }
+  }
 }

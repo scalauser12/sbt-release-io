@@ -10,16 +10,18 @@ import sbt.Keys.*
 import sbt.Setting
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 
 @scala.annotation.nowarn("cat=deprecation")
-class MonorepoHookCompilerSpec extends CatsEffectSuite {
+class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
 
   test(
     "compile - match the built-in monorepo release steps when no hook or policy customization is present"
   ) {
     hookFixtureResource("monorepo-hook-compiler-defaults").use { fixture =>
       IO {
-        assertEquals(MonorepoHookCompiler.compile(fixture.state), MonorepoReleaseSteps.defaults)
+        assertEquals(compileLifecycle(fixture.state), MonorepoReleaseSteps.defaults)
       }
     }
   }
@@ -27,8 +29,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
   test("compile - use the per-project tagging step in the canonical lifecycle") {
     hookFixtureResource("monorepo-hook-compiler-tag-step").use { fixture =>
       IO {
-        val tagStep = MonorepoHookCompiler
-          .compile(fixture.state)
+        val tagStep = compileLifecycle(fixture.state)
           .collectFirst {
             case step: ProcessStep.PerItem[?, ?] @unchecked if step.name == "tag-releases" =>
               step.asInstanceOf[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]]
@@ -40,13 +41,27 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
     }
   }
 
-  test("compile(configuration) - match compile(state) for the same resolved hook configuration") {
+  test("production sources no longer reference thin monorepo hook compiler") {
     hookFixtureResource("monorepo-hook-compiler-overload").use { fixture =>
       IO {
-        assertEquals(
-          MonorepoHookCompiler.compile(MonorepoHookCompiler.resolve(fixture.state)).map(_.name),
-          MonorepoHookCompiler.compile(fixture.state).map(_.name)
+        val commandExecution = Files.readString(
+          repoPath(
+            "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoCommandExecution.scala"
+          )
         )
+
+        assertEquals(
+          compileLifecycle(fixture.state).map(_.name),
+          MonorepoReleaseSteps.defaults.map(_.name)
+        )
+        assert(
+          !Files.exists(
+            repoPath(
+              "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoHookCompiler.scala"
+            )
+          )
+        )
+        assert(!commandExecution.contains("MonorepoHookCompiler"))
       }
     }
   }
@@ -65,7 +80,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
 
     hookFixtureResource("monorepo-hook-compiler-resolve", settings).use { fixture =>
       IO {
-        val config = MonorepoHookCompiler.resolve(fixture.state)
+        val config = MonorepoHookConfiguration.resolve(fixture.state)
 
         assert(!config.enableRunTests)
         assert(!config.enablePublish)
@@ -78,7 +93,10 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
   test("resolve - generated monorepo lifecycle defaults produce the empty hook configuration") {
     hookFixtureResource("monorepo-hook-compiler-generated-defaults").use { fixture =>
       IO {
-        assertEquals(MonorepoHookCompiler.resolve(fixture.state), MonorepoHookConfiguration.empty)
+        assertEquals(
+          MonorepoHookConfiguration.resolve(fixture.state),
+          MonorepoHookConfiguration.empty
+        )
       }
     }
   }
@@ -117,7 +135,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
 
     hookFixtureResource("monorepo-hook-compiler-order", settings).use { fixture =>
       IO {
-        val stepNames = MonorepoHookCompiler.compile(fixture.state).map(_.name)
+        val stepNames = compileLifecycle(fixture.state).map(_.name)
 
         assertEquals(
           stepNames,
@@ -152,8 +170,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookFixtureResource("monorepo-hook-compiler-publish-gate", settings).use { fixture =>
-        val publishHookSteps = MonorepoHookCompiler
-          .compile(fixture.state)
+        val publishHookSteps = compileLifecycle(fixture.state)
           .collect {
             case step: ProcessStep.PerItem[?, ?] @unchecked
                 if step.name
@@ -194,8 +211,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookFixtureResource("monorepo-hook-compiler-publish-cache-enabled", settings).use { fixture =>
-        val publishHookSteps = MonorepoHookCompiler
-          .compile(fixture.state)
+        val publishHookSteps = compileLifecycle(fixture.state)
           .collect {
             case step: ProcessStep.PerItem[?, ?] @unchecked
                 if step.name
@@ -226,8 +242,7 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookFixtureResource("monorepo-hook-compiler-publish-cache-skipped", settings).use { fixture =>
-        val publishHookSteps = MonorepoHookCompiler
-          .compile(fixture.state)
+        val publishHookSteps = compileLifecycle(fixture.state)
           .collect {
             case step: ProcessStep.PerItem[?, ?] @unchecked
                 if step.name
@@ -286,6 +301,22 @@ class MonorepoHookCompilerSpec extends CatsEffectSuite {
 
   private def hookSettingsDefaults: Seq[Setting[?]] =
     MonorepoLifecycle.configDefaultSettings
+
+  private def compileLifecycle(
+      state: sbt.State
+  ): Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
+    MonorepoLifecycle.compile(MonorepoHookConfiguration.resolve(state))
+
+  private def repoPath(relative: String): Path = {
+    @scala.annotation.tailrec
+    def loop(path: Path): Path =
+      if (path == null) sys.error("Could not locate repository root")
+      else if (Files.exists(path.resolve("build.sbt")) && Files.exists(path.resolve("modules")))
+        path
+      else loop(path.getParent)
+
+    loop(Path.of("").toAbsolutePath.normalize).resolve(relative)
+  }
 
   private def publishHookSettings(
       observed: Ref[IO, List[String]]

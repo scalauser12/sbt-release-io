@@ -162,11 +162,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
   ): Either[String, PluginEntrypointSupport.ParsedCommand[ReleaseCli.Arg]] =
     ReleaseCli.parse(tokens, commandName).map { parsed =>
       PluginEntrypointSupport.ParsedCommand(
-        mode = parsed.mode match {
-          case ReleaseCli.CommandMode.Help  => PluginEntrypointSupport.CommandMode.Help
-          case ReleaseCli.CommandMode.Check => PluginEntrypointSupport.CommandMode.Check
-          case ReleaseCli.CommandMode.Run   => PluginEntrypointSupport.CommandMode.Run
-        },
+        mode = parsed.mode,
         args = parsed.args
       )
     }

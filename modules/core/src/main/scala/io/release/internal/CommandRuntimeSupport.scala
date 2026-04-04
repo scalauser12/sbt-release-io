@@ -31,16 +31,6 @@ private[release] object CommandRuntimeSupport {
       )
     else IO.pure(ctx)
 
-  def mergeMaterializedHooks[T, Config, ResourceHooks](
-      plainHooks: Config,
-      resourceHooks: ResourceHooks,
-      maybeResource: Option[T]
-  )(
-      materialize: (ResourceHooks, Option[T]) => Config,
-      merge: (Config, Config) => Config
-  ): Config =
-    merge(plainHooks, materialize(resourceHooks, maybeResource))
-
   def logLines(
       state: State,
       prefix: String,

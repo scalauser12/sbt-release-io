@@ -116,12 +116,12 @@ private[release] object CoreCommandExecution {
       .compileMergedSteps(
         state = state,
         maybeResource = maybeResource,
-        resolveHooks = ReleaseHookCompiler.resolve,
+        resolveHooks = CoreHookConfiguration.resolve,
         resolveResourceHooks = runtime.resolveResourceHooks
       )(
         materialize = ReleaseResourceHooks.materialize,
         merge = (left, right) => left.mergeWith(right),
-        compile = ReleaseHookCompiler.compile
+        compile = CoreLifecycle.compile
       )
       .map(steps => CompiledSteps(steps = steps))
 

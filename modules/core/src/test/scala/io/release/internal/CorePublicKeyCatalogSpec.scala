@@ -1,9 +1,15 @@
 package io.release.internal
 
+import io.release.TestRepoFiles
 import munit.FunSuite
 
 class CorePublicKeyCatalogSpec extends FunSuite {
   import PublicKeyCatalogSupport.KeyKind
+
+  private lazy val catalogSource =
+    TestRepoFiles.readString(
+      "modules/core/src/main/scala/io/release/internal/CorePublicKeyCatalog.scala"
+    )
 
   private val expectedLabelsByGroup = Vector(
     "behavior"    -> Vector(
@@ -116,5 +122,34 @@ class CorePublicKeyCatalogSpec extends FunSuite {
         else KeyKind.Setting
       assertEquals(kindsByLabel(label), expectedKind, label)
     }
+  }
+
+  test("grouped public key inventories concatenate to the same publicEntries sequence") {
+    assertEquals(
+      CorePublicKeyCatalog.publicEntries,
+      CoreBehaviorPublicKeys.publicEntries ++
+        CoreDefaultsPublicKeys.publicEntries ++
+        CorePolicyPublicKeys.publicEntries ++
+        CoreHookPublicKeys.publicEntries ++
+        CoreVersioningPublicKeys.publicEntries ++
+        CoreVcsPublicKeys.publicEntries ++
+        CorePublishPublicKeys.publicEntries ++
+        CoreRuntimePublicKeys.publicEntries ++
+        CoreDiagnosticsPublicKeys.publicEntries
+    )
+  }
+
+  test("source cleanup - top-level catalog is inventory-only") {
+    assert(!catalogSource.contains("setting("))
+    assert(!catalogSource.contains("task("))
+  }
+
+  test("source cleanup - public key catalog support no longer uses ArrayBuffer") {
+    val source =
+      TestRepoFiles.readString(
+        "modules/core/src/main/scala/io/release/internal/PublicKeyCatalogSupport.scala"
+      )
+
+    assert(!source.contains("ArrayBuffer"))
   }
 }

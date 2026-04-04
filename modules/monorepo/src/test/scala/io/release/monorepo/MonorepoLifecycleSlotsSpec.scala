@@ -1,8 +1,7 @@
 package io.release.monorepo
 
-import scala.annotation.nowarn
-
 import io.release.internal.LifecycleCompiler
+import io.release.TestRepoFiles
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.FunSuite
 
@@ -54,6 +53,21 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
     )
   }
 
+  test("slot catalog - grouped inventories concatenate into the aggregate inventory in order") {
+    assertEquals(MonorepoLifecycleSlots.policySlots, MonorepoPolicySlots.policySlots)
+    assertEquals(MonorepoLifecycleSlots.globalHookSlots, MonorepoGlobalHookSlots.globalHookSlots)
+    assertEquals(
+      MonorepoLifecycleSlots.projectHookSlots,
+      MonorepoProjectHookSlots.projectHookSlots
+    )
+    assertEquals(
+      MonorepoLifecycleSlots.slots,
+      MonorepoPolicySlots.policySlots ++
+        MonorepoGlobalHookSlots.globalHookSlots ++
+        MonorepoProjectHookSlots.projectHookSlots
+    )
+  }
+
   test("slot-backed phases - preserve canonical phase and built-in step names") {
     assertEquals(
       hookPhaseNames(MonorepoLifecycle.phases),
@@ -65,7 +79,6 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
     )
   }
 
-  @nowarn("cat=unchecked")
   private def hookPhaseNames(
       phases: Seq[
         LifecycleCompiler.Phase[
@@ -75,12 +88,8 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
         ]
       ]
   ): Seq[String] =
-    phases.collect {
-      case phase: LifecycleCompiler.SingleHookPhase[?, ?, ?, ?, ?] @unchecked  => phase.phase
-      case phase: LifecycleCompiler.PerItemHookPhase[?, ?, ?, ?, ?] @unchecked => phase.phase
-    }
+    phases.flatMap(_.phaseName)
 
-  @nowarn("cat=unchecked")
   private def builtInStepNames(
       phases: Seq[
         LifecycleCompiler.Phase[
@@ -90,10 +99,17 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
         ]
       ]
   ): Seq[String] =
-    phases.collect {
-      case phase: LifecycleCompiler.SingleBuiltInPhase[?, ?, ?] @unchecked  => phase.step.name
-      case phase: LifecycleCompiler.PerItemBuiltInPhase[?, ?, ?] @unchecked => phase.step.name
-    }
+    LifecycleCompiler.defaults(phases).map(_.name)
+
+  test("source cleanup - top-level slot facade no longer defines slots inline") {
+    val topLevelSource =
+      TestRepoFiles.readString(
+        "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoLifecycleSlots.scala"
+      )
+
+    assert(!topLevelSource.contains("policySlot("))
+    assert(!topLevelSource.contains("hookSlot("))
+  }
 }
 
 object MonorepoLifecycleSlotsSpec {

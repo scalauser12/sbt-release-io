@@ -1,7 +1,5 @@
 package io.release.internal
 
-import scala.collection.mutable.ArrayBuffer
-
 import sbt.{AttributeKey, SettingKey, Task, TaskKey}
 
 private[release] object PublicKeyCatalogSupport {
@@ -22,16 +20,25 @@ private[release] object PublicKeyCatalogSupport {
       keyRef: AnyRef
   )
 
-  final class Builder {
-    private val entries = ArrayBuffer.empty[PublicEntry]
+  final case class SettingDefinition[A](
+      key: SettingKey[A],
+      publicEntry: PublicEntry
+  )
 
-    def setting[A: Manifest](
-        group: String,
-        label: String,
-        description: String
-    ): SettingKey[A] = {
-      val key = SettingKey[A](AttributeKey[A](label, description))
-      entries += PublicEntry(
+  final case class TaskDefinition[A](
+      key: TaskKey[A],
+      publicEntry: PublicEntry
+  )
+
+  def setting[A: Manifest](
+      group: String,
+      label: String,
+      description: String
+  ): SettingDefinition[A] = {
+    val key = SettingKey[A](AttributeKey[A](label, description))
+    SettingDefinition(
+      key = key,
+      publicEntry = PublicEntry(
         group = group,
         label = label,
         description = description,
@@ -39,17 +46,19 @@ private[release] object PublicKeyCatalogSupport {
         attributeKey = key.key,
         keyRef = key
       )
-      key
-    }
+    )
+  }
 
-    def task[A: Manifest](
-        group: String,
-        label: String,
-        description: String,
-        isTransient: Boolean = false
-    ): TaskKey[A] = {
-      val key = TaskKey[A](AttributeKey[Task[A]](label, description))
-      entries += PublicEntry(
+  def task[A: Manifest](
+      group: String,
+      label: String,
+      description: String,
+      isTransient: Boolean = false
+  ): TaskDefinition[A] = {
+    val key = TaskKey[A](AttributeKey[Task[A]](label, description))
+    TaskDefinition(
+      key = key,
+      publicEntry = PublicEntry(
         group = group,
         label = label,
         description = description,
@@ -57,10 +66,6 @@ private[release] object PublicKeyCatalogSupport {
         attributeKey = key.key,
         keyRef = key
       )
-      key
-    }
-
-    def publicEntries: Vector[PublicEntry] =
-      entries.toVector
+    )
   }
 }

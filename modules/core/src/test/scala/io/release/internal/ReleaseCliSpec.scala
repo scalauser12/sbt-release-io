@@ -4,10 +4,12 @@ import munit.FunSuite
 
 class ReleaseCliSpec extends FunSuite {
 
+  import PluginEntrypointSupport.CommandMode
+
   test("splitMode - treat help as a first-token subcommand") {
     val (mode, remaining) = ReleaseCli.splitMode(Seq("help", "ignored"))
 
-    assertEquals(mode, ReleaseCli.CommandMode.Help)
+    assertEquals(mode, CommandMode.Help)
     assertEquals(remaining, Seq("ignored"))
   }
 
@@ -15,7 +17,7 @@ class ReleaseCliSpec extends FunSuite {
     val (mode, remaining) =
       ReleaseCli.splitMode(Seq("check", "with-defaults", "release-version", "1.0.0"))
 
-    assertEquals(mode, ReleaseCli.CommandMode.Check)
+    assertEquals(mode, CommandMode.Check)
     assertEquals(remaining, Seq("with-defaults", "release-version", "1.0.0"))
   }
 
@@ -38,7 +40,7 @@ class ReleaseCliSpec extends FunSuite {
       result,
       Right(
         ReleaseCli.Parsed(
-          ReleaseCli.CommandMode.Check,
+          CommandMode.Check,
           Seq(
             ReleaseCli.Arg.WithDefaults,
             ReleaseCli.Arg.ReleaseVersion("1.0.0"),
@@ -59,7 +61,7 @@ class ReleaseCliSpec extends FunSuite {
       result,
       Right(
         ReleaseCli.Parsed(
-          ReleaseCli.CommandMode.Run,
+          CommandMode.Run,
           Seq(
             ReleaseCli.Arg.WithDefaults,
             ReleaseCli.Arg.ReleaseVersion("1.0.0")
@@ -88,7 +90,7 @@ class ReleaseCliSpec extends FunSuite {
       result,
       Right(
         ReleaseCli.Parsed(
-          ReleaseCli.CommandMode.Run,
+          CommandMode.Run,
           Seq(
             ReleaseCli.Arg.SnapshotDependenciesDefault(true),
             ReleaseCli.Arg.RemoteCheckFailureDefault(false),

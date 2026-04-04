@@ -121,11 +121,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
   ): Either[String, PluginEntrypointSupport.ParsedCommand[MonorepoCli.Arg]] =
     MonorepoCli.parse(tokens, commandName).map { parsed =>
       PluginEntrypointSupport.ParsedCommand(
-        mode = parsed.mode match {
-          case MonorepoCli.CommandMode.Help  => PluginEntrypointSupport.CommandMode.Help
-          case MonorepoCli.CommandMode.Check => PluginEntrypointSupport.CommandMode.Check
-          case MonorepoCli.CommandMode.Run   => PluginEntrypointSupport.CommandMode.Run
-        },
+        mode = parsed.mode,
         args = parsed.args
       )
     }

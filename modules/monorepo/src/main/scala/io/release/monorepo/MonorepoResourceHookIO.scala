@@ -1,7 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.internal.HookMaterializationSupport
+import io.release.internal.LifecycleConfigCompiler
 
 /** A resource-aware global hook for custom monorepo plugins with a shared resource `T`.
   *
@@ -101,6 +101,17 @@ case class MonorepoResourceHooks[T](
 object MonorepoResourceHooks {
   def empty[T]: MonorepoResourceHooks[T] = MonorepoResourceHooks[T]()
 
+  private type GlobalHookAssignment  =
+    (
+        LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoGlobalHookIO],
+        Seq[MonorepoGlobalHookIO]
+    )
+  private type ProjectHookAssignment =
+    (
+        LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoProjectHookIO],
+        Seq[MonorepoProjectHookIO]
+    )
+
   private def globalHookBuckets[T](
       hooks: MonorepoResourceHooks[T]
   ): Seq[Seq[MonorepoGlobalResourceHookIO[T]]] =
@@ -159,36 +170,49 @@ object MonorepoResourceHooks {
         validate = hook.validate
       )
 
-    val withGlobalHooks = HookMaterializationSupport.applyAssignments(
-      MonorepoHookConfiguration.empty,
-      globalHookAssignments(hooks, globalHook)
-    )
+    val withGlobalHooks =
+      globalHookAssignments(hooks, globalHook).foldLeft(MonorepoHookConfiguration.empty) {
+        case (config, (slot, materializedHooks)) =>
+          slot.updated(config, materializedHooks)
+      }
 
-    HookMaterializationSupport.applyAssignments(
-      withGlobalHooks,
-      projectHookAssignments(hooks, projectHook)
-    )
+    projectHookAssignments(hooks, projectHook).foldLeft(withGlobalHooks) {
+      case (config, (slot, materializedHooks)) =>
+        slot.updated(config, materializedHooks)
+    }
   }
 
   private[monorepo] def globalHookAssignments[T](
       hooks: MonorepoResourceHooks[T],
       materialize: MonorepoGlobalResourceHookIO[T] => MonorepoGlobalHookIO
-  ): Seq[
-    HookMaterializationSupport.HookAssignment[MonorepoHookConfiguration, MonorepoGlobalHookIO]
-  ] =
-    HookMaterializationSupport.materializedAssignments(
-      MonorepoLifecycleSlots.globalHookSlots,
-      globalHookBuckets(hooks)
-    )(materialize)
+  ): Seq[GlobalHookAssignment] = {
+    val slots   = MonorepoLifecycleSlots.globalHookSlots
+    val buckets = globalHookBuckets(hooks)
+
+    require(
+      slots.length == buckets.length,
+      s"Expected ${slots.length} hook buckets but received ${buckets.length}"
+    )
+
+    slots.zip(buckets).map { case (slot, hooksAtSlot) =>
+      slot -> hooksAtSlot.map(materialize)
+    }
+  }
 
   private[monorepo] def projectHookAssignments[T](
       hooks: MonorepoResourceHooks[T],
       materialize: MonorepoProjectResourceHookIO[T] => MonorepoProjectHookIO
-  ): Seq[
-    HookMaterializationSupport.HookAssignment[MonorepoHookConfiguration, MonorepoProjectHookIO]
-  ] =
-    HookMaterializationSupport.materializedAssignments(
-      MonorepoLifecycleSlots.projectHookSlots,
-      projectHookBuckets(hooks)
-    )(materialize)
+  ): Seq[ProjectHookAssignment] = {
+    val slots   = MonorepoLifecycleSlots.projectHookSlots
+    val buckets = projectHookBuckets(hooks)
+
+    require(
+      slots.length == buckets.length,
+      s"Expected ${slots.length} hook buckets but received ${buckets.length}"
+    )
+
+    slots.zip(buckets).map { case (slot, hooksAtSlot) =>
+      slot -> hooksAtSlot.map(materialize)
+    }
+  }
 }

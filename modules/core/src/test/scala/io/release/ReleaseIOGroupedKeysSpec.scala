@@ -116,8 +116,10 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     "releaseIOPublishArtifactsChecks"
   )
 
-  private lazy val releaseIOSource =
+  private lazy val releaseIOSource          =
     TestRepoFiles.readString("modules/core/src/main/scala/io/release/ReleaseIO.scala")
+  private lazy val releaseIOKeyGroupsSource =
+    TestRepoFiles.readString("modules/core/src/main/scala/io/release/ReleaseIOKeyGroups.scala")
 
   test("grouped core keys cover the full catalog and expose exact catalog-backed instances") {
     val groupedByLabel = groupedPublicKeys.toMap
@@ -166,5 +168,9 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
         .isDefined,
       "Expected only internal manifest helper keys to remain as _releaseIO private vals"
     )
+  }
+
+  test("ReleaseIOKeyGroups source points directly at grouped key modules") {
+    assert(!releaseIOKeyGroupsSource.contains("CorePublicKeyCatalog."))
   }
 }

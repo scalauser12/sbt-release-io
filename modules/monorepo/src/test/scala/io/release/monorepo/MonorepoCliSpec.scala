@@ -1,5 +1,6 @@
 package io.release.monorepo
 
+import io.release.internal.PluginEntrypointSupport.CommandMode
 import munit.FunSuite
 
 class MonorepoCliSpec extends FunSuite {
@@ -7,7 +8,7 @@ class MonorepoCliSpec extends FunSuite {
   test("splitMode - reserve help only in the first token position") {
     val (mode, remaining) = MonorepoCli.splitMode(Seq("help", "core"))
 
-    assertEquals(mode, MonorepoCli.CommandMode.Help)
+    assertEquals(mode, CommandMode.Help)
     assertEquals(remaining, Seq("core"))
   }
 
@@ -18,7 +19,7 @@ class MonorepoCliSpec extends FunSuite {
       result,
       Right(
         MonorepoCli.Parsed(
-          MonorepoCli.CommandMode.Run,
+          CommandMode.Run,
           Seq(
             MonorepoCli.Arg.SelectProject("core"),
             MonorepoCli.Arg.SelectProject("help")
@@ -38,7 +39,7 @@ class MonorepoCliSpec extends FunSuite {
       result,
       Right(
         MonorepoCli.Parsed(
-          MonorepoCli.CommandMode.Run,
+          CommandMode.Run,
           Seq(
             MonorepoCli.Arg.SelectProject("cross"),
             MonorepoCli.Arg.WithDefaults
@@ -75,7 +76,7 @@ class MonorepoCliSpec extends FunSuite {
       result,
       Right(
         MonorepoCli.Parsed(
-          MonorepoCli.CommandMode.Check,
+          CommandMode.Check,
           Seq(
             MonorepoCli.Arg.SelectProject("core"),
             MonorepoCli.Arg.WithDefaults,
@@ -104,7 +105,7 @@ class MonorepoCliSpec extends FunSuite {
       result,
       Right(
         MonorepoCli.Parsed(
-          MonorepoCli.CommandMode.Run,
+          CommandMode.Run,
           Seq(
             MonorepoCli.Arg.TagDefault("k"),
             MonorepoCli.Arg.SnapshotDependenciesDefault(true),
