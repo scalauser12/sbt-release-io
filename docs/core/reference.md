@@ -40,15 +40,26 @@ and the grouped names are now the canonical sbt key labels.
 | `releaseIOBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step entirely at runtime |
 | `releaseIOBehaviorInteractive` | `Boolean` | `false` | Enable interactive prompting in `run` mode |
 
+When interactive mode is enabled and no decision default is configured, four prompts may appear:
+
+| Prompt | When | Default |
+| ------ | ---- | ------- |
+| `Do you want to continue (y/n)? [n]` | Snapshot dependencies detected | no (abort) |
+| `Push changes to the remote repository (y/n)? [y]` | Before pushing | yes |
+| `Tag [<name>] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a]` | Tag already exists | abort |
+| `Error while checking remote. Still continue (y/n)? [n]` | Remote check fails or times out | no (abort) |
+
+When interactive is `false` (the default) and no decision default is set: snapshot-dependency and tag-conflict issues raise errors, push is skipped, and remote-check failures abort. The `with-defaults` CLI flag pre-answers all prompts with safe defaults without enabling interactive mode.
+
 ## Decision-default settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIODefaultsTagExistsAnswer` | `Option[String]` | `None` | Default answer for tag-conflict handling |
-| `releaseIODefaultsSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Default answer for snapshot-dependency confirmation |
-| `releaseIODefaultsRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Default answer when the remote check fails |
-| `releaseIODefaultsUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Default answer when the branch is behind upstream |
-| `releaseIODefaultsPushAnswer` | `Option[Boolean]` | `None` | Default answer for the final push prompt |
+| `releaseIODefaultsTagExistsAnswer` | `Option[String]` | `None` | Pre-answer for tag conflicts: `"o"` (overwrite), `"k"` (keep existing), `"a"` (abort), or a replacement tag name. `None` = prompt or abort |
+| `releaseIODefaultsSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Pre-answer for snapshot dependencies: `true` = continue, `false` = abort. `None` = prompt or abort |
+| `releaseIODefaultsRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Pre-answer when remote check fails: `true` = continue, `false` = abort. `None` = prompt or abort |
+| `releaseIODefaultsUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Pre-answer when branch is behind upstream: `true` = continue, `false` = abort. `None` = prompt or abort |
+| `releaseIODefaultsPushAnswer` | `Option[Boolean]` | `None` | Pre-answer for push: `true` = push, `false` = skip push. `None` = prompt or skip |
 
 ## Versioning settings
 
@@ -132,8 +143,8 @@ so `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` do not exist whe
 | `Minor` | `1.0.0 -> 1.1.0` | Bump minor version |
 | `Bugfix` | `1.0.0 -> 1.0.1` | Bump patch version |
 | `Nano` | `1.0.0.0 -> 1.0.0.1` | Bump nano version |
-| `Next` | `1.0-RC1 -> 1.0-RC2` | Increment the next component, including prerelease |
-| `NextStable` | `1.0-RC1 -> 1.0` | Drop the prerelease qualifier |
+| `Next` | `1.0.0 -> 1.0.1`, `1.0-RC1 -> 1.0-RC2` | Increment the last component (patch for stable, qualifier for pre-release) |
+| `NextStable` | `1.0.0 -> 1.0.1`, `1.0-RC1 -> 1.0` | For stable: same as `Next`. For pre-release: drop the qualifier |
 
 ## CLI
 

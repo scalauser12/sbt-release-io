@@ -10,6 +10,8 @@
 - **Cross-build support**: Steps like test and publish run once per `crossScalaVersions` entry
 - **Resource-safe custom plugins**: `MonorepoReleasePluginLike[T]` acquires a shared resource (HTTP client, temp dir, etc.) once for the entire release with guaranteed cleanup
 
+> **Note:** This plugin supports Git only. If your project uses Mercurial or Subversion, see [sbt-release](https://github.com/sbt/sbt-release).
+
 ## Installation
 
 Add to `project/plugins.sbt`:
