@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
+import io.release.internal.CoreStepAliases.Step
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
@@ -483,7 +484,7 @@ class CorePreflightSpec extends CatsEffectSuite {
       )
     )
 
-  private val skipPublishInValidationStep: ProcessStep.Single[ReleaseContext] =
+  private val skipPublishInValidationStep: Step =
     ProcessStep
       .single[ReleaseContext]("skip-publish-in-validation")
       .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
@@ -492,7 +493,7 @@ class CorePreflightSpec extends CatsEffectSuite {
   private def overrideVersionTasksInValidationStep(
       releaseVersion: String,
       nextVersion: String
-  ): ProcessStep.Single[ReleaseContext] =
+  ): Step =
     ProcessStep
       .single[ReleaseContext](s"override-version-tasks-$releaseVersion")
       .withValidationContext { currentCtx =>

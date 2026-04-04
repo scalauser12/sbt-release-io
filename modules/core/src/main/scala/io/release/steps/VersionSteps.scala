@@ -2,6 +2,7 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
+import io.release.internal.CoreStepAliases.Step
 import io.release.internal.CoreStepFactory
 import io.release.internal.ProcessStep
 import io.release.internal.VersionPlan
@@ -62,25 +63,25 @@ private[release] object VersionSteps {
       IO.pure(s"""$key := "$ver"\n""")
     }
 
-  val inquireVersions: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
+  val inquireVersions: Step = ProcessStep.Single(
     name = "inquire-versions",
     validate = ReleaseVersionWorkflow.validateInquireVersions,
     execute = ReleaseVersionWorkflow.inquireVersions
   )
 
-  val setReleaseVersion: ProcessStep.Single[ReleaseContext] =
+  val setReleaseVersion: Step =
     CoreStepFactory.io("set-release-version")(ReleaseVersionWorkflow.writeReleaseVersion)
 
-  val setNextVersion: ProcessStep.Single[ReleaseContext] =
+  val setNextVersion: Step =
     CoreStepFactory.io("set-next-version")(ReleaseVersionWorkflow.writeNextVersion)
 
-  val commitReleaseVersion: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
+  val commitReleaseVersion: Step = ProcessStep.Single(
     name = "commit-release-version",
     validate = VcsSteps.validateCleanWorkingDir(_, logStartHash = false),
     execute = ReleaseVersionWorkflow.commitReleaseVersion
   )
 
-  val commitNextVersion: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
+  val commitNextVersion: Step = ProcessStep.Single(
     name = "commit-next-version",
     validate = VcsSteps.validateCleanWorkingDir(_, logStartHash = false),
     execute = ReleaseVersionWorkflow.commitNextVersion

@@ -11,6 +11,7 @@ import io.release.ReleaseIO.releaseIOVersioningFileContents
 import io.release.ReleaseIO.releaseIOVersioningReadVersion
 import io.release.ReleaseIO.releaseIOVersioningUseGlobal
 import io.release.VcsOps
+import io.release.internal.CoreStepAliases.Step
 import io.release.internal.CoreStepFactory
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
@@ -33,12 +34,11 @@ private[release] object VcsSteps {
       status: String
   )
 
-  val initializeVcs: ProcessStep.Single[ReleaseContext] = CoreStepFactory.io("initialize-vcs") {
-    ctx =>
-      VcsOps.detectAndInit(ctx)
+  val initializeVcs: Step = CoreStepFactory.io("initialize-vcs") { ctx =>
+    VcsOps.detectAndInit(ctx)
   }
 
-  val checkCleanWorkingDir: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
+  val checkCleanWorkingDir: Step = ProcessStep.Single(
     name = "check-clean-working-dir",
     execute = ctx => IO.pure(ctx),
     validate = validateCleanWorkingDir(_, logStartHash = true)
@@ -66,7 +66,7 @@ private[release] object VcsSteps {
   // No validation phase: the tag name depends on releaseIOVcsTagName, which is resolved from the
   // release version set by inquireVersions.execute. At validation time, that version is not yet
   // available, so tag-exists checks can only run during execution.
-  val tagRelease: ProcessStep.Single[ReleaseContext] = CoreStepFactory.io("tag-release") { ctx =>
+  val tagRelease: Step = CoreStepFactory.io("tag-release") { ctx =>
     requireVcs(ctx) { vcs =>
       for {
         params <- resolveTagPlan(ctx)
@@ -199,7 +199,7 @@ private[release] object VcsSteps {
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call.
-  val pushChanges: ProcessStep.Single[ReleaseContext] = ProcessStep.Single(
+  val pushChanges: Step = ProcessStep.Single(
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>

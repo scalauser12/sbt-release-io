@@ -5,7 +5,7 @@ import cats.effect.Ref
 import cats.effect.Resource
 import io.release.internal.CoreCommandExecution
 import io.release.internal.CoreLifecycle
-import io.release.internal.ProcessStep
+import io.release.internal.CoreStepAliases.Step
 import sbt.Project
 import sbt.Setting
 import sbt.State
@@ -158,7 +158,7 @@ trait ReleasePluginIOSpecSupport {
 
   protected def checkSteps(
       processMode: CoreCommandExecution.CompiledSteps
-  ): Seq[ProcessStep.Single[ReleaseContext]] =
+  ): Seq[Step] =
     processMode.steps
 
   protected def runStepNames(runProcess: CoreCommandExecution.CompiledSteps): Seq[String] =
@@ -166,6 +166,6 @@ trait ReleasePluginIOSpecSupport {
 
   protected def runSteps(
       runProcess: CoreCommandExecution.CompiledSteps
-  ): Seq[ProcessStep.Single[ReleaseContext]] =
+  ): Seq[Step] =
     runProcess.steps
 }

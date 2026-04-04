@@ -8,6 +8,7 @@ import io.release.TestSupport
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ProcessStep
 import io.release.internal.SbtRuntime
+import io.release.monorepo.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.monorepo.steps.MonorepoStepTestCompat
 import io.release.monorepo.steps.MonorepoVcsSteps
@@ -654,7 +655,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
       }
     }
 
-  private val requiresVcsValidationStep: ProcessStep.Single[MonorepoContext] =
+  private val requiresVcsValidationStep: GlobalStep =
     ProcessStep
       .single[MonorepoContext]("requires-vcs")
       .withValidation(ctx =>
@@ -664,13 +665,13 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
       )
       .validateOnly
 
-  private val skipPublishInValidationStep: ProcessStep.Single[MonorepoContext] =
+  private val skipPublishInValidationStep: GlobalStep =
     ProcessStep
       .single[MonorepoContext]("skip-publish-in-validation")
       .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
       .validateOnly
 
-  private val requiresResolvedVersionsValidationStep: ProcessStep.Single[MonorepoContext] =
+  private val requiresResolvedVersionsValidationStep: GlobalStep =
     ProcessStep
       .single[MonorepoContext]("requires-resolved-versions")
       .withValidation(currentCtx =>
@@ -687,7 +688,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
 
   private def narrowProjectsInValidationStep(
       name: String
-  ): ProcessStep.Single[MonorepoContext] =
+  ): GlobalStep =
     ProcessStep
       .single[MonorepoContext](s"narrow-projects-to-$name")
       .withValidationContext(currentCtx =>

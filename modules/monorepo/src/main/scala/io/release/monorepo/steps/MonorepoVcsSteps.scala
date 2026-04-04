@@ -9,8 +9,9 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoStepAliases.GlobalStep
+import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.MonorepoVersionFiles
-import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import io.release.steps.StepHelpers.required
 import io.release.steps.StepHelpers.useDefaults
@@ -29,12 +30,12 @@ private[monorepo] object MonorepoVcsSteps {
       status: String
   )
 
-  val initializeVcs: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
+  val initializeVcs: GlobalStep = ProcessStep.Single(
     name = "initialize-vcs",
     execute = ctx => VcsOps.detectAndInit(ctx)
   )
 
-  val checkCleanWorkingDir: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
+  val checkCleanWorkingDir: GlobalStep = ProcessStep.Single(
     name = "check-clean-working-dir",
     execute = ctx => IO.pure(ctx),
     validate = ctx =>
@@ -111,8 +112,7 @@ private[monorepo] object MonorepoVcsSteps {
       }
     }
 
-  private[monorepo] val tagReleasesPerProject
-      : ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+  private[monorepo] val tagReleasesPerProject: ProjectStep =
     ProcessStep.PerItem(
       name = "tag-releases",
       execute = (ctx, project) =>
@@ -176,7 +176,7 @@ private[monorepo] object MonorepoVcsSteps {
     * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
     * users should verify their VCS behavior.
     */
-  val pushChanges: ProcessStep.Single[MonorepoContext] = ProcessStep.Single(
+  val pushChanges: GlobalStep = ProcessStep.Single(
     name = "push-changes",
     validateWithContext = Some(ctx =>
       required(ctx.vcs, MissingVcsMessage) { vcs =>

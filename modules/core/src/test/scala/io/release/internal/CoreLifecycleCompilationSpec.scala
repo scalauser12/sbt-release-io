@@ -5,6 +5,7 @@ import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
+import io.release.internal.CoreStepAliases.Step
 import io.release.TestSupport
 import io.release.steps.ReleaseSteps
 import munit.CatsEffectSuite
@@ -297,7 +298,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
   private def hookSettingsDefaults: Seq[Setting[?]] =
     CoreLifecycle.configDefaultSettings
 
-  private def compileLifecycle(state: State): Seq[ProcessStep.Single[ReleaseContext]] =
+  private def compileLifecycle(state: State): Seq[Step] =
     CoreLifecycle.compile(CoreHookConfiguration.resolve(state))
 
   private def repoPath(relative: String): Path = {
@@ -332,13 +333,13 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     )
 
   private def runPublishHooks(
-      steps: Seq[ProcessStep.Single[ReleaseContext]],
+      steps: Seq[Step],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     validatePublishHooks(steps, ctx).flatMap(executePublishHooks(steps, _))
 
   private def validatePublishHooks(
-      steps: Seq[ProcessStep.Single[ReleaseContext]],
+      steps: Seq[Step],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
@@ -346,7 +347,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     }
 
   private def executePublishHooks(
-      steps: Seq[ProcessStep.Single[ReleaseContext]],
+      steps: Seq[Step],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>

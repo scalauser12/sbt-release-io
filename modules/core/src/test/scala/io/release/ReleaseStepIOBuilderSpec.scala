@@ -3,6 +3,7 @@ package io.release
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
+import io.release.internal.CoreStepAliases.Step
 import io.release.internal.ProcessStep
 import munit.CatsEffectSuite
 import sbt.AttributeKey
@@ -121,13 +122,13 @@ class ReleaseStepIOBuilderSpec extends CatsEffectSuite {
     }
   }
 
-  private def assertPassesThrough(step: ProcessStep.Single[ReleaseContext]): IO[Unit] =
+  private def assertPassesThrough(step: Step): IO[Unit] =
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       step.execute(ctx).map(result => assertEquals(result, ctx))
     }
 
   private def assertValidationRuns(
-      buildStep: Ref[IO, Boolean] => ProcessStep.Single[ReleaseContext]
+      buildStep: Ref[IO, Boolean] => Step
   ): IO[Unit] =
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       Ref.of[IO, Boolean](false).flatMap { validationRan =>

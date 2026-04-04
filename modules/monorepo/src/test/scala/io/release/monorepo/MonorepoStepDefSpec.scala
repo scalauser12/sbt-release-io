@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.internal.ProcessStep
+import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.AttributeKey
@@ -131,7 +132,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("built-in tag-releases remains a per-project step") {
     assert(
       MonorepoReleaseSteps.tagReleasesPerProject.isInstanceOf[
-        ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]
+        ProjectStep
       ]
     )
   }

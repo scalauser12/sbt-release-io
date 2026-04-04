@@ -3,6 +3,7 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseComposer
 import io.release.ReleaseContext
+import io.release.internal.CoreStepAliases.Step
 import io.release.steps.ReleaseSteps
 import io.release.steps.VcsSteps
 import io.release.steps.VersionSteps
@@ -26,7 +27,7 @@ private[release] object CorePreflight {
   )
 
   private object CheckSteps {
-    def apply(steps: Seq[ProcessStep.Single[ReleaseContext]]): CheckSteps = {
+    def apply(steps: Seq[Step]): CheckSteps = {
       val stepNames = steps.map(_.name)
 
       CheckSteps(
@@ -127,7 +128,7 @@ private[release] object CorePreflight {
 
   def check(
       initialCtx: ReleaseContext,
-      steps: Seq[ProcessStep.Single[ReleaseContext]],
+      steps: Seq[Step],
       crossBuild: Boolean
   ): IO[Summary] = {
     val checkSteps = CheckSteps(steps)
