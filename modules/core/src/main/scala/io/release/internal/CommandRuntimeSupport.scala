@@ -31,10 +31,4 @@ private[release] object CommandRuntimeSupport {
       )
     else IO.pure(ctx)
 
-  def logLines(
-      state: State,
-      prefix: String,
-      lines: Seq[String]
-  ): IO[Unit] =
-    ReleaseCommandRunner.logLines(state, prefix, lines)
 }

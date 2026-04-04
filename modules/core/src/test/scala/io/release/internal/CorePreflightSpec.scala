@@ -391,18 +391,16 @@ class CorePreflightSpec extends CatsEffectSuite {
         )
         val initialCtx  = ReleaseContext(state = state, interactive = false).withExecutionState(
           CoreExecutionState(
-            CoreReleasePlan.build(
-              CoreReleasePlan.Inputs(
-                useDefaults = false,
-                skipTests = false,
-                skipPublish = false,
-                interactive = false,
-                crossBuild = false,
-                releaseVersionOverride = None,
-                nextVersionOverride = None,
-                decisionDefaults = ReleaseDecisionDefaults.empty,
-                commandName = "releaseIO"
-              )
+            CoreReleasePlan.fromFlags(
+              useDefaults = false,
+              skipTests = false,
+              skipPublish = false,
+              interactive = false,
+              crossBuild = false,
+              releaseVersionOverride = None,
+              nextVersionOverride = None,
+              decisionDefaults = ReleaseDecisionDefaults.empty,
+              commandName = "releaseIO"
             )
           )
         )
@@ -471,18 +469,16 @@ class CorePreflightSpec extends CatsEffectSuite {
   private def releaseContext(state: sbt.State): ReleaseContext =
     ReleaseContext(state = state, interactive = false).withExecutionState(
       CoreExecutionState(
-        CoreReleasePlan.build(
-          CoreReleasePlan.Inputs(
-            useDefaults = false,
-            skipTests = false,
-            skipPublish = false,
-            interactive = false,
-            crossBuild = false,
-            releaseVersionOverride = None,
-            nextVersionOverride = None,
-            decisionDefaults = ReleaseDecisionDefaults.empty,
-            commandName = "releaseIO"
-          )
+        CoreReleasePlan.fromFlags(
+          useDefaults = false,
+          skipTests = false,
+          skipPublish = false,
+          interactive = false,
+          crossBuild = false,
+          releaseVersionOverride = None,
+          nextVersionOverride = None,
+          decisionDefaults = ReleaseDecisionDefaults.empty,
+          commandName = "releaseIO"
         )
       )
     )

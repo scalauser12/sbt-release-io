@@ -100,9 +100,10 @@ private[monorepo] object MonorepoCrossBuild {
     IO.blocking {
       val extracted     = SbtRuntime.extracted(ctx.state)
       val crossVersions =
-        CrossBuildSupport.distinctCrossScalaVersions(
-          (project.ref / crossScalaVersions).get(extracted.structure.data).getOrElse(Seq.empty)
-        )
+        (project.ref / crossScalaVersions)
+          .get(extracted.structure.data)
+          .getOrElse(Seq.empty)
+          .distinct
       (crossVersions, ctx.state)
     }.flatMap { case (crossVersions, entryState) =>
       if (crossVersions.isEmpty)

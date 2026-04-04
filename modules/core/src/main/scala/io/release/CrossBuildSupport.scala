@@ -12,12 +12,6 @@ import sbt.{internal as _, *}
   */
 private[release] object CrossBuildSupport {
 
-  /** Normalize configured cross-build versions by removing duplicates while preserving
-    * first-seen order.
-    */
-  def distinctCrossScalaVersions(versions: Seq[String]): Seq[String] =
-    versions.distinct
-
   /** Switch Scala version by fully reloading the project structure.
     * Based on `sbt.Cross.switchVersion` logic.
     * Wraps the entire operation in `IO.blocking` since it calls sbt internals

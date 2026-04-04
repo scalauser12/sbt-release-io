@@ -89,7 +89,7 @@ private[release] object ReleaseComposer {
       val entryState    = ctx.state
       val extracted     = SbtRuntime.extracted(entryState)
       val crossVersions =
-        CrossBuildSupport.distinctCrossScalaVersions(extracted.get(crossScalaVersions))
+        extracted.get(crossScalaVersions).distinct
       (crossVersions, entryState)
     }.flatMap { case (crossVersions, entryState) =>
       def switchToVersion(currentCtx: ReleaseContext, version: String): IO[ReleaseContext] =
