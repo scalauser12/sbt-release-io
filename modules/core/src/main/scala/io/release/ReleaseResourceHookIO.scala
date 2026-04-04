@@ -71,7 +71,7 @@ object ReleaseResourceHooks {
   def empty[T]: ReleaseResourceHooks[T] = ReleaseResourceHooks[T]()
 
   private type HookAssignment =
-    (LifecycleConfigCompiler.HookSlot[CoreHookConfiguration, ReleaseHookIO], Seq[ReleaseHookIO])
+    (LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO], Seq[ReleaseHookIO])
 
   private def hookBuckets[T](hooks: ReleaseResourceHooks[T]): Seq[Seq[ReleaseResourceHookIO[T]]] =
     Seq(

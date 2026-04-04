@@ -6,6 +6,7 @@ private[release] object LifecycleConfigCompiler {
 
   sealed trait Binding[Config] {
     def id: String
+    def keyLabel: String
     def defaultSetting: Setting[?]
     def resolve(extracted: Extracted, config: Config): Config
     def merge(left: Config, right: Config): Config
@@ -13,12 +14,15 @@ private[release] object LifecycleConfigCompiler {
   }
 
   final case class PolicyBinding[Config](
-      id: String,
       key: SettingKey[Boolean],
       get: Config => Boolean,
       updated: (Config, Boolean) => Config
   ) extends Binding[Config] {
+    override val id: String                 = key.key.label
+    override val keyLabel: String           = key.key.label
     override val defaultSetting: Setting[?] = key := true
+
+    val enabled: Config => Boolean = get
 
     override def resolve(extracted: Extracted, config: Config): Config =
       updated(config, extracted.get(key))
@@ -31,12 +35,15 @@ private[release] object LifecycleConfigCompiler {
   }
 
   final case class HookBinding[Config, Hook](
-      id: String,
       key: SettingKey[Seq[Hook]],
       get: Config => Seq[Hook],
       updated: (Config, Seq[Hook]) => Config
   ) extends Binding[Config] {
+    override val id: String                 = key.key.label
+    override val keyLabel: String           = key.key.label
     override val defaultSetting: Setting[?] = key := Seq.empty[Hook]
+
+    val resolveHooks: Config => Seq[Hook] = get
 
     override def resolve(extracted: Extracted, config: Config): Config =
       updated(config, extracted.get(key))
@@ -48,91 +55,19 @@ private[release] object LifecycleConfigCompiler {
       get(config).nonEmpty
   }
 
-  sealed trait Slot[Config] {
-    def id: String
-    def keyLabel: String
-    def binding: Binding[Config]
-  }
-
-  final case class PolicySlot[Config](
-      binding: PolicyBinding[Config]
-  ) extends Slot[Config] {
-    override val id: String       = binding.id
-    override val keyLabel: String = binding.key.key.label
-
-    val enabled: Config => Boolean = binding.get
-  }
-
-  final case class HookSlot[Config, Hook](
-      binding: HookBinding[Config, Hook]
-  ) extends Slot[Config] {
-    override val id: String       = binding.id
-    override val keyLabel: String = binding.key.key.label
-
-    val resolveHooks: Config => Seq[Hook] = binding.get
-
-    def updated(config: Config, hooks: Seq[Hook]): Config =
-      binding.updated(config, hooks)
-  }
-
   def policyBinding[Config](
-      id: String,
       key: SettingKey[Boolean],
       get: Config => Boolean,
       updated: (Config, Boolean) => Config
   ): PolicyBinding[Config] =
-    PolicyBinding(
-      id = id,
-      key = key,
-      get = get,
-      updated = updated
-    )
+    PolicyBinding(key = key, get = get, updated = updated)
 
   def hookBinding[Config, Hook](
-      id: String,
       key: SettingKey[Seq[Hook]],
       get: Config => Seq[Hook],
       updated: (Config, Seq[Hook]) => Config
   ): HookBinding[Config, Hook] =
-    HookBinding(
-      id = id,
-      key = key,
-      get = get,
-      updated = updated
-    )
-
-  def policySlot[Config](
-      key: SettingKey[Boolean],
-      get: Config => Boolean,
-      updated: (Config, Boolean) => Config
-  ): PolicySlot[Config] =
-    PolicySlot(
-      policyBinding(
-        id = key.key.label,
-        key = key,
-        get = get,
-        updated = updated
-      )
-    )
-
-  def hookSlot[Config, Hook](
-      key: SettingKey[Seq[Hook]],
-      get: Config => Seq[Hook],
-      updated: (Config, Seq[Hook]) => Config
-  ): HookSlot[Config, Hook] =
-    HookSlot(
-      hookBinding(
-        id = key.key.label,
-        key = key,
-        get = get,
-        updated = updated
-      )
-    )
-
-  def configBindings[Config](
-      slots: Seq[Slot[Config]]
-  ): Seq[Binding[Config]] =
-    slots.map(_.binding)
+    HookBinding(key = key, get = get, updated = updated)
 
   def defaultSettings[Config, C, I](
       phases: Seq[LifecycleCompiler.Phase[Config, C, I]]

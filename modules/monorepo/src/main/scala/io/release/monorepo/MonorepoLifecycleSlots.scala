@@ -4,18 +4,19 @@ import io.release.internal.LifecycleConfigCompiler
 
 private[release] object MonorepoLifecycleSlots {
 
-  val policySlots: Vector[LifecycleConfigCompiler.PolicySlot[MonorepoHookConfiguration]] =
+  val policySlots: Vector[LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]] =
     MonorepoPolicySlots.policySlots
 
-  val globalHookSlots
-      : Vector[LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoGlobalHookIO]] =
+  val globalHookSlots: Vector[
+    LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
+  ] =
     MonorepoGlobalHookSlots.globalHookSlots
 
   val projectHookSlots: Vector[
-    LifecycleConfigCompiler.HookSlot[MonorepoHookConfiguration, MonorepoProjectHookIO]
+    LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoProjectHookIO]
   ] =
     MonorepoProjectHookSlots.projectHookSlots
 
-  val slots: Vector[LifecycleConfigCompiler.Slot[MonorepoHookConfiguration]] =
+  val slots: Vector[LifecycleConfigCompiler.Binding[MonorepoHookConfiguration]] =
     policySlots ++ globalHookSlots ++ projectHookSlots
 }
