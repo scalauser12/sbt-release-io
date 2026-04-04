@@ -9,53 +9,98 @@ class MonorepoReleaseIOGroupedKeysSpec
     extends CatsEffectSuite
     with MonorepoReleasePluginSpecSupport {
 
-  private def groupedKeyRef[A](key: SettingKey[A]): (String, AnyRef) =
-    key.key.label -> key.asInstanceOf[AnyRef]
+  private def keyLabel[A](key: SettingKey[A]): String = key.key.label
 
-  private val groupedPublicKeys = Vector(
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoSelectionProjects),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoBehaviorInteractive),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseVersionWrite),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseVersionWrite),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeTag),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforePublish),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterPublish),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextVersionWrite),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoVersioningFile),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoDetectionEnabled),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoDetectionExcludes),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoDetectionSharedPaths),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoVcsTagName),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoVcsTagComment),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoVcsReleaseCommitMessage),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoVcsNextCommitMessage),
-    groupedKeyRef(MonorepoReleaseIO.releaseIOMonorepoPublishChecks)
+  private val expectedLabels = Set(
+    "releaseIOMonorepoSelectionProjects",
+    "releaseIOMonorepoBehaviorCrossBuild",
+    "releaseIOMonorepoBehaviorSkipTests",
+    "releaseIOMonorepoBehaviorSkipPublish",
+    "releaseIOMonorepoBehaviorInteractive",
+    "releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck",
+    "releaseIOMonorepoPolicyEnableRunClean",
+    "releaseIOMonorepoPolicyEnableRunTests",
+    "releaseIOMonorepoPolicyEnableTagging",
+    "releaseIOMonorepoPolicyEnablePublish",
+    "releaseIOMonorepoPolicyEnablePush",
+    "releaseIOMonorepoHooksAfterCleanCheck",
+    "releaseIOMonorepoHooksBeforeSelection",
+    "releaseIOMonorepoHooksAfterSelection",
+    "releaseIOMonorepoHooksBeforeVersionResolution",
+    "releaseIOMonorepoHooksAfterVersionResolution",
+    "releaseIOMonorepoHooksBeforeReleaseVersionWrite",
+    "releaseIOMonorepoHooksAfterReleaseVersionWrite",
+    "releaseIOMonorepoHooksBeforeReleaseCommit",
+    "releaseIOMonorepoHooksAfterReleaseCommit",
+    "releaseIOMonorepoHooksBeforeTag",
+    "releaseIOMonorepoHooksAfterTag",
+    "releaseIOMonorepoHooksBeforePublish",
+    "releaseIOMonorepoHooksAfterPublish",
+    "releaseIOMonorepoHooksBeforeNextVersionWrite",
+    "releaseIOMonorepoHooksAfterNextVersionWrite",
+    "releaseIOMonorepoHooksBeforeNextCommit",
+    "releaseIOMonorepoHooksAfterNextCommit",
+    "releaseIOMonorepoHooksBeforePush",
+    "releaseIOMonorepoHooksAfterPush",
+    "releaseIOMonorepoVersioningFile",
+    "releaseIOMonorepoVersioningReadVersion",
+    "releaseIOMonorepoVersioningFileContents",
+    "releaseIOMonorepoDetectionEnabled",
+    "releaseIOMonorepoDetectionIncludeDownstream",
+    "releaseIOMonorepoDetectionChangeDetector",
+    "releaseIOMonorepoDetectionExcludes",
+    "releaseIOMonorepoDetectionSharedPaths",
+    "releaseIOMonorepoVcsTagName",
+    "releaseIOMonorepoVcsTagComment",
+    "releaseIOMonorepoVcsReleaseCommitMessage",
+    "releaseIOMonorepoVcsNextCommitMessage",
+    "releaseIOMonorepoPublishChecks"
+  )
+
+  private val actualLabels = Set(
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoSelectionProjects),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoBehaviorInteractive),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseVersionWrite),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseVersionWrite),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeTag),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforePublish),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterPublish),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextVersionWrite),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoVersioningFile),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoDetectionEnabled),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoDetectionExcludes),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoDetectionSharedPaths),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoVcsTagName),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoVcsTagComment),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoVcsReleaseCommitMessage),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoVcsNextCommitMessage),
+    keyLabel(MonorepoReleaseIO.releaseIOMonorepoPublishChecks)
   )
 
   private val removedAliases = Seq(
@@ -104,24 +149,14 @@ class MonorepoReleaseIOGroupedKeysSpec
     "releaseIOMonorepoNextCommitMessage"
   )
 
-  private lazy val monorepoReleaseIOSource          =
+  private lazy val monorepoReleaseIOSource =
     TestRepoFiles.readString(
       "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleaseIO.scala"
     )
-  private lazy val monorepoReleaseIOKeyGroupsSource =
-    TestRepoFiles.readString(
-      "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleaseIOKeyGroups.scala"
-    )
 
-  test("grouped monorepo keys cover the full catalog and expose exact catalog-backed instances") {
-    val groupedByLabel = groupedPublicKeys.toMap
-
-    assertEquals(groupedPublicKeys.map(_._1), MonorepoPublicKeyCatalog.publicEntries.map(_.label))
-    assertEquals(groupedByLabel.keySet, MonorepoPublicKeyCatalog.publicEntries.map(_.label).toSet)
-
-    MonorepoPublicKeyCatalog.publicEntries.foreach { entry =>
-      assert(groupedByLabel(entry.label) eq entry.keyRef, entry.label)
-    }
+  test("MonorepoReleaseIO exposes the full set of 43 expected public keys") {
+    assertEquals(actualLabels, expectedLabels)
+    assertEquals(actualLabels.size, 43)
   }
 
   test("grouped monorepo settings resolve expected defaults") {
@@ -129,15 +164,30 @@ class MonorepoReleaseIOGroupedKeysSpec
       IO {
         val extracted = io.release.TestkitSbtCompat.extract(loaded.state)
 
-        assertEquals(extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild), false)
-        assertEquals(extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests), false)
-        assertEquals(extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish), false)
-        assertEquals(extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish), true)
+        assertEquals(
+          extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild),
+          false
+        )
+        assertEquals(
+          extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests),
+          false
+        )
+        assertEquals(
+          extracted.get(MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish),
+          false
+        )
+        assertEquals(
+          extracted.get(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish),
+          true
+        )
         assertEquals(
           extracted.get(MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck),
           Seq.empty
         )
-        assertEquals(extracted.get(MonorepoReleaseIO.releaseIOMonorepoPublishChecks), true)
+        assertEquals(
+          extracted.get(MonorepoReleaseIO.releaseIOMonorepoPublishChecks),
+          true
+        )
       }
     }
   }
@@ -146,7 +196,9 @@ class MonorepoReleaseIOGroupedKeysSpec
     assert(!monorepoReleaseIOSource.contains("@deprecated("))
     removedAliases.foreach { name =>
       assert(
-        !monorepoReleaseIOSource.contains(s"val $name"),
+        !s"(?m)^\\s+(?:lazy\\s+)?val ${java.util.regex.Pattern.quote(name)}\\b".r
+          .findFirstIn(monorepoReleaseIOSource)
+          .isDefined,
         s"Expected $name to be removed from MonorepoReleaseIO.scala"
       )
     }
@@ -163,9 +215,5 @@ class MonorepoReleaseIOGroupedKeysSpec
         .isDefined,
       "Expected MonorepoReleaseIO.scala to remove private _releaseIOMonorepo forwarding aliases"
     )
-  }
-
-  test("MonorepoReleaseIOKeyGroups source points directly at grouped key modules") {
-    assert(!monorepoReleaseIOKeyGroupsSource.contains("MonorepoPublicKeyCatalog."))
   }
 }
