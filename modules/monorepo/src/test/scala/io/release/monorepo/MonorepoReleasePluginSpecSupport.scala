@@ -5,6 +5,9 @@ import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
 import io.release.internal.ProcessStep
+import io.release.monorepo.MonorepoStepAliases.AnyStep
+import io.release.monorepo.MonorepoStepAliases.GlobalStep
+import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import sbt.*
 import sbt.Project
 import sbt.ProjectRef
@@ -175,7 +178,7 @@ trait MonorepoReleasePluginSpecSupport {
 
   protected def checkSteps(
       processMode: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
+  ): Seq[AnyStep] =
     processMode.steps
 
   protected def runStepNames(
@@ -185,7 +188,7 @@ trait MonorepoReleasePluginSpecSupport {
 
   protected def runSteps(
       runProcess: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
+  ): Seq[AnyStep] =
     runProcess.steps
 
   protected def sampleProject(loaded: LoadedState): ProjectReleaseInfo =
@@ -207,7 +210,7 @@ trait MonorepoReleasePluginSpecSupport {
     )
 
   protected def runMonorepoCheckSteps(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      steps: Seq[AnyStep],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[Unit] =
@@ -219,11 +222,11 @@ trait MonorepoReleasePluginSpecSupport {
         ioCtx.flatMap { current =>
           step match {
             case global: ProcessStep.Single[?]                    =>
-              val single = global.asInstanceOf[ProcessStep.Single[MonorepoContext]]
+              val single = global.asInstanceOf[GlobalStep]
               single.validate(current) *> single.execute(current)
             case perProject: ProcessStep.PerItem[?, ?] @unchecked =>
               val item = perProject
-                .asInstanceOf[ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]]
+                .asInstanceOf[ProjectStep]
               item.validate(current, project) *> item.execute(current, project)
           }
         }
@@ -231,7 +234,7 @@ trait MonorepoReleasePluginSpecSupport {
       .void
 
   protected def runMonorepoRunSteps(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      steps: Seq[AnyStep],
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[Unit] =

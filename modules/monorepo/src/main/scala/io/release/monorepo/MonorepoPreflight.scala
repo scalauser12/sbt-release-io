@@ -7,6 +7,7 @@ import io.release.internal.ExecutionEngine
 import io.release.internal.HelpDocsLinks
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
+import io.release.monorepo.MonorepoStepAliases.AnyStep
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import io.release.monorepo.steps.MonorepoVcsSteps
 
@@ -31,7 +32,7 @@ private[monorepo] object MonorepoPreflight {
   )
 
   private object CheckSteps {
-    def apply(steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]): CheckSteps = {
+    def apply(steps: Seq[AnyStep]): CheckSteps = {
       val stepNames              = steps.map(_.name)
       val shouldResolveSelection = stepNames.contains(DetectOrSelectProjectsStep)
       val shouldResolveVersions  = stepNames.contains(InquireVersionsStep)
@@ -52,12 +53,12 @@ private[monorepo] object MonorepoPreflight {
   }
 
   private final case class CheckSegments(
-      setupSteps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
-      mainSteps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
+      setupSteps: Seq[AnyStep],
+      mainSteps: Seq[AnyStep]
   )
 
   private object CheckSegments {
-    def apply(steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]): CheckSegments = {
+    def apply(steps: Seq[AnyStep]): CheckSegments = {
       val boundaryIndex = steps.indexWhere {
         case step: ProcessStep.Single[?] => step.isSelectionBoundary
         case _                           => false
@@ -162,7 +163,7 @@ private[monorepo] object MonorepoPreflight {
 
   def check(
       session: MonorepoPreparedSession,
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
+      steps: Seq[AnyStep]
   ): IO[Summary] = {
     val checkSteps    = CheckSteps(steps)
     val checkSegments = CheckSegments(steps)
@@ -212,7 +213,7 @@ private[monorepo] object MonorepoPreflight {
 
   private def checkWithoutSelectionBoundary(
       baseCtx: MonorepoContext,
-      normalizedSteps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      normalizedSteps: Seq[AnyStep],
       checkSteps: CheckSteps,
       crossBuildEnabled: Boolean
   ): IO[Summary] = {
@@ -231,7 +232,7 @@ private[monorepo] object MonorepoPreflight {
   private def checkVersionAwareSegment(
       baseCtx: MonorepoContext,
       selectionMode: Evaluation[SelectionMode],
-      normalizedSteps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      normalizedSteps: Seq[AnyStep],
       checkSteps: CheckSteps,
       crossBuildEnabled: Boolean
   ): IO[Summary] =
@@ -335,7 +336,7 @@ private[monorepo] object MonorepoPreflight {
       MonorepoVcsSteps.preflightTags(ctx).map(Evaluation.Resolved(_))
 
   private def validateSegment(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      steps: Seq[AnyStep],
       crossBuild: Boolean
   )(ctx: MonorepoContext): IO[MonorepoContext] =
     ExecutionEngine.runValidations(
@@ -345,11 +346,11 @@ private[monorepo] object MonorepoPreflight {
     )
 
   private def splitAtBuiltInVersionResolution(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
+      steps: Seq[AnyStep]
   ): Option[
     (
-        Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
-        Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
+        Seq[AnyStep],
+        Seq[AnyStep]
     )
   ] = {
     val versionIndex = steps.indexWhere(_.name == InquireVersionsStep)
@@ -359,7 +360,7 @@ private[monorepo] object MonorepoPreflight {
   }
 
   private def builtInTagPreflightFollowsVersionResolution(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
+      steps: Seq[AnyStep]
   ): Boolean = {
     val versionIndex = steps.indexWhere(_.name == InquireVersionsStep)
     val tagIndex     = steps.indexWhere(_.name == TagReleasesStep)

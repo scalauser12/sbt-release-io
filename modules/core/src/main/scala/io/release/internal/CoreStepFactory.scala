@@ -2,23 +2,24 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseContext
+import io.release.internal.CoreStepAliases.Step
 import sbt.{internal as _, *}
 
 /** Core-only helpers for building steps backed by sbt tasks or commands. */
 private[release] object CoreStepFactory {
 
-  def pure(name: String)(f: ReleaseContext => ReleaseContext): ProcessStep.Single[ReleaseContext] =
+  def pure(name: String)(f: ReleaseContext => ReleaseContext): Step =
     ProcessStep.Single(name, ctx => IO(f(ctx)))
 
   def io(name: String)(
       f: ReleaseContext => IO[ReleaseContext]
-  ): ProcessStep.Single[ReleaseContext] =
+  ): Step =
     ProcessStep.Single(name, f)
 
   def fromTask[T](
       key: TaskKey[T],
       enableCrossBuild: Boolean = false
-  ): ProcessStep.Single[ReleaseContext] =
+  ): Step =
     ProcessStep.Single(
       name = key.key.label,
       execute = ctx =>
@@ -33,7 +34,7 @@ private[release] object CoreStepFactory {
       key: InputKey[T],
       args: String = "",
       enableCrossBuild: Boolean = false
-  ): ProcessStep.Single[ReleaseContext] =
+  ): Step =
     ProcessStep.Single(
       name = key.key.label,
       execute = ctx =>
@@ -47,7 +48,7 @@ private[release] object CoreStepFactory {
   def fromTaskAggregated[T](
       key: TaskKey[T],
       enableCrossBuild: Boolean = false
-  ): ProcessStep.Single[ReleaseContext] =
+  ): Step =
     ProcessStep.Single(
       name = s"${key.key.label} (aggregated)",
       execute = ctx =>
@@ -59,7 +60,7 @@ private[release] object CoreStepFactory {
       enableCrossBuild = enableCrossBuild
     )
 
-  def fromCommand(command: String): ProcessStep.Single[ReleaseContext] =
+  def fromCommand(command: String): Step =
     ProcessStep.Single(
       name = s"command: $command",
       execute = ctx =>
@@ -68,7 +69,7 @@ private[release] object CoreStepFactory {
         }
     )
 
-  def fromCommandAndRemaining(command: String): ProcessStep.Single[ReleaseContext] =
+  def fromCommandAndRemaining(command: String): Step =
     ProcessStep.Single(
       name = s"command+remaining: $command",
       execute = ctx =>

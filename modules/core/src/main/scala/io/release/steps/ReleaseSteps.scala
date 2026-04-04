@@ -1,8 +1,7 @@
 package io.release.steps
 
-import io.release.ReleaseContext
 import io.release.internal.CoreLifecycle
-import io.release.internal.ProcessStep
+import io.release.internal.CoreStepAliases.Step
 
 /** Facade re-exporting all built-in release steps and default sequences.
   *
@@ -15,30 +14,30 @@ private[release] object ReleaseSteps {
 
   // ── VCS steps ───────────────────────────────────────────────────────────
 
-  val initializeVcs: ProcessStep.Single[ReleaseContext]        = VcsSteps.initializeVcs
-  val checkCleanWorkingDir: ProcessStep.Single[ReleaseContext] = VcsSteps.checkCleanWorkingDir
-  val tagRelease: ProcessStep.Single[ReleaseContext]           = VcsSteps.tagRelease
-  val pushChanges: ProcessStep.Single[ReleaseContext]          = VcsSteps.pushChanges
+  val initializeVcs: Step        = VcsSteps.initializeVcs
+  val checkCleanWorkingDir: Step = VcsSteps.checkCleanWorkingDir
+  val tagRelease: Step           = VcsSteps.tagRelease
+  val pushChanges: Step          = VcsSteps.pushChanges
 
   // ── Version steps ─────────────────────────────────────────────────────
 
-  val inquireVersions: ProcessStep.Single[ReleaseContext]      = VersionSteps.inquireVersions
-  val setReleaseVersion: ProcessStep.Single[ReleaseContext]    = VersionSteps.setReleaseVersion
-  val setNextVersion: ProcessStep.Single[ReleaseContext]       = VersionSteps.setNextVersion
-  val commitReleaseVersion: ProcessStep.Single[ReleaseContext] =
+  val inquireVersions: Step      = VersionSteps.inquireVersions
+  val setReleaseVersion: Step    = VersionSteps.setReleaseVersion
+  val setNextVersion: Step       = VersionSteps.setNextVersion
+  val commitReleaseVersion: Step =
     VersionSteps.commitReleaseVersion
-  val commitNextVersion: ProcessStep.Single[ReleaseContext]    = VersionSteps.commitNextVersion
+  val commitNextVersion: Step    = VersionSteps.commitNextVersion
 
   // ── Publish & test steps ──────────────────────────────────────────────
 
-  val checkSnapshotDependencies: ProcessStep.Single[ReleaseContext] =
+  val checkSnapshotDependencies: Step =
     PublishSteps.checkSnapshotDependencies
-  val publishArtifacts: ProcessStep.Single[ReleaseContext]          = PublishSteps.publishArtifacts
-  val runTests: ProcessStep.Single[ReleaseContext]                  = PublishSteps.runTests
-  val runClean: ProcessStep.Single[ReleaseContext]                  = PublishSteps.runClean
+  val publishArtifacts: Step          = PublishSteps.publishArtifacts
+  val runTests: Step                  = PublishSteps.runTests
+  val runClean: Step                  = PublishSteps.runClean
 
   // ── Default step sequences ────────────────────────────────────────────
 
   /** Default ordered sequence of all release steps using IO-native implementations. */
-  lazy val defaults: Seq[ProcessStep.Single[ReleaseContext]] = CoreLifecycle.defaults
+  lazy val defaults: Seq[Step] = CoreLifecycle.defaults
 }

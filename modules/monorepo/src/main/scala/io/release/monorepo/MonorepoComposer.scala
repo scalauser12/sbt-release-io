@@ -4,6 +4,8 @@ import cats.effect.IO
 import io.release.internal.ExecutionEngine
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
+import io.release.monorepo.MonorepoStepAliases.AnyStep
+import io.release.monorepo.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.steps.MonorepoCrossBuild
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
@@ -21,7 +23,7 @@ private[monorepo] object MonorepoComposer {
   private[monorepo] val SelectionBoundary = "detect-or-select-projects"
 
   def compose(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      steps: Seq[AnyStep],
       crossBuild: Boolean = false
   )(
       initialCtx: MonorepoContext
@@ -50,11 +52,11 @@ private[monorepo] object MonorepoComposer {
     * Returns `None` if no boundary step exists (all steps run sequentially).
     */
   private def splitAtBoundary(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
+      steps: Seq[AnyStep]
   ): Option[
     (
-        Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
-        Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]]
+        Seq[AnyStep],
+        Seq[AnyStep]
     )
   ] = {
     val boundaryIndex = steps.indexWhere {
@@ -66,7 +68,7 @@ private[monorepo] object MonorepoComposer {
   }
 
   private def runMainSegment(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      steps: Seq[AnyStep],
       startCtx: MonorepoContext,
       crossBuild: Boolean
   ): IO[MonorepoContext] =
@@ -78,7 +80,7 @@ private[monorepo] object MonorepoComposer {
     )
 
   private def runSequentialValidateThenExecute(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      steps: Seq[AnyStep],
       startCtx: MonorepoContext,
       crossBuild: Boolean
   ): IO[MonorepoContext] =
@@ -90,17 +92,17 @@ private[monorepo] object MonorepoComposer {
     )
 
   private[monorepo] def preparedSteps(
-      steps: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]],
+      steps: Seq[AnyStep],
       crossBuild: Boolean
   ): Seq[ExecutionEngine.PreparedStep[MonorepoContext]] =
     steps.map(asPreparedStep(_, crossBuild))
 
   private def asPreparedStep(
-      step: ProcessStep[MonorepoContext, ProjectReleaseInfo],
+      step: AnyStep,
       crossBuild: Boolean
   ): ExecutionEngine.PreparedStep[MonorepoContext] =
     step match {
-      case single: ProcessStep.Single[MonorepoContext] =>
+      case single: GlobalStep =>
         ExecutionEngine.PreparedStep(
           name = single.name,
           validate = single.threadedValidation,

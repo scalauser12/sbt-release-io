@@ -5,6 +5,7 @@ import cats.effect.Resource
 import io.release.ReleaseComposer
 import io.release.ReleaseContext
 import io.release.ReleaseResourceHooks
+import io.release.internal.CoreStepAliases.Step
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for core command planning and execution.
@@ -45,7 +46,7 @@ private[release] object CoreCommandExecution {
   )
 
   final case class CompiledSteps(
-      steps: Seq[ProcessStep.Single[ReleaseContext]]
+      steps: Seq[Step]
   )
 
   def doHelp(state: State, commandName: String): State =

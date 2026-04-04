@@ -8,7 +8,9 @@ import io.release.internal.LifecycleConfigCompiler.Binding
 import io.release.internal.LifecycleConfigCompiler.HookBinding
 import io.release.internal.LifecycleConfigCompiler.PolicyBinding
 import io.release.internal.LifecycleConfigCompiler.policyBinding
-import io.release.internal.ProcessStep
+import io.release.monorepo.MonorepoStepAliases.AnyStep
+import io.release.monorepo.MonorepoStepAliases.GlobalStep
+import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.steps.MonorepoPublishSteps
 import io.release.monorepo.steps.MonorepoReleaseSteps
 import sbt.Setting
@@ -113,7 +115,7 @@ private[release] object MonorepoLifecycle {
     )
 
   private def singleBuiltIn(
-      step: ProcessStep.Single[MonorepoContext],
+      step: GlobalStep,
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
       bindings: Seq[Binding] = Nil
   ): Phase =
@@ -124,7 +126,7 @@ private[release] object MonorepoLifecycle {
     )
 
   private def singleBuiltIn(
-      step: ProcessStep.Single[MonorepoContext],
+      step: GlobalStep,
       policyBinding: PolicyBinding
   ): Phase =
     singleBuiltIn(
@@ -134,7 +136,7 @@ private[release] object MonorepoLifecycle {
     )
 
   private def perItemBuiltIn(
-      step: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo],
+      step: ProjectStep,
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
       bindings: Seq[Binding] = Nil
   ): Phase =
@@ -145,7 +147,7 @@ private[release] object MonorepoLifecycle {
     )
 
   private def perItemBuiltIn(
-      step: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo],
+      step: ProjectStep,
       policyBinding: PolicyBinding
   ): Phase =
     perItemBuiltIn(
@@ -347,12 +349,12 @@ private[release] object MonorepoLifecycle {
   private[release] lazy val configDefaultSettings: Seq[Setting[?]] =
     LifecycleConfigCompiler.defaultSettings(phases)
 
-  val defaults: Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
+  val defaults: Seq[AnyStep] =
     LifecycleCompiler.defaults(phases)
 
   def compile(
       hooks: MonorepoHookConfiguration
-  ): Seq[ProcessStep[MonorepoContext, ProjectReleaseInfo]] =
+  ): Seq[AnyStep] =
     LifecycleCompiler.compile(hooks, phases)
 }
 

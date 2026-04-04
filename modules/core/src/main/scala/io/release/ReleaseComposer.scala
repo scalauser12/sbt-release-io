@@ -1,9 +1,9 @@
 package io.release
 
 import cats.effect.IO
+import io.release.internal.CoreStepAliases.Step
 import io.release.internal.CrossBuildExecution
 import io.release.internal.ExecutionEngine
-import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import sbt.Keys.*
@@ -28,7 +28,7 @@ private[release] object ReleaseComposer {
     * When `crossBuild` is true, both validations and executions with `enableCrossBuild` are
     * executed once per `crossScalaVersions`.
     */
-  def compose(steps: Seq[ProcessStep.Single[ReleaseContext]], crossBuild: Boolean)(
+  def compose(steps: Seq[Step], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
     ExecutionEngine.runMainSegment(
@@ -41,7 +41,7 @@ private[release] object ReleaseComposer {
   /** Run only the validation phase for the given steps.
     * Used by preflight checks to reuse the exact validation wiring without executing actions.
     */
-  def validateOnly(steps: Seq[ProcessStep.Single[ReleaseContext]], crossBuild: Boolean)(
+  def validateOnly(steps: Seq[Step], crossBuild: Boolean)(
       initialCtx: ReleaseContext
   ): IO[ReleaseContext] =
     ExecutionEngine.runValidations(
@@ -51,13 +51,13 @@ private[release] object ReleaseComposer {
     )
 
   private def preparedSteps(
-      steps: Seq[ProcessStep.Single[ReleaseContext]],
+      steps: Seq[Step],
       crossBuild: Boolean
   ): Seq[ExecutionEngine.PreparedStep[ReleaseContext]] =
     steps.map(preparedStep(_, crossBuild))
 
   private def preparedStep(
-      step: ProcessStep.Single[ReleaseContext],
+      step: Step,
       crossBuild: Boolean
   ): ExecutionEngine.PreparedStep[ReleaseContext] =
     ExecutionEngine.PreparedStep(
@@ -72,7 +72,7 @@ private[release] object ReleaseComposer {
     )
 
   private def wrapWithCrossBuild(
-      step: ProcessStep.Single[ReleaseContext],
+      step: Step,
       crossBuild: Boolean
   )(action: ReleaseContext => IO[ReleaseContext]): ReleaseContext => IO[ReleaseContext] =
     if (step.enableCrossBuild && crossBuild)

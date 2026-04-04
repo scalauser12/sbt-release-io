@@ -10,6 +10,7 @@ import io.release.ReleaseIOCompat
 import io.release.internal.DecisionResolver
 import io.release.internal.ProcessStep
 import io.release.internal.PublishValidation
+import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.SnapshotDependencyTasks
@@ -138,7 +139,7 @@ private[monorepo] object MonorepoPublishSteps {
     * (via `.dependsOn()`) are resolved internally by sbt from compiled classes
     * and are not included in `releaseIODiagnosticsSnapshotDependencies`.
     */
-  val checkSnapshotDependencies: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+  val checkSnapshotDependencies: ProjectStep =
     ProcessStep.PerItem(
       name = "check-snapshot-dependencies",
       // Snapshot checking is purely a pre-flight check; there is no release-time action.
@@ -163,7 +164,7 @@ private[monorepo] object MonorepoPublishSteps {
     )
 
   /** Run clean for each project. */
-  val runClean: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] = ProcessStep.PerItem(
+  val runClean: ProjectStep = ProcessStep.PerItem(
     name = "run-clean",
     execute = (ctx, project) =>
       IO.blocking {
@@ -173,7 +174,7 @@ private[monorepo] object MonorepoPublishSteps {
   )
 
   /** Run tests for each project. */
-  val runTests: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] = ProcessStep.PerItem(
+  val runTests: ProjectStep = ProcessStep.PerItem(
     name = "run-tests",
     execute = (ctx, project) =>
       if (ctx.skipTests)
@@ -184,7 +185,7 @@ private[monorepo] object MonorepoPublishSteps {
   )
 
   /** Publish artifacts for each project. */
-  val publishArtifacts: ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo] =
+  val publishArtifacts: ProjectStep =
     ProcessStep.PerItem(
       name = "publish-artifacts",
       execute = (ctx, project) =>
