@@ -125,7 +125,7 @@ private[release] object LifecycleCompiler {
   def defaultsSingle[Config, C](
       phases: Seq[Phase[Config, C, Nothing]]
   ): Seq[ProcessStep.Single[C]] =
-    defaults(phases).map(_.asInstanceOf[ProcessStep.Single[C]])
+    defaults(phases).collect { case s: ProcessStep.Single[C @unchecked] => s }
 
   def compile[Config, C, I](
       config: Config,
@@ -137,5 +137,5 @@ private[release] object LifecycleCompiler {
       config: Config,
       phases: Seq[Phase[Config, C, Nothing]]
   ): Seq[ProcessStep.Single[C]] =
-    compile(config, phases).map(_.asInstanceOf[ProcessStep.Single[C]])
+    compile(config, phases).collect { case s: ProcessStep.Single[C @unchecked] => s }
 }

@@ -24,8 +24,7 @@ private[monorepo] object MonorepoStepTestCompat {
       }
       .updateState { (state: State, _: Unit) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -37,8 +36,7 @@ private[monorepo] object MonorepoStepTestCompat {
       }
       .updateState { (state: State, _: Unit) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -49,8 +47,7 @@ private[monorepo] object MonorepoStepTestCompat {
         .task(())
         .updateState { (state: State, _: Unit) =>
           state.copy(
-            remainingCommands =
-              SbtCompat.FailureCommand :: state.remainingCommands
+            remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value
@@ -64,8 +61,7 @@ private[monorepo] object MonorepoStepTestCompat {
         .task(())
         .updateState { (state: State, _: Unit) =>
           state.copy(
-            remainingCommands =
-              SbtCompat.FailureCommand :: state.remainingCommands
+            remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value

@@ -19,8 +19,7 @@ private[release] object ReleaseStepIOCrossBuildCompat {
       }
       .updateState { (state: State, _: Unit) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value

@@ -71,6 +71,40 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     )
   }
 
+  test("slot catalog - every CoreHookConfiguration field has a corresponding binding") {
+    val configFieldCount =
+      classOf[CoreHookConfiguration].getDeclaredFields.count(!_.isSynthetic)
+    val bindingCount     = CoreLifecycleSlots.slots.size
+
+    assertEquals(
+      bindingCount,
+      configFieldCount,
+      s"CoreHookConfiguration has $configFieldCount fields but there are $bindingCount bindings"
+    )
+  }
+
+  test("slot catalog - each policy binding round-trips through its get/updated accessors") {
+    CorePolicySlots.policySlots.foreach { binding =>
+      val toggled = binding.updated(CoreHookConfiguration.empty, false)
+      assert(
+        !binding.get(toggled),
+        s"Policy binding '${binding.id}' did not round-trip"
+      )
+    }
+  }
+
+  test("slot catalog - each hook binding round-trips through its get/updated accessors") {
+    val sentinel = Seq(io.release.ReleaseHookIO("sentinel", ctx => cats.effect.IO.pure(ctx)))
+    CoreHookSlots.hookSlots.foreach { binding =>
+      val updated   = binding.updated(CoreHookConfiguration.empty, sentinel)
+      val retrieved = binding.get(updated)
+      assert(
+        retrieved.nonEmpty,
+        s"Hook binding '${binding.id}' did not round-trip: get after updated returned empty"
+      )
+    }
+  }
+
   test("source cleanup - standalone lifecycle slot and hook materialization helpers are gone") {
     val repoRoot = TestRepoFiles.resolve("build.sbt").getParent
 
