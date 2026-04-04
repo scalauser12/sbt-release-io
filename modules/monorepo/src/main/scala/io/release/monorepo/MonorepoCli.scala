@@ -80,6 +80,9 @@ private[monorepo] object MonorepoCli {
         )
     }
 
+    def missingValue(flag: String): Either[String, Seq[Arg]] =
+      Left(s"Missing value after '$flag'. See '$commandName help' for usage.")
+
     def loop(rest: List[String], acc: List[Arg]): Either[String, Seq[Arg]] =
       rest match {
         case Nil                                                     => Right(acc.reverse)
@@ -108,38 +111,17 @@ private[monorepo] object MonorepoCli {
         case "next-version" :: value :: tail                         =>
           parseVersionArg(value, "next-version")(NextVersion.apply)
             .flatMap(arg => loop(tail, arg :: acc))
-        case "release-version" :: Nil                                =>
-          Left(
-            s"Missing value after 'release-version'. See '$commandName help' for usage."
-          )
-        case "next-version" :: Nil                                   =>
-          Left(
-            s"Missing value after 'next-version'. See '$commandName help' for usage."
-          )
-        case "default-tag-exists-answer" :: Nil                      =>
-          Left(
-            s"Missing value after 'default-tag-exists-answer'. See '$commandName help' for usage."
-          )
+        case "release-version" :: Nil                                => missingValue("release-version")
+        case "next-version" :: Nil                                   => missingValue("next-version")
+        case "default-tag-exists-answer" :: Nil                      => missingValue("default-tag-exists-answer")
         case "default-snapshot-dependencies-answer" :: Nil           =>
-          Left(
-            s"Missing value after 'default-snapshot-dependencies-answer'. See '$commandName help' for usage."
-          )
+          missingValue("default-snapshot-dependencies-answer")
         case "default-remote-check-failure-answer" :: Nil            =>
-          Left(
-            s"Missing value after 'default-remote-check-failure-answer'. See '$commandName help' for usage."
-          )
+          missingValue("default-remote-check-failure-answer")
         case "default-upstream-behind-answer" :: Nil                 =>
-          Left(
-            s"Missing value after 'default-upstream-behind-answer'. See '$commandName help' for usage."
-          )
-        case "default-push-answer" :: Nil                            =>
-          Left(
-            s"Missing value after 'default-push-answer'. See '$commandName help' for usage."
-          )
-        case "project" :: Nil                                        =>
-          Left(
-            s"Missing value after 'project'. See '$commandName help' for usage."
-          )
+          missingValue("default-upstream-behind-answer")
+        case "default-push-answer" :: Nil                            => missingValue("default-push-answer")
+        case "project" :: Nil                                        => missingValue("project")
         // Catch-all: token was admitted by MonorepoCommandParsers as a known project name.
         // Direct callers (tests, tooling) must pre-validate tokens; see class Scaladoc.
         case project :: tail                                         =>

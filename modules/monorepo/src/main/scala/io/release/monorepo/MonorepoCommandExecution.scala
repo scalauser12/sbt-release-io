@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.internal.CheckModeOutput
 import io.release.internal.CommandRuntimeSupport
-import io.release.internal.DecisionDefaultsSupport
 import io.release.internal.ExecutionFlags
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseCommandRunner
@@ -323,47 +322,16 @@ private[monorepo] object MonorepoCommandExecution {
     def allArgs[A](extract: PartialFunction[MonorepoCli.Arg, A]): Seq[A] =
       args.collect(extract)
 
-    val cliDefaults = ReleaseDecisionDefaults(
-      tagExistsAnswer = DecisionDefaultsSupport.resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-tag-exists-answer",
-        allArgs { case TagDefault(value) => value },
-        (value: String) => value,
-        warnOnDuplicates
-      ),
-      snapshotDependenciesAnswer = DecisionDefaultsSupport.resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-snapshot-dependencies-answer",
-        allArgs { case SnapshotDependenciesDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo,
-        warnOnDuplicates
-      ),
-      remoteCheckFailureAnswer = DecisionDefaultsSupport.resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-remote-check-failure-answer",
-        allArgs { case RemoteCheckFailureDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo,
-        warnOnDuplicates
-      ),
-      upstreamBehindAnswer = DecisionDefaultsSupport.resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-upstream-behind-answer",
-        allArgs { case UpstreamBehindDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo,
-        warnOnDuplicates
-      ),
-      pushAnswer = DecisionDefaultsSupport.resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-push-answer",
-        allArgs { case PushDefault(value) => value },
-        DecisionDefaultsSupport.renderYesNo,
-        warnOnDuplicates
-      )
+    val cliDefaults = ReleaseDecisionDefaults.resolveFromCli(
+      state,
+      ReleaseLogPrefixes.Monorepo,
+      warnOnDuplicates
+    )(
+      tagExistsMatches = allArgs { case TagDefault(value) => value },
+      snapshotMatches = allArgs { case SnapshotDependenciesDefault(value) => value },
+      remoteMatches = allArgs { case RemoteCheckFailureDefault(value) => value },
+      upstreamMatches = allArgs { case UpstreamBehindDefault(value) => value },
+      pushMatches = allArgs { case PushDefault(value) => value }
     )
 
     ReleaseDecisionDefaults.merge(cliDefaults, ReleaseDecisionDefaults.fromState(state))
