@@ -9,6 +9,23 @@ import java.nio.file.LinkOption
 
 class TestSupportSpec extends CatsEffectSuite {
 
+  test("TestRepoFiles.resolve - find tracked files from a nested working directory") {
+    IO.blocking {
+      val repoRoot   = TestRepoFiles.resolve("build.sbt").getParent
+      val nestedDir  = repoRoot.resolve("modules").resolve("core").resolve("src").resolve("test")
+      val originalWd = sys.props("user.dir")
+
+      try {
+        sys.props("user.dir") = nestedDir.toString
+        val resolved = TestRepoFiles.resolve("build.sbt")
+        val buildSbt = TestRepoFiles.readString("build.sbt")
+
+        assertEquals(resolved.normalize(), repoRoot.resolve("build.sbt").normalize())
+        assert(buildSbt.contains("val Sbt1Version            = \"1.12.3\""))
+      } finally sys.props("user.dir") = originalWd
+    }
+  }
+
   test("dummyAppConfiguration - expose the current runtime Scala version") {
     TestSupport.tempDirResource("test-support-app-config").use { dir =>
       IO.blocking {

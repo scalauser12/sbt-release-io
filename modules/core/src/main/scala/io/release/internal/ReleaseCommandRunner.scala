@@ -9,8 +9,8 @@ import sbt.State
 
 import scala.util.control.NonFatal
 
-/** Runs `IO[State]` at the plugin command boundary with `unsafeRunSync` and a uniform
-  * `NonFatal` handler so core and monorepo release commands do not duplicate try/catch.
+/** Runs `IO[State]` at the plugin command boundary with `unsafeRunSync` and uniform
+  * `NonFatal` recovery inside the `IO` program.
   */
 private[release] object ReleaseCommandRunner {
 
@@ -19,12 +19,16 @@ private[release] object ReleaseCommandRunner {
     * normal `State` value.
     */
   def runSync(failureState: State, logPrefix: String)(program: IO[State]): State =
-    try program.unsafeRunSync()
-    catch {
-      case NonFatal(e) =>
-        failureState.log.error(s"$logPrefix Release failed: ${StepHelpers.errorMessage(e)}")
-        failureState.fail
-    }
+    program
+      .handleErrorWith {
+        case NonFatal(e) =>
+          IO.blocking(
+            failureState.log.error(s"$logPrefix Release failed: ${StepHelpers.errorMessage(e)}")
+          ).as(failureState.fail)
+        case fatal       =>
+          IO.raiseError(fatal)
+      }
+      .unsafeRunSync()
 
   /** Log a sequence of lines with a shared prefix. Used by help and check output. */
   def logLines(state: State, prefix: String, lines: Seq[String]): IO[Unit] =

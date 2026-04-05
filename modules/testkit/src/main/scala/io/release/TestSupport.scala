@@ -71,7 +71,7 @@ object TestSupport {
               dir: Path,
               exc: IOException
           ): FileVisitResult = {
-            if (exc != null) throw exc
+            Option(exc).foreach(throw _)
             Files.deleteIfExists(dir)
             FileVisitResult.CONTINUE
           }

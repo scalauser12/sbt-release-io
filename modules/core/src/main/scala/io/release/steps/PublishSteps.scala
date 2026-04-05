@@ -197,16 +197,18 @@ private[release] object PublishSteps {
   ): IO[Boolean] =
     IO.blocking {
       val extracted = SbtRuntime.extracted(state)
-
-      try extracted.runTask(ref / publish / Keys.skip, state)._2
-      catch {
-        case NonFatal(e) =>
+      extracted.runTask(ref / publish / Keys.skip, state)._2
+    }.handleErrorWith {
+      case NonFatal(e) =>
+        IO.blocking {
           state.log.warn(
             s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for ${ref.project}: " +
               s"${errorMessage(e)}. Assuming skip = false."
           )
           false
-      }
+        }
+      case fatal       =>
+        IO.raiseError(fatal)
     }
 
   private def checkPublishToMissing(
@@ -215,15 +217,17 @@ private[release] object PublishSteps {
   ): IO[Boolean] =
     IO.blocking {
       val extracted = SbtRuntime.extracted(state)
-
-      try extracted.runTask(ref / publishTo, state)._2.isEmpty
-      catch {
-        case NonFatal(e) =>
+      extracted.runTask(ref / publishTo, state)._2.isEmpty
+    }.handleErrorWith {
+      case NonFatal(e) =>
+        IO.blocking {
           state.log.warn(
             s"${ReleaseLogPrefixes.Core} Failed to evaluate publishTo for ${ref.project}: " +
               s"${errorMessage(e)}. Assuming publishTo is missing."
           )
           true
-      }
+        }
+      case fatal       =>
+        IO.raiseError(fatal)
     }
 }

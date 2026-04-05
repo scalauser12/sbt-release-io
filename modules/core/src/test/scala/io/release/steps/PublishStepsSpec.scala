@@ -8,6 +8,7 @@ import io.release.ReleaseIOCompat
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtCompat
 import munit.CatsEffectSuite
 import sbt.*
@@ -145,15 +146,23 @@ class PublishStepsSpec extends CatsEffectSuite {
   test(
     "publishArtifacts.validate - treat publishTo eval error as missing (fail validation)"
   ) {
-    loadedContextResource(s"$fixturePrefix-val-throw-pt") { _ =>
+    bufferedLoadedContextResource(s"$fixturePrefix-val-throw-pt") { _ =>
       () -> Seq(
         ReleaseIO.releaseIOPublishChecks := true,
         CoreStepTestCompat.throwingPublishToSetting
       )
-    }.use { case (ctx, _) =>
-      assertFailure[IllegalStateException, Unit](
-        PublishSteps.publishArtifacts.validate(ctx)
-      )(err => assert(err.getMessage.contains("publishTo not configured")))
+    }.use { case (ctx, _, consoleBuffer) =>
+      val warningPrefix =
+        s"${ReleaseLogPrefixes.Core} Failed to evaluate publishTo for root: "
+
+      for {
+        _   <- assertFailure[IllegalStateException, Unit](
+                 PublishSteps.publishArtifacts.validate(ctx)
+               )(err => assert(err.getMessage.contains("publishTo not configured")))
+        log <- IO(consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertEquals(TestSupport.warningCount(log, warningPrefix), 1)
+      }
     }
   }
 
@@ -161,14 +170,22 @@ class PublishStepsSpec extends CatsEffectSuite {
     "publishArtifacts.validate - treat publish/skip eval error as not skipped " +
       "(pass when publishTo is set)"
   ) {
-    loadedContextResource(s"$fixturePrefix-val-throw-ps") { dir =>
+    bufferedLoadedContextResource(s"$fixturePrefix-val-throw-ps") { dir =>
       () -> Seq(
         ReleaseIO.releaseIOPublishChecks := true,
         CoreStepTestCompat.throwingPublishSkipSetting,
         publishTo                        := Some(Resolver.file("local", new File(dir, "repo")))
       )
-    }.use { case (ctx, _) =>
-      PublishSteps.publishArtifacts.validate(ctx)
+    }.use { case (ctx, _, consoleBuffer) =>
+      val warningPrefix =
+        s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for root: "
+
+      for {
+        _   <- PublishSteps.publishArtifacts.validate(ctx)
+        log <- IO(consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertEquals(TestSupport.warningCount(log, warningPrefix), 1)
+      }
     }
   }
 
@@ -314,6 +331,25 @@ class PublishStepsSpec extends CatsEffectSuite {
           currentProjectId = Some("root")
         )
         (ReleaseContext(state = state), value)
+      }
+    }
+
+  private def bufferedLoadedContextResource[A](
+      prefix: String
+  )(
+      prepare: File => (A, Seq[Setting[?]])
+  ): Resource[IO, (ReleaseContext, A, java.io.ByteArrayOutputStream)] =
+    TestSupport.tempDirResource(prefix).evalMap { dir =>
+      IO.blocking {
+        val (value, settings) = prepare(dir)
+        val buffered          = TestSupport.bufferedState(dir)
+        val state             = sbt.TestBuildState(
+          baseState = buffered.state,
+          baseDir = dir,
+          projects = Seq(Project("root", dir).settings(settings*)),
+          currentProjectId = Some("root")
+        )
+        (ReleaseContext(state = state), value, buffered.consoleBuffer)
       }
     }
 }
