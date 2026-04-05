@@ -102,6 +102,51 @@ object CustomMonorepoStepExamples {
     MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook
   )
 
+  /** Custom version file format: use `.properties` files instead of `version.sbt`.
+    *
+    * Override all three versioning settings together so that the reader, writer, and
+    * file resolver are consistent. The writer preserves existing fields (e.g.
+    * `app.name`) and replaces only the `app.version` line.
+    *
+    * {{{
+    * lazy val root = (project in file("."))
+    *   .aggregate(core, api)
+    *   .settings(CustomMonorepoStepExamples.propertiesVersionSettings)
+    * }}}
+    */
+  val propertiesVersionSettings: Seq[Setting[?]] = Seq(
+    MonorepoReleaseIO.releaseIOMonorepoVersioningFile         := {
+      (ref: ProjectRef, state: State) =>
+        Project.extract(state).get(ref / Keys.baseDirectory) /
+          "version.properties"
+    },
+    MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion  := { (f: File) =>
+      IO.blocking(sbt.IO.read(f)).flatMap { contents =>
+        val pattern = """app\.version=(.+)""".r
+        pattern.findFirstMatchIn(contents) match {
+          case Some(m) => IO.pure(m.group(1).trim)
+          case None    =>
+            IO.raiseError(
+              new RuntimeException(
+                s"Could not parse version from ${f.getName}"
+              )
+            )
+        }
+      }
+    },
+    MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents := { (f: File, ver: String) =>
+      IO.blocking(sbt.IO.read(f)).map { contents =>
+        contents.linesIterator
+          .map {
+            case l if l.startsWith("app.version=") =>
+              s"app.version=$ver"
+            case l                                 => l
+          }
+          .mkString("\n") + "\n"
+      }
+    }
+  )
+
   val printSummaryHook: MonorepoGlobalHookIO = MonorepoGlobalHookIO.action("print-summary")(ctx =>
     IO.println(s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}")
   )
