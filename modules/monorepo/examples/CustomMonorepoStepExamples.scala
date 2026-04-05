@@ -115,10 +115,9 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val propertiesVersionSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoVersioningFile         := {
-      (ref: ProjectRef, state: State) =>
-        Project.extract(state).get(ref / Keys.baseDirectory) /
-          "version.properties"
+    MonorepoReleaseIO.releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, state: State) =>
+      Project.extract(state).get(ref / Keys.baseDirectory) /
+        "version.properties"
     },
     MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion  := { (f: File) =>
       IO.blocking(sbt.IO.read(f)).flatMap { contents =>

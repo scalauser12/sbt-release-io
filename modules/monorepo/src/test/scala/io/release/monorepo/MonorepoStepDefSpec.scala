@@ -58,7 +58,7 @@ class MonorepoStepDefSpec extends CatsEffectSuite with MonorepoDummyProjectSuppo
 
   test("perItem validation composition preserves order and project context") {
     contextResource.use { ctx =>
-      val key     = AttributeKey[String]("per-project-validation-order")
+      val key = AttributeKey[String]("per-project-validation-order")
       dummyProject("core").flatMap { project =>
         Ref.of[IO, List[String]](Nil).flatMap { events =>
           val step = ProcessStep

@@ -294,7 +294,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
         dummyProjects("core", "api").flatMap { projects =>
-          val pCtx = ctx.withProjects(projects)
+          val pCtx     = ctx.withProjects(projects)
           val failStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
             name = "fail-with-step",
             execute = (c, project) =>

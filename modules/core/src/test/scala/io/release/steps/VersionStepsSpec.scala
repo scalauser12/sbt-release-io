@@ -405,7 +405,9 @@ class VersionStepsSpec extends CatsEffectSuite {
           result   <- VersionSteps.commitReleaseVersion.execute(written)
           headHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
         } yield {
-          assert(TestSupport.manifestAttributes(result.state).contains("Vcs-Release-Hash" -> headHash))
+          assert(
+            TestSupport.manifestAttributes(result.state).contains("Vcs-Release-Hash" -> headHash)
+          )
         }
       }
   }
