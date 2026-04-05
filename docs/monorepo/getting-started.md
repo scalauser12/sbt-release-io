@@ -33,7 +33,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
 ```
 
-By default, each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The file path and format can be customized — see [Version settings](configuration.md#version-settings).
+By default, each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The file path and format can be customized — see [Versioning settings](reference.md#versioning-settings).
 
 If you are migrating from an older configuration, move any shared root version file setup to per-project `version.sbt` files and replace any global CLI overrides with `project=version` overrides.
 
@@ -104,8 +104,10 @@ For the full list of CLI flags, subcommands, version override syntax, and select
   [Selective release walkthrough](selective-release-walkthrough.md)
 - CLI grammar, selectors, flags, and override syntax:
   [Usage](usage.md)
-- Grouped settings surface and shared core knobs:
+- Starter patterns and migration guide:
   [Configuration](configuration.md)
+- Exhaustive settings catalog:
+  [Settings reference](reference.md)
 - Hooks, resource-aware custom plugins, and migration guidance:
   [Customization](customization.md)
 - Execution model, failure isolation, and ordering:

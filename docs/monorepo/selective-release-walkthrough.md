@@ -154,6 +154,6 @@ sbt "releaseIOMonorepo check project cross with-defaults"
 
 - For selector syntax and more CLI examples, see [Usage](usage.md).
 - For the underlying git-based selection rules, see [Change detection](change-detection.md).
-- For the full policy and hook surface, see [Configuration](configuration.md) and
+- For the full policy and hook surface, see [Settings reference](reference.md) and
   [Customization](customization.md).
 - For a simpler first-release setup from scratch, see [First release walkthrough](walkthrough.md).
