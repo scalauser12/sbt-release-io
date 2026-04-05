@@ -60,11 +60,12 @@ docs/
 | File | Purpose |
 |------|---------|
 | `ReleasePluginIO.scala` | Main sbt plugin (`ReleasePluginIOLike[T]`); auto-triggered; resource lifecycle and two-phase execution |
-| `ReleaseStepIO.scala` | Atomic release step with validate/execute phases; builders `fromTask`, `fromInputTask` |
+| `internal/StepKernel.scala` | Step validate/execute kernel; cancellation-safe execution |
+| `internal/ExecutionEngine.scala` | Runs compiled step sequence with context threading |
 | `ReleaseContext.scala` | Immutable context threaded through steps (versions, vcs, state, metadata) |
 | `ReleaseIO.scala` | 60+ setting keys exported by the plugin |
 | `ReleaseHookIO.scala` | Hook case class for lifecycle customization |
-| `ReleaseHookCompiler.scala` | Compiles policy settings + hooks into ordered step sequence |
+| `internal/LifecycleCompiler.scala` | Compiles policy settings + hooks into ordered step sequence |
 | `steps/ReleaseSteps.scala` | 13 default steps (initVcs → checkClean → inquireVersions → tag → publish → push) |
 | `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
 
@@ -73,7 +74,7 @@ docs/
 | File | Purpose |
 |------|---------|
 | `MonorepoReleasePlugin.scala` | Monorepo plugin (`noTrigger`, must be explicitly enabled on root) |
-| `MonorepoStepIO.scala` | `Global` and `PerProject` step types |
+| `MonorepoComposer.scala` | Composes global and per-project steps into release sequence |
 | `MonorepoContext.scala` | Global context + `ProjectReleaseInfo` per project |
 | `ChangeDetection.scala` | Git diff-based change detection with shared-paths support |
 | `MonorepoProjectResolver.scala` | Dependency graph resolution and topological sorting |
