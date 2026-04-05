@@ -16,13 +16,12 @@ object TestRepoFiles {
     val start = Paths.get(sys.props("user.dir")).toAbsolutePath.normalize()
 
     def loop(current: Path): Option[Path] =
-      if (current == null) None
-      else {
-        val buildFile = current.resolve("build.sbt")
-        val candidate = current.resolve(relativePath).normalize()
+      Option(current).flatMap { path =>
+        val buildFile = path.resolve("build.sbt")
+        val candidate = path.resolve(relativePath).normalize()
 
         if (Files.isRegularFile(buildFile) && Files.exists(candidate)) Some(candidate)
-        else loop(current.getParent)
+        else loop(path.getParent)
       }
 
     loop(start).getOrElse {

@@ -16,6 +16,7 @@ import sbt.TaskKey
 import sbt.internal.Aggregation.KeyValue
 
 import scala.sys.process.*
+import scala.util.control.Exception.catching
 
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
@@ -126,11 +127,12 @@ private[release] object StepHelpers {
   def aggregatedTaskValues[T](
       result: Result[Seq[KeyValue[Seq[T]]]]
   ): Either[Incomplete, Seq[T]] =
-    try {
-      Right(EvaluateTask.onResult(result)(_.flatMap(_.value)))
-    } catch {
-      case inc: Incomplete => Left(inc)
-    }
+    catching(classOf[Incomplete])
+      .either(EvaluateTask.onResult(result)(_.flatMap(_.value)))
+      .fold(
+        err => Left(err.asInstanceOf[Incomplete]),
+        values => Right(values)
+      )
 
   /** Run an sbt task and fail fast if it reports failure via `FailureCommand`.
     *
