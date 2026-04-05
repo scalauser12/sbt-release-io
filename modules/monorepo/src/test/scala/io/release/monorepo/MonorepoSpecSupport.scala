@@ -18,9 +18,6 @@ import java.io.File
 
 object MonorepoSpecSupport {
 
-  def dummyProject(name: String): ProjectReleaseInfo =
-    MonorepoTestSupport.dummyProject(name)
-
   def projectNamed(projects: Seq[ProjectReleaseInfo], name: String): ProjectReleaseInfo =
     projects.find(_.name == name).getOrElse(fail(s"Expected project '$name'"))
 

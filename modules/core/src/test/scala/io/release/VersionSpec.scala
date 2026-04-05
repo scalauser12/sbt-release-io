@@ -7,7 +7,7 @@ class VersionSpec extends FunSuite {
 
   private def version(v: String): Version = Version(v) match {
     case Some(parsed) => parsed
-    case None         => sys.error("Can't parse version " + v)
+    case None         => fail("Can't parse version " + v)
   }
 
   private def testBumpNext(input: String, expectedOutput: String): Unit =

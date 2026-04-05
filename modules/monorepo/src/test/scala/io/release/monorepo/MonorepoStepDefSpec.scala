@@ -8,7 +8,7 @@ import io.release.monorepo.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 
-class MonorepoStepDefSpec extends CatsEffectSuite {
+class MonorepoStepDefSpec extends CatsEffectSuite with MonorepoDummyProjectSupport {
 
   test("single builder creates a selection-aware global step") {
     val key  = AttributeKey[String]("global-key")
@@ -59,27 +59,27 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
   test("perItem validation composition preserves order and project context") {
     contextResource.use { ctx =>
       val key     = AttributeKey[String]("per-project-validation-order")
-      val project = dummyProject("core")
-
-      Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = ProcessStep
-          .perItem[MonorepoContext, ProjectReleaseInfo]("validated-pp")
-          .withValidation((currentCtx, currentProject) =>
-            events.update(
-              _ :+ s"validate:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, List[String]](Nil).flatMap { events =>
+          val step = ProcessStep
+            .perItem[MonorepoContext, ProjectReleaseInfo]("validated-pp")
+            .withValidation((currentCtx, currentProject) =>
+              events.update(
+                _ :+ s"validate:${currentProject.name}:${currentCtx.metadata(key).getOrElse("missing")}"
+              )
             )
-          )
-          .withValidationContext((currentCtx, currentProject) =>
-            events
-              .update(_ :+ s"context:${currentProject.name}")
-              .as(currentCtx.withMetadata(key, currentProject.name))
-          )
-          .validateOnly
+            .withValidationContext((currentCtx, currentProject) =>
+              events
+                .update(_ :+ s"context:${currentProject.name}")
+                .as(currentCtx.withMetadata(key, currentProject.name))
+            )
+            .validateOnly
 
-        step.threadedValidation(ctx, project).flatMap { result =>
-          events.get.map { observed =>
-            assertEquals(observed, List("validate:core:missing", "context:core"))
-            assertEquals(result.metadata(key), Some("core"))
+          step.threadedValidation(ctx, project).flatMap { result =>
+            events.get.map { observed =>
+              assertEquals(observed, List("validate:core:missing", "context:core"))
+              assertEquals(result.metadata(key), Some("core"))
+            }
           }
         }
       }
@@ -105,20 +105,21 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
 
   test("resourcePerItem validateOnly produces a step with no-op execute") {
     contextResource.use { ctx =>
-      val project = dummyProject("core")
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, List[String]](Nil).flatMap { events =>
+          val step = ProcessStep
+            .perItemResource[String, MonorepoContext, ProjectReleaseInfo]("res-pp-validate")
+            .withValidation(resource =>
+              (_, currentProject) =>
+                events.update(_ :+ s"validate:$resource:${currentProject.name}")
+            )
+            .validateOnly("myResource")
 
-      Ref.of[IO, List[String]](Nil).flatMap { events =>
-        val step = ProcessStep
-          .perItemResource[String, MonorepoContext, ProjectReleaseInfo]("res-pp-validate")
-          .withValidation(resource =>
-            (_, currentProject) => events.update(_ :+ s"validate:$resource:${currentProject.name}")
-          )
-          .validateOnly("myResource")
-
-        step.validate(ctx, project) *> step.execute(ctx, project).flatMap { result =>
-          events.get.map { observed =>
-            assertEquals(result, ctx)
-            assertEquals(observed, List("validate:myResource:core"))
+          step.validate(ctx, project) *> step.execute(ctx, project).flatMap { result =>
+            events.get.map { observed =>
+              assertEquals(result, ctx)
+              assertEquals(observed, List("validate:myResource:core"))
+            }
           }
         }
       }
@@ -136,10 +137,6 @@ class MonorepoStepDefSpec extends CatsEffectSuite {
       ]
     )
   }
-
-  private def dummyProject(name: String): ProjectReleaseInfo =
-    MonorepoTestSupport.dummyProject(name)
-
   private val contextResource =
     MonorepoSpecSupport.dummyContextResource("monorepo-step-def-spec")
 }

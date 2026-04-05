@@ -1,133 +1,148 @@
 package io.release.monorepo
 
+import cats.effect.IO
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
-import munit.FunSuite
+import munit.CatsEffectSuite
 
-class MonorepoProjectResolverSpec extends FunSuite {
+class MonorepoProjectResolverSpec extends CatsEffectSuite with MonorepoDummyProjectSupport {
 
   test("mergeSnapshot - carry forward release state by matching project refs") {
-    val failure  = new RuntimeException("previous failure")
-    val current  = Seq(
-      project("core").copy(
-        versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"),
-        tagName = Some("core-v1.0.0"),
-        failed = true,
-        failureCause = Some(failure)
-      ),
-      project("legacy").copy(
-        versions = Some("0.1.0" -> "0.2.0-SNAPSHOT"),
-        tagName = Some("legacy-v0.1.0"),
-        failed = true,
-        failureCause = Some(new RuntimeException("legacy failure"))
+    dummyProjects("core", "legacy", "core", "api").map { projects =>
+      val failure  = new RuntimeException("previous failure")
+      val current  = Seq(
+        projects(0).copy(
+          versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"),
+          tagName = Some("core-v1.0.0"),
+          failed = true,
+          failureCause = Some(failure)
+        ),
+        projects(1).copy(
+          versions = Some("0.1.0" -> "0.2.0-SNAPSHOT"),
+          tagName = Some("legacy-v0.1.0"),
+          failed = true,
+          failureCause = Some(new RuntimeException("legacy failure"))
+        )
       )
-    )
-    val resolved = Seq(
-      project("core"),
-      project("api").copy(versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
-    )
-    val result   = MonorepoProjectResolver.mergeSnapshot(current, resolved)
-    val core     = projectNamed(result, "core")
-    val api      = projectNamed(result, "api")
+      val resolved = Seq(
+        projects(2),
+        projects(3).copy(versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+      )
+      val result   = MonorepoProjectResolver.mergeSnapshot(current, resolved)
+      val core     = projectNamed(result, "core")
+      val api      = projectNamed(result, "api")
 
-    assertEquals(core.baseDir, resolved.head.baseDir)
-    assertEquals(core.versionFile, resolved.head.versionFile)
-    assertEquals(core.versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
-    assertEquals(core.tagName, Some("core-v1.0.0"))
-    assertEquals(core.failed, true)
-    assertEquals(core.failureCause, Some(failure))
-    assertEquals(api.versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
-    assertEquals(api.tagName, None)
-    assertEquals(api.failed, false)
-    assertEquals(result.map(_.name), Seq("core", "api"))
+      assertEquals(core.baseDir, resolved.head.baseDir)
+      assertEquals(core.versionFile, resolved.head.versionFile)
+      assertEquals(core.versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+      assertEquals(core.tagName, Some("core-v1.0.0"))
+      assertEquals(core.failed, true)
+      assertEquals(core.failureCause, Some(failure))
+      assertEquals(api.versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+      assertEquals(api.tagName, None)
+      assertEquals(api.failed, false)
+      assertEquals(result.map(_.name), Seq("core", "api"))
+    }
   }
 
   test("applyVersionOverrides - return empty output for empty projects") {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq.empty,
-      plan(selectionMode = SelectionMode.DetectChanges)
-    )
+    IO {
+      val result = MonorepoProjectResolver.applyVersionOverrides(
+        Seq.empty,
+        plan(selectionMode = SelectionMode.DetectChanges)
+      )
 
-    assertEquals(result, Seq.empty)
+      assertEquals(result, Seq.empty)
+    }
   }
 
   test("applyVersionOverrides - apply per-project overrides") {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(project("core"), project("api")),
-      plan(
-        selectionMode = SelectionMode.ExplicitSelection,
-        selectedNames = Seq("core"),
-        releaseVersionOverrides = Map("core" -> "1.0.0"),
-        nextVersionOverrides = Map("core" -> "1.1.0-SNAPSHOT")
+    dummyProjects("core", "api").map { projects =>
+      val result = MonorepoProjectResolver.applyVersionOverrides(
+        projects,
+        plan(
+          selectionMode = SelectionMode.ExplicitSelection,
+          selectedNames = Seq("core"),
+          releaseVersionOverrides = Map("core" -> "1.0.0"),
+          nextVersionOverrides = Map("core" -> "1.1.0-SNAPSHOT")
+        )
       )
-    )
 
-    assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
-    assertEquals(projectNamed(result, "api").versions, None)
+      assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+      assertEquals(projectNamed(result, "api").versions, None)
+    }
   }
 
   test("applyVersionOverrides - preserve current next version when only release is overridden") {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(
-        project("core", versions = Some("0.9.0" -> "1.0.0-SNAPSHOT")),
-        project("api", versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
-      ),
-      plan(
-        selectionMode = SelectionMode.ExplicitSelection,
-        releaseVersionOverrides = Map("core" -> "1.0.0")
+    dummyProjects("core", "api").map { projects =>
+      val result = MonorepoProjectResolver.applyVersionOverrides(
+        Seq(
+          projects.head.copy(versions = Some("0.9.0" -> "1.0.0-SNAPSHOT")),
+          projects(1).copy(versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+        ),
+        plan(
+          selectionMode = SelectionMode.ExplicitSelection,
+          releaseVersionOverrides = Map("core" -> "1.0.0")
+        )
       )
-    )
 
-    assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.0.0-SNAPSHOT"))
-    assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+      assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.0.0-SNAPSHOT"))
+      assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+    }
   }
 
   test("applyVersionOverrides - preserve current release version when only next is overridden") {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(
-        project("core", versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
-        project("api", versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
-      ),
-      plan(
-        selectionMode = SelectionMode.ExplicitSelection,
-        nextVersionOverrides = Map("core" -> "1.2.0-SNAPSHOT")
+    dummyProjects("core", "api").map { projects =>
+      val result = MonorepoProjectResolver.applyVersionOverrides(
+        Seq(
+          projects.head.copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
+          projects(1).copy(versions = Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+        ),
+        plan(
+          selectionMode = SelectionMode.ExplicitSelection,
+          nextVersionOverrides = Map("core" -> "1.2.0-SNAPSHOT")
+        )
       )
-    )
 
-    assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.2.0-SNAPSHOT"))
-    assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+      assertEquals(projectNamed(result, "core").versions, Some("1.0.0" -> "1.2.0-SNAPSHOT"))
+      assertEquals(projectNamed(result, "api").versions, Some("0.4.0" -> "0.5.0-SNAPSHOT"))
+    }
   }
 
   test("applyVersionOverrides - keep next version unresolved when only release is overridden") {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(project("core")),
-      plan(
-        selectionMode = SelectionMode.ExplicitSelection,
-        releaseVersionOverrides = Map("core" -> "1.0.0")
+    dummyProject("core").map { project =>
+      val result = MonorepoProjectResolver.applyVersionOverrides(
+        Seq(project),
+        plan(
+          selectionMode = SelectionMode.ExplicitSelection,
+          releaseVersionOverrides = Map("core" -> "1.0.0")
+        )
       )
-    )
-    val core   = projectNamed(result, "core")
+      val core   = projectNamed(result, "core")
 
-    assertEquals(core.versions, Some("1.0.0" -> ""))
-    assertEquals(core.releaseVersion, Some("1.0.0"))
-    assertEquals(core.nextVersion, None)
-    assertEquals(core.resolvedVersions, None)
+      assertEquals(core.versions, Some("1.0.0" -> ""))
+      assertEquals(core.releaseVersion, Some("1.0.0"))
+      assertEquals(core.nextVersion, None)
+      assertEquals(core.resolvedVersions, None)
+    }
   }
 
   test("applyVersionOverrides - keep release version unresolved when only next is overridden") {
-    val result = MonorepoProjectResolver.applyVersionOverrides(
-      Seq(project("core")),
-      plan(
-        selectionMode = SelectionMode.ExplicitSelection,
-        nextVersionOverrides = Map("core" -> "1.2.0-SNAPSHOT")
+    dummyProject("core").map { project =>
+      val result = MonorepoProjectResolver.applyVersionOverrides(
+        Seq(project),
+        plan(
+          selectionMode = SelectionMode.ExplicitSelection,
+          nextVersionOverrides = Map("core" -> "1.2.0-SNAPSHOT")
+        )
       )
-    )
-    val core   = projectNamed(result, "core")
+      val core   = projectNamed(result, "core")
 
-    assertEquals(core.versions, Some("" -> "1.2.0-SNAPSHOT"))
-    assertEquals(core.releaseVersion, None)
-    assertEquals(core.nextVersion, Some("1.2.0-SNAPSHOT"))
-    assertEquals(core.resolvedVersions, None)
+      assertEquals(core.versions, Some("" -> "1.2.0-SNAPSHOT"))
+      assertEquals(core.releaseVersion, None)
+      assertEquals(core.nextVersion, Some("1.2.0-SNAPSHOT"))
+      assertEquals(core.resolvedVersions, None)
+    }
   }
 
   private val defaultFlags = ExecutionFlags(
@@ -152,12 +167,6 @@ class MonorepoProjectResolverSpec extends FunSuite {
       nextVersionOverrides = nextVersionOverrides,
       decisionDefaults = ReleaseDecisionDefaults.empty
     )
-
-  private def project(
-      name: String,
-      versions: Option[(String, String)] = None
-  ): ProjectReleaseInfo =
-    MonorepoTestSupport.dummyProject(name).copy(versions = versions)
 
   private def projectNamed(
       projects: Seq[ProjectReleaseInfo],

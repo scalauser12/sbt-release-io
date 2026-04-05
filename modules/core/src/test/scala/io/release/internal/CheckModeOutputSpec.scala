@@ -50,17 +50,10 @@ class CheckModeOutputSpec extends FunSuite {
     )
   }
 
-  test("pushStatus - return PushConfiguredSummary when push is configured") {
+  test("pushStatus - return the configured summary when push is configured") {
     assertEquals(
       CheckModeOutput.pushStatus(pushConfigured = true),
       CheckModeOutput.PushConfiguredSummary
-    )
-  }
-
-  test("pushStatus - return 'configured (not executed in check mode)' when push is configured") {
-    assertEquals(
-      CheckModeOutput.pushStatus(pushConfigured = true),
-      "configured (not executed in check mode)"
     )
   }
 

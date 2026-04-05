@@ -5,6 +5,7 @@ import cats.effect.Resource
 import sbt.Project
 import sbt.Setting
 import sbt.State
+import sbt.Keys.packageOptions
 import sbt.internal.util.AttributeMap
 import sbt.internal.util.ConsoleOut
 import sbt.internal.util.GlobalLogging
@@ -206,6 +207,22 @@ object TestSupport {
   def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
     TestkitSbtCompat.extract(state).appendWithSession(settings, state)
 
+  def warningCount(log: String, warning: String): Int =
+    log.sliding(warning.length).count(_ == warning)
+
+  def manifestAttributes(state: State): Set[(String, String)] = {
+    val (_, options) = TestkitSbtCompat.extract(state).runTask(packageOptions, state)
+    manifestAttributes(options)
+  }
+
+  def manifestAttributes(
+      state: State,
+      projectRef: sbt.ProjectRef
+  ): Set[(String, String)] = {
+    val (_, options) = TestkitSbtCompat.extract(state).runTask(projectRef / packageOptions, state)
+    manifestAttributes(options)
+  }
+
   final case class BufferedState(state: State, consoleBuffer: ByteArrayOutputStream)
 
   def bufferedState(baseDir: File): BufferedState =
@@ -359,6 +376,21 @@ object TestSupport {
     runGit(repo, "commit", "-m", message)
     ()
   }
+
+  private def manifestAttributes(
+      options: Seq[sbt.PackageOption]
+  ): Set[(String, String)] =
+    options.flatMap {
+      case product: Product if product.productPrefix == "ManifestAttributes" =>
+        product.productElement(0) match {
+          case entries: Seq[?] @unchecked =>
+            entries.collect { case (name, value: String) =>
+              name.toString -> value
+            }
+          case _                          => Seq.empty
+        }
+      case _                                                                 => Seq.empty
+    }.toSet
 
   def runGit(repo: File, args: String*): String =
     Process(Seq("git") ++ args, repo).!!

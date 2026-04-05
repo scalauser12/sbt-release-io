@@ -507,23 +507,25 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
   test("compose - per-project validation returning ctx.failWith stops later projects") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val pCtx = ctx.withProjects(Seq(dummyProject("core"), dummyProject("api")))
-        val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "validate-fail-with-step",
-          execute = (c, _) => IO.pure(c),
-          validateWithContext = Some((c, project) =>
-            observed.update(_ :+ project.name).as {
-              if (project.name == "core")
-                c.failWith(new RuntimeException("fatal stop"))
-              else c
-            }
+        dummyProjects("core", "api").flatMap { projects =>
+          val pCtx = ctx.withProjects(projects)
+          val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "validate-fail-with-step",
+            execute = (c, _) => IO.pure(c),
+            validateWithContext = Some((c, project) =>
+              observed.update(_ :+ project.name).as {
+                if (project.name == "core")
+                  c.failWith(new RuntimeException("fatal stop"))
+                else c
+              }
+            )
           )
-        )
 
-        MonorepoComposer.compose(Seq(step))(pCtx).flatMap { result =>
-          observed.get.map { obs =>
-            assert(result.failed)
-            assertEquals(obs, List("core"))
+          MonorepoComposer.compose(Seq(step))(pCtx).flatMap { result =>
+            observed.get.map { obs =>
+              assert(result.failed)
+              assertEquals(obs, List("core"))
+            }
           }
         }
       }

@@ -13,7 +13,6 @@ import io.release.internal.CoreReleasePlan
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ReleaseLogPrefixes
-import io.release.internal.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
 import sbt.Project
@@ -174,7 +173,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       } yield {
         assertEquals(tags.trim, "v1.0.1")
         assertEquals(result.vcs.map(_.commandName), Some("git"))
-        assert(manifestAttributes(result.state).contains("Vcs-Release-Tag" -> "v1.0.1"))
+        assert(
+          TestSupport.manifestAttributes(result.state).contains("Vcs-Release-Tag" -> "v1.0.1")
+        )
       }
     }
   }
@@ -293,7 +294,7 @@ class VcsStepsSpec extends CatsEffectSuite {
       } yield {
         val warning =
           s"${ReleaseLogPrefixes.Core} Standard input closed before tag conflict resolution. Aborting."
-        assertEquals(warningCount(log, warning), 1)
+        assertEquals(TestSupport.warningCount(log, warning), 1)
       }
     }
   }
@@ -492,22 +493,6 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
-  private def manifestAttributes(state: sbt.State): Set[(String, String)] = {
-    val (_, options) = SbtRuntime.extracted(state).runTask(packageOptions, state)
-
-    options.flatMap {
-      case product: Product if product.productPrefix == "ManifestAttributes" =>
-        product.productElement(0) match {
-          case entries: Seq[?] @unchecked =>
-            entries.collect { case (name, value: String) =>
-              name.toString -> value
-            }
-          case _                          => Seq.empty
-        }
-      case _                                                                 => Seq.empty
-    }.toSet
-  }
-
   private def releaseManifestSettings(
       basePackageOptions: Seq[sbt.PackageOption] = Seq.empty
   ): Seq[sbt.Setting[?]] =
@@ -540,6 +525,4 @@ class VcsStepsSpec extends CatsEffectSuite {
     buffered.copy(state = state)
   }
 
-  private def warningCount(log: String, warning: String): Int =
-    log.sliding(warning.length).count(_ == warning)
 }

@@ -160,9 +160,11 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
           _              <- runPublishHooks(publishHookSteps, skippedCtx)
           skipped        <- observed.get
           _               = assertEquals(skipped, Nil)
+          _              <- observed.set(Nil)
           _              <- runPublishHooks(publishHookSteps, publishSkippedCtx)
           publishSkipped <- observed.get
           _               = assertEquals(publishSkipped, Nil)
+          _              <- observed.set(Nil)
           _              <- runPublishHooks(publishHookSteps, enabledCtx)
           events         <- observed.get
         } yield assertEquals(

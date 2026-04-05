@@ -10,7 +10,7 @@ import sbt.State
 
 import java.io.File
 
-trait MonorepoStepIOSpecSupport {
+trait MonorepoStepIOSpecSupport extends MonorepoDummyProjectSupport {
 
   protected val contextResource: Resource[IO, MonorepoContext] =
     MonorepoSpecSupport.dummyContextResource("monorepo-step-spec")
@@ -20,9 +20,6 @@ trait MonorepoStepIOSpecSupport {
       selectedProjectIds: Seq[String]
   )(projectsFor: File => Seq[Project]): Resource[IO, MonorepoContext] =
     MonorepoSpecSupport.loadedContextResource(prefix, selectedProjectIds)(projectsFor)
-
-  protected def dummyProject(name: String): ProjectReleaseInfo =
-    MonorepoSpecSupport.dummyProject(name)
 
   protected def scalaVersionOf(state: State): IO[String] =
     IO.blocking(SbtRuntime.extracted(state).get(scalaVersion))

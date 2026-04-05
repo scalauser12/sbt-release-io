@@ -46,10 +46,7 @@ class GitSpec extends CatsEffectSuite {
           onStart = process => pid.set(process.pid())
         )
         .flatMap { result =>
-          IO.blocking {
-            val handle = java.lang.ProcessHandle.of(pid.get())
-            val alive  = handle.isPresent && handle.get.isAlive
-
+          waitForProcessToExit(pid.get(), 1.second).map { alive =>
             assertEquals(result, None)
             assert(pid.get() > 0L)
             assertEquals(alive, false)

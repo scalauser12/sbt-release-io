@@ -72,16 +72,19 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         afterApi  <- MonorepoVcsSteps.tagReleasesPerProject.execute(afterCore, apiProject)
       } yield {
         assertEquals(
-          manifestAttributes(afterCore.state, coreProject.ref),
-          Set("Existing" -> "kept", "Vcs-Release-Tag" -> "core-v1.0.0")
-        )
-        assertEquals(manifestAttributes(afterCore.state, apiProject.ref), Set("Existing" -> "kept"))
-        assertEquals(
-          manifestAttributes(afterApi.state, coreProject.ref),
+          TestSupport.manifestAttributes(afterCore.state, coreProject.ref),
           Set("Existing" -> "kept", "Vcs-Release-Tag" -> "core-v1.0.0")
         )
         assertEquals(
-          manifestAttributes(afterApi.state, apiProject.ref),
+          TestSupport.manifestAttributes(afterCore.state, apiProject.ref),
+          Set("Existing" -> "kept")
+        )
+        assertEquals(
+          TestSupport.manifestAttributes(afterApi.state, coreProject.ref),
+          Set("Existing" -> "kept", "Vcs-Release-Tag" -> "core-v1.0.0")
+        )
+        assertEquals(
+          TestSupport.manifestAttributes(afterApi.state, apiProject.ref),
           Set("Existing" -> "kept", "Vcs-Release-Tag" -> "api-v2.0.0")
         )
       }
@@ -104,7 +107,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         afterApi  <- MonorepoVcsSteps.tagReleasesPerProject.execute(afterCore, apiProject)
       } yield {
         assertEquals(
-          manifestAttributes(afterCore.state, coreProject.ref),
+          TestSupport.manifestAttributes(afterCore.state, coreProject.ref),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "release-hash",
@@ -112,11 +115,11 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           )
         )
         assertEquals(
-          manifestAttributes(afterCore.state, apiProject.ref),
+          TestSupport.manifestAttributes(afterCore.state, apiProject.ref),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> "release-hash")
         )
         assertEquals(
-          manifestAttributes(afterApi.state, coreProject.ref),
+          TestSupport.manifestAttributes(afterApi.state, coreProject.ref),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "release-hash",
@@ -124,7 +127,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           )
         )
         assertEquals(
-          manifestAttributes(afterApi.state, apiProject.ref),
+          TestSupport.manifestAttributes(afterApi.state, apiProject.ref),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "release-hash",
@@ -731,25 +734,6 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         IO.pure(s"version=$version\n")
       }
     )
-
-  private def manifestAttributes(
-      state: State,
-      projectRef: ProjectRef
-  ): Set[(String, String)] = {
-    val (_, options) = SbtRuntime.extracted(state).runTask(projectRef / packageOptions, state)
-
-    options.flatMap {
-      case product: Product if product.productPrefix == "ManifestAttributes" =>
-        product.productElement(0) match {
-          case entries: Seq[?] @unchecked =>
-            entries.collect { case (name, value: String) =>
-              name.toString -> value
-            }
-          case _                          => Seq.empty
-        }
-      case _                                                                 => Seq.empty
-    }.toSet
-  }
 
   private def releaseManifestSettings(
       basePackageOptions: Seq[sbt.PackageOption] = Seq(ManifestAttributes("Existing" -> "kept")),
