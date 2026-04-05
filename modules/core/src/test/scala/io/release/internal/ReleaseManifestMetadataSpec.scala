@@ -7,7 +7,6 @@ import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
 import sbt.Package.ManifestAttributes
 import sbt.Project
-import sbt.State
 import sbt.settingKey
 
 class ReleaseManifestMetadataSpec extends CatsEffectSuite {
@@ -30,14 +29,14 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
         val cleared = ReleaseIO.clearReleaseManifestMetadata(seeded)
 
         assertEquals(
-          manifestAttributes(seeded),
+          TestSupport.manifestAttributes(seeded),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "abc123",
             "Vcs-Release-Tag"  -> "v1.0.0"
           )
         )
-        assertEquals(manifestAttributes(cleared), Set("Existing" -> "kept"))
+        assertEquals(TestSupport.manifestAttributes(cleared), Set("Existing" -> "kept"))
       }
     }
   }
@@ -62,7 +61,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
         )
 
         assertEquals(
-          manifestAttributes(secondPass),
+          TestSupport.manifestAttributes(secondPass),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "second-hash",
@@ -88,22 +87,6 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
         currentProjectId = Some(projectId)
       )
     }
-
-  private def manifestAttributes(state: State): Set[(String, String)] = {
-    val (_, options) = SbtRuntime.extracted(state).runTask(packageOptions, state)
-
-    options.flatMap {
-      case product: Product if product.productPrefix == "ManifestAttributes" =>
-        product.productElement(0) match {
-          case entries: Seq[?] @unchecked =>
-            entries.collect { case (name, value: String) =>
-              name.toString -> value
-            }
-          case _                          => Seq.empty
-        }
-      case _                                                                 => Seq.empty
-    }.toSet
-  }
 
   private def releaseManifestSettings(
       basePackageOptions: Seq[sbt.PackageOption],

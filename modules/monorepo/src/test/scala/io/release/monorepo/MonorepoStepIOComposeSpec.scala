@@ -55,16 +55,16 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - iterate PerProject executes over all projects") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
-        val projects = Seq(dummyProject("core"), dummyProject("api"))
-        val pCtx     = ctx.withProjects(projects)
+        dummyProjects("core", "api").flatMap { projects =>
+          val pCtx = ctx.withProjects(projects)
+          val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "per-project-step",
+            execute = (c, proj) => log.update(_ :+ proj.name).as(c)
+          )
 
-        val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "per-project-step",
-          execute = (c, proj) => log.update(_ :+ proj.name).as(c)
-        )
-
-        MonorepoComposer.compose(Seq(step))(pCtx) *>
-          log.get.map(obs => assertEquals(obs, List("core", "api")))
+          MonorepoComposer.compose(Seq(step))(pCtx) *>
+            log.get.map(obs => assertEquals(obs, List("core", "api")))
+        }
       }
     }
   }
@@ -72,24 +72,26 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - per-project validation returning ctx.failWith skips execute and later projects") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val pCtx = ctx.withProjects(Seq(dummyProject("core"), dummyProject("api")))
-        val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "validate-fail-with-step",
-          validateWithContext = Some((currentCtx, project) =>
-            observed.update(_ :+ s"validate:${project.name}").as {
-              if (project.name == "core")
-                currentCtx.failWith(new RuntimeException("fatal stop"))
-              else currentCtx
-            }
-          ),
-          execute =
-            (currentCtx, project) => observed.update(_ :+ s"execute:${project.name}").as(currentCtx)
-        )
+        dummyProjects("core", "api").flatMap { projects =>
+          val pCtx = ctx.withProjects(projects)
+          val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "validate-fail-with-step",
+            validateWithContext = Some((currentCtx, project) =>
+              observed.update(_ :+ s"validate:${project.name}").as {
+                if (project.name == "core")
+                  currentCtx.failWith(new RuntimeException("fatal stop"))
+                else currentCtx
+              }
+            ),
+            execute = (currentCtx, project) =>
+              observed.update(_ :+ s"execute:${project.name}").as(currentCtx)
+          )
 
-        MonorepoComposer.compose(Seq(step))(pCtx).flatMap { result =>
-          observed.get.map { obs =>
-            assert(result.failed)
-            assertEquals(obs, List("validate:core"))
+          MonorepoComposer.compose(Seq(step))(pCtx).flatMap { result =>
+            observed.get.map { obs =>
+              assert(result.failed)
+              assertEquals(obs, List("validate:core"))
+            }
           }
         }
       }
@@ -99,34 +101,42 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - batch-validate then execute selected projects after the selection boundary") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
-        val core     = dummyProject("core")
-        val api      = dummyProject("api")
-        val selected = api
-        val pCtx     = ctx.withProjects(Seq(core, api))
+        dummyProjects("core", "api").flatMap { projects =>
+          val core     = projects.head
+          val api      = projects(1)
+          val selected = api
+          val pCtx     = ctx.withProjects(Seq(core, api))
 
-        val setupStep = ProcessStep
-          .single[MonorepoContext]("detect-or-select-projects")
-          .withSelectionBoundary
-          .execute(c => log.update(_ :+ "setup").as(c.withProjects(Seq(selected))))
+          val setupStep = ProcessStep
+            .single[MonorepoContext]("detect-or-select-projects")
+            .withSelectionBoundary
+            .execute(c => log.update(_ :+ "setup").as(c.withProjects(Seq(selected))))
 
-        val stepA = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "step-a",
-          validate = (_, project) => log.update(_ :+ s"validate-a:${project.name}"),
-          execute = (c, project) => log.update(_ :+ s"execute-a:${project.name}").as(c)
-        )
-        val stepB = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "step-b",
-          validate = (_, project) => log.update(_ :+ s"validate-b:${project.name}"),
-          execute = (c, project) => log.update(_ :+ s"execute-b:${project.name}").as(c)
-        )
+          val stepA = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "step-a",
+            validate = (_, project) => log.update(_ :+ s"validate-a:${project.name}"),
+            execute = (c, project) => log.update(_ :+ s"execute-a:${project.name}").as(c)
+          )
+          val stepB = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "step-b",
+            validate = (_, project) => log.update(_ :+ s"validate-b:${project.name}"),
+            execute = (c, project) => log.update(_ :+ s"execute-b:${project.name}").as(c)
+          )
 
-        MonorepoComposer.compose(Seq(setupStep, stepA, stepB))(pCtx) *>
-          log.get.map { obs =>
-            assertEquals(
-              obs,
-              List("setup", "validate-a:api", "validate-b:api", "execute-a:api", "execute-b:api")
-            )
-          }
+          MonorepoComposer.compose(Seq(setupStep, stepA, stepB))(pCtx) *>
+            log.get.map { obs =>
+              assertEquals(
+                obs,
+                List(
+                  "setup",
+                  "validate-a:api",
+                  "validate-b:api",
+                  "execute-a:api",
+                  "execute-b:api"
+                )
+              )
+            }
+        }
       }
     }
   }
@@ -134,48 +144,50 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - preserve custom process order around the selection boundary") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
-        val core = dummyProject("core")
-        val api  = dummyProject("api")
-        val pCtx = ctx.withProjects(Seq(core, api))
+        dummyProjects("core", "api").flatMap { projects =>
+          val core = projects.head
+          val api  = projects(1)
+          val pCtx = ctx.withProjects(Seq(core, api))
 
-        val setup       = ProcessStep.Single[MonorepoContext](
-          name = "custom-setup",
-          validate = currentCtx =>
-            log.update(_ :+ s"validate-setup:${currentCtx.state.onFailure.isDefined}"),
-          execute = c => log.update(_ :+ "execute-setup").as(c)
-        )
-        val boundary    = ProcessStep
-          .single[MonorepoContext]("detect-or-select-projects")
-          .withSelectionBoundary
-          .execute(c => log.update(_ :+ "select").as(c.withProjects(Seq(api))))
-        val afterPer    = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "custom-project",
-          validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
-          execute = (c, project) => log.update(_ :+ s"execute-project:${project.name}").as(c)
-        )
-        val afterGlobal = ProcessStep.Single[MonorepoContext](
-          name = "custom-global",
-          validate = _ => log.update(_ :+ "validate-global"),
-          execute = c => log.update(_ :+ "execute-global").as(c)
-        )
+          val setup       = ProcessStep.Single[MonorepoContext](
+            name = "custom-setup",
+            validate = currentCtx =>
+              log.update(_ :+ s"validate-setup:${currentCtx.state.onFailure.isDefined}"),
+            execute = c => log.update(_ :+ "execute-setup").as(c)
+          )
+          val boundary    = ProcessStep
+            .single[MonorepoContext]("detect-or-select-projects")
+            .withSelectionBoundary
+            .execute(c => log.update(_ :+ "select").as(c.withProjects(Seq(api))))
+          val afterPer    = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "custom-project",
+            validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
+            execute = (c, project) => log.update(_ :+ s"execute-project:${project.name}").as(c)
+          )
+          val afterGlobal = ProcessStep.Single[MonorepoContext](
+            name = "custom-global",
+            validate = _ => log.update(_ :+ "validate-global"),
+            execute = c => log.update(_ :+ "execute-global").as(c)
+          )
 
-        MonorepoComposer.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx).flatMap {
-          result =>
-            log.get.map { obs =>
-              assertEquals(
-                obs,
-                List(
-                  "validate-setup:false",
-                  "execute-setup",
-                  "select",
-                  "validate-project:api",
-                  "validate-global",
-                  "execute-project:api",
-                  "execute-global"
+          MonorepoComposer.compose(Seq(setup, boundary, afterPer, afterGlobal))(pCtx).flatMap {
+            result =>
+              log.get.map { obs =>
+                assertEquals(
+                  obs,
+                  List(
+                    "validate-setup:false",
+                    "execute-setup",
+                    "select",
+                    "validate-project:api",
+                    "validate-global",
+                    "execute-project:api",
+                    "execute-global"
+                  )
                 )
-              )
-              assertEquals(result.state.onFailure, None)
-            }
+                assertEquals(result.state.onFailure, None)
+              }
+          }
         }
       }
     }
@@ -251,28 +263,29 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
 
   test("compose - preserve per-project failure causes in the final context") {
     contextResource.use { ctx =>
-      val projects = Seq(dummyProject("core"), dummyProject("api"))
-      val pCtx     = ctx.withProjects(projects)
+      dummyProjects("core", "api").flatMap { projects =>
+        val pCtx = ctx.withProjects(projects)
 
-      val failingStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-        name = "failing-step",
-        execute = (c, project) =>
-          if (project.name == "core")
-            IO.raiseError(new RuntimeException("core failed"))
-          else IO.pure(c)
-      )
-
-      MonorepoComposer.compose(Seq(failingStep))(pCtx).map { result =>
-        val aggregate = requireProjectFailures(result.failureCause)
-        assert(result.failed)
-        assert(aggregate.failures.map(_.projectName).contains("core"))
-        assertEquals(
-          aggregate.failures
-            .find(_.projectName == "core")
-            .flatMap(_.cause)
-            .map(_.getMessage),
-          Some("core failed")
+        val failingStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+          name = "failing-step",
+          execute = (c, project) =>
+            if (project.name == "core")
+              IO.raiseError(new RuntimeException("core failed"))
+            else IO.pure(c)
         )
+
+        MonorepoComposer.compose(Seq(failingStep))(pCtx).map { result =>
+          val aggregate = requireProjectFailures(result.failureCause)
+          assert(result.failed)
+          assert(aggregate.failures.map(_.projectName).contains("core"))
+          assertEquals(
+            aggregate.failures
+              .find(_.projectName == "core")
+              .flatMap(_.cause)
+              .map(_.getMessage),
+            Some("core failed")
+          )
+        }
       }
     }
   }
@@ -280,23 +293,23 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - per-project step returning ctx.failWith stops later projects") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val projects = Seq(dummyProject("core"), dummyProject("api"))
-        val pCtx     = ctx.withProjects(projects)
+        dummyProjects("core", "api").flatMap { projects =>
+          val pCtx = ctx.withProjects(projects)
+          val failStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "fail-with-step",
+            execute = (c, project) =>
+              observed.update(_ :+ project.name).as {
+                if (project.name == "core")
+                  c.failWith(new RuntimeException("fatal stop"))
+                else c
+              }
+          )
 
-        val failStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "fail-with-step",
-          execute = (c, project) =>
-            observed.update(_ :+ project.name).as {
-              if (project.name == "core")
-                c.failWith(new RuntimeException("fatal stop"))
-              else c
+          MonorepoComposer.compose(Seq(failStep))(pCtx).flatMap { result =>
+            observed.get.map { obs =>
+              assert(result.failed)
+              assertEquals(obs, List("core"))
             }
-        )
-
-        MonorepoComposer.compose(Seq(failStep))(pCtx).flatMap { result =>
-          observed.get.map { obs =>
-            assert(result.failed)
-            assertEquals(obs, List("core"))
           }
         }
       }
@@ -308,42 +321,43 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   ) {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val projects = Seq(dummyProject("core"), dummyProject("api"))
-        val pCtx     = ctx.withProjects(projects)
+        dummyProjects("core", "api").flatMap { projects =>
+          val pCtx = ctx.withProjects(projects)
 
-        val injectFailure = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
-          name = "inject-failure-command",
-          execute = (c, project) =>
-            observed.update(_ :+ project.name).as {
-              if (project.name == "core")
-                c.withState(
-                  c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
-                )
-              else c
-            }
-        )
-        val skipped       = ProcessStep.Single[MonorepoContext](
-          name = "skipped-after-failure",
-          execute = c => observed.update(_ :+ "after").as(c)
-        )
+          val injectFailure = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "inject-failure-command",
+            execute = (c, project) =>
+              observed.update(_ :+ project.name).as {
+                if (project.name == "core")
+                  c.withState(
+                    c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+                  )
+                else c
+              }
+          )
+          val skipped       = ProcessStep.Single[MonorepoContext](
+            name = "skipped-after-failure",
+            execute = c => observed.update(_ :+ "after").as(c)
+          )
 
-        MonorepoComposer
-          .compose(Seq(injectFailure, skipped))(pCtx)
-          .flatMap { result =>
-            observed.get.map { obs =>
-              assert(result.failed)
-              val aggregate = requireProjectFailures(result.failureCause)
-              assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
-              assert(
-                aggregate.failures.head.cause.exists(
-                  _.getMessage.contains("sbt task reported failure via FailureCommand")
+          MonorepoComposer
+            .compose(Seq(injectFailure, skipped))(pCtx)
+            .flatMap { result =>
+              observed.get.map { obs =>
+                assert(result.failed)
+                val aggregate = requireProjectFailures(result.failureCause)
+                assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+                assert(
+                  aggregate.failures.head.cause.exists(
+                    _.getMessage.contains("sbt task reported failure via FailureCommand")
+                  )
                 )
-              )
-              assertEquals(obs, List("core", "api"))
-              assertEquals(result.state.remainingCommands, Nil)
-              assertEquals(result.state.onFailure, None)
+                assertEquals(obs, List("core", "api"))
+                assertEquals(result.state.remainingCommands, Nil)
+                assertEquals(result.state.onFailure, None)
+              }
             }
-          }
+        }
       }
     }
   }

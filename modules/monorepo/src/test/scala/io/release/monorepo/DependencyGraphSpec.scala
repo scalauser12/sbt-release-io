@@ -311,22 +311,6 @@ class DependencyGraphSpec extends CatsEffectSuite {
       )
       .asInstanceOf[ResolvedProject]
 
-  private def assertBefore(
-      ordered: Seq[ProjectRef],
-      first: ProjectRef,
-      second: ProjectRef
-  ): Unit = {
-    val firstIndex  = ordered.indexOf(first)
-    val secondIndex = ordered.indexOf(second)
-
-    assert(firstIndex >= 0, s"Missing project ${first.project} in $ordered")
-    assert(secondIndex >= 0, s"Missing project ${second.project} in $ordered")
-    assert(
-      firstIndex < secondIndex,
-      s"Expected ${first.project} before ${second.project} but got ${ordered.map(_.project)}"
-    )
-  }
-
   private object CycleStatePatcher {
 
     def inject(

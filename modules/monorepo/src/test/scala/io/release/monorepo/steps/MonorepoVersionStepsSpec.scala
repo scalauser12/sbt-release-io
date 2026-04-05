@@ -166,7 +166,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
       } yield {
         val warning =
           s"${ReleaseLogPrefixes.Monorepo} Standard input closed while waiting for Release version for core. Aborting."
-        assertEquals(MonorepoVersionStepsSpec.warningCount(log, warning), 1)
+        assertEquals(TestSupport.warningCount(log, warning), 1)
       }
     }
   }
@@ -188,7 +188,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
       } yield {
         val warning =
           s"${ReleaseLogPrefixes.Monorepo} Standard input closed while waiting for Next version for core. Aborting."
-        assertEquals(MonorepoVersionStepsSpec.warningCount(log, warning), 1)
+        assertEquals(TestSupport.warningCount(log, warning), 1)
       }
     }
   }
@@ -493,7 +493,4 @@ private object MonorepoVersionStepsSpec {
         flags = MonorepoSpecSupport.defaultFlags.copy(interactive = true)
       )
     )
-
-  def warningCount(log: String, warning: String): Int =
-    log.sliding(warning.length).count(_ == warning)
 }

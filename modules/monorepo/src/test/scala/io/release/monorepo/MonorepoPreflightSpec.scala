@@ -16,7 +16,7 @@ import munit.CatsEffectSuite
 
 import java.io.File
 
-class MonorepoPreflightSpec extends CatsEffectSuite {
+class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSupport {
 
   test("renderSummary - include selection and per-project tag summaries") {
     val summary = MonorepoPreflight.Summary(
@@ -567,25 +567,27 @@ class MonorepoPreflightSpec extends CatsEffectSuite {
   }
 
   test("renderProjects - fail on inconsistent project and tag outcome counts") {
-    val projects = Seq(
-      MonorepoTestSupport.dummyProject("core").copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
-      MonorepoTestSupport.dummyProject("api").copy(versions = Some("2.0.0" -> "2.1.0-SNAPSHOT"))
-    )
-    val tags     = MonorepoPreflight.Evaluation.Resolved(
-      Seq(
-        MonorepoVcsSteps.PreflightTagOutcome("core/v1.0.0", "available"),
-        MonorepoVcsSteps.PreflightTagOutcome("api/v2.0.0", "available"),
-        MonorepoVcsSteps.PreflightTagOutcome("extra/v3.0.0", "available")
+    dummyProjects("core", "api").flatMap { rawProjects =>
+      val projects = Seq(
+        rawProjects.head.copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
+        rawProjects(1).copy(versions = Some("2.0.0" -> "2.1.0-SNAPSHOT"))
       )
-    )
+      val tags     = MonorepoPreflight.Evaluation.Resolved(
+        Seq(
+          MonorepoVcsSteps.PreflightTagOutcome("core/v1.0.0", "available"),
+          MonorepoVcsSteps.PreflightTagOutcome("api/v2.0.0", "available"),
+          MonorepoVcsSteps.PreflightTagOutcome("extra/v3.0.0", "available")
+        )
+      )
 
-    assertFailure[IllegalStateException, Seq[MonorepoPreflight.ProjectSummary]](
-      MonorepoPreflight.renderProjects(
-        projects,
-        builtInVersionsResolved = true,
-        tagOutcomes = tags
-      )
-    )(err => assert(err.getMessage.contains("inconsistent project/tag counts")))
+      assertFailure[IllegalStateException, Seq[MonorepoPreflight.ProjectSummary]](
+        MonorepoPreflight.renderProjects(
+          projects,
+          builtInVersionsResolved = true,
+          tagOutcomes = tags
+        )
+      )(err => assert(err.getMessage.contains("inconsistent project/tag counts")))
+    }
   }
 
   private val preflightFixtureResource: Resource[IO, (File, MonorepoContext, File)] =

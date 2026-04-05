@@ -46,11 +46,11 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         currentHash <- vcs.currentHash
       } yield {
         assertEquals(
-          manifestAttributes(result.state, fixture.refsById("core")),
+          TestSupport.manifestAttributes(result.state, fixture.refsById("core")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> currentHash)
         )
         assertEquals(
-          manifestAttributes(result.state, fixture.refsById("api")),
+          TestSupport.manifestAttributes(result.state, fixture.refsById("api")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> currentHash)
         )
       }
@@ -80,11 +80,11 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       } yield {
         assertEquals(afterHash, beforeHash)
         assertEquals(
-          manifestAttributes(result.state, fixture.refsById("core")),
+          TestSupport.manifestAttributes(result.state, fixture.refsById("core")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> beforeHash)
         )
         assertEquals(
-          manifestAttributes(result.state, fixture.refsById("api")),
+          TestSupport.manifestAttributes(result.state, fixture.refsById("api")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> beforeHash)
         )
       }
@@ -116,11 +116,11 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       } yield {
         assertNotEquals(nextHash, releaseHash)
         assertEquals(
-          manifestAttributes(afterNextCommit.state, fixture.refsById("core")),
+          TestSupport.manifestAttributes(afterNextCommit.state, fixture.refsById("core")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> releaseHash)
         )
         assertEquals(
-          manifestAttributes(afterNextCommit.state, fixture.refsById("api")),
+          TestSupport.manifestAttributes(afterNextCommit.state, fixture.refsById("api")),
           Set("Existing" -> "kept", "Vcs-Release-Hash" -> releaseHash)
         )
       }
@@ -298,7 +298,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         )
 
         assertEquals(
-          manifestAttributes(seeded, coreRef),
+          TestSupport.manifestAttributes(seeded, coreRef),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "abc123",
@@ -306,15 +306,15 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         assertEquals(
-          manifestAttributes(seeded, apiRef),
+          TestSupport.manifestAttributes(seeded, apiRef),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "abc123",
             "Vcs-Release-Tag"  -> "api/v2.0.0"
           )
         )
-        assertEquals(manifestAttributes(cleared, coreRef), Set("Existing" -> "kept"))
-        assertEquals(manifestAttributes(cleared, apiRef), Set("Existing" -> "kept"))
+        assertEquals(TestSupport.manifestAttributes(cleared, coreRef), Set("Existing" -> "kept"))
+        assertEquals(TestSupport.manifestAttributes(cleared, apiRef), Set("Existing" -> "kept"))
       }
     }
   }
@@ -342,7 +342,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         )
 
         assertEquals(
-          manifestAttributes(secondPass, coreRef),
+          TestSupport.manifestAttributes(secondPass, coreRef),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "second-hash",
@@ -350,7 +350,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         assertEquals(
-          manifestAttributes(secondPass, apiRef),
+          TestSupport.manifestAttributes(secondPass, apiRef),
           Set(
             "Existing"         -> "kept",
             "Vcs-Release-Hash" -> "second-hash",
@@ -414,25 +414,6 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         IO.pure(s"version=$version\n")
       }
     )
-
-  private def manifestAttributes(
-      state: State,
-      projectRef: ProjectRef
-  ): Set[(String, String)] = {
-    val (_, options) = SbtRuntime.extracted(state).runTask(projectRef / packageOptions, state)
-
-    options.flatMap {
-      case product: Product if product.productPrefix == "ManifestAttributes" =>
-        product.productElement(0) match {
-          case entries: Seq[?] @unchecked =>
-            entries.collect { case (name, value: String) =>
-              name.toString -> value
-            }
-          case _                          => Seq.empty
-        }
-      case _                                                                 => Seq.empty
-    }.toSet
-  }
 
   private def releaseManifestSettings(
       basePackageOptions: Seq[sbt.PackageOption] = Seq(ManifestAttributes("Existing" -> "kept")),

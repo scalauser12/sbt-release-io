@@ -323,7 +323,7 @@ class StepHelpersSpec extends CatsEffectSuite {
                }
         log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
       } yield {
-        assertEquals(warningCount(log, snapshotDependencyEofWarning), 1)
+        assertEquals(TestSupport.warningCount(log, snapshotDependencyEofWarning), 1)
       }
     }
   }
@@ -580,7 +580,4 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   private def assertNoEofWarning(log: String): Unit =
     assert(!log.contains(snapshotDependencyEofWarning), s"Did not expect EOF warning in log: $log")
-
-  private def warningCount(log: String, warning: String): Int =
-    log.sliding(warning.length).count(_ == warning)
 }
