@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import io.release.internal.SbtRuntime
+import io.release.internal.LifecycleCatalogSupport
 import sbt.*
 
 /** Monorepo hook/policy settings resolved from a single sbt state snapshot. */
@@ -44,12 +45,12 @@ private[monorepo] object MonorepoHookConfiguration {
   val empty: MonorepoHookConfiguration = MonorepoHookConfiguration()
 
   lazy val defaultSettings: Seq[Setting[?]] =
-    uniqueSlots.map(_.defaultSetting)
+    validatedSlots.map(_.defaultSetting)
 
   def resolve(state: State): MonorepoHookConfiguration = {
     val extracted = SbtRuntime.extracted(state)
 
-    uniqueSlots.foldLeft(empty) { (config, slot) =>
+    validatedSlots.foldLeft(empty) { (config, slot) =>
       slot.resolve(extracted, config)
     }
   }
@@ -58,18 +59,16 @@ private[monorepo] object MonorepoHookConfiguration {
       left: MonorepoHookConfiguration,
       right: MonorepoHookConfiguration
   ): MonorepoHookConfiguration =
-    uniqueSlots.foldLeft(left) { (config, slot) =>
+    validatedSlots.foldLeft(left) { (config, slot) =>
       slot.merge(config, right)
     }
 
   def hasCustomizations(config: MonorepoHookConfiguration): Boolean =
-    uniqueSlots.exists(_.isCustomized(config))
+    validatedSlots.exists(_.isCustomized(config))
 
-  private def uniqueSlots: Vector[MonorepoConfigSlot] =
-    MonorepoLifecycleSlots.slots
-      .foldLeft((Vector.empty[MonorepoConfigSlot], Set.empty[String])) {
-        case ((acc, seen), slot) if seen.contains(slot.id) => (acc, seen)
-        case ((acc, seen), slot)                           => (acc :+ slot, seen + slot.id)
-      }
-      ._1
+  private lazy val validatedSlots: Vector[MonorepoConfigSlot] =
+    LifecycleCatalogSupport.validateUniqueSlots("monorepo", MonorepoLifecycleSlots.slots)(
+      _.id,
+      _.keyLabel
+    )
 }

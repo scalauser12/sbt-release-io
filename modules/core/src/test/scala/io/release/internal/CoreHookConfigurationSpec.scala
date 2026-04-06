@@ -86,6 +86,24 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
     }
   }
 
+  test("slot catalog validation fails fast on duplicate ids") {
+    IO {
+      val err = intercept[IllegalStateException] {
+        LifecycleCatalogSupport.validateUniqueSlots(
+          "core",
+          Vector[CoreConfigSlot](
+            CorePolicySlots.enablePublish,
+            CorePolicySlots.enablePublish
+          )
+        )(_.id, _.keyLabel)
+      }
+
+      assert(err.getMessage.contains("core lifecycle slot catalog"))
+      assert(err.getMessage.contains(CorePolicySlots.enablePublish.id))
+      assert(err.getMessage.contains(CorePolicySlots.enablePublish.keyLabel))
+    }
+  }
+
   private def stateResource(
       prefix: String,
       settings: Seq[Setting[?]]

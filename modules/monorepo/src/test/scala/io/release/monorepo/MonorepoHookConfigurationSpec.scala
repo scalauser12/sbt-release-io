@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.TestSupport
+import io.release.internal.LifecycleCatalogSupport
 import munit.CatsEffectSuite
 import sbt.*
 
@@ -89,6 +90,24 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
           )
         )
       )
+    }
+  }
+
+  test("slot catalog validation fails fast on duplicate ids") {
+    IO {
+      val err = intercept[IllegalStateException] {
+        LifecycleCatalogSupport.validateUniqueSlots(
+          "monorepo",
+          Vector[MonorepoConfigSlot](
+            MonorepoPolicySlots.enablePublish,
+            MonorepoPolicySlots.enablePublish
+          )
+        )(_.id, _.keyLabel)
+      }
+
+      assert(err.getMessage.contains("monorepo lifecycle slot catalog"))
+      assert(err.getMessage.contains(MonorepoPolicySlots.enablePublish.id))
+      assert(err.getMessage.contains(MonorepoPolicySlots.enablePublish.keyLabel))
     }
   }
 

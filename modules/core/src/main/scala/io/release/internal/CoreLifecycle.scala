@@ -103,6 +103,19 @@ private[release] object CoreLifecycle {
   private type Phase =
     LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]
 
+  private sealed trait CatalogEntry
+
+  private object CatalogEntry {
+    final case class BuiltIn(
+        step: ProcessStep.Single[ReleaseContext],
+        enabled: CoreHookConfiguration => Boolean = _ => true
+    ) extends CatalogEntry
+
+    final case class Hook(
+        descriptor: CoreHookSlots.HookDescriptor
+    ) extends CatalogEntry
+  }
+
   private def publishCachedGate(
       phase: String
   ): LifecycleCompiler.CachedSingleGate[ReleaseContext, CorePublishHookGateCache.HookToken] =
@@ -123,15 +136,6 @@ private[release] object CoreLifecycle {
       enabled = enabled
     )
 
-  private def builtIn(
-      step: ProcessStep.Single[ReleaseContext],
-      policySlot: CorePolicySlot
-  ): Phase =
-    builtIn(
-      step = step,
-      enabled = policySlot.enabled
-    )
-
   private def hookPhase(
       descriptor: CoreHookSlots.HookDescriptor
   ): Phase =
@@ -147,52 +151,50 @@ private[release] object CoreLifecycle {
       enabled = descriptor.enabled
     )
 
-  private def hookPhase(
-      phase: String
-  ): Phase =
-    hookPhase(
-      CoreHookSlots.descriptors
-        .find(_.phase == phase)
-        .getOrElse(
-          throw new IllegalArgumentException(s"Unknown core hook phase descriptor: $phase")
-        )
-    )
-
-  private[release] val phases: Seq[Phase] = Seq(
-    builtIn(ReleaseSteps.initializeVcs),
-    builtIn(ReleaseSteps.checkCleanWorkingDir),
-    hookPhase("after-clean-check"),
-    builtIn(
+  private val catalog: Vector[CatalogEntry] = Vector(
+    CatalogEntry.BuiltIn(ReleaseSteps.initializeVcs),
+    CatalogEntry.BuiltIn(ReleaseSteps.checkCleanWorkingDir),
+    CatalogEntry.Hook(CoreHookSlots.afterCleanCheckDescriptor),
+    CatalogEntry.BuiltIn(
       ReleaseSteps.checkSnapshotDependencies,
-      CorePolicySlots.enableSnapshotDependenciesCheck
+      CorePolicySlots.enableSnapshotDependenciesCheck.enabled
     ),
-    hookPhase("before-version-resolution"),
-    builtIn(ReleaseSteps.inquireVersions),
-    hookPhase("after-version-resolution"),
-    builtIn(ReleaseSteps.runClean, CorePolicySlots.enableRunClean),
-    builtIn(ReleaseSteps.runTests, CorePolicySlots.enableRunTests),
-    hookPhase("before-release-version-write"),
-    builtIn(ReleaseSteps.setReleaseVersion),
-    hookPhase("after-release-version-write"),
-    hookPhase("before-release-commit"),
-    builtIn(ReleaseSteps.commitReleaseVersion),
-    hookPhase("after-release-commit"),
-    hookPhase("before-tag"),
-    builtIn(ReleaseSteps.tagRelease, CorePolicySlots.enableTagging),
-    hookPhase("after-tag"),
-    hookPhase("before-publish"),
-    builtIn(ReleaseSteps.publishArtifacts, CorePolicySlots.enablePublish),
-    hookPhase("after-publish"),
-    hookPhase("before-next-version-write"),
-    builtIn(ReleaseSteps.setNextVersion),
-    hookPhase("after-next-version-write"),
-    hookPhase("before-next-commit"),
-    builtIn(ReleaseSteps.commitNextVersion),
-    hookPhase("after-next-commit"),
-    hookPhase("before-push"),
-    builtIn(ReleaseSteps.pushChanges, CorePolicySlots.enablePush),
-    hookPhase("after-push")
+    CatalogEntry.Hook(CoreHookSlots.beforeVersionResolutionDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.inquireVersions),
+    CatalogEntry.Hook(CoreHookSlots.afterVersionResolutionDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.runClean, CorePolicySlots.enableRunClean.enabled),
+    CatalogEntry.BuiltIn(ReleaseSteps.runTests, CorePolicySlots.enableRunTests.enabled),
+    CatalogEntry.Hook(CoreHookSlots.beforeReleaseVersionWriteDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.setReleaseVersion),
+    CatalogEntry.Hook(CoreHookSlots.afterReleaseVersionWriteDescriptor),
+    CatalogEntry.Hook(CoreHookSlots.beforeReleaseCommitDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.commitReleaseVersion),
+    CatalogEntry.Hook(CoreHookSlots.afterReleaseCommitDescriptor),
+    CatalogEntry.Hook(CoreHookSlots.beforeTagDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.tagRelease, CorePolicySlots.enableTagging.enabled),
+    CatalogEntry.Hook(CoreHookSlots.afterTagDescriptor),
+    CatalogEntry.Hook(CoreHookSlots.beforePublishDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.publishArtifacts, CorePolicySlots.enablePublish.enabled),
+    CatalogEntry.Hook(CoreHookSlots.afterPublishDescriptor),
+    CatalogEntry.Hook(CoreHookSlots.beforeNextVersionWriteDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.setNextVersion),
+    CatalogEntry.Hook(CoreHookSlots.afterNextVersionWriteDescriptor),
+    CatalogEntry.Hook(CoreHookSlots.beforeNextCommitDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.commitNextVersion),
+    CatalogEntry.Hook(CoreHookSlots.afterNextCommitDescriptor),
+    CatalogEntry.Hook(CoreHookSlots.beforePushDescriptor),
+    CatalogEntry.BuiltIn(ReleaseSteps.pushChanges, CorePolicySlots.enablePush.enabled),
+    CatalogEntry.Hook(CoreHookSlots.afterPushDescriptor)
   )
+
+  private[release] lazy val orderedHookDescriptors: Vector[CoreHookSlots.HookDescriptor] =
+    catalog.collect { case CatalogEntry.Hook(descriptor) => descriptor }
+
+  private[release] lazy val phases: Seq[Phase] =
+    catalog.map {
+      case CatalogEntry.BuiltIn(step, enabled) => builtIn(step, enabled)
+      case CatalogEntry.Hook(descriptor)       => hookPhase(descriptor)
+    }
 
   private[release] lazy val configDefaultSettings: Seq[Setting[?]] =
     CoreHookConfiguration.defaultSettings

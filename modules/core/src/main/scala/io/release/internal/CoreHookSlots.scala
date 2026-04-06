@@ -171,7 +171,7 @@ private[release] object CoreHookSlots {
   private val publishGate: ReleaseContext => IO[Boolean] =
     PublishSteps.shouldRunPublishHooks
 
-  private val afterCleanCheckDescriptor =
+  private[release] val afterCleanCheckDescriptor =
     new HookDescriptor(
       phase = "after-clean-check",
       slot = afterCleanCheckHooks
@@ -180,7 +180,7 @@ private[release] object CoreHookSlots {
         hooks.afterCleanCheckHooks
     }
 
-  private val beforeVersionResolutionDescriptor =
+  private[release] val beforeVersionResolutionDescriptor =
     new HookDescriptor(
       phase = "before-version-resolution",
       slot = beforeVersionResolutionHooks
@@ -189,7 +189,7 @@ private[release] object CoreHookSlots {
         hooks.beforeVersionResolutionHooks
     }
 
-  private val afterVersionResolutionDescriptor =
+  private[release] val afterVersionResolutionDescriptor =
     new HookDescriptor(
       phase = "after-version-resolution",
       slot = afterVersionResolutionHooks
@@ -198,7 +198,7 @@ private[release] object CoreHookSlots {
         hooks.afterVersionResolutionHooks
     }
 
-  private val beforeReleaseVersionWriteDescriptor =
+  private[release] val beforeReleaseVersionWriteDescriptor =
     new HookDescriptor(
       phase = "before-release-version-write",
       slot = beforeReleaseVersionWriteHooks
@@ -207,7 +207,7 @@ private[release] object CoreHookSlots {
         hooks.beforeReleaseVersionWriteHooks
     }
 
-  private val afterReleaseVersionWriteDescriptor =
+  private[release] val afterReleaseVersionWriteDescriptor =
     new HookDescriptor(
       phase = "after-release-version-write",
       slot = afterReleaseVersionWriteHooks
@@ -216,7 +216,7 @@ private[release] object CoreHookSlots {
         hooks.afterReleaseVersionWriteHooks
     }
 
-  private val beforeReleaseCommitDescriptor =
+  private[release] val beforeReleaseCommitDescriptor =
     new HookDescriptor(
       phase = "before-release-commit",
       slot = beforeReleaseCommitHooks
@@ -225,7 +225,7 @@ private[release] object CoreHookSlots {
         hooks.beforeReleaseCommitHooks
     }
 
-  private val afterReleaseCommitDescriptor =
+  private[release] val afterReleaseCommitDescriptor =
     new HookDescriptor(
       phase = "after-release-commit",
       slot = afterReleaseCommitHooks
@@ -234,7 +234,7 @@ private[release] object CoreHookSlots {
         hooks.afterReleaseCommitHooks
     }
 
-  private val beforeTagDescriptor =
+  private[release] val beforeTagDescriptor =
     new HookDescriptor(
       phase = "before-tag",
       slot = beforeTagHooks,
@@ -244,7 +244,7 @@ private[release] object CoreHookSlots {
         hooks.beforeTagHooks
     }
 
-  private val afterTagDescriptor =
+  private[release] val afterTagDescriptor =
     new HookDescriptor(
       phase = "after-tag",
       slot = afterTagHooks,
@@ -254,7 +254,7 @@ private[release] object CoreHookSlots {
         hooks.afterTagHooks
     }
 
-  private val beforePublishDescriptor =
+  private[release] val beforePublishDescriptor =
     new HookDescriptor(
       phase = "before-publish",
       slot = beforePublishHooks,
@@ -267,7 +267,7 @@ private[release] object CoreHookSlots {
         hooks.beforePublishHooks
     }
 
-  private val afterPublishDescriptor =
+  private[release] val afterPublishDescriptor =
     new HookDescriptor(
       phase = "after-publish",
       slot = afterPublishHooks,
@@ -280,7 +280,7 @@ private[release] object CoreHookSlots {
         hooks.afterPublishHooks
     }
 
-  private val beforeNextVersionWriteDescriptor =
+  private[release] val beforeNextVersionWriteDescriptor =
     new HookDescriptor(
       phase = "before-next-version-write",
       slot = beforeNextVersionWriteHooks
@@ -289,7 +289,7 @@ private[release] object CoreHookSlots {
         hooks.beforeNextVersionWriteHooks
     }
 
-  private val afterNextVersionWriteDescriptor =
+  private[release] val afterNextVersionWriteDescriptor =
     new HookDescriptor(
       phase = "after-next-version-write",
       slot = afterNextVersionWriteHooks
@@ -298,7 +298,7 @@ private[release] object CoreHookSlots {
         hooks.afterNextVersionWriteHooks
     }
 
-  private val beforeNextCommitDescriptor =
+  private[release] val beforeNextCommitDescriptor =
     new HookDescriptor(
       phase = "before-next-commit",
       slot = beforeNextCommitHooks
@@ -307,7 +307,7 @@ private[release] object CoreHookSlots {
         hooks.beforeNextCommitHooks
     }
 
-  private val afterNextCommitDescriptor =
+  private[release] val afterNextCommitDescriptor =
     new HookDescriptor(
       phase = "after-next-commit",
       slot = afterNextCommitHooks
@@ -316,7 +316,7 @@ private[release] object CoreHookSlots {
         hooks.afterNextCommitHooks
     }
 
-  private val beforePushDescriptor =
+  private[release] val beforePushDescriptor =
     new HookDescriptor(
       phase = "before-push",
       slot = beforePushHooks,
@@ -326,7 +326,7 @@ private[release] object CoreHookSlots {
         hooks.beforePushHooks
     }
 
-  private val afterPushDescriptor =
+  private[release] val afterPushDescriptor =
     new HookDescriptor(
       phase = "after-push",
       slot = afterPushHooks,
@@ -336,27 +336,9 @@ private[release] object CoreHookSlots {
         hooks.afterPushHooks
     }
 
-  val descriptors: Vector[HookDescriptor] =
-    Vector(
-      afterCleanCheckDescriptor,
-      beforeVersionResolutionDescriptor,
-      afterVersionResolutionDescriptor,
-      beforeReleaseVersionWriteDescriptor,
-      afterReleaseVersionWriteDescriptor,
-      beforeReleaseCommitDescriptor,
-      afterReleaseCommitDescriptor,
-      beforeTagDescriptor,
-      afterTagDescriptor,
-      beforePublishDescriptor,
-      afterPublishDescriptor,
-      beforeNextVersionWriteDescriptor,
-      afterNextVersionWriteDescriptor,
-      beforeNextCommitDescriptor,
-      afterNextCommitDescriptor,
-      beforePushDescriptor,
-      afterPushDescriptor
-    )
+  lazy val descriptors: Vector[HookDescriptor] =
+    CoreLifecycle.orderedHookDescriptors
 
-  val hookSlots: Vector[CoreHookSlot] =
+  lazy val hookSlots: Vector[CoreHookSlot] =
     descriptors.map(_.slot)
 }
