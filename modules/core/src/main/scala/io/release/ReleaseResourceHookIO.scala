@@ -2,8 +2,8 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.CoreHookConfiguration
-import io.release.internal.CoreLifecycleSlots
 import io.release.internal.LifecycleConfigCompiler
+import io.release.internal.CoreHookSlots
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -73,27 +73,6 @@ object ReleaseResourceHooks {
   private type HookAssignment =
     (LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO], Seq[ReleaseHookIO])
 
-  private def hookBuckets[T](hooks: ReleaseResourceHooks[T]): Seq[Seq[ReleaseResourceHookIO[T]]] =
-    Seq(
-      hooks.afterCleanCheckHooks,
-      hooks.beforeVersionResolutionHooks,
-      hooks.afterVersionResolutionHooks,
-      hooks.beforeReleaseVersionWriteHooks,
-      hooks.afterReleaseVersionWriteHooks,
-      hooks.beforeReleaseCommitHooks,
-      hooks.afterReleaseCommitHooks,
-      hooks.beforeTagHooks,
-      hooks.afterTagHooks,
-      hooks.beforePublishHooks,
-      hooks.afterPublishHooks,
-      hooks.beforeNextVersionWriteHooks,
-      hooks.afterNextVersionWriteHooks,
-      hooks.beforeNextCommitHooks,
-      hooks.afterNextCommitHooks,
-      hooks.beforePushHooks,
-      hooks.afterPushHooks
-    )
-
   /** Convert resource-aware hooks into plain hooks by optionally binding the resource value.
     * Boolean policies default to `true` so the result is neutral when merged via
     * [[CoreHookConfiguration.mergeWith]].
@@ -119,17 +98,8 @@ object ReleaseResourceHooks {
   private[release] def hookAssignments[T](
       hooks: ReleaseResourceHooks[T],
       materialize: ReleaseResourceHookIO[T] => ReleaseHookIO
-  ): Seq[HookAssignment] = {
-    val slots   = CoreLifecycleSlots.hookSlots
-    val buckets = hookBuckets(hooks)
-
-    require(
-      slots.length == buckets.length,
-      s"Expected ${slots.length} hook buckets but received ${buckets.length}"
-    )
-
-    slots.zip(buckets).map { case (slot, hooksAtSlot) =>
-      slot -> hooksAtSlot.map(materialize)
+  ): Seq[HookAssignment] =
+    CoreHookSlots.descriptors.map { descriptor =>
+      descriptor.binding -> descriptor.resourceHooks(hooks).map(materialize)
     }
-  }
 }

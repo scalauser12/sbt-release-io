@@ -74,6 +74,39 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
       MonorepoLifecycleSlotsSpec.expectedHookPhases
     )
     assertEquals(
+      MonorepoGlobalHookSlots.descriptors.map(_.phase) ++
+        MonorepoProjectHookSlots.descriptors.map(_.phase),
+      Seq(
+        "after-clean-check",
+        "before-selection",
+        "after-selection",
+        "before-release-commit",
+        "after-release-commit",
+        "before-next-commit",
+        "after-next-commit",
+        "before-push",
+        "after-push",
+        "before-version-resolution",
+        "after-version-resolution",
+        "before-release-version-write",
+        "after-release-version-write",
+        "before-tag",
+        "after-tag",
+        "before-publish",
+        "after-publish",
+        "before-next-version-write",
+        "after-next-version-write"
+      )
+    )
+    assertEquals(
+      MonorepoGlobalHookSlots.descriptors.map(_.binding.keyLabel),
+      MonorepoLifecycleSlots.globalHookSlots.map(_.keyLabel)
+    )
+    assertEquals(
+      MonorepoProjectHookSlots.descriptors.map(_.binding.keyLabel),
+      MonorepoLifecycleSlots.projectHookSlots.map(_.keyLabel)
+    )
+    assertEquals(
       builtInStepNames(MonorepoLifecycle.phases),
       MonorepoReleaseSteps.defaults.map(_.name)
     )

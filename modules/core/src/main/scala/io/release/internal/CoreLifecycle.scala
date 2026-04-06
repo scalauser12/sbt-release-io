@@ -1,6 +1,5 @@
 package io.release.internal
 
-import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
@@ -9,7 +8,6 @@ import io.release.internal.LifecycleConfigCompiler.Binding
 import io.release.internal.LifecycleConfigCompiler.HookBinding
 import io.release.internal.LifecycleConfigCompiler.PolicyBinding
 import io.release.internal.LifecycleConfigCompiler.policyBinding
-import io.release.steps.PublishSteps
 import io.release.steps.ReleaseSteps
 import sbt.Setting
 
@@ -71,17 +69,11 @@ private[release] object CorePolicySlots {
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
 
-  private type Gate          = ReleaseContext => IO[Boolean]
   private type Phase         =
     LifecycleCompiler.Phase[CoreHookConfiguration, ReleaseContext, Nothing]
   private type Binding       = LifecycleConfigCompiler.Binding[CoreHookConfiguration]
   private type PolicyBinding =
     LifecycleConfigCompiler.PolicyBinding[CoreHookConfiguration]
-  private type HookBinding   =
-    LifecycleConfigCompiler.HookBinding[CoreHookConfiguration, ReleaseHookIO]
-
-  private val Always: Gate      = _ => IO.pure(true)
-  private val PublishGate: Gate = PublishSteps.shouldRunPublishHooks
 
   private def publishCachedGate(
       phase: String
@@ -117,150 +109,66 @@ private[release] object CoreLifecycle {
     )
 
   private def hookPhase(
-      phase: String,
-      hookBinding: HookBinding,
-      gate: Gate,
-      crossBuild: Boolean = false,
-      cachedGate: Option[
-        CachedSingleGate[
-          ReleaseContext,
-          CorePublishHookGateCache.HookToken
-        ]
-      ] = None,
-      enabled: CoreHookConfiguration => Boolean = _ => true,
-      additionalBindings: Seq[Binding] = Nil
+      descriptor: CoreHookSlots.HookDescriptor
   ): Phase =
     LifecycleCompiler.singleHookPhase(
-      phase = phase,
-      resolveHooks = hookBinding.resolveHooks,
-      gate = gate,
+      phase = descriptor.phase,
+      resolveHooks = descriptor.binding.resolveHooks,
+      gate = descriptor.gate,
       nameOf = (hook: ReleaseHookIO) => hook.name,
       executeOf = (hook: ReleaseHookIO) => hook.execute,
       validateOf = (hook: ReleaseHookIO) => hook.validate,
-      crossBuild = crossBuild,
-      cachedGate = cachedGate,
-      enabled = enabled,
-      configBindings = hookBinding +: additionalBindings
+      crossBuild = descriptor.crossBuild,
+      cachedGate = descriptor.cachedGatePhase.map(publishCachedGate),
+      enabled = descriptor.enabled,
+      configBindings = descriptor.binding +: descriptor.additionalBindings
+    )
+
+  private def hookPhase(
+      phase: String
+  ): Phase =
+    hookPhase(
+      CoreHookSlots.descriptors
+        .find(_.phase == phase)
+        .getOrElse(
+          throw new IllegalArgumentException(s"Unknown core hook phase descriptor: $phase")
+        )
     )
 
   private[release] val phases: Seq[Phase] = Seq(
     builtIn(ReleaseSteps.initializeVcs),
     builtIn(ReleaseSteps.checkCleanWorkingDir),
-    hookPhase(
-      phase = "after-clean-check",
-      hookBinding = CoreHookSlots.afterCleanCheckHooks,
-      gate = Always
-    ),
+    hookPhase("after-clean-check"),
     builtIn(
       ReleaseSteps.checkSnapshotDependencies,
       CorePolicySlots.enableSnapshotDependenciesCheck
     ),
-    hookPhase(
-      phase = "before-version-resolution",
-      hookBinding = CoreHookSlots.beforeVersionResolutionHooks,
-      gate = Always
-    ),
+    hookPhase("before-version-resolution"),
     builtIn(ReleaseSteps.inquireVersions),
-    hookPhase(
-      phase = "after-version-resolution",
-      hookBinding = CoreHookSlots.afterVersionResolutionHooks,
-      gate = Always
-    ),
+    hookPhase("after-version-resolution"),
     builtIn(ReleaseSteps.runClean, CorePolicySlots.enableRunClean),
     builtIn(ReleaseSteps.runTests, CorePolicySlots.enableRunTests),
-    hookPhase(
-      phase = "before-release-version-write",
-      hookBinding = CoreHookSlots.beforeReleaseVersionWriteHooks,
-      gate = Always
-    ),
+    hookPhase("before-release-version-write"),
     builtIn(ReleaseSteps.setReleaseVersion),
-    hookPhase(
-      phase = "after-release-version-write",
-      hookBinding = CoreHookSlots.afterReleaseVersionWriteHooks,
-      gate = Always
-    ),
-    hookPhase(
-      phase = "before-release-commit",
-      hookBinding = CoreHookSlots.beforeReleaseCommitHooks,
-      gate = Always
-    ),
+    hookPhase("after-release-version-write"),
+    hookPhase("before-release-commit"),
     builtIn(ReleaseSteps.commitReleaseVersion),
-    hookPhase(
-      phase = "after-release-commit",
-      hookBinding = CoreHookSlots.afterReleaseCommitHooks,
-      gate = Always
-    ),
-    hookPhase(
-      phase = "before-tag",
-      hookBinding = CoreHookSlots.beforeTagHooks,
-      gate = Always,
-      enabled = CorePolicySlots.enableTagging.enabled,
-      additionalBindings = Seq(CorePolicySlots.enableTagging)
-    ),
+    hookPhase("after-release-commit"),
+    hookPhase("before-tag"),
     builtIn(ReleaseSteps.tagRelease, CorePolicySlots.enableTagging),
-    hookPhase(
-      phase = "after-tag",
-      hookBinding = CoreHookSlots.afterTagHooks,
-      gate = Always,
-      enabled = CorePolicySlots.enableTagging.enabled,
-      additionalBindings = Seq(CorePolicySlots.enableTagging)
-    ),
-    hookPhase(
-      phase = "before-publish",
-      hookBinding = CoreHookSlots.beforePublishHooks,
-      gate = PublishGate,
-      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
-      cachedGate = Some(publishCachedGate("before-publish")),
-      enabled = CorePolicySlots.enablePublish.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePublish)
-    ),
+    hookPhase("after-tag"),
+    hookPhase("before-publish"),
     builtIn(ReleaseSteps.publishArtifacts, CorePolicySlots.enablePublish),
-    hookPhase(
-      phase = "after-publish",
-      hookBinding = CoreHookSlots.afterPublishHooks,
-      gate = PublishGate,
-      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
-      cachedGate = Some(publishCachedGate("after-publish")),
-      enabled = CorePolicySlots.enablePublish.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePublish)
-    ),
-    hookPhase(
-      phase = "before-next-version-write",
-      hookBinding = CoreHookSlots.beforeNextVersionWriteHooks,
-      gate = Always
-    ),
+    hookPhase("after-publish"),
+    hookPhase("before-next-version-write"),
     builtIn(ReleaseSteps.setNextVersion),
-    hookPhase(
-      phase = "after-next-version-write",
-      hookBinding = CoreHookSlots.afterNextVersionWriteHooks,
-      gate = Always
-    ),
-    hookPhase(
-      phase = "before-next-commit",
-      hookBinding = CoreHookSlots.beforeNextCommitHooks,
-      gate = Always
-    ),
+    hookPhase("after-next-version-write"),
+    hookPhase("before-next-commit"),
     builtIn(ReleaseSteps.commitNextVersion),
-    hookPhase(
-      phase = "after-next-commit",
-      hookBinding = CoreHookSlots.afterNextCommitHooks,
-      gate = Always
-    ),
-    hookPhase(
-      phase = "before-push",
-      hookBinding = CoreHookSlots.beforePushHooks,
-      gate = Always,
-      enabled = CorePolicySlots.enablePush.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePush)
-    ),
+    hookPhase("after-next-commit"),
+    hookPhase("before-push"),
     builtIn(ReleaseSteps.pushChanges, CorePolicySlots.enablePush),
-    hookPhase(
-      phase = "after-push",
-      hookBinding = CoreHookSlots.afterPushHooks,
-      gate = Always,
-      enabled = CorePolicySlots.enablePush.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePush)
-    )
+    hookPhase("after-push")
   )
 
   private[release] lazy val configDefaultSettings: Seq[Setting[?]] =

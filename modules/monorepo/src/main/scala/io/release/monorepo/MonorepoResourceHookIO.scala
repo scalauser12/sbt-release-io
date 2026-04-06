@@ -112,37 +112,6 @@ object MonorepoResourceHooks {
         Seq[MonorepoProjectHookIO]
     )
 
-  private def globalHookBuckets[T](
-      hooks: MonorepoResourceHooks[T]
-  ): Seq[Seq[MonorepoGlobalResourceHookIO[T]]] =
-    Seq(
-      hooks.afterCleanCheckHooks,
-      hooks.beforeSelectionHooks,
-      hooks.afterSelectionHooks,
-      hooks.beforeReleaseCommitHooks,
-      hooks.afterReleaseCommitHooks,
-      hooks.beforeNextCommitHooks,
-      hooks.afterNextCommitHooks,
-      hooks.beforePushHooks,
-      hooks.afterPushHooks
-    )
-
-  private def projectHookBuckets[T](
-      hooks: MonorepoResourceHooks[T]
-  ): Seq[Seq[MonorepoProjectResourceHookIO[T]]] =
-    Seq(
-      hooks.beforeVersionResolutionHooks,
-      hooks.afterVersionResolutionHooks,
-      hooks.beforeReleaseVersionWriteHooks,
-      hooks.afterReleaseVersionWriteHooks,
-      hooks.beforeTagHooks,
-      hooks.afterTagHooks,
-      hooks.beforePublishHooks,
-      hooks.afterPublishHooks,
-      hooks.beforeNextVersionWriteHooks,
-      hooks.afterNextVersionWriteHooks
-    )
-
   /** Convert resource-aware hooks into plain hooks by binding the resource value.
     * Boolean policies default to `true` so they are neutral when merged via
     * [[MonorepoHookConfiguration.mergeWith]].
@@ -185,36 +154,16 @@ object MonorepoResourceHooks {
   private[monorepo] def globalHookAssignments[T](
       hooks: MonorepoResourceHooks[T],
       materialize: MonorepoGlobalResourceHookIO[T] => MonorepoGlobalHookIO
-  ): Seq[GlobalHookAssignment] = {
-    val slots   = MonorepoLifecycleSlots.globalHookSlots
-    val buckets = globalHookBuckets(hooks)
-
-    require(
-      slots.length == buckets.length,
-      s"BUG: Expected ${slots.length} global hook buckets " +
-        s"but received ${buckets.length}"
-    )
-
-    slots.zip(buckets).map { case (slot, hooksAtSlot) =>
-      slot -> hooksAtSlot.map(materialize)
+  ): Seq[GlobalHookAssignment] =
+    MonorepoGlobalHookSlots.descriptors.map { descriptor =>
+      descriptor.binding -> descriptor.resourceHooks(hooks).map(materialize)
     }
-  }
 
   private[monorepo] def projectHookAssignments[T](
       hooks: MonorepoResourceHooks[T],
       materialize: MonorepoProjectResourceHookIO[T] => MonorepoProjectHookIO
-  ): Seq[ProjectHookAssignment] = {
-    val slots   = MonorepoLifecycleSlots.projectHookSlots
-    val buckets = projectHookBuckets(hooks)
-
-    require(
-      slots.length == buckets.length,
-      s"BUG: Expected ${slots.length} project hook buckets " +
-        s"but received ${buckets.length}"
-    )
-
-    slots.zip(buckets).map { case (slot, hooksAtSlot) =>
-      slot -> hooksAtSlot.map(materialize)
+  ): Seq[ProjectHookAssignment] =
+    MonorepoProjectHookSlots.descriptors.map { descriptor =>
+      descriptor.binding -> descriptor.resourceHooks(hooks).map(materialize)
     }
-  }
 }

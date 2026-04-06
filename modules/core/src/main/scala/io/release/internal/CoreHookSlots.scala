@@ -1,11 +1,30 @@
 package io.release.internal
 
+import cats.effect.IO
+import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleaseIO
+import io.release.ReleaseResourceHookIO
+import io.release.ReleaseResourceHooks
+import io.release.internal.LifecycleConfigCompiler.Binding
 import io.release.internal.LifecycleConfigCompiler.HookBinding
 import io.release.internal.LifecycleConfigCompiler.hookBinding
+import io.release.steps.PublishSteps
+import io.release.steps.ReleaseSteps
 
 private[release] object CoreHookSlots {
+
+  sealed abstract class HookDescriptor(
+      val phase: String,
+      val binding: HookBinding[CoreHookConfiguration, ReleaseHookIO],
+      val gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
+      val crossBuild: Boolean = false,
+      val cachedGatePhase: Option[String] = None,
+      val enabled: CoreHookConfiguration => Boolean = _ => true,
+      val additionalBindings: Seq[Binding[CoreHookConfiguration]] = Nil
+  ) {
+    def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]]
+  }
 
   val afterCleanCheckHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
     hookBinding(
@@ -126,24 +145,200 @@ private[release] object CoreHookSlots {
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
     )
 
-  val hookSlots: Vector[HookBinding[CoreHookConfiguration, ReleaseHookIO]] =
+  private val PublishGate: ReleaseContext => IO[Boolean] = PublishSteps.shouldRunPublishHooks
+
+  private val afterCleanCheckDescriptor =
+    new HookDescriptor(
+      phase = "after-clean-check",
+      binding = afterCleanCheckHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterCleanCheckHooks
+    }
+
+  private val beforeVersionResolutionDescriptor =
+    new HookDescriptor(
+      phase = "before-version-resolution",
+      binding = beforeVersionResolutionHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforeVersionResolutionHooks
+    }
+
+  private val afterVersionResolutionDescriptor =
+    new HookDescriptor(
+      phase = "after-version-resolution",
+      binding = afterVersionResolutionHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterVersionResolutionHooks
+    }
+
+  private val beforeReleaseVersionWriteDescriptor =
+    new HookDescriptor(
+      phase = "before-release-version-write",
+      binding = beforeReleaseVersionWriteHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforeReleaseVersionWriteHooks
+    }
+
+  private val afterReleaseVersionWriteDescriptor =
+    new HookDescriptor(
+      phase = "after-release-version-write",
+      binding = afterReleaseVersionWriteHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterReleaseVersionWriteHooks
+    }
+
+  private val beforeReleaseCommitDescriptor =
+    new HookDescriptor(
+      phase = "before-release-commit",
+      binding = beforeReleaseCommitHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforeReleaseCommitHooks
+    }
+
+  private val afterReleaseCommitDescriptor =
+    new HookDescriptor(
+      phase = "after-release-commit",
+      binding = afterReleaseCommitHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterReleaseCommitHooks
+    }
+
+  private val beforeTagDescriptor =
+    new HookDescriptor(
+      phase = "before-tag",
+      binding = beforeTagHooks,
+      enabled = CorePolicySlots.enableTagging.enabled,
+      additionalBindings = Seq(CorePolicySlots.enableTagging)
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforeTagHooks
+    }
+
+  private val afterTagDescriptor =
+    new HookDescriptor(
+      phase = "after-tag",
+      binding = afterTagHooks,
+      enabled = CorePolicySlots.enableTagging.enabled,
+      additionalBindings = Seq(CorePolicySlots.enableTagging)
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterTagHooks
+    }
+
+  private val beforePublishDescriptor =
+    new HookDescriptor(
+      phase = "before-publish",
+      binding = beforePublishHooks,
+      gate = PublishGate,
+      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      cachedGatePhase = Some("before-publish"),
+      enabled = CorePolicySlots.enablePublish.enabled,
+      additionalBindings = Seq(CorePolicySlots.enablePublish)
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforePublishHooks
+    }
+
+  private val afterPublishDescriptor =
+    new HookDescriptor(
+      phase = "after-publish",
+      binding = afterPublishHooks,
+      gate = PublishGate,
+      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      cachedGatePhase = Some("after-publish"),
+      enabled = CorePolicySlots.enablePublish.enabled,
+      additionalBindings = Seq(CorePolicySlots.enablePublish)
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterPublishHooks
+    }
+
+  private val beforeNextVersionWriteDescriptor =
+    new HookDescriptor(
+      phase = "before-next-version-write",
+      binding = beforeNextVersionWriteHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforeNextVersionWriteHooks
+    }
+
+  private val afterNextVersionWriteDescriptor =
+    new HookDescriptor(
+      phase = "after-next-version-write",
+      binding = afterNextVersionWriteHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterNextVersionWriteHooks
+    }
+
+  private val beforeNextCommitDescriptor =
+    new HookDescriptor(
+      phase = "before-next-commit",
+      binding = beforeNextCommitHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforeNextCommitHooks
+    }
+
+  private val afterNextCommitDescriptor =
+    new HookDescriptor(
+      phase = "after-next-commit",
+      binding = afterNextCommitHooks
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterNextCommitHooks
+    }
+
+  private val beforePushDescriptor =
+    new HookDescriptor(
+      phase = "before-push",
+      binding = beforePushHooks,
+      enabled = CorePolicySlots.enablePush.enabled,
+      additionalBindings = Seq(CorePolicySlots.enablePush)
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.beforePushHooks
+    }
+
+  private val afterPushDescriptor =
+    new HookDescriptor(
+      phase = "after-push",
+      binding = afterPushHooks,
+      enabled = CorePolicySlots.enablePush.enabled,
+      additionalBindings = Seq(CorePolicySlots.enablePush)
+    ) {
+      override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
+        hooks.afterPushHooks
+    }
+
+  val descriptors: Vector[HookDescriptor] =
     Vector(
-      afterCleanCheckHooks,
-      beforeVersionResolutionHooks,
-      afterVersionResolutionHooks,
-      beforeReleaseVersionWriteHooks,
-      afterReleaseVersionWriteHooks,
-      beforeReleaseCommitHooks,
-      afterReleaseCommitHooks,
-      beforeTagHooks,
-      afterTagHooks,
-      beforePublishHooks,
-      afterPublishHooks,
-      beforeNextVersionWriteHooks,
-      afterNextVersionWriteHooks,
-      beforeNextCommitHooks,
-      afterNextCommitHooks,
-      beforePushHooks,
-      afterPushHooks
+      afterCleanCheckDescriptor,
+      beforeVersionResolutionDescriptor,
+      afterVersionResolutionDescriptor,
+      beforeReleaseVersionWriteDescriptor,
+      afterReleaseVersionWriteDescriptor,
+      beforeReleaseCommitDescriptor,
+      afterReleaseCommitDescriptor,
+      beforeTagDescriptor,
+      afterTagDescriptor,
+      beforePublishDescriptor,
+      afterPublishDescriptor,
+      beforeNextVersionWriteDescriptor,
+      afterNextVersionWriteDescriptor,
+      beforeNextCommitDescriptor,
+      afterNextCommitDescriptor,
+      beforePushDescriptor,
+      afterPushDescriptor
     )
+
+  val hookSlots: Vector[HookBinding[CoreHookConfiguration, ReleaseHookIO]] =
+    descriptors.map(_.binding)
 }
