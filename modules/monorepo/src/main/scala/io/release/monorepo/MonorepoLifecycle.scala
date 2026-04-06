@@ -1,62 +1,96 @@
 package io.release.monorepo
 
-import io.release.internal.HookStepCompilation.CachedItemGate
 import io.release.internal.LifecycleCompiler
-import io.release.internal.LifecycleConfigCompiler
-import io.release.internal.LifecycleConfigCompiler.Binding
-import io.release.internal.LifecycleConfigCompiler.PolicyBinding
-import io.release.internal.LifecycleConfigCompiler.policyBinding
 import io.release.monorepo.MonorepoStepAliases.AnyStep
 import io.release.monorepo.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.steps.MonorepoReleaseSteps
-import sbt.Setting
+import sbt.*
+
+private[release] trait MonorepoConfigSlot {
+  final def id: String = keyLabel
+
+  def keyLabel: String
+  def defaultSetting: Setting[?]
+  def resolve(extracted: Extracted, config: MonorepoHookConfiguration): MonorepoHookConfiguration
+  def merge(
+      left: MonorepoHookConfiguration,
+      right: MonorepoHookConfiguration
+  ): MonorepoHookConfiguration
+  def isCustomized(config: MonorepoHookConfiguration): Boolean
+}
+
+private[release] final case class MonorepoPolicySlot(
+    key: SettingKey[Boolean],
+    get: MonorepoHookConfiguration => Boolean,
+    updated: (MonorepoHookConfiguration, Boolean) => MonorepoHookConfiguration
+) extends MonorepoConfigSlot {
+  override val keyLabel: String           = key.key.label
+  override val defaultSetting: Setting[?] = key := true
+
+  val enabled: MonorepoHookConfiguration => Boolean = get
+
+  override def resolve(
+      extracted: Extracted,
+      config: MonorepoHookConfiguration
+  ): MonorepoHookConfiguration =
+    updated(config, extracted.get(key))
+
+  override def merge(
+      left: MonorepoHookConfiguration,
+      right: MonorepoHookConfiguration
+  ): MonorepoHookConfiguration =
+    updated(left, get(left) && get(right))
+
+  override def isCustomized(config: MonorepoHookConfiguration): Boolean =
+    !get(config)
+}
 
 private[release] object MonorepoPolicySlots {
 
-  val enableSnapshotDependenciesCheck: PolicyBinding[MonorepoHookConfiguration] =
-    policyBinding(
+  val enableSnapshotDependenciesCheck: MonorepoPolicySlot =
+    MonorepoPolicySlot(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck,
       get = _.enableSnapshotDependenciesCheck,
       updated = (config, value) => config.copy(enableSnapshotDependenciesCheck = value)
     )
 
-  val enableRunClean: PolicyBinding[MonorepoHookConfiguration] =
-    policyBinding(
+  val enableRunClean: MonorepoPolicySlot =
+    MonorepoPolicySlot(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean,
       get = _.enableRunClean,
       updated = (config, value) => config.copy(enableRunClean = value)
     )
 
-  val enableRunTests: PolicyBinding[MonorepoHookConfiguration] =
-    policyBinding(
+  val enableRunTests: MonorepoPolicySlot =
+    MonorepoPolicySlot(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunTests,
       get = _.enableRunTests,
       updated = (config, value) => config.copy(enableRunTests = value)
     )
 
-  val enableTagging: PolicyBinding[MonorepoHookConfiguration] =
-    policyBinding(
+  val enableTagging: MonorepoPolicySlot =
+    MonorepoPolicySlot(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging,
       get = _.enableTagging,
       updated = (config, value) => config.copy(enableTagging = value)
     )
 
-  val enablePublish: PolicyBinding[MonorepoHookConfiguration] =
-    policyBinding(
+  val enablePublish: MonorepoPolicySlot =
+    MonorepoPolicySlot(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish,
       get = _.enablePublish,
       updated = (config, value) => config.copy(enablePublish = value)
     )
 
-  val enablePush: PolicyBinding[MonorepoHookConfiguration] =
-    policyBinding(
+  val enablePush: MonorepoPolicySlot =
+    MonorepoPolicySlot(
       key = MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush,
       get = _.enablePush,
       updated = (config, value) => config.copy(enablePush = value)
     )
 
-  val policySlots: Vector[PolicyBinding[MonorepoHookConfiguration]] =
+  val policySlots: Vector[MonorepoPolicySlot] =
     Vector(
       enableSnapshotDependenciesCheck,
       enableRunClean,
@@ -70,21 +104,17 @@ private[release] object MonorepoPolicySlots {
 /** Canonical monorepo lifecycle order and hook compilation. */
 private[release] object MonorepoLifecycle {
 
-  private type Phase         =
+  private type Phase =
     LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoContext, ProjectReleaseInfo]
-  private type Binding       =
-    LifecycleConfigCompiler.Binding[MonorepoHookConfiguration]
-  private type PolicyBinding =
-    LifecycleConfigCompiler.PolicyBinding[MonorepoHookConfiguration]
 
   private def publishCachedGate(
       phase: String
-  ): CachedItemGate[
+  ): LifecycleCompiler.CachedItemGate[
     MonorepoContext,
     ProjectReleaseInfo,
     MonorepoPublishHookGateCache.HookToken
   ] =
-    CachedItemGate[
+    LifecycleCompiler.CachedItemGate[
       MonorepoContext,
       ProjectReleaseInfo,
       MonorepoPublishHookGateCache.HookToken
@@ -103,44 +133,38 @@ private[release] object MonorepoLifecycle {
 
   private def singleBuiltIn(
       step: GlobalStep,
-      enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      bindings: Seq[Binding] = Nil
+      enabled: MonorepoHookConfiguration => Boolean = _ => true
   ): Phase =
     LifecycleCompiler.singleBuiltIn(
       step = step,
-      enabled = enabled,
-      configBindings = bindings
+      enabled = enabled
     )
 
   private def singleBuiltIn(
       step: GlobalStep,
-      policyBinding: PolicyBinding
+      policySlot: MonorepoPolicySlot
   ): Phase =
     singleBuiltIn(
       step = step,
-      enabled = policyBinding.enabled,
-      bindings = Seq(policyBinding)
+      enabled = policySlot.enabled
     )
 
   private def perItemBuiltIn(
       step: ProjectStep,
-      enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      bindings: Seq[Binding] = Nil
+      enabled: MonorepoHookConfiguration => Boolean = _ => true
   ): Phase =
     LifecycleCompiler.perItemBuiltIn(
       step = step,
-      enabled = enabled,
-      configBindings = bindings
+      enabled = enabled
     )
 
   private def perItemBuiltIn(
       step: ProjectStep,
-      policyBinding: PolicyBinding
+      policySlot: MonorepoPolicySlot
   ): Phase =
     perItemBuiltIn(
       step = step,
-      enabled = policyBinding.enabled,
-      bindings = Seq(policyBinding)
+      enabled = policySlot.enabled
     )
 
   private def globalHookPhase(
@@ -148,13 +172,12 @@ private[release] object MonorepoLifecycle {
   ): Phase =
     LifecycleCompiler.singleHookPhase(
       phase = descriptor.phase,
-      resolveHooks = descriptor.binding.resolveHooks,
+      resolveHooks = descriptor.slot.resolveHooks,
       gate = descriptor.gate,
       nameOf = (hook: MonorepoGlobalHookIO) => hook.name,
       executeOf = (hook: MonorepoGlobalHookIO) => hook.execute,
       validateOf = (hook: MonorepoGlobalHookIO) => hook.validate,
-      enabled = descriptor.enabled,
-      configBindings = descriptor.binding +: descriptor.additionalBindings
+      enabled = descriptor.enabled
     )
 
   private def projectHookPhase(
@@ -162,15 +185,14 @@ private[release] object MonorepoLifecycle {
   ): Phase =
     LifecycleCompiler.perItemHookPhase(
       phase = descriptor.phase,
-      resolveHooks = descriptor.binding.resolveHooks,
+      resolveHooks = descriptor.slot.resolveHooks,
       gate = descriptor.gate,
       nameOf = (hook: MonorepoProjectHookIO) => hook.name,
       executeOf = (hook: MonorepoProjectHookIO) => hook.execute,
       validateOf = (hook: MonorepoProjectHookIO) => hook.validate,
       crossBuild = descriptor.crossBuild,
       cachedGate = descriptor.cachedGatePhase.map(publishCachedGate),
-      enabled = descriptor.enabled,
-      configBindings = descriptor.binding +: descriptor.additionalBindings
+      enabled = descriptor.enabled
     )
 
   private def globalHookPhase(
@@ -246,7 +268,7 @@ private[release] object MonorepoLifecycle {
   )
 
   private[release] lazy val configDefaultSettings: Seq[Setting[?]] =
-    LifecycleConfigCompiler.defaultSettings(phases)
+    MonorepoHookConfiguration.defaultSettings
 
   val defaults: Seq[AnyStep] =
     LifecycleCompiler.defaults(phases)
@@ -259,15 +281,15 @@ private[release] object MonorepoLifecycle {
 
 private[release] object MonorepoLifecycleSlots {
 
-  val policySlots: Vector[PolicyBinding[MonorepoHookConfiguration]] =
+  val policySlots: Vector[MonorepoPolicySlot] =
     MonorepoPolicySlots.policySlots
 
-  val globalHookSlots =
+  val globalHookSlots: Vector[MonorepoGlobalHookSlot] =
     MonorepoGlobalHookSlots.globalHookSlots
 
-  val projectHookSlots =
+  val projectHookSlots: Vector[MonorepoProjectHookSlot] =
     MonorepoProjectHookSlots.projectHookSlots
 
-  val slots: Vector[Binding[MonorepoHookConfiguration]] =
+  val slots: Vector[MonorepoConfigSlot] =
     policySlots ++ globalHookSlots ++ projectHookSlots
 }

@@ -2,6 +2,8 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
+import io.release.ReleaseCtxOps.syntax._
 import io.release.steps.StepHelpers
 import sbt.TaskKey
 
@@ -9,7 +11,7 @@ import java.io.File
 
 private[release] object VersionWorkflowSupport {
 
-  final case class ResolvedVersionInputs[C <: ReleaseCtx[C]](
+  final case class ResolvedVersionInputs[C <: ReleaseCtx](
       context: C,
       releaseVersion: String,
       nextVersion: String
@@ -18,7 +20,7 @@ private[release] object VersionWorkflowSupport {
   def ensureVersionFileExists(versionFile: File, notFoundMessage: String): IO[Unit] =
     VersionFileSupport.ensureExists(versionFile, notFoundMessage)
 
-  def resolveVersionInputsFromTasks[C <: ReleaseCtx[C]](
+  def resolveVersionInputsFromTasks[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       currentVersion: String,
       releaseVersionTask: TaskKey[String => String],

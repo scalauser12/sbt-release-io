@@ -1,9 +1,10 @@
 package io.release.monorepo
 
-import io.release.internal.PluginEntrypointSupport.CommandMode
 import munit.FunSuite
 
 class MonorepoCliSpec extends FunSuite {
+
+  import MonorepoCli.CommandMode
 
   test("splitMode - reserve help only in the first token position") {
     val (mode, remaining) = MonorepoCli.splitMode(Seq("help", "core"))

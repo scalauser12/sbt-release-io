@@ -106,36 +106,21 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
       resolveInteractiveEnabled = state => interactiveEnabled(state)
     )
 
-  private def monorepoDispatch: PluginEntrypointSupport.DispatchAdapter[MonorepoCli.Arg] =
-    PluginEntrypointSupport.DispatchAdapter(
-      parse = parseMonorepoTokens,
-      help = state => doMonorepoHelp(state),
-      check = (state, args) => doMonorepoCheck(state, args),
-      run = (state, args) => doMonorepoRelease(state, args)
-    )
-
-  private def parseMonorepoTokens(
-      tokens: Seq[String],
-      commandName: String
-  ): Either[String, PluginEntrypointSupport.ParsedCommand[MonorepoCli.Arg]] =
-    MonorepoCli.parse(tokens, commandName).map { parsed =>
-      PluginEntrypointSupport.ParsedCommand(
-        mode = parsed.mode,
-        args = parsed.args
-      )
-    }
-
   private[monorepo] final def handleMonorepoCommandTokens(
       state: State,
       tokens: Seq[String]
   ): State =
-    PluginEntrypointSupport.handleTokens(
-      state = state,
-      tokens = tokens,
-      logPrefix = ReleaseLogPrefixes.Monorepo,
-      commandName = commandName,
-      dispatch = monorepoDispatch
-    )
+    MonorepoCli.parse(tokens, commandName) match {
+      case Left(message) =>
+        state.log.error(s"${ReleaseLogPrefixes.Monorepo} $message")
+        state.fail
+      case Right(parsed) =>
+        parsed.mode match {
+          case MonorepoCli.CommandMode.Help  => doMonorepoHelp(state)
+          case MonorepoCli.CommandMode.Check => doMonorepoCheck(state, parsed.args)
+          case MonorepoCli.CommandMode.Run   => doMonorepoRelease(state, parsed.args)
+        }
+    }
 
   protected def doMonorepoHelp(state: State): State =
     MonorepoCommandExecution.doHelp(state, commandName)

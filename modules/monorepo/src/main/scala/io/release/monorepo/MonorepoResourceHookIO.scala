@@ -1,7 +1,6 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.internal.LifecycleConfigCompiler
 
 /** A resource-aware global hook for custom monorepo plugins with a shared resource `T`.
   *
@@ -102,15 +101,9 @@ object MonorepoResourceHooks {
   def empty[T]: MonorepoResourceHooks[T] = MonorepoResourceHooks[T]()
 
   private type GlobalHookAssignment  =
-    (
-        LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO],
-        Seq[MonorepoGlobalHookIO]
-    )
+    (MonorepoGlobalHookSlot, Seq[MonorepoGlobalHookIO])
   private type ProjectHookAssignment =
-    (
-        LifecycleConfigCompiler.HookBinding[MonorepoHookConfiguration, MonorepoProjectHookIO],
-        Seq[MonorepoProjectHookIO]
-    )
+    (MonorepoProjectHookSlot, Seq[MonorepoProjectHookIO])
 
   /** Convert resource-aware hooks into plain hooks by binding the resource value.
     * Boolean policies default to `true` so they are neutral when merged via
@@ -156,7 +149,7 @@ object MonorepoResourceHooks {
       materialize: MonorepoGlobalResourceHookIO[T] => MonorepoGlobalHookIO
   ): Seq[GlobalHookAssignment] =
     MonorepoGlobalHookSlots.descriptors.map { descriptor =>
-      descriptor.binding -> descriptor.resourceHooks(hooks).map(materialize)
+      descriptor.slot -> descriptor.resourceHooks(hooks).map(materialize)
     }
 
   private[monorepo] def projectHookAssignments[T](
@@ -164,6 +157,6 @@ object MonorepoResourceHooks {
       materialize: MonorepoProjectResourceHookIO[T] => MonorepoProjectHookIO
   ): Seq[ProjectHookAssignment] =
     MonorepoProjectHookSlots.descriptors.map { descriptor =>
-      descriptor.binding -> descriptor.resourceHooks(hooks).map(materialize)
+      descriptor.slot -> descriptor.resourceHooks(hooks).map(materialize)
     }
 }

@@ -3,6 +3,7 @@ package io.release.steps
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
 import io.release.internal.DecisionResolver
 import io.release.internal.PromptAdapter
 import io.release.internal.SbtRuntime
@@ -30,33 +31,33 @@ private[release] object StepHelpers {
     * turning `\r\n` into an empty extra line on the next `readLine()` call. Returns `None`
     * on EOF when no bytes were read for the current line.
     */
-  private[release] def readLine[C <: ReleaseCtx[C]](
+  private[release] def readLine[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C
   ): IO[(C, Option[String])] =
     PromptAdapter.readLine(ctx)
 
   /** Read a line from standard input and fail fast if stdin closes before input arrives. */
-  private[release] def readRequiredLine[C <: ReleaseCtx[C]](
+  private[release] def readRequiredLine[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       context: String
   ): IO[(C, String)] =
     PromptAdapter.readRequiredLine(ctx, context)
 
-  private[release] def askYesNo[C <: ReleaseCtx[C]](
+  private[release] def askYesNo[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Boolean)] =
     PromptAdapter.promptYesNo(ctx, prompt, defaultYes)
 
-  private[release] def askYesNoOrEof[C <: ReleaseCtx[C]](
+  private[release] def askYesNoOrEof[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
     PromptAdapter.promptYesNoOrEof(ctx, prompt, defaultYes)
 
-  def useDefaults[C <: ReleaseCtx[C]](ctx: C): Boolean =
+  def useDefaults[C <: ReleaseCtx](ctx: C): Boolean =
     ctx.useDefaults
 
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
@@ -80,7 +81,7 @@ private[release] object StepHelpers {
     }
 
   /** Confirmation prompt shared by core and monorepo steps. */
-  def confirmContinue[C <: ReleaseCtx[C]](
+  def confirmContinue[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String,
       defaultYes: Boolean,
@@ -116,7 +117,7 @@ private[release] object StepHelpers {
   /** Handle snapshot dependencies found during validation. Shared by core and monorepo.
     * The caller's runtime metadata determines interactive defaulting behavior.
     */
-  def handleSnapshotDependencies[C <: ReleaseCtx[C]](
+  def handleSnapshotDependencies[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       deps: Seq[sbt.ModuleID],
       logPrefix: String,

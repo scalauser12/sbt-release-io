@@ -2,6 +2,8 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
+import io.release.ReleaseCtxOps.syntax._
 
 import java.io.ByteArrayOutputStream
 import java.nio.charset.Charset
@@ -17,12 +19,12 @@ private[release] object PromptAdapter {
 
   private val stdinCharset = Charset.defaultCharset()
 
-  def readLine[C <: ReleaseCtx[C]](ctx: C): IO[(C, Option[String])] =
+  def readLine[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): IO[(C, Option[String])] =
     IO.blocking(readLineBlocking(promptState(ctx))).map { case (nextState, line) =>
       (ctx.withMetadata(PromptState.key, nextState), line)
     }
 
-  def readRequiredLine[C <: ReleaseCtx[C]](
+  def readRequiredLine[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       context: String
   ): IO[(C, String)] =
@@ -34,27 +36,27 @@ private[release] object PromptAdapter {
       case (nextCtx, Some(input)) => IO.pure((nextCtx, input))
     }
 
-  def promptLine[C <: ReleaseCtx[C]](
+  def promptLine[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String
   ): IO[(C, Option[String])] =
     IO.print(prompt) *> readLine(ctx)
 
-  def promptRequiredLine[C <: ReleaseCtx[C]](
+  def promptRequiredLine[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String,
       context: String
   ): IO[(C, String)] =
     IO.print(prompt) *> readRequiredLine(ctx, context)
 
-  def promptYesNoOrEof[C <: ReleaseCtx[C]](
+  def promptYesNoOrEof[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
     promptYesNoLoop(ctx, prompt, defaultYes)
 
-  def promptYesNo[C <: ReleaseCtx[C]](
+  def promptYesNo[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
@@ -63,10 +65,10 @@ private[release] object PromptAdapter {
       (nextCtx, decision.getOrElse(defaultYes))
     }
 
-  private def promptState[C <: ReleaseCtx[C]](ctx: C): PromptState =
+  private def promptState[C <: ReleaseCtx](ctx: C): PromptState =
     ctx.metadata(PromptState.key).getOrElse(PromptState.empty)
 
-  private def promptYesNoLoop[C <: ReleaseCtx[C]](
+  private def promptYesNoLoop[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       prompt: String,
       defaultYes: Boolean

@@ -9,7 +9,6 @@ import io.release.internal.ReleaseCommandRunner
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
-import io.release.internal.SharedCommandKernel
 import io.release.monorepo.MonorepoStepAliases.AnyStep
 import sbt.{internal as _, *}
 
@@ -21,7 +20,7 @@ import sbt.{internal as _, *}
   * sbt "releaseIOMonorepo [projects] [flags]"
   *   → MonorepoReleasePlugin registers the sbt command
   *   → MonorepoCommandExecution.buildCommandInputs   (parse CLI into MonorepoReleasePlan)
-  *   → SharedCommandKernel.runPreparedCommand         (resolve hooks, compile into steps)
+  *   → MonorepoCommandExecution.runPreparedCommand    (resolve hooks, compile into steps)
   *   → MonorepoComposer.compose                       (split at selection boundary)
   *       ├─ setup segment  → ExecutionEngine.runSequentialValidateThenExecute
   *       └─ main segment   → ExecutionEngine.runMainSegment
@@ -62,11 +61,11 @@ private[monorepo] object MonorepoCommandExecution {
   )
 
   def doHelp(state: State, commandName: String): State =
-    SharedCommandKernel.doHelp(
-      state = state,
-      logPrefix = ReleaseLogPrefixes.Monorepo,
-      lines = MonorepoPreflight.helpLines(commandName)
-    )
+    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo) {
+      ReleaseCommandRunner
+        .logLines(state, ReleaseLogPrefixes.Monorepo, MonorepoPreflight.helpLines(commandName))
+        .as(state)
+    }
 
   def doRelease[T](
       state: State,
@@ -116,18 +115,14 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
   ): IO[CompiledMonorepoSteps] =
-    SharedCommandKernel
-      .compileMergedSteps(
-        state = state,
-        maybeResource = maybeResource,
-        resolveHooks = MonorepoHookConfiguration.resolve,
-        resolveResourceHooks = runtime.resolveResourceHooks
-      )(
-        materialize = MonorepoResourceHooks.materialize,
-        merge = (left, right) => left.mergeWith(right),
-        compile = MonorepoLifecycle.compile
-      )
-      .map(steps => CompiledMonorepoSteps(steps = steps))
+    IO.blocking {
+      val resolvedHooks     = MonorepoHookConfiguration.resolve(state)
+      val resourceHooks     = runtime.resolveResourceHooks(state)
+      val materializedHooks = MonorepoResourceHooks.materialize(resourceHooks, maybeResource)
+      val mergedHooks       = resolvedHooks.mergeWith(materializedHooks)
+
+      CompiledMonorepoSteps(steps = MonorepoLifecycle.compile(mergedHooks))
+    }
 
   private[monorepo] def resolveFlags[T](
       cleanState: State,
@@ -202,9 +197,8 @@ private[monorepo] object MonorepoCommandExecution {
     val cleanStateFn: State => State =
       state => CommandRuntimeSupport.cleanReleaseState(state, loadedProjectRefs(state))
 
-    SharedCommandKernel.runPreparedCommand(
+    runPreparedCommand(
       state = state,
-      logPrefix = ReleaseLogPrefixes.Monorepo,
       cleanState = cleanStateFn
     )(
       cleanState =>
@@ -251,9 +245,8 @@ private[monorepo] object MonorepoCommandExecution {
                         )
                     } yield finalCtx
                   }
-      result   <- SharedCommandKernel.finalizeReleaseResult(
-                    ctx = finalCtx,
-                    logPrefix = ReleaseLogPrefixes.Monorepo,
+      result   <- finalizeReleaseResult(
+                    finalCtx,
                     cleanState = state =>
                       CommandRuntimeSupport.cleanReleaseState(
                         state,
@@ -284,6 +277,31 @@ private[monorepo] object MonorepoCommandExecution {
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
+
+  private def runPreparedCommand[Inputs](
+      state: State,
+      cleanState: State => State
+  )(
+      prepare: State => IO[Either[State, Inputs]],
+      run: Inputs => IO[State]
+  ): State = {
+    val cleanedState = cleanState(state)
+    val program      = prepare(cleanedState).flatMap {
+      case Left(failedState) => IO.pure(failedState)
+      case Right(inputs)     => run(inputs)
+    }
+
+    ReleaseCommandRunner.runSync(cleanedState, ReleaseLogPrefixes.Monorepo)(program)
+  }
+
+  private def finalizeReleaseResult(
+      ctx: MonorepoContext,
+      cleanState: State => State
+  ): IO[State] =
+    IO.blocking(ctx.withState(cleanState(ctx.state)))
+      .flatMap(cleanedCtx =>
+        ReleaseCommandRunner.handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Monorepo)
+      )
 
   private def loadedProjectRefs(state: State): Seq[ProjectRef] =
     SbtRuntime.extracted(state).structure.allProjectRefs

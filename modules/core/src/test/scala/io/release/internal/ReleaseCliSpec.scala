@@ -4,7 +4,7 @@ import munit.FunSuite
 
 class ReleaseCliSpec extends FunSuite {
 
-  import PluginEntrypointSupport.CommandMode
+  import ReleaseCli.CommandMode
 
   test("splitMode - treat help as a first-token subcommand") {
     val (mode, remaining) = ReleaseCli.splitMode(Seq("help", "ignored"))

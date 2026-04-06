@@ -37,7 +37,7 @@ case class ReleaseContext(
     metadataBag: AttributeMap = AttributeMap.empty,
     failed: Boolean = false,
     failureCause: Option[Throwable] = None
-) extends ReleaseCtx[ReleaseContext] {
+) extends ReleaseCtx {
 
   def withState(s: State): ReleaseContext = copy(state = s)
 
@@ -79,4 +79,35 @@ case class ReleaseContext(
 
   def fail: ReleaseContext                       = copy(failed = true)
   def failWith(cause: Throwable): ReleaseContext = copy(failed = true, failureCause = Some(cause))
+}
+
+object ReleaseContext {
+
+  implicit val releaseContextOps: ReleaseCtxOps[ReleaseContext] =
+    new ReleaseCtxOps[ReleaseContext] {
+      override def withState(ctx: ReleaseContext, state: State): ReleaseContext =
+        ctx.withState(state)
+
+      override def withVcs(ctx: ReleaseContext, vcs: Vcs): ReleaseContext =
+        ctx.withVcs(vcs)
+
+      override def fail(ctx: ReleaseContext): ReleaseContext =
+        ctx.fail
+
+      override def failWith(ctx: ReleaseContext, cause: Throwable): ReleaseContext =
+        ctx.failWith(cause)
+
+      override def withMetadata[A](
+          ctx: ReleaseContext,
+          key: AttributeKey[A],
+          value: A
+      ): ReleaseContext =
+        ctx.withMetadata(key, value)
+
+      override def withoutMetadata[A](
+          ctx: ReleaseContext,
+          key: AttributeKey[A]
+      ): ReleaseContext =
+        ctx.withoutMetadata(key)
+    }
 }

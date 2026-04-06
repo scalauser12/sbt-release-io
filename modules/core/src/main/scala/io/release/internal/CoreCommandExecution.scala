@@ -16,7 +16,7 @@ import sbt.{internal as _, *}
   * sbt "releaseIO [flags]"
   *   → ReleasePluginIO registers the sbt command
   *   → CoreCommandExecution.buildCommandInputs   (parse CLI flags into CoreReleasePlan)
-  *   → SharedCommandKernel.runPreparedCommand     (resolve hooks, compile into steps)
+  *   → CoreCommandExecution.runPreparedCommand    (resolve hooks, compile into steps)
   *   → ReleaseComposer.compose                    (wrap steps as PreparedStep, cross-build)
   *   → ExecutionEngine.runMainSegment             (validate all, then execute all)
   * }}}
@@ -50,20 +50,19 @@ private[release] object CoreCommandExecution {
   )
 
   def doHelp(state: State, commandName: String): State =
-    SharedCommandKernel.doHelp(
-      state = state,
-      logPrefix = ReleaseLogPrefixes.Core,
-      lines = CorePreflight.helpLines(commandName)
-    )
+    ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core) {
+      ReleaseCommandRunner
+        .logLines(state, ReleaseLogPrefixes.Core, CorePreflight.helpLines(commandName))
+        .as(state)
+    }
 
   def doRelease[T](
       state: State,
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    SharedCommandKernel.runPreparedCommand(
+    runPreparedCommand(
       state = state,
-      logPrefix = ReleaseLogPrefixes.Core,
       cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
     )(
       cleanState =>
@@ -86,9 +85,8 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    SharedCommandKernel.runPreparedCommand(
+    runPreparedCommand(
       state = state,
-      logPrefix = ReleaseLogPrefixes.Core,
       cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
     )(
       cleanState =>
@@ -124,18 +122,14 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
   ): IO[CompiledSteps] =
-    SharedCommandKernel
-      .compileMergedSteps(
-        state = state,
-        maybeResource = maybeResource,
-        resolveHooks = CoreHookConfiguration.resolve,
-        resolveResourceHooks = runtime.resolveResourceHooks
-      )(
-        materialize = ReleaseResourceHooks.materialize,
-        merge = (left, right) => left.mergeWith(right),
-        compile = CoreLifecycle.compile
-      )
-      .map(steps => CompiledSteps(steps = steps))
+    IO.blocking {
+      val resolvedHooks     = CoreHookConfiguration.resolve(state)
+      val resourceHooks     = runtime.resolveResourceHooks(state)
+      val materializedHooks = ReleaseResourceHooks.materialize(resourceHooks, maybeResource)
+      val mergedHooks       = resolvedHooks.mergeWith(materializedHooks)
+
+      CompiledSteps(steps = CoreLifecycle.compile(mergedHooks))
+    }
 
   private def buildCommandInputs[T](
       cleanState: State,
@@ -242,9 +236,8 @@ private[release] object CoreCommandExecution {
                                      )(preparedCtx)
                     } yield finalCtx
                   }
-      result   <- SharedCommandKernel.finalizeReleaseResult(
-                    ctx = finalCtx,
-                    logPrefix = ReleaseLogPrefixes.Core,
+      result   <- finalizeReleaseResult(
+                    finalCtx,
                     cleanState = state => CommandRuntimeSupport.cleanReleaseState(state)
                   )
     } yield result
@@ -280,6 +273,31 @@ private[release] object CoreCommandExecution {
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)
+
+  private def runPreparedCommand[Inputs](
+      state: State,
+      cleanState: State => State
+  )(
+      prepare: State => IO[Either[State, Inputs]],
+      run: Inputs => IO[State]
+  ): State = {
+    val cleanedState = cleanState(state)
+    val program      = prepare(cleanedState).flatMap {
+      case Left(failedState) => IO.pure(failedState)
+      case Right(inputs)     => run(inputs)
+    }
+
+    ReleaseCommandRunner.runSync(cleanedState, ReleaseLogPrefixes.Core)(program)
+  }
+
+  private def finalizeReleaseResult(
+      ctx: ReleaseContext,
+      cleanState: State => State
+  ): IO[State] =
+    IO.blocking(ctx.withState(cleanState(ctx.state)))
+      .flatMap(cleanedCtx =>
+        ReleaseCommandRunner.handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Core)
+      )
 
   private def logReleaseStart(
       state: State,

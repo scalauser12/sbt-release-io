@@ -6,151 +6,175 @@ import io.release.ReleaseHookIO
 import io.release.ReleaseIO
 import io.release.ReleaseResourceHookIO
 import io.release.ReleaseResourceHooks
-import io.release.internal.LifecycleConfigCompiler.Binding
-import io.release.internal.LifecycleConfigCompiler.HookBinding
-import io.release.internal.LifecycleConfigCompiler.hookBinding
 import io.release.steps.PublishSteps
 import io.release.steps.ReleaseSteps
+import sbt.*
+
+private[release] final case class CoreHookSlot(
+    key: SettingKey[Seq[ReleaseHookIO]],
+    get: CoreHookConfiguration => Seq[ReleaseHookIO],
+    updated: (CoreHookConfiguration, Seq[ReleaseHookIO]) => CoreHookConfiguration
+) extends CoreConfigSlot {
+  override val keyLabel: String           = key.key.label
+  override val defaultSetting: Setting[?] = key := Seq.empty[ReleaseHookIO]
+
+  val resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO] = get
+
+  override def resolve(
+      extracted: Extracted,
+      config: CoreHookConfiguration
+  ): CoreHookConfiguration =
+    updated(config, extracted.get(key))
+
+  override def merge(
+      left: CoreHookConfiguration,
+      right: CoreHookConfiguration
+  ): CoreHookConfiguration =
+    updated(left, get(left) ++ get(right))
+
+  override def isCustomized(config: CoreHookConfiguration): Boolean =
+    get(config).nonEmpty
+}
 
 private[release] object CoreHookSlots {
 
   sealed abstract class HookDescriptor(
       val phase: String,
-      val binding: HookBinding[CoreHookConfiguration, ReleaseHookIO],
+      val slot: CoreHookSlot,
       val gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
       val crossBuild: Boolean = false,
       val cachedGatePhase: Option[String] = None,
-      val enabled: CoreHookConfiguration => Boolean = _ => true,
-      val additionalBindings: Seq[Binding[CoreHookConfiguration]] = Nil
+      val enabled: CoreHookConfiguration => Boolean = _ => true
   ) {
     def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]]
   }
 
-  val afterCleanCheckHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterCleanCheckHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterCleanCheck,
       get = _.afterCleanCheckHooks,
       updated = (config, hooks) => config.copy(afterCleanCheckHooks = hooks)
     )
 
-  val beforeVersionResolutionHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforeVersionResolutionHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforeVersionResolution,
       get = _.beforeVersionResolutionHooks,
       updated = (config, hooks) => config.copy(beforeVersionResolutionHooks = hooks)
     )
 
-  val afterVersionResolutionHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterVersionResolutionHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterVersionResolution,
       get = _.afterVersionResolutionHooks,
       updated = (config, hooks) => config.copy(afterVersionResolutionHooks = hooks)
     )
 
-  val beforeReleaseVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforeReleaseVersionWriteHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite,
       get = _.beforeReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeReleaseVersionWriteHooks = hooks)
     )
 
-  val afterReleaseVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterReleaseVersionWriteHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterReleaseVersionWrite,
       get = _.afterReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterReleaseVersionWriteHooks = hooks)
     )
 
-  val beforeReleaseCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforeReleaseCommitHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforeReleaseCommit,
       get = _.beforeReleaseCommitHooks,
       updated = (config, hooks) => config.copy(beforeReleaseCommitHooks = hooks)
     )
 
-  val afterReleaseCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterReleaseCommitHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterReleaseCommit,
       get = _.afterReleaseCommitHooks,
       updated = (config, hooks) => config.copy(afterReleaseCommitHooks = hooks)
     )
 
-  val beforeTagHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforeTagHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforeTag,
       get = _.beforeTagHooks,
       updated = (config, hooks) => config.copy(beforeTagHooks = hooks)
     )
 
-  val afterTagHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterTagHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterTag,
       get = _.afterTagHooks,
       updated = (config, hooks) => config.copy(afterTagHooks = hooks)
     )
 
-  val beforePublishHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforePublishHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforePublish,
       get = _.beforePublishHooks,
       updated = (config, hooks) => config.copy(beforePublishHooks = hooks)
     )
 
-  val afterPublishHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterPublishHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterPublish,
       get = _.afterPublishHooks,
       updated = (config, hooks) => config.copy(afterPublishHooks = hooks)
     )
 
-  val beforeNextVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforeNextVersionWriteHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforeNextVersionWrite,
       get = _.beforeNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeNextVersionWriteHooks = hooks)
     )
 
-  val afterNextVersionWriteHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterNextVersionWriteHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterNextVersionWrite,
       get = _.afterNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterNextVersionWriteHooks = hooks)
     )
 
-  val beforeNextCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforeNextCommitHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforeNextCommit,
       get = _.beforeNextCommitHooks,
       updated = (config, hooks) => config.copy(beforeNextCommitHooks = hooks)
     )
 
-  val afterNextCommitHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterNextCommitHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterNextCommit,
       get = _.afterNextCommitHooks,
       updated = (config, hooks) => config.copy(afterNextCommitHooks = hooks)
     )
 
-  val beforePushHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val beforePushHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksBeforePush,
       get = _.beforePushHooks,
       updated = (config, hooks) => config.copy(beforePushHooks = hooks)
     )
 
-  val afterPushHooks: HookBinding[CoreHookConfiguration, ReleaseHookIO] =
-    hookBinding(
+  val afterPushHooks: CoreHookSlot =
+    CoreHookSlot(
       key = ReleaseIO.releaseIOHooksAfterPush,
       get = _.afterPushHooks,
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
     )
 
-  private val PublishGate: ReleaseContext => IO[Boolean] = PublishSteps.shouldRunPublishHooks
+  private val publishGate: ReleaseContext => IO[Boolean] =
+    PublishSteps.shouldRunPublishHooks
 
   private val afterCleanCheckDescriptor =
     new HookDescriptor(
       phase = "after-clean-check",
-      binding = afterCleanCheckHooks
+      slot = afterCleanCheckHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterCleanCheckHooks
@@ -159,7 +183,7 @@ private[release] object CoreHookSlots {
   private val beforeVersionResolutionDescriptor =
     new HookDescriptor(
       phase = "before-version-resolution",
-      binding = beforeVersionResolutionHooks
+      slot = beforeVersionResolutionHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforeVersionResolutionHooks
@@ -168,7 +192,7 @@ private[release] object CoreHookSlots {
   private val afterVersionResolutionDescriptor =
     new HookDescriptor(
       phase = "after-version-resolution",
-      binding = afterVersionResolutionHooks
+      slot = afterVersionResolutionHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterVersionResolutionHooks
@@ -177,7 +201,7 @@ private[release] object CoreHookSlots {
   private val beforeReleaseVersionWriteDescriptor =
     new HookDescriptor(
       phase = "before-release-version-write",
-      binding = beforeReleaseVersionWriteHooks
+      slot = beforeReleaseVersionWriteHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforeReleaseVersionWriteHooks
@@ -186,7 +210,7 @@ private[release] object CoreHookSlots {
   private val afterReleaseVersionWriteDescriptor =
     new HookDescriptor(
       phase = "after-release-version-write",
-      binding = afterReleaseVersionWriteHooks
+      slot = afterReleaseVersionWriteHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterReleaseVersionWriteHooks
@@ -195,7 +219,7 @@ private[release] object CoreHookSlots {
   private val beforeReleaseCommitDescriptor =
     new HookDescriptor(
       phase = "before-release-commit",
-      binding = beforeReleaseCommitHooks
+      slot = beforeReleaseCommitHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforeReleaseCommitHooks
@@ -204,7 +228,7 @@ private[release] object CoreHookSlots {
   private val afterReleaseCommitDescriptor =
     new HookDescriptor(
       phase = "after-release-commit",
-      binding = afterReleaseCommitHooks
+      slot = afterReleaseCommitHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterReleaseCommitHooks
@@ -213,9 +237,8 @@ private[release] object CoreHookSlots {
   private val beforeTagDescriptor =
     new HookDescriptor(
       phase = "before-tag",
-      binding = beforeTagHooks,
-      enabled = CorePolicySlots.enableTagging.enabled,
-      additionalBindings = Seq(CorePolicySlots.enableTagging)
+      slot = beforeTagHooks,
+      enabled = CorePolicySlots.enableTagging.enabled
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforeTagHooks
@@ -224,9 +247,8 @@ private[release] object CoreHookSlots {
   private val afterTagDescriptor =
     new HookDescriptor(
       phase = "after-tag",
-      binding = afterTagHooks,
-      enabled = CorePolicySlots.enableTagging.enabled,
-      additionalBindings = Seq(CorePolicySlots.enableTagging)
+      slot = afterTagHooks,
+      enabled = CorePolicySlots.enableTagging.enabled
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterTagHooks
@@ -235,12 +257,11 @@ private[release] object CoreHookSlots {
   private val beforePublishDescriptor =
     new HookDescriptor(
       phase = "before-publish",
-      binding = beforePublishHooks,
-      gate = PublishGate,
+      slot = beforePublishHooks,
+      gate = publishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGatePhase = Some("before-publish"),
-      enabled = CorePolicySlots.enablePublish.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePublish)
+      enabled = CorePolicySlots.enablePublish.enabled
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforePublishHooks
@@ -249,12 +270,11 @@ private[release] object CoreHookSlots {
   private val afterPublishDescriptor =
     new HookDescriptor(
       phase = "after-publish",
-      binding = afterPublishHooks,
-      gate = PublishGate,
+      slot = afterPublishHooks,
+      gate = publishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
       cachedGatePhase = Some("after-publish"),
-      enabled = CorePolicySlots.enablePublish.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePublish)
+      enabled = CorePolicySlots.enablePublish.enabled
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterPublishHooks
@@ -263,7 +283,7 @@ private[release] object CoreHookSlots {
   private val beforeNextVersionWriteDescriptor =
     new HookDescriptor(
       phase = "before-next-version-write",
-      binding = beforeNextVersionWriteHooks
+      slot = beforeNextVersionWriteHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforeNextVersionWriteHooks
@@ -272,7 +292,7 @@ private[release] object CoreHookSlots {
   private val afterNextVersionWriteDescriptor =
     new HookDescriptor(
       phase = "after-next-version-write",
-      binding = afterNextVersionWriteHooks
+      slot = afterNextVersionWriteHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterNextVersionWriteHooks
@@ -281,7 +301,7 @@ private[release] object CoreHookSlots {
   private val beforeNextCommitDescriptor =
     new HookDescriptor(
       phase = "before-next-commit",
-      binding = beforeNextCommitHooks
+      slot = beforeNextCommitHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforeNextCommitHooks
@@ -290,7 +310,7 @@ private[release] object CoreHookSlots {
   private val afterNextCommitDescriptor =
     new HookDescriptor(
       phase = "after-next-commit",
-      binding = afterNextCommitHooks
+      slot = afterNextCommitHooks
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterNextCommitHooks
@@ -299,9 +319,8 @@ private[release] object CoreHookSlots {
   private val beforePushDescriptor =
     new HookDescriptor(
       phase = "before-push",
-      binding = beforePushHooks,
-      enabled = CorePolicySlots.enablePush.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePush)
+      slot = beforePushHooks,
+      enabled = CorePolicySlots.enablePush.enabled
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.beforePushHooks
@@ -310,9 +329,8 @@ private[release] object CoreHookSlots {
   private val afterPushDescriptor =
     new HookDescriptor(
       phase = "after-push",
-      binding = afterPushHooks,
-      enabled = CorePolicySlots.enablePush.enabled,
-      additionalBindings = Seq(CorePolicySlots.enablePush)
+      slot = afterPushHooks,
+      enabled = CorePolicySlots.enablePush.enabled
     ) {
       override def resourceHooks[T](hooks: ReleaseResourceHooks[T]): Seq[ReleaseResourceHookIO[T]] =
         hooks.afterPushHooks
@@ -339,6 +357,6 @@ private[release] object CoreHookSlots {
       afterPushDescriptor
     )
 
-  val hookSlots: Vector[HookBinding[CoreHookConfiguration, ReleaseHookIO]] =
-    descriptors.map(_.binding)
+  val hookSlots: Vector[CoreHookSlot] =
+    descriptors.map(_.slot)
 }

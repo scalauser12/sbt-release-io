@@ -1,7 +1,7 @@
 package io.release.monorepo
 
-import io.release.internal.LifecycleConfigCompiler
-import sbt.State
+import io.release.internal.SbtRuntime
+import sbt.*
 
 /** Monorepo hook/policy settings resolved from a single sbt state snapshot. */
 private[monorepo] final case class MonorepoHookConfiguration(
@@ -33,16 +33,43 @@ private[monorepo] final case class MonorepoHookConfiguration(
 ) {
 
   def mergeWith(other: MonorepoHookConfiguration): MonorepoHookConfiguration =
-    LifecycleConfigCompiler.merge(this, other, MonorepoLifecycle.phases)
+    MonorepoHookConfiguration.merge(this, other)
 
   def hasCustomizations: Boolean =
-    LifecycleConfigCompiler.hasCustomizations(this, MonorepoLifecycle.phases)
+    MonorepoHookConfiguration.hasCustomizations(this)
 }
 
 private[monorepo] object MonorepoHookConfiguration {
 
   val empty: MonorepoHookConfiguration = MonorepoHookConfiguration()
 
-  def resolve(state: State): MonorepoHookConfiguration =
-    LifecycleConfigCompiler.resolve(state, empty, MonorepoLifecycle.phases)
+  lazy val defaultSettings: Seq[Setting[?]] =
+    uniqueSlots.map(_.defaultSetting)
+
+  def resolve(state: State): MonorepoHookConfiguration = {
+    val extracted = SbtRuntime.extracted(state)
+
+    uniqueSlots.foldLeft(empty) { (config, slot) =>
+      slot.resolve(extracted, config)
+    }
+  }
+
+  def merge(
+      left: MonorepoHookConfiguration,
+      right: MonorepoHookConfiguration
+  ): MonorepoHookConfiguration =
+    uniqueSlots.foldLeft(left) { (config, slot) =>
+      slot.merge(config, right)
+    }
+
+  def hasCustomizations(config: MonorepoHookConfiguration): Boolean =
+    uniqueSlots.exists(_.isCustomized(config))
+
+  private def uniqueSlots: Vector[MonorepoConfigSlot] =
+    MonorepoLifecycleSlots.slots
+      .foldLeft((Vector.empty[MonorepoConfigSlot], Set.empty[String])) {
+        case ((acc, seen), slot) if seen.contains(slot.id) => (acc, seen)
+        case ((acc, seen), slot)                           => (acc :+ slot, seen + slot.id)
+      }
+      ._1
 }

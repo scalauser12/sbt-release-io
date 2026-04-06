@@ -15,7 +15,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       resolveHooks: TestConfig => Seq[SingleHook],
       gate: TestContext => IO[Boolean],
       crossBuild: Boolean = false,
-      cachedGate: Option[HookStepCompilation.CachedSingleGate[TestContext, String]] = None
+      cachedGate: Option[LifecycleCompiler.CachedSingleGate[TestContext, String]] = None
   ): LifecycleCompiler.Phase[TestConfig, TestContext, I] =
     LifecycleCompiler.singleHookPhase(
       phase = phase,
@@ -33,7 +33,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       resolveHooks: TestConfig => Seq[ItemHook],
       gate: (TestContext, String) => IO[Boolean],
       crossBuild: Boolean = false,
-      cachedGate: Option[HookStepCompilation.CachedItemGate[TestContext, String, String]] = None
+      cachedGate: Option[LifecycleCompiler.CachedItemGate[TestContext, String, String]] = None
   ): LifecycleCompiler.Phase[TestConfig, TestContext, String] =
     LifecycleCompiler.perItemHookPhase(
       phase = phase,
@@ -127,7 +127,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
     Ref.of[IO, Map[String, Boolean]](Map.empty).flatMap { decisions =>
       Ref.of[IO, Int](0).flatMap { gateCalls =>
         Ref.of[IO, List[String]](Nil).flatMap { events =>
-          val cachedGate = HookStepCompilation.CachedSingleGate[TestContext, String](
+          val cachedGate = LifecycleCompiler.CachedSingleGate[TestContext, String](
             tokenForIndex = hookIndex => s"before-publish:$hookIndex",
             resolveDecision = (_, token, fallback) =>
               decisions.get.flatMap(_.get(token) match {
@@ -175,7 +175,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
     Ref.of[IO, Map[(String, String), Boolean]](Map.empty).flatMap { decisions =>
       Ref.of[IO, Int](0).flatMap { gateCalls =>
         Ref.of[IO, List[String]](Nil).flatMap { events =>
-          val cachedGate = HookStepCompilation.CachedItemGate[TestContext, String, String](
+          val cachedGate = LifecycleCompiler.CachedItemGate[TestContext, String, String](
             tokenForIndex = hookIndex => s"before-publish:$hookIndex",
             resolveDecision = (_, token, item, fallback) =>
               decisions.get.flatMap(_.get(token -> item) match {
