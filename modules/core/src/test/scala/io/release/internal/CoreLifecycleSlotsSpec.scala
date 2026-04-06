@@ -65,6 +65,11 @@ class CoreLifecycleSlotsSpec extends FunSuite {
 
   test("slot-backed phases - preserve canonical phase and built-in step names") {
     assertEquals(hookPhaseNames(CoreLifecycle.phases), CoreLifecycleSlotsSpec.expectedHookPhases)
+    assertEquals(CoreHookSlots.descriptors.map(_.phase), CoreLifecycleSlotsSpec.expectedHookPhases)
+    assertEquals(
+      CoreHookSlots.descriptors.map(_.binding.keyLabel),
+      CoreLifecycleSlots.hookSlots.map(_.keyLabel)
+    )
     assertEquals(
       builtInStepNames(CoreLifecycle.phases),
       ReleaseSteps.defaults.map(_.name)

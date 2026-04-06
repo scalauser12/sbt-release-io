@@ -55,25 +55,28 @@ class StepKernelSpec extends CatsEffectSuite {
 
   test("single builder and single resource builder compose validations with the same ordering") {
     Ref.of[IO, List[String]](Nil).flatMap { events =>
-      val plainState = StepKernel
-        .SingleBuilderState[Int]("plain")
-        .appendValidation(value => events.update(_ :+ s"plain:first:$value").as(value + 1))
-        .appendValidation(value => events.update(_ :+ s"plain:second:$value").as(value + 1))
+      val plainStep = ProcessStep
+        .single[Int]("plain")
+        .withValidationContext(value => events.update(_ :+ s"plain:first:$value").as(value + 1))
+        .withValidationContext(value => events.update(_ :+ s"plain:second:$value").as(value + 1))
+        .validateOnly
 
-      val resourceState = StepKernel
-        .SingleResourceBuilderState[String, Int]("resource")
-        .appendValidation(resource =>
-          value => events.update(_ :+ s"resource:first:$resource:$value").as(value + 1)
-        )
-        .appendValidation(resource =>
-          value => events.update(_ :+ s"resource:second:$resource:$value").as(value + 1)
-        )
+      val resourceStep =
+        ProcessStep
+          .singleResource[String, Int]("resource")
+          .withValidationContext(resource =>
+            value => events.update(_ :+ s"resource:first:$resource:$value").as(value + 1)
+          )
+          .withValidationContext(resource =>
+            value => events.update(_ :+ s"resource:second:$resource:$value").as(value + 1)
+          )
+          .validateOnly("demo")
 
       for {
-        plainResult    <- plainState.validateWithContext.get.apply(1)
+        plainResult    <- plainStep.threadedValidation(1)
         plainObserved  <- events.get
         _              <- events.set(Nil)
-        resourceResult <- resourceState.validateWithContext("demo").get.apply(1)
+        resourceResult <- resourceStep.threadedValidation(1)
         resourceSeen   <- events.get
       } yield {
         assertEquals(plainResult, 3)
@@ -86,31 +89,34 @@ class StepKernelSpec extends CatsEffectSuite {
 
   test("item builder and item resource builder compose validations with the same ordering") {
     Ref.of[IO, List[String]](Nil).flatMap { events =>
-      val plainState = StepKernel
-        .ItemBuilderState[Int, String]("plain-item")
-        .appendValidation((value, item) =>
+      val plainStep = ProcessStep
+        .perItem[Int, String]("plain-item")
+        .withValidationContext((value, item) =>
           events.update(_ :+ s"plain:first:$item:$value").as(value + 1)
         )
-        .appendValidation((value, item) =>
+        .withValidationContext((value, item) =>
           events.update(_ :+ s"plain:second:$item:$value").as(value + 1)
         )
+        .validateOnly
 
-      val resourceState = StepKernel
-        .ItemResourceBuilderState[String, Int, String]("resource-item")
-        .appendValidation(resource =>
-          (value, item) =>
-            events.update(_ :+ s"resource:first:$resource:$item:$value").as(value + 1)
-        )
-        .appendValidation(resource =>
-          (value, item) =>
-            events.update(_ :+ s"resource:second:$resource:$item:$value").as(value + 1)
-        )
+      val resourceStep =
+        ProcessStep
+          .perItemResource[String, Int, String]("resource-item")
+          .withValidationContext(resource =>
+            (value, item) =>
+              events.update(_ :+ s"resource:first:$resource:$item:$value").as(value + 1)
+          )
+          .withValidationContext(resource =>
+            (value, item) =>
+              events.update(_ :+ s"resource:second:$resource:$item:$value").as(value + 1)
+          )
+          .validateOnly("demo")
 
       for {
-        plainResult    <- plainState.validateWithContext.get.apply(1, "api")
+        plainResult    <- plainStep.threadedValidation(1, "api")
         plainObserved  <- events.get
         _              <- events.set(Nil)
-        resourceResult <- resourceState.validateWithContext("demo").get.apply(1, "api")
+        resourceResult <- resourceStep.threadedValidation(1, "api")
         resourceSeen   <- events.get
       } yield {
         assertEquals(plainResult, 3)
@@ -126,8 +132,10 @@ class StepKernelSpec extends CatsEffectSuite {
       val source =
         TestRepoFiles.readString("modules/core/src/main/scala/io/release/internal/StepKernel.scala")
 
-      assert(!source.contains("resolveSingleCopyFields"))
-      assert(!source.contains("resolveItemCopyFields"))
+      assert(!source.contains("SingleBuilderState"))
+      assert(!source.contains("ItemBuilderState"))
+      assert(!source.contains("SingleResourceBuilderState"))
+      assert(!source.contains("ItemResourceBuilderState"))
     }
   }
 }
