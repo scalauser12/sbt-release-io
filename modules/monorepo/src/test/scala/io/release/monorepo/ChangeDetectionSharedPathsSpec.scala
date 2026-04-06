@@ -33,9 +33,13 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         val project = nestedProject(repo, "core")
 
         detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
-          readLogs(env, required = Seq("git describe failed for core")).map { logs =>
+          readLogs(
+            env,
+            required = Seq("git describe failed for core", "not a git repository")
+          ).map { logs =>
             assertEquals(changed.map(_.name), Seq("core"))
             assert(logs.contains("git describe failed for core"))
+            assert(logs.contains("not a git repository"))
             assert(!logs.contains("No previous tag matching"))
           }
         }
@@ -196,6 +200,50 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
               assert(!logs.contains("Shared path change(s) detected"))
             }
         }
+      }
+    }
+  }
+
+  test("detectChangedProjects - ignore shared path changes under excluded directories") {
+    repoResource.use { repo =>
+      for {
+        generatedDir <- IO.blocking {
+                          val dir      = new File(repo, "shared/generated")
+                          val noteFile = new File(dir, "notes.txt")
+
+                          sbt.IO.createDirectory(new File(repo, "core"))
+                          sbt.IO.createDirectory(dir)
+                          sbt.IO.write(
+                            new File(repo, "core/version.sbt"),
+                            """version := "0.1.0-SNAPSHOT"""" + "\n"
+                          )
+                          sbt.IO.write(noteFile, "initial note\n")
+
+                          TestSupport.initGitRepo(repo)
+                          TestSupport.runGit(repo, "add", ".")
+                          TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+                          TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+                          sbt.IO.write(noteFile, "updated note\n")
+                          TestSupport.runGit(repo, "add", ".")
+                          TestSupport.runGit(repo, "commit", "-m", "Update generated shared note")
+                          dir
+                        }
+        vcs          <- detectVcs(repo)
+        env           = testEnv(repo)
+        project       = nestedProject(repo, "core")
+        changed      <- detectChanged(
+                          vcs,
+                          Seq(project),
+                          env.state,
+                          sharedPaths = Seq("shared/"),
+                          additionalExcludeFiles = Seq(generatedDir)
+                        )
+        logs         <- readLogs(env, required = Seq("core unchanged since core-v0.1.0"))
+      } yield {
+        assert(changed.isEmpty)
+        assert(logs.contains("core unchanged since core-v0.1.0"))
+        assert(!logs.contains("Shared path change(s) detected"))
       }
     }
   }

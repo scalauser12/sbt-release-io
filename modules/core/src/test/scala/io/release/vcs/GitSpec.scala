@@ -14,6 +14,28 @@ import scala.concurrent.duration.*
 class GitSpec extends CatsEffectSuite {
   private val fixturePrefix = "git-spec"
 
+  test("executableNameFor - return git.exe for Windows-like OS names") {
+    IO(assertEquals(GitProcessSupport.executableNameFor("Windows 11"), "git.exe"))
+  }
+
+  test("executableNameFor - return git for non-Windows OS names") {
+    IO(assertEquals(GitProcessSupport.executableNameFor("Linux"), "git"))
+  }
+
+  test("runLines - preserve stderr on git failure in a non-repository directory") {
+    TestSupport.tempDirResource(s"$fixturePrefix-stderr").use { dir =>
+      GitProcessSupport.runLines(dir, Seq("status", "--porcelain"))("git status").attempt.map {
+        case Left(err: IllegalStateException) =>
+          assert(err.getMessage.contains("git status failed with exit code"))
+          assert(err.getMessage.contains("not a git repository"))
+        case Left(other)                      =>
+          fail(s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}")
+        case Right(output)                    =>
+          fail(s"Expected git status failure, got output: ${output.mkString(", ")}")
+      }
+    }
+  }
+
   test("runCommandWithTimeout - return the exit code when the process finishes in time") {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 

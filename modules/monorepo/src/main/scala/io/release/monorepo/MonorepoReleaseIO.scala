@@ -174,7 +174,7 @@ trait MonorepoReleaseIO {
       : SettingKey[Option[(ProjectRef, File, State) => IO[Boolean]]] =
     MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector
 
-  /** Additional files to exclude from change detection (absolute paths). */
+  /** Additional files or directories to exclude from change detection (absolute paths). */
   lazy val releaseIOMonorepoDetectionExcludes: SettingKey[Seq[File]] =
     MonorepoReleaseIO.releaseIOMonorepoDetectionExcludes
 
@@ -457,7 +457,7 @@ object MonorepoReleaseIO extends MonorepoReleaseIO {
   override lazy val releaseIOMonorepoDetectionExcludes: SettingKey[Seq[File]] =
     SettingKey[Seq[File]](
       "releaseIOMonorepoDetectionExcludes",
-      "Additional files to exclude from change detection"
+      "Additional files or directories to exclude from change detection"
     )
 
   override lazy val releaseIOMonorepoDetectionSharedPaths: SettingKey[Seq[String]] =

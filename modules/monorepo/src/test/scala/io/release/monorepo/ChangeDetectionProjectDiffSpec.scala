@@ -154,6 +154,162 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
     }
   }
 
+  test("detectChangedProjects - ignore additional excluded directories beyond the version file") {
+    repoResource.use { repo =>
+      for {
+        docsDir <- IO.blocking {
+                     val dir = new File(repo, "core/docs")
+                     sbt.IO.createDirectory(dir)
+                     sbt.IO.write(
+                       new File(repo, "core/version.sbt"),
+                       """version := "0.1.0-SNAPSHOT"""" + "\n"
+                     )
+                     val readme = new File(dir, "README.md")
+                     sbt.IO.write(readme, "# Core docs\n")
+
+                     TestSupport.initGitRepo(repo)
+                     TestSupport.runGit(repo, "add", ".")
+                     TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+                     TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+                     sbt.IO.write(readme, "# Updated core docs\n")
+                     TestSupport.runGit(repo, "add", ".")
+                     TestSupport.runGit(repo, "commit", "-m", "Update docs")
+                     dir
+                   }
+        vcs     <- detectVcs(repo)
+        env      = testEnv(repo)
+        project  = nestedProject(repo, "core")
+        changed <- detectChanged(
+                     vcs,
+                     Seq(project),
+                     env.state,
+                     additionalExcludeFiles = Seq(docsDir)
+                   )
+        logs    <- readLogs(
+                     env,
+                     required = Seq(
+                       "core has only version/excluded file changes since " +
+                         "core-v0.1.0, treating as unchanged"
+                     )
+                   )
+      } yield {
+        assert(changed.isEmpty)
+        assert(
+          logs.contains(
+            "core has only version/excluded file changes since " +
+              "core-v0.1.0, treating as unchanged"
+          )
+        )
+      }
+    }
+  }
+
+  test("detectChangedProjects - keep sibling changes when excluding a directory") {
+    repoResource.use { repo =>
+      for {
+        docsDir <- IO.blocking {
+                     val dir        = new File(repo, "core/docs")
+                     val sourceDir  = new File(repo, "core/src/main/scala")
+                     val versionSbt = new File(repo, "core/version.sbt")
+                     val readme     = new File(dir, "README.md")
+                     val sourceFile = new File(sourceDir, "Core.scala")
+
+                     sbt.IO.createDirectory(dir)
+                     sbt.IO.createDirectory(sourceDir)
+                     sbt.IO.write(versionSbt, """version := "0.1.0-SNAPSHOT"""" + "\n")
+                     sbt.IO.write(readme, "# Core docs\n")
+                     sbt.IO.write(sourceFile, "object Core {}\n")
+
+                     TestSupport.initGitRepo(repo)
+                     TestSupport.runGit(repo, "add", ".")
+                     TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+                     TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+                     sbt.IO.write(readme, "# Updated core docs\n")
+                     sbt.IO.write(sourceFile, "object Core { val changed = true }\n")
+                     TestSupport.runGit(repo, "add", ".")
+                     TestSupport.runGit(repo, "commit", "-m", "Update docs and sources")
+                     dir
+                   }
+        vcs     <- detectVcs(repo)
+        env      = testEnv(repo)
+        project  = nestedProject(repo, "core")
+        changed <- detectChanged(
+                     vcs,
+                     Seq(project),
+                     env.state,
+                     additionalExcludeFiles = Seq(docsDir)
+                   )
+        logs    <- readLogs(
+                     env,
+                     required = Seq(
+                       "core has 1 changed file(s) since core-v0.1.0 " +
+                         "(1 version/excluded file(s) filtered)"
+                     )
+                   )
+      } yield {
+        assertEquals(changed.map(_.name), Seq("core"))
+        assert(
+          logs.contains(
+            "core has 1 changed file(s) since core-v0.1.0 " +
+              "(1 version/excluded file(s) filtered)"
+          )
+        )
+      }
+    }
+  }
+
+  test("detectChangedProjects - mark as changed when git diff fails unexpectedly") {
+    repoResource.use { repo =>
+      IO.blocking {
+        val badDir = new File(repo, ":(badmagic)")
+
+        sbt.IO.createDirectory(badDir)
+        sbt.IO.write(
+          new File(badDir, "version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+        sbt.IO.write(new File(badDir, "Magic.scala"), "object Magic {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "magic-v0.1.0")
+
+        sbt.IO.write(new File(badDir, "Magic.scala"), "object Magic { val changed = true }\n")
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update magic sources")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val badDir  = new File(repo, ":(badmagic)")
+        val project = projectInfo(
+          repo,
+          name = "magic",
+          baseDir = badDir,
+          versionFile = new File(badDir, "version.sbt")
+        )
+
+        detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
+          readLogs(
+            env,
+            required = Seq(
+              "git diff failed for magic",
+              "Invalid pathspec magic 'badmagic'"
+            )
+          ).map { logs =>
+            assertEquals(changed.map(_.name), Seq("magic"))
+            assert(logs.contains("git diff failed for magic"))
+            assert(logs.contains("Invalid pathspec magic 'badmagic'"))
+          }
+        }
+      }
+    }
+  }
+
   test("detectChangedProjects - treat root project as unchanged when no files changed") {
     repoResource.use { repo =>
       IO.blocking {

@@ -8,7 +8,7 @@ The plugin detects which projects have changed since their last release tag usin
    - Pattern `<projectName>/v*` (e.g., `core/v*`)
 2. If no tag exists, the project is treated as changed (first release).
 3. Run `git diff --name-only <tag>..HEAD -- <projectDir>`.
-4. Filter out version files and any files in `releaseIOMonorepoDetectionExcludes`.
+4. Filter out version files and any files or directories in `releaseIOMonorepoDetectionExcludes`.
 5. If any significant files remain, the project is changed.
 
 Any git command failure conservatively treats the project as changed.
@@ -49,17 +49,22 @@ On detector error, the project is conservatively treated as changed.
 > `releaseIOMonorepoDetectionExcludes` only apply to the built-in detector and are
 > ignored when a custom detector is set.
 
-## Excluding files from detection
+## Excluding files or directories from detection
 
 ```scala
 // In the root project settings — exclude a subproject's generated changelog
 releaseIOMonorepoDetectionExcludes := Seq(
   (core / baseDirectory).value / "CHANGELOG.md"
 )
+
+// Exclude an entire generated directory tree
+releaseIOMonorepoDetectionExcludes +=
+  (core / baseDirectory).value / "target" / "generated-docs"
 ```
 
 This setting is read from the **root project** scope, so use `(subproject / baseDirectory).value`
-to reference subproject directories. Per-project version files are always excluded automatically.
+to reference subproject directories. Excluded directory paths suppress nested files using prefix
+matching. Per-project version files are always excluded automatically.
 This setting only applies to the built-in detector and is ignored when `releaseIOMonorepoDetectionChangeDetector` is set.
 
 ## First release shows no projects changed

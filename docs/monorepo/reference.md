@@ -108,7 +108,7 @@ exist when it is `false`.
 | `releaseIOMonorepoDetectionEnabled` | `Boolean` | `true` | Enable git-based change detection |
 | `releaseIOMonorepoDetectionIncludeDownstream` | `Boolean` | `false` | Include downstream dependents of changed projects |
 | `releaseIOMonorepoDetectionChangeDetector` | `Option[(ProjectRef, File, State) => IO[Boolean]]` | `None` | Custom change detector |
-| `releaseIOMonorepoDetectionExcludes` | `Seq[File]` | `Seq.empty` | Files to exclude from detection |
+| `releaseIOMonorepoDetectionExcludes` | `Seq[File]` | `Seq.empty` | Files or directories to exclude from detection |
 | `releaseIOMonorepoDetectionSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level shared paths checked per project |
 
 Files matching `releaseIOMonorepoDetectionSharedPaths` are checked against each project's last

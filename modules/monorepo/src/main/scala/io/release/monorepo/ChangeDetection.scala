@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers.errorMessage
+import io.release.vcs.GitProcessSupport
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
@@ -44,6 +45,30 @@ private[monorepo] object ChangeDetection {
   private def gitRelativize(base: File, file: File): Option[String] =
     sbt.IO.relativize(base.getCanonicalFile, file.getCanonicalFile).map(_.replace('\\', '/'))
 
+  private def matchesExcludedPath(path: String, excluded: String): Boolean =
+    path == excluded || path.startsWith(excluded + "/")
+
+  private def isExcludedPath(path: String, excludes: Set[String]): Boolean =
+    excludes.exists(matchesExcludedPath(path, _))
+
+  private def successfulGitLines(
+      vcs: Vcs,
+      args: Seq[String]
+  )(context: => String): Seq[String] = {
+    val result = GitProcessSupport.runLinesResult(vcs.baseDir, args)
+    if (result.exitCode != 0) throw gitFailure(context, result)
+    else result.stdout
+  }
+
+  private def gitFailure(
+      context: => String,
+      result: GitProcessSupport.GitCommandResult
+  ): IllegalStateException =
+    new IllegalStateException(
+      s"$context failed with exit code ${result.exitCode}" +
+        (if (result.stderr.nonEmpty) s": ${result.stderr}" else "")
+    )
+
   /** Look up the last tag matching a pattern via `git describe` / `git tag`.
     * '''Performs blocking I/O''' (git subprocess calls) — must only be called
     * from within `IO.blocking`.
@@ -51,13 +76,11 @@ private[monorepo] object ChangeDetection {
   private def lookupLastTag(vcs: Vcs, tagPattern: String): TagLookupResult = {
     import TagLookupResult.*
 
-    import scala.sys.process.*
-
     Try(
-      Process(
-        Seq("git", "describe", "--tags", "--match", tagPattern, "--abbrev=0"),
-        vcs.baseDir
-      ).!!.trim
+      successfulGitLines(
+        vcs,
+        Seq("describe", "--tags", "--match", tagPattern, "--abbrev=0")
+      )("git describe").mkString("\n").trim
     ) match {
       case Success(tag) if tag.nonEmpty =>
         TagFound(tag)
@@ -65,10 +88,10 @@ private[monorepo] object ChangeDetection {
         NoMatchingTag
       case Failure(describeErr)         =>
         Try(
-          Process(
-            Seq("git", "tag", "--list", tagPattern, "--merged", "HEAD"),
-            vcs.baseDir
-          ).!!.linesIterator.filter(_.nonEmpty).toList
+          successfulGitLines(
+            vcs,
+            Seq("tag", "--list", tagPattern, "--merged", "HEAD")
+          )("git tag --list --merged HEAD").toList
         ) match {
           case Success(Nil)          =>
             NoMatchingTag
@@ -102,7 +125,7 @@ private[monorepo] object ChangeDetection {
     *
     * Each project's version file is automatically excluded from diff results,
     * since version bumps from the previous release are not meaningful changes.
-    * Additional files to exclude can be passed via `additionalExcludeFiles`.
+    * Additional files or directories to exclude can be passed via `additionalExcludeFiles`.
     */
   def detectChangedProjects(
       vcs: Vcs,
@@ -253,17 +276,15 @@ private[monorepo] object ChangeDetection {
       state: State,
       sharedPaths: Seq[String],
       excludes: Set[String]
-  ): Boolean = {
-    import scala.sys.process.*
-
+  ): Boolean =
     Try(
-      Process(
-        Seq("git", "diff", "--name-only", s"$tag..HEAD", "--") ++ sharedPaths,
-        vcs.baseDir
-      ).!!.linesIterator.filter(_.nonEmpty).toList
+      successfulGitLines(
+        vcs,
+        Seq("diff", "--name-only", s"$tag..HEAD", "--") ++ sharedPaths
+      )("git diff").toList
     ) match {
       case Success(rawFiles) =>
-        val files = rawFiles.filterNot(f => excludes.exists(e => f == e || f.startsWith(e + "/")))
+        val files = rawFiles.filterNot(isExcludedPath(_, excludes))
         if (files.nonEmpty) {
           state.log.info(
             s"${ReleaseLogPrefixes.Monorepo} Shared path change(s) detected since $tag: " +
@@ -278,7 +299,6 @@ private[monorepo] object ChangeDetection {
         )
         true
     }
-  }
 
   /** Check whether a project has changed since its last matching tag.
     * '''Performs blocking I/O''' (git subprocess calls) — must only be called
@@ -344,14 +364,12 @@ private[monorepo] object ChangeDetection {
       state: State,
       excludePaths: Set[String],
       childDirPrefixes: Set[String]
-  ): Boolean = {
-    import scala.sys.process.*
-
+  ): Boolean =
     Try(
-      Process(
-        Seq("git", "diff", "--name-only", s"$tag..HEAD", "--", baseRelative),
-        vcs.baseDir
-      ).!!.linesIterator.filter(_.nonEmpty).toList
+      successfulGitLines(
+        vcs,
+        Seq("diff", "--name-only", s"$tag..HEAD", "--", baseRelative)
+      )("git diff").toList
     ) match {
       case Failure(err)          =>
         state.log.warn(
@@ -361,7 +379,7 @@ private[monorepo] object ChangeDetection {
         true
       case Success(changedFiles) =>
         val significantFiles = changedFiles
-          .filterNot(excludePaths.contains)
+          .filterNot(isExcludedPath(_, excludePaths))
           .filterNot(f =>
             childDirPrefixes.exists(prefix => f.startsWith(prefix + "/") || f == prefix)
           )
@@ -388,5 +406,4 @@ private[monorepo] object ChangeDetection {
           false
         }
     }
-  }
 }

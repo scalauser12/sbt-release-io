@@ -7,20 +7,28 @@ import cats.syntax.all.*
 
 import java.io.File
 import java.lang.ProcessBuilder.Redirect
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
+import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
 import scala.sys.process.Process
 import scala.sys.process.ProcessBuilder as ScalaProcessBuilder
 import scala.sys.process.ProcessLogger
 
-private[vcs] object GitProcessSupport {
+private[release] object GitProcessSupport {
+  private[release] final case class GitCommandResult(
+      exitCode: Int,
+      stdout: Vector[String],
+      stderr: String
+  )
+
   val DefaultDestroyGracePeriod: FiniteDuration   = 1.second
   private val ProcessPollInterval: FiniteDuration = 50.millis
 
-  private lazy val exec: String = {
-    val maybeWindows = sys.props.get("os.name").map(_.toLowerCase).exists(_.contains("windows"))
-    if (maybeWindows) "git.exe" else "git"
-  }
+  private[release] def executableNameFor(osName: String): String =
+    if (osName.toLowerCase.contains("windows")) "git.exe" else "git"
+
+  private lazy val exec: String = executableNameFor(sys.props.getOrElse("os.name", ""))
 
   val discardLogger: ProcessLogger = new ProcessLogger {
     override def out(s: => String): Unit = {}
@@ -44,26 +52,33 @@ private[vcs] object GitProcessSupport {
       else IO.unit
     }
 
-  def runLines(baseDir: File, args: Seq[String])(context: => String): IO[Seq[String]] =
-    IO.blocking {
-      val stderr = new StringBuilder
-      val lines  = List.newBuilder[String]
-      val code   = cmd(baseDir, args*).!(
-        ProcessLogger(
-          line => { lines += line; () },
-          err => { stderr.append(err).append('\n'); () }
-        )
+  private[release] def runLinesResult(baseDir: File, args: Seq[String]): GitCommandResult = {
+    val stdout = new ConcurrentLinkedQueue[String]()
+    val stderr = new ConcurrentLinkedQueue[String]()
+    val code   = cmd(baseDir, args*).!(
+      ProcessLogger(
+        line => { stdout.add(line); () },
+        err => { stderr.add(err); () }
       )
-      (code, lines.result(), stderr.toString.trim)
-    }.flatMap { case (code, result, stderr) =>
-      if (code != 0)
+    )
+
+    GitCommandResult(
+      exitCode = code,
+      stdout = stdout.asScala.iterator.filter(_.nonEmpty).toVector,
+      stderr = stderr.asScala.iterator.filter(_.nonEmpty).mkString("\n").trim
+    )
+  }
+
+  def runLines(baseDir: File, args: Seq[String])(context: => String): IO[Seq[String]] =
+    IO.blocking(runLinesResult(baseDir, args)).flatMap { result =>
+      if (result.exitCode != 0)
         IO.raiseError(
           new IllegalStateException(
-            s"$context failed with exit code $code" +
-              (if (stderr.nonEmpty) s": $stderr" else "")
+            s"$context failed with exit code ${result.exitCode}" +
+              (if (result.stderr.nonEmpty) s": ${result.stderr}" else "")
           )
         )
-      else IO.pure(result)
+      else IO.pure(result.stdout)
     }
 
   def runSingleLine(baseDir: File, args: Seq[String])(context: => String): IO[String] =
