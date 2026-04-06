@@ -6,6 +6,16 @@ This file is the canonical release history for the repository.
 
 ## Unreleased
 
+## v0.9.0
+
+Published: 2026-04-06
+GitHub release:
+[v0.9.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.0)
+
+`v0.9.0` completes the breaking API cleanup started in `v0.8.1`, making the grouped hook and
+policy settings the only supported build-facing customization model across both plugins while
+continuing the internal release-runtime simplification work.
+
 ### Breaking changes
 
 - Remove all deprecated flat key aliases from `ReleaseIO` and `MonorepoReleaseIO`; grouped
@@ -16,6 +26,33 @@ This file is the canonical release history for the repository.
   grouped hook settings, grouped policy settings, and resource-hook custom plugins only.
 - Retire docs and examples built around step-list editing. Migration guidance now points to
   grouped hook/policy settings and resource-aware hook plugins instead.
+
+### Improvements
+
+- Simplify and consolidate lifecycle compilation, release command handling, preflight plumbing,
+  execution helpers, and shared hook descriptor ordering across the core and monorepo modules
+  without changing the supported hook-first customization model.
+- Continue tightening test support, process/resource handling, and internal type naming so the
+  shared runtime stays easier to reason about and maintain.
+
+### Documentation
+
+- Refresh the root README, module READMEs, onboarding guides, and walkthroughs to reference
+  `0.9.0`.
+- Keep the docs aligned on the supported migration path: grouped hook settings, grouped policy
+  settings, and resource-aware custom plugins instead of flat aliases or step-list editing.
+
+### Tests
+
+- Expand and update coverage around grouped public keys, lifecycle compilation, default settings,
+  release command handling, monorepo selection/order behavior, and shared test support while
+  removing compatibility scaffolding tied to the retired lower-level step DSLs.
+
+### Verification
+
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
 
 ## v0.8.1
 

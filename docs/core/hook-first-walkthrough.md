@@ -12,7 +12,7 @@ This walkthrough shows the current recommended way to customize the core plugin:
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.8.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.9.0")
 ```
 
 ## 2. Add a version file
