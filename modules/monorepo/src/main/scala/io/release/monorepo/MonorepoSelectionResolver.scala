@@ -139,13 +139,7 @@ private[monorepo] object MonorepoSelectionResolver {
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
     resolveDetectionSettings(ctx.state).flatMap { settings =>
       detectSelectedProjects(ctx, ordered, tagSettings, settings).flatMap { case (detected, mode) =>
-        forceIncludeOverridden(
-          ctx,
-          ordered,
-          detected,
-          validated,
-          settings.includeDownstream
-        ).map(_ -> mode)
+        forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
       }
     }
 
@@ -317,8 +311,7 @@ private[monorepo] object MonorepoSelectionResolver {
       ctx: MonorepoContext,
       allOrdered: Seq[ProjectReleaseInfo],
       detected: Seq[ProjectReleaseInfo],
-      plan: MonorepoReleasePlan,
-      includeDownstream: Boolean
+      plan: MonorepoReleasePlan
   ): IO[Seq[ProjectReleaseInfo]] = {
     val overrideNames = plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet
     val detectedNames = detected.map(_.name).toSet
@@ -336,10 +329,7 @@ private[monorepo] object MonorepoSelectionResolver {
               s" (unchanged but has version override)"
           )
         )
-      }.as(forcedSelection).flatMap { updatedSelection =>
-        if (includeDownstream) expandToDownstream(ctx, allOrdered, updatedSelection)
-        else IO.pure(updatedSelection)
-      }
+      }.as(forcedSelection)
     }
   }
 
