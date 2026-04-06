@@ -4,7 +4,6 @@ import cats.effect.IO
 
 import java.io.File
 import scala.concurrent.duration.*
-import scala.sys.process.ProcessLogger
 
 /** Git implementation of [[Vcs]] with all operations wrapped in `IO.blocking`. */
 class Git(val baseDir: File) extends Vcs {
@@ -87,20 +86,7 @@ class Git(val baseDir: File) extends Vcs {
     runLines("ls-files", "--other", "--exclude-standard")("git ls-files --other")
 
   def status: IO[String] =
-    IO.blocking {
-      val sb   = new StringBuilder
-      val code = cmd("status", "--porcelain").!(
-        ProcessLogger(
-          line => { sb.append(line).append('\n'); () },
-          _ => ()
-        )
-      )
-      (code, sb.toString.trim)
-    }.flatMap { case (code, output) =>
-      if (code != 0)
-        IO.raiseError(new IllegalStateException(s"git status failed with exit code $code"))
-      else IO.pure(output)
-    }
+    runLines("status", "--porcelain")("git status").map(_.mkString("\n"))
 
   def checkRemote(remote: String): IO[Int] =
     IO.blocking(cmd("fetch", remote).!)
