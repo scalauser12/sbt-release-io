@@ -31,11 +31,12 @@ trait Vcs {
   def checkRemote(remote: String): IO[Int]
 
   /** Fetch/check the given remote, aborting with `None` if the timeout elapses first.
-    * The default implementation preserves the previous fiber-timeout behavior so existing
-    * custom adapters remain source-compatible.
+    * The default implementation is best-effort: it preserves compatibility for adapters that only
+    * implement [[checkRemote]], but the underlying work may continue running after the timeout
+    * elapses.
     *
-    * Implementations that spawn external processes should override this method to terminate
-    * those processes when the timeout elapses before returning `None`.
+    * Implementations that can perform a real timed remote check should override this method and
+    * ensure any spawned work is terminated when the timeout elapses before returning `None`.
     */
   def checkRemoteWithTimeout(remote: String, timeout: FiniteDuration): IO[Option[Int]] =
     checkRemote(remote).map(Some(_)).timeoutTo(timeout, IO.pure(None))

@@ -284,7 +284,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       VcsOps
         .validatePushRemote(
           ctx,
-          new StubVcs(dir, checkRemote0 = IO.pure(0)),
+          new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(0)))),
           ReleaseLogPrefixes.Core
         )
         .map(result => assertEquals(result, ctx))
@@ -325,26 +325,36 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
-  test("validatePushRemote - use the configured remote-check timeout") {
+  test("validatePushRemote - time out when the adapter has no timed check override") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
-      val logged = VcsOpsSpec.bufferedState(
-        dir,
-        Seq(ReleaseIO.releaseIOVcsRemoteCheckTimeout := 5.millis)
-      )
-      val ctx    = VcsOpsSpec.promptContext(logged.state, interactive = false, useDefaults = false)
+      Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
+        val logged = VcsOpsSpec.bufferedState(
+          dir,
+          Seq(ReleaseIO.releaseIOVcsRemoteCheckTimeout := 5.millis)
+        )
+        val ctx    =
+          VcsOpsSpec.promptContext(logged.state, interactive = false, useDefaults = false)
 
-      assertIllegalStateMessage(
-        VcsOps
-          .validatePushRemote(
+        assertIllegalStateMessage(
+          VcsOps.validatePushRemote(
             ctx,
-            new StubVcs(dir, checkRemote0 = IO.never),
+            new StubVcs(dir, checkRemote0 = IO.never, recordedCalls0 = Some(calls)),
             ReleaseLogPrefixes.Monorepo
-          )
-          .timeout(1.second),
-        "Aborting the release due to remote check failure."
-      ) *> IO.blocking {
-        val log = logged.consoleBuffer.toString("UTF-8")
-        assert(log.contains(s"${ReleaseLogPrefixes.Monorepo} Remote check timed out after"))
+          ),
+          "Aborting the release due to remote check failure."
+        ) *> calls.get.flatMap { seen =>
+          IO.blocking {
+            val log = logged.consoleBuffer.toString("UTF-8")
+            assertEquals(
+              seen,
+              Vector(
+                StubVcsCall.CheckRemoteWithTimeout("origin", 5.millis),
+                StubVcsCall.CheckRemote("origin")
+              )
+            )
+            assert(log.contains("Remote check timed out after 5 milliseconds while fetching 'origin'."))
+          }
+        }
       }
     }
   }
@@ -384,7 +394,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       assertIllegalStateMessage(
         VcsOps.validatePushRemote(
           ctx,
-          new StubVcs(dir, checkRemote0 = IO.pure(1)),
+          new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(1)))),
           ReleaseLogPrefixes.Core
         ),
         "Aborting the release due to remote check failure."
@@ -520,7 +530,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new StubVcs(dir)
+        vcs         = new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(0))))
         _          <- VcsOps.interactivePushAfterRemote(
                         ctx,
                         vcs,
@@ -550,7 +560,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new StubVcs(dir)
+        vcs         = new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(0))))
         _          <- VcsOps.interactivePushAfterRemote(
                         ctx,
                         vcs,
@@ -580,7 +590,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new StubVcs(dir)
+        vcs         = new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(0))))
         _          <- TestSupport.withInput("\n") {
                         VcsOps.interactivePushAfterRemote(
                           ctx,
@@ -612,7 +622,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new StubVcs(dir)
+        vcs         = new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(0))))
         _          <- TestSupport.withInput("maybe\ny\n") {
                         VcsOps.interactivePushAfterRemote(
                           ctx,
@@ -645,7 +655,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new StubVcs(dir)
+        vcs         = new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(0))))
         _          <- TestSupport.withInput("") {
                         VcsOps.interactivePushAfterRemote(
                           ctx,
@@ -683,7 +693,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       for {
         pushed     <- Ref[IO].of(false)
         declined   <- Ref[IO].of(false)
-        vcs         = new StubVcs(dir, checkRemote0 = IO.pure(1))
+        vcs         = new StubVcs(dir, checkRemoteWithTimeout0 = Some((_, _) => IO.pure(Some(1))))
         _          <- TestSupport.withInput("y\r\nn\r\n") {
                         VcsOps.interactivePushAfterRemote(
                           ctx,
