@@ -1,5 +1,6 @@
 package io.release.monorepo
 
+import cats.effect.IO
 import io.release.TestRepoFiles
 import io.release.internal.LifecycleCompiler
 import io.release.monorepo.steps.MonorepoReleaseSteps
@@ -71,32 +72,19 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
   test("slot-backed phases - preserve canonical phase and built-in step names") {
     assertEquals(
       hookPhaseNames(MonorepoLifecycle.phases),
+      MonorepoLifecycle.orderedHookPhases
+    )
+    assertEquals(
+      MonorepoLifecycle.orderedHookPhases,
       MonorepoLifecycleSlotsSpec.expectedHookPhases
     )
     assertEquals(
-      MonorepoGlobalHookSlots.descriptors.map(_.phase) ++
-        MonorepoProjectHookSlots.descriptors.map(_.phase),
-      Seq(
-        "after-clean-check",
-        "before-selection",
-        "after-selection",
-        "before-release-commit",
-        "after-release-commit",
-        "before-next-commit",
-        "after-next-commit",
-        "before-push",
-        "after-push",
-        "before-version-resolution",
-        "after-version-resolution",
-        "before-release-version-write",
-        "after-release-version-write",
-        "before-tag",
-        "after-tag",
-        "before-publish",
-        "after-publish",
-        "before-next-version-write",
-        "after-next-version-write"
-      )
+      MonorepoGlobalHookSlots.descriptors,
+      MonorepoLifecycle.orderedGlobalHookDescriptors
+    )
+    assertEquals(
+      MonorepoProjectHookSlots.descriptors,
+      MonorepoLifecycle.orderedProjectHookDescriptors
     )
     assertEquals(
       MonorepoGlobalHookSlots.descriptors.map(_.slot.keyLabel),
@@ -109,6 +97,38 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
     assertEquals(
       builtInStepNames(MonorepoLifecycle.phases),
       MonorepoReleaseSteps.defaults.map(_.name)
+    )
+  }
+
+  test(
+    "resource hook materialization order follows the lifecycle-derived global descriptor order"
+  ) {
+    val assignments =
+      MonorepoResourceHooks.globalHookAssignments(
+        MonorepoResourceHooks.empty[Unit],
+        (_: MonorepoGlobalResourceHookIO[Unit]) =>
+          MonorepoGlobalHookIO.action("unused")(_ => IO.unit)
+      )
+
+    assertEquals(
+      assignments.map(_._1.keyLabel),
+      MonorepoLifecycle.orderedGlobalHookDescriptors.map(_.slot.keyLabel)
+    )
+  }
+
+  test(
+    "resource hook materialization order follows the lifecycle-derived project descriptor order"
+  ) {
+    val assignments =
+      MonorepoResourceHooks.projectHookAssignments(
+        MonorepoResourceHooks.empty[Unit],
+        (_: MonorepoProjectResourceHookIO[Unit]) =>
+          MonorepoProjectHookIO.action("unused")((_, _) => IO.unit)
+      )
+
+    assertEquals(
+      assignments.map(_._1.keyLabel),
+      MonorepoLifecycle.orderedProjectHookDescriptors.map(_.slot.keyLabel)
     )
   }
 
@@ -188,6 +208,8 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
 
     assert(!topLevelSource.contains("policySlot("))
     assert(!topLevelSource.contains("hookSlot("))
+    assert(!topLevelSource.contains("globalHookPhase(\""))
+    assert(!topLevelSource.contains("projectHookPhase(\""))
   }
 }
 

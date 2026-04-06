@@ -117,7 +117,7 @@ private[release] object MonorepoProjectHookSlots {
   private val publishGate: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] =
     MonorepoPublishSteps.shouldRunPublishHooks
 
-  private val beforeVersionResolutionDescriptor =
+  private[release] val beforeVersionResolutionDescriptor =
     new ProjectHookDescriptor(
       phase = "before-version-resolution",
       slot = beforeVersionResolutionHooks,
@@ -129,7 +129,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.beforeVersionResolutionHooks
     }
 
-  private val afterVersionResolutionDescriptor =
+  private[release] val afterVersionResolutionDescriptor =
     new ProjectHookDescriptor(
       phase = "after-version-resolution",
       slot = afterVersionResolutionHooks,
@@ -141,7 +141,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.afterVersionResolutionHooks
     }
 
-  private val beforeReleaseVersionWriteDescriptor =
+  private[release] val beforeReleaseVersionWriteDescriptor =
     new ProjectHookDescriptor(
       phase = "before-release-version-write",
       slot = beforeReleaseVersionWriteHooks,
@@ -153,7 +153,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.beforeReleaseVersionWriteHooks
     }
 
-  private val afterReleaseVersionWriteDescriptor =
+  private[release] val afterReleaseVersionWriteDescriptor =
     new ProjectHookDescriptor(
       phase = "after-release-version-write",
       slot = afterReleaseVersionWriteHooks,
@@ -165,7 +165,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.afterReleaseVersionWriteHooks
     }
 
-  private val beforeTagDescriptor =
+  private[release] val beforeTagDescriptor =
     new ProjectHookDescriptor(
       phase = "before-tag",
       slot = beforeTagHooks,
@@ -177,7 +177,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.beforeTagHooks
     }
 
-  private val afterTagDescriptor =
+  private[release] val afterTagDescriptor =
     new ProjectHookDescriptor(
       phase = "after-tag",
       slot = afterTagHooks,
@@ -189,7 +189,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.afterTagHooks
     }
 
-  private val beforePublishDescriptor =
+  private[release] val beforePublishDescriptor =
     new ProjectHookDescriptor(
       phase = "before-publish",
       slot = beforePublishHooks,
@@ -204,7 +204,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.beforePublishHooks
     }
 
-  private val afterPublishDescriptor =
+  private[release] val afterPublishDescriptor =
     new ProjectHookDescriptor(
       phase = "after-publish",
       slot = afterPublishHooks,
@@ -219,7 +219,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.afterPublishHooks
     }
 
-  private val beforeNextVersionWriteDescriptor =
+  private[release] val beforeNextVersionWriteDescriptor =
     new ProjectHookDescriptor(
       phase = "before-next-version-write",
       slot = beforeNextVersionWriteHooks,
@@ -231,7 +231,7 @@ private[release] object MonorepoProjectHookSlots {
         hooks.beforeNextVersionWriteHooks
     }
 
-  private val afterNextVersionWriteDescriptor =
+  private[release] val afterNextVersionWriteDescriptor =
     new ProjectHookDescriptor(
       phase = "after-next-version-write",
       slot = afterNextVersionWriteHooks,
@@ -243,20 +243,9 @@ private[release] object MonorepoProjectHookSlots {
         hooks.afterNextVersionWriteHooks
     }
 
-  val descriptors: Vector[ProjectHookDescriptor] =
-    Vector(
-      beforeVersionResolutionDescriptor,
-      afterVersionResolutionDescriptor,
-      beforeReleaseVersionWriteDescriptor,
-      afterReleaseVersionWriteDescriptor,
-      beforeTagDescriptor,
-      afterTagDescriptor,
-      beforePublishDescriptor,
-      afterPublishDescriptor,
-      beforeNextVersionWriteDescriptor,
-      afterNextVersionWriteDescriptor
-    )
+  lazy val descriptors: Vector[ProjectHookDescriptor] =
+    MonorepoLifecycle.orderedProjectHookDescriptors
 
-  val projectHookSlots: Vector[MonorepoProjectHookSlot] =
+  lazy val projectHookSlots: Vector[MonorepoProjectHookSlot] =
     descriptors.map(_.slot)
 }

@@ -107,6 +107,28 @@ private[release] object MonorepoLifecycle {
   private type Phase =
     LifecycleCompiler.Phase[MonorepoHookConfiguration, MonorepoContext, ProjectReleaseInfo]
 
+  private sealed trait CatalogEntry
+
+  private object CatalogEntry {
+    final case class GlobalBuiltIn(
+        step: GlobalStep,
+        enabled: MonorepoHookConfiguration => Boolean = _ => true
+    ) extends CatalogEntry
+
+    final case class ProjectBuiltIn(
+        step: ProjectStep,
+        enabled: MonorepoHookConfiguration => Boolean = _ => true
+    ) extends CatalogEntry
+
+    final case class GlobalHook(
+        descriptor: MonorepoGlobalHookSlots.GlobalHookDescriptor
+    ) extends CatalogEntry
+
+    final case class ProjectHook(
+        descriptor: MonorepoProjectHookSlots.ProjectHookDescriptor
+    ) extends CatalogEntry
+  }
+
   private def publishCachedGate(
       phase: String
   ): LifecycleCompiler.CachedItemGate[
@@ -140,15 +162,6 @@ private[release] object MonorepoLifecycle {
       enabled = enabled
     )
 
-  private def singleBuiltIn(
-      step: GlobalStep,
-      policySlot: MonorepoPolicySlot
-  ): Phase =
-    singleBuiltIn(
-      step = step,
-      enabled = policySlot.enabled
-    )
-
   private def perItemBuiltIn(
       step: ProjectStep,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
@@ -156,15 +169,6 @@ private[release] object MonorepoLifecycle {
     LifecycleCompiler.perItemBuiltIn(
       step = step,
       enabled = enabled
-    )
-
-  private def perItemBuiltIn(
-      step: ProjectStep,
-      policySlot: MonorepoPolicySlot
-  ): Phase =
-    perItemBuiltIn(
-      step = step,
-      enabled = policySlot.enabled
     )
 
   private def globalHookPhase(
@@ -195,77 +199,82 @@ private[release] object MonorepoLifecycle {
       enabled = descriptor.enabled
     )
 
-  private def globalHookPhase(
-      phase: String
-  ): Phase =
-    globalHookPhase(
-      MonorepoGlobalHookSlots.descriptors
-        .find(_.phase == phase)
-        .getOrElse(
-          throw new IllegalArgumentException(
-            s"Unknown monorepo global hook phase descriptor: $phase"
-          )
-        )
-    )
-
-  private def projectHookPhase(
-      phase: String
-  ): Phase =
-    projectHookPhase(
-      MonorepoProjectHookSlots.descriptors
-        .find(_.phase == phase)
-        .getOrElse(
-          throw new IllegalArgumentException(
-            s"Unknown monorepo project hook phase descriptor: $phase"
-          )
-        )
-    )
-
-  private[release] val phases: Seq[Phase] = Seq(
-    singleBuiltIn(MonorepoReleaseSteps.initializeVcs),
-    singleBuiltIn(MonorepoReleaseSteps.checkCleanWorkingDir),
-    globalHookPhase("after-clean-check"),
-    singleBuiltIn(MonorepoReleaseSteps.resolveReleaseOrder),
-    globalHookPhase("before-selection"),
-    singleBuiltIn(MonorepoReleaseSteps.detectOrSelectProjects),
-    globalHookPhase("after-selection"),
-    perItemBuiltIn(
+  private val catalog: Vector[CatalogEntry] = Vector(
+    CatalogEntry.GlobalBuiltIn(MonorepoReleaseSteps.initializeVcs),
+    CatalogEntry.GlobalBuiltIn(MonorepoReleaseSteps.checkCleanWorkingDir),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.afterCleanCheckDescriptor),
+    CatalogEntry.GlobalBuiltIn(MonorepoReleaseSteps.resolveReleaseOrder),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.beforeSelectionDescriptor),
+    CatalogEntry.GlobalBuiltIn(MonorepoReleaseSteps.detectOrSelectProjects),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.afterSelectionDescriptor),
+    CatalogEntry.ProjectBuiltIn(
       MonorepoReleaseSteps.checkSnapshotDependencies,
-      MonorepoPolicySlots.enableSnapshotDependenciesCheck
+      MonorepoPolicySlots.enableSnapshotDependenciesCheck.enabled
     ),
-    projectHookPhase("before-version-resolution"),
-    perItemBuiltIn(MonorepoReleaseSteps.inquireVersions),
-    projectHookPhase("after-version-resolution"),
-    perItemBuiltIn(MonorepoReleaseSteps.runClean, MonorepoPolicySlots.enableRunClean),
-    perItemBuiltIn(MonorepoReleaseSteps.runTests, MonorepoPolicySlots.enableRunTests),
-    projectHookPhase("before-release-version-write"),
-    perItemBuiltIn(MonorepoReleaseSteps.setReleaseVersions),
-    projectHookPhase("after-release-version-write"),
-    globalHookPhase("before-release-commit"),
-    singleBuiltIn(MonorepoReleaseSteps.commitReleaseVersions),
-    globalHookPhase("after-release-commit"),
-    projectHookPhase("before-tag"),
-    perItemBuiltIn(
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.beforeVersionResolutionDescriptor),
+    CatalogEntry.ProjectBuiltIn(MonorepoReleaseSteps.inquireVersions),
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.afterVersionResolutionDescriptor),
+    CatalogEntry.ProjectBuiltIn(
+      MonorepoReleaseSteps.runClean,
+      MonorepoPolicySlots.enableRunClean.enabled
+    ),
+    CatalogEntry.ProjectBuiltIn(
+      MonorepoReleaseSteps.runTests,
+      MonorepoPolicySlots.enableRunTests.enabled
+    ),
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.beforeReleaseVersionWriteDescriptor),
+    CatalogEntry.ProjectBuiltIn(MonorepoReleaseSteps.setReleaseVersions),
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.afterReleaseVersionWriteDescriptor),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.beforeReleaseCommitDescriptor),
+    CatalogEntry.GlobalBuiltIn(MonorepoReleaseSteps.commitReleaseVersions),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.afterReleaseCommitDescriptor),
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.beforeTagDescriptor),
+    CatalogEntry.ProjectBuiltIn(
       MonorepoReleaseSteps.tagReleasesPerProject,
-      MonorepoPolicySlots.enableTagging
+      MonorepoPolicySlots.enableTagging.enabled
     ),
-    projectHookPhase("after-tag"),
-    projectHookPhase("before-publish"),
-    perItemBuiltIn(
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.afterTagDescriptor),
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.beforePublishDescriptor),
+    CatalogEntry.ProjectBuiltIn(
       MonorepoReleaseSteps.publishArtifacts,
-      MonorepoPolicySlots.enablePublish
+      MonorepoPolicySlots.enablePublish.enabled
     ),
-    projectHookPhase("after-publish"),
-    projectHookPhase("before-next-version-write"),
-    perItemBuiltIn(MonorepoReleaseSteps.setNextVersions),
-    projectHookPhase("after-next-version-write"),
-    globalHookPhase("before-next-commit"),
-    singleBuiltIn(MonorepoReleaseSteps.commitNextVersions),
-    globalHookPhase("after-next-commit"),
-    globalHookPhase("before-push"),
-    singleBuiltIn(MonorepoReleaseSteps.pushChanges, MonorepoPolicySlots.enablePush),
-    globalHookPhase("after-push")
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.afterPublishDescriptor),
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.beforeNextVersionWriteDescriptor),
+    CatalogEntry.ProjectBuiltIn(MonorepoReleaseSteps.setNextVersions),
+    CatalogEntry.ProjectHook(MonorepoProjectHookSlots.afterNextVersionWriteDescriptor),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.beforeNextCommitDescriptor),
+    CatalogEntry.GlobalBuiltIn(MonorepoReleaseSteps.commitNextVersions),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.afterNextCommitDescriptor),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.beforePushDescriptor),
+    CatalogEntry.GlobalBuiltIn(
+      MonorepoReleaseSteps.pushChanges,
+      MonorepoPolicySlots.enablePush.enabled
+    ),
+    CatalogEntry.GlobalHook(MonorepoGlobalHookSlots.afterPushDescriptor)
   )
+
+  private[release] lazy val orderedHookPhases: Vector[String] =
+    catalog.collect {
+      case CatalogEntry.GlobalHook(descriptor)  => descriptor.phase
+      case CatalogEntry.ProjectHook(descriptor) => descriptor.phase
+    }
+
+  private[release] lazy val orderedGlobalHookDescriptors
+      : Vector[MonorepoGlobalHookSlots.GlobalHookDescriptor] =
+    catalog.collect { case CatalogEntry.GlobalHook(descriptor) => descriptor }
+
+  private[release] lazy val orderedProjectHookDescriptors
+      : Vector[MonorepoProjectHookSlots.ProjectHookDescriptor] =
+    catalog.collect { case CatalogEntry.ProjectHook(descriptor) => descriptor }
+
+  private[release] lazy val phases: Seq[Phase] =
+    catalog.map {
+      case CatalogEntry.GlobalBuiltIn(step, enabled)  => singleBuiltIn(step, enabled)
+      case CatalogEntry.ProjectBuiltIn(step, enabled) => perItemBuiltIn(step, enabled)
+      case CatalogEntry.GlobalHook(descriptor)        => globalHookPhase(descriptor)
+      case CatalogEntry.ProjectHook(descriptor)       => projectHookPhase(descriptor)
+    }
 
   private[release] lazy val configDefaultSettings: Seq[Setting[?]] =
     MonorepoHookConfiguration.defaultSettings

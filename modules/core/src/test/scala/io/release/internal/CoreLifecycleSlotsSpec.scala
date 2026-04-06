@@ -1,7 +1,10 @@
 package io.release.internal
 
+import cats.effect.IO
 import io.release.ReleaseContext
+import io.release.ReleaseHookIO
 import io.release.ReleaseIO
+import io.release.ReleaseResourceHooks
 import io.release.TestRepoFiles
 import io.release.steps.ReleaseSteps
 import munit.FunSuite
@@ -64,8 +67,15 @@ class CoreLifecycleSlotsSpec extends FunSuite {
   }
 
   test("slot-backed phases - preserve canonical phase and built-in step names") {
-    assertEquals(hookPhaseNames(CoreLifecycle.phases), CoreLifecycleSlotsSpec.expectedHookPhases)
-    assertEquals(CoreHookSlots.descriptors.map(_.phase), CoreLifecycleSlotsSpec.expectedHookPhases)
+    assertEquals(
+      hookPhaseNames(CoreLifecycle.phases),
+      CoreLifecycle.orderedHookDescriptors.map(_.phase)
+    )
+    assertEquals(
+      CoreLifecycle.orderedHookDescriptors.map(_.phase),
+      CoreLifecycleSlotsSpec.expectedHookPhases
+    )
+    assertEquals(CoreHookSlots.descriptors, CoreLifecycle.orderedHookDescriptors)
     assertEquals(
       CoreHookSlots.descriptors.map(_.slot.keyLabel),
       CoreLifecycleSlots.hookSlots.map(_.keyLabel)
@@ -96,6 +106,19 @@ class CoreLifecycleSlotsSpec extends FunSuite {
         s"Policy slot '${slot.id}' did not round-trip"
       )
     }
+  }
+
+  test("resource hook materialization order follows the lifecycle-derived descriptor order") {
+    val assignments =
+      ReleaseResourceHooks.hookAssignments(
+        ReleaseResourceHooks.empty[Unit],
+        (_: io.release.ReleaseResourceHookIO[Unit]) => ReleaseHookIO.action("unused")(_ => IO.unit)
+      )
+
+    assertEquals(
+      assignments.map(_._1.keyLabel),
+      CoreLifecycle.orderedHookDescriptors.map(_.slot.keyLabel)
+    )
   }
 
   test("slot catalog - each hook slot round-trips through its get/updated accessors") {
@@ -133,6 +156,7 @@ class CoreLifecycleSlotsSpec extends FunSuite {
       )
     assert(!topLevelSource.contains("policySlot("))
     assert(!topLevelSource.contains("hookSlot("))
+    assert(!topLevelSource.contains("hookPhase(\""))
   }
 
   private def hookPhaseNames(

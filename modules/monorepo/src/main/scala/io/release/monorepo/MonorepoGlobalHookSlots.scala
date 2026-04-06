@@ -103,7 +103,7 @@ private[release] object MonorepoGlobalHookSlots {
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
     )
 
-  private val afterCleanCheckDescriptor =
+  private[release] val afterCleanCheckDescriptor =
     new GlobalHookDescriptor(
       phase = "after-clean-check",
       slot = afterCleanCheckHooks
@@ -114,7 +114,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.afterCleanCheckHooks
     }
 
-  private val beforeSelectionDescriptor =
+  private[release] val beforeSelectionDescriptor =
     new GlobalHookDescriptor(
       phase = "before-selection",
       slot = beforeSelectionHooks
@@ -125,7 +125,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.beforeSelectionHooks
     }
 
-  private val afterSelectionDescriptor =
+  private[release] val afterSelectionDescriptor =
     new GlobalHookDescriptor(
       phase = "after-selection",
       slot = afterSelectionHooks
@@ -136,7 +136,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.afterSelectionHooks
     }
 
-  private val beforeReleaseCommitDescriptor =
+  private[release] val beforeReleaseCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "before-release-commit",
       slot = beforeReleaseCommitHooks
@@ -147,7 +147,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.beforeReleaseCommitHooks
     }
 
-  private val afterReleaseCommitDescriptor =
+  private[release] val afterReleaseCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "after-release-commit",
       slot = afterReleaseCommitHooks
@@ -158,7 +158,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.afterReleaseCommitHooks
     }
 
-  private val beforeNextCommitDescriptor =
+  private[release] val beforeNextCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "before-next-commit",
       slot = beforeNextCommitHooks
@@ -169,7 +169,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.beforeNextCommitHooks
     }
 
-  private val afterNextCommitDescriptor =
+  private[release] val afterNextCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "after-next-commit",
       slot = afterNextCommitHooks
@@ -180,7 +180,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.afterNextCommitHooks
     }
 
-  private val beforePushDescriptor =
+  private[release] val beforePushDescriptor =
     new GlobalHookDescriptor(
       phase = "before-push",
       slot = beforePushHooks,
@@ -192,7 +192,7 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.beforePushHooks
     }
 
-  private val afterPushDescriptor =
+  private[release] val afterPushDescriptor =
     new GlobalHookDescriptor(
       phase = "after-push",
       slot = afterPushHooks,
@@ -204,19 +204,9 @@ private[release] object MonorepoGlobalHookSlots {
         hooks.afterPushHooks
     }
 
-  val descriptors: Vector[GlobalHookDescriptor] =
-    Vector(
-      afterCleanCheckDescriptor,
-      beforeSelectionDescriptor,
-      afterSelectionDescriptor,
-      beforeReleaseCommitDescriptor,
-      afterReleaseCommitDescriptor,
-      beforeNextCommitDescriptor,
-      afterNextCommitDescriptor,
-      beforePushDescriptor,
-      afterPushDescriptor
-    )
+  lazy val descriptors: Vector[GlobalHookDescriptor] =
+    MonorepoLifecycle.orderedGlobalHookDescriptors
 
-  val globalHookSlots: Vector[MonorepoGlobalHookSlot] =
+  lazy val globalHookSlots: Vector[MonorepoGlobalHookSlot] =
     descriptors.map(_.slot)
 }
