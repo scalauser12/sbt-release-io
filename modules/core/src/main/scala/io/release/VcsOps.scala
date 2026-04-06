@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.IO
-import io.release.ReleaseCtxOps.syntax._
+import io.release.ReleaseCtxOps.syntax.*
 import io.release.internal.DecisionResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*

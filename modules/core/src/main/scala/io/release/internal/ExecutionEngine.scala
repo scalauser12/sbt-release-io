@@ -3,7 +3,7 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseCtx
 import io.release.ReleaseCtxOps
-import io.release.ReleaseCtxOps.syntax._
+import io.release.ReleaseCtxOps.syntax.*
 import io.release.steps.StepHelpers
 
 /** Shared execution engine used by both core and monorepo composers.

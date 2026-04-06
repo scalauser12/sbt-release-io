@@ -10,14 +10,14 @@ import io.release.ReleaseIOCompat
 import io.release.internal.DecisionResolver
 import io.release.internal.ProcessStep
 import io.release.internal.PublishValidation
-import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.SnapshotDependencyTasks
 import io.release.monorepo.MonorepoContext
+import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishChecks
+import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.MonorepoVersionFiles
 import io.release.monorepo.ProjectReleaseInfo
-import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishChecks
 import io.release.monorepo.steps.MonorepoStepHelpers.*
 import sbt.Keys.*
 import sbt.{internal as _, *}

@@ -2,10 +2,10 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
+import sbt.Keys.packageOptions
 import sbt.Project
 import sbt.Setting
 import sbt.State
-import sbt.Keys.packageOptions
 import sbt.internal.util.AttributeMap
 import sbt.internal.util.ConsoleOut
 import sbt.internal.util.GlobalLogging
