@@ -99,11 +99,11 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
       )
     )
     assertEquals(
-      MonorepoGlobalHookSlots.descriptors.map(_.binding.keyLabel),
+      MonorepoGlobalHookSlots.descriptors.map(_.slot.keyLabel),
       MonorepoLifecycleSlots.globalHookSlots.map(_.keyLabel)
     )
     assertEquals(
-      MonorepoProjectHookSlots.descriptors.map(_.binding.keyLabel),
+      MonorepoProjectHookSlots.descriptors.map(_.slot.keyLabel),
       MonorepoLifecycleSlots.projectHookSlots.map(_.keyLabel)
     )
     assertEquals(
@@ -134,7 +134,7 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
   ): Seq[String] =
     LifecycleCompiler.defaults(phases).map(_.name)
 
-  test("slot catalog - every MonorepoHookConfiguration field has a corresponding binding") {
+  test("slot catalog - every MonorepoHookConfiguration field has a corresponding slot") {
     val configFieldCount =
       classOf[MonorepoHookConfiguration].getDeclaredFields.count(!_.isSynthetic)
     val bindingCount     = MonorepoLifecycleSlots.slots.size
@@ -142,40 +142,40 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
     assertEquals(
       bindingCount,
       configFieldCount,
-      s"MonorepoHookConfiguration has $configFieldCount fields but there are $bindingCount bindings"
+      s"MonorepoHookConfiguration has $configFieldCount fields but there are $bindingCount slots"
     )
   }
 
-  test("slot catalog - each policy binding round-trips through its get/updated accessors") {
-    MonorepoPolicySlots.policySlots.foreach { binding =>
-      val toggled = binding.updated(MonorepoHookConfiguration.empty, false)
+  test("slot catalog - each policy slot round-trips through its get/updated accessors") {
+    MonorepoPolicySlots.policySlots.foreach { slot =>
+      val toggled = slot.updated(MonorepoHookConfiguration.empty, false)
       assert(
-        !binding.get(toggled),
-        s"Policy binding '${binding.id}' did not round-trip"
+        !slot.get(toggled),
+        s"Policy slot '${slot.id}' did not round-trip"
       )
     }
   }
 
-  test("slot catalog - each global hook binding round-trips through its get/updated accessors") {
+  test("slot catalog - each global hook slot round-trips through its get/updated accessors") {
     val sentinel = Seq(MonorepoGlobalHookIO("sentinel", ctx => cats.effect.IO.pure(ctx)))
-    MonorepoGlobalHookSlots.globalHookSlots.foreach { binding =>
-      val updated   = binding.updated(MonorepoHookConfiguration.empty, sentinel)
-      val retrieved = binding.get(updated)
+    MonorepoGlobalHookSlots.globalHookSlots.foreach { slot =>
+      val updated   = slot.updated(MonorepoHookConfiguration.empty, sentinel)
+      val retrieved = slot.get(updated)
       assert(
         retrieved.nonEmpty,
-        s"Global hook binding '${binding.id}' did not round-trip"
+        s"Global hook slot '${slot.id}' did not round-trip"
       )
     }
   }
 
-  test("slot catalog - each project hook binding round-trips through its get/updated accessors") {
+  test("slot catalog - each project hook slot round-trips through its get/updated accessors") {
     val sentinel = Seq(MonorepoProjectHookIO("sentinel", (ctx, _) => cats.effect.IO.pure(ctx)))
-    MonorepoProjectHookSlots.projectHookSlots.foreach { binding =>
-      val updated   = binding.updated(MonorepoHookConfiguration.empty, sentinel)
-      val retrieved = binding.get(updated)
+    MonorepoProjectHookSlots.projectHookSlots.foreach { slot =>
+      val updated   = slot.updated(MonorepoHookConfiguration.empty, sentinel)
+      val retrieved = slot.get(updated)
       assert(
         retrieved.nonEmpty,
-        s"Project hook binding '${binding.id}' did not round-trip"
+        s"Project hook slot '${slot.id}' did not round-trip"
       )
     }
   }

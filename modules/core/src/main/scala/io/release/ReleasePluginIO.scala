@@ -147,36 +147,21 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
         this.initialContext(state, skipTests, skipPublish, interactive)
     )
 
-  private def releaseDispatch: PluginEntrypointSupport.DispatchAdapter[ReleaseCli.Arg] =
-    PluginEntrypointSupport.DispatchAdapter(
-      parse = parseReleaseTokens,
-      help = state => doReleaseHelp(state),
-      check = (state, args) => doReleaseCheck(state, args),
-      run = (state, args) => doReleaseIO(state, args)
-    )
-
-  private def parseReleaseTokens(
-      tokens: Seq[String],
-      commandName: String
-  ): Either[String, PluginEntrypointSupport.ParsedCommand[ReleaseCli.Arg]] =
-    ReleaseCli.parse(tokens, commandName).map { parsed =>
-      PluginEntrypointSupport.ParsedCommand(
-        mode = parsed.mode,
-        args = parsed.args
-      )
-    }
-
   private[release] final def handleReleaseCommandTokens(
       state: State,
       tokens: Seq[String]
   ): State =
-    PluginEntrypointSupport.handleTokens(
-      state = state,
-      tokens = tokens,
-      logPrefix = ReleaseLogPrefixes.Core,
-      commandName = commandName,
-      dispatch = releaseDispatch
-    )
+    ReleaseCli.parse(tokens, commandName) match {
+      case Left(message) =>
+        state.log.error(s"${ReleaseLogPrefixes.Core} $message")
+        state.fail
+      case Right(parsed) =>
+        parsed.mode match {
+          case ReleaseCli.CommandMode.Help  => doReleaseHelp(state)
+          case ReleaseCli.CommandMode.Check => doReleaseCheck(state, parsed.args)
+          case ReleaseCli.CommandMode.Run   => doReleaseIO(state, parsed.args)
+        }
+    }
 
   protected def doReleaseHelp(state: State): State =
     CoreCommandExecution.doHelp(state, commandName)

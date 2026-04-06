@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import io.release.internal.CoreStepAliases.Step
-import io.release.internal.CrossBuildExecution
 import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
@@ -127,28 +126,30 @@ private[release] object ReleaseComposer {
             s"$LogPrefix Cross-build enabled but crossScalaVersions is empty"
           )
         )
-      else {
-        val runtime = CrossBuildExecution.LoopRuntime[ReleaseContext](
-          logIteration = (currentCtx, message) => IO.blocking(currentCtx.state.log.info(message)),
-          switchToVersion = switchToVersion,
-          restoreEntry = restoreEntry,
-          detectIterationFailure = detectIterationFailure,
-          shouldStop = _.failed,
-          onRestoreAfterCompletionFailure = (currentCtx, restoreErr) =>
-            CrossBuildExecution.raiseRestoreFailure(
-              currentCtx,
-              restoreErr,
-              logRestoreAfterCompletionFailure
-            )
-        )
-
-        CrossBuildExecution.runVersions(
-          initialCtx = ctx,
-          crossVersions = crossVersions,
-          action = action,
-          logMessageForVersion = version => s"$LogPrefix Cross-building with Scala $version",
-          runtime = runtime
-        )
-      }
+      else
+        crossVersions
+          .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+            ioCtx.flatMap { currentCtx =>
+              if (currentCtx.failed) IO.pure(currentCtx)
+              else
+                for {
+                  _        <- IO.blocking(
+                                currentCtx.state.log.info(
+                                  s"$LogPrefix Cross-building with Scala $version"
+                                )
+                              )
+                  switched <- switchToVersion(currentCtx, version)
+                  result   <- action(switched).flatMap(detectIterationFailure)
+                } yield result
+            }
+          }
+          .flatMap(currentCtx =>
+            restoreEntry(currentCtx).attempt.flatMap {
+              case Right(restoredCtx) => IO.pure(restoredCtx)
+              case Left(restoreErr)   =>
+                logRestoreAfterCompletionFailure(currentCtx, restoreErr) *>
+                  IO.raiseError(restoreErr)
+            }
+          )
     }
 }

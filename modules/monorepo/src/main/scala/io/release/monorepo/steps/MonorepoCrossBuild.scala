@@ -2,7 +2,6 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.CrossBuildSupport
-import io.release.internal.CrossBuildExecution
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
@@ -117,35 +116,41 @@ private[monorepo] object MonorepoCrossBuild {
         def refreshedProject(currentCtx: MonorepoContext): ProjectReleaseInfo =
           latestProject(currentCtx, project)
 
-        CrossBuildExecution.runVersions(
-          initialCtx = ctx,
-          crossVersions = crossVersions,
-          action = currentCtx => action(currentCtx, refreshedProject(currentCtx)),
-          logMessageForVersion =
-            version => s"$LogPrefix Cross-building ${project.name} with Scala $version",
-          runtime = CrossBuildExecution.LoopRuntime[MonorepoContext](
-            logIteration = (currentCtx, message) => IO.blocking(currentCtx.state.log.info(message)),
-            switchToVersion = (currentCtx, version) =>
-              SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState),
-            restoreEntry = currentCtx =>
-              CrossBuildSupport
-                .restoreEntryScalaSession(entryState, currentCtx.state)
-                .map(currentCtx.withState),
-            detectIterationFailure = currentCtx =>
-              MonorepoStepHelpers.detectProjectFailureCommand(
-                currentCtx,
-                refreshedProject(currentCtx)
-              ),
-            shouldStop = currentCtx => shouldSkipProject(currentCtx, project),
-            onRestoreAfterCompletionFailure = (currentCtx, restoreErr) =>
-              CrossBuildExecution.raiseRestoreFailure(
-                currentCtx,
-                restoreErr,
-                (failureCtx, failure) =>
-                  logRestoreAfterCompletionFailure(failureCtx, project, failure)
-              )
+        crossVersions
+          .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
+            ioCtx.flatMap { currentCtx =>
+              if (shouldSkipProject(currentCtx, project)) IO.pure(currentCtx)
+              else
+                for {
+                  _        <- IO.blocking(
+                                currentCtx.state.log.info(
+                                  s"$LogPrefix Cross-building ${project.name} with Scala $version"
+                                )
+                              )
+                  switched <- SbtRuntime
+                                .switchScalaVersion(currentCtx.state, version)
+                                .map(currentCtx.withState)
+                  result   <- action(switched, refreshedProject(switched)).flatMap(nextCtx =>
+                                MonorepoStepHelpers.detectProjectFailureCommand(
+                                  nextCtx,
+                                  refreshedProject(nextCtx)
+                                )
+                              )
+                } yield result
+            }
+          }
+          .flatMap(currentCtx =>
+            CrossBuildSupport
+              .restoreEntryScalaSession(entryState, currentCtx.state)
+              .map(currentCtx.withState)
+              .attempt
+              .flatMap {
+                case Right(restoredCtx) => IO.pure(restoredCtx)
+                case Left(restoreErr)   =>
+                  logRestoreAfterCompletionFailure(currentCtx, project, restoreErr) *>
+                    IO.raiseError(restoreErr)
+              }
           )
-        )
       }
     }
 }

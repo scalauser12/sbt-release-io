@@ -63,6 +63,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
           )
         )
         assert(!commandExecution.contains("MonorepoHookCompiler"))
+        assert(!commandExecution.contains("SharedCommandKernel"))
       }
     }
   }

@@ -28,17 +28,11 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     }
   }
 
-  test("production sources no longer reference thin core hook compiler or merge wrapper") {
+  test("production sources no longer reference removed hook or command wrappers") {
     hookStateResource("release-hook-compiler-overload").use { state =>
       IO {
         val commandExecution = Files.readString(
           repoPath("modules/core/src/main/scala/io/release/internal/CoreCommandExecution.scala")
-        )
-        val sharedKernel     = Files.readString(
-          repoPath("modules/core/src/main/scala/io/release/internal/SharedCommandKernel.scala")
-        )
-        val runtimeSupport   = Files.readString(
-          repoPath("modules/core/src/main/scala/io/release/internal/CommandRuntimeSupport.scala")
         )
 
         assertEquals(compileLifecycle(state).map(_.name), ReleaseSteps.defaults.map(_.name))
@@ -47,9 +41,13 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
             repoPath("modules/core/src/main/scala/io/release/internal/ReleaseHookCompiler.scala")
           )
         )
+        assert(
+          !Files.exists(
+            repoPath("modules/core/src/main/scala/io/release/internal/SharedCommandKernel.scala")
+          )
+        )
         assert(!commandExecution.contains("ReleaseHookCompiler"))
-        assert(!sharedKernel.contains("mergeMaterializedHooks("))
-        assert(!runtimeSupport.contains("mergeMaterializedHooks("))
+        assert(!commandExecution.contains("SharedCommandKernel"))
       }
     }
   }

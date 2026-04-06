@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
 import io.release.internal.ExecutionFlags
 import io.release.internal.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
@@ -97,7 +98,7 @@ case class MonorepoContext(
     metadataBag: AttributeMap = AttributeMap.empty,
     failed: Boolean = false,
     failureCause: Option[Throwable] = None
-) extends ReleaseCtx[MonorepoContext] {
+) extends ReleaseCtx {
 
   def currentProjects: Seq[ProjectReleaseInfo] =
     projects.filterNot(_.failed)
@@ -160,6 +161,34 @@ case class MonorepoContext(
 }
 
 private[monorepo] object MonorepoContext {
+
+  implicit val monorepoContextOps: ReleaseCtxOps[MonorepoContext] =
+    new ReleaseCtxOps[MonorepoContext] {
+      override def withState(ctx: MonorepoContext, state: State): MonorepoContext =
+        ctx.withState(state)
+
+      override def withVcs(ctx: MonorepoContext, vcs: Vcs): MonorepoContext =
+        ctx.withVcs(vcs)
+
+      override def fail(ctx: MonorepoContext): MonorepoContext =
+        ctx.fail
+
+      override def failWith(ctx: MonorepoContext, cause: Throwable): MonorepoContext =
+        ctx.failWith(cause)
+
+      override def withMetadata[A](
+          ctx: MonorepoContext,
+          key: AttributeKey[A],
+          value: A
+      ): MonorepoContext =
+        ctx.withMetadata(key, value)
+
+      override def withoutMetadata[A](
+          ctx: MonorepoContext,
+          key: AttributeKey[A]
+      ): MonorepoContext =
+        ctx.withoutMetadata(key)
+    }
 
   private val releaseVersionFilesValidatedKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalMonorepoReleaseVersionFilesValidated")

@@ -2,6 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
 import io.release.ReleaseIO
 import io.release.ReleaseKeys
 import io.release.VcsOps
@@ -16,7 +17,7 @@ private[release] object CommandRuntimeSupport {
   ): State =
     ReleaseIO.clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions), projectRefs)
 
-  def preparePushIfNeeded[C <: ReleaseCtx[C]](
+  def preparePushIfNeeded[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       stepNames: Seq[String],
       prefix: String

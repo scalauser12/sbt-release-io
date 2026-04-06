@@ -67,7 +67,7 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     assertEquals(hookPhaseNames(CoreLifecycle.phases), CoreLifecycleSlotsSpec.expectedHookPhases)
     assertEquals(CoreHookSlots.descriptors.map(_.phase), CoreLifecycleSlotsSpec.expectedHookPhases)
     assertEquals(
-      CoreHookSlots.descriptors.map(_.binding.keyLabel),
+      CoreHookSlots.descriptors.map(_.slot.keyLabel),
       CoreLifecycleSlots.hookSlots.map(_.keyLabel)
     )
     assertEquals(
@@ -76,7 +76,7 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     )
   }
 
-  test("slot catalog - every CoreHookConfiguration field has a corresponding binding") {
+  test("slot catalog - every CoreHookConfiguration field has a corresponding slot") {
     val configFieldCount =
       classOf[CoreHookConfiguration].getDeclaredFields.count(!_.isSynthetic)
     val bindingCount     = CoreLifecycleSlots.slots.size
@@ -84,28 +84,28 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     assertEquals(
       bindingCount,
       configFieldCount,
-      s"CoreHookConfiguration has $configFieldCount fields but there are $bindingCount bindings"
+      s"CoreHookConfiguration has $configFieldCount fields but there are $bindingCount slots"
     )
   }
 
-  test("slot catalog - each policy binding round-trips through its get/updated accessors") {
-    CorePolicySlots.policySlots.foreach { binding =>
-      val toggled = binding.updated(CoreHookConfiguration.empty, false)
+  test("slot catalog - each policy slot round-trips through its get/updated accessors") {
+    CorePolicySlots.policySlots.foreach { slot =>
+      val toggled = slot.updated(CoreHookConfiguration.empty, false)
       assert(
-        !binding.get(toggled),
-        s"Policy binding '${binding.id}' did not round-trip"
+        !slot.get(toggled),
+        s"Policy slot '${slot.id}' did not round-trip"
       )
     }
   }
 
-  test("slot catalog - each hook binding round-trips through its get/updated accessors") {
+  test("slot catalog - each hook slot round-trips through its get/updated accessors") {
     val sentinel = Seq(io.release.ReleaseHookIO("sentinel", ctx => cats.effect.IO.pure(ctx)))
-    CoreHookSlots.hookSlots.foreach { binding =>
-      val updated   = binding.updated(CoreHookConfiguration.empty, sentinel)
-      val retrieved = binding.get(updated)
+    CoreHookSlots.hookSlots.foreach { slot =>
+      val updated   = slot.updated(CoreHookConfiguration.empty, sentinel)
+      val retrieved = slot.get(updated)
       assert(
         retrieved.nonEmpty,
-        s"Hook binding '${binding.id}' did not round-trip: get after updated returned empty"
+        s"Hook slot '${slot.id}' did not round-trip: get after updated returned empty"
       )
     }
   }

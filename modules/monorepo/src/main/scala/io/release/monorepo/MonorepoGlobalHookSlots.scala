@@ -1,80 +1,103 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.internal.LifecycleConfigCompiler.Binding
-import io.release.internal.LifecycleConfigCompiler.HookBinding
-import io.release.internal.LifecycleConfigCompiler.hookBinding
+import sbt.*
+
+private[release] final case class MonorepoGlobalHookSlot(
+    key: SettingKey[Seq[MonorepoGlobalHookIO]],
+    get: MonorepoHookConfiguration => Seq[MonorepoGlobalHookIO],
+    updated: (MonorepoHookConfiguration, Seq[MonorepoGlobalHookIO]) => MonorepoHookConfiguration
+) extends MonorepoConfigSlot {
+  override val keyLabel: String           = key.key.label
+  override val defaultSetting: Setting[?] = key := Seq.empty[MonorepoGlobalHookIO]
+
+  val resolveHooks: MonorepoHookConfiguration => Seq[MonorepoGlobalHookIO] = get
+
+  override def resolve(
+      extracted: Extracted,
+      config: MonorepoHookConfiguration
+  ): MonorepoHookConfiguration =
+    updated(config, extracted.get(key))
+
+  override def merge(
+      left: MonorepoHookConfiguration,
+      right: MonorepoHookConfiguration
+  ): MonorepoHookConfiguration =
+    updated(left, get(left) ++ get(right))
+
+  override def isCustomized(config: MonorepoHookConfiguration): Boolean =
+    get(config).nonEmpty
+}
 
 private[release] object MonorepoGlobalHookSlots {
 
   sealed abstract class GlobalHookDescriptor(
       val phase: String,
-      val binding: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO],
+      val slot: MonorepoGlobalHookSlot,
       val gate: MonorepoContext => IO[Boolean] = _ => IO.pure(true),
-      val enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      val additionalBindings: Seq[Binding[MonorepoHookConfiguration]] = Nil
+      val enabled: MonorepoHookConfiguration => Boolean = _ => true
   ) {
     def resourceHooks[T](hooks: MonorepoResourceHooks[T]): Seq[MonorepoGlobalResourceHookIO[T]]
   }
 
-  val afterCleanCheckHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val afterCleanCheckHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck,
       get = _.afterCleanCheckHooks,
       updated = (config, hooks) => config.copy(afterCleanCheckHooks = hooks)
     )
 
-  val beforeSelectionHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val beforeSelectionHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection,
       get = _.beforeSelectionHooks,
       updated = (config, hooks) => config.copy(beforeSelectionHooks = hooks)
     )
 
-  val afterSelectionHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val afterSelectionHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection,
       get = _.afterSelectionHooks,
       updated = (config, hooks) => config.copy(afterSelectionHooks = hooks)
     )
 
-  val beforeReleaseCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val beforeReleaseCommitHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit,
       get = _.beforeReleaseCommitHooks,
       updated = (config, hooks) => config.copy(beforeReleaseCommitHooks = hooks)
     )
 
-  val afterReleaseCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val afterReleaseCommitHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit,
       get = _.afterReleaseCommitHooks,
       updated = (config, hooks) => config.copy(afterReleaseCommitHooks = hooks)
     )
 
-  val beforeNextCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val beforeNextCommitHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit,
       get = _.beforeNextCommitHooks,
       updated = (config, hooks) => config.copy(beforeNextCommitHooks = hooks)
     )
 
-  val afterNextCommitHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val afterNextCommitHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit,
       get = _.afterNextCommitHooks,
       updated = (config, hooks) => config.copy(afterNextCommitHooks = hooks)
     )
 
-  val beforePushHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val beforePushHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush,
       get = _.beforePushHooks,
       updated = (config, hooks) => config.copy(beforePushHooks = hooks)
     )
 
-  val afterPushHooks: HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO] =
-    hookBinding(
+  val afterPushHooks: MonorepoGlobalHookSlot =
+    MonorepoGlobalHookSlot(
       key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush,
       get = _.afterPushHooks,
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
@@ -83,7 +106,7 @@ private[release] object MonorepoGlobalHookSlots {
   private val afterCleanCheckDescriptor =
     new GlobalHookDescriptor(
       phase = "after-clean-check",
-      binding = afterCleanCheckHooks
+      slot = afterCleanCheckHooks
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -94,7 +117,7 @@ private[release] object MonorepoGlobalHookSlots {
   private val beforeSelectionDescriptor =
     new GlobalHookDescriptor(
       phase = "before-selection",
-      binding = beforeSelectionHooks
+      slot = beforeSelectionHooks
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -105,7 +128,7 @@ private[release] object MonorepoGlobalHookSlots {
   private val afterSelectionDescriptor =
     new GlobalHookDescriptor(
       phase = "after-selection",
-      binding = afterSelectionHooks
+      slot = afterSelectionHooks
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -116,7 +139,7 @@ private[release] object MonorepoGlobalHookSlots {
   private val beforeReleaseCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "before-release-commit",
-      binding = beforeReleaseCommitHooks
+      slot = beforeReleaseCommitHooks
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -127,7 +150,7 @@ private[release] object MonorepoGlobalHookSlots {
   private val afterReleaseCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "after-release-commit",
-      binding = afterReleaseCommitHooks
+      slot = afterReleaseCommitHooks
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -138,7 +161,7 @@ private[release] object MonorepoGlobalHookSlots {
   private val beforeNextCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "before-next-commit",
-      binding = beforeNextCommitHooks
+      slot = beforeNextCommitHooks
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -149,7 +172,7 @@ private[release] object MonorepoGlobalHookSlots {
   private val afterNextCommitDescriptor =
     new GlobalHookDescriptor(
       phase = "after-next-commit",
-      binding = afterNextCommitHooks
+      slot = afterNextCommitHooks
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -160,9 +183,8 @@ private[release] object MonorepoGlobalHookSlots {
   private val beforePushDescriptor =
     new GlobalHookDescriptor(
       phase = "before-push",
-      binding = beforePushHooks,
-      enabled = MonorepoPolicySlots.enablePush.enabled,
-      additionalBindings = Seq(MonorepoPolicySlots.enablePush)
+      slot = beforePushHooks,
+      enabled = MonorepoPolicySlots.enablePush.enabled
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -173,9 +195,8 @@ private[release] object MonorepoGlobalHookSlots {
   private val afterPushDescriptor =
     new GlobalHookDescriptor(
       phase = "after-push",
-      binding = afterPushHooks,
-      enabled = MonorepoPolicySlots.enablePush.enabled,
-      additionalBindings = Seq(MonorepoPolicySlots.enablePush)
+      slot = afterPushHooks,
+      enabled = MonorepoPolicySlots.enablePush.enabled
     ) {
       override def resourceHooks[T](
           hooks: MonorepoResourceHooks[T]
@@ -196,8 +217,6 @@ private[release] object MonorepoGlobalHookSlots {
       afterPushDescriptor
     )
 
-  val globalHookSlots: Vector[
-    HookBinding[MonorepoHookConfiguration, MonorepoGlobalHookIO]
-  ] =
-    descriptors.map(_.binding)
+  val globalHookSlots: Vector[MonorepoGlobalHookSlot] =
+    descriptors.map(_.slot)
 }

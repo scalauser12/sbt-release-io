@@ -2,6 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
 import io.release.steps.StepHelpers
 
 /** Shared runtime decision helpers for built-in release flows.
@@ -12,7 +13,7 @@ import io.release.steps.StepHelpers
   */
 private[release] object DecisionResolver {
 
-  def resolveVersionInput[C <: ReleaseCtx[C]](
+  def resolveVersionInput[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       override_ : Option[String],
       suggested: String,
@@ -45,7 +46,7 @@ private[release] object DecisionResolver {
               }
     }
 
-  def confirmOrAbort[C <: ReleaseCtx[C]](
+  def confirmOrAbort[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       configuredAnswer: Option[Boolean],
       logPrefix: String,
@@ -72,7 +73,7 @@ private[release] object DecisionResolver {
           }
     }
 
-  def handleSnapshotDependencies[C <: ReleaseCtx[C]](
+  def handleSnapshotDependencies[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       deps: Seq[sbt.ModuleID],
       logPrefix: String,
@@ -110,7 +111,7 @@ private[release] object DecisionResolver {
       }
     }
 
-  def resolvePushDecision[C <: ReleaseCtx[C]](
+  def resolvePushDecision[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       logPrefix: String
   )(doPush: C => IO[C], onDeclinePush: C => IO[C]): IO[C] =
@@ -139,7 +140,7 @@ private[release] object DecisionResolver {
             }
     }
 
-  def resolveTagAnswer[C <: ReleaseCtx[C]](
+  def resolveTagAnswer[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       configuredAnswer: Option[String],
       tagName: String,

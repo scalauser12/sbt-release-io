@@ -6,31 +6,11 @@ import sbt.complete.Parser
 
 /** Shared plugin-entrypoint helpers for the public release plugins.
   *
-  * Core and monorepo keep their own parser grammars and runtime command objects, but they share
-  * the same outer shell: read settings from state, register a command next to the default
-  * settings, and dispatch parsed help/check/run modes with consistent prefixed error handling.
+  * Core and monorepo keep their own parser grammars, token decoding, and command dispatch, but
+  * they share the small amount of sbt boilerplate needed to read settings from state, register a
+  * command next to default settings, and aggregate those settings into one plugin surface.
   */
 private[release] object PluginEntrypointSupport {
-
-  sealed trait CommandMode
-
-  object CommandMode {
-    case object Help  extends CommandMode
-    case object Check extends CommandMode
-    case object Run   extends CommandMode
-  }
-
-  final case class ParsedCommand[A](
-      mode: CommandMode,
-      args: Seq[A]
-  )
-
-  final case class DispatchAdapter[A](
-      parse: (Seq[String], String) => Either[String, ParsedCommand[A]],
-      help: State => State,
-      check: (State, Seq[A]) => State,
-      run: (State, Seq[A]) => State
-  )
 
   def settingValue[A](state: State, key: SettingKey[A]): A =
     Project.extract(state).get(key)
@@ -48,23 +28,4 @@ private[release] object PluginEntrypointSupport {
       commandSetting: Setting[?]
   ): Seq[Setting[?]] =
     defaultSettings ++ Seq(commandSetting)
-
-  def handleTokens[A](
-      state: State,
-      tokens: Seq[String],
-      logPrefix: String,
-      commandName: String,
-      dispatch: DispatchAdapter[A]
-  ): State =
-    dispatch.parse(tokens, commandName) match {
-      case Left(message) =>
-        state.log.error(s"$logPrefix $message")
-        state.fail
-      case Right(parsed) =>
-        parsed.mode match {
-          case CommandMode.Help  => dispatch.help(state)
-          case CommandMode.Check => dispatch.check(state, parsed.args)
-          case CommandMode.Run   => dispatch.run(state, parsed.args)
-        }
-    }
 }

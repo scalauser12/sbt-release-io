@@ -2,6 +2,8 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
+import io.release.ReleaseCtxOps.syntax._
 import io.release.steps.StepHelpers
 
 /** Shared execution engine used by both core and monorepo composers.
@@ -11,7 +13,7 @@ import io.release.steps.StepHelpers
   * {{{
   * sbt command
   *   → CoreCommandExecution / MonorepoCommandExecution   (parse CLI, build plan)
-  *   → SharedCommandKernel.runPreparedCommand             (compile hooks into steps)
+  *   → CoreCommandExecution / MonorepoCommandExecution   (compile hooks into steps)
   *   → ReleaseComposer / MonorepoComposer                 (wrap steps as PreparedStep)
   *   → ExecutionEngine                                    (validate + execute)
   * }}}
@@ -39,7 +41,7 @@ private[release] object ExecutionEngine {
 
   // ── Orchestration ───────────────────────────────────────────────────
 
-  def runMainSegment[C <: ReleaseCtx[C]](
+  def runMainSegment[C <: ReleaseCtx: ReleaseCtxOps](
       logPrefix: String,
       steps: Seq[PreparedStep[C]],
       startCtx: C,
@@ -52,7 +54,7 @@ private[release] object ExecutionEngine {
         else runActions(steps, armOnFailure(validatedCtx))
     } yield resultCtx
 
-  def runSequentialValidateThenExecute[C <: ReleaseCtx[C]](
+  def runSequentialValidateThenExecute[C <: ReleaseCtx: ReleaseCtxOps](
       steps: Seq[PreparedStep[C]],
       startCtx: C,
       armOnFailure: C => C,
@@ -74,7 +76,7 @@ private[release] object ExecutionEngine {
 
   // ── Validation ──────────────────────────────────────────────────────
 
-  def runValidations[C <: ReleaseCtx[C]](
+  def runValidations[C <: ReleaseCtx: ReleaseCtxOps](
       logPrefix: String,
       steps: Seq[PreparedStep[C]],
       initialCtx: C
@@ -86,16 +88,16 @@ private[release] object ExecutionEngine {
       }
     }
 
-  def runActions[C <: ReleaseCtx[C]](
+  def runActions[C <: ReleaseCtx: ReleaseCtxOps](
       steps: Seq[PreparedStep[C]],
       startCtx: C
   ): IO[C] =
     runActionPhase(steps)(startCtx)
 
-  def armOnFailure[C <: ReleaseCtx[C]](ctx: C): C =
+  def armOnFailure[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): C =
     ctx.withState(ctx.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
 
-  def detectSbtFailure[C <: ReleaseCtx[C]](stepName: String, ctx: C): IO[C] = IO {
+  def detectSbtFailure[C <: ReleaseCtx: ReleaseCtxOps](stepName: String, ctx: C): IO[C] = IO {
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
       ctx
@@ -106,12 +108,12 @@ private[release] object ExecutionEngine {
     } else armOnFailure(ctx)
   }
 
-  def stripFailureCommand[C <: ReleaseCtx[C]](ctx: C): IO[C] = IO {
+  def stripFailureCommand[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): IO[C] = IO {
     val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
     ctx.withState(cleaned.copy(onFailure = None))
   }
 
-  def raiseIfFailed[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+  def raiseIfFailed[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): IO[C] =
     if (ctx.failed)
       IO.raiseError(
         ctx.failureCause.getOrElse(
@@ -120,7 +122,7 @@ private[release] object ExecutionEngine {
       )
     else IO.pure(ctx)
 
-  def withErrorRecovery[C <: ReleaseCtx[C]](logPrefix: String)(
+  def withErrorRecovery[C <: ReleaseCtx: ReleaseCtxOps](logPrefix: String)(
       f: C => IO[C]
   ): C => IO[C] =
     (ctx: C) =>
@@ -132,7 +134,7 @@ private[release] object ExecutionEngine {
         ).flatMap(_ => IO.pure(ctx.failWith(err)))
       }
 
-  def runActionPhase[C <: ReleaseCtx[C]](
+  def runActionPhase[C <: ReleaseCtx: ReleaseCtxOps](
       steps: Seq[PreparedStep[C]]
   )(startCtx: C): IO[C] = {
     // After each action, check whether sbt injected a FailureCommand into
@@ -147,10 +149,10 @@ private[release] object ExecutionEngine {
 
     interleavedSteps
       .foldLeft(IO.pure(startCtx)) { (ioCtx, f) => ioCtx.flatMap(f) }
-      .flatMap(stripFailureCommand)
+      .flatMap(ctx => stripFailureCommand(ctx))
   }
 
-  private def runValidationStep[C <: ReleaseCtx[C]](
+  private def runValidationStep[C <: ReleaseCtx: ReleaseCtxOps](
       logPrefix: String,
       step: PreparedStep[C],
       currentCtx: C

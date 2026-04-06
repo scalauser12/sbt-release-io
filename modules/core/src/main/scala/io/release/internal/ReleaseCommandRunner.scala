@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.syntax.all.*
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
 import io.release.steps.StepHelpers
 import sbt.State
 
@@ -35,7 +36,7 @@ private[release] object ReleaseCommandRunner {
     lines.toList.traverse_(line => IO.blocking(state.log.info(s"$prefix $line")))
 
   /** Map a finished release context to the appropriate sbt `State`. */
-  def handleReleaseResult[C <: ReleaseCtx[C]](ctx: C, prefix: String): IO[State] =
+  def handleReleaseResult[C <: ReleaseCtx: ReleaseCtxOps](ctx: C, prefix: String): IO[State] =
     if (ctx.failed) {
       val cause =
         ctx.failureCause.map(e => StepHelpers.errorMessage(e)).getOrElse("unknown error")

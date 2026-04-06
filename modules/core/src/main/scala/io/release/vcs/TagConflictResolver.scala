@@ -2,6 +2,7 @@ package io.release.vcs
 
 import cats.effect.IO
 import io.release.ReleaseCtx
+import io.release.ReleaseCtxOps
 import io.release.internal.DecisionResolver
 
 /** Shared tag-conflict resolution for core and monorepo release steps.
@@ -45,7 +46,7 @@ private[release] object TagConflictResolver {
     *
     * Returns the final tag name and whether an overwrite occurred.
     */
-  def resolveConflict[C <: ReleaseCtx[C]](
+  def resolveConflict[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       vcs: Vcs,
       params: TagParams
@@ -162,7 +163,7 @@ private[release] object TagConflictResolver {
     final case class Retry(tag: String) extends ConflictAction
   }
 
-  private def resolveAnswer[C <: ReleaseCtx[C]](
+  private def resolveAnswer[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       tagName: String,
       defaultAnswer: Option[String],

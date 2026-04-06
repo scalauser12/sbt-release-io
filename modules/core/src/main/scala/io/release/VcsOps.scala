@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.ReleaseCtxOps.syntax._
 import io.release.internal.DecisionResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
@@ -23,13 +24,13 @@ private[release] object VcsOps {
   private val confirmedUpstreamTipKey: AttributeKey[String] =
     AttributeKey[String]("releaseIOInternalConfirmedUpstreamTip")
 
-  private final case class RemoteCheckResult[C <: ReleaseCtx[C]](
+  private final case class RemoteCheckResult[C <: ReleaseCtx](
       context: C,
       refreshed: Boolean
   )
 
   /** Detect VCS at the project base and return the context with the VCS adapter. */
-  def detectAndInit[C <: ReleaseCtx[C]](ctx: C): IO[C] =
+  def detectAndInit[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): IO[C] =
     IO.blocking(Project.extract(ctx.state).get(thisProject).base).flatMap { baseDir =>
       Vcs.detect(baseDir).flatMap {
         case Some(vcs) => IO.pure(ctx.withVcs(vcs))
@@ -136,7 +137,7 @@ private[release] object VcsOps {
   /** Validate that the tracking remote is reachable. Shared by core and monorepo push steps.
     * @param log optional callback to log the remote name before checking
     */
-  def validatePushRemote[C <: ReleaseCtx[C]](
+  def validatePushRemote[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       vcs: Vcs,
       logPrefix: String,
@@ -144,7 +145,7 @@ private[release] object VcsOps {
   ): IO[C] =
     checkPushRemote(ctx, vcs, logPrefix, log).map(_.context)
 
-  private def checkPushRemote[C <: ReleaseCtx[C]](
+  private def checkPushRemote[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       vcs: Vcs,
       logPrefix: String,
@@ -196,7 +197,7 @@ private[release] object VcsOps {
   /** Validate that a tracking branch exists and the local branch is not behind remote.
     * Shared by core and monorepo push steps.
     */
-  def validatePushReadiness[C <: ReleaseCtx[C]](
+  def validatePushReadiness[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       vcs: Vcs,
       logPrefix: String
@@ -221,7 +222,7 @@ private[release] object VcsOps {
     * Keeps `check` and validation mode network-free while preventing stale remote state from
     * being discovered only at the final push.
     */
-  def preparePushRelease[C <: ReleaseCtx[C]](
+  def preparePushRelease[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       logPrefix: String,
       remoteCheckLog: Option[String => Unit] = None
@@ -232,7 +233,7 @@ private[release] object VcsOps {
 
   /** After a fresh remote check, optionally prompt before pushing (interactive mode).
     */
-  def interactivePushAfterRemote[C <: ReleaseCtx[C]](
+  def interactivePushAfterRemote[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       vcs: Vcs,
       logPrefix: String,
@@ -242,7 +243,7 @@ private[release] object VcsOps {
       DecisionResolver.resolvePushDecision(validatedCtx, logPrefix)(doPush, onDeclinePush)
     }
 
-  private def ensureVcs[C <: ReleaseCtx[C]](ctx: C): IO[(C, Vcs)] =
+  private def ensureVcs[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): IO[(C, Vcs)] =
     ctx.vcs match {
       case Some(vcs) => IO.pure(ctx -> vcs)
       case None      =>
@@ -255,7 +256,7 @@ private[release] object VcsOps {
         }
     }
 
-  private def refreshPushReadiness[C <: ReleaseCtx[C]](
+  private def refreshPushReadiness[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       vcs: Vcs,
       logPrefix: String,
@@ -270,7 +271,7 @@ private[release] object VcsOps {
   // Best-effort check using the currently available tracking refs.
   // On any error (missing refs, corrupted repo, etc.), conservatively treat as not behind
   // and let the actual push surface the real failure.
-  private def confirmUpstreamReadiness[C <: ReleaseCtx[C]](
+  private def confirmUpstreamReadiness[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
       vcs: Vcs,
       logPrefix: String
@@ -300,10 +301,10 @@ private[release] object VcsOps {
   private def currentUpstreamTip(vcs: Vcs): IO[Option[String]] =
     vcs.upstreamTrackingHash.handleError(_ => None)
 
-  private def confirmedUpstreamTip[C <: ReleaseCtx[C]](ctx: C): Option[String] =
+  private def confirmedUpstreamTip[C <: ReleaseCtx](ctx: C): Option[String] =
     ctx.metadata(confirmedUpstreamTipKey)
 
-  private def confirmUpstreamTip[C <: ReleaseCtx[C]](ctx: C, tip: Option[String]): C =
+  private def confirmUpstreamTip[C <: ReleaseCtx: ReleaseCtxOps](ctx: C, tip: Option[String]): C =
     tip.fold(ctx.withoutMetadata(confirmedUpstreamTipKey))(value =>
       ctx.withMetadata(confirmedUpstreamTipKey, value)
     )
