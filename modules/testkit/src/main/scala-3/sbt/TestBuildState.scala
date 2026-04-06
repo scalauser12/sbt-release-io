@@ -1,6 +1,8 @@
 package sbt
 
+import sbt.Keys.*
 import sbt.internal.*
+import sbt.internal.inc.MappedFileConverter
 import sbt.internal.util.Util
 
 /** Test-only adapter over sbt loader internals. Expect to update it when bumping sbt.
@@ -80,8 +82,20 @@ object TestBuildState:
     val units      = loaded.units
     val delegates  = Util.withCaching(preGlobal.delegates(loaded))
     val scopeLocal: Def.ScopeLocal = preGlobal.scopeLocal
+    val syntheticCacheGlobals = Seq(
+      allowMachinePath :== true,
+      rootPaths := Defaults.getRootPaths(rootOutputDirectory.value, appConfiguration.value),
+      fileConverter := MappedFileConverter(rootPaths.value, allowMachinePath.value)
+    )
+    // Keep the synthetic test state minimal: `Defaults.globalCore` pulls in `globalSbtCore`,
+    // which registers sbt shutdown hooks. Those hooks trigger cleanup on the forked sbt 2 test
+    // classpath after the tests finish, producing noisy shutdown errors outside the project code.
+    // The harness still needs the cache globals for settings such as `fileConverter` and
+    // `localDigestCacheByteSize`, so inject only the narrow subset required by `RemoteCache`.
     val inject     = preGlobal.injectSettings.copy(
-      global = preGlobal.injectSettings.global ++ Defaults.globalCore
+      global =
+        preGlobal.injectSettings.global ++
+          Defaults.globalDefaults(syntheticCacheGlobals ++ RemoteCache.globalSettings)
     )
     val settings =
       Load.finalTransforms(

@@ -483,6 +483,32 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("preparePushRelease - fail with a clear message before remote warmup when no tracking branch is configured") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      for {
+        calls <- Ref.of[IO, Vector[StubVcsCall]](Vector.empty)
+        buffered = VcsOpsSpec.bufferedState(dir)
+        vcs = new StubVcs(
+          dir,
+          currentBranch0 = IO.pure("feature"),
+          hasUpstream0 = IO.pure(false),
+          trackingRemote0 = IO.raiseError(new IllegalStateException("tracking remote should not run")),
+          checkRemoteWithTimeout0 = Some((_, _) => IO.raiseError(new AssertionError("remote check should not run"))),
+          recordedCalls0 = Some(calls)
+        )
+        ctx = VcsOpsSpec
+          .promptContext(buffered.state, interactive = false, useDefaults = false)
+          .withVcs(vcs)
+        _    <- assertFailure[IllegalStateException, ReleaseContext](
+                  VcsOps.preparePushRelease(ctx, ReleaseLogPrefixes.Core)
+                )(err =>
+                  assert(err.getMessage.contains("No tracking branch configured for 'feature'"))
+                )
+        seen <- calls.get
+      } yield assertEquals(seen, Vector.empty)
+    }
+  }
+
   test("interactivePushAfterRemote - non-interactive without defaults declines push") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val ctx = VcsOpsSpec.promptContext(

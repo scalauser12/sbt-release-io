@@ -203,18 +203,7 @@ private[release] object VcsOps {
       logPrefix: String
   ): IO[C] =
     for {
-      hasUp     <- vcs.hasUpstream
-      _         <-
-        if (hasUp) IO.unit
-        else
-          vcs.currentBranch.flatMap { branch =>
-            IO.raiseError(
-              new IllegalStateException(
-                s"No tracking branch configured for '$branch'. " +
-                  "Set up a remote tracking branch or remove pushChanges from the release process."
-              )
-            )
-          }
+      _         <- ensureTrackingBranchConfigured(vcs)
       resultCtx <- confirmUpstreamReadiness(ctx, vcs, logPrefix)
     } yield resultCtx
 
@@ -262,10 +251,25 @@ private[release] object VcsOps {
       logPrefix: String,
       remoteCheckLog: Option[String => Unit]
   ): IO[C] =
-    checkPushRemote(ctx, vcs, logPrefix, remoteCheckLog).flatMap {
+    ensureTrackingBranchConfigured(vcs) *>
+      checkPushRemote(ctx, vcs, logPrefix, remoteCheckLog).flatMap {
       case RemoteCheckResult(currentCtx, refreshed) =>
         if (refreshed) confirmUpstreamReadiness(currentCtx, vcs, logPrefix)
         else IO.pure(currentCtx)
+      }
+
+  private def ensureTrackingBranchConfigured(vcs: Vcs): IO[Unit] =
+    vcs.hasUpstream.flatMap {
+      case true  => IO.unit
+      case false =>
+        vcs.currentBranch.flatMap { branch =>
+          IO.raiseError(
+            new IllegalStateException(
+              s"No tracking branch configured for '$branch'. " +
+                "Set up a remote tracking branch or remove pushChanges from the release process."
+            )
+          )
+        }
     }
 
   // Best-effort check using the currently available tracking refs.

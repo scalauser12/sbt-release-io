@@ -113,6 +113,32 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolve - propagate downstream dependents for CLI overrides when includeDownstream is enabled") {
+    resolverFixtureResource(
+      prefix = "monorepo-selection-force-include-downstream",
+      rootSettings = Seq(
+        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector :=
+          Some((_: ProjectRef, _: File, _: sbt.State) => IO.pure(false)),
+        MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := true
+      )
+    ).use { fixture =>
+      val plan = MonorepoSpecSupport.releasePlan(
+        selectionMode = SelectionMode.DetectChanges,
+        releaseVersionOverrides = Map("api" -> "3.0.0"),
+        nextVersionOverrides = Map("api" -> "3.1.0-SNAPSHOT")
+      )
+
+      MonorepoSelectionResolver.resolve(fixture.context(Seq.empty), plan).map { result =>
+        assertEquals(result.selectionMode, SelectionMode.DetectChanges)
+        assertEquals(result.projects.map(_.name), Seq("api", "consumer"))
+        assertEquals(
+          result.projects.find(_.name == "api").flatMap(_.versions),
+          Some("3.0.0" -> "3.1.0-SNAPSHOT")
+        )
+      }
+    }
+  }
+
   test("resolve - reject version overrides that target projects not selected for release") {
     resolverFixtureResource("monorepo-selection-unused-overrides").use { fixture =>
       val plan = MonorepoSpecSupport.releasePlan(

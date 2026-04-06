@@ -137,45 +137,51 @@ private[monorepo] object MonorepoSelectionResolver {
       tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
       validated: MonorepoReleasePlan
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
-    detectSelectedProjects(ctx, ordered, tagSettings)
-      .flatMap { case (detected, mode) =>
-        forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
+    resolveDetectionSettings(ctx.state).flatMap { settings =>
+      detectSelectedProjects(ctx, ordered, tagSettings, settings).flatMap { case (detected, mode) =>
+        forceIncludeOverridden(
+          ctx,
+          ordered,
+          detected,
+          validated,
+          settings.includeDownstream
+        ).map(_ -> mode)
       }
+    }
 
   private def detectSelectedProjects(
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
-      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings
+      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
+      settings: DetectionSettings
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
-    resolveDetectionSettings(ctx.state).flatMap { settings =>
-      if (!settings.detectChanges)
-        IO.pure((orderedProjects, SelectionMode.AllChanged))
-      else {
-        val detected = settings.customDetector match {
-          case Some(detector) =>
-            detectWithCustomDetector(ctx, orderedProjects, detector)
-          case None           =>
-            IO.fromOption(ctx.vcs)(
-              new IllegalStateException("VCS not initialized")
-            ).flatMap { vcs =>
-              ChangeDetection.detectChangedProjects(
-                vcs,
-                orderedProjects,
-                tagSettings.perProjectTagName,
-                ctx.state,
-                settings.userExcludes,
-                settings.sharedPaths
-              )
-            }
-        }
-
-        if (!settings.includeDownstream) detected.map((_, SelectionMode.DetectChanges))
-        else
-          detected.flatMap { directlyChanged =>
-            expandToDownstream(ctx, orderedProjects, directlyChanged)
-              .map((_, SelectionMode.DetectChanges))
+    if (!settings.detectChanges)
+      IO.pure((orderedProjects, SelectionMode.AllChanged))
+    else {
+      val detected = settings.customDetector match {
+        case Some(detector) =>
+          detectWithCustomDetector(ctx, orderedProjects, detector)
+        case None           =>
+          IO.fromOption(ctx.vcs)(
+            new IllegalStateException("VCS not initialized")
+          ).flatMap { vcs =>
+            ChangeDetection.detectChangedProjects(
+              vcs,
+              orderedProjects,
+              tagSettings.perProjectTagName,
+              ctx.state,
+              settings.userExcludes,
+              settings.sharedPaths
+            )
           }
       }
+
+      if (!settings.includeDownstream) detected.map((_, SelectionMode.DetectChanges))
+      else
+        detected.flatMap { directlyChanged =>
+          expandToDownstream(ctx, orderedProjects, directlyChanged)
+            .map((_, SelectionMode.DetectChanges))
+        }
     }
 
   private def resolveDetectionSettings(state: State): IO[DetectionSettings] =
@@ -311,7 +317,8 @@ private[monorepo] object MonorepoSelectionResolver {
       ctx: MonorepoContext,
       allOrdered: Seq[ProjectReleaseInfo],
       detected: Seq[ProjectReleaseInfo],
-      plan: MonorepoReleasePlan
+      plan: MonorepoReleasePlan,
+      includeDownstream: Boolean
   ): IO[Seq[ProjectReleaseInfo]] = {
     val overrideNames = plan.releaseVersionOverrides.keySet ++ plan.nextVersionOverrides.keySet
     val detectedNames = detected.map(_.name).toSet
@@ -320,7 +327,8 @@ private[monorepo] object MonorepoSelectionResolver {
 
     if (forceInclude.isEmpty) IO.pure(detected)
     else {
-      val selectedNames = detectedNames ++ forceInclude.map(_.name)
+      val selectedNames  = detectedNames ++ forceInclude.map(_.name)
+      val forcedSelection = allOrdered.filter(p => selectedNames.contains(p.name))
       IO.blocking {
         forceInclude.foreach(p =>
           ctx.state.log.info(
@@ -328,7 +336,10 @@ private[monorepo] object MonorepoSelectionResolver {
               s" (unchanged but has version override)"
           )
         )
-      }.as(allOrdered.filter(p => selectedNames.contains(p.name)))
+      }.as(forcedSelection).flatMap { updatedSelection =>
+        if (includeDownstream) expandToDownstream(ctx, allOrdered, updatedSelection)
+        else IO.pure(updatedSelection)
+      }
     }
   }
 
