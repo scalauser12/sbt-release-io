@@ -70,8 +70,11 @@ private[monorepo] object MonorepoStepHelpers {
         }
       }
 
-  /** If any project is marked failed, propagate failure to the global context. */
-  private def propagateFailures(ctx: MonorepoContext): MonorepoContext =
+  /** If any project is marked failed, propagate failure to the global context.
+    * Package-private so validation paths can reuse the same project-to-global
+    * failure promotion as execution.
+    */
+  private[monorepo] def propagateFailures(ctx: MonorepoContext): MonorepoContext =
     if (ctx.projects.exists(_.failed)) {
       val failures = ctx.projects.collect {
         case project if project.failed =>
@@ -92,13 +95,15 @@ private[monorepo] object MonorepoStepHelpers {
       val failure = new IllegalStateException(
         s"${project.name}: sbt task reported failure via FailureCommand"
       )
-      val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
-      val result  = ExecutionEngine
-        .armOnFailure(ctx.withState(cleaned))
-        .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
-      IO.blocking(
-        result.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
-      ).as(result)
+      for {
+        stripped <- ExecutionEngine.stripFailureCommand(ctx)
+        armed = ExecutionEngine
+          .armOnFailure(stripped)
+          .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
+        _ <- IO.blocking(
+              armed.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
+            )
+      } yield armed
     } else IO.pure(ctx)
 
   // ── Logging ───────────────────────────────────────────────────────────

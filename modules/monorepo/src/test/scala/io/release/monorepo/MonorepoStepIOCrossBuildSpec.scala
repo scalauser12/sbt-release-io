@@ -5,6 +5,7 @@ import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.internal.ProcessStep
+import io.release.internal.SbtCompat
 import io.release.monorepo.steps.MonorepoPublishSteps
 import io.release.monorepo.steps.MonorepoStepTestCompat
 import munit.CatsEffectSuite
@@ -12,6 +13,7 @@ import sbt.AttributeKey
 import sbt.Keys.*
 import sbt.LocalProject
 import sbt.Project
+import sbt.ThisBuild
 
 import java.io.File
 
@@ -241,6 +243,52 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
             assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
             assertEquals(restoredCore, Some(TestSupport.CurrentScalaVersion))
           }
+      }
+    }
+  }
+
+  test("compose - cross-build uses delegated ThisBuild crossScalaVersions for selected projects") {
+    loadedContextResource("monorepo-step-thisbuild-cross", Seq("core")) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"))
+          .settings(
+            scalaVersion := TestSupport.CurrentScalaVersion,
+            ThisBuild / crossScalaVersions := Seq(
+              TestSupport.CurrentScalaVersion,
+              TestSupport.alternateScalaVersion
+            )
+          ),
+        Project("core", coreBase).settings(
+          scalaVersion := TestSupport.CurrentScalaVersion
+        )
+      )
+    }.use { ctx =>
+      val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+        name = "cross-step",
+        execute = (c, project) =>
+          appendCurrentScalaVersion(new File(project.baseDir, "thisbuild-cross.txt"), c.state)
+            .as(c),
+        enableCrossBuild = true
+      )
+
+      MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
+
+        for {
+          restoredVersion <- scalaVersionOf(result.state)
+          lines           <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(project.baseDir, "thisbuild-cross.txt"))
+        } yield {
+          assertEquals(
+            lines,
+            List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+          )
+          assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+        }
       }
     }
   }
@@ -576,6 +624,75 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
               assert(result.failed)
               assertEquals(obs, List("core"))
               assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "compose - cross-build validation FailureCommand propagates globally and skips execute"
+  ) {
+    loadedContextResource("monorepo-step-cross-validation-failure-command", Seq("core", "api")) {
+      dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+
+        Seq(
+          Project("root", dir)
+            .aggregate(LocalProject("core"), LocalProject("api"))
+            .settings(scalaVersion := TestSupport.CurrentScalaVersion),
+          Project("core", coreBase).settings(
+            scalaVersion       := TestSupport.CurrentScalaVersion,
+            crossScalaVersions := Seq(TestSupport.CurrentScalaVersion)
+          ),
+          Project("api", apiBase).settings(
+            scalaVersion       := TestSupport.CurrentScalaVersion,
+            crossScalaVersions := Seq(TestSupport.CurrentScalaVersion)
+          )
+        )
+    }.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+          name = "cross-validate-failure-command-step",
+          validateWithContext = Some((c, project) =>
+            observed.update(_ :+ s"validate:${project.name}").as {
+              if (project.name == "core")
+                c.withState(
+                  c.state.copy(
+                    remainingCommands = SbtCompat.FailureCommand :: c.state.remainingCommands
+                  )
+                )
+              else c
+            }
+          ),
+          execute = (c, project) =>
+            observed.update(_ :+ s"execute:${project.name}").as(c),
+          enableCrossBuild = true
+        )
+
+        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+          scalaVersionOf(result.state).flatMap { finalVersion =>
+            observed.get.map { events =>
+              val core      = MonorepoSpecSupport.projectNamed(result.projects, "core")
+              val api       = MonorepoSpecSupport.projectNamed(result.projects, "api")
+              val aggregate = requireProjectFailures(result.failureCause)
+
+              assert(result.failed)
+              assert(core.failed)
+              assert(!api.failed)
+              assertEquals(events, List("validate:core"))
+              assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+              assertEquals(result.state.onFailure, None)
+              assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+              assert(
+                aggregate.failures.head.cause.exists(
+                  _.getMessage.contains("core: sbt task reported failure via FailureCommand")
+                )
+              )
             }
           }
         }

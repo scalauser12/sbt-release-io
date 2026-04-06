@@ -2,6 +2,7 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.CrossBuildSupport
+import io.release.internal.ExecutionEngine
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
@@ -19,6 +20,10 @@ import sbt.{internal as _, *}
 private[monorepo] object MonorepoCrossBuild {
 
   private val LogPrefix = ReleaseLogPrefixes.Monorepo
+
+  private def cleanupValidationFailure(ctx: MonorepoContext): IO[MonorepoContext] =
+    if (ctx.failed) ExecutionEngine.stripFailureCommand(ctx)
+    else IO.pure(ctx)
 
   private def latestProject(
       ctx: MonorepoContext,
@@ -84,9 +89,18 @@ private[monorepo] object MonorepoCrossBuild {
         ctx,
         (currentCtx, currentProject) =>
           runCrossBuildForProject(currentCtx, currentProject, validate)
+            .map(MonorepoStepHelpers.propagateFailures)
+            .flatMap(cleanupValidationFailure)
       )
     else
-      foldCurrentProjects(ctx, validate)
+      foldCurrentProjects(
+        ctx,
+        (currentCtx, currentProject) =>
+          validate(currentCtx, currentProject)
+            .flatMap(MonorepoStepHelpers.detectProjectFailureCommand(_, currentProject))
+            .map(MonorepoStepHelpers.propagateFailures)
+            .flatMap(cleanupValidationFailure)
+      )
 
   /** Cross-build a single project across its `crossScalaVersions`.
     * Reads cross-build settings, validates non-empty, then delegates to
@@ -100,8 +114,8 @@ private[monorepo] object MonorepoCrossBuild {
     IO.blocking {
       val extracted     = SbtRuntime.extracted(ctx.state)
       val crossVersions =
-        (project.ref / crossScalaVersions)
-          .get(extracted.structure.data)
+        extracted
+          .getOpt(project.ref / crossScalaVersions)
           .getOrElse(Seq.empty)
           .distinct
       (crossVersions, ctx.state)
