@@ -158,7 +158,7 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
     repoResource.use { repo =>
       for {
         docsDir <- IO.blocking {
-                     val dir = new File(repo, "core/docs")
+                     val dir    = new File(repo, "core/docs")
                      sbt.IO.createDirectory(dir)
                      sbt.IO.write(
                        new File(repo, "core/version.sbt"),

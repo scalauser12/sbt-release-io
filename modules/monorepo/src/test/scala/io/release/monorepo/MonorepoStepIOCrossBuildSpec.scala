@@ -256,14 +256,14 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         Project("root", dir)
           .aggregate(LocalProject("core"))
           .settings(
-            scalaVersion := TestSupport.CurrentScalaVersion,
+            scalaVersion                   := TestSupport.CurrentScalaVersion,
             ThisBuild / crossScalaVersions := Seq(
               TestSupport.CurrentScalaVersion,
               TestSupport.alternateScalaVersion
             )
           ),
         Project("core", coreBase).settings(
-          scalaVersion := TestSupport.CurrentScalaVersion
+          scalaVersion                     := TestSupport.CurrentScalaVersion
         )
       )
     }.use { ctx =>
@@ -646,12 +646,12 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
             .aggregate(LocalProject("core"), LocalProject("api"))
             .settings(scalaVersion := TestSupport.CurrentScalaVersion),
           Project("core", coreBase).settings(
-            scalaVersion       := TestSupport.CurrentScalaVersion,
-            crossScalaVersions := Seq(TestSupport.CurrentScalaVersion)
+            scalaVersion           := TestSupport.CurrentScalaVersion,
+            crossScalaVersions     := Seq(TestSupport.CurrentScalaVersion)
           ),
           Project("api", apiBase).settings(
-            scalaVersion       := TestSupport.CurrentScalaVersion,
-            crossScalaVersions := Seq(TestSupport.CurrentScalaVersion)
+            scalaVersion           := TestSupport.CurrentScalaVersion,
+            crossScalaVersions     := Seq(TestSupport.CurrentScalaVersion)
           )
         )
     }.use { ctx =>
@@ -669,8 +669,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
               else c
             }
           ),
-          execute = (c, project) =>
-            observed.update(_ :+ s"execute:${project.name}").as(c),
+          execute = (c, project) => observed.update(_ :+ s"execute:${project.name}").as(c),
           enableCrossBuild = true
         )
 

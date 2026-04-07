@@ -320,7 +320,7 @@ private[monorepo] object MonorepoSelectionResolver {
 
     if (forceInclude.isEmpty) IO.pure(detected)
     else {
-      val selectedNames  = detectedNames ++ forceInclude.map(_.name)
+      val selectedNames   = detectedNames ++ forceInclude.map(_.name)
       val forcedSelection = allOrdered.filter(p => selectedNames.contains(p.name))
       IO.blocking {
         forceInclude.foreach(p =>

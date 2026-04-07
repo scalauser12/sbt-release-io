@@ -97,12 +97,12 @@ private[monorepo] object MonorepoStepHelpers {
       )
       for {
         stripped <- ExecutionEngine.stripFailureCommand(ctx)
-        armed = ExecutionEngine
-          .armOnFailure(stripped)
-          .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
-        _ <- IO.blocking(
-              armed.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
-            )
+        armed     = ExecutionEngine
+                      .armOnFailure(stripped)
+                      .updateProject(project.ref)(_.copy(failed = true, failureCause = Some(failure)))
+        _        <- IO.blocking(
+                      armed.state.log.error(s"${ReleaseLogPrefixes.Monorepo} ${failure.getMessage}")
+                    )
       } yield armed
     } else IO.pure(ctx)
 

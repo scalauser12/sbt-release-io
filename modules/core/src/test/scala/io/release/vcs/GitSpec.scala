@@ -29,7 +29,9 @@ class GitSpec extends CatsEffectSuite {
           assert(err.getMessage.contains("git status failed with exit code"))
           assert(err.getMessage.contains("not a git repository"))
         case Left(other)                      =>
-          fail(s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}")
+          fail(
+            s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+          )
         case Right(output)                    =>
           fail(s"Expected git status failure, got output: ${output.mkString(", ")}")
       }
