@@ -156,8 +156,13 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
 
 Notes:
 
-- `check` validates resource-aware hooks without acquiring the resource
-- `run` acquires the resource once, executes compiled hooks, then releases it
+- **Check mode and resources:** `check` runs every hook's `validate` function but never
+  acquires the plugin resource. This is safe because `validate` on
+  `ReleaseResourceHookIO` is always resource-free — it receives only the context, not
+  the resource value. Hook authors should place any logic that depends on the resource
+  (HTTP calls, temp-dir setup, etc.) in `execute`, not `validate`.
+- `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
+  resource value, then releases it.
 - custom plugins should not define `object autoImport`; reuse the keys from `ReleasePluginIO`
 
 ## Older API renames

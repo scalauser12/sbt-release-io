@@ -253,9 +253,9 @@ private[release] object VcsOps {
   ): IO[C] =
     ensureTrackingBranchConfigured(vcs) *>
       checkPushRemote(ctx, vcs, logPrefix, remoteCheckLog).flatMap {
-      case RemoteCheckResult(currentCtx, refreshed) =>
-        if (refreshed) confirmUpstreamReadiness(currentCtx, vcs, logPrefix)
-        else IO.pure(currentCtx)
+        case RemoteCheckResult(currentCtx, refreshed) =>
+          if (refreshed) confirmUpstreamReadiness(currentCtx, vcs, logPrefix)
+          else IO.pure(currentCtx)
       }
 
   private def ensureTrackingBranchConfigured(vcs: Vcs): IO[Unit] =

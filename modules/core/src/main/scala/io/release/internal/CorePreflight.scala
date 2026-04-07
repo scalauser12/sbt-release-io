@@ -139,20 +139,28 @@ private[release] object CorePreflight {
       versionSnapshot <- resolveVersionSnapshot(checkedCtx, checkSteps)
       snapshotCtx     <- ExecutionEngine.raiseIfFailed(versionSnapshot.context)
       tagSummary      <- resolveTagSummary(versionSnapshot.copy(context = snapshotCtx), checkSteps)
-      summary          = Summary(
-                           versions = versionSnapshot.summary,
-                           tag = tagSummary,
-                           crossBuildEnabled = crossBuild,
-                           publishSummary = CheckModeOutput.publishStatus(
-                             publishConfigured = checkSteps.publishConfigured,
-                             skipPublish = snapshotCtx.skipPublish,
-                             skippedMessage = "skipped via releaseIOBehaviorSkipPublish := true"
-                           ),
-                           pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
-                           stepNames = checkSteps.stepNames
-                         )
-    } yield summary
+    } yield buildSummary(versionSnapshot.summary, tagSummary, crossBuild, snapshotCtx, checkSteps)
   }
+
+  private def buildSummary(
+      versions: VersionsSummary,
+      tag: TagSummary,
+      crossBuildEnabled: Boolean,
+      ctx: ReleaseContext,
+      checkSteps: CheckSteps
+  ): Summary =
+    Summary(
+      versions = versions,
+      tag = tag,
+      crossBuildEnabled = crossBuildEnabled,
+      publishSummary = CheckModeOutput.publishStatus(
+        publishConfigured = checkSteps.publishConfigured,
+        skipPublish = ctx.skipPublish,
+        skippedMessage = "skipped via releaseIOBehaviorSkipPublish := true"
+      ),
+      pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
+      stepNames = checkSteps.stepNames
+    )
 
   private def resolveVersionSnapshot(
       ctx: ReleaseContext,
