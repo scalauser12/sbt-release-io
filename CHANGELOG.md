@@ -6,6 +6,50 @@ This file is the canonical release history for the repository.
 
 ## Unreleased
 
+## v0.9.1
+
+Published: 2026-04-07
+GitHub release:
+[v0.9.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.1)
+
+`v0.9.1` is a patch hardening release for both plugins, tightening Git/VCS execution, monorepo
+selection and cross-build cleanup, prompt/help behavior, and supporting guidance without expanding
+the public customization surface introduced in `v0.9.0`.
+
+### Fixes
+
+- Share Git process execution and status capture across the core and monorepo modules, restore the
+  default remote-check timeout fallback, and keep remote/push behavior compatible with existing VCS
+  adapter expectations.
+- Fix release edge cases around push handling, narrow monorepo project selection, and the sbt 2
+  test lane.
+- Fix monorepo cross-build validation cleanup and keep override-only selection narrow after
+  reverting downstream expansion.
+
+### Improvements
+
+- Avoid per-byte allocation in `PromptAdapter.readLineBlocking` so interactive input stays lighter.
+- Extract `CorePreflight.buildSummary` and remove the self-referential hint from `releaseIO help`
+  output for cleaner preflight/help messaging.
+
+### Documentation
+
+- Clarify the non-interactive default for sbt-release migrants and expand resource-hook check-mode
+  guidance in the core docs.
+- Refresh the root README, module READMEs, onboarding guides, and walkthroughs to reference
+  `0.9.1`.
+
+### Tests
+
+- Add regression coverage for Git/VCS handling, narrow override-only monorepo selection,
+  shared-path change detection, and monorepo cross-build cleanup.
+
+### Verification
+
+- sbt 1.12.3: `sbt scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+
 ## v0.9.0
 
 Published: 2026-04-06

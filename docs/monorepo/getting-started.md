@@ -17,7 +17,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.1")
 ```
 
 Enable on your root project in `build.sbt`:

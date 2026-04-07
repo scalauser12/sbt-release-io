@@ -20,7 +20,7 @@ my-monorepo/
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.1")
 ```
 
 ## 2. Configure the build
