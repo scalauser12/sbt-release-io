@@ -33,7 +33,7 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-all-changed",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoDetectionEnabled := false
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionEnabled := false
       )
     ).use { fixture =>
       val ctx = fixture.context(Seq("core", "api", "consumer"))
@@ -51,9 +51,9 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-custom",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector    :=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionChangeDetector    :=
           Some((ref: ProjectRef, _: File, _: sbt.State) => IO.pure(ref.project == "api")),
-        MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := false
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionIncludeDownstream := false
       )
     ).use { fixture =>
       MonorepoSelectionResolver
@@ -72,9 +72,9 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-downstream",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector    :=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionChangeDetector    :=
           Some((ref: ProjectRef, _: File, _: sbt.State) => IO.pure(ref.project == "api")),
-        MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := true
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionIncludeDownstream := true
       )
     ).use { fixture =>
       MonorepoSelectionResolver
@@ -93,7 +93,7 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-force-include",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector :=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionChangeDetector :=
           Some((ref: ProjectRef, _: File, _: sbt.State) => IO.pure(ref.project == "core"))
       )
     ).use { fixture =>
@@ -117,9 +117,9 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     resolverFixtureResource(
       prefix = "monorepo-selection-force-include-downstream-enabled",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector    :=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionChangeDetector    :=
           Some((_: ProjectRef, _: File, _: sbt.State) => IO.pure(false)),
-        MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := true
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionIncludeDownstream := true
       )
     ).use { fixture =>
       val plan = MonorepoSpecSupport.releasePlan(

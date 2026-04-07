@@ -2,9 +2,9 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.ReleaseIO
-import io.release.ReleaseIO.releaseIOVcsSign
-import io.release.ReleaseIO.releaseIOVcsSignOff
+import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleasePluginIO.autoImport.releaseIOVcsSign
+import io.release.ReleasePluginIO.autoImport.releaseIOVcsSignOff
 import io.release.VcsOps
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
@@ -92,7 +92,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                val newState = SbtRuntime.appendWithSession(
                                  result.state,
                                  preserved ++
-                                   ReleaseIO.releaseManifestHashSettings(
+                                   ReleaseManifestMetadataSupport.releaseManifestHashSettings(
                                      result.currentProjects.map(_.ref),
                                      currentHash
                                    )

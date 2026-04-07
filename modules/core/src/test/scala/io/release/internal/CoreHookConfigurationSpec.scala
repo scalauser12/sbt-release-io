@@ -2,7 +2,7 @@ package io.release.internal
 
 import cats.effect.IO
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.TestSupport
 import munit.CatsEffectSuite
 import sbt.*
@@ -22,11 +22,11 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
     stateResource(
       "core-hook-configuration-resolve",
       Seq(
-        ReleaseIO.releaseIOPolicyEnablePublish := false,
-        ReleaseIO.releaseIOHooksBeforeTag      := Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeTag      := Seq(
           ReleaseHookIO.action("before-tag")(_ => IO.unit)
         ),
-        ReleaseIO.releaseIOHooksAfterPush      := Seq(
+        ReleasePluginIO.autoImport.releaseIOHooksAfterPush      := Seq(
           ReleaseHookIO.action("after-push")(_ => IO.unit)
         )
       )

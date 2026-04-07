@@ -59,7 +59,8 @@ private[release] object VcsOps {
   def checkCleanWorkingDir(state: State): IO[CleanCheckResult] =
     IO.blocking {
       val extracted       = Project.extract(state)
-      val ignoreUntracked = extracted.get(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles)
+      val ignoreUntracked =
+        extracted.get(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles)
       val base            = extracted.get(thisProject).base
       (ignoreUntracked, base)
     }.flatMap { case (ignoreUntracked, base) =>
@@ -71,7 +72,10 @@ private[release] object VcsOps {
     */
   def checkCleanWorkingDir(state: State, vcs: Vcs): IO[CleanCheckResult] =
     IO.blocking(
-      Project.extract(state).getOpt(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles).getOrElse(false)
+      Project
+        .extract(state)
+        .getOpt(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles)
+        .getOrElse(false)
     ).flatMap(ignoreUntracked => checkCleanFromVcs(vcs, ignoreUntracked))
 
   /** Core clean-working-directory validation against an already-detected VCS adapter. */
@@ -156,7 +160,9 @@ private[release] object VcsOps {
       _           <- log.fold(IO.unit)(f => IO.blocking(f(remote)))
       timeout     <- IO
                        .blocking(
-                         Project.extract(ctx.state).getOpt(ReleaseIO.releaseIOVcsRemoteCheckTimeout)
+                         Project
+                           .extract(ctx.state)
+                           .getOpt(ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout)
                        )
                        .map(_.getOrElse(DefaultRemoteCheckTimeout))
       remoteCheck <- vcs.checkRemoteWithTimeout(remote, timeout)

@@ -1,7 +1,7 @@
 package io.release.monorepo.steps
 
 import _root_.io.release.internal.SbtCompat
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
 import sbt.*
 import sbt.Keys.*
@@ -42,7 +42,7 @@ private[monorepo] object MonorepoStepTestCompat {
       .value
 
   def failureCommandVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleaseIO.releaseIOVersioningReleaseVersion := {
+    project / ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := {
       val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -56,7 +56,7 @@ private[monorepo] object MonorepoStepTestCompat {
     }
 
   def failureCommandNextVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleaseIO.releaseIOVersioningNextVersion := {
+    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := {
       val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -74,7 +74,7 @@ private[monorepo] object MonorepoStepTestCompat {
       key: AttributeKey[String],
       value: String
   ): Setting[?] =
-    project / ReleaseIO.releaseIOVersioningNextVersion := {
+    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := {
       val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>

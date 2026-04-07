@@ -3,7 +3,7 @@ package io.release.internal
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.ReleaseContext
-import io.release.ReleaseIO.*
+import io.release.ReleasePluginIO.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import munit.CatsEffectSuite

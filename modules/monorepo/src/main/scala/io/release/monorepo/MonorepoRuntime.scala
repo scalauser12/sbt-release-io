@@ -20,7 +20,9 @@ private[monorepo] object MonorepoRuntime {
     MonorepoRuntime(
       state = state,
       extracted = extracted,
-      readVersion = extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion),
-      versionFileContents = extracted.get(MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents)
+      readVersion =
+        extracted.get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningReadVersion),
+      versionFileContents =
+        extracted.get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFileContents)
     )
 }

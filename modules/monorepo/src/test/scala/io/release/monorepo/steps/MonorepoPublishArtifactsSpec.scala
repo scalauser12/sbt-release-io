@@ -2,11 +2,11 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoReleasePlugin
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
@@ -20,7 +20,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     singleProjectFixtureResource(
       "monorepo-publish-validate-fail",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := true
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
       )
     ) { _ =>
       Seq(
@@ -42,7 +42,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     val checksDisabled = singleProjectFixtureResource(
       "monorepo-publish-validate-disabled",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := false
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
       )
     ) { _ =>
       Seq(
@@ -54,7 +54,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     val skipPublish = singleProjectFixtureResource(
       "monorepo-publish-validate-skip",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := true
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
       )
     ) { _ =>
       Seq(
@@ -77,8 +77,8 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
   test("publishArtifacts.execute - skip the publish task when publish / skip is true") {
     singleProjectFixtureResource("monorepo-publish-skip-action") { _ =>
       Seq(
-        publish / skip                   := true,
-        ReleaseIO.releaseIOPublishAction := {
+        publish / skip                                    := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction := {
           throw new RuntimeException("publish action should not run")
         }
       )
@@ -97,9 +97,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val marker = new File(projectBase.getParentFile, "published.txt")
 
       Seq(
-        publish / skip                   := false,
-        publishTo                        := Some(Resolver.file("local-test", projectBase.getParentFile)),
-        ReleaseIO.releaseIOPublishAction := {
+        publish / skip                                    := false,
+        publishTo                                         := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        ReleasePluginIO.autoImport.releaseIOPublishAction := {
           sbt.IO.write(marker, "published")
         }
       )
@@ -118,17 +118,18 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val marker = new File(projectBase.getParentFile, "publish-metadata.txt")
 
       Seq(
-        publish / skip                         := false,
-        publishTo                              := Some(Resolver.file("local-test", projectBase.getParentFile)),
-        version                                := "0.1.0-SNAPSHOT",
-        packageOptions                         := Seq.empty,
-        ReleaseIO.releaseIOInternalReleaseHash := None,
-        ReleaseIO.releaseIOInternalReleaseTag  := None,
-        packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-          ReleaseIO.releaseIOInternalReleaseHash.value,
-          ReleaseIO.releaseIOInternalReleaseTag.value
-        ),
-        ReleaseIO.releaseIOPublishAction       := {
+        publish / skip                                                                := false,
+        publishTo                                                                     := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        version                                                                       := "0.1.0-SNAPSHOT",
+        packageOptions                                                                := Seq.empty,
+        _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
+        _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
+        packageOptions ++= _root_.io.release.ReleaseManifestMetadataSupport
+          .releaseManifestPackageOptions(
+            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
+            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
+          ),
+        ReleasePluginIO.autoImport.releaseIOPublishAction                             := {
           def manifestEntries(options: Seq[PackageOption]): Map[String, String] =
             options.flatMap {
               case product: Product if product.productPrefix == "ManifestAttributes" =>
@@ -157,8 +158,10 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val coreRef     = fixture.refsById("core")
       val seededState = TestSupport.appendSessionSettings(
         fixture.state,
-        ReleaseIO.releaseManifestHashSettings(Seq(coreRef), "abc123") ++
-          ReleaseIO.releaseManifestTagSettings(coreRef, "core/v1.0.0")
+        _root_.io.release.ReleaseManifestMetadataSupport
+          .releaseManifestHashSettings(Seq(coreRef), "abc123") ++
+          _root_.io.release.ReleaseManifestMetadataSupport
+            .releaseManifestTagSettings(coreRef, "core/v1.0.0")
       )
       val project     = fixture.projectInfo(
         "core",
@@ -180,7 +183,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     singleProjectFixtureResource(
       "monorepo-publish-validate-pass",
       rootSettings = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPublishChecks := true
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
       )
     ) { projectBase =>
       Seq(

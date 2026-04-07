@@ -1,7 +1,7 @@
 package io.release.internal
 
 import cats.effect.IO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import munit.CatsEffectSuite
@@ -19,7 +19,8 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
           dir,
           Seq(
             Project("root", dir).settings(
-              ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq.empty[ModuleID]
+              ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq
+                .empty[ModuleID]
             )
           ),
           currentProjectId = Some("root")
@@ -47,11 +48,14 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
             Project("root", dir)
               .aggregate(LocalProject("child"))
               .settings(
-                ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(depA)
+                ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(depA)
               ),
             Project("child", childBase)
               .settings(
-                ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(depA, depB)
+                ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+                  depA,
+                  depB
+                )
               )
           ),
           currentProjectId = Some("root")
@@ -69,7 +73,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   ) {
     TestSupport.tempDirResource(s"$fixturePrefix-throw").use { dir =>
       val throwingSetting: Setting[?] =
-        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := {
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := {
           throw new RuntimeException("snapshot deps eval error")
           Seq.empty[ModuleID]
         }

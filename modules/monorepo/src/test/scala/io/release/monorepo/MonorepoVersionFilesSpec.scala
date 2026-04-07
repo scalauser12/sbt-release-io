@@ -24,8 +24,8 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             dir,
             projectIds = Seq("core"),
             settings = Seq(
-              io.release.ReleaseIO.releaseIOVersioningFile      := rootVersionFile,
-              MonorepoReleaseIO.releaseIOMonorepoVersioningFile := {
+              io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile    := rootVersionFile,
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
                 (_: sbt.ProjectRef, _: sbt.State) =>
                   monorepoProjectVersion
               }
@@ -35,7 +35,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             "core",
             coreBase,
             settings = Seq(
-              io.release.ReleaseIO.releaseIOVersioningFile := new File(
+              io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile := new File(
                 coreBase,
                 "ignored-version.sbt"
               )

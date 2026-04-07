@@ -156,11 +156,14 @@ object MonorepoSpecSupport {
 
     aggregated.settings(
       (
-        MonorepoReleaseIO.monorepoDefaultSettings ++
+        _root_.io.release.monorepo.MonorepoDefaultSettings.pluginDefaultSettings ++
           Seq(
-            io.release.ReleaseIO.releaseIOVersioningFile := new File(repo, "version.sbt"),
-            io.release.ReleaseIO.releaseIOVcsSign        := false,
-            io.release.ReleaseIO.releaseIOVcsSignOff     := false
+            io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile := new File(
+              repo,
+              "version.sbt"
+            ),
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsSign        := false,
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsSignOff     := false
           ) ++
           settings
       )*
@@ -175,7 +178,10 @@ object MonorepoSpecSupport {
     Project(id, base).settings(
       (
         Seq(
-          io.release.ReleaseIO.releaseIOVersioningFile := new File(base, "version.sbt")
+          io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile := new File(
+            base,
+            "version.sbt"
+          )
         ) ++ settings
       )*
     )

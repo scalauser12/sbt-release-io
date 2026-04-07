@@ -3,7 +3,7 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.internal.CoreStepAliases.Step
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
@@ -131,8 +131,9 @@ class CorePreflightSpec extends CatsEffectSuite {
                           SbtRuntime.appendWithSession(
                             initialCtx.state,
                             Seq(
-                              ReleaseIO.releaseIOVersioningReadVersion := { (_: File) =>
-                                IO.raiseError(new IllegalStateException(versionResolutionFailure))
+                              ReleasePluginIO.autoImport.releaseIOVersioningReadVersion := {
+                                (_: File) =>
+                                  IO.raiseError(new IllegalStateException(versionResolutionFailure))
                               }
                             )
                           )
@@ -170,8 +171,9 @@ class CorePreflightSpec extends CatsEffectSuite {
                           SbtRuntime.appendWithSession(
                             initialCtx.state,
                             Seq(
-                              ReleaseIO.releaseIOVersioningReadVersion := { (_: File) =>
-                                IO.raiseError(new IllegalStateException(versionResolutionFailure))
+                              ReleasePluginIO.autoImport.releaseIOVersioningReadVersion := {
+                                (_: File) =>
+                                  IO.raiseError(new IllegalStateException(versionResolutionFailure))
                               }
                             )
                           )
@@ -281,9 +283,9 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - summarize the compiled hook process and disabled phases") {
     withPluginInitialContext(
       Seq(
-        ReleaseIO.releaseIOPolicyEnablePublish := false,
-        ReleaseIO.releaseIOPolicyEnablePush    := false,
-        ReleaseIO.releaseIOHooksBeforeTag      := Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeTag      := Seq(
           ReleaseHookIO.action("before-tag-marker")(_ => IO.unit)
         )
       )
@@ -414,57 +416,63 @@ class CorePreflightSpec extends CatsEffectSuite {
       includeExplicitTagName: Boolean = true
   ): Seq[sbt.Setting[?]] =
     Seq(
-      io.release.ReleaseIO.releaseIOVersioningFile           := versionFile,
-      io.release.ReleaseIO.releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
-      io.release.ReleaseIO.releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
-        useGlobalVersion = true
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile           := versionFile,
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents   := VersionSteps
+        .defaultWriteVersion(
+          useGlobalVersion = true
+        ),
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal      := true,
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
+        "0.1.0"
       ),
-      io.release.ReleaseIO.releaseIOVersioningUseGlobal      := true,
-      io.release.ReleaseIO.releaseIOVersioningReleaseVersion := ((_: String) => "0.1.0"),
-      io.release.ReleaseIO.releaseIOVersioningNextVersion    := ((_: String) => "0.2.0-SNAPSHOT"),
-      io.release.ReleaseIO.releaseIOVcsTagComment            := "Releasing 0.1.0",
-      io.release.ReleaseIO.releaseIOVcsSign                  := false,
-      io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles  := false
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
+        "0.2.0-SNAPSHOT"
+      ),
+      io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment            := "Releasing 0.1.0",
+      io.release.ReleasePluginIO.autoImport.releaseIOVcsSign                  := false,
+      io.release.ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles  := false
     ) ++
-      (if (includeExplicitTagName) Seq(io.release.ReleaseIO.releaseIOVcsTagName := "v0.1.0")
+      (if (includeExplicitTagName)
+         Seq(io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName          := "v0.1.0")
        else
          Seq(
            sbt.ThisBuild / sbt.Keys.version                                     := "0.1.0-SNAPSHOT",
            sbt.Keys.version                                                     := "0.1.0-SNAPSHOT",
-           io.release.ReleaseIO.releaseIORuntimeCurrentVersion                  := {
-             if (io.release.ReleaseIO.releaseIOVersioningUseGlobal.value)
+           io.release.ReleasePluginIO.autoImport.releaseIORuntimeCurrentVersion := {
+             if (io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal.value)
                (sbt.ThisBuild / sbt.Keys.version).value
              else sbt.Keys.version.value
            },
-           io.release.ReleaseIO.releaseIOVcsTagName                             :=
-             s"v${io.release.ReleaseIO.releaseIORuntimeCurrentVersion.value}"
+           io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName            :=
+             s"v${io.release.ReleasePluginIO.autoImport.releaseIORuntimeCurrentVersion.value}"
          ))
 
   private def hookSettingsDefaults: Seq[sbt.Setting[?]] =
     Seq(
-      ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck := true,
-      ReleaseIO.releaseIOPolicyEnableRunClean                  := true,
-      ReleaseIO.releaseIOPolicyEnableRunTests                  := true,
-      ReleaseIO.releaseIOPolicyEnableTagging                   := true,
-      ReleaseIO.releaseIOPolicyEnablePublish                   := true,
-      ReleaseIO.releaseIOPolicyEnablePush                      := true,
-      ReleaseIO.releaseIOHooksAfterCleanCheck                  := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeVersionResolution          := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterVersionResolution           := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite        := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterReleaseVersionWrite         := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeReleaseCommit              := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterReleaseCommit               := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeTag                        := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterTag                         := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforePublish                    := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterPublish                     := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeNextVersionWrite           := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterNextVersionWrite            := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforeNextCommit                 := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterNextCommit                  := Seq.empty,
-      ReleaseIO.releaseIOHooksBeforePush                       := Seq.empty,
-      ReleaseIO.releaseIOHooksAfterPush                        := Seq.empty
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableSnapshotDependenciesCheck := true,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableRunClean                  := true,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableRunTests                  := true,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableTagging                   := true,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish                   := true,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnablePush                      := true,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck                  := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution          := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution           := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeReleaseVersionWrite        := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseVersionWrite         := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeReleaseCommit              := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseCommit               := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag                        := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterTag                         := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforePublish                    := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterPublish                     := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeNextVersionWrite           := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterNextVersionWrite            := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeNextCommit                 := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterNextCommit                  := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforePush                       := Seq.empty,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterPush                        := Seq.empty
     )
 
   private def releaseContext(state: sbt.State): ReleaseContext =
@@ -501,8 +509,12 @@ class CorePreflightSpec extends CatsEffectSuite {
           val newState = SbtRuntime.appendWithSession(
             currentCtx.state,
             Seq(
-              ReleaseIO.releaseIOVersioningReleaseVersion := ((_: String) => releaseVersion),
-              ReleaseIO.releaseIOVersioningNextVersion    := ((_: String) => nextVersion)
+              ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
+                releaseVersion
+              ),
+              ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
+                nextVersion
+              )
             )
           )
           currentCtx.withState(newState)

@@ -3,7 +3,7 @@ package io.release.steps
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseContext
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
@@ -37,7 +37,7 @@ class PublishStepsSpec extends CatsEffectSuite {
           result.failureCause.exists(
             _.getMessage.contains(
               "publish-artifacts: sbt task " +
-                s"'${ReleaseIO.releaseIOPublishAction.key.label}'"
+                s"'${ReleasePluginIO.autoImport.releaseIOPublishAction.key.label}'"
             )
           )
         )
@@ -59,7 +59,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("checkSnapshotDependencies.validate - fail on snapshot dependencies") {
     loadedContextResource(s"$fixturePrefix-snapshots") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -76,7 +76,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
     loadedContextResource(s"$fixturePrefix-snapshots-field") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -96,10 +96,10 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-snapshots-distinct",
       rootSettings = Seq(
-        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
       ),
       childSettings = Seq(
-        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
       )
     ).use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
@@ -116,7 +116,7 @@ class PublishStepsSpec extends CatsEffectSuite {
 
   test("publishArtifacts.validate - short-circuit when publishArtifactsChecks is false") {
     loadedContextResource(s"$fixturePrefix-val-off") { _ =>
-      () -> Seq(ReleaseIO.releaseIOPublishChecks := false)
+      () -> Seq(ReleasePluginIO.autoImport.releaseIOPublishChecks := false)
     }.use { case (ctx, _) =>
       PublishSteps.publishArtifacts.validate(ctx)
     }
@@ -125,8 +125,8 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("publishArtifacts.validate - pass when publish/skip is true") {
     loadedContextResource(s"$fixturePrefix-val-skip") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIOPublishChecks := true,
-        publish / skip                   := true
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publish / skip                                    := true
       )
     }.use { case (ctx, _) =>
       PublishSteps.publishArtifacts.validate(ctx)
@@ -135,7 +135,7 @@ class PublishStepsSpec extends CatsEffectSuite {
 
   test("publishArtifacts.validate - fail when publishTo is missing and checks enabled") {
     loadedContextResource(s"$fixturePrefix-val-missing") { _ =>
-      () -> Seq(ReleaseIO.releaseIOPublishChecks := true)
+      () -> Seq(ReleasePluginIO.autoImport.releaseIOPublishChecks := true)
     }.use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
         PublishSteps.publishArtifacts.validate(ctx)
@@ -148,7 +148,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   ) {
     bufferedLoadedContextResource(s"$fixturePrefix-val-throw-pt") { _ =>
       () -> Seq(
-        ReleaseIO.releaseIOPublishChecks := true,
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
         CoreStepTestCompat.throwingPublishToSetting
       )
     }.use { case (ctx, _, consoleBuffer) =>
@@ -172,9 +172,9 @@ class PublishStepsSpec extends CatsEffectSuite {
   ) {
     bufferedLoadedContextResource(s"$fixturePrefix-val-throw-ps") { dir =>
       () -> Seq(
-        ReleaseIO.releaseIOPublishChecks := true,
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
         CoreStepTestCompat.throwingPublishSkipSetting,
-        publishTo                        := Some(Resolver.file("local", new File(dir, "repo")))
+        publishTo                                         := Some(Resolver.file("local", new File(dir, "repo")))
       )
     }.use { case (ctx, _, consoleBuffer) =>
       val warningPrefix =
@@ -196,9 +196,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-false",
       rootSettings = Seq(
-        ReleaseIO.releaseIOPublishChecks                  := true,
-        ReleaseIO.releaseIOPublishAction / Keys.aggregate := false,
-        publishTo                                         := Some(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := false,
+        publishTo                                                          := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),
@@ -215,9 +215,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-true",
       rootSettings = Seq(
-        ReleaseIO.releaseIOPublishChecks                  := true,
-        ReleaseIO.releaseIOPublishAction / Keys.aggregate := true,
-        publishTo                                         := Some(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                                          := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),

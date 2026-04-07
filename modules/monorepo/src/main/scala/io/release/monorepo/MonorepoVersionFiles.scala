@@ -1,9 +1,9 @@
 package io.release.monorepo
 
 import cats.effect.IO
-import io.release.ReleaseIO
+import io.release.ReleaseManifestMetadataSupport
 import io.release.internal.SbtRuntime
-import io.release.monorepo.MonorepoReleaseIO as MR
+import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 import sbt.{internal as _, *}
 
 /** Shared version-file resolution for monorepo release steps and project discovery. */
@@ -17,7 +17,7 @@ private[monorepo] object MonorepoVersionFiles {
   )
 
   def resolve(runtime: MonorepoRuntime, ref: ProjectRef): File =
-    runtime.extracted.get(MR.releaseIOMonorepoVersioningFile)(ref, runtime.state)
+    runtime.extracted.get(releaseIOMonorepoVersioningFile)(ref, runtime.state)
 
   def resolve(state: State, ref: ProjectRef): File =
     resolve(MonorepoRuntime.fromState(state), ref)
@@ -42,10 +42,10 @@ private[monorepo] object MonorepoVersionFiles {
   /** Settings to preserve across sbt state reloads during version writes. */
   def sessionSettings(runtime: MonorepoRuntime): Seq[sbt.Setting[?]] =
     Seq(
-      MR.releaseIOMonorepoVersioningFile         :=
-        runtime.extracted.get(MR.releaseIOMonorepoVersioningFile),
-      MR.releaseIOMonorepoVersioningReadVersion  := runtime.readVersion,
-      MR.releaseIOMonorepoVersioningFileContents := runtime.versionFileContents
+      releaseIOMonorepoVersioningFile         :=
+        runtime.extracted.get(releaseIOMonorepoVersioningFile),
+      releaseIOMonorepoVersioningReadVersion  := runtime.readVersion,
+      releaseIOMonorepoVersioningFileContents := runtime.versionFileContents
     )
 
   def sessionSettings(state: State): IO[Seq[sbt.Setting[?]]] =
@@ -58,23 +58,24 @@ private[monorepo] object MonorepoVersionFiles {
       state: State,
       projectRefs: Seq[ProjectRef]
   ): IO[Seq[sbt.Setting[?]]] =
-    sessionSettings(state).map(
-      _ ++ ReleaseIO.existingReleaseManifestSettings(state, projectRefs)
+    IO.blocking(
+      sessionSettingsIfDefined(state) ++
+        ReleaseManifestMetadataSupport.existingReleaseManifestSettings(state, projectRefs)
     )
 
   private def sessionSettingsIfDefined(state: State): Seq[sbt.Setting[?]] = {
     val extracted = SbtRuntime.extracted(state)
 
     (
-      extracted.getOpt(MR.releaseIOMonorepoVersioningFile),
-      extracted.getOpt(MR.releaseIOMonorepoVersioningReadVersion),
-      extracted.getOpt(MR.releaseIOMonorepoVersioningFileContents)
+      extracted.getOpt(releaseIOMonorepoVersioningFile),
+      extracted.getOpt(releaseIOMonorepoVersioningReadVersion),
+      extracted.getOpt(releaseIOMonorepoVersioningFileContents)
     ) match {
       case (Some(versionFile), Some(readVersion), Some(versionFileContents)) =>
         Seq(
-          MR.releaseIOMonorepoVersioningFile         := versionFile,
-          MR.releaseIOMonorepoVersioningReadVersion  := readVersion,
-          MR.releaseIOMonorepoVersioningFileContents := versionFileContents
+          releaseIOMonorepoVersioningFile         := versionFile,
+          releaseIOMonorepoVersioningReadVersion  := readVersion,
+          releaseIOMonorepoVersioningFileContents := versionFileContents
         )
       case _                                                                 => Seq.empty
     }

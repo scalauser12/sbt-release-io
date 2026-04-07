@@ -2,13 +2,13 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.ReleaseIO
+import io.release.ReleaseManifestMetadataSupport
 import io.release.VcsOps
 import io.release.internal.ProcessStep
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoTagSettingsSupport
 import io.release.monorepo.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.MonorepoVersionFiles
@@ -101,7 +101,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
-      MonorepoReleaseIO.resolveTagSettings(ctx.state).flatMap { settings =>
+      MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
         ctx.currentProjects.toList.traverse { project =>
           required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
             case (releaseVer, _) =>
@@ -121,7 +121,7 @@ private[monorepo] object MonorepoVcsSteps {
             case (releaseVer, _) =>
               // Resolved per-project: tag name/comment depend on releaseIORuntimeCurrentVersion
               // which varies by project.
-              MonorepoReleaseIO.resolveTagSettings(ctx.state).flatMap { settings =>
+              MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
                 val initialTagName = settings.perProjectTagName(project.name, releaseVer)
                 createTag(
                   ctx,
@@ -137,15 +137,16 @@ private[monorepo] object MonorepoVcsSteps {
                                    updatedCtx.currentProjects.map(_.ref)
                                  )
                     _         <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
-                    newState  <- IO.blocking {
-                                   SbtRuntime.appendWithSession(
-                                     updatedCtx.state,
-                                     preserved ++ ReleaseIO.releaseManifestTagSettings(
-                                       project.ref,
-                                       resolvedTagName
-                                     )
-                                   )
-                                 }
+                    newState  <-
+                      IO.blocking {
+                        SbtRuntime.appendWithSession(
+                          updatedCtx.state,
+                          preserved ++ ReleaseManifestMetadataSupport.releaseManifestTagSettings(
+                            project.ref,
+                            resolvedTagName
+                          )
+                        )
+                      }
                   } yield updatedCtx
                     .withState(newState)
                     .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))

@@ -33,7 +33,7 @@ private[monorepo] object MonorepoCommandParsers {
     Try {
       Project
         .extract(state)
-        .get(MonorepoReleaseIO.releaseIOMonorepoSelectionProjects)
+        .get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects)
         .map(_.project)
     }.toEither.left
       .map { err =>

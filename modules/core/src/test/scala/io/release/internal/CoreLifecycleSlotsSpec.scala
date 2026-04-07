@@ -3,7 +3,7 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.ReleaseResourceHooks
 import io.release.TestRepoFiles
 import io.release.steps.ReleaseSteps
@@ -23,29 +23,29 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     assertEquals(
       CoreLifecycleSlots.slots.map(_.keyLabel).sorted,
       Seq(
-        ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck.key.label,
-        ReleaseIO.releaseIOPolicyEnableRunClean.key.label,
-        ReleaseIO.releaseIOPolicyEnableRunTests.key.label,
-        ReleaseIO.releaseIOPolicyEnableTagging.key.label,
-        ReleaseIO.releaseIOPolicyEnablePublish.key.label,
-        ReleaseIO.releaseIOPolicyEnablePush.key.label,
-        ReleaseIO.releaseIOHooksAfterCleanCheck.key.label,
-        ReleaseIO.releaseIOHooksBeforeVersionResolution.key.label,
-        ReleaseIO.releaseIOHooksAfterVersionResolution.key.label,
-        ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite.key.label,
-        ReleaseIO.releaseIOHooksAfterReleaseVersionWrite.key.label,
-        ReleaseIO.releaseIOHooksBeforeReleaseCommit.key.label,
-        ReleaseIO.releaseIOHooksAfterReleaseCommit.key.label,
-        ReleaseIO.releaseIOHooksBeforeTag.key.label,
-        ReleaseIO.releaseIOHooksAfterTag.key.label,
-        ReleaseIO.releaseIOHooksBeforePublish.key.label,
-        ReleaseIO.releaseIOHooksAfterPublish.key.label,
-        ReleaseIO.releaseIOHooksBeforeNextVersionWrite.key.label,
-        ReleaseIO.releaseIOHooksAfterNextVersionWrite.key.label,
-        ReleaseIO.releaseIOHooksBeforeNextCommit.key.label,
-        ReleaseIO.releaseIOHooksAfterNextCommit.key.label,
-        ReleaseIO.releaseIOHooksBeforePush.key.label,
-        ReleaseIO.releaseIOHooksAfterPush.key.label
+        ReleasePluginIO.autoImport.releaseIOPolicyEnableSnapshotDependenciesCheck.key.label,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnableRunClean.key.label,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnableRunTests.key.label,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnableTagging.key.label,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish.key.label,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeReleaseVersionWrite.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseVersionWrite.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeReleaseCommit.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseCommit.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeTag.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterTag.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforePublish.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterPublish.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeNextVersionWrite.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterNextVersionWrite.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeNextCommit.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterNextCommit.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforePush.key.label,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterPush.key.label
       ).sorted
     )
   }

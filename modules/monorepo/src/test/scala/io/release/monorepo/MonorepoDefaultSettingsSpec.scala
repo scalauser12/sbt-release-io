@@ -7,11 +7,25 @@ class MonorepoDefaultSettingsSpec extends FunSuite {
   test("pluginDefaultSettings include representative monorepo defaults") {
     val labels = MonorepoDefaultSettings.pluginDefaultSettings.map(_.key.key.label).toSet
 
-    assert(labels.contains(MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild.key.label))
-    assert(labels.contains(MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish.key.label))
-    assert(labels.contains(MonorepoReleaseIO.releaseIOMonorepoSelectionProjects.key.label))
-    assert(labels.contains(MonorepoReleaseIO.releaseIOMonorepoVersioningFile.key.label))
-    assert(labels.contains(MonorepoReleaseIO.releaseIOMonorepoPublishChecks.key.label))
+    assert(
+      labels.contains(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild.key.label
+      )
+    )
+    assert(
+      labels.contains(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnablePublish.key.label
+      )
+    )
+    assert(
+      labels.contains(MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects.key.label)
+    )
+    assert(
+      labels.contains(MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile.key.label)
+    )
+    assert(
+      labels.contains(MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks.key.label)
+    )
   }
 
   test("pluginDefaultSettings include each lifecycle-derived default exactly once") {

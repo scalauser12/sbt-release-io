@@ -1,10 +1,10 @@
 package io.release.monorepo.steps
 
 import io.release.internal.ProcessStep
+import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.steps.MonorepoVcsCommitHelpers.commitVersions
-import io.release.monorepo.{MonorepoReleaseIO as MR}
 
 /** Version-related monorepo release steps: inquire, set, commit. */
 private[monorepo] object MonorepoVersionSteps {
@@ -40,7 +40,7 @@ private[monorepo] object MonorepoVersionSteps {
     execute = ctx =>
       commitVersions(
         ctx,
-        MR.releaseIOMonorepoVcsReleaseCommitMessage,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsReleaseCommitMessage,
         { case (releaseVer, _) => releaseVer },
         persistReleaseHash = true
       )
@@ -52,7 +52,7 @@ private[monorepo] object MonorepoVersionSteps {
     execute = ctx =>
       commitVersions(
         ctx,
-        MR.releaseIOMonorepoVcsNextCommitMessage,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsNextCommitMessage,
         { case (_, nextVer) => nextVer },
         persistReleaseHash = false
       )

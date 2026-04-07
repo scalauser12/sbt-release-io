@@ -5,6 +5,7 @@ import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
 import io.release.internal.ProcessStep
+import io.release.internal.PluginEntrypointSupport
 import io.release.monorepo.MonorepoStepAliases.AnyStep
 import io.release.monorepo.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.MonorepoStepAliases.ProjectStep
@@ -20,13 +21,13 @@ import java.io.File
 trait MonorepoReleasePluginSpecSupport {
 
   private val settingsDefaults: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoBehaviorCrossBuild  := false,
-    MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipTests   := false,
-    MonorepoReleaseIO.releaseIOMonorepoBehaviorSkipPublish := false
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild  := false,
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests   := false,
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish := false
   ) ++ MonorepoLifecycle.configDefaultSettings ++ Seq(
-    MonorepoReleaseIO.releaseIOMonorepoPublishChecks           := true,
-    MonorepoReleaseIO.releaseIOMonorepoBehaviorInteractive     := false,
-    _root_.io.release.ReleaseIO.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks             := true,
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive       := false,
+    _root_.io.release.ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
       .DurationInt(60)
       .seconds
   )
@@ -88,6 +89,29 @@ trait MonorepoReleasePluginSpecSupport {
   }
 
   protected object InheritedBehaviorOverridePlugin extends BaseBehaviorOverridePlugin
+
+  protected object BaseProjectSettingsPlugin extends MonorepoReleasePluginLike[Unit] {
+    override def trigger = noTrigger
+
+    override protected def commandName = "releaseMonorepoBaseSettings"
+
+    override def resource: Resource[IO, Unit] = Resource.unit
+
+    override lazy val projectSettings: Seq[Setting[?]] =
+      PluginEntrypointSupport.pluginSettings(
+        MonorepoDefaultSettings.pluginDefaultSettings,
+        PluginEntrypointSupport.commandSetting(commandName)(
+          monorepoParser,
+          (state, tokens) => handleMonorepoCommandTokens(state, tokens)
+        )
+      ) ++ Seq(
+        releaseIOMonorepoHooksAfterSelection += MonorepoGlobalHookIO.action(
+          "base-after-selection"
+        )(_ => IO.unit)
+      )
+
+    def settingsForTests: Seq[Setting[?]] = projectSettings
+  }
 
   protected def resourceAwareHookPlugin(
       observed: Ref[IO, List[String]]

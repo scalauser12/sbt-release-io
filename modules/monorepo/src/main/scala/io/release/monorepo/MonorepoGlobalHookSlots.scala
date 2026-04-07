@@ -42,63 +42,63 @@ private[release] object MonorepoGlobalHookSlots {
 
   val afterCleanCheckHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterCleanCheck,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterCleanCheck,
       get = _.afterCleanCheckHooks,
       updated = (config, hooks) => config.copy(afterCleanCheckHooks = hooks)
     )
 
   val beforeSelectionHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection,
       get = _.beforeSelectionHooks,
       updated = (config, hooks) => config.copy(beforeSelectionHooks = hooks)
     )
 
   val afterSelectionHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection,
       get = _.afterSelectionHooks,
       updated = (config, hooks) => config.copy(afterSelectionHooks = hooks)
     )
 
   val beforeReleaseCommitHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseCommit,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeReleaseCommit,
       get = _.beforeReleaseCommitHooks,
       updated = (config, hooks) => config.copy(beforeReleaseCommitHooks = hooks)
     )
 
   val afterReleaseCommitHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseCommit,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterReleaseCommit,
       get = _.afterReleaseCommitHooks,
       updated = (config, hooks) => config.copy(afterReleaseCommitHooks = hooks)
     )
 
   val beforeNextCommitHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextCommit,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeNextCommit,
       get = _.beforeNextCommitHooks,
       updated = (config, hooks) => config.copy(beforeNextCommitHooks = hooks)
     )
 
   val afterNextCommitHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterNextCommit,
       get = _.afterNextCommitHooks,
       updated = (config, hooks) => config.copy(afterNextCommitHooks = hooks)
     )
 
   val beforePushHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforePush,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePush,
       get = _.beforePushHooks,
       updated = (config, hooks) => config.copy(beforePushHooks = hooks)
     )
 
   val afterPushHooks: MonorepoGlobalHookSlot =
     MonorepoGlobalHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterPush,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPush,
       get = _.afterPushHooks,
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
     )

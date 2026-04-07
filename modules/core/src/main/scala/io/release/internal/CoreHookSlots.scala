@@ -3,7 +3,7 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.ReleaseResourceHookIO
 import io.release.ReleaseResourceHooks
 import io.release.steps.PublishSteps
@@ -51,119 +51,119 @@ private[release] object CoreHookSlots {
 
   val afterCleanCheckHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterCleanCheck,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck,
       get = _.afterCleanCheckHooks,
       updated = (config, hooks) => config.copy(afterCleanCheckHooks = hooks)
     )
 
   val beforeVersionResolutionHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforeVersionResolution,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution,
       get = _.beforeVersionResolutionHooks,
       updated = (config, hooks) => config.copy(beforeVersionResolutionHooks = hooks)
     )
 
   val afterVersionResolutionHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterVersionResolution,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution,
       get = _.afterVersionResolutionHooks,
       updated = (config, hooks) => config.copy(afterVersionResolutionHooks = hooks)
     )
 
   val beforeReleaseVersionWriteHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforeReleaseVersionWrite,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforeReleaseVersionWrite,
       get = _.beforeReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeReleaseVersionWriteHooks = hooks)
     )
 
   val afterReleaseVersionWriteHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterReleaseVersionWrite,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseVersionWrite,
       get = _.afterReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterReleaseVersionWriteHooks = hooks)
     )
 
   val beforeReleaseCommitHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforeReleaseCommit,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforeReleaseCommit,
       get = _.beforeReleaseCommitHooks,
       updated = (config, hooks) => config.copy(beforeReleaseCommitHooks = hooks)
     )
 
   val afterReleaseCommitHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterReleaseCommit,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseCommit,
       get = _.afterReleaseCommitHooks,
       updated = (config, hooks) => config.copy(afterReleaseCommitHooks = hooks)
     )
 
   val beforeTagHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforeTag,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforeTag,
       get = _.beforeTagHooks,
       updated = (config, hooks) => config.copy(beforeTagHooks = hooks)
     )
 
   val afterTagHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterTag,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterTag,
       get = _.afterTagHooks,
       updated = (config, hooks) => config.copy(afterTagHooks = hooks)
     )
 
   val beforePublishHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforePublish,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforePublish,
       get = _.beforePublishHooks,
       updated = (config, hooks) => config.copy(beforePublishHooks = hooks)
     )
 
   val afterPublishHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterPublish,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterPublish,
       get = _.afterPublishHooks,
       updated = (config, hooks) => config.copy(afterPublishHooks = hooks)
     )
 
   val beforeNextVersionWriteHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforeNextVersionWrite,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforeNextVersionWrite,
       get = _.beforeNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeNextVersionWriteHooks = hooks)
     )
 
   val afterNextVersionWriteHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterNextVersionWrite,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterNextVersionWrite,
       get = _.afterNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterNextVersionWriteHooks = hooks)
     )
 
   val beforeNextCommitHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforeNextCommit,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforeNextCommit,
       get = _.beforeNextCommitHooks,
       updated = (config, hooks) => config.copy(beforeNextCommitHooks = hooks)
     )
 
   val afterNextCommitHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterNextCommit,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterNextCommit,
       get = _.afterNextCommitHooks,
       updated = (config, hooks) => config.copy(afterNextCommitHooks = hooks)
     )
 
   val beforePushHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksBeforePush,
+      key = ReleasePluginIO.autoImport.releaseIOHooksBeforePush,
       get = _.beforePushHooks,
       updated = (config, hooks) => config.copy(beforePushHooks = hooks)
     )
 
   val afterPushHooks: CoreHookSlot =
     CoreHookSlot(
-      key = ReleaseIO.releaseIOHooksAfterPush,
+      key = ReleasePluginIO.autoImport.releaseIOHooksAfterPush,
       get = _.afterPushHooks,
       updated = (config, hooks) => config.copy(afterPushHooks = hooks)
     )

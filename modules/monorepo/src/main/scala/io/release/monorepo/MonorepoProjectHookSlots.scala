@@ -46,70 +46,70 @@ private[release] object MonorepoProjectHookSlots {
 
   val beforeVersionResolutionHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeVersionResolution,
       get = _.beforeVersionResolutionHooks,
       updated = (config, hooks) => config.copy(beforeVersionResolutionHooks = hooks)
     )
 
   val afterVersionResolutionHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterVersionResolution,
       get = _.afterVersionResolutionHooks,
       updated = (config, hooks) => config.copy(afterVersionResolutionHooks = hooks)
     )
 
   val beforeReleaseVersionWriteHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeReleaseVersionWrite,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeReleaseVersionWrite,
       get = _.beforeReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeReleaseVersionWriteHooks = hooks)
     )
 
   val afterReleaseVersionWriteHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterReleaseVersionWrite,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterReleaseVersionWrite,
       get = _.afterReleaseVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterReleaseVersionWriteHooks = hooks)
     )
 
   val beforeTagHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeTag,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeTag,
       get = _.beforeTagHooks,
       updated = (config, hooks) => config.copy(beforeTagHooks = hooks)
     )
 
   val afterTagHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterTag,
       get = _.afterTagHooks,
       updated = (config, hooks) => config.copy(afterTagHooks = hooks)
     )
 
   val beforePublishHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforePublish,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePublish,
       get = _.beforePublishHooks,
       updated = (config, hooks) => config.copy(beforePublishHooks = hooks)
     )
 
   val afterPublishHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterPublish,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPublish,
       get = _.afterPublishHooks,
       updated = (config, hooks) => config.copy(afterPublishHooks = hooks)
     )
 
   val beforeNextVersionWriteHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksBeforeNextVersionWrite,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeNextVersionWrite,
       get = _.beforeNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(beforeNextVersionWriteHooks = hooks)
     )
 
   val afterNextVersionWriteHooks: MonorepoProjectHookSlot =
     MonorepoProjectHookSlot(
-      key = MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite,
+      key = MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterNextVersionWrite,
       get = _.afterNextVersionWriteHooks,
       updated = (config, hooks) => config.copy(afterNextVersionWriteHooks = hooks)
     )

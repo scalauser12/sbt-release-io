@@ -133,6 +133,15 @@ as an HTTP client. The supported extension points are `monorepoResourceHooks` pl
 protected behavior hooks `crossBuildEnabled`, `skipTestsEnabled`, `skipPublishEnabled`,
 and `interactiveEnabled`.
 
+For new `.scala` sources, prefer the plugin auto-import explicitly:
+
+```scala
+import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
+```
+
+Existing Scala build code can continue to import or mix in `MonorepoReleaseIO` while
+migrating, but `MonorepoReleaseIO` is now a deprecated compatibility shim.
+
 ```scala
 // project/MyMonorepoRelease.scala
 import sbt.*
@@ -181,10 +190,14 @@ Notes:
 - protected behavior hooks default to the corresponding `releaseIOMonorepoBehavior*`
   settings and are intended for custom plugin authors, not ordinary `build.sbt`
   customization
-- custom monorepo plugins should not define `object autoImport`; reuse the keys from
-  `MonorepoReleasePlugin`
+- custom monorepo plugins already inherit `autoImport`; do not add your own
+  `object autoImport` unless you intentionally want a different public surface
 
 ## Older API renames
+
+Scala-source migration note: prefer `MonorepoReleasePlugin.autoImport` in new `.scala`
+sources. Older Scala build code that imports or mixes in `MonorepoReleaseIO` still works
+during migration, but `MonorepoReleaseIO` is deprecated and should not be used for new code.
 
 When updating older builds or plugins:
 

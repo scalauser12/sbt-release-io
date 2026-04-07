@@ -3,8 +3,8 @@ package io.release.internal
 import cats.effect.IO
 import io.release.ReleaseCtx
 import io.release.ReleaseCtxOps
-import io.release.ReleaseIO
 import io.release.ReleaseKeys
+import io.release.ReleaseManifestMetadataSupport
 import io.release.VcsOps
 import sbt.ProjectRef
 import sbt.State
@@ -15,7 +15,10 @@ private[release] object CommandRuntimeSupport {
       state: State,
       projectRefs: Seq[ProjectRef] = Nil
   ): State =
-    ReleaseIO.clearReleaseManifestMetadata(state.remove(ReleaseKeys.versions), projectRefs)
+    ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
+      state.remove(ReleaseKeys.versions),
+      projectRefs
+    )
 
   def preparePushIfNeeded[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,

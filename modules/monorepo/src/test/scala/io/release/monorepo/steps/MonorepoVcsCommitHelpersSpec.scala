@@ -133,7 +133,7 @@ class MonorepoVcsCommitHelpersSpec extends CatsEffectSuite {
       repo,
       Seq(
         Project("root", repo).settings(
-          io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true
         )
       ),
       currentProjectId = Some("root")

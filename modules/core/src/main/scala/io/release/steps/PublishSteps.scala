@@ -3,8 +3,8 @@ package io.release.steps
 import cats.effect.IO
 import io.release.CleanCompat
 import io.release.ReleaseContext
-import io.release.ReleaseIO.releaseIOPublishAction
-import io.release.ReleaseIO.releaseIOPublishChecks
+import io.release.ReleasePluginIO.autoImport.releaseIOPublishAction
+import io.release.ReleasePluginIO.autoImport.releaseIOPublishChecks
 import io.release.ReleaseIOCompat
 import io.release.internal.CoreStepAliases.Step
 import io.release.internal.DecisionResolver

@@ -1,6 +1,7 @@
 package io.release.monorepo.steps
 
-import io.release.{ReleaseIO, ReleaseIOCompat}
+import io.release.ReleasePluginIO
+import io.release.ReleaseIOCompat
 import sjsonnew.BasicJsonProtocol
 import sbt.Keys.*
 import sbt.{Setting, *}
@@ -45,20 +46,18 @@ private[monorepo] object MonorepoStepTestCompat:
       }
       .updateState { (state: State, _: Unit) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
 
   def failureCommandVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleaseIO.releaseIOVersioningReleaseVersion := Def.uncached {
+    project / ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>
           state.copy(
-            remainingCommands =
-              SbtCompat.FailureCommand :: state.remainingCommands
+            remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value
@@ -68,13 +67,12 @@ private[monorepo] object MonorepoStepTestCompat:
     }
 
   def failureCommandNextVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleaseIO.releaseIOVersioningNextVersion := Def.uncached {
+    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>
           state.copy(
-            remainingCommands =
-              SbtCompat.FailureCommand :: state.remainingCommands
+            remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
           )
         }
         .value
@@ -84,11 +82,11 @@ private[monorepo] object MonorepoStepTestCompat:
     }
 
   def stateMutationNextVersionTaskSetting(
-    project: ProjectRef,
-    key: AttributeKey[String],
-    value: String
+      project: ProjectRef,
+      key: AttributeKey[String],
+      value: String
   ): Setting[?] =
-    project / ReleaseIO.releaseIOVersioningNextVersion := Def.uncached {
+    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>

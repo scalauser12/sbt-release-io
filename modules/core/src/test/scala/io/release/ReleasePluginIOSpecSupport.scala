@@ -16,16 +16,18 @@ import java.io.File
 trait ReleasePluginIOSpecSupport {
 
   private val settingsDefaults: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOBehaviorCrossBuild                 := false,
-    ReleaseIO.releaseIOBehaviorSkipPublish                := false,
-    ReleaseIO.releaseIOBehaviorInteractive                := false,
-    ReleaseIO.releaseIODefaultsTagExistsAnswer            := None,
-    ReleaseIO.releaseIODefaultsSnapshotDependenciesAnswer := None,
-    ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer   := None,
-    ReleaseIO.releaseIODefaultsUpstreamBehindAnswer       := None,
-    ReleaseIO.releaseIODefaultsPushAnswer                 := None
+    ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild                 := false,
+    ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish                := false,
+    ReleasePluginIO.autoImport.releaseIOBehaviorInteractive                := false,
+    ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer            := None,
+    ReleasePluginIO.autoImport.releaseIODefaultsSnapshotDependenciesAnswer := None,
+    ReleasePluginIO.autoImport.releaseIODefaultsRemoteCheckFailureAnswer   := None,
+    ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer       := None,
+    ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer                 := None
   ) ++ CoreLifecycle.configDefaultSettings ++ Seq(
-    ReleaseIO.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(60).seconds
+    ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
+      .DurationInt(60)
+      .seconds
   )
 
   protected final class LoadedState(
@@ -75,7 +77,7 @@ trait ReleasePluginIOSpecSupport {
 
     override lazy val projectSettings: Seq[Setting[?]] =
       baseReleaseSettings ++ Seq(
-        ReleaseIO.releaseIOHooksBeforeTag += ReleaseHookIO.action("base-before-tag")(_ => IO.unit)
+        releaseIOHooksBeforeTag += ReleaseHookIO.action("base-before-tag")(_ => IO.unit)
       )
 
     def settingsForTests: Seq[Setting[?]] = projectSettings

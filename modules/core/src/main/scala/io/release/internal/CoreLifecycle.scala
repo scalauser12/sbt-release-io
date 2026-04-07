@@ -2,7 +2,7 @@ package io.release.internal
 
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.steps.ReleaseSteps
 import sbt.*
 
@@ -46,42 +46,42 @@ private[release] object CorePolicySlots {
 
   val enableSnapshotDependenciesCheck: CorePolicySlot =
     CorePolicySlot(
-      key = ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck,
+      key = ReleasePluginIO.autoImport.releaseIOPolicyEnableSnapshotDependenciesCheck,
       get = _.enableSnapshotDependenciesCheck,
       updated = (config, value) => config.copy(enableSnapshotDependenciesCheck = value)
     )
 
   val enableRunClean: CorePolicySlot =
     CorePolicySlot(
-      key = ReleaseIO.releaseIOPolicyEnableRunClean,
+      key = ReleasePluginIO.autoImport.releaseIOPolicyEnableRunClean,
       get = _.enableRunClean,
       updated = (config, value) => config.copy(enableRunClean = value)
     )
 
   val enableRunTests: CorePolicySlot =
     CorePolicySlot(
-      key = ReleaseIO.releaseIOPolicyEnableRunTests,
+      key = ReleasePluginIO.autoImport.releaseIOPolicyEnableRunTests,
       get = _.enableRunTests,
       updated = (config, value) => config.copy(enableRunTests = value)
     )
 
   val enableTagging: CorePolicySlot =
     CorePolicySlot(
-      key = ReleaseIO.releaseIOPolicyEnableTagging,
+      key = ReleasePluginIO.autoImport.releaseIOPolicyEnableTagging,
       get = _.enableTagging,
       updated = (config, value) => config.copy(enableTagging = value)
     )
 
   val enablePublish: CorePolicySlot =
     CorePolicySlot(
-      key = ReleaseIO.releaseIOPolicyEnablePublish,
+      key = ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish,
       get = _.enablePublish,
       updated = (config, value) => config.copy(enablePublish = value)
     )
 
   val enablePush: CorePolicySlot =
     CorePolicySlot(
-      key = ReleaseIO.releaseIOPolicyEnablePush,
+      key = ReleasePluginIO.autoImport.releaseIOPolicyEnablePush,
       get = _.enablePush,
       updated = (config, value) => config.copy(enablePush = value)
     )

@@ -2,12 +2,11 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseIO
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.MonorepoVersionFiles
 import io.release.monorepo.ProjectReleaseInfo
@@ -95,7 +94,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     twoProjectTagContextResource.use { case (_, coreProject, apiProject, ctx) =>
       val seededState = TestSupport.appendSessionSettings(
         ctx.state,
-        ReleaseIO.releaseManifestHashSettings(
+        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
           Seq(coreProject.ref, apiProject.ref),
           "release-hash"
         )
@@ -448,7 +447,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private def gitRepoWithLoadedStateResource(
       rootSettings: Seq[Def.Setting[?]] = Seq(
-        io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false
+        io.release.ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
       )
   ): Resource[IO, (File, State)] =
     gitRepoWithVcsResource { repo =>
@@ -472,13 +471,13 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             repo,
             aggregateIds = Seq("core"),
             settings = Seq(
-              MonorepoReleaseIO.releaseIOMonorepoVcsTagName    := ((name: String, ver: String) =>
-                s"$name-v$ver"
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName    := (
+                (name: String, ver: String) => s"$name-v$ver"
               ),
-              MonorepoReleaseIO.releaseIOMonorepoVcsTagComment := ((name: String, ver: String) =>
-                s"Release $name $ver"
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment := (
+                (name: String, ver: String) => s"Release $name $ver"
               ),
-              io.release.ReleaseIO.releaseIOVcsSign            := false
+              io.release.ReleasePluginIO.autoImport.releaseIOVcsSign          := false
             )
           ),
           versionedProject(coreBase, "core")
@@ -523,13 +522,13 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             repo,
             aggregateIds = Seq("core", "api"),
             settings = Seq(
-              MonorepoReleaseIO.releaseIOMonorepoVcsTagName    := ((name: String, ver: String) =>
-                s"$name-v$ver"
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName    := (
+                (name: String, ver: String) => s"$name-v$ver"
               ),
-              MonorepoReleaseIO.releaseIOMonorepoVcsTagComment := ((name: String, ver: String) =>
-                s"Release $name $ver"
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment := (
+                (name: String, ver: String) => s"Release $name $ver"
               ),
-              io.release.ReleaseIO.releaseIOVcsSign            := false
+              io.release.ReleasePluginIO.autoImport.releaseIOVcsSign          := false
             )
           ),
           versionedProject(coreBase, "core"),
@@ -665,12 +664,15 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
     aggregated.settings(
       (
-        MonorepoReleaseIO.monorepoDefaultSettings ++
+        _root_.io.release.monorepo.MonorepoDefaultSettings.pluginDefaultSettings ++
           Seq(
-            io.release.ReleaseIO.releaseIOVersioningFile          := new File(repo, "version.sbt"),
-            io.release.ReleaseIO.releaseIOVcsSign                 := false,
-            io.release.ReleaseIO.releaseIOVcsSignOff              := false,
-            io.release.ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false
+            io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile          := new File(
+              repo,
+              "version.sbt"
+            ),
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsSign                 := false,
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsSignOff              := false,
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
           ) ++
           settings
       )*
@@ -724,13 +726,14 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private def lateBoundVersionSettings(repo: File): Seq[Def.Setting[?]] =
     Seq(
-      MonorepoReleaseIO.releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, _: State) =>
-        new File(new File(repo, ref.project), "version.properties")
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile         := {
+        (ref: ProjectRef, _: State) =>
+          new File(new File(repo, ref.project), "version.properties")
       },
-      MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion  := { file =>
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningReadVersion  := { file =>
         IO.blocking(sbt.IO.read(file).trim.stripPrefix("version="))
       },
-      MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents := { (_, version) =>
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFileContents := { (_, version) =>
         IO.pure(s"version=$version\n")
       }
     )
@@ -740,18 +743,18 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       nonce: String
   ): Seq[sbt.Setting[?]] =
     Seq(
-      fixtureNonce                           := nonce,
-      packageOptions                         := {
+      fixtureNonce                                                                  := nonce,
+      packageOptions                                                                := {
         val _ = fixtureNonce.value
         basePackageOptions
       },
-      ReleaseIO.releaseIOInternalReleaseHash := None,
-      ReleaseIO.releaseIOInternalReleaseTag  := None,
+      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
+      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
       packageOptions ++= {
         val _ = fixtureNonce.value
-        ReleaseIO.releaseManifestPackageOptions(
-          ReleaseIO.releaseIOInternalReleaseHash.value,
-          ReleaseIO.releaseIOInternalReleaseTag.value
+        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
+          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
         )
       }
     )

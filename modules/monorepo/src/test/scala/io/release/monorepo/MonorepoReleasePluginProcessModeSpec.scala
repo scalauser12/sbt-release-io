@@ -12,7 +12,7 @@ class MonorepoReleasePluginProcessModeSpec
 
   test("resolveProcessMode compiles plain hooks for the default monorepo plugin") {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection +=
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 
@@ -29,10 +29,10 @@ class MonorepoReleasePluginProcessModeSpec
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val plugin                    = resourceAwareHookPlugin(observed)
       val settings: Seq[Setting[?]] = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection +=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection +=
           MonorepoGlobalHookIO
             .action("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
-        MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag +=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterTag +=
           MonorepoProjectHookIO.action("plain-after-tag")((_, project) =>
             observed.update(_ :+ s"plain-project-execute:${project.name}")
           )
@@ -69,7 +69,7 @@ class MonorepoReleasePluginProcessModeSpec
     "resolveProcessMode keeps a direct custom plugin with unrelated overrides on compiled hook mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection +=
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 
@@ -85,7 +85,7 @@ class MonorepoReleasePluginProcessModeSpec
     "resolveProcessMode keeps an inherited custom plugin with unrelated overrides on compiled hook mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection +=
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 
@@ -160,7 +160,9 @@ class MonorepoReleasePluginProcessModeSpec
       "monorepo-plugin-throwing-hooks",
       MonorepoReleasePlugin,
       Seq(
-        MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection := throwingHookSeq("hook boom")
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection := throwingHookSeq(
+          "hook boom"
+        )
       )
     ).use { loaded =>
       interceptMessageIO[RuntimeException]("hook boom") {
@@ -172,6 +174,19 @@ class MonorepoReleasePluginProcessModeSpec
   test("monorepo plugin projectSettings include command registration plus the full default block") {
     IO {
       val labels = MonorepoReleasePlugin.projectSettings.map(_.key.key.label).toSet
+
+      assert(labels.contains("commands"))
+      assert(
+        MonorepoDefaultSettings.pluginDefaultSettings
+          .map(_.key.key.label)
+          .forall(labels.contains)
+      )
+    }
+  }
+
+  test("custom monorepo plugins can reference inherited hook keys in projectSettings") {
+    IO {
+      val labels = BaseProjectSettingsPlugin.settingsForTests.map(_.key.key.label).toSet
 
       assert(labels.contains("commands"))
       assert(

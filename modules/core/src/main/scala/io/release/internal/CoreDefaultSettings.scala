@@ -1,9 +1,10 @@
 package io.release.internal
 
-import _root_.io.release.ReleaseIO
-import _root_.io.release.ReleaseIOCompat
-import _root_.io.release.steps.VersionSteps
-import _root_.io.release.version.Version
+import io.release.ReleaseIOCompat
+import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleasePluginIO.autoImport.*
+import io.release.steps.VersionSteps
+import io.release.version.Version
 import sbt.*
 import sbt.Keys.*
 
@@ -18,36 +19,36 @@ private[release] object CoreDefaultSettings {
     ).flatten
 
   private lazy val behaviorAndDecisionDefaults: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOBehaviorCrossBuild                 := false,
-    ReleaseIO.releaseIOBehaviorSkipPublish                := false,
-    ReleaseIO.releaseIOBehaviorInteractive                := false,
-    ReleaseIO.releaseIODefaultsTagExistsAnswer            := None,
-    ReleaseIO.releaseIODefaultsSnapshotDependenciesAnswer := None,
-    ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer   := None,
-    ReleaseIO.releaseIODefaultsUpstreamBehindAnswer       := None,
-    ReleaseIO.releaseIODefaultsPushAnswer                 := None
+    releaseIOBehaviorCrossBuild                 := false,
+    releaseIOBehaviorSkipPublish                := false,
+    releaseIOBehaviorInteractive                := false,
+    releaseIODefaultsTagExistsAnswer            := None,
+    releaseIODefaultsSnapshotDependenciesAnswer := None,
+    releaseIODefaultsRemoteCheckFailureAnswer   := None,
+    releaseIODefaultsUpstreamBehindAnswer       := None,
+    releaseIODefaultsPushAnswer                 := None
   )
 
   private lazy val versioningAndRuntimeDefaults: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
-    ReleaseIO.releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
-      ReleaseIO.releaseIOVersioningUseGlobal.value
+    releaseIOVersioningReadVersion                              := VersionSteps.defaultReadVersion,
+    releaseIOVersioningFileContents                             := VersionSteps.defaultWriteVersion(
+      releaseIOVersioningUseGlobal.value
     ),
-    ReleaseIO.releaseIOVersioningFile           := baseDirectory.value / "version.sbt",
-    ReleaseIO.releaseIOVersioningUseGlobal      := true,
-    ReleaseIO.releaseIOInternalReleaseHash      := None,
-    ReleaseIO.releaseIOInternalReleaseTag       := None,
-    packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-      ReleaseIO.releaseIOInternalReleaseHash.value,
-      ReleaseIO.releaseIOInternalReleaseTag.value
+    releaseIOVersioningFile                                     := baseDirectory.value / "version.sbt",
+    releaseIOVersioningUseGlobal                                := true,
+    ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
+    ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
+    packageOptions ++= ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+      ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
+      ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
     ),
-    ReleaseIO.releaseIORuntimeCurrentVersion    := {
-      if (ReleaseIO.releaseIOVersioningUseGlobal.value) (ThisBuild / version).value
+    releaseIORuntimeCurrentVersion                              := {
+      if (releaseIOVersioningUseGlobal.value) (ThisBuild / version).value
       else version.value
     },
-    ReleaseIO.releaseIOVersioningBump           := Version.Bump.default,
-    ReleaseIO.releaseIOVersioningReleaseVersion := {
-      val bump = ReleaseIO.releaseIOVersioningBump.value
+    releaseIOVersioningBump                                     := Version.Bump.default,
+    releaseIOVersioningReleaseVersion                           := {
+      val bump = releaseIOVersioningBump.value
       ver =>
         Version(ver)
           .map { v =>
@@ -65,8 +66,8 @@ private[release] object CoreDefaultSettings {
             throw new IllegalArgumentException(s"Cannot parse version: $ver")
           )
     },
-    ReleaseIO.releaseIOVersioningNextVersion    := {
-      val bump = ReleaseIO.releaseIOVersioningBump.value
+    releaseIOVersioningNextVersion                              := {
+      val bump = releaseIOVersioningBump.value
       ver =>
         Version(ver)
           .map(_.bump(bump).asSnapshot.render)
@@ -78,15 +79,15 @@ private[release] object CoreDefaultSettings {
   )
 
   private lazy val vcsAndPublishDefaults: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOVcsSign                 := false,
-    ReleaseIO.releaseIOVcsSignOff              := false,
-    ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false,
-    ReleaseIO.releaseIOVcsRemoteCheckTimeout   := scala.concurrent.duration.DurationInt(60).seconds,
-    ReleaseIO.releaseIOVcsTagName              := s"v${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
-    ReleaseIO.releaseIOVcsTagComment           := s"Releasing ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
-    ReleaseIO.releaseIOVcsReleaseCommitMessage := s"Setting release version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
-    ReleaseIO.releaseIOVcsNextCommitMessage    := s"Setting next version to ${ReleaseIO.releaseIORuntimeCurrentVersion.value}",
-    ReleaseIO.releaseIOPublishChecks           := true,
-    ReleaseIO.releaseIOPublishAction           := publish.value
+    releaseIOVcsSign                 := false,
+    releaseIOVcsSignOff              := false,
+    releaseIOVcsIgnoreUntrackedFiles := false,
+    releaseIOVcsRemoteCheckTimeout   := scala.concurrent.duration.DurationInt(60).seconds,
+    releaseIOVcsTagName              := s"v${releaseIORuntimeCurrentVersion.value}",
+    releaseIOVcsTagComment           := s"Releasing ${releaseIORuntimeCurrentVersion.value}",
+    releaseIOVcsReleaseCommitMessage := s"Setting release version to ${releaseIORuntimeCurrentVersion.value}",
+    releaseIOVcsNextCommitMessage    := s"Setting next version to ${releaseIORuntimeCurrentVersion.value}",
+    releaseIOPublishChecks           := true,
+    releaseIOPublishAction           := publish.value
   )
 }

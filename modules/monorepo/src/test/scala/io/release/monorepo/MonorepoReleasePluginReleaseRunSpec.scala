@@ -15,10 +15,10 @@ class MonorepoReleasePluginReleaseRunSpec
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val plugin                    = resourceAwareHookPlugin(observed)
       val settings: Seq[Setting[?]] = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection +=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection +=
           MonorepoGlobalHookIO
             .action("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
-        MonorepoReleaseIO.releaseIOMonorepoHooksAfterTag +=
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterTag +=
           MonorepoProjectHookIO.action("plain-after-tag")((_, project) =>
             observed.update(_ :+ s"plain-project-execute:${project.name}")
           )
@@ -64,7 +64,7 @@ class MonorepoReleasePluginReleaseRunSpec
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val plugin                    = resourceAwareHookPlugin(observed)
       val settings: Seq[Setting[?]] = Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPolicyEnableTagging := false
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnableTagging := false
       )
 
       stateResource("monorepo-plugin-resource-disabled-phase", plugin, settings).use { loaded =>
@@ -83,7 +83,7 @@ class MonorepoReleasePluginReleaseRunSpec
 
   test("resolveReleaseRun keeps custom monorepo plugins on the compiled hook path") {
     val settings: Seq[Setting[?]] = Seq(
-      MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection +=
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
         MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
     )
 

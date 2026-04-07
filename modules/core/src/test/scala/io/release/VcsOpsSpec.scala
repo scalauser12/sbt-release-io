@@ -104,7 +104,10 @@ class VcsOpsSpec extends CatsEffectSuite {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
         ReleaseTestSupport
-          .gitRootState(repo, Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true))
+          .gitRootState(
+            repo,
+            Seq(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
+          )
       ).flatMap { state =>
         VcsOps.detectVcs(state).map { vcs =>
           assertEquals(vcs.commandName, "git")
@@ -117,7 +120,10 @@ class VcsOpsSpec extends CatsEffectSuite {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
         ReleaseTestSupport
-          .gitRootState(repo, Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true))
+          .gitRootState(
+            repo,
+            Seq(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
+          )
       ).flatMap { state =>
         VcsOps.checkCleanWorkingDir(state).map { result =>
           assert(result.currentHash.nonEmpty)
@@ -131,7 +137,10 @@ class VcsOpsSpec extends CatsEffectSuite {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, _) =>
       IO.blocking(
         ReleaseTestSupport
-          .gitRootState(repo, Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := true))
+          .gitRootState(
+            repo,
+            Seq(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
+          )
       ).flatMap { state =>
         for {
           vcs    <- VcsOps.detectVcs(state)
@@ -300,7 +309,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
         val logged = VcsOpsSpec.bufferedState(
           dir,
-          Seq(ReleaseIO.releaseIOVcsRemoteCheckTimeout := 5.millis)
+          Seq(ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := 5.millis)
         )
         val ctx    = VcsOpsSpec.promptContext(logged.state, interactive = false, useDefaults = false)
 
@@ -330,7 +339,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
         val logged = VcsOpsSpec.bufferedState(
           dir,
-          Seq(ReleaseIO.releaseIOVcsRemoteCheckTimeout := 5.millis)
+          Seq(ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := 5.millis)
         )
         val ctx    =
           VcsOpsSpec.promptContext(logged.state, interactive = false, useDefaults = false)
