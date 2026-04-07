@@ -35,7 +35,9 @@ releaseIOBehaviorCrossBuild := true
 // Runtime flag: keep the publish step available, but skip it when the release runs
 releaseIOBehaviorSkipPublish := true
 
-// Enable interactive prompts (disabled by default)
+// Interactive prompts are disabled by default (unlike sbt-release, which prompts by
+// default). Enable to get the guided sbt-release-style experience for version
+// confirmation and push decisions.
 releaseIOBehaviorInteractive := true
 
 // Fail the remote reachability check if it hangs for too long

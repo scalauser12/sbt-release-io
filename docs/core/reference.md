@@ -32,6 +32,19 @@ and the grouped names are now the canonical sbt key labels.
 | `releaseIOBeforeTagHooks` | `releaseIOHooksBeforeTag` |
 | `releaseIOAfterPublishHooks` | `releaseIOHooksAfterPublish` |
 
+> **Coming from sbt-release?** The original plugin enables interactive prompts by default.
+> This plugin defaults to `releaseIOBehaviorInteractive := false` — decision points that
+> have no configured answer **fail fast** instead of prompting.
+>
+> You have two options:
+> - `releaseIOBehaviorInteractive := true` — restore the guided sbt-release-style
+>   experience where the plugin prompts for versions, confirmation, and push decisions.
+> - `with-defaults` CLI flag — auto-accept safe built-in defaults without prompting
+>   and without enabling interactive mode. Useful for CI.
+>
+> The two can be combined: when both are active, `with-defaults` pre-answers prompts
+> that would otherwise appear.
+
 ## Behavior settings
 
 | Setting | Type | Default | Description |
