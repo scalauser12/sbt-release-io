@@ -90,7 +90,6 @@ private[release] object CorePreflight {
       s"  - ${CheckModeOutput.CrossBuildValidationNote}",
       "",
       "First steps:",
-      s"  - Run `$commandName help` to review flags and examples",
       s"  - Run `$commandName check with-defaults ...` to validate locally before a real release",
       "",
       "Flags:",
