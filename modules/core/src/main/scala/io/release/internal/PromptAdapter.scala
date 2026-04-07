@@ -29,7 +29,7 @@ private[release] object PromptAdapter {
       context: String
   ): IO[(C, String)] =
     readLine(ctx).flatMap {
-      case (_, None)              =>
+      case (_, None)              => // updated prompt state lost; error terminates flow
         IO.raiseError(
           new IllegalStateException(s"Standard input closed while waiting for $context.")
         )
@@ -79,7 +79,7 @@ private[release] object PromptAdapter {
         parseYesNoInput(rawInput, defaultYes) match {
           case Some(answer) => IO.pure((nextCtx, Some(answer)))
           case None         =>
-            IO.print("Please answer 'y' or 'n' (or press Enter for the default).\n") *>
+            IO.println("Please answer 'y' or 'n' (or press Enter for the default).") *>
               promptYesNoLoop(nextCtx, prompt, defaultYes)
         }
     }
@@ -91,30 +91,30 @@ private[release] object PromptAdapter {
       else PromptState(currentIn = Some(currentIn), skipLeadingLf = false)
     val buffer       = new ByteArrayOutputStream()
 
-    @tailrec def loop(currentState: PromptState): (PromptState, Option[String]) = {
+    @tailrec def loop(skipLf: Boolean): (PromptState, Option[String]) = {
       val nextByte = currentIn.read()
 
-      if (currentState.skipLeadingLf && nextByte == '\n')
-        loop(currentState.copy(skipLeadingLf = false))
+      if (skipLf && nextByte == '\n') loop(skipLf = false)
       else {
-        val clearedState = currentState.copy(currentIn = Some(currentIn), skipLeadingLf = false)
+        def exitState(skipLeadingLf: Boolean = false) =
+          PromptState(Some(currentIn), skipLeadingLf)
 
         nextByte match {
           case -1   =>
-            if (buffer.size() == 0) (clearedState, None)
-            else (clearedState, Some(decode(buffer)))
+            if (buffer.size() == 0) (exitState(), None)
+            else (exitState(), Some(decode(buffer)))
           case '\n' =>
-            (clearedState, Some(decode(buffer)))
+            (exitState(), Some(decode(buffer)))
           case '\r' =>
-            (clearedState.copy(skipLeadingLf = true), Some(decode(buffer)))
+            (exitState(skipLeadingLf = true), Some(decode(buffer)))
           case byte =>
             buffer.write(byte)
-            loop(clearedState)
+            loop(skipLf = false)
         }
       }
     }
 
-    loop(initialState)
+    loop(initialState.skipLeadingLf)
   }
 
   private def decode(buffer: ByteArrayOutputStream): String =
