@@ -1,6 +1,6 @@
 package io.release.internal
 
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import sbt.{internal as _, *}
 import DecisionDefaultsSupport.renderYesNo
 
@@ -28,14 +28,17 @@ private[release] object ReleaseDecisionDefaults {
     val extracted = Project.extract(state)
 
     ReleaseDecisionDefaults(
-      tagExistsAnswer = extracted.getOpt(ReleaseIO.releaseIODefaultsTagExistsAnswer).flatten,
-      snapshotDependenciesAnswer =
-        extracted.getOpt(ReleaseIO.releaseIODefaultsSnapshotDependenciesAnswer).flatten,
-      remoteCheckFailureAnswer =
-        extracted.getOpt(ReleaseIO.releaseIODefaultsRemoteCheckFailureAnswer).flatten,
+      tagExistsAnswer =
+        extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer).flatten,
+      snapshotDependenciesAnswer = extracted
+        .getOpt(ReleasePluginIO.autoImport.releaseIODefaultsSnapshotDependenciesAnswer)
+        .flatten,
+      remoteCheckFailureAnswer = extracted
+        .getOpt(ReleasePluginIO.autoImport.releaseIODefaultsRemoteCheckFailureAnswer)
+        .flatten,
       upstreamBehindAnswer =
-        extracted.getOpt(ReleaseIO.releaseIODefaultsUpstreamBehindAnswer).flatten,
-      pushAnswer = extracted.getOpt(ReleaseIO.releaseIODefaultsPushAnswer).flatten
+        extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer).flatten,
+      pushAnswer = extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer).flatten
     )
   }
 

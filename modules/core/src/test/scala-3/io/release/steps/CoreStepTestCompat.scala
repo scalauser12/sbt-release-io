@@ -1,6 +1,7 @@
 package io.release.steps
 
-import io.release.{ReleaseIO, ReleaseIOCompat}
+import io.release.ReleasePluginIO
+import io.release.ReleaseIOCompat
 import sjsonnew.BasicJsonProtocol
 import sbt.Keys.*
 import sbt.{Def, Setting, State, *}
@@ -15,14 +16,13 @@ private[steps] object CoreStepTestCompat:
   import TestResultJsonProtocol.given
 
   def failureCommandPublishTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOPublishAction := Def
+    ReleasePluginIO.autoImport.releaseIOPublishAction := Def
       .task[Unit] {
         sbt.IO.write(marker, "ran")
       }
       .updateState { (state: State, _: Unit) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
@@ -36,14 +36,13 @@ private[steps] object CoreStepTestCompat:
       }
       .updateState { (state: State, _: sbt.protocol.testing.TestResult) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
 
   def failureCommandVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVersioningReleaseVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := Def
       .task[String => String] {
         sbt.IO.write(marker, "ran")
         { currentVersion =>
@@ -52,79 +51,72 @@ private[steps] object CoreStepTestCompat:
       }
       .updateState { (state: State, _: String => String) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
 
   def failureCommandNextVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVersioningNextVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def
       .task[String => String] {
         sbt.IO.write(marker, "ran")
-        _ =>
-          "0.2.0-SNAPSHOT"
+        _ => "0.2.0-SNAPSHOT"
       }
       .updateState { (state: State, _: String => String) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
 
   def failureCommandCommitMessageSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsReleaseCommitMessage := Def
+    ReleasePluginIO.autoImport.releaseIOVcsReleaseCommitMessage := Def
       .task[String] {
         sbt.IO.write(marker, "ran")
         "Setting version"
       }
       .updateState { (state: State, _: String) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
 
   def failureCommandNextCommitMessageSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsNextCommitMessage := Def
+    ReleasePluginIO.autoImport.releaseIOVcsNextCommitMessage := Def
       .task[String] {
         sbt.IO.write(marker, "ran")
         "Setting next version"
       }
       .updateState { (state: State, _: String) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
 
   def failureCommandTagNameSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsTagName := Def
+    ReleasePluginIO.autoImport.releaseIOVcsTagName := Def
       .task[String] {
         sbt.IO.write(marker, "ran")
         "v1.0.0"
       }
       .updateState { (state: State, _: String) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value
 
   def failureCommandTagCommentSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsTagComment := Def
+    ReleasePluginIO.autoImport.releaseIOVcsTagComment := Def
       .task[String] {
         sbt.IO.write(marker, "ran")
         "Releasing 1.0.0"
       }
       .updateState { (state: State, _: String) =>
         state.copy(
-          remainingCommands =
-            SbtCompat.FailureCommand :: state.remainingCommands
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
         )
       }
       .value

@@ -3,7 +3,7 @@ package io.release.examples
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO.autoImport.*
 import io.release.ReleasePluginIOLike
 import io.release.ReleaseResourceHookIO
 import io.release.ReleaseResourceHooks
@@ -34,7 +34,7 @@ object CustomStepExamples {
     *
     * Usage in build.sbt:
     * {{{
-    * import io.release.ReleasePluginIO.autoImport._
+    * import io.release.ReleasePluginIO.autoImport.*
     * import io.release.ReleaseHookIO
     * import io.release.examples.CustomStepExamples
     *
@@ -45,15 +45,15 @@ object CustomStepExamples {
     * Run with: `sbt "releaseIO with-defaults"`
     */
   lazy val firstHookSettings: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOPolicyEnablePush := false,
-    ReleaseIO.releaseIOHooksBeforeTag += printBannerHook
+    releaseIOPolicyEnablePush := false,
+    releaseIOHooksBeforeTag += printBannerHook
   )
 
   /** A richer hook-based setup with policy toggles and a few semantic lifecycle hooks.
     *
     * Usage in build.sbt:
     * {{{
-    * import io.release.ReleasePluginIO.autoImport._
+    * import io.release.ReleasePluginIO.autoImport.*
     * import io.release.examples.CustomStepExamples
     *
     * lazy val root = (project in file("."))
@@ -61,11 +61,11 @@ object CustomStepExamples {
     * }}}
     */
   lazy val customHookSettings: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOPolicyEnablePush := false,
-    ReleaseIO.releaseIOHooksAfterCleanCheck += validateBranchHook,
-    ReleaseIO.releaseIOHooksAfterVersionResolution += generateChangelogHook,
-    ReleaseIO.releaseIOHooksAfterTag += optionalNotifyHook,
-    ReleaseIO.releaseIOHooksAfterNextCommit += markReleaseDoneHook
+    releaseIOPolicyEnablePush := false,
+    releaseIOHooksAfterCleanCheck += validateBranchHook,
+    releaseIOHooksAfterVersionResolution += generateChangelogHook,
+    releaseIOHooksAfterTag += optionalNotifyHook,
+    releaseIOHooksAfterNextCommit += markReleaseDoneHook
   )
 
   /** Recommended template for a safe local rehearsal with the compiled built-ins intact.
@@ -85,11 +85,11 @@ object CustomStepExamples {
     * }}}
     */
   lazy val rehearsalSettings: Seq[Setting[?]] = Seq(
-    ReleaseIO.releaseIOPolicyEnablePush     := false,
-    ReleaseIO.releaseIOPolicyEnablePublish  := false,
-    ReleaseIO.releaseIOPolicyEnableRunClean := false,
-    ReleaseIO.releaseIOHooksAfterCleanCheck += validateBranchHook,
-    ReleaseIO.releaseIOHooksBeforeTag += printBannerHook
+    releaseIOPolicyEnablePush     := false,
+    releaseIOPolicyEnablePublish  := false,
+    releaseIOPolicyEnableRunClean := false,
+    releaseIOHooksAfterCleanCheck += validateBranchHook,
+    releaseIOHooksBeforeTag += printBannerHook
   )
 
   val printBannerHook: ReleaseHookIO = ReleaseHookIO.action("print-banner")(_ =>

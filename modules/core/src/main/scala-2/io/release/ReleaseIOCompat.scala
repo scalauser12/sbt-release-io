@@ -15,7 +15,7 @@ object ReleaseIOCompat {
     * In sbt 1, Attributed supports typed AttributeKey[ModuleID] via moduleID.key.
     */
   def snapshotDependenciesSetting: Setting[?] =
-    ReleaseIO.releaseIODiagnosticsSnapshotDependencies := {
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := {
       val modules =
         (Test / Keys.managedClasspath).value.flatMap(_.get(Keys.moduleID.key))
       modules.filter(m => m.isChanging || m.revision.endsWith("-SNAPSHOT"))

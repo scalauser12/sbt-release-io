@@ -111,6 +111,15 @@ releaseIOHooksAfterTag += ReleaseHookIO.action("notify-tagged") { ctx =>
 Use `ReleasePluginIOLike[T]` when release behavior needs one shared resource, such as an
 HTTP client. The supported extension point is `releaseResourceHooks`.
 
+For new `.scala` sources, prefer the plugin auto-import explicitly:
+
+```scala
+import io.release.ReleasePluginIO.autoImport.*
+```
+
+Existing Scala build code can continue to import or mix in `ReleaseIO` while migrating, but
+`ReleaseIO` is now a deprecated compatibility shim.
+
 ```scala
 // project/MyReleasePlugin.scala
 import sbt.*
@@ -163,9 +172,14 @@ Notes:
   (HTTP calls, temp-dir setup, etc.) in `execute`, not `validate`.
 - `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
   resource value, then releases it.
-- custom plugins should not define `object autoImport`; reuse the keys from `ReleasePluginIO`
+- custom plugins already inherit `autoImport`; do not add your own `object autoImport`
+  unless you intentionally want a different public surface
 
 ## Older API renames
+
+Scala-source migration note: prefer `ReleasePluginIO.autoImport` in new `.scala` sources.
+Older Scala build code that imports or mixes in `ReleaseIO` still works during migration,
+but `ReleaseIO` is deprecated and should not be used for new code.
 
 When updating older builds or plugins:
 

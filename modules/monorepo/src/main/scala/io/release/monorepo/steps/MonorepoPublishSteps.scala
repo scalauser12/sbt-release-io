@@ -2,10 +2,10 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import io.release.CleanCompat
-import io.release.ReleaseIO
-import io.release.ReleaseIO.releaseIOInternalReleaseHash
-import io.release.ReleaseIO.releaseIOInternalReleaseTag
-import io.release.ReleaseIO.releaseIOPublishAction
+import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
+import io.release.ReleasePluginIO.autoImport.releaseIOPublishAction
 import io.release.ReleaseIOCompat
 import io.release.internal.DecisionResolver
 import io.release.internal.ProcessStep
@@ -14,7 +14,7 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.SnapshotDependencyTasks
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.MonorepoReleaseIO.releaseIOMonorepoPublishChecks
+import io.release.monorepo.MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks
 import io.release.monorepo.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.MonorepoVersionFiles
 import io.release.monorepo.ProjectReleaseInfo
@@ -120,13 +120,16 @@ private[monorepo] object MonorepoPublishSteps {
                                           preservedSettings ++
                                             Seq(project.ref / version := releaseVersion) ++
                                             fallbackHash.toSeq.flatMap(hash =>
-                                              ReleaseIO.releaseManifestHashSettings(
+                                              ReleaseManifestMetadataSupport.releaseManifestHashSettings(
                                                 Seq(project.ref),
                                                 hash
                                               )
                                             ) ++
                                             releaseTag.toSeq.flatMap(tag =>
-                                              ReleaseIO.releaseManifestTagSettings(project.ref, tag)
+                                              ReleaseManifestMetadataSupport.releaseManifestTagSettings(
+                                                project.ref,
+                                                tag
+                                              )
                                             )
                                         )
                                         ctx.withState(newState)

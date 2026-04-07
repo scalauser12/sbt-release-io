@@ -2,7 +2,7 @@ package io.release.monorepo.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseIO.*
+import io.release.ReleasePluginIO.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
@@ -10,7 +10,7 @@ import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.monorepo.MonorepoComposer
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.SelectionMode
 import io.release.monorepo.steps.MonorepoVersionStepsSpec.VersionFixture
@@ -236,7 +236,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val mutatedState = SbtRuntime.appendWithSession(
           fixture.state,
           Seq(
-            MonorepoReleaseIO.releaseIOMonorepoVersioningFile := {
+            MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
               (_: sbt.ProjectRef, _: sbt.State) =>
                 sharedFile
             }
@@ -284,7 +284,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val countingState = SbtRuntime.appendWithSession(
           fixture.state,
           Seq(
-            MonorepoReleaseIO.releaseIOMonorepoVersioningFile := {
+            MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
               (ref: sbt.ProjectRef, _: sbt.State) =>
                 resolverCalls.incrementAndGet()
                 new File(new File(fixture.dir, ref.project), "version.sbt")

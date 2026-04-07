@@ -1,13 +1,14 @@
 package io.release.monorepo.steps
 
 import cats.effect.IO
-import io.release.ReleaseIO.releaseIOVersioningNextVersion
-import io.release.ReleaseIO.releaseIOVersioningReleaseVersion
+import io.release.ReleasePluginIO.autoImport.releaseIOVersioningNextVersion
+import io.release.ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime
 import io.release.internal.VersionWorkflowSupport
+import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.steps.MonorepoStepHelpers.*
-import io.release.monorepo.{MonorepoReleaseIO as MR, *}
+import io.release.monorepo.*
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -170,9 +171,11 @@ private[monorepo] object MonorepoVersionWorkflow {
     */
   private def validateDistinctVersionFiles(runtime: MonorepoRuntime): IO[Unit] =
     IO.blocking {
-      val entries = runtime.extracted.get(MR.releaseIOMonorepoSelectionProjects).map { ref =>
-        ref.project -> MonorepoVersionFiles.resolve(runtime, ref).getCanonicalPath
-      }
+      val entries = runtime.extracted
+        .get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects)
+        .map { ref =>
+          ref.project -> MonorepoVersionFiles.resolve(runtime, ref).getCanonicalPath
+        }
       val byPath  = entries.groupBy(_._2).filter(_._2.length > 1)
 
       byPath.headOption.map { _ =>

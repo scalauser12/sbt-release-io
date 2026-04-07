@@ -4,8 +4,9 @@ import cats.effect.Deferred
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.ReleaseContext
-import io.release.ReleaseIO
-import io.release.ReleaseIO.*
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
+import io.release.ReleasePluginIO.autoImport.*
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions
 import io.release.TestSupport
@@ -571,10 +572,11 @@ class VersionStepsSpec extends CatsEffectSuite {
       packageOptions               := basePackageOptions,
       releaseIOInternalReleaseHash := None,
       releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-        releaseIOInternalReleaseHash.value,
-        releaseIOInternalReleaseTag.value
-      )
+      packageOptions ++= _root_.io.release.ReleaseManifestMetadataSupport
+        .releaseManifestPackageOptions(
+          releaseIOInternalReleaseHash.value,
+          releaseIOInternalReleaseTag.value
+        )
     )
 
   private def withStartupPlan(

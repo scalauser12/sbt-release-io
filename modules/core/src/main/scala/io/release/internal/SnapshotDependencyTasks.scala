@@ -1,7 +1,7 @@
 package io.release.internal
 
 import cats.effect.IO
-import io.release.ReleaseIO.releaseIODiagnosticsSnapshotDependencies
+import io.release.ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
 import io.release.steps.StepHelpers
 import sbt.Keys.*
 import sbt.{internal as _, *}

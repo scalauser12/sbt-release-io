@@ -20,7 +20,7 @@ private[monorepo] object MonorepoSelectionResolver {
 
   private final case class ResolvedSelectionInputs(
       orderedProjects: Seq[ProjectReleaseInfo],
-      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
+      tagSettings: MonorepoTagSettingsSupport.ResolvedMonorepoTagSettings,
       plan: MonorepoReleasePlan
   )
 
@@ -77,7 +77,7 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[ResolvedSelectionInputs] =
     for {
-      tagSettings    <- MonorepoReleaseIO.resolveTagSettings(ctx.state)
+      tagSettings    <- MonorepoTagSettingsSupport.resolveTagSettings(ctx.state)
       liveOrdered    <- MonorepoProjectResolver.resolveOrdered(ctx.state)
       orderedProjects = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
       validatedPlan  <-
@@ -134,7 +134,7 @@ private[monorepo] object MonorepoSelectionResolver {
   private def resolveDetectChanges(
       ctx: MonorepoContext,
       ordered: Seq[ProjectReleaseInfo],
-      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
+      tagSettings: MonorepoTagSettingsSupport.ResolvedMonorepoTagSettings,
       validated: MonorepoReleasePlan
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
     resolveDetectionSettings(ctx.state).flatMap { settings =>
@@ -146,7 +146,7 @@ private[monorepo] object MonorepoSelectionResolver {
   private def detectSelectedProjects(
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
-      tagSettings: MonorepoReleaseIO.ResolvedMonorepoTagSettings,
+      tagSettings: MonorepoTagSettingsSupport.ResolvedMonorepoTagSettings,
       settings: DetectionSettings
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
     if (!settings.detectChanges)
@@ -183,13 +183,20 @@ private[monorepo] object MonorepoSelectionResolver {
       val runtime = MonorepoRuntime.fromState(state)
 
       DetectionSettings(
-        detectChanges = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionEnabled),
-        includeDownstream =
-          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream),
-        customDetector =
-          runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionChangeDetector),
-        userExcludes = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionExcludes),
-        sharedPaths = runtime.extracted.get(MonorepoReleaseIO.releaseIOMonorepoDetectionSharedPaths)
+        detectChanges =
+          runtime.extracted.get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionEnabled),
+        includeDownstream = runtime.extracted.get(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionIncludeDownstream
+        ),
+        customDetector = runtime.extracted.get(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionChangeDetector
+        ),
+        userExcludes = runtime.extracted.get(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionExcludes
+        ),
+        sharedPaths = runtime.extracted.get(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionSharedPaths
+        )
       )
     }
 

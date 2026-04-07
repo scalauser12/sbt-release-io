@@ -10,8 +10,343 @@ import io.release.internal.ReleaseCommandParsers
 import io.release.internal.ReleaseLogPrefixes
 import io.release.steps.StepHelpers
 import io.release.vcs.Vcs
+import io.release.version.Version
 import sbt.complete.Parser
 import sbt.{internal as _, *}
+
+import scala.concurrent.duration.FiniteDuration
+
+/** Build-facing project keys imported into `.sbt` files via `ReleasePluginIO.autoImport`. */
+object ReleasePluginIOAutoImport {
+
+  // ── Behavior keys ───────────────────────────────────────────────────
+
+  lazy val releaseIOBehaviorCrossBuild: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOBehaviorCrossBuild",
+      "Whether to enable cross-building during release"
+    )
+
+  lazy val releaseIOBehaviorSkipPublish: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOBehaviorSkipPublish",
+      "Whether to skip publish during release"
+    )
+
+  lazy val releaseIOBehaviorInteractive: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOBehaviorInteractive",
+      "Whether to enable interactive prompts during release"
+    )
+
+  // ── Defaults keys ───────────────────────────────────────────────────
+
+  lazy val releaseIODefaultsTagExistsAnswer: SettingKey[Option[String]] =
+    SettingKey[Option[String]](
+      "releaseIODefaultsTagExistsAnswer",
+      "Default action when a release tag already exists"
+    )
+
+  lazy val releaseIODefaultsSnapshotDependenciesAnswer: SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultsSnapshotDependenciesAnswer",
+      "Default decision for continuing when SNAPSHOT dependencies are detected"
+    )
+
+  lazy val releaseIODefaultsRemoteCheckFailureAnswer: SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultsRemoteCheckFailureAnswer",
+      "Default decision for continuing after a remote-check failure"
+    )
+
+  lazy val releaseIODefaultsUpstreamBehindAnswer: SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultsUpstreamBehindAnswer",
+      "Default decision for continuing when the local branch is behind upstream"
+    )
+
+  lazy val releaseIODefaultsPushAnswer: SettingKey[Option[Boolean]] =
+    SettingKey[Option[Boolean]](
+      "releaseIODefaultsPushAnswer",
+      "Default decision for whether to push changes at the end of the release"
+    )
+
+  // ── Policy keys ─────────────────────────────────────────────────────
+
+  lazy val releaseIOPolicyEnableSnapshotDependenciesCheck: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPolicyEnableSnapshotDependenciesCheck",
+      "Whether to include the snapshot dependency validation phase"
+    )
+
+  lazy val releaseIOPolicyEnableRunClean: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPolicyEnableRunClean",
+      "Whether to include the clean phase in the compiled hook process"
+    )
+
+  lazy val releaseIOPolicyEnableRunTests: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPolicyEnableRunTests",
+      "Whether to include the test phase in the compiled hook process"
+    )
+
+  lazy val releaseIOPolicyEnableTagging: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPolicyEnableTagging",
+      "Whether to include the tag phase in the compiled hook process"
+    )
+
+  lazy val releaseIOPolicyEnablePublish: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPolicyEnablePublish",
+      "Whether to include the publish phase in the compiled hook process"
+    )
+
+  lazy val releaseIOPolicyEnablePush: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPolicyEnablePush",
+      "Whether to include the push phase in the compiled hook process"
+    )
+
+  // ── Hook keys ───────────────────────────────────────────────────────
+
+  lazy val releaseIOHooksAfterCleanCheck: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterCleanCheck",
+      "Hooks that run after the clean-working-dir check phase"
+    )
+
+  lazy val releaseIOHooksBeforeVersionResolution: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforeVersionResolution",
+      "Hooks that run before version resolution"
+    )
+
+  lazy val releaseIOHooksAfterVersionResolution: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterVersionResolution",
+      "Hooks that run after version resolution"
+    )
+
+  lazy val releaseIOHooksBeforeReleaseVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforeReleaseVersionWrite",
+      "Hooks that run before writing the release version"
+    )
+
+  lazy val releaseIOHooksAfterReleaseVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterReleaseVersionWrite",
+      "Hooks that run after writing the release version"
+    )
+
+  lazy val releaseIOHooksBeforeReleaseCommit: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforeReleaseCommit",
+      "Hooks that run before committing the release version"
+    )
+
+  lazy val releaseIOHooksAfterReleaseCommit: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterReleaseCommit",
+      "Hooks that run after committing the release version"
+    )
+
+  lazy val releaseIOHooksBeforeTag: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforeTag",
+      "Hooks that run before tagging the release"
+    )
+
+  lazy val releaseIOHooksAfterTag: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterTag",
+      "Hooks that run after tagging the release"
+    )
+
+  lazy val releaseIOHooksBeforePublish: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforePublish",
+      "Hooks that run before publish"
+    )
+
+  lazy val releaseIOHooksAfterPublish: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterPublish",
+      "Hooks that run after publish"
+    )
+
+  lazy val releaseIOHooksBeforeNextVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforeNextVersionWrite",
+      "Hooks that run before writing the next version"
+    )
+
+  lazy val releaseIOHooksAfterNextVersionWrite: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterNextVersionWrite",
+      "Hooks that run after writing the next version"
+    )
+
+  lazy val releaseIOHooksBeforeNextCommit: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforeNextCommit",
+      "Hooks that run before committing the next version"
+    )
+
+  lazy val releaseIOHooksAfterNextCommit: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterNextCommit",
+      "Hooks that run after committing the next version"
+    )
+
+  lazy val releaseIOHooksBeforePush: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksBeforePush",
+      "Hooks that run before pushing release changes"
+    )
+
+  lazy val releaseIOHooksAfterPush: SettingKey[Seq[ReleaseHookIO]] =
+    SettingKey[Seq[ReleaseHookIO]](
+      "releaseIOHooksAfterPush",
+      "Hooks that run after pushing release changes"
+    )
+
+  // ── Versioning keys ─────────────────────────────────────────────────
+
+  lazy val releaseIOVersioningReadVersion: SettingKey[File => IO[String]] =
+    SettingKey[File => IO[String]](
+      "releaseIOVersioningReadVersion",
+      "Function to read the current version from the version file"
+    )
+
+  lazy val releaseIOVersioningFileContents: SettingKey[(File, String) => IO[String]] =
+    SettingKey[(File, String) => IO[String]](
+      "releaseIOVersioningFileContents",
+      "Function that produces version file contents: (file, version) => IO[contents]"
+    )
+
+  lazy val releaseIOVersioningFile: SettingKey[File] =
+    SettingKey[File](
+      "releaseIOVersioningFile",
+      "Path to the version file"
+    )
+
+  lazy val releaseIOVersioningUseGlobal: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOVersioningUseGlobal",
+      "Whether the version file uses ThisBuild / version"
+    )
+
+  @transient
+  lazy val releaseIOVersioningReleaseVersion: TaskKey[String => String] =
+    TaskKey[String => String](
+      "releaseIOVersioningReleaseVersion",
+      "Function that computes the release version from the current version"
+    )
+
+  @transient
+  lazy val releaseIOVersioningNextVersion: TaskKey[String => String] =
+    TaskKey[String => String](
+      "releaseIOVersioningNextVersion",
+      "Function that computes the next development version from the release version"
+    )
+
+  @transient
+  lazy val releaseIOVersioningBump: TaskKey[Version.Bump] =
+    TaskKey[Version.Bump](
+      "releaseIOVersioningBump",
+      "Version bump strategy"
+    )
+
+  // ── VCS keys ────────────────────────────────────────────────────────
+
+  lazy val releaseIOVcsSign: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOVcsSign",
+      "Whether VCS tags and commits are GPG-signed"
+    )
+
+  lazy val releaseIOVcsSignOff: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOVcsSignOff",
+      "Whether VCS commits include a Signed-off-by line"
+    )
+
+  lazy val releaseIOVcsIgnoreUntrackedFiles: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOVcsIgnoreUntrackedFiles",
+      "Whether untracked files are ignored during clean working dir check"
+    )
+
+  lazy val releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
+    SettingKey[FiniteDuration](
+      "releaseIOVcsRemoteCheckTimeout",
+      "Timeout for the remote reachability check performed before push"
+    )
+
+  @transient
+  lazy val releaseIOVcsTagName: TaskKey[String] =
+    TaskKey[String](
+      "releaseIOVcsTagName",
+      "Tag name for the release"
+    )
+
+  @transient
+  lazy val releaseIOVcsTagComment: TaskKey[String] =
+    TaskKey[String](
+      "releaseIOVcsTagComment",
+      "Tag comment for the release"
+    )
+
+  @transient
+  lazy val releaseIOVcsReleaseCommitMessage: TaskKey[String] =
+    TaskKey[String](
+      "releaseIOVcsReleaseCommitMessage",
+      "Commit message for the release version commit"
+    )
+
+  @transient
+  lazy val releaseIOVcsNextCommitMessage: TaskKey[String] =
+    TaskKey[String](
+      "releaseIOVcsNextCommitMessage",
+      "Commit message for the next snapshot version commit"
+    )
+
+  // ── Publish keys ────────────────────────────────────────────────────
+
+  @transient
+  lazy val releaseIOPublishAction: TaskKey[Unit] =
+    TaskKey[Unit](
+      "releaseIOPublishAction",
+      "Task that performs the actual publish action"
+    )
+
+  lazy val releaseIOPublishChecks: SettingKey[Boolean] =
+    SettingKey[Boolean](
+      "releaseIOPublishChecks",
+      "Whether to run publishTo validation checks for the publish step"
+    )
+
+  // ── Runtime keys ────────────────────────────────────────────────────
+
+  @transient
+  lazy val releaseIORuntimeCurrentVersion: TaskKey[String] =
+    TaskKey[String](
+      "releaseIORuntimeCurrentVersion",
+      "The current version at evaluation time (used by tag/commit message tasks)"
+    )
+
+  // ── Diagnostics keys ────────────────────────────────────────────────
+
+  @transient
+  lazy val releaseIODiagnosticsSnapshotDependencies: TaskKey[Seq[ModuleID]] =
+    TaskKey[Seq[ModuleID]](
+      "releaseIODiagnosticsSnapshotDependencies",
+      "Task that resolves SNAPSHOT dependencies for validation"
+    )
+}
 
 /** Base trait for resource-parameterized release plugins.
   *
@@ -28,13 +363,15 @@ import sbt.{internal as _, *}
   * // Run with:     sbt releaseCustom
   * }}}
   *
-  * '''Do not add `object autoImport`''' to custom plugins. When both [[ReleasePluginIO]]
-  * and a custom plugin define autoImport, the build gets ambiguous references
-  * (e.g. `reference to releaseIOHooksBeforeTag is ambiguous`). [[ReleasePluginIO]] is
-  * auto-enabled via `allRequirements`, so its keys are already in scope when
-  * the custom plugin is enabled.
+  * Custom plugins inherit [[autoImport]] automatically, so build-facing project keys remain
+  * available without adding another `autoImport` definition. They also inherit the deprecated
+  * [[ReleaseIO]] mixin members so existing plugins defined under `project/` can keep using
+  * unqualified keys while migrating to [[ReleasePluginIO.autoImport]].
   */
+@scala.annotation.nowarn("cat=deprecation")
 trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
+
+  final val autoImport = ReleasePluginIOAutoImport
 
   override def requires: Plugins = sbt.plugins.JvmPlugin
 
@@ -184,6 +521,4 @@ object ReleasePluginIO extends ReleasePluginIOLike[Unit] {
   override def trigger = allRequirements
 
   override def resource: Resource[IO, Unit] = Resource.unit
-
-  object autoImport extends ReleaseIO
 }

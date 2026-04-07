@@ -1,6 +1,6 @@
 package io.release.monorepo.steps
 
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.TestAssertions.assertFailure
 import io.release.monorepo.MonorepoComposer
 import munit.CatsEffectSuite
@@ -13,7 +13,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   ) {
     singleProjectFixtureResource("monorepo-publish-snapshots") { _ =>
       Seq(
-        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -33,7 +33,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-snapshots-field") { _ =>
       Seq(
-        ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -86,7 +86,9 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
 
   test("checkSnapshotDependencies.validate - pass when no snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-no-snapshots") { _ =>
-      Seq(ReleaseIO.releaseIODiagnosticsSnapshotDependencies := Seq.empty[ModuleID])
+      Seq(
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq.empty[ModuleID]
+      )
     }.use { fixture =>
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")

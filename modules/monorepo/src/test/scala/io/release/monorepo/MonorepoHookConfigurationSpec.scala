@@ -21,11 +21,11 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
     stateResource(
       "monorepo-hook-configuration-resolve",
       Seq(
-        MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish        := false,
-        MonorepoReleaseIO.releaseIOMonorepoHooksBeforeSelection       := Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnablePublish        := false,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection       := Seq(
           MonorepoGlobalHookIO.action("before-selection")(_ => IO.unit)
         ),
-        MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextVersionWrite := Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterNextVersionWrite := Seq(
           MonorepoProjectHookIO.action("after-next-version")((_, _) => IO.unit)
         )
       )

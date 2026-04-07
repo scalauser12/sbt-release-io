@@ -2,9 +2,9 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseIO
-import io.release.ReleaseIO.releaseIOInternalReleaseHash
-import io.release.ReleaseIO.releaseIOInternalReleaseTag
+import io.release.ReleasePluginIO
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions
 import io.release.TestSupport
@@ -129,9 +129,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
 
@@ -151,16 +151,16 @@ class VcsStepsSpec extends CatsEffectSuite {
         repo,
         releaseManifestSettings() ++
           Seq(
-            io.release.ReleaseIO.releaseIOVersioningFile         := versionFile,
-            io.release.ReleaseIO.releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
-            io.release.ReleaseIO.releaseIOVersioningFileContents := VersionSteps
+            io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile         := versionFile,
+            io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+            io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents := VersionSteps
               .defaultWriteVersion(
                 useGlobalVersion = true
               ),
-            io.release.ReleaseIO.releaseIOVersioningUseGlobal    := true,
-            io.release.ReleaseIO.releaseIOVcsSign                := false,
-            io.release.ReleaseIO.releaseIOVcsTagName             := "v1.0.1",
-            io.release.ReleaseIO.releaseIOVcsTagComment          := "Releasing 1.0.1"
+            io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal    := true,
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsSign                := false,
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName             := "v1.0.1",
+            io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment          := "Releasing 1.0.1"
           )
       )
 
@@ -186,9 +186,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state  = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
           CoreStepTestCompat.failureCommandTagNameSetting(marker),
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
 
@@ -199,7 +199,10 @@ class VcsStepsSpec extends CatsEffectSuite {
                   )
                 ) { err =>
                   assert(marker.exists())
-                  assert(err.getMessage.contains(io.release.ReleaseIO.releaseIOVcsTagName.key.label))
+                  assert(
+                    err.getMessage
+                      .contains(io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName.key.label)
+                  )
                   assert(err.getMessage.contains("FailureCommand"))
                 }
         tags <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
@@ -217,8 +220,8 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state  = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign    := false,
-          io.release.ReleaseIO.releaseIOVcsTagName := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign    := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName := "v1.0.0",
           CoreStepTestCompat.failureCommandTagCommentSetting(marker)
         )
       )
@@ -231,7 +234,8 @@ class VcsStepsSpec extends CatsEffectSuite {
                 ) { err =>
                   assert(marker.exists())
                   assert(
-                    err.getMessage.contains(io.release.ReleaseIO.releaseIOVcsTagComment.key.label)
+                    err.getMessage
+                      .contains(io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment.key.label)
                   )
                   assert(err.getMessage.contains("FailureCommand"))
                 }
@@ -247,9 +251,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
 
@@ -274,9 +278,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val buffered = bufferedGitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
 
@@ -304,9 +308,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
 
@@ -333,9 +337,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
 
@@ -357,9 +361,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
       val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
@@ -394,9 +398,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
       val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
@@ -431,9 +435,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
 
@@ -458,9 +462,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       val state = ReleaseTestSupport.gitRootState(
         repo,
         Seq(
-          io.release.ReleaseIO.releaseIOVcsSign       := false,
-          io.release.ReleaseIO.releaseIOVcsTagName    := "v1.0.0",
-          io.release.ReleaseIO.releaseIOVcsTagComment := "Releasing 1.0.0"
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
         )
       )
       val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
@@ -500,10 +504,11 @@ class VcsStepsSpec extends CatsEffectSuite {
       packageOptions               := basePackageOptions,
       releaseIOInternalReleaseHash := None,
       releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseIO.releaseManifestPackageOptions(
-        releaseIOInternalReleaseHash.value,
-        releaseIOInternalReleaseTag.value
-      )
+      packageOptions ++= _root_.io.release.ReleaseManifestMetadataSupport
+        .releaseManifestPackageOptions(
+          releaseIOInternalReleaseHash.value,
+          releaseIOInternalReleaseTag.value
+        )
     )
 
   private def bufferedGitRootState(
@@ -516,7 +521,9 @@ class VcsStepsSpec extends CatsEffectSuite {
       baseDir = repo,
       projects = Seq(
         Project("root", repo).settings(
-          (Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false) ++ rootSettings)*
+          (Seq(
+            ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
+          ) ++ rootSettings)*
         )
       ),
       currentProjectId = Some("root")

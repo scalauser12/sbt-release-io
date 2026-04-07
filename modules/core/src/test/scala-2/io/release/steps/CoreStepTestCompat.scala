@@ -1,7 +1,7 @@
 package io.release.steps
 
 import _root_.io.release.internal.SbtCompat
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
 import sbt.*
 import sbt.Def
@@ -14,7 +14,7 @@ import java.io.File
 private[steps] object CoreStepTestCompat {
 
   def failureCommandPublishTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOPublishAction := Def
+    ReleasePluginIO.autoImport.releaseIOPublishAction := Def
       .task {
         sbt.IO.write(marker, "ran")
       }
@@ -38,7 +38,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVersioningReleaseVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := Def
       .task {
         sbt.IO.write(marker, "ran")
         (currentVersion: String) => currentVersion.stripSuffix("-SNAPSHOT")
@@ -51,7 +51,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandNextVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVersioningNextVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def
       .task {
         sbt.IO.write(marker, "ran")
         (_: String) => "0.2.0-SNAPSHOT"
@@ -64,7 +64,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandCommitMessageSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsReleaseCommitMessage := Def
+    ReleasePluginIO.autoImport.releaseIOVcsReleaseCommitMessage := Def
       .task {
         sbt.IO.write(marker, "ran")
         "Setting version"
@@ -77,7 +77,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandNextCommitMessageSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsNextCommitMessage := Def
+    ReleasePluginIO.autoImport.releaseIOVcsNextCommitMessage := Def
       .task {
         sbt.IO.write(marker, "ran")
         "Setting next version"
@@ -90,7 +90,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandTagNameSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsTagName := Def
+    ReleasePluginIO.autoImport.releaseIOVcsTagName := Def
       .task {
         sbt.IO.write(marker, "ran")
         "v1.0.0"
@@ -103,7 +103,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandTagCommentSetting(marker: File): Setting[?] =
-    ReleaseIO.releaseIOVcsTagComment := Def
+    ReleasePluginIO.autoImport.releaseIOVcsTagComment := Def
       .task {
         sbt.IO.write(marker, "ran")
         "Releasing 1.0.0"

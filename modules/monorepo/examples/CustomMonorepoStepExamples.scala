@@ -6,7 +6,7 @@ import io.release.monorepo.MonorepoGlobalHookIO
 import io.release.monorepo.MonorepoGlobalResourceHookIO
 import io.release.monorepo.MonorepoProjectHookIO
 import io.release.monorepo.MonorepoProjectResourceHookIO
-import io.release.monorepo.MonorepoReleaseIO
+import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 import io.release.monorepo.MonorepoReleasePluginLike
 import io.release.monorepo.MonorepoResourceHooks
 import sbt.*
@@ -35,8 +35,8 @@ object CustomMonorepoStepExamples {
     * Run with: `sbt "releaseIOMonorepo with-defaults"`
     */
   val firstHookSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush := false,
-    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook
+    releaseIOMonorepoPolicyEnablePush := false,
+    releaseIOMonorepoHooksAfterSelection += printSummaryHook
   )
 
   /** A richer hook-based setup with policy toggles and a mix of global and per-project hooks.
@@ -47,11 +47,11 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val customHookSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush := false,
-    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook,
-    MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook,
-    MonorepoReleaseIO.releaseIOMonorepoHooksAfterVersionResolution += generateChangelogHook,
-    MonorepoReleaseIO.releaseIOMonorepoHooksAfterNextCommit += markReleaseDoneHook
+    releaseIOMonorepoPolicyEnablePush := false,
+    releaseIOMonorepoHooksAfterSelection += printSummaryHook,
+    releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook,
+    releaseIOMonorepoHooksAfterVersionResolution += generateChangelogHook,
+    releaseIOMonorepoHooksAfterNextCommit += markReleaseDoneHook
   )
 
   /** Recommended template for selective monorepo rehearsals driven by change detection.
@@ -73,11 +73,11 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val selectionAndDetectionSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush           := false,
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish        := false,
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean       := false,
-    MonorepoReleaseIO.releaseIOMonorepoDetectionIncludeDownstream := true,
-    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook
+    releaseIOMonorepoPolicyEnablePush           := false,
+    releaseIOMonorepoPolicyEnablePublish        := false,
+    releaseIOMonorepoPolicyEnableRunClean       := false,
+    releaseIOMonorepoDetectionIncludeDownstream := true,
+    releaseIOMonorepoHooksAfterSelection += printSummaryHook
   )
 
   /** Recommended template for targeted project rehearsals with explicit selectors.
@@ -95,11 +95,11 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val targetedRehearsalSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePush     := false,
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnablePublish  := false,
-    MonorepoReleaseIO.releaseIOMonorepoPolicyEnableRunClean := false,
-    MonorepoReleaseIO.releaseIOMonorepoHooksAfterSelection += printSummaryHook,
-    MonorepoReleaseIO.releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoHooksAfterSelection += printSummaryHook,
+    releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook
   )
 
   /** Custom version file format: use `.properties` files instead of `version.sbt`.
@@ -115,11 +115,11 @@ object CustomMonorepoStepExamples {
     * }}}
     */
   val propertiesVersionSettings: Seq[Setting[?]] = Seq(
-    MonorepoReleaseIO.releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, state: State) =>
+    releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / Keys.baseDirectory) /
         "version.properties"
     },
-    MonorepoReleaseIO.releaseIOMonorepoVersioningReadVersion  := { (f: File) =>
+    releaseIOMonorepoVersioningReadVersion  := { (f: File) =>
       IO.blocking(sbt.IO.read(f)).flatMap { contents =>
         val pattern = """app\.version=(.+)""".r
         pattern.findFirstMatchIn(contents) match {
@@ -133,7 +133,7 @@ object CustomMonorepoStepExamples {
         }
       }
     },
-    MonorepoReleaseIO.releaseIOMonorepoVersioningFileContents := { (f: File, ver: String) =>
+    releaseIOMonorepoVersioningFileContents := { (f: File, ver: String) =>
       IO.blocking(sbt.IO.read(f)).map { contents =>
         contents.linesIterator
           .map {

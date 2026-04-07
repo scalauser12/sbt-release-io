@@ -2,7 +2,8 @@ package io.release.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseIO.*
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import io.release.ReleasePluginIO.autoImport.*
 import io.release.VcsOps
 import io.release.internal.ReleaseLogPrefixes
 import io.release.internal.SbtRuntime

@@ -40,7 +40,9 @@ object ReleaseTestSupport {
       repo,
       Seq(
         Project("root", repo).settings(
-          (Seq(ReleaseIO.releaseIOVcsIgnoreUntrackedFiles := false) ++ rootSettings)*
+          (Seq(
+            ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
+          ) ++ rootSettings)*
         )
       ),
       currentProjectId = Some("root")

@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleaseIO
+import io.release.ReleasePluginIO
 import io.release.internal.CoreStepAliases.Step
 import io.release.TestSupport
 import io.release.steps.ReleaseSteps
@@ -54,12 +54,12 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
 
   test("resolve - read lifecycle policy and hook settings from state") {
     val settings: Seq[Setting[?]] = Seq(
-      ReleaseIO.releaseIOPolicyEnableRunTests := false,
-      ReleaseIO.releaseIOPolicyEnablePublish  := false,
-      ReleaseIO.releaseIOHooksBeforeTag       := Seq(
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableRunTests := false,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish  := false,
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag       := Seq(
         ReleaseHookIO.action("before-tag")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOHooksAfterNextCommit := Seq(
+      ReleasePluginIO.autoImport.releaseIOHooksAfterNextCommit := Seq(
         ReleaseHookIO.action("after-next-commit")(_ => IO.unit)
       )
     )
@@ -86,24 +86,24 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
 
   test("compile - apply policy flags and lifecycle hooks around the remaining built-in phases") {
     val settings: Seq[Setting[?]] = Seq(
-      ReleaseIO.releaseIOPolicyEnableSnapshotDependenciesCheck := false,
-      ReleaseIO.releaseIOPolicyEnableRunClean                  := false,
-      ReleaseIO.releaseIOPolicyEnableRunTests                  := false,
-      ReleaseIO.releaseIOPolicyEnablePublish                   := false,
-      ReleaseIO.releaseIOPolicyEnablePush                      := false,
-      ReleaseIO.releaseIOHooksAfterCleanCheck                  := Seq(
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableSnapshotDependenciesCheck := false,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableRunClean                  := false,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnableRunTests                  := false,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish                   := false,
+      ReleasePluginIO.autoImport.releaseIOPolicyEnablePush                      := false,
+      ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck                  := Seq(
         ReleaseHookIO.action("after-clean")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOHooksBeforeVersionResolution          := Seq(
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution          := Seq(
         ReleaseHookIO.action("before-version")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOHooksAfterVersionResolution           := Seq(
+      ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution           := Seq(
         ReleaseHookIO.action("after-version")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOHooksBeforeTag                        := Seq(
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag                        := Seq(
         ReleaseHookIO.action("before-tag")(_ => IO.unit)
       ),
-      ReleaseIO.releaseIOHooksAfterTag                         := Seq(
+      ReleasePluginIO.autoImport.releaseIOHooksAfterTag                         := Seq(
         ReleaseHookIO.action("after-tag")(_ => IO.unit)
       )
     )
@@ -316,14 +316,14 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       observed: Ref[IO, List[String]]
   ): Seq[Setting[?]] =
     Seq(
-      ReleaseIO.releaseIOHooksBeforePublish := Seq(
+      ReleasePluginIO.autoImport.releaseIOHooksBeforePublish := Seq(
         ReleaseHookIO(
           name = "before-publish",
           execute = ctx => observed.update(_ :+ "execute-before").as(ctx),
           validate = _ => observed.update(_ :+ "validate-before")
         )
       ),
-      ReleaseIO.releaseIOHooksAfterPublish  := Seq(
+      ReleasePluginIO.autoImport.releaseIOHooksAfterPublish  := Seq(
         ReleaseHookIO(
           name = "after-publish",
           execute = ctx => observed.update(_ :+ "execute-after").as(ctx),
