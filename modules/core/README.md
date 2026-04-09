@@ -36,7 +36,7 @@ step DSL were removed in the breaking API cleanup.
 - [Core getting started](../../docs/core/getting-started.md) for install, first `help` / `check` / `run`, and the default built-in steps
 - [Core customization walkthrough](../../docs/core/customization-walkthrough.md) for a safe local rehearsal using policy keys and lifecycle hooks
 - [Core configuration](../../docs/core/configuration.md) for starter `build.sbt` patterns, and [Core reference](../../docs/core/reference.md) for the full settings and CLI catalog
-- [Core customization](../../docs/core/customization.md) for hooks, resource-aware custom plugins, and migration guidance
+- [Core customization](../../docs/core/customization.md) for hooks, resource-aware custom plugins, and snippet recipes
 - [Core operations](../../docs/core/operations.md) for rollback and recovery
 - [Docs index](../../docs/README.md) for the full documentation tree
 

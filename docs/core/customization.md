@@ -39,8 +39,8 @@ Hook semantics:
 
 ## Hook and policy recipes
 
-| Old intent | New hook/policy surface |
-| ---------- | ----------------------- |
+| Intent | Setting |
+| ------ | ------- |
 | Remove `push-changes` | `releaseIOPolicyEnablePush := false` |
 | Remove `publish-artifacts` | `releaseIOPolicyEnablePublish := false` |
 | Remove `run-tests` or `run-clean` | `releaseIOPolicyEnableRunTests := false` / `releaseIOPolicyEnableRunClean := false` |
@@ -49,7 +49,7 @@ Hook semantics:
 | Insert logic around version resolution | `releaseIOHooksBeforeVersionResolution` / `releaseIOHooksAfterVersionResolution` |
 | Insert logic around publish | `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` |
 
-### Copy/paste replacements
+### Snippets
 
 Disable push and publish:
 
@@ -58,7 +58,7 @@ releaseIOPolicyEnablePush := false
 releaseIOPolicyEnablePublish := false
 ```
 
-Replace a "run this before tagging" custom step with a lifecycle hook:
+Run code before tagging:
 
 ```scala
 import _root_.cats.effect.IO

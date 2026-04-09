@@ -49,8 +49,8 @@ The tagging lifecycle phase is still named `tag-releases`. Customize around it w
 
 ## Hook and policy recipes
 
-| Old intent | New hook/policy surface |
-| ---------- | ----------------------- |
+| Intent | Setting |
+| ------ | ------- |
 | Remove `push-changes` | `releaseIOMonorepoPolicyEnablePush := false` |
 | Remove `publish-artifacts` | `releaseIOMonorepoPolicyEnablePublish := false` |
 | Remove `run-clean` | `releaseIOMonorepoPolicyEnableRunClean := false` |
@@ -61,7 +61,7 @@ The tagging lifecycle phase is still named `tag-releases`. Customize around it w
 | Insert logic around tagging | `releaseIOMonorepoHooksBeforeTag` / `releaseIOMonorepoHooksAfterTag` |
 | Insert logic around publish | `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` |
 
-### Copy/paste replacements
+### Snippets
 
 Disable push and publish:
 
@@ -82,7 +82,7 @@ releaseIOMonorepoHooksAfterCleanCheck +=
   )
 ```
 
-Replace "insert a step after project selection" with a global hook:
+Run a global hook after project selection:
 
 ```scala
 import _root_.cats.effect.IO
