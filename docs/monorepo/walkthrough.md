@@ -8,6 +8,7 @@ This walkthrough sets up a two-project monorepo from scratch and runs the first 
 my-monorepo/
 ├── build.sbt
 ├── project/
+│   ├── build.properties
 │   └── plugins.sbt
 ├── core/
 │   └── version.sbt
@@ -22,6 +23,15 @@ my-monorepo/
 ```scala
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.2")
 ```
+
+`project/build.properties`:
+
+```properties
+sbt.version=1.12.3
+```
+
+Pinning `sbt.version` up front avoids sbt auto-creating `project/build.properties` on first
+launch, which would otherwise appear as an untracked file and fail `check-clean-working-dir`.
 
 ## 2. Configure the build
 

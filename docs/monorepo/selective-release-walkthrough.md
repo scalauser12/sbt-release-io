@@ -24,6 +24,15 @@ The example uses three projects:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.2")
 ```
 
+`project/build.properties`:
+
+```properties
+sbt.version=1.12.3
+```
+
+Pinning `sbt.version` up front avoids sbt auto-creating `project/build.properties` on first
+launch, which would otherwise appear as an untracked file and fail `check-clean-working-dir`.
+
 ## 2. Configure the build
 
 `build.sbt`:
@@ -100,11 +109,19 @@ is now on `0.2.0-SNAPSHOT`.
 
 ## 5. Rehearse automatic change detection
 
-Modify only `core`, for example:
+Make a committed change to `core`, for example:
 
 ```bash
-echo "// change" >> core/src/main/scala/Core.scala
+mkdir -p core/src/main/scala
+echo "// change" > core/src/main/scala/Core.scala
+git add core/src/main/scala/Core.scala
+git commit -m "Touch core"
 ```
+
+The change must be committed: `check-clean-working-dir` runs in validation phase and the
+default `releaseIOVcsIgnoreUntrackedFiles := false` rejects both unstaged modifications and
+untracked files. Change detection then compares each project against its last release tag, so
+the committed file in `core/` is what selects the project.
 
 Now run a no-side-effect rehearsal:
 
@@ -134,7 +151,7 @@ Sometimes you want to narrow the run intentionally instead of following change d
 explicit selectors and per-project version overrides:
 
 ```bash
-sbt "releaseIOMonorepo check api with-defaults release-version api=1.1.0 next-version api=1.2.0-SNAPSHOT"
+sbt "releaseIOMonorepo check api with-defaults release-version api=0.2.0 next-version api=0.3.0-SNAPSHOT"
 ```
 
 In this mode, `detect-or-select-projects` uses the explicit selector instead of git-based change
