@@ -364,12 +364,10 @@ object ReleasePluginIOAutoImport {
   * }}}
   *
   * Custom plugins inherit [[autoImport]] automatically, so build-facing project keys remain
-  * available without adding another `autoImport` definition. They also inherit the deprecated
-  * [[ReleaseIO]] mixin members so existing plugins defined under `project/` can keep using
-  * unqualified keys while migrating to [[ReleasePluginIO.autoImport]].
+  * available without adding another `autoImport` definition. When grouped keys are needed in
+  * `.scala` sources under `project/`, import them explicitly from [[ReleasePluginIO.autoImport]].
   */
-@scala.annotation.nowarn("cat=deprecation")
-trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
+trait ReleasePluginIOLike[T] extends AutoPlugin {
 
   final val autoImport = ReleasePluginIOAutoImport
 
@@ -389,20 +387,33 @@ trait ReleasePluginIOLike[T] extends AutoPlugin with ReleaseIO {
     ReleaseResourceHooks.empty
 
   /** Whether cross-building is enabled (before command-line args are applied).
-    * Defaults to reading from the `releaseIOBehaviorCrossBuild` setting.
+    * Defaults to reading from the `ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild`
+    * setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(state, releaseIOBehaviorCrossBuild)
+    PluginEntrypointSupport.settingValue(
+      state,
+      ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild
+    )
 
-  /** Whether to skip publish. Defaults to reading from the `releaseIOBehaviorSkipPublish` setting. */
+  /** Whether to skip publish. Defaults to reading from the
+    * `ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish` setting.
+    */
   protected def skipPublishEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(state, releaseIOBehaviorSkipPublish)
+    PluginEntrypointSupport.settingValue(
+      state,
+      ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish
+    )
 
   /** Whether interactive prompts are enabled.
-    * Defaults to reading from the `releaseIOBehaviorInteractive` setting.
+    * Defaults to reading from the `ReleasePluginIO.autoImport.releaseIOBehaviorInteractive`
+    * setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(state, releaseIOBehaviorInteractive)
+    PluginEntrypointSupport.settingValue(
+      state,
+      ReleasePluginIO.autoImport.releaseIOBehaviorInteractive
+    )
 
   /** Base settings that include all default `releaseIO*` values plus command registration.
     * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`

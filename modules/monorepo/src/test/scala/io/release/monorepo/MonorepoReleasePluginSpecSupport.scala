@@ -6,11 +6,11 @@ import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
-import io.release.runtime.engine.ProcessStep
-import io.release.runtime.command.PluginEntrypointSupport
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
+import io.release.runtime.command.PluginEntrypointSupport
+import io.release.runtime.engine.ProcessStep
 import sbt.*
 import sbt.Project
 import sbt.ProjectRef
@@ -107,7 +107,7 @@ trait MonorepoReleasePluginSpecSupport {
           (state, tokens) => handleMonorepoCommandTokens(state, tokens)
         )
       ) ++ Seq(
-        releaseIOMonorepoHooksAfterSelection += MonorepoGlobalHookIO.action(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection += MonorepoGlobalHookIO.action(
           "base-after-selection"
         )(_ => IO.unit)
       )

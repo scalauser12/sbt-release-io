@@ -4,6 +4,16 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## Unreleased
+
+### Breaking changes
+
+- Remove the deprecated `ReleaseIO` and `MonorepoReleaseIO` compatibility namespaces.
+  Scala-source custom plugins and helpers must use `ReleasePluginIO.autoImport.*` or
+  `MonorepoReleasePlugin.autoImport.*` when they need grouped keys from `.scala` sources.
+- Stop exposing deprecated mixin-based grouped key access from `ReleasePluginIOLike` and
+  `MonorepoReleasePluginLike`; grouped `.sbt` usage and grouped key labels remain unchanged.
+
 ## v0.9.2
 
 Published: 2026-04-09

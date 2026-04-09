@@ -306,12 +306,11 @@ object MonorepoReleasePluginAutoImport {
   * }}}
   *
   * Custom plugins inherit [[autoImport]] automatically, so build-facing project keys remain
-  * available without adding another `autoImport` definition. They also inherit the deprecated
-  * [[MonorepoReleaseIO]] mixin members so existing plugins defined under `project/` can keep
-  * using unqualified keys while migrating to [[MonorepoReleasePlugin.autoImport]].
+  * available without adding another `autoImport` definition. When grouped keys are needed in
+  * `.scala` sources under `project/`, import them explicitly from
+  * [[MonorepoReleasePlugin.autoImport]].
   */
-@scala.annotation.nowarn("cat=deprecation")
-trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
+trait MonorepoReleasePluginLike[T] extends AutoPlugin {
 
   final val autoImport = MonorepoReleasePluginAutoImport
 
@@ -331,28 +330,43 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin with MonorepoReleaseIO {
     MonorepoResourceHooks.empty
 
   /** Whether cross-building is enabled (before command-line args are applied).
-    * Defaults to reading from the `releaseIOMonorepoBehaviorCrossBuild` setting.
+    * Defaults to reading from the
+    * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild` setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorCrossBuild)
+    PluginEntrypointSupport.settingValue(
+      state,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild
+    )
 
   /** Whether tests should be skipped (before command-line args are applied).
-    * Defaults to reading from the `releaseIOMonorepoBehaviorSkipTests` setting.
+    * Defaults to reading from the
+    * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests` setting.
     */
   protected def skipTestsEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorSkipTests)
+    PluginEntrypointSupport.settingValue(
+      state,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests
+    )
 
   /** Whether to skip publish. Defaults to reading from the
-    * `releaseIOMonorepoBehaviorSkipPublish` setting.
+    * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish` setting.
     */
   protected def skipPublishEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorSkipPublish)
+    PluginEntrypointSupport.settingValue(
+      state,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish
+    )
 
   /** Whether interactive prompts are enabled.
-    * Defaults to reading from the `releaseIOMonorepoBehaviorInteractive` setting.
+    * Defaults to reading from the
+    * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive` setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(state, releaseIOMonorepoBehaviorInteractive)
+    PluginEntrypointSupport.settingValue(
+      state,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive
+    )
 
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].
