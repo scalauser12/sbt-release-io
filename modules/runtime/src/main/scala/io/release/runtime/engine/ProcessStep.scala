@@ -311,40 +311,40 @@ private[release] object ProcessStep {
 
     def execute(f: T => C => IO[C]): T => Single[C] =
       resource =>
-      Single(
-        name = name,
-        roles =
-          if (isSelectionBoundary) Set(BuiltInStepRole.ProjectSelection)
-          else Set.empty,
-        execute = f(resource),
-        enableCrossBuild = enableCrossBuild,
-        isSelectionBoundary = isSelectionBoundary,
+        Single(
+          name = name,
+          roles =
+            if (isSelectionBoundary) Set(BuiltInStepRole.ProjectSelection)
+            else Set.empty,
+          execute = f(resource),
+          enableCrossBuild = enableCrossBuild,
+          isSelectionBoundary = isSelectionBoundary,
           validateWithContext = validateWithContext(resource)
         )
 
     def executeAction(f: T => C => IO[Unit]): T => Single[C] =
       resource =>
-      Single(
-        name = name,
-        roles =
-          if (isSelectionBoundary) Set(BuiltInStepRole.ProjectSelection)
-          else Set.empty,
-        execute = ctx => f(resource)(ctx).as(ctx),
-        enableCrossBuild = enableCrossBuild,
-        isSelectionBoundary = isSelectionBoundary,
+        Single(
+          name = name,
+          roles =
+            if (isSelectionBoundary) Set(BuiltInStepRole.ProjectSelection)
+            else Set.empty,
+          execute = ctx => f(resource)(ctx).as(ctx),
+          enableCrossBuild = enableCrossBuild,
+          isSelectionBoundary = isSelectionBoundary,
           validateWithContext = validateWithContext(resource)
         )
 
     def validateOnly: T => Single[C] =
       resource =>
-      Single(
-        name = name,
-        roles =
-          if (isSelectionBoundary) Set(BuiltInStepRole.ProjectSelection)
-          else Set.empty,
-        execute = ctx => IO.pure(ctx),
-        enableCrossBuild = enableCrossBuild,
-        isSelectionBoundary = isSelectionBoundary,
+        Single(
+          name = name,
+          roles =
+            if (isSelectionBoundary) Set(BuiltInStepRole.ProjectSelection)
+            else Set.empty,
+          execute = ctx => IO.pure(ctx),
+          enableCrossBuild = enableCrossBuild,
+          isSelectionBoundary = isSelectionBoundary,
           validateWithContext = validateWithContext(resource)
         )
   }
@@ -379,34 +379,34 @@ private[release] object ProcessStep {
         f: T => (C, I) => IO[C]
     ): T => PerItem[C, I] =
       resource =>
-      PerItem(
-        name = name,
-        roles = Set.empty,
-        execute = f(resource),
-        enableCrossBuild = enableCrossBuild,
-        validateWithContext = validateWithContext(resource)
+        PerItem(
+          name = name,
+          roles = Set.empty,
+          execute = f(resource),
+          enableCrossBuild = enableCrossBuild,
+          validateWithContext = validateWithContext(resource)
         )
 
     def executeAction(
         f: T => (C, I) => IO[Unit]
     ): T => PerItem[C, I] =
       resource =>
-      PerItem(
-        name = name,
-        roles = Set.empty,
-        execute = (ctx, item) => f(resource)(ctx, item).as(ctx),
-        enableCrossBuild = enableCrossBuild,
-        validateWithContext = validateWithContext(resource)
+        PerItem(
+          name = name,
+          roles = Set.empty,
+          execute = (ctx, item) => f(resource)(ctx, item).as(ctx),
+          enableCrossBuild = enableCrossBuild,
+          validateWithContext = validateWithContext(resource)
         )
 
     def validateOnly: T => PerItem[C, I] =
       resource =>
-      PerItem(
-        name = name,
-        roles = Set.empty,
-        execute = (ctx, _) => IO.pure(ctx),
-        enableCrossBuild = enableCrossBuild,
-        validateWithContext = validateWithContext(resource)
+        PerItem(
+          name = name,
+          roles = Set.empty,
+          execute = (ctx, _) => IO.pure(ctx),
+          enableCrossBuild = enableCrossBuild,
+          validateWithContext = validateWithContext(resource)
         )
   }
 }

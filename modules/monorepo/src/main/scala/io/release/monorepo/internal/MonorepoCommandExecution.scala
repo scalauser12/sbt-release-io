@@ -347,8 +347,8 @@ private[monorepo] object MonorepoCommandExecution {
     def allArgs[A](extract: PartialFunction[MonorepoCli.Arg, A]): Seq[A] =
       args.collect(extract)
 
-    val extracted   = Project.extract(state)
-    val settings    = ReleaseDecisionDefaults(
+    val extracted = Project.extract(state)
+    val settings  = ReleaseDecisionDefaults(
       tagExistsAnswer =
         extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer).flatten,
       snapshotDependenciesAnswer = extracted
@@ -361,7 +361,7 @@ private[monorepo] object MonorepoCommandExecution {
         extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer).flatten,
       pushAnswer = extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer).flatten
     )
-    val cli         = ReleaseDecisionDefaults(
+    val cli       = ReleaseDecisionDefaults(
       tagExistsAnswer = resolveLast(
         state,
         ReleaseLogPrefixes.Monorepo,

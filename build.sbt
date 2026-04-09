@@ -79,9 +79,9 @@ lazy val runtime = (project in file("modules/runtime"))
   .enablePlugins(SbtPlugin)
   .settings(
     commonSettings,
-    name                   := "sbt-release-io-runtime",
-    description            := "Internal shared runtime/kernel for sbt-release-io modules",
-    publish / skip         := true
+    name           := "sbt-release-io-runtime",
+    description    := "Internal shared runtime/kernel for sbt-release-io modules",
+    publish / skip := true
   )
 
 lazy val core = (project in file("modules/core"))

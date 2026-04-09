@@ -32,7 +32,9 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     hookStateResource("release-hook-compiler-overload").use { state =>
       IO {
         val commandExecution = Files.readString(
-          repoPath("modules/core/src/main/scala/io/release/core/internal/CoreCommandExecution.scala")
+          repoPath(
+            "modules/core/src/main/scala/io/release/core/internal/CoreCommandExecution.scala"
+          )
         )
 
         assertEquals(compileLifecycle(state).map(_.name), ReleaseSteps.defaults.map(_.name))
