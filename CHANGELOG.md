@@ -4,7 +4,45 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
-## Unreleased
+## v0.9.2
+
+Published: 2026-04-09
+GitHub release:
+[v0.9.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.2)
+
+`v0.9.2` is a patch release for both plugins that makes plugin `autoImport` the canonical
+Scala-source import path, keeps the legacy compatibility namespaces available with deprecation
+warnings, and refreshes the published examples and docs to match.
+
+### Improvements
+
+- Make `ReleasePluginIO.autoImport.*` and `MonorepoReleasePlugin.autoImport.*` the canonical
+  Scala-source imports for grouped public keys while keeping `.sbt` usage unchanged.
+- Keep `ReleaseIO` and `MonorepoReleaseIO` available as deprecated compatibility shims that
+  forward to the same public keys, preserving source compatibility for existing Scala build
+  helpers and custom plugins.
+- Extract internal release manifest metadata and monorepo tag-setting helpers without changing the
+  supported `.sbt` key surface.
+
+### Documentation
+
+- Refresh customization guides and example plugins to use the canonical plugin `autoImport.*`
+  imports and explain the deprecated compatibility namespaces.
+- Update the root README, module READMEs, and walkthrough/getting-started docs to reference
+  `0.9.2`.
+
+### Tests
+
+- Expand grouped-key compatibility coverage so core and monorepo specs assert that the deprecated
+  compatibility namespaces and mixins forward to the canonical plugin `autoImport` keys.
+- Keep compatibility specs checking that plugin `autoImport` exposes the intended public project
+  keys without leaking internal helpers.
+
+### Verification
+
+- sbt 1.12.3: `sbt scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
 
 ## v0.9.1
 

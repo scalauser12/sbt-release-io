@@ -19,7 +19,7 @@ The example uses three projects:
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.9.2")
 ```
 
 ## 2. Configure the build
