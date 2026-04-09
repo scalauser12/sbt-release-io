@@ -169,6 +169,28 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
     }
   }
 
+  test("resolveDecisionDefaults warns with the selected duplicate tag default in release mode") {
+    import MonorepoCli.Arg.*
+
+    stateResource("monorepo-command-tag-defaults-release", MonorepoReleasePlugin).use { loaded =>
+      IO {
+        val defaults = MonorepoCommandExecution.resolveDecisionDefaults(
+          loaded.state,
+          Seq(TagDefault("keep"), TagDefault("core-v1.2.3")),
+          warnOnDuplicates = true
+        )
+        val log      = loaded.consoleBuffer.toString("UTF-8")
+
+        assertEquals(defaults.tagExistsAnswer, Some("core-v1.2.3"))
+        assert(
+          log.contains(
+            "Multiple default-tag-exists-answer args provided; using 'core-v1.2.3'"
+          )
+        )
+      }
+    }
+  }
+
   test("resolveDecisionDefaults suppresses duplicate push warnings in check mode") {
     import MonorepoCli.Arg.*
 
