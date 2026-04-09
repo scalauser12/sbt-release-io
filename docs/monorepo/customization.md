@@ -10,8 +10,6 @@ Monorepo customization is hook-first:
 - protected behavior hooks on `MonorepoReleasePluginLike` let custom plugins override
   runtime defaults for cross-build, skip-tests, skip-publish, and interactive mode
 
-Legacy raw-process step-list editing was removed. Use hooks and policies instead.
-
 ## Hook-based customization
 
 ```scala
@@ -49,24 +47,7 @@ Hook semantics:
 The tagging lifecycle phase is still named `tag-releases`. Customize around it with
 `releaseIOMonorepoHooksBeforeTag` and `releaseIOMonorepoHooksAfterTag`.
 
-Prefer the grouped names in `build.sbt`; the breaking cleanup removed the older flat aliases.
-
-## Key rename guide
-
-| Removed name | Replacement |
-| -------- | ---------------------- |
-| `releaseIOMonorepoEnablePush` | `releaseIOMonorepoPolicyEnablePush` |
-| `releaseIOMonorepoEnablePublish` | `releaseIOMonorepoPolicyEnablePublish` |
-| `releaseIOMonorepoEnableRunClean` | `releaseIOMonorepoPolicyEnableRunClean` |
-| `releaseIOMonorepoAfterCleanCheckHooks` | `releaseIOMonorepoHooksAfterCleanCheck` |
-| `releaseIOMonorepoBeforeSelectionHooks` | `releaseIOMonorepoHooksBeforeSelection` |
-| `releaseIOMonorepoAfterSelectionHooks` | `releaseIOMonorepoHooksAfterSelection` |
-| `releaseIOMonorepoBeforeTagHooks` | `releaseIOMonorepoHooksBeforeTag` |
-| `releaseIOMonorepoAfterTagHooks` | `releaseIOMonorepoHooksAfterTag` |
-| `releaseIOMonorepoBeforePublishHooks` | `releaseIOMonorepoHooksBeforePublish` |
-| `releaseIOMonorepoAfterPublishHooks` | `releaseIOMonorepoHooksAfterPublish` |
-
-## Migration guide
+## Hook and policy recipes
 
 | Old intent | New hook/policy surface |
 | ---------- | ----------------------- |
@@ -139,10 +120,8 @@ For new `.scala` sources, prefer the plugin auto-import explicitly:
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 ```
 
-The old `MonorepoReleaseIO` compatibility namespace has been removed. When grouped keys are
-needed in custom Scala build code under `project/`, import them from
-`MonorepoReleasePlugin.autoImport.*` or qualify them through
-`MonorepoReleasePlugin.autoImport`.
+When grouped keys are needed in custom Scala build code under `project/`, import them from
+`MonorepoReleasePlugin.autoImport.*` or qualify them through `MonorepoReleasePlugin.autoImport`.
 
 ```scala
 // project/MyMonorepoRelease.scala
@@ -195,19 +174,3 @@ Notes:
 - custom monorepo plugins already inherit `autoImport`, but grouped keys referenced from
   `.scala` sources should use `MonorepoReleasePlugin.autoImport`
 - do not add your own `object autoImport` unless you intentionally want a different public surface
-
-## Removed Compatibility Namespace
-
-Older Scala build code that imported or mixed in `MonorepoReleaseIO` must switch to
-`MonorepoReleasePlugin.autoImport` or fully-qualified grouped keys.
-
-When updating older builds or plugins:
-
-- replace flat `releaseIOMonorepo*` keys with grouped `releaseIOMonorepoSelection*`,
-  `releaseIOMonorepoBehavior*`, `releaseIOMonorepoPolicy*`, `releaseIOMonorepoHooks*`,
-  `releaseIOMonorepoVersioning*`, `releaseIOMonorepoDetection*`, `releaseIOMonorepoVcs*`, and
-  `releaseIOMonorepoPublish*`
-- replace lower-level step-list edits with hook/resource-hook builders plus grouped policy keys
-
-The low-level `MonorepoStepIO` DSL was removed in the breaking API cleanup. Build-facing
-customization now goes through monorepo hooks, resource hooks, and grouped hook/policy settings.

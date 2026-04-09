@@ -76,12 +76,17 @@ Read next:
 - [Selective release walkthrough](docs/monorepo/selective-release-walkthrough.md)
 - [Monorepo customization](docs/monorepo/customization.md)
 
-For routine customization, prefer the grouped hook/policy settings
-(`releaseIOPolicy*`, `releaseIOHooks*`, `releaseIOMonorepoPolicy*`,
-`releaseIOMonorepoHooks*`) and leave the built-in process intact. For shared-resource or advanced
-integration work, use custom plugins built around the hook and resource-hook APIs. The older flat
-key names and lower-level step DSLs were removed in the breaking API cleanup; raw process override
-is no longer part of the supported public surface.
+Customization is layered: flip a `releaseIOBehavior*` toggle or pass a CLI flag
+(`with-defaults`, `skip-tests`, `cross`) for one-off tweaks, pre-answer decision
+prompts with `releaseIODefaults*`, redefine a specific task key
+(`releaseIOPublishAction`, `releaseIOVcsTagName`, the `releaseIOVersioning*`
+family), or inject logic around phases with `releaseIOHooks*` / `releaseIOPolicy*`
+(and their `releaseIOMonorepo*` counterparts). For shared-resource integration —
+an HTTP client, a temp workspace, anything acquired once per run — extend
+`ReleasePluginIOLike[T]` / `MonorepoReleasePluginLike[T]` and use the
+resource-hook APIs. See [docs/core/customization.md](docs/core/customization.md)
+and [docs/monorepo/customization.md](docs/monorepo/customization.md) for the
+full catalog.
 
 For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
 [docs/monorepo/recipes.md](docs/monorepo/recipes.md). For rollback and recovery, see

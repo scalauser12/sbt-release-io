@@ -4,34 +4,6 @@ This page is the exhaustive reference for core settings and CLI flags. If you wa
 smaller starter example, see [Configuration](configuration.md). If you want a guided
 walkthrough, start with [Getting started](getting-started.md).
 
-## Migration note
-
-The hook/policy lifecycle is now the only supported build-facing customization surface.
-Migrate legacy step-list edits to grouped `releaseIOPolicy*` keys, `releaseIOHooks*`, and
-resource-aware custom plugins built around `releaseResourceHooks`.
-
-Use the grouped names in `build.sbt`. The older flat names were removed in the breaking cleanup,
-and the grouped names are now the canonical sbt key labels.
-
-## Grouped key migration
-
-| Removed name | Replacement |
-| -------- | ---------------------- |
-| `releaseIOCrossBuild` | `releaseIOBehaviorCrossBuild` |
-| `releaseIOSkipPublish` | `releaseIOBehaviorSkipPublish` |
-| `releaseIOInteractive` | `releaseIOBehaviorInteractive` |
-| `releaseIODefaultTagExistsAnswer` | `releaseIODefaultsTagExistsAnswer` |
-| `releaseIOVersionFile` | `releaseIOVersioningFile` |
-| `releaseIOReadVersion` | `releaseIOVersioningReadVersion` |
-| `releaseIOVersionFileContents` | `releaseIOVersioningFileContents` |
-| `releaseIOTagName` | `releaseIOVcsTagName` |
-| `releaseIOCommitMessage` | `releaseIOVcsReleaseCommitMessage` |
-| `releaseIOPublishArtifactsAction` | `releaseIOPublishAction` |
-| `releaseIORuntimeVersion` | `releaseIORuntimeCurrentVersion` |
-| `releaseIOEnablePush` | `releaseIOPolicyEnablePush` |
-| `releaseIOBeforeTagHooks` | `releaseIOHooksBeforeTag` |
-| `releaseIOAfterPublishHooks` | `releaseIOHooksAfterPublish` |
-
 > **Coming from sbt-release?** The original plugin enables interactive prompts by default.
 > This plugin defaults to `releaseIOBehaviorInteractive := false` — decision points that
 > have no configured answer **fail fast** instead of prompting.

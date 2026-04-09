@@ -103,7 +103,7 @@ hook documentation.
   [Configuration](configuration.md)
 - Full settings and CLI catalog:
   [Settings reference](reference.md)
-- Hooks, resource-aware custom plugins, and migration guidance:
+- Hooks, resource-aware custom plugins, and recipes:
   [Customization](customization.md)
 - Validate/execute semantics and execution model details:
   [Concepts](concepts.md)

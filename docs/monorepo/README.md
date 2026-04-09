@@ -4,8 +4,6 @@
 
 A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/README.md) with per-project version files, per-project tags, change detection, topological ordering, and failure isolation.
 
-> Migration note: monorepo global version mode and unified tags were removed. Removed surfaces include `releaseIOMonorepoUseGlobalVersion`, `releaseIOMonorepoTagStrategy`, `releaseIOMonorepoUnifiedTagName`, `releaseIOMonorepoUnifiedTagComment`, bare `release-version <version>` / `next-version <version>` CLI overrides, and the corresponding global/unified scripted workflows. Migrate to per-project version files and per-project `project=version` CLI overrides.
-
 ## Start
 
 - [Getting started](getting-started.md)
@@ -20,7 +18,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
 - [Usage](usage.md)
   CLI grammar, selectors, flags, version overrides, and short command examples.
 - [Configuration](configuration.md)
-  Starter `build.sbt` patterns, migration guide, and configuration recipes.
+  Starter `build.sbt` patterns and configuration recipes.
 - [Settings reference](reference.md)
   Exhaustive catalog of `releaseIOMonorepoSelection*`, `releaseIOMonorepoPolicy*`, `releaseIOMonorepoHooks*`, and shared core settings.
 - [Concepts](concepts.md)
@@ -33,7 +31,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
 ## Customize
 
 - [Customization](customization.md)
-  Hook-first customization, resource-aware custom plugins, and migration guidance.
+  Hook-first customization, resource-aware custom plugins, and recipes.
 
 ## Operate
 

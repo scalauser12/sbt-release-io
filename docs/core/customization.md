@@ -8,9 +8,6 @@ Core release customization is hook-first:
 - `releaseIOHooks*` adds behavior around supported lifecycle points
 - `ReleasePluginIOLike.releaseResourceHooks` lets custom plugins use one shared resource
 
-Legacy raw-process step-list editing was removed. If you previously customized the release
-by editing the step sequence directly, migrate to hooks and policies instead.
-
 ## Hook-based customization
 
 ```scala
@@ -40,24 +37,7 @@ Hook semantics:
 - `releaseIO check` validates the same lifecycle shape that `releaseIO` executes
 - hooks extend behavior, but they do not change phase ordering
 
-Prefer the grouped names in `build.sbt`; the breaking cleanup removed the older flat aliases and
-renamed the underlying sbt key labels to match.
-
-## Key rename guide
-
-| Removed name | Replacement |
-| ------------ | ----------- |
-| `releaseIOEnablePush` | `releaseIOPolicyEnablePush` |
-| `releaseIOEnablePublish` | `releaseIOPolicyEnablePublish` |
-| `releaseIOEnableRunTests` | `releaseIOPolicyEnableRunTests` |
-| `releaseIOBeforeTagHooks` | `releaseIOHooksBeforeTag` |
-| `releaseIOAfterTagHooks` | `releaseIOHooksAfterTag` |
-| `releaseIOBeforeVersionResolutionHooks` | `releaseIOHooksBeforeVersionResolution` |
-| `releaseIOAfterVersionResolutionHooks` | `releaseIOHooksAfterVersionResolution` |
-| `releaseIOBeforePublishHooks` | `releaseIOHooksBeforePublish` |
-| `releaseIOAfterPublishHooks` | `releaseIOHooksAfterPublish` |
-
-## Migration guide
+## Hook and policy recipes
 
 | Old intent | New hook/policy surface |
 | ---------- | ----------------------- |
@@ -117,9 +97,8 @@ For new `.scala` sources, prefer the plugin auto-import explicitly:
 import io.release.ReleasePluginIO.autoImport.*
 ```
 
-The old `ReleaseIO` compatibility namespace has been removed. When grouped keys are needed in
-custom Scala build code under `project/`, import them from `ReleasePluginIO.autoImport.*`
-or qualify them through `ReleasePluginIO.autoImport`.
+When grouped keys are needed in custom Scala build code under `project/`, import them from
+`ReleasePluginIO.autoImport.*` or qualify them through `ReleasePluginIO.autoImport`.
 
 ```scala
 // project/MyReleasePlugin.scala
@@ -176,19 +155,3 @@ Notes:
 - custom plugins already inherit `autoImport`, but grouped keys referenced from `.scala`
   sources should use `ReleasePluginIO.autoImport`
 - do not add your own `object autoImport` unless you intentionally want a different public surface
-
-## Removed Compatibility Namespace
-
-Older Scala build code that imported or mixed in `ReleaseIO` must switch to
-`ReleasePluginIO.autoImport` or fully-qualified grouped keys.
-
-When updating older builds or plugins:
-
-- replace flat `releaseIO*` key names with grouped `releaseIOBehavior*`, `releaseIODefaults*`,
-  `releaseIOPolicy*`, `releaseIOHooks*`, `releaseIOVersioning*`, `releaseIOVcs*`,
-  `releaseIOPublish*`, `releaseIORuntime*`, and `releaseIODiagnostics*`
-- replace older low-level step-list edits with `ReleaseHookIO`, `ReleaseResourceHookIO`,
-  grouped hook settings, and grouped policy settings
-
-The low-level `ReleaseStepIO` DSL was removed in the breaking API cleanup. Build-facing
-customization now goes through hooks, resource hooks, and grouped hook/policy settings only.

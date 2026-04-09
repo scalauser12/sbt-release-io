@@ -50,7 +50,7 @@ git push origin main
 
 ## Related docs
 
-- Custom-step and custom-plugin migration:
+- Customization: hooks, policies, and custom plugins:
   [Customization](customization.md)
 - Execution model, failure isolation, and ordering:
   [Concepts](concepts.md)

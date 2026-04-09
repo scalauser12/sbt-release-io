@@ -55,7 +55,7 @@ git push origin main
 
 ## Related docs
 
-- Custom-step and custom-plugin migration:
+- Customization: hooks, policies, and custom plugins:
   [Customization](customization.md)
 - Execution model, validate/execute semantics, and sbt-release comparison:
   [Concepts](concepts.md)

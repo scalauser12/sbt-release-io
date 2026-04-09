@@ -38,16 +38,22 @@ sbt scalafmtSbtCheck       # check sbt/build file formatting
 
 ```
 modules/
-├── core/                               # io.release package
-│   ├── src/main/scala/io/release/      # Core plugin sources
-│   ├── src/test/scala/                 # Unit tests (MUnit)
-│   ├── src/sbt-test/sbt-release-io/    # 50+ scripted integration tests
-│   └── examples/                       # Example code
-└── monorepo/                           # io.release.monorepo package
-    ├── src/main/scala/io/release/monorepo/  # Monorepo extension sources
-    ├── src/test/scala/                      # Unit tests
-    ├── src/sbt-test/sbt-release-io-monorepo/ # 60+ scripted tests
-    └── examples/                            # Example code
+├── core/                                     # io.release, io.release.core.internal
+│   ├── src/main/scala/io/release/            # Public API: ReleasePluginIO, ReleaseContext, ReleaseHookIO, ReleaseResourceHookIO, ReleaseComposer, VcsOps
+│   ├── src/main/scala/io/release/core/internal/  # CoreLifecycle, CoreCommandExecution, CoreDefaultSettings, steps/
+│   ├── src/test/scala/                       # Unit tests (MUnit)
+│   ├── src/sbt-test/sbt-release-io/          # 50+ scripted integration tests
+│   └── examples/                             # Example code
+├── monorepo/                                 # io.release.monorepo, io.release.monorepo.internal
+│   ├── src/main/scala/io/release/monorepo/   # Public API: MonorepoReleasePlugin, MonorepoContext, MonorepoHookIO, MonorepoResourceHookIO
+│   ├── src/main/scala/io/release/monorepo/internal/  # MonorepoComposer, ChangeDetection, MonorepoProjectResolver, MonorepoSelectionResolver, DependencyGraph, MonorepoLifecycle, MonorepoCommandExecution
+│   ├── src/test/scala/                       # Unit tests
+│   ├── src/sbt-test/sbt-release-io-monorepo/ # 60+ scripted tests
+│   └── examples/                             # Example code
+├── runtime/                                  # io.release, io.release.runtime, io.release.vcs, io.release.version
+│   └── src/main/scala/                       # Engine, VCS adapter, version model (shared by core + monorepo)
+└── testkit/                                  # io.release
+    └── src/main/scala/                       # TestAssertions, TestSupport, TestRepoFiles
 docs/
 ├── core/       # Core plugin documentation
 └── monorepo/   # Monorepo plugin documentation
@@ -59,25 +65,47 @@ docs/
 
 | File | Purpose |
 |------|---------|
-| `ReleasePluginIO.scala` | Main sbt plugin (`ReleasePluginIOLike[T]`); auto-triggered; resource lifecycle, two-phase execution, and grouped core keys under `ReleasePluginIO.autoImport` |
-| `internal/StepKernel.scala` | Step validate/execute kernel; cancellation-safe execution |
-| `internal/ExecutionEngine.scala` | Runs compiled step sequence with context threading |
-| `ReleaseContext.scala` | Immutable context threaded through steps (versions, vcs, state, metadata) |
-| `ReleaseHookIO.scala` | Hook case class for lifecycle customization |
-| `internal/LifecycleCompiler.scala` | Compiles policy settings + hooks into ordered step sequence |
-| `steps/ReleaseSteps.scala` | 13 default steps (initVcs → checkClean → inquireVersions → tag → publish → push) |
-| `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
+| `core/ReleasePluginIO.scala` | Main sbt plugin (`ReleasePluginIOLike[T]`); auto-triggered; resource lifecycle, two-phase execution; grouped core keys exposed via the `ReleasePluginIOAutoImport` object |
+| `core/ReleaseContext.scala` | Immutable context threaded through steps (versions, vcs, state, metadata) |
+| `core/ReleaseHookIO.scala` | Hook case class for lifecycle customization |
+| `core/ReleaseResourceHookIO.scala` | Resource-lifecycle hook for acquire/release around the run |
+| `core/ReleaseComposer.scala` | Composes policies + hooks into the core release sequence |
+| `core/internal/CoreLifecycle.scala` | Wires core policy/hook settings to the shared lifecycle compiler |
+| `core/internal/steps/ReleaseSteps.scala` | 13 default steps (initialize-vcs → check-clean → inquire-versions → tag-release → publish-artifacts → push-changes); `private[release]` |
 
 ### Monorepo Module
 
 | File | Purpose |
 |------|---------|
-| `MonorepoReleasePlugin.scala` | Monorepo plugin (`noTrigger`, must be explicitly enabled on root) |
-| `MonorepoComposer.scala` | Composes global and per-project steps into release sequence |
-| `MonorepoContext.scala` | Global context + `ProjectReleaseInfo` per project |
-| `ChangeDetection.scala` | Git diff-based change detection with shared-paths support |
-| `MonorepoProjectResolver.scala` | Dependency graph resolution and topological sorting |
-| `MonorepoSelectionResolver.scala` | Project selection (by name or change detection) |
+| `monorepo/MonorepoReleasePlugin.scala` | Monorepo plugin (`noTrigger`, must be explicitly enabled on root) |
+| `monorepo/MonorepoContext.scala` | Global context + `ProjectReleaseInfo` per project |
+| `monorepo/MonorepoHookIO.scala` | Global and per-project hook types |
+| `monorepo/MonorepoResourceHookIO.scala` | Global resource hook type for acquire/release around the run |
+| `monorepo/internal/MonorepoComposer.scala` | Composes global and per-project steps into release sequence |
+| `monorepo/internal/ChangeDetection.scala` | Git diff-based change detection with shared-paths support |
+| `monorepo/internal/MonorepoProjectResolver.scala` | Dependency graph resolution and topological sorting |
+| `monorepo/internal/MonorepoSelectionResolver.scala` | Project selection (by name or change detection) |
+
+### Runtime Module
+
+| File | Purpose |
+|------|---------|
+| `runtime/engine/ExecutionEngine.scala` | Runs compiled step sequence with context threading |
+| `runtime/engine/StepKernel.scala` | Step validate/execute kernel; cancellation-safe execution |
+| `runtime/engine/LifecycleCompiler.scala` | Compiles policy settings + hooks into ordered step sequence |
+| `runtime/engine/ProcessStep.scala` | `sealed trait ProcessStep[C, +I]` ADT (internal) |
+| `ReleaseKeys.scala` | Shared sbt setting/task keys used by core + monorepo |
+| `runtime/workflow/VersionWorkflowSupport.scala` | Default version-file IO and publish validation helpers |
+| `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
+| `version/Version.scala` | Version model |
+
+### Testkit Module
+
+| File | Purpose |
+|------|---------|
+| `TestSupport.scala` | MUnit test harness base |
+| `TestAssertions.scala` | IO-aware assertion helpers |
+| `TestRepoFiles.scala` | Git-backed test repo fixtures |
 
 ## Conventions
 

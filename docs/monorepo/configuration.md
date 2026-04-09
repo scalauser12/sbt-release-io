@@ -11,31 +11,6 @@ Settings prefixed `releaseIO` come from the core plugin. Settings prefixed
 `releaseIOMonorepo` also consumes shared core `releaseIODefaults*` and
 `releaseIOVcsRemoteCheckTimeout` settings for decision defaults and the pre-push remote check.
 
-## Migration note
-
-The supported build-facing customization surface is now hook- and policy-based. Use
-grouped `releaseIOMonorepoPolicy*`, `releaseIOMonorepoHooks*`, and resource-aware custom plugins
-built around `monorepoResourceHooks` instead of legacy step-list editing.
-
-Use the grouped names in `build.sbt`. The older flat names were removed in the breaking cleanup,
-and the grouped names are now the canonical sbt key labels.
-
-## Grouped key migration
-
-| Removed name | Replacement |
-| -------- | ---------------------- |
-| `releaseIOMonorepoProjects` | `releaseIOMonorepoSelectionProjects` |
-| `releaseIOMonorepoCrossBuild` | `releaseIOMonorepoBehaviorCrossBuild` |
-| `releaseIOMonorepoSkipTests` | `releaseIOMonorepoBehaviorSkipTests` |
-| `releaseIOMonorepoSkipPublish` | `releaseIOMonorepoBehaviorSkipPublish` |
-| `releaseIOMonorepoCommitMessage` | `releaseIOMonorepoVcsReleaseCommitMessage` |
-| `releaseIOMonorepoTagName` | `releaseIOMonorepoVcsTagName` |
-| `releaseIOMonorepoDetectChanges` | `releaseIOMonorepoDetectionEnabled` |
-| `releaseIOMonorepoIncludeDownstream` | `releaseIOMonorepoDetectionIncludeDownstream` |
-| `releaseIOMonorepoEnablePush` | `releaseIOMonorepoPolicyEnablePush` |
-| `releaseIOMonorepoAfterCleanCheckHooks` | `releaseIOMonorepoHooksAfterCleanCheck` |
-| `releaseIOMonorepoBeforePublishHooks` | `releaseIOMonorepoHooksBeforePublish` |
-
 ## Example: Persistent decision defaults
 
 Use these shared settings when you want `build.sbt` to pre-answer the built-in monorepo

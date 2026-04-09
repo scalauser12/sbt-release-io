@@ -104,11 +104,11 @@ For the full list of CLI flags, subcommands, version override syntax, and select
   [Selective release walkthrough](selective-release-walkthrough.md)
 - CLI grammar, selectors, flags, and override syntax:
   [Usage](usage.md)
-- Starter patterns and migration guide:
+- Starter patterns and recipes:
   [Configuration](configuration.md)
 - Exhaustive settings catalog:
   [Settings reference](reference.md)
-- Hooks, resource-aware custom plugins, and migration guidance:
+- Hooks, resource-aware custom plugins, and recipes:
   [Customization](customization.md)
 - Execution model, failure isolation, and ordering:
   [Concepts](concepts.md)
