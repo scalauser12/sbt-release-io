@@ -79,7 +79,7 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       - name: Run core scripted tests on sbt 2
-        run: sbt -Dsbt.version=${{ env.SBT2_VERSION }} core/scripted
+        run: ./bin/sbt2-clean core/scripted
 
   monorepo-scripted:
     runs-on: ubuntu-latest
@@ -113,7 +113,7 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       - name: Run monorepo scripted tests on sbt 2
-        run: sbt -Dsbt.version=${{ env.SBT2_VERSION }} monorepo/scripted
+        run: ./bin/sbt2-clean monorepo/scripted
 
   publish-local-smoke:
     runs-on: ubuntu-latest
