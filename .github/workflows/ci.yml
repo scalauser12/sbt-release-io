@@ -117,6 +117,10 @@ jobs:
 
   publish-local-smoke:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sbt-line: ["sbt1", "sbt2"]
     steps:
       - name: Configure git
         run: git config --global init.defaultBranch main
@@ -128,7 +132,12 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       - name: Run publishLocal smoke for core and monorepo
-        run: sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'
+        run: |
+          if [ "${{ matrix.sbt-line }}" = "sbt2" ]; then
+            ./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'
+          else
+            sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'
+          fi
 
   publish:
     needs:

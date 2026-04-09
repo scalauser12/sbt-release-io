@@ -31,6 +31,28 @@ class CoreCommandExecutionSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     }
   }
 
+  test("resolveDecisionDefaults warns with the selected duplicate tag default in release mode") {
+    import ReleaseCli.Arg.*
+
+    stateResource("core-command-tag-defaults-release", HookFriendlyPlugin).use { loaded =>
+      IO {
+        val defaults = CoreCommandExecution.resolveDecisionDefaults(
+          loaded.state,
+          Seq(TagDefault("keep"), TagDefault("release-v1.2.3")),
+          warnOnDuplicates = true
+        )
+        val log      = loaded.consoleBuffer.toString("UTF-8")
+
+        assertEquals(defaults.tagExistsAnswer, Some("release-v1.2.3"))
+        assert(
+          log.contains(
+            "Multiple default-tag-exists-answer args provided; using 'release-v1.2.3'"
+          )
+        )
+      }
+    }
+  }
+
   test("resolveDecisionDefaults suppresses duplicate push warnings in check mode") {
     import ReleaseCli.Arg.*
 
