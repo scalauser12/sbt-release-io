@@ -1,5 +1,7 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 
 /** A resource-aware global hook for custom monorepo plugins with a shared resource `T`.

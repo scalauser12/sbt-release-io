@@ -1,4 +1,4 @@
-package io.release.steps
+package io.release.core.internal.steps
 
 import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
@@ -8,7 +8,7 @@ import sbt.{Def, Setting, State, *}
 import sbt.protocol.testing.codec.TestResultFormats
 
 import java.io.File
-import _root_.io.release.internal.SbtCompat
+import _root_.io.release.runtime.sbt.SbtCompat
 
 private[steps] object CoreStepTestCompat:
 

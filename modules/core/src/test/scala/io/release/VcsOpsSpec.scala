@@ -4,11 +4,11 @@ import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
-import io.release.internal.CoreExecutionState
-import io.release.internal.CoreReleasePlan
-import io.release.internal.ExecutionFlags
-import io.release.internal.ReleaseDecisionDefaults
-import io.release.internal.ReleaseLogPrefixes
+import io.release.core.internal.CoreExecutionState
+import io.release.core.internal.CoreReleasePlan
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.ReleaseLogPrefixes
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Project

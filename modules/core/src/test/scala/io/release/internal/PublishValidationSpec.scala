@@ -1,4 +1,4 @@
-package io.release.internal
+package io.release.runtime.workflow
 
 import io.release.TestAssertions.assertIllegalStateMessage
 import munit.CatsEffectSuite

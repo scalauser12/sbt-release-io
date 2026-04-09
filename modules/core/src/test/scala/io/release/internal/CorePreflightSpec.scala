@@ -1,16 +1,20 @@
-package io.release.internal
+package io.release.core.internal
 
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
-import io.release.internal.CoreStepAliases.Step
+import io.release.core.internal.CoreStepAliases.Step
+import io.release.core.internal.steps.ReleaseSteps
+import io.release.core.internal.steps.VcsSteps
+import io.release.core.internal.steps.VersionSteps
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.steps.ReleaseSteps
-import io.release.steps.VcsSteps
-import io.release.steps.VersionSteps
+import io.release.runtime.command.HelpDocsLinks
+import io.release.runtime.engine.ProcessStep
+import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Project
 

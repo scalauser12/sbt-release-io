@@ -1,9 +1,10 @@
-package io.release.internal
+package io.release.core.internal
 
 import cats.effect.IO
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
 import io.release.TestSupport
+import io.release.runtime.engine.LifecycleCatalogSupport
 import munit.CatsEffectSuite
 import sbt.*
 

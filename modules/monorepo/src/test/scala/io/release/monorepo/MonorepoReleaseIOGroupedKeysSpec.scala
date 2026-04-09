@@ -1,5 +1,7 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import io.release.TestRepoFiles
 import munit.CatsEffectSuite

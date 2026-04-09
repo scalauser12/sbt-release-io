@@ -4,7 +4,7 @@ import sbt.Keys
 import sbt.{Def, Setting, State, TaskKey, *}
 
 import java.io.File
-import _root_.io.release.internal.SbtCompat
+import _root_.io.release.runtime.sbt.SbtCompat
 
 private[release] object ReleaseStepIOCrossBuildCompat:
 

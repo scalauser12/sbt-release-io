@@ -3,9 +3,9 @@ package io.release
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
-import io.release.internal.CoreCommandExecution
-import io.release.internal.CoreLifecycle
-import io.release.internal.CoreStepAliases.Step
+import io.release.core.internal.CoreCommandExecution
+import io.release.core.internal.CoreLifecycle
+import io.release.core.internal.CoreStepAliases.Step
 import sbt.Project
 import sbt.Setting
 import sbt.State

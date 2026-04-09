@@ -2,8 +2,8 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.CoreCommandExecution
-import io.release.internal.ReleaseLogPrefixes
+import io.release.core.internal.CoreCommandExecution
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.Setting
 
@@ -136,7 +136,7 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
 
       assert(labels.contains("commands"))
       assert(
-        io.release.internal.CoreDefaultSettings.pluginDefaultSettings
+        io.release.core.internal.CoreDefaultSettings.pluginDefaultSettings
           .map(_.key.key.label)
           .forall(labels.contains)
       )

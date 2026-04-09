@@ -75,19 +75,39 @@ lazy val testkit = (project in file("modules/testkit"))
     libraryDependencies += "org.scalameta" %% "munit" % MunitVersion
   )
 
+lazy val runtime = (project in file("modules/runtime"))
+  .enablePlugins(SbtPlugin)
+  .settings(
+    commonSettings,
+    name                   := "sbt-release-io-runtime",
+    description            := "Internal shared runtime/kernel for sbt-release-io modules",
+    publish / skip         := true
+  )
+
 lazy val core = (project in file("modules/core"))
   .enablePlugins(SbtPlugin)
-  .dependsOn(testkit % "test->compile")
+  .dependsOn(
+    runtime % "compile-internal->compile;test-internal->test",
+    testkit % "test->compile"
+  )
   .settings(
     commonSettings,
     name        := "sbt-release-io",
     description := "A cats-effect IO port of sbt-release for sbt",
+    Compile / doc / sources ++= (runtime / Compile / sources).value,
+    Compile / tastyFiles ++= (runtime / Compile / tastyFiles).value,
+    Compile / packageBin / mappings ++= RuntimePackagingCompat.classMappings(runtime).value,
+    Compile / packageSrc / mappings ++= RuntimePackagingCompat.sourceMappings(runtime).value,
     Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
 lazy val monorepo = (project in file("modules/monorepo"))
   .enablePlugins(SbtPlugin)
-  .dependsOn(core, testkit % "test->compile")
+  .dependsOn(
+    core,
+    runtime % "compile-internal->compile;test-internal->test",
+    testkit % "test->compile"
+  )
   .settings(
     commonSettings,
     name        := "sbt-release-io-monorepo",
@@ -96,7 +116,7 @@ lazy val monorepo = (project in file("modules/monorepo"))
   )
 
 lazy val root = (project in file("."))
-  .aggregate(testkit, core, monorepo)
+  .aggregate(testkit, runtime, core, monorepo)
   .settings(
     name           := "sbt-release-io-root",
     publish / skip := true
@@ -105,6 +125,7 @@ lazy val root = (project in file("."))
 Global / excludeLintKeys ++= Set(
   ThisBuild / git.gitUncommittedChanges,
   testkit / git.gitDescribedVersion,
+  runtime / git.gitDescribedVersion,
   core / git.gitDescribedVersion,
   monorepo / git.gitDescribedVersion,
   root / git.gitDescribedVersion

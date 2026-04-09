@@ -1,14 +1,16 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
-import io.release.internal.ProcessStep
-import io.release.internal.PluginEntrypointSupport
-import io.release.monorepo.MonorepoStepAliases.AnyStep
-import io.release.monorepo.MonorepoStepAliases.GlobalStep
-import io.release.monorepo.MonorepoStepAliases.ProjectStep
+import io.release.runtime.engine.ProcessStep
+import io.release.runtime.command.PluginEntrypointSupport
+import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
+import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
+import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import sbt.*
 import sbt.Project
 import sbt.ProjectRef

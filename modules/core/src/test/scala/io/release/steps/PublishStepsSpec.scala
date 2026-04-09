@@ -1,4 +1,4 @@
-package io.release.steps
+package io.release.core.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
@@ -8,8 +8,8 @@ import io.release.ReleaseIOCompat
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.internal.ReleaseLogPrefixes
-import io.release.internal.SbtCompat
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*

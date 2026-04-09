@@ -1,8 +1,8 @@
 package io.release
 
 import io.release.TestAssertions.assertFailure
-import io.release.internal.CoreStepFactory
-import io.release.internal.SbtRuntime
+import io.release.core.internal.CoreStepFactory
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Def.*
 import sbt.Keys

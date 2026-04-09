@@ -1,10 +1,12 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleasePluginIO
-import io.release.internal.PluginEntrypointSupport
-import io.release.internal.ReleaseLogPrefixes
+import io.release.runtime.command.PluginEntrypointSupport
+import io.release.runtime.ReleaseLogPrefixes
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 

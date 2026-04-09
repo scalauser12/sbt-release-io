@@ -1,4 +1,4 @@
-package io.release.steps
+package io.release.core.internal.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
@@ -8,11 +8,11 @@ import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalRelease
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions
 import io.release.TestSupport
-import io.release.internal.CoreExecutionState
-import io.release.internal.CoreReleasePlan
-import io.release.internal.ExecutionFlags
-import io.release.internal.ReleaseDecisionDefaults
-import io.release.internal.ReleaseLogPrefixes
+import io.release.core.internal.CoreExecutionState
+import io.release.core.internal.CoreReleasePlan
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
 import sbt.Project

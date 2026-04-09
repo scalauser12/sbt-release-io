@@ -1,9 +1,11 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.ProcessStep
-import io.release.internal.SbtCompat
+import io.release.runtime.engine.ProcessStep
+import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
 
 class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecSupport {

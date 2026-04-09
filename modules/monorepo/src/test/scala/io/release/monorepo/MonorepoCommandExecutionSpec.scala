@@ -1,9 +1,11 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseKeys
-import io.release.internal.ReleaseLogPrefixes
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 
 class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleasePluginSpecSupport {

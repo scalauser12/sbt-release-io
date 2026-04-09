@@ -2,9 +2,9 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.CoreStepFactory
-import io.release.internal.ProcessStep
-import io.release.internal.SbtRuntime
+import io.release.core.internal.CoreStepFactory
+import io.release.runtime.engine.ProcessStep
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.Keys

@@ -1,6 +1,6 @@
-package io.release.monorepo.steps
+package io.release.monorepo.internal.steps
 
-import _root_.io.release.internal.SbtCompat
+import _root_.io.release.runtime.sbt.SbtCompat
 import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
 import sbt.*

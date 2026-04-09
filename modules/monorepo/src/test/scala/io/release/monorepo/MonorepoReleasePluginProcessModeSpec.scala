@@ -1,8 +1,10 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.ReleaseLogPrefixes
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.Setting
 

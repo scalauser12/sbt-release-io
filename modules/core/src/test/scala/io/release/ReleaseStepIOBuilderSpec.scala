@@ -3,8 +3,8 @@ package io.release
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
-import io.release.internal.CoreStepAliases.Step
-import io.release.internal.ProcessStep
+import io.release.core.internal.CoreStepAliases.Step
+import io.release.runtime.engine.ProcessStep
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 

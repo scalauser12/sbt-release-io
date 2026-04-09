@@ -2,13 +2,13 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.internal.CoreCommandExecution
-import io.release.internal.CoreDefaultSettings
-import io.release.internal.PluginEntrypointSupport
-import io.release.internal.ReleaseCli
-import io.release.internal.ReleaseCommandParsers
-import io.release.internal.ReleaseLogPrefixes
-import io.release.steps.StepHelpers
+import io.release.core.internal.CoreCommandExecution
+import io.release.core.internal.CoreDefaultSettings
+import io.release.runtime.command.PluginEntrypointSupport
+import io.release.core.internal.ReleaseCli
+import io.release.core.internal.ReleaseCommandParsers
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
 import io.release.version.Version
 import sbt.complete.Parser

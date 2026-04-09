@@ -1,4 +1,4 @@
-package io.release.internal
+package io.release.core.internal
 
 import cats.effect.IO
 import cats.effect.Ref
@@ -7,6 +7,7 @@ import io.release.ReleaseContext
 import io.release.ReleaseKeys
 import io.release.ReleasePluginIOSpecSupport
 import io.release.ReleaseResourceHooks
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.State
 

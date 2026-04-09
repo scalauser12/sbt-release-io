@@ -1,10 +1,10 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.CoreStepAliases.Step
-import io.release.internal.ExecutionEngine
-import io.release.internal.ReleaseLogPrefixes
-import io.release.internal.SbtRuntime
+import io.release.core.internal.CoreStepAliases.Step
+import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.SbtRuntime
 import sbt.Keys.*
 import sbt.{internal as _, *}
 

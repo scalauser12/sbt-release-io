@@ -1,8 +1,11 @@
-package io.release.monorepo.steps
+package io.release.monorepo.internal.steps
+
+import io.release.monorepo.internal.*
+import io.release.monorepo.internal.steps.*
 
 import io.release.ReleasePluginIO
 import io.release.TestAssertions.assertFailure
-import io.release.monorepo.MonorepoComposer
+import io.release.monorepo.internal.MonorepoComposer
 import munit.CatsEffectSuite
 import sbt.*
 

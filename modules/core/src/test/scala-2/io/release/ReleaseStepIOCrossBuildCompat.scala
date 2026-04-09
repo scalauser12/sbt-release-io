@@ -1,6 +1,6 @@
 package io.release
 
-import _root_.io.release.internal.SbtCompat
+import _root_.io.release.runtime.sbt.SbtCompat
 import sbt.*
 import sbt.Def
 import sbt.Keys

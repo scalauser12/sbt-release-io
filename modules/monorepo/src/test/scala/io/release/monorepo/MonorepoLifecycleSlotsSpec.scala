@@ -1,9 +1,11 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import io.release.TestRepoFiles
-import io.release.internal.LifecycleCompiler
-import io.release.monorepo.steps.MonorepoReleaseSteps
+import io.release.runtime.engine.LifecycleCompiler
+import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import munit.FunSuite
 
 class MonorepoLifecycleSlotsSpec extends FunSuite {
@@ -203,7 +205,7 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
   test("source cleanup - top-level slot facade no longer defines slots inline") {
     val topLevelSource =
       TestRepoFiles.readString(
-        "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoLifecycle.scala"
+        "modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoLifecycle.scala"
       )
 
     assert(!topLevelSource.contains("policySlot("))

@@ -3,11 +3,11 @@ package io.release
 import cats.effect.IO
 import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
-import io.release.internal.CoreExecutionState
-import io.release.internal.CoreReleasePlan
-import io.release.internal.ExecutionFlags
-import io.release.internal.ReleaseDecisionDefaults
-import io.release.steps.StepHelpers
+import io.release.core.internal.CoreExecutionState
+import io.release.core.internal.CoreReleasePlan
+import io.release.core.internal.steps.StepHelpers
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.AttributeKey

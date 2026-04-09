@@ -1,13 +1,13 @@
-package io.release.internal
+package io.release.core.internal
 
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
-import io.release.internal.CoreStepAliases.Step
+import io.release.core.internal.CoreStepAliases.Step
+import io.release.core.internal.steps.ReleaseSteps
 import io.release.TestSupport
-import io.release.steps.ReleaseSteps
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
@@ -32,7 +32,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     hookStateResource("release-hook-compiler-overload").use { state =>
       IO {
         val commandExecution = Files.readString(
-          repoPath("modules/core/src/main/scala/io/release/internal/CoreCommandExecution.scala")
+          repoPath("modules/core/src/main/scala/io/release/core/internal/CoreCommandExecution.scala")
         )
 
         assertEquals(compileLifecycle(state).map(_.name), ReleaseSteps.defaults.map(_.name))

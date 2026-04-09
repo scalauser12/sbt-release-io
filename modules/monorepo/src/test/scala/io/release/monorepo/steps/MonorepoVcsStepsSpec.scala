@@ -1,16 +1,19 @@
-package io.release.monorepo.steps
+package io.release.monorepo.internal.steps
+
+import io.release.monorepo.internal.*
+import io.release.monorepo.internal.steps.*
 
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestAssertions
 import io.release.TestSupport
-import io.release.internal.SbtRuntime
+import io.release.runtime.sbt.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
-import io.release.monorepo.MonorepoVersionFiles
+import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.ProjectReleaseInfo
-import io.release.monorepo.SelectionMode
+import io.release.monorepo.internal.SelectionMode
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Def
@@ -664,7 +667,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
     aggregated.settings(
       (
-        _root_.io.release.monorepo.MonorepoDefaultSettings.pluginDefaultSettings ++
+        _root_.io.release.monorepo.internal.MonorepoDefaultSettings.pluginDefaultSettings ++
           Seq(
             io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile          := new File(
               repo,

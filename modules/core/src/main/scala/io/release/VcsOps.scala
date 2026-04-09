@@ -1,8 +1,10 @@
 package io.release
 
 import cats.effect.IO
-import io.release.ReleaseCtxOps.syntax.*
-import io.release.internal.DecisionResolver
+import io.release.runtime.ReleaseCtx
+import io.release.runtime.ReleaseCtxOps
+import io.release.runtime.ReleaseCtxOps.syntax.*
+import io.release.runtime.workflow.DecisionResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
 import sbt.{internal as _, *}

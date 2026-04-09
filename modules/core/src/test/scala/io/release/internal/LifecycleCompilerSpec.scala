@@ -1,11 +1,8 @@
-package io.release.internal
+package io.release.runtime.engine
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.LifecycleCompilerSpec.ItemHook
-import io.release.internal.LifecycleCompilerSpec.SingleHook
-import io.release.internal.LifecycleCompilerSpec.TestConfig
-import io.release.internal.LifecycleCompilerSpec.TestContext
+import LifecycleCompilerSpec.{ItemHook, SingleHook, TestConfig, TestContext}
 import munit.CatsEffectSuite
 
 class LifecycleCompilerSpec extends CatsEffectSuite {

@@ -1,4 +1,6 @@
-package io.release.monorepo.steps
+package io.release.monorepo.internal.steps
+
+import io.release.monorepo.internal.steps.*
 
 import cats.effect.IO
 import io.release.TestSupport

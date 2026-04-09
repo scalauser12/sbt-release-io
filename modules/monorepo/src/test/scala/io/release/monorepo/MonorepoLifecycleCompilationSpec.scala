@@ -1,12 +1,14 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestSupport
-import io.release.internal.ProcessStep
-import io.release.monorepo.MonorepoStepAliases.AnyStep
-import io.release.monorepo.MonorepoStepAliases.ProjectStep
-import io.release.monorepo.steps.MonorepoReleaseSteps
+import io.release.runtime.engine.ProcessStep
+import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
+import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
+import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import munit.CatsEffectSuite
 import sbt.Keys.*
 import sbt.Setting
@@ -47,7 +49,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       IO {
         val commandExecution = Files.readString(
           repoPath(
-            "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoCommandExecution.scala"
+            "modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandExecution.scala"
           )
         )
 
