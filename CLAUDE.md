@@ -59,11 +59,10 @@ docs/
 
 | File | Purpose |
 |------|---------|
-| `ReleasePluginIO.scala` | Main sbt plugin (`ReleasePluginIOLike[T]`); auto-triggered; resource lifecycle and two-phase execution |
+| `ReleasePluginIO.scala` | Main sbt plugin (`ReleasePluginIOLike[T]`); auto-triggered; resource lifecycle, two-phase execution, and grouped core keys under `ReleasePluginIO.autoImport` |
 | `internal/StepKernel.scala` | Step validate/execute kernel; cancellation-safe execution |
 | `internal/ExecutionEngine.scala` | Runs compiled step sequence with context threading |
 | `ReleaseContext.scala` | Immutable context threaded through steps (versions, vcs, state, metadata) |
-| `ReleaseIO.scala` | 60+ setting keys exported by the plugin |
 | `ReleaseHookIO.scala` | Hook case class for lifecycle customization |
 | `internal/LifecycleCompiler.scala` | Compiles policy settings + hooks into ordered step sequence |
 | `steps/ReleaseSteps.scala` | 13 default steps (initVcs → checkClean → inquireVersions → tag → publish → push) |
@@ -100,7 +99,7 @@ docs/
 
 ### Customization Model
 
-**Supported — Hook lifecycle:** Policy settings enable/disable phases (`releaseIOPolicyEnableRunTests`, `releaseIOPolicyEnablePublish`, etc.). Hook settings inject logic at semantic points (`releaseIOHooksBeforeTag`, `releaseIOHooksAfterPublish`, etc.). The older flat names remain as deprecated aliases for compatibility. Compiled into an ordered step sequence at startup.
+**Supported — Hook lifecycle:** Policy settings enable/disable phases (`releaseIOPolicyEnableRunTests`, `releaseIOPolicyEnablePublish`, etc.). Hook settings inject logic at semantic points (`releaseIOHooksBeforeTag`, `releaseIOHooksAfterPublish`, etc.). Grouped keys are the only supported build-facing settings surface. Compiled into an ordered step sequence at startup.
 
 **Advanced internals:** Lower-level step types still exist for internals, tests, and custom plugin
 helpers, but build-facing customization should use hooks, policies, and resource hooks.

@@ -139,8 +139,10 @@ For new `.scala` sources, prefer the plugin auto-import explicitly:
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 ```
 
-Existing Scala build code can continue to import or mix in `MonorepoReleaseIO` while
-migrating, but `MonorepoReleaseIO` is now a deprecated compatibility shim.
+The old `MonorepoReleaseIO` compatibility namespace has been removed. When grouped keys are
+needed in custom Scala build code under `project/`, import them from
+`MonorepoReleasePlugin.autoImport.*` or qualify them through
+`MonorepoReleasePlugin.autoImport`.
 
 ```scala
 // project/MyMonorepoRelease.scala
@@ -190,14 +192,15 @@ Notes:
 - protected behavior hooks default to the corresponding `releaseIOMonorepoBehavior*`
   settings and are intended for custom plugin authors, not ordinary `build.sbt`
   customization
-- custom monorepo plugins already inherit `autoImport`; do not add your own
-  `object autoImport` unless you intentionally want a different public surface
+- custom monorepo plugins already inherit `autoImport`, but grouped keys referenced from
+  `.scala` sources should use `MonorepoReleasePlugin.autoImport`
+- do not add your own `object autoImport` unless you intentionally want a different public surface
 
 ## Older API renames
 
 Scala-source migration note: prefer `MonorepoReleasePlugin.autoImport` in new `.scala`
-sources. Older Scala build code that imports or mixes in `MonorepoReleaseIO` still works
-during migration, but `MonorepoReleaseIO` is deprecated and should not be used for new code.
+sources. Older Scala build code that imported or mixed in `MonorepoReleaseIO` must switch
+to `MonorepoReleasePlugin.autoImport` or fully-qualified grouped keys.
 
 When updating older builds or plugins:
 

@@ -192,6 +192,9 @@ trait HttpClient {
  * // enablePlugins(MyReleasePlugin)
  * }}}
  *
+ * If this plugin needs grouped `releaseIO*` keys in `.scala` sources, import them explicitly:
+ * `import io.release.ReleasePluginIO.autoImport.*`
+ *
  * Run with:
  * {{{
  * sbt "releaseWithClient with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"

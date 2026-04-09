@@ -117,8 +117,9 @@ For new `.scala` sources, prefer the plugin auto-import explicitly:
 import io.release.ReleasePluginIO.autoImport.*
 ```
 
-Existing Scala build code can continue to import or mix in `ReleaseIO` while migrating, but
-`ReleaseIO` is now a deprecated compatibility shim.
+The old `ReleaseIO` compatibility namespace has been removed. When grouped keys are needed in
+custom Scala build code under `project/`, import them from `ReleasePluginIO.autoImport.*`
+or qualify them through `ReleasePluginIO.autoImport`.
 
 ```scala
 // project/MyReleasePlugin.scala
@@ -172,14 +173,15 @@ Notes:
   (HTTP calls, temp-dir setup, etc.) in `execute`, not `validate`.
 - `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
   resource value, then releases it.
-- custom plugins already inherit `autoImport`; do not add your own `object autoImport`
-  unless you intentionally want a different public surface
+- custom plugins already inherit `autoImport`, but grouped keys referenced from `.scala`
+  sources should use `ReleasePluginIO.autoImport`
+- do not add your own `object autoImport` unless you intentionally want a different public surface
 
 ## Older API renames
 
 Scala-source migration note: prefer `ReleasePluginIO.autoImport` in new `.scala` sources.
-Older Scala build code that imports or mixes in `ReleaseIO` still works during migration,
-but `ReleaseIO` is deprecated and should not be used for new code.
+Older Scala build code that imported or mixed in `ReleaseIO` must switch to
+`ReleasePluginIO.autoImport` or fully-qualified grouped keys.
 
 When updating older builds or plugins:
 

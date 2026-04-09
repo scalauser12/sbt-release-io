@@ -209,6 +209,9 @@ trait HttpClient {
   *   .enablePlugins(MyMonorepoRelease)
   * }}}
   *
+  * If this plugin needs grouped `releaseIOMonorepo*` keys in `.scala` sources, import them
+  * explicitly: `import io.release.monorepo.MonorepoReleasePlugin.autoImport.*`
+  *
   * Run with: `sbt "releaseMonorepoCustom core api with-defaults"`
   */
 object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
