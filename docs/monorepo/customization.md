@@ -171,6 +171,6 @@ Notes:
 - protected behavior hooks default to the corresponding `releaseIOMonorepoBehavior*`
   settings and are intended for custom plugin authors, not ordinary `build.sbt`
   customization
-- custom monorepo plugins already inherit `autoImport`, but grouped keys referenced from
+- custom monorepo plugins already inherit `autoImport` (declared `final` on
+  `MonorepoReleasePluginLike`), so it cannot be overridden; grouped keys referenced from
   `.scala` sources should use `MonorepoReleasePlugin.autoImport`
-- do not add your own `object autoImport` unless you intentionally want a different public surface

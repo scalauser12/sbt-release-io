@@ -152,6 +152,6 @@ Notes:
   (HTTP calls, temp-dir setup, etc.) in `execute`, not `validate`.
 - `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
   resource value, then releases it.
-- custom plugins already inherit `autoImport`, but grouped keys referenced from `.scala`
-  sources should use `ReleasePluginIO.autoImport`
-- do not add your own `object autoImport` unless you intentionally want a different public surface
+- custom plugins already inherit `autoImport` (declared `final` on `ReleasePluginIOLike`),
+  so it cannot be overridden; grouped keys referenced from `.scala` sources should use
+  `ReleasePluginIO.autoImport`
