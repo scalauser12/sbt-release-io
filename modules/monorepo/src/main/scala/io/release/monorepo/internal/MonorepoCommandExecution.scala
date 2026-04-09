@@ -341,7 +341,6 @@ private[monorepo] object MonorepoCommandExecution {
       args: Seq[MonorepoCli.Arg],
       warnOnDuplicates: Boolean
   ): ReleaseDecisionDefaults = {
-    import DecisionDefaultsSupport.{renderYesNo, resolveLast}
     import MonorepoCli.Arg.*
 
     def allArgs[A](extract: PartialFunction[MonorepoCli.Arg, A]): Seq[A] =
@@ -361,50 +360,26 @@ private[monorepo] object MonorepoCommandExecution {
         extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer).flatten,
       pushAnswer = extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer).flatten
     )
-    val cli       = ReleaseDecisionDefaults(
-      tagExistsAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-tag-exists-answer",
-        allArgs { case TagDefault(value) => value },
-        identity[String],
-        warnOnDuplicates
-      ),
-      snapshotDependenciesAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-snapshot-dependencies-answer",
-        allArgs { case SnapshotDependenciesDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      ),
-      remoteCheckFailureAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-remote-check-failure-answer",
-        allArgs { case RemoteCheckFailureDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      ),
-      upstreamBehindAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-upstream-behind-answer",
-        allArgs { case UpstreamBehindDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      ),
-      pushAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Monorepo,
-        "default-push-answer",
-        allArgs { case PushDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      )
-    )
 
-    ReleaseDecisionDefaults.merge(cli, settings)
+    DecisionDefaultsSupport.resolve(
+      state = state,
+      prefix = ReleaseLogPrefixes.Monorepo,
+      settings = settings,
+      cliInputs = DecisionDefaultsSupport.CliInputs(
+        tagExistsAnswers = allArgs { case TagDefault(value) => value },
+        snapshotDependenciesAnswers = allArgs { case SnapshotDependenciesDefault(value) =>
+          value
+        },
+        remoteCheckFailureAnswers = allArgs { case RemoteCheckFailureDefault(value) =>
+          value
+        },
+        upstreamBehindAnswers = allArgs { case UpstreamBehindDefault(value) =>
+          value
+        },
+        pushAnswers = allArgs { case PushDefault(value) => value }
+      ),
+      warnOnDuplicates = warnOnDuplicates
+    )
   }
 
   private def preparePushIfNeeded(

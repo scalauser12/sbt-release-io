@@ -115,6 +115,21 @@ jobs:
       - name: Run monorepo scripted tests on sbt 2
         run: sbt -Dsbt.version=${{ env.SBT2_VERSION }} monorepo/scripted
 
+  publish-local-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure git
+        run: git config --global init.defaultBranch main
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - name: Run publishLocal smoke for core and monorepo
+        run: sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'
+
   publish:
     needs:
       [
@@ -124,6 +139,7 @@ jobs:
         core-scripted-sbt2,
         monorepo-scripted,
         monorepo-scripted-sbt2,
+        publish-local-smoke,
       ]
     if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest

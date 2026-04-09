@@ -74,8 +74,8 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
         raw"\b"
     ).r
 
-  test("monorepo main sources do not import legacy core internals or old step facades") {
-    sourceFiles("modules/monorepo/src/main/scala").flatMap { files =>
+  private def assertNoLegacyImports(relativeDir: String): IO[Unit] =
+    sourceFiles(relativeDir).flatMap { files =>
       IO.blocking {
         val offenders =
           files
@@ -86,6 +86,13 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
         assertEquals(offenders, Nil)
       }
     }
+
+  test("core main sources do not import legacy internal or old step facades") {
+    assertNoLegacyImports("modules/core/src/main/scala")
+  }
+
+  test("monorepo main sources do not import legacy core internals or old step facades") {
+    assertNoLegacyImports("modules/monorepo/src/main/scala")
   }
 
   test("shared runtime kernel types are defined only in modules/runtime") {
