@@ -13,6 +13,42 @@ import sbt.State
 
 class CoreCommandExecutionSpec extends CatsEffectSuite with ReleasePluginIOSpecSupport {
 
+  test("resolveDecisionDefaults warns on duplicate push defaults in release mode") {
+    import ReleaseCli.Arg.*
+
+    stateResource("core-command-defaults-release", HookFriendlyPlugin).use { loaded =>
+      IO {
+        val defaults = CoreCommandExecution.resolveDecisionDefaults(
+          loaded.state,
+          Seq(PushDefault(true), PushDefault(false)),
+          warnOnDuplicates = true
+        )
+        val log      = loaded.consoleBuffer.toString("UTF-8")
+
+        assertEquals(defaults.pushAnswer, Some(false))
+        assert(log.contains("Multiple default-push-answer args provided; using 'n'"))
+      }
+    }
+  }
+
+  test("resolveDecisionDefaults suppresses duplicate push warnings in check mode") {
+    import ReleaseCli.Arg.*
+
+    stateResource("core-command-defaults-check", HookFriendlyPlugin).use { loaded =>
+      IO {
+        val defaults = CoreCommandExecution.resolveDecisionDefaults(
+          loaded.state,
+          Seq(PushDefault(true), PushDefault(false)),
+          warnOnDuplicates = false
+        )
+        val log      = loaded.consoleBuffer.toString("UTF-8")
+
+        assertEquals(defaults.pushAnswer, Some(false))
+        assert(!log.contains("Multiple default-push-answer args provided"))
+      }
+    }
+  }
+
   test("doRelease resolves interactive mode from cleanState before building inputs") {
     stateResource("core-command-clean-state", HookFriendlyPlugin).use { loaded =>
       Ref.of[IO, Option[Boolean]](None).flatMap { observedInteractive =>

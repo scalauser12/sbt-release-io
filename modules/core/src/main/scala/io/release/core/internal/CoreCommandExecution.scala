@@ -306,12 +306,11 @@ private[release] object CoreCommandExecution {
       state.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
   }
 
-  private def resolveDecisionDefaults(
+  private[core] def resolveDecisionDefaults(
       state: State,
       args: Seq[ReleaseCli.Arg],
       warnOnDuplicates: Boolean
   ): ReleaseDecisionDefaults = {
-    import DecisionDefaultsSupport.{renderYesNo, resolveLast}
     import ReleaseCli.Arg.*
 
     def allArgs[A](extract: PartialFunction[ReleaseCli.Arg, A]): Seq[A] =
@@ -331,50 +330,26 @@ private[release] object CoreCommandExecution {
         extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer).flatten,
       pushAnswer = extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer).flatten
     )
-    val cli       = ReleaseDecisionDefaults(
-      tagExistsAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Core,
-        "default-tag-exists-answer",
-        allArgs { case TagDefault(value) => value },
-        identity[String],
-        warnOnDuplicates
-      ),
-      snapshotDependenciesAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Core,
-        "default-snapshot-dependencies-answer",
-        allArgs { case SnapshotDependenciesDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      ),
-      remoteCheckFailureAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Core,
-        "default-remote-check-failure-answer",
-        allArgs { case RemoteCheckFailureDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      ),
-      upstreamBehindAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Core,
-        "default-upstream-behind-answer",
-        allArgs { case UpstreamBehindDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      ),
-      pushAnswer = resolveLast(
-        state,
-        ReleaseLogPrefixes.Core,
-        "default-push-answer",
-        allArgs { case PushDefault(value) => value },
-        renderYesNo,
-        warnOnDuplicates
-      )
-    )
 
-    ReleaseDecisionDefaults.merge(cli, settings)
+    DecisionDefaultsSupport.resolve(
+      state = state,
+      prefix = ReleaseLogPrefixes.Core,
+      settings = settings,
+      cliInputs = DecisionDefaultsSupport.CliInputs(
+        tagExistsAnswers = allArgs { case TagDefault(value) => value },
+        snapshotDependenciesAnswers = allArgs { case SnapshotDependenciesDefault(value) =>
+          value
+        },
+        remoteCheckFailureAnswers = allArgs { case RemoteCheckFailureDefault(value) =>
+          value
+        },
+        upstreamBehindAnswers = allArgs { case UpstreamBehindDefault(value) =>
+          value
+        },
+        pushAnswers = allArgs { case PushDefault(value) => value }
+      ),
+      warnOnDuplicates = warnOnDuplicates
+    )
   }
 
   private def preparePushIfNeeded(

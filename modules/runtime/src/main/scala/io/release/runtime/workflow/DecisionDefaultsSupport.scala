@@ -1,11 +1,74 @@
 package io.release.runtime.workflow
 
+import io.release.runtime.ReleaseDecisionDefaults
+
 import _root_.sbt.State
 
 private[release] object DecisionDefaultsSupport {
 
+  final case class CliInputs(
+      tagExistsAnswers: Seq[String] = Nil,
+      snapshotDependenciesAnswers: Seq[Boolean] = Nil,
+      remoteCheckFailureAnswers: Seq[Boolean] = Nil,
+      upstreamBehindAnswers: Seq[Boolean] = Nil,
+      pushAnswers: Seq[Boolean] = Nil
+  )
+
   def renderYesNo(value: Boolean): String =
     if (value) "y" else "n"
+
+  def resolve(
+      state: State,
+      prefix: String,
+      settings: ReleaseDecisionDefaults,
+      cliInputs: CliInputs,
+      warnOnDuplicates: Boolean
+  ): ReleaseDecisionDefaults = {
+    val cli = ReleaseDecisionDefaults(
+      tagExistsAnswer = resolveLast(
+        state,
+        prefix,
+        "default-tag-exists-answer",
+        cliInputs.tagExistsAnswers,
+        identity[String],
+        warnOnDuplicates
+      ),
+      snapshotDependenciesAnswer = resolveLast(
+        state,
+        prefix,
+        "default-snapshot-dependencies-answer",
+        cliInputs.snapshotDependenciesAnswers,
+        renderYesNo,
+        warnOnDuplicates
+      ),
+      remoteCheckFailureAnswer = resolveLast(
+        state,
+        prefix,
+        "default-remote-check-failure-answer",
+        cliInputs.remoteCheckFailureAnswers,
+        renderYesNo,
+        warnOnDuplicates
+      ),
+      upstreamBehindAnswer = resolveLast(
+        state,
+        prefix,
+        "default-upstream-behind-answer",
+        cliInputs.upstreamBehindAnswers,
+        renderYesNo,
+        warnOnDuplicates
+      ),
+      pushAnswer = resolveLast(
+        state,
+        prefix,
+        "default-push-answer",
+        cliInputs.pushAnswers,
+        renderYesNo,
+        warnOnDuplicates
+      )
+    )
+
+    ReleaseDecisionDefaults.merge(cli, settings)
+  }
 
   def resolveLast[A](
       state: State,
