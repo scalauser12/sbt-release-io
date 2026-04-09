@@ -130,7 +130,9 @@ class StepKernelSpec extends CatsEffectSuite {
   test("source cleanup - wrapper-era copy helpers are gone") {
     IO {
       val source =
-        TestRepoFiles.readString("modules/runtime/src/main/scala/io/release/runtime/engine/StepKernel.scala")
+        TestRepoFiles.readString(
+          "modules/runtime/src/main/scala/io/release/runtime/engine/StepKernel.scala"
+        )
 
       assert(!source.contains("SingleBuilderState"))
       assert(!source.contains("ItemBuilderState"))

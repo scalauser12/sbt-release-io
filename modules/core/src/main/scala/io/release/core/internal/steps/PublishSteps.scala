@@ -31,16 +31,16 @@ private[release] object PublishSteps {
       SnapshotDependencyTasks
         .aggregatedSnapshotDependencies(ctx.state, releaseIODiagnosticsSnapshotDependencies)
         .flatMap {
-        case Left(err)                    =>
-          IO.raiseError[ReleaseContext](new IllegalStateException(err))
-        case Right(deps) if deps.nonEmpty =>
-          DecisionResolver.handleSnapshotDependencies(
-            ctx,
-            deps,
-            ReleaseLogPrefixes.Core
-          )
-        case Right(_)                     => IO.pure(ctx)
-      }
+          case Left(err)                    =>
+            IO.raiseError[ReleaseContext](new IllegalStateException(err))
+          case Right(deps) if deps.nonEmpty =>
+            DecisionResolver.handleSnapshotDependencies(
+              ctx,
+              deps,
+              ReleaseLogPrefixes.Core
+            )
+          case Right(_)                     => IO.pure(ctx)
+        }
     ),
     enableCrossBuild = true
   )

@@ -2,7 +2,7 @@ import sbt.*
 import sbt.Keys.*
 import xsbti.HashedVirtualFileRef
 
-object RuntimePackagingCompat {
+object RuntimePackagingCompat:
 
   def classMappings(
       project: ProjectReference
@@ -11,9 +11,10 @@ object RuntimePackagingCompat {
       val converter = fileConverter.value
 
       (project / Compile / products).value.flatMap { product =>
-        if (product.isDirectory)
-          Path.allSubpaths(product).toSeq.collect { case (file, path) if file.isFile =>
-            (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
+        if product.isDirectory then
+          Path.allSubpaths(product).toSeq.collect {
+            case (file, path) if file.isFile =>
+              (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
           }
         else Nil
       }
@@ -28,12 +29,16 @@ object RuntimePackagingCompat {
       val baseDir    = (project / baseDirectory).value
       val excluded   = sourceDirs.toSet + baseDir
       val relative   = (file: File) =>
-        Path.relativeTo(sourceDirs)(file).orElse(Path.relativeTo(baseDir)(file)).orElse(Path.flat(file))
+        Path
+          .relativeTo(sourceDirs)(file)
+          .orElse(Path.relativeTo(baseDir)(file))
+          .orElse(Path.flat(file))
 
       (project / Compile / sources).value.flatMap {
         case file if !excluded(file) =>
-          relative(file).map(path => (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path)
+          relative(file).map(path =>
+            (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
+          )
         case _                       => None
       }
     }
-}

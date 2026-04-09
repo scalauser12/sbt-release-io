@@ -10,7 +10,7 @@ import sbt.*
 import java.io.File
 
 class SnapshotDependencyTasksSpec extends CatsEffectSuite {
-  private val fixturePrefix = "snapshot-deps-spec"
+  private val fixturePrefix           = "snapshot-deps-spec"
   private val snapshotDependenciesKey =
     ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
 
@@ -30,7 +30,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
       }.flatMap { state =>
         SnapshotDependencyTasks.aggregatedSnapshotDependencies(state, snapshotDependenciesKey).map {
           result =>
-          assertEquals(result, Right(Seq.empty[ModuleID]))
+            assertEquals(result, Right(Seq.empty[ModuleID]))
         }
       }
     }
@@ -66,7 +66,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
       }.flatMap { state =>
         SnapshotDependencyTasks.aggregatedSnapshotDependencies(state, snapshotDependenciesKey).map {
           result =>
-          assertEquals(result, Right(Seq(depA, depB)))
+            assertEquals(result, Right(Seq(depA, depB)))
         }
       }
     }
