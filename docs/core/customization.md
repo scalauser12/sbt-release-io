@@ -177,9 +177,8 @@ Notes:
   sources should use `ReleasePluginIO.autoImport`
 - do not add your own `object autoImport` unless you intentionally want a different public surface
 
-## Older API renames
+## Removed Compatibility Namespace
 
-Scala-source migration note: prefer `ReleasePluginIO.autoImport` in new `.scala` sources.
 Older Scala build code that imported or mixed in `ReleaseIO` must switch to
 `ReleasePluginIO.autoImport` or fully-qualified grouped keys.
 

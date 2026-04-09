@@ -107,9 +107,8 @@ trait MonorepoReleasePluginSpecSupport {
           (state, tokens) => handleMonorepoCommandTokens(state, tokens)
         )
       ) ++ Seq(
-        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection += MonorepoGlobalHookIO.action(
-          "base-after-selection"
-        )(_ => IO.unit)
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection +=
+          MonorepoGlobalHookIO.action("base-after-selection")(_ => IO.unit)
       )
 
     def settingsForTests: Seq[Setting[?]] = projectSettings

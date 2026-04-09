@@ -196,11 +196,10 @@ Notes:
   `.scala` sources should use `MonorepoReleasePlugin.autoImport`
 - do not add your own `object autoImport` unless you intentionally want a different public surface
 
-## Older API renames
+## Removed Compatibility Namespace
 
-Scala-source migration note: prefer `MonorepoReleasePlugin.autoImport` in new `.scala`
-sources. Older Scala build code that imported or mixed in `MonorepoReleaseIO` must switch
-to `MonorepoReleasePlugin.autoImport` or fully-qualified grouped keys.
+Older Scala build code that imported or mixed in `MonorepoReleaseIO` must switch to
+`MonorepoReleasePlugin.autoImport` or fully-qualified grouped keys.
 
 When updating older builds or plugins:
 
