@@ -4,7 +4,7 @@
 
 - **Two-phase release steps**: Each step has a `validate` phase (preflight checks) and an `execute` phase (actions), both running in cats-effect `IO`
 - **Independent codebase**: Ports sbt-release's types, settings, and execution model onto cats-effect IO — no runtime dependency on sbt-release
-- **Hook-first customization**: Extend the built-in release flow with grouped `releaseIOPolicy*` keys and `releaseIOHooks*`
+- **Policy and hook customization**: Extend the built-in release flow with grouped `releaseIOPolicy*` keys and `releaseIOHooks*`
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
 - **Resource-safe custom plugins**: Acquire shared resources (HTTP clients, temp dirs, etc.) once for the entire release with guaranteed cleanup via `Resource[IO, T]`
@@ -71,8 +71,8 @@ sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAP
 
 For the full list of CLI flags and subcommands, see [Settings reference — CLI](reference.md#cli).
 
-For a concrete hook-first rehearsal that keeps the built-in process intact while disabling remote
-phases and adding lifecycle hooks, see [Hook-first walkthrough](hook-first-walkthrough.md).
+For a concrete rehearsal that disables remote phases via policy keys and adds lifecycle hooks,
+see [Customization walkthrough](customization-walkthrough.md).
 
 ## Default release steps
 
@@ -98,7 +98,7 @@ hook documentation.
 ## What to read next
 
 - Safe local rehearsal with hooks and policy keys:
-  [Hook-first walkthrough](hook-first-walkthrough.md)
+  [Customization walkthrough](customization-walkthrough.md)
 - Starter `build.sbt` patterns and common configuration recipes:
   [Configuration](configuration.md)
 - Full settings and CLI catalog:

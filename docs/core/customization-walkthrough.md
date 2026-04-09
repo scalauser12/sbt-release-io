@@ -1,8 +1,11 @@
-# Hook-first walkthrough (core)
+# Customization walkthrough (core)
 
-This walkthrough shows the current recommended way to customize the core plugin:
+This walkthrough shows how to customize the core plugin. Customization is done through policy
+keys and lifecycle hooks — that is the only build-facing customization surface, so there is no
+alternative "edit the step list" path to compare against. Phase ordering is fixed by the
+engine; policies toggle phases on or off, hooks attach behavior to phases. This page walks
+through a typical setup:
 
-- keep the built-in release process intact
 - disable mutating remote phases with policy keys
 - add small lifecycle hooks around the built-in phases
 - use `releaseIO check` for local rehearsal
@@ -56,7 +59,7 @@ lazy val root = (project in file("."))
   )
 ```
 
-This keeps the default release order and only changes the behavior semantically:
+What this config does:
 
 - `push-changes` is disabled
 - `publish-artifacts` is disabled

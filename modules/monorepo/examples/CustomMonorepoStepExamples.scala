@@ -54,11 +54,10 @@ object CustomMonorepoStepExamples {
     releaseIOMonorepoHooksAfterNextCommit += markReleaseDoneHook
   )
 
-  /** Recommended template for selective monorepo rehearsals driven by change detection.
+  /** Template for selective monorepo rehearsals driven by change detection.
     *
-    * This keeps the compiled built-ins, disables mutating remote phases, skips `run-clean`,
-    * includes downstream dependents of changed projects, and logs the resolved selection after
-    * `detect-or-select-projects`.
+    * This disables mutating remote phases, skips `run-clean`, includes downstream dependents
+    * of changed projects, and logs the resolved selection after `detect-or-select-projects`.
     *
     * {{{
     * lazy val root = (project in file("."))
@@ -80,10 +79,10 @@ object CustomMonorepoStepExamples {
     releaseIOMonorepoHooksAfterSelection += printSummaryHook
   )
 
-  /** Recommended template for targeted project rehearsals with explicit selectors.
+  /** Template for targeted project rehearsals with explicit selectors.
     *
-    * This keeps the built-in process, disables remote phases, and adds lightweight validation
-    * around selection and version resolution so you can focus on one project at a time.
+    * This disables remote phases and adds lightweight validation around selection and version
+    * resolution so you can focus on one project at a time.
     *
     * {{{
     * lazy val root = (project in file("."))

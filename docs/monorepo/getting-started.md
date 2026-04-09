@@ -39,8 +39,8 @@ If you are migrating from an older configuration, move any shared root version f
 
 For working examples, see [scala-monorepo-demo](https://github.com/scalauser12/scala-monorepo-demo) and [files-monorepo-demo](https://github.com/scalauser12/files-monorepo-demo).
 
-For a concrete hook-first rehearsal that combines change detection, downstream inclusion, and
-explicit project selectors, see [Selective release walkthrough](selective-release-walkthrough.md).
+For a concrete rehearsal that combines change detection, downstream inclusion, and explicit
+project selectors, see [Selective release walkthrough](selective-release-walkthrough.md).
 
 ## Usage
 
@@ -100,7 +100,7 @@ For the full list of CLI flags, subcommands, version override syntax, and select
 
 - End-to-end setup from scratch:
   [First release walkthrough](walkthrough.md)
-- Hook-first selective rehearsal with change detection and explicit selectors:
+- Selective rehearsal with change detection and explicit selectors:
   [Selective release walkthrough](selective-release-walkthrough.md)
 - CLI grammar, selectors, flags, and override syntax:
   [Usage](usage.md)

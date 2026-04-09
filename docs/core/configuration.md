@@ -2,7 +2,8 @@
 
 Use this page for starter `build.sbt` patterns and common configuration recipes. For the
 exhaustive settings and CLI catalog, see [Settings reference](reference.md). For a worked
-hook-first tutorial, see [Hook-first walkthrough](hook-first-walkthrough.md).
+tutorial that sets up policies and hooks and rehearses the result, see
+[Customization walkthrough](customization-walkthrough.md).
 
 Use the grouped `releaseIOBehavior*`, `releaseIODefaults*`, `releaseIOPolicy*`,
 `releaseIOHooks*`, `releaseIOVersioning*`, `releaseIOVcs*`, and `releaseIOPublish*` names in
@@ -53,8 +54,8 @@ releaseIOVersioningFileContents := ((_, version) =>
 )
 ```
 
-`releaseIOPolicyEnablePublish := false` removes publish from the compiled hook-first lifecycle
-entirely, including `beforePublish` / `afterPublish` hooks. `releaseIOBehaviorSkipPublish := true`
+`releaseIOPolicyEnablePublish := false` removes publish from the compiled lifecycle entirely,
+including `beforePublish` / `afterPublish` hooks. `releaseIOBehaviorSkipPublish := true`
 keeps the phase in the process shape but skips the publish action at execution time.
 
 ## Example: Persistent decision defaults

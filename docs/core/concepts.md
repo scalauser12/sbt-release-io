@@ -6,7 +6,7 @@ Use this page for the core plugin's execution model and the conceptual differenc
 ## Validate / execute model
 
 Internally, the compiled core lifecycle is expressed in terms of `ProcessStep`, the internal
-validate/execute runtime model used under the hook-first lifecycle. Each compiled step has two
+validate/execute runtime model that policies and hooks compile into. Each compiled step has two
 phases:
 
 - `validate: ReleaseContext => IO[Unit]`
@@ -16,9 +16,9 @@ The release engine validates the planned lifecycle before it performs any releas
 That means `releaseIO check` can resolve versions and tags, run validations, and print the
 plan without writing version files, creating commits or tags, publishing, or pushing.
 
-When the built-in process is left intact, hook and policy settings compile into the same
-validate/execute lifecycle that `releaseIO` runs. The release command then executes the
-planned steps sequentially, threading `ReleaseContext` through the run.
+Hook and policy settings compile into the validate/execute lifecycle that `releaseIO` runs.
+The release command then executes the planned steps sequentially, threading `ReleaseContext`
+through the run.
 
 ## Execution model: sbt-release-io vs sbt-release
 
@@ -56,7 +56,7 @@ commands such as `+publish`. The main difference is the effect model:
 | ----------------------- | ------------------------------------------- | ------------------------------------------------- |
 | Effect system           | Plain `State => State` via `Function.chain` | `IO`-wrapped via `unsafeRunSync`                  |
 | Internal step type      | `ReleaseStep(action, check)`                | `ProcessStep(validate, execute)`              |
-| Supported customization | Direct process editing and step surgery     | Hook-first policies, hooks, and resource hooks    |
+| Supported customization | Direct process editing and step surgery     | Policies, hooks, and resource hooks               |
 | Resource management     | Manual                                      | `Resource.use` with guaranteed cleanup            |
 | Cross-build validation  | Actions only                                | Both `validate` and `execute` phases              |
 | Custom plugin resources | Not supported                               | `ReleasePluginIOLike[T]`                          |

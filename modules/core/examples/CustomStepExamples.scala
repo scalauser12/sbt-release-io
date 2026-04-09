@@ -28,7 +28,7 @@ object CustomStepExamples {
 
   private val releaseCompletedKey = AttributeKey[Boolean]("releaseCompleted")
 
-  // ── Hook-first customization (preferred) ────────────────────────────
+  // ── Hook and policy customization ───────────────────────────────────
 
   /** First customization: keep the compiled built-ins, disable push, and add one lifecycle hook.
     *
@@ -68,7 +68,7 @@ object CustomStepExamples {
     releaseIOHooksAfterNextCommit += markReleaseDoneHook
   )
 
-  /** Recommended template for a safe local rehearsal with the compiled built-ins intact.
+  /** Template for a safe local rehearsal.
     *
     * This disables push, publish, and run-clean, then adds one validation-oriented hook after
     * the clean-working-dir check and one lifecycle hook before tagging.

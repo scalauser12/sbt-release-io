@@ -2,7 +2,7 @@
 
 ## Supported customization model
 
-Monorepo customization is hook-first:
+Monorepo customization has one surface, made of four knobs:
 
 - `releaseIOMonorepoPolicy*` turns built-in phases on or off
 - `releaseIOMonorepoHooks*` adds behavior around supported lifecycle points

@@ -43,7 +43,7 @@ sbt "releaseIO check with-defaults"
 Read next:
 
 - [Core getting started](docs/core/getting-started.md)
-- [Core hook-first walkthrough](docs/core/hook-first-walkthrough.md)
+- [Core customization walkthrough](docs/core/customization-walkthrough.md)
 - [Core customization](docs/core/customization.md)
 
 ### Monorepo

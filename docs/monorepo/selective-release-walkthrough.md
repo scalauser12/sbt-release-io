@@ -1,12 +1,14 @@
 # Selective release walkthrough (monorepo)
 
-This walkthrough shows the current recommended monorepo flow for local rehearsals:
+This walkthrough shows a typical monorepo flow for local rehearsals. Monorepo customization
+goes through policy keys and lifecycle hooks — the phase ordering is fixed by the engine,
+policies toggle phases on or off, and hooks attach behavior to phases. On top of that, the
+monorepo engine adds project selection and change detection. This page covers:
 
-- keep the built-in process intact
-- customize it with hook/policy settings
-- let change detection pick the changed projects
-- include downstream dependents automatically
-- use explicit selectors only when you want to narrow a rehearsal on purpose
+- customizing the flow with hook/policy settings
+- letting change detection pick the changed projects
+- including downstream dependents automatically
+- using explicit selectors only when you want to narrow a rehearsal on purpose
 
 The example uses three projects:
 
@@ -56,7 +58,7 @@ lazy val root = (project in file("."))
   )
 ```
 
-This keeps the built-in release flow, but makes it local-safe:
+What this config does:
 
 - `push-changes` is disabled
 - `publish-artifacts` is disabled
@@ -123,8 +125,8 @@ The `afterSelection` hook prints the effective set, for example:
 [monorepo] selected: core, api, web
 ```
 
-This is the recommended default flow for routine releases: let change detection decide the base set
-and use policy keys to make the rehearsal safe.
+This is the routine path: let change detection decide the base set and use policy keys to make
+the rehearsal safe.
 
 ## 6. Rehearse an explicit project selection
 

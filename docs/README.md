@@ -12,7 +12,7 @@
 ## Start here
 
 - New to the core plugin:
-  [Getting started (core)](core/getting-started.md) and [Hook-first walkthrough](core/hook-first-walkthrough.md)
+  [Getting started (core)](core/getting-started.md) and [Customization walkthrough](core/customization-walkthrough.md)
 - New to the monorepo plugin:
   [Getting started (monorepo)](monorepo/getting-started.md),
   [First release walkthrough](monorepo/walkthrough.md), and

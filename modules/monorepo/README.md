@@ -34,16 +34,16 @@ First command:
 sbt "releaseIOMonorepo check with-defaults"
 ```
 
-Preferred customization keeps the built-in process intact and uses
-grouped `releaseIOMonorepoPolicy*` keys, `releaseIOMonorepoHooks*`, and resource-aware custom
-plugins. The older flat key names and lower-level step DSL were removed in the breaking API
-cleanup. Raw process override is no longer part of the supported public surface.
+Customization uses grouped `releaseIOMonorepoPolicy*` keys, `releaseIOMonorepoHooks*`, and
+resource-aware custom plugins. The older flat key names and lower-level step DSL were removed
+in the breaking API cleanup. Raw process override is no longer part of the supported public
+surface.
 
 ## Read next
 
 - [Monorepo getting started](../../docs/monorepo/getting-started.md) for install, first `help` / `check` / `run`, and the main navigation path
 - [First release walkthrough](../../docs/monorepo/walkthrough.md) for an end-to-end setup from scratch
-- [Selective release walkthrough](../../docs/monorepo/selective-release-walkthrough.md) for hook-first change detection, downstream inclusion, and explicit selectors
+- [Selective release walkthrough](../../docs/monorepo/selective-release-walkthrough.md) for change detection, downstream inclusion, and explicit selectors
 - [Monorepo configuration](../../docs/monorepo/configuration.md) for the grouped settings surface and [Monorepo usage](../../docs/monorepo/usage.md) for CLI syntax
 - [Monorepo customization](../../docs/monorepo/customization.md) for hooks, resource-aware custom plugins, and migration guidance
 - [Monorepo operations](../../docs/monorepo/operations.md) for rollback and recovery

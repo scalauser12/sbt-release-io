@@ -169,5 +169,5 @@ This path is useful when:
 - you want to confirm selector behavior without involving the full changed set
 - you want a smaller rehearsal before running a broader change-detection flow
 
-For a full hook-first example that combines change detection and downstream inclusion, see
+For a full example that combines change detection and downstream inclusion, see
 [Selective release walkthrough](selective-release-walkthrough.md).

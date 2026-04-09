@@ -2,7 +2,7 @@
 
 ## Supported customization model
 
-Core release customization is hook-first:
+Core release customization has one surface, made of three knobs:
 
 - `releaseIOPolicy*` turns built-in phases on or off
 - `releaseIOHooks*` adds behavior around supported lifecycle points

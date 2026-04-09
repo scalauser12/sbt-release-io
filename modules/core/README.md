@@ -27,15 +27,14 @@ First command:
 sbt "releaseIO check with-defaults"
 ```
 
-Preferred customization keeps the built-in process intact and uses grouped
-`releaseIOPolicy*` keys, `releaseIOHooks*`, and resource-aware custom plugins when one shared
-resource is needed. The older flat key names and lower-level step DSL were removed in the
-breaking API cleanup.
+Customization uses grouped `releaseIOPolicy*` keys, `releaseIOHooks*`, and resource-aware
+custom plugins when one shared resource is needed. The older flat key names and lower-level
+step DSL were removed in the breaking API cleanup.
 
 ## Read next
 
 - [Core getting started](../../docs/core/getting-started.md) for install, first `help` / `check` / `run`, and the default built-in steps
-- [Core hook-first walkthrough](../../docs/core/hook-first-walkthrough.md) for a safe local rehearsal that keeps the built-in process intact
+- [Core customization walkthrough](../../docs/core/customization-walkthrough.md) for a safe local rehearsal using policy keys and lifecycle hooks
 - [Core configuration](../../docs/core/configuration.md) for starter `build.sbt` patterns, and [Core reference](../../docs/core/reference.md) for the full settings and CLI catalog
 - [Core customization](../../docs/core/customization.md) for hooks, resource-aware custom plugins, and migration guidance
 - [Core operations](../../docs/core/operations.md) for rollback and recovery

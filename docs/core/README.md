@@ -8,8 +8,8 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 
 - [Getting started](getting-started.md)
   Install the plugin, run the first `help` / `check` / `run`, and see the default built-in steps.
-- [Hook-first walkthrough](hook-first-walkthrough.md)
-  Rehearse a release locally with policy keys and lifecycle hooks while keeping the built-in process intact.
+- [Customization walkthrough](customization-walkthrough.md)
+  Rehearse a release locally using policy keys and lifecycle hooks.
 
 ## Learn
 
@@ -25,7 +25,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 ## Customize
 
 - [Customization](customization.md)
-  Hook-first customization, resource-aware custom plugins, and recipes.
+  Policy and hook customization, resource-aware custom plugins, and recipes.
 
 ## Operate
 

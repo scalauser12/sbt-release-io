@@ -11,7 +11,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
 - [First release walkthrough](walkthrough.md)
   Set up a small monorepo from scratch and run the first end-to-end release.
 - [Selective release walkthrough](selective-release-walkthrough.md)
-  Rehearse a hook-first selective release with change detection, downstream inclusion, and explicit selectors.
+  Rehearse a selective release with change detection, downstream inclusion, and explicit selectors.
 
 ## Learn
 
@@ -31,7 +31,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
 ## Customize
 
 - [Customization](customization.md)
-  Hook-first customization, resource-aware custom plugins, and recipes.
+  Policy and hook customization, resource-aware custom plugins, and recipes.
 
 ## Operate
 
