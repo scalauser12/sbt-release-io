@@ -2,9 +2,9 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.CoreHookConfiguration
-import io.release.internal.CoreHookSlots
-import io.release.internal.CoreLifecycleSlots
+import io.release.core.internal.CoreHookConfiguration
+import io.release.core.internal.CoreHookSlots
+import io.release.core.internal.CoreLifecycleSlots
 import munit.CatsEffectSuite
 
 class ReleaseHookIOSpec extends CatsEffectSuite {

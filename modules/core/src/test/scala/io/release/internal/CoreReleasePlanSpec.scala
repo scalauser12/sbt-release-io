@@ -1,5 +1,7 @@
-package io.release.internal
+package io.release.core.internal
 
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
 import munit.FunSuite
 
 class CoreReleasePlanSpec extends FunSuite {

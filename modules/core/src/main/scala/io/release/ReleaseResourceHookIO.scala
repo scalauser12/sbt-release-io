@@ -1,8 +1,8 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.CoreHookConfiguration
-import io.release.internal.CoreHookSlots
+import io.release.core.internal.CoreHookConfiguration
+import io.release.core.internal.CoreHookSlots
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -70,7 +70,7 @@ object ReleaseResourceHooks {
   def empty[T]: ReleaseResourceHooks[T] = ReleaseResourceHooks[T]()
 
   private type HookAssignment =
-    (io.release.internal.CoreHookSlot, Seq[ReleaseHookIO])
+    (io.release.core.internal.CoreHookSlot, Seq[ReleaseHookIO])
 
   /** Convert resource-aware hooks into plain hooks by optionally binding the resource value.
     * Boolean policies default to `true` so the result is neutral when merged via

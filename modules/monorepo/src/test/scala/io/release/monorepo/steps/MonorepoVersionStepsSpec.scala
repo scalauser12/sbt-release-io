@@ -1,4 +1,7 @@
-package io.release.monorepo.steps
+package io.release.monorepo.internal.steps
+
+import io.release.monorepo.internal.*
+import io.release.monorepo.internal.steps.*
 
 import cats.effect.IO
 import cats.effect.Resource
@@ -6,14 +9,14 @@ import io.release.ReleasePluginIO.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
-import io.release.internal.ReleaseLogPrefixes
-import io.release.internal.SbtRuntime
-import io.release.monorepo.MonorepoComposer
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.SbtRuntime
+import io.release.monorepo.internal.MonorepoComposer
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
-import io.release.monorepo.SelectionMode
-import io.release.monorepo.steps.MonorepoVersionStepsSpec.VersionFixture
+import io.release.monorepo.internal.SelectionMode
+import io.release.monorepo.internal.steps.MonorepoVersionStepsSpec.VersionFixture
 import munit.CatsEffectSuite
 
 import java.io.ByteArrayOutputStream

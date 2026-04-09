@@ -1,4 +1,4 @@
-package io.release.monorepo.steps
+package io.release.monorepo.internal.steps
 
 import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
@@ -8,7 +8,7 @@ import sbt.{Setting, *}
 import sbt.protocol.testing.codec.TestResultFormats
 
 import java.io.File
-import _root_.io.release.internal.SbtCompat
+import _root_.io.release.runtime.sbt.SbtCompat
 
 // Source-split because sbt 1 and sbt 2 expose different test task result types and caching needs.
 private[monorepo] object MonorepoStepTestCompat:

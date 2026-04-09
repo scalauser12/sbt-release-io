@@ -1,4 +1,4 @@
-package io.release.internal
+package io.release.runtime.sbt
 
 import cats.effect.IO
 import io.release.ReleasePluginIO
@@ -11,6 +11,8 @@ import java.io.File
 
 class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   private val fixturePrefix = "snapshot-deps-spec"
+  private val snapshotDependenciesKey =
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
 
   test("aggregatedSnapshotDependencies - return Right(empty) when no snapshots") {
     TestSupport.tempDirResource(s"$fixturePrefix-empty").use { dir =>
@@ -26,7 +28,8 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
           currentProjectId = Some("root")
         )
       }.flatMap { state =>
-        SnapshotDependencyTasks.aggregatedSnapshotDependencies(state).map { result =>
+        SnapshotDependencyTasks.aggregatedSnapshotDependencies(state, snapshotDependenciesKey).map {
+          result =>
           assertEquals(result, Right(Seq.empty[ModuleID]))
         }
       }
@@ -61,7 +64,8 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
           currentProjectId = Some("root")
         )
       }.flatMap { state =>
-        SnapshotDependencyTasks.aggregatedSnapshotDependencies(state).map { result =>
+        SnapshotDependencyTasks.aggregatedSnapshotDependencies(state, snapshotDependenciesKey).map {
+          result =>
           assertEquals(result, Right(Seq(depA, depB)))
         }
       }
@@ -87,7 +91,12 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
         (state, ref)
       }.flatMap { case (state, ref) =>
         assertFailure[IllegalStateException, Seq[ModuleID]](
-          SnapshotDependencyTasks.projectSnapshotDependencies(state, ref, "test-project")
+          SnapshotDependencyTasks.projectSnapshotDependencies(
+            state,
+            ref,
+            "test-project",
+            snapshotDependenciesKey
+          )
         )(err => assert(err.getMessage.contains("test-project")))
       }
     }

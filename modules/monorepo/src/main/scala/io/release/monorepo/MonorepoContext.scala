@@ -1,9 +1,11 @@
 package io.release.monorepo
 
-import io.release.ReleaseCtx
-import io.release.ReleaseCtxOps
-import io.release.internal.ExecutionFlags
-import io.release.internal.ReleaseDecisionDefaults
+import io.release.monorepo.internal.*
+
+import io.release.runtime.ReleaseCtx
+import io.release.runtime.ReleaseCtxOps
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}
@@ -76,7 +78,8 @@ case class ProjectReleaseInfo(
   * Per-project failure lives on [[ProjectReleaseInfo.failed]] — a failing project is
   * marked failed without aborting the current step's remaining projects. Global failure
   * lives on [[MonorepoContext.failed]] — set by the composer via
-  * [[MonorepoProjectFailures]] when per-project failures are propagated, causing
+  * [[io.release.monorepo.internal.MonorepoProjectFailures]] when per-project failures are
+  * propagated, causing
   * subsequent steps to be skipped entirely.
   *
   * @param state       the current `sbt.State`, updated between steps

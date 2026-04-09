@@ -7,7 +7,7 @@ import io.release.ReleasePluginIO.autoImport.*
 import io.release.ReleasePluginIOLike
 import io.release.ReleaseResourceHookIO
 import io.release.ReleaseResourceHooks
-import io.release.internal.ReleaseLogPrefixes
+import io.release.runtime.ReleaseLogPrefixes
 import sbt.*
 import sbt.Keys.thisProject
 

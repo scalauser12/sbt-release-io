@@ -1,8 +1,9 @@
-package io.release.internal
+package io.release.runtime.command
 
 import cats.effect.IO
 import io.release.ReleaseKeys
 import io.release.TestSupport
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 
 class ReleaseCommandRunnerSpec extends CatsEffectSuite {

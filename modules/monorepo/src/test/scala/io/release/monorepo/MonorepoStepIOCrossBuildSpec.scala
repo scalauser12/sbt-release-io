@@ -1,13 +1,15 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.internal.ProcessStep
-import io.release.internal.SbtCompat
-import io.release.monorepo.steps.MonorepoPublishSteps
-import io.release.monorepo.steps.MonorepoStepTestCompat
+import io.release.runtime.engine.ProcessStep
+import io.release.runtime.sbt.SbtCompat
+import io.release.monorepo.internal.steps.MonorepoPublishSteps
+import io.release.monorepo.internal.steps.MonorepoStepTestCompat
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.Keys.*

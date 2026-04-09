@@ -1,4 +1,6 @@
-package io.release.monorepo.steps
+package io.release.monorepo.internal.steps
+
+import io.release.monorepo.internal.steps.*
 
 import cats.effect.IO
 import cats.effect.Resource
@@ -33,7 +35,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
 
       assertIllegalStateMessage(
         MonorepoPublishSteps.publishArtifacts.validate(ctx, project),
-        _root_.io.release.internal.PublishValidation.message("core")
+        _root_.io.release.runtime.workflow.PublishValidation.message("core")
       )
     }
   }

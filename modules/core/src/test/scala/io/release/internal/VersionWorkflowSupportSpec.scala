@@ -1,4 +1,4 @@
-package io.release.internal
+package io.release.runtime.workflow
 
 import cats.effect.IO
 import cats.effect.Ref
@@ -6,6 +6,11 @@ import io.release.ReleaseContext
 import io.release.ReleasePluginIO.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.core.internal.CoreExecutionState
+import io.release.core.internal.CoreReleasePlan
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Def

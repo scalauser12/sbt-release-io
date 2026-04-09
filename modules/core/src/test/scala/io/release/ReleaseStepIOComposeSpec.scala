@@ -2,14 +2,14 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.internal.CoreExecutionState
-import io.release.internal.CoreReleasePlan
-import io.release.internal.CoreStepFactory
-import io.release.internal.ExecutionFlags
-import io.release.internal.ProcessStep
-import io.release.internal.ReleaseDecisionDefaults
-import io.release.internal.SbtCompat
-import io.release.steps.StepHelpers
+import io.release.core.internal.CoreExecutionState
+import io.release.core.internal.CoreReleasePlan
+import io.release.core.internal.CoreStepFactory
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.engine.ProcessStep
+import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.sbt.SbtCompat
+import io.release.runtime.workflow.StepHelpers
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 

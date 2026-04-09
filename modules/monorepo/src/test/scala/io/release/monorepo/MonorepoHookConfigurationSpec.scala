@@ -1,8 +1,10 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import io.release.TestSupport
-import io.release.internal.LifecycleCatalogSupport
+import io.release.runtime.engine.LifecycleCatalogSupport
 import munit.CatsEffectSuite
 import sbt.*
 

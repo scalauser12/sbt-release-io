@@ -1,4 +1,4 @@
-package io.release.internal
+package io.release.core.internal
 
 import cats.effect.IO
 import io.release.ReleaseContext
@@ -6,7 +6,8 @@ import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
 import io.release.ReleaseResourceHooks
 import io.release.TestRepoFiles
-import io.release.steps.ReleaseSteps
+import io.release.core.internal.steps.ReleaseSteps
+import io.release.runtime.engine.LifecycleCompiler
 import munit.FunSuite
 
 import java.nio.file.Files
@@ -152,7 +153,7 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     )
     val topLevelSource =
       TestRepoFiles.readString(
-        "modules/core/src/main/scala/io/release/internal/CoreLifecycle.scala"
+        "modules/core/src/main/scala/io/release/core/internal/CoreLifecycle.scala"
       )
     assert(!topLevelSource.contains("policySlot("))
     assert(!topLevelSource.contains("hookSlot("))

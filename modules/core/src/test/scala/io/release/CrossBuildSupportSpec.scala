@@ -1,7 +1,7 @@
 package io.release
 
 import cats.effect.IO
-import io.release.internal.SbtRuntime
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*

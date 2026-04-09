@@ -1,7 +1,9 @@
 package io.release.monorepo
 
-import io.release.internal.ExecutionFlags
-import io.release.internal.ReleaseDecisionDefaults
+import io.release.monorepo.internal.*
+
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
 import munit.FunSuite
 
 class MonorepoReleasePlanSpec extends FunSuite {

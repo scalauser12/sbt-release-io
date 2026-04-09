@@ -1,4 +1,4 @@
-package io.release.internal
+package io.release.core.internal
 
 import io.release.ReleasePluginIO
 import munit.FunSuite

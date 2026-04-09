@@ -1,9 +1,11 @@
 package io.release.monorepo
 
+import io.release.monorepo.internal.*
+
 import cats.effect.IO
 import io.release.TestSupport
-import io.release.internal.ExecutionFlags
-import io.release.internal.ReleaseDecisionDefaults
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
 import munit.CatsEffectSuite
 import sbt.AttributeKey
 

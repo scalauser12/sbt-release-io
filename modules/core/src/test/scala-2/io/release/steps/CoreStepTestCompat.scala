@@ -1,6 +1,6 @@
-package io.release.steps
+package io.release.core.internal.steps
 
-import _root_.io.release.internal.SbtCompat
+import _root_.io.release.runtime.sbt.SbtCompat
 import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
 import sbt.*
