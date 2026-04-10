@@ -21,7 +21,6 @@ import scala.concurrent.duration.*
 private[release] object VcsOps {
 
   private[release] val DefaultRemoteCheckTimeout: FiniteDuration = 60.seconds
-  private[release] val PushChangesStepName                       = "push-changes"
 
   private val confirmedUpstreamTipKey: AttributeKey[String] =
     AttributeKey[String]("releaseIOInternalConfirmedUpstreamTip")

@@ -40,13 +40,6 @@ private[release] object PromptAdapter {
   ): IO[(C, Option[String])] =
     IO.print(prompt) *> readLine(ctx)
 
-  def promptRequiredLine[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      prompt: String,
-      context: String
-  ): IO[(C, String)] =
-    IO.print(prompt) *> readRequiredLine(ctx, context)
-
   def promptYesNoOrEof[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String,
