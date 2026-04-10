@@ -1,11 +1,11 @@
 package io.release.core.internal.steps
 
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import cats.effect.Deferred
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.ReleaseContext
-import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
-import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.ReleasePluginIO.autoImport.*
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions

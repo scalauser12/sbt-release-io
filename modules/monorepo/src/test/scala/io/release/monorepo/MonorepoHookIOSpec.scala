@@ -1,9 +1,8 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.monorepo.internal.*
 import munit.CatsEffectSuite
 
 class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSupport {
@@ -416,38 +415,51 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     }
   }
 
-  test("MonorepoResourceHooks.materialize - populated global hooks only fill the intended slot") {
+  test(
+    "MonorepoResourceHooks.materialize - populated global hooks only fill the intended slot"
+  ) {
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { _ =>
-      val hook   = MonorepoGlobalResourceHookIO.action[String]("before-selection")(_ => _ => IO.unit)
+      val hook   =
+        MonorepoGlobalResourceHookIO.action[String]("before-selection")(_ => _ => IO.unit)
       val config = MonorepoResourceHooks.materialize(
         MonorepoResourceHooks[String](beforeSelectionHooks = Seq(hook)),
         None
       )
 
       IO {
-        val populatedSlots = MonorepoLifecycle.orderedGlobalHookDescriptors
-          .filter(slot => slot.resolveHooks(config).nonEmpty)
-          .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(MonorepoLifecycle.beforeSelectionDescriptor.keyLabel))
-        assertEquals(config.beforeSelectionHooks.map(_.name), Seq("before-selection"))
+        assertEquals(
+          config.beforeSelectionHooks.map(_.name),
+          Seq("before-selection")
+        )
+        // Other global hook fields should be empty
+        assertEquals(config.afterCleanCheckHooks, Seq.empty)
+        assertEquals(config.afterSelectionHooks, Seq.empty)
+        assertEquals(config.beforeReleaseCommitHooks, Seq.empty)
+        assertEquals(config.beforePushHooks, Seq.empty)
       }
     }
   }
 
-  test("MonorepoResourceHooks.materialize - populated project hooks only fill the intended slot") {
+  test(
+    "MonorepoResourceHooks.materialize - populated project hooks only fill the intended slot"
+  ) {
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { _ =>
-      val hook   = MonorepoProjectResourceHookIO.action[String]("before-tag")(_ => (_, _) => IO.unit)
+      val hook   =
+        MonorepoProjectResourceHookIO.action[String]("before-tag")(_ => (_, _) => IO.unit)
       val config = MonorepoResourceHooks.materialize(
         MonorepoResourceHooks[String](beforeTagHooks = Seq(hook)),
         None
       )
 
       IO {
-        val populatedSlots = MonorepoLifecycle.orderedProjectHookDescriptors
-          .filter(slot => slot.resolveHooks(config).nonEmpty)
-          .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(MonorepoLifecycle.beforeTagDescriptor.keyLabel))
-        assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
+        assertEquals(
+          config.beforeTagHooks.map(_.name),
+          Seq("before-tag")
+        )
+        // Other project hook fields should be empty
+        assertEquals(config.afterTagHooks, Seq.empty)
+        assertEquals(config.beforePublishHooks, Seq.empty)
+        assertEquals(config.afterPublishHooks, Seq.empty)
       }
     }
   }
@@ -460,7 +472,8 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
           execute = _ => IO.pure,
           validate = _ => log.update(_ :+ "validated")
         )
-        val hooks        = MonorepoResourceHooks[String](beforeSelectionHooks = Seq(resourceHook))
+        val hooks        =
+          MonorepoResourceHooks[String](beforeSelectionHooks = Seq(resourceHook))
         val config       = MonorepoResourceHooks.materialize(hooks, Some("res"))
 
         config.beforeSelectionHooks.head.validate(ctx).flatMap { _ =>
@@ -470,34 +483,15 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     }
   }
 
-  test("MonorepoResourceHooks.globalHookAssignments covers every global hook slot exactly once") {
+  test("MonorepoResourceHooks.materialize - empty hooks produce empty config") {
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { _ =>
       IO {
-        val assignments = MonorepoResourceHooks.globalHookAssignments(
-          MonorepoResourceHooks.empty[String],
-          (resourceHook: MonorepoGlobalResourceHookIO[String]) =>
-            MonorepoGlobalHookIO.action(resourceHook.name)(_ => IO.unit)
-        )
-        assertEquals(
-          assignments.map(_._1.keyLabel),
-          MonorepoLifecycle.orderedGlobalHookDescriptors.map(_.keyLabel)
-        )
-      }
-    }
-  }
-
-  test("MonorepoResourceHooks.projectHookAssignments covers every project hook slot exactly once") {
-    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { _ =>
-      IO {
-        val assignments = MonorepoResourceHooks.projectHookAssignments(
-          MonorepoResourceHooks.empty[String],
-          (resourceHook: MonorepoProjectResourceHookIO[String]) =>
-            MonorepoProjectHookIO.action(resourceHook.name)((_, _) => IO.unit)
-        )
-        assertEquals(
-          assignments.map(_._1.keyLabel),
-          MonorepoLifecycle.orderedProjectHookDescriptors.map(_.keyLabel)
-        )
+        val config =
+          MonorepoResourceHooks.materialize(
+            MonorepoResourceHooks.empty[String],
+            None
+          )
+        assertEquals(config, MonorepoHookConfiguration.empty)
       }
     }
   }

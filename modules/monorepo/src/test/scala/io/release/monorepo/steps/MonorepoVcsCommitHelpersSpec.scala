@@ -1,11 +1,10 @@
 package io.release.monorepo.internal.steps
 
-import io.release.monorepo.internal.steps.*
-
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
+import io.release.monorepo.internal.steps.*
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Project

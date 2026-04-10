@@ -18,14 +18,12 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
 
   private val sharedRuntimeSymbols = Seq(
     "ReleaseCtx",
-    "ReleaseCtxOps",
     "ExecutionFlags",
     "ReleaseDecisionDefaults",
     "ReleaseLogPrefixes",
     "ProcessStep",
     "ExecutionEngine",
     "LifecycleCompiler",
-    "LifecycleCatalogSupport",
     "CheckModeOutput",
     "HelpDocsLinks",
     "PluginEntrypointSupport",

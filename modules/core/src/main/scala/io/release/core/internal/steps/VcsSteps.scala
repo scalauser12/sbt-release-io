@@ -15,9 +15,9 @@ import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.CoreStepFactory
 import io.release.core.internal.TagPlan
 import io.release.core.internal.VersionPlan
+import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
-import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.sbt.SbtRuntime
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs

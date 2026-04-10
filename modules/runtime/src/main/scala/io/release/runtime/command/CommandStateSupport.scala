@@ -1,9 +1,9 @@
 package io.release.runtime.command
 
-import io.release.ReleaseKeys
-import io.release.ReleaseManifestMetadataSupport
 import _root_.sbt.ProjectRef
 import _root_.sbt.State
+import io.release.ReleaseKeys
+import io.release.ReleaseManifestMetadataSupport
 
 private[release] object CommandStateSupport {
 

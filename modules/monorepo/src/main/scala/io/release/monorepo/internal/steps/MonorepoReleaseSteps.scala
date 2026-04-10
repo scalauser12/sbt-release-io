@@ -1,9 +1,6 @@
 package io.release.monorepo.internal.steps
 
 import io.release.monorepo.internal.*
-
-import io.release.runtime.engine.BuiltInStepRole
-import io.release.runtime.engine.ProcessStep
 import io.release.monorepo.internal.MonorepoComposer
 import io.release.monorepo.internal.MonorepoLifecycle
 import io.release.monorepo.internal.MonorepoPreparation
@@ -12,6 +9,8 @@ import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
+import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.ProcessStep
 
 /** Facade re-exporting all built-in monorepo release steps and default sequences. */
 private[monorepo] object MonorepoReleaseSteps {
@@ -55,8 +54,7 @@ private[monorepo] object MonorepoReleaseSteps {
 
   val detectOrSelectProjects: GlobalStep = ProcessStep.Single(
     name = MonorepoComposer.SelectionBoundary,
-    roles = Set(BuiltInStepRole.ProjectSelection),
-    isSelectionBoundary = true,
+    roles = Set(BuiltInStepRole.ProjectSelection, BuiltInStepRole.SelectionBoundary),
     execute = ctx =>
       MonorepoPreparation.selectProjects(ctx).flatMap { selected =>
         logInfo(

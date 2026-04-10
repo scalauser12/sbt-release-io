@@ -1,11 +1,10 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.monorepo.internal.*
 import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.{internal as _, *}

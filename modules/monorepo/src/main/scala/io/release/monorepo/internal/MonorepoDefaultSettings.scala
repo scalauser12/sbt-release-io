@@ -1,9 +1,8 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile
+import io.release.monorepo.*
 import io.release.runtime.workflow.DefaultVersionFileIO
 import sbt.*
 import sbt.Keys.*

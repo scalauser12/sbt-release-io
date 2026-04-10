@@ -4,7 +4,6 @@ import cats.effect.IO
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
 import io.release.TestSupport
-import io.release.runtime.engine.LifecycleCatalogSupport
 import munit.CatsEffectSuite
 import sbt.*
 
@@ -12,10 +11,12 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
 
   test("defaultSettings - expose each lifecycle-derived setting key exactly once") {
     IO {
-      val labels = CoreHookConfiguration.defaultSettings.map(_.key.key.label)
+      val labels =
+        CoreHookConfiguration.defaultSettings.map(_.key.key.label)
 
       assertEquals(labels, labels.distinct)
-      assertEquals(labels.sorted, CoreLifecycle.slots.map(_.keyLabel).sorted)
+      // 6 policy + 17 hook = 23 settings
+      assertEquals(labels.size, 23)
     }
   }
 
@@ -87,24 +88,6 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
     }
   }
 
-  test("slot catalog validation fails fast on duplicate ids") {
-    IO {
-      val err = intercept[IllegalStateException] {
-        LifecycleCatalogSupport.validateUniqueSlots(
-          "core",
-          Vector[CoreConfigSlot](
-            CorePolicySlots.enablePublish,
-            CorePolicySlots.enablePublish
-          )
-        )(_.id, _.keyLabel)
-      }
-
-      assert(err.getMessage.contains("core lifecycle slot catalog"))
-      assert(err.getMessage.contains(CorePolicySlots.enablePublish.id))
-      assert(err.getMessage.contains(CorePolicySlots.enablePublish.keyLabel))
-    }
-  }
-
   private def stateResource(
       prefix: String,
       settings: Seq[Setting[?]]
@@ -114,7 +97,9 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
         TestSupport.loadedState(
           dir,
           Seq(
-            Project("root", dir).settings((CoreHookConfiguration.defaultSettings ++ settings)*)
+            Project("root", dir).settings(
+              (CoreHookConfiguration.defaultSettings ++ settings)*
+            )
           ),
           currentProjectId = Some("root")
         )

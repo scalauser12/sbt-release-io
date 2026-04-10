@@ -1,11 +1,10 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
+import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
@@ -187,34 +186,24 @@ trait MonorepoReleasePluginSpecSupport {
   protected def resolveProcessMode(
       plugin: MonorepoReleasePluginLike[Unit],
       state: State
-  ): IO[MonorepoCommandExecution.CompiledMonorepoSteps] =
+  ): IO[Seq[AnyStep]] =
     MonorepoCommandExecution.resolveProcessMode(state, plugin.commandRuntime)
 
   protected def resolveReleaseRun(
       plugin: MonorepoReleasePluginLike[Unit],
       state: State
-  ): IO[MonorepoCommandExecution.CompiledMonorepoSteps] =
+  ): IO[Seq[AnyStep]] =
     MonorepoCommandExecution.resolveReleaseRun(state, (), plugin.commandRuntime)
 
-  protected def checkStepNames(
-      processMode: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[String] =
-    processMode.steps.map(_.name)
+  protected def checkStepNames(steps: Seq[AnyStep]): Seq[String] =
+    steps.map(_.name)
 
-  protected def checkSteps(
-      processMode: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[AnyStep] =
-    processMode.steps
+  protected def checkSteps(steps: Seq[AnyStep]): Seq[AnyStep] = steps
 
-  protected def runStepNames(
-      runProcess: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[String] =
-    runProcess.steps.map(_.name)
+  protected def runStepNames(steps: Seq[AnyStep]): Seq[String] =
+    steps.map(_.name)
 
-  protected def runSteps(
-      runProcess: MonorepoCommandExecution.CompiledMonorepoSteps
-  ): Seq[AnyStep] =
-    runProcess.steps
+  protected def runSteps(steps: Seq[AnyStep]): Seq[AnyStep] = steps
 
   protected def sampleProject(loaded: LoadedState): ProjectReleaseInfo =
     ProjectReleaseInfo(

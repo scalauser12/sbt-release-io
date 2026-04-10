@@ -1,9 +1,9 @@
 package io.release.runtime
 
-import io.release.vcs.Vcs
 import _root_.sbt.AttributeKey
 import _root_.sbt.AttributeMap
 import _root_.sbt.State
+import io.release.vcs.Vcs
 
 /** Common interface for immutable release contexts threaded through steps.
   *
@@ -16,11 +16,22 @@ import _root_.sbt.State
   * user metadata and internal planning data separate while preserving immutable threading.
  */
 private[release] trait ReleaseCtx {
+  type Self <: ReleaseCtx
+
   def state: State
   def vcs: Option[Vcs]
   def interactive: Boolean
   def failed: Boolean
   def failureCause: Option[Throwable]
+
+  // ── Mutation ──────────────────────────────────────────────────────────
+
+  def withState(state: State): Self
+  def withVcs(vcs: Vcs): Self
+  def fail: Self
+  def failWith(cause: Throwable): Self
+  def withMetadata[A](key: AttributeKey[A], value: A): Self
+  def withoutMetadata[A](key: AttributeKey[A]): Self
 
   // ── Metadata ──────────────────────────────────────────────────────────
 
@@ -34,42 +45,4 @@ private[release] trait ReleaseCtx {
 
   private[release] def useDefaults: Boolean =
     executionFlags.exists(_.useDefaults)
-}
-
-private[release] trait ReleaseCtxOps[C <: ReleaseCtx] {
-  def withState(ctx: C, state: State): C
-  def withVcs(ctx: C, vcs: Vcs): C
-  def fail(ctx: C): C
-  def failWith(ctx: C, cause: Throwable): C
-  def withMetadata[A](ctx: C, key: AttributeKey[A], value: A): C
-  def withoutMetadata[A](ctx: C, key: AttributeKey[A]): C
-}
-
-private[release] object ReleaseCtxOps {
-
-  def apply[C <: ReleaseCtx](implicit ops: ReleaseCtxOps[C]): ReleaseCtxOps[C] = ops
-
-  object syntax {
-
-    implicit final class ReleaseCtxSyntax[C <: ReleaseCtx](private val ctx: C) extends AnyVal {
-
-      def withState(state: State)(implicit ops: ReleaseCtxOps[C]): C =
-        ops.withState(ctx, state)
-
-      def withVcs(vcs: Vcs)(implicit ops: ReleaseCtxOps[C]): C =
-        ops.withVcs(ctx, vcs)
-
-      def fail(implicit ops: ReleaseCtxOps[C]): C =
-        ops.fail(ctx)
-
-      def failWith(cause: Throwable)(implicit ops: ReleaseCtxOps[C]): C =
-        ops.failWith(ctx, cause)
-
-      def withMetadata[A](key: AttributeKey[A], value: A)(implicit ops: ReleaseCtxOps[C]): C =
-        ops.withMetadata(ctx, key, value)
-
-      def withoutMetadata[A](key: AttributeKey[A])(implicit ops: ReleaseCtxOps[C]): C =
-        ops.withoutMetadata(ctx, key)
-    }
-  }
 }

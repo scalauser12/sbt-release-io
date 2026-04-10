@@ -3,7 +3,6 @@ package io.release
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.core.internal.CoreHookConfiguration
-import io.release.core.internal.CoreLifecycle
 import munit.CatsEffectSuite
 
 class ReleaseHookIOSpec extends CatsEffectSuite {
@@ -338,12 +337,15 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       )
 
       IO {
-        val populatedSlots =
-          CoreLifecycle.orderedHookDescriptors
-            .filter(slot => slot.resolveHooks(config).nonEmpty)
-            .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(CoreLifecycle.beforeTagDescriptor.keyLabel))
         assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
+        // All other hook fields should be empty
+        assertEquals(config.afterCleanCheckHooks, Seq.empty)
+        assertEquals(config.beforeVersionResolutionHooks, Seq.empty)
+        assertEquals(config.afterVersionResolutionHooks, Seq.empty)
+        assertEquals(config.beforePublishHooks, Seq.empty)
+        assertEquals(config.afterPublishHooks, Seq.empty)
+        assertEquals(config.beforePushHooks, Seq.empty)
+        assertEquals(config.afterPushHooks, Seq.empty)
       }
     }
   }
@@ -366,19 +368,15 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
     }
   }
 
-  test("ReleaseResourceHooks.hookAssignments covers every hook slot exactly once") {
+  test("ReleaseResourceHooks.materialize - empty hooks produce empty config") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
       IO {
-        val assignments =
-          ReleaseResourceHooks.hookAssignments(
+        val config =
+          ReleaseResourceHooks.materialize(
             ReleaseResourceHooks.empty[String],
-            (resourceHook: ReleaseResourceHookIO[String]) =>
-              ReleaseHookIO.action(resourceHook.name)(_ => IO.unit)
+            None
           )
-        assertEquals(
-          assignments.map(_._1.keyLabel),
-          CoreLifecycle.orderedHookDescriptors.map(_.keyLabel)
-        )
+        assertEquals(config, CoreHookConfiguration.empty)
       }
     }
   }

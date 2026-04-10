@@ -1,19 +1,18 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.VcsOps
-import io.release.runtime.command.CommandStateSupport
-import io.release.runtime.command.CheckModeOutput
-import io.release.runtime.command.ReleaseCommandCompilation
-import io.release.runtime.command.ReleaseCommandRunner
+import io.release.monorepo.*
+import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.command.CheckModeOutput
+import io.release.runtime.command.CommandStateSupport
+import io.release.runtime.command.ReleaseCommandCompilation
+import io.release.runtime.command.ReleaseCommandRunner
 import io.release.runtime.sbt.SbtRuntime
-import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for monorepo command planning and execution.
@@ -60,10 +59,6 @@ private[monorepo] object MonorepoCommandExecution {
       plan: MonorepoReleasePlan
   )
 
-  final case class CompiledMonorepoSteps(
-      steps: Seq[AnyStep]
-  )
-
   def doHelp(state: State, commandName: String): State =
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Monorepo) {
       ReleaseCommandRunner
@@ -104,33 +99,28 @@ private[monorepo] object MonorepoCommandExecution {
   def resolveProcessMode[T](
       state: State,
       runtime: CommandRuntime[T]
-  ): IO[CompiledMonorepoSteps] =
+  ): IO[Seq[AnyStep]] =
     compileMergedSteps(state, runtime, maybeResource = None)
 
   def resolveReleaseRun[T](
       state: State,
       resourceValue: T,
       runtime: CommandRuntime[T]
-  ): IO[CompiledMonorepoSteps] =
+  ): IO[Seq[AnyStep]] =
     compileMergedSteps(state, runtime, maybeResource = Some(resourceValue))
 
   private def compileMergedSteps[T](
       state: State,
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
-  ): IO[CompiledMonorepoSteps] =
-    ReleaseCommandCompilation
-      .blockingMergeAndCompile(
-        state = state,
-        maybeResource = maybeResource,
-        resolveHooks = MonorepoHookConfiguration.resolve,
-        resolveResourceHooks = runtime.resolveResourceHooks,
-        materialize = (rh: MonorepoResourceHooks[T], opt: Option[T]) =>
-          MonorepoResourceHooks.materialize(rh, opt),
-        merge = (a: MonorepoHookConfiguration, b: MonorepoHookConfiguration) => a.mergeWith(b),
-        compile = MonorepoLifecycle.compile
-      )
-      .map(steps => CompiledMonorepoSteps(steps))
+  ): IO[Seq[AnyStep]] =
+    IO.blocking {
+      val resolvedHooks     = MonorepoHookConfiguration.resolve(state)
+      val resourceHooks     = runtime.resolveResourceHooks(state)
+      val materializedHooks = MonorepoResourceHooks.materialize(resourceHooks, maybeResource)
+      val mergedHooks       = resolvedHooks.mergeWith(materializedHooks)
+      MonorepoLifecycle.compile(mergedHooks)
+    }
 
   private[monorepo] def resolveFlags[T](
       cleanState: State,
@@ -233,11 +223,11 @@ private[monorepo] object MonorepoCommandExecution {
     for {
       finalCtx <- runtime.resource.use { resourceValue =>
                     for {
-                      runProcess  <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
+                      steps       <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
                       _           <- IO.blocking(
                                        logReleaseStart(
                                          session.cleanState,
-                                         runProcess.steps.length,
+                                         steps.length,
                                          session.context.projects.length,
                                          command.flags
                                        )
@@ -245,11 +235,11 @@ private[monorepo] object MonorepoCommandExecution {
                       preparedCtx <-
                         VcsOps.preparePushReleaseIfNeeded(
                           session.context,
-                          runProcess.steps,
+                          steps,
                           ReleaseLogPrefixes.Monorepo
                         )
                       finalCtx    <-
-                        MonorepoComposer.compose(runProcess.steps, command.flags.crossBuild)(
+                        MonorepoComposer.compose(steps, command.flags.crossBuild)(
                           preparedCtx
                         )
                     } yield finalCtx
@@ -271,13 +261,13 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      process <- resolveProcessMode(session.cleanState, runtime)
+      steps   <- resolveProcessMode(session.cleanState, runtime)
       _       <- CheckModeOutput.logCheckStart(
                    session.cleanState,
                    ReleaseLogPrefixes.Monorepo,
-                   process.steps.length
+                   steps.length
                  )
-      summary <- MonorepoPreflight.check(session, process.steps)
+      summary <- MonorepoPreflight.check(session, steps)
       _       <- logLines(session.cleanState, MonorepoPreflight.renderSummary(summary))
       _       <- CheckModeOutput.logCheckPassed(
                    session.cleanState,

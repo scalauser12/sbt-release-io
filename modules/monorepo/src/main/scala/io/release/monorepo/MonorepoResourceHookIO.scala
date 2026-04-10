@@ -1,8 +1,7 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
+import io.release.monorepo.internal.*
 
 /** A resource-aware global hook for custom monorepo plugins with a shared resource `T`.
   *
@@ -102,11 +101,6 @@ case class MonorepoResourceHooks[T](
 object MonorepoResourceHooks {
   def empty[T]: MonorepoResourceHooks[T] = MonorepoResourceHooks[T]()
 
-  private type GlobalHookAssignment  =
-    (MonorepoLifecycle.GlobalHookDescriptor, Seq[MonorepoGlobalHookIO])
-  private type ProjectHookAssignment =
-    (MonorepoLifecycle.ProjectHookDescriptor, Seq[MonorepoProjectHookIO])
-
   /** Convert resource-aware hooks into plain hooks by binding the resource value.
     * Boolean policies default to `true` so they are neutral when merged via
     * [[MonorepoHookConfiguration.mergeWith]].
@@ -134,31 +128,30 @@ object MonorepoResourceHooks {
         validate = hook.validate
       )
 
-    val withGlobalHooks =
-      globalHookAssignments(hooks, globalHook).foldLeft(MonorepoHookConfiguration.empty) {
-        case (config, (slot, materializedHooks)) =>
-          slot.updated(config, materializedHooks)
-      }
-
-    projectHookAssignments(hooks, projectHook).foldLeft(withGlobalHooks) {
-      case (config, (slot, materializedHooks)) =>
-        slot.updated(config, materializedHooks)
-    }
+    MonorepoHookConfiguration(
+      afterCleanCheckHooks = hooks.afterCleanCheckHooks.map(globalHook),
+      beforeSelectionHooks = hooks.beforeSelectionHooks.map(globalHook),
+      afterSelectionHooks = hooks.afterSelectionHooks.map(globalHook),
+      beforeVersionResolutionHooks = hooks.beforeVersionResolutionHooks.map(projectHook),
+      afterVersionResolutionHooks = hooks.afterVersionResolutionHooks.map(projectHook),
+      beforeReleaseVersionWriteHooks = hooks.beforeReleaseVersionWriteHooks.map(
+        projectHook
+      ),
+      afterReleaseVersionWriteHooks = hooks.afterReleaseVersionWriteHooks.map(
+        projectHook
+      ),
+      beforeReleaseCommitHooks = hooks.beforeReleaseCommitHooks.map(globalHook),
+      afterReleaseCommitHooks = hooks.afterReleaseCommitHooks.map(globalHook),
+      beforeTagHooks = hooks.beforeTagHooks.map(projectHook),
+      afterTagHooks = hooks.afterTagHooks.map(projectHook),
+      beforePublishHooks = hooks.beforePublishHooks.map(projectHook),
+      afterPublishHooks = hooks.afterPublishHooks.map(projectHook),
+      beforeNextVersionWriteHooks = hooks.beforeNextVersionWriteHooks.map(projectHook),
+      afterNextVersionWriteHooks = hooks.afterNextVersionWriteHooks.map(projectHook),
+      beforeNextCommitHooks = hooks.beforeNextCommitHooks.map(globalHook),
+      afterNextCommitHooks = hooks.afterNextCommitHooks.map(globalHook),
+      beforePushHooks = hooks.beforePushHooks.map(globalHook),
+      afterPushHooks = hooks.afterPushHooks.map(globalHook)
+    )
   }
-
-  private[monorepo] def globalHookAssignments[T](
-      hooks: MonorepoResourceHooks[T],
-      materialize: MonorepoGlobalResourceHookIO[T] => MonorepoGlobalHookIO
-  ): Seq[GlobalHookAssignment] =
-    MonorepoLifecycle.orderedGlobalHookDescriptors.map { descriptor =>
-      descriptor -> descriptor.resourceHooks(hooks).map(materialize)
-    }
-
-  private[monorepo] def projectHookAssignments[T](
-      hooks: MonorepoResourceHooks[T],
-      materialize: MonorepoProjectResourceHookIO[T] => MonorepoProjectHookIO
-  ): Seq[ProjectHookAssignment] =
-    MonorepoLifecycle.orderedProjectHookDescriptors.map { descriptor =>
-      descriptor -> descriptor.resourceHooks(hooks).map(materialize)
-    }
 }

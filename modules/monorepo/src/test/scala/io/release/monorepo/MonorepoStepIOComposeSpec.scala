@@ -1,9 +1,8 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.monorepo.internal.*
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
@@ -113,8 +112,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           val setupStep = ProcessStep.Single[MonorepoContext](
             name = "detect-or-select-projects",
             execute = c => log.update(_ :+ "setup").as(c.withProjects(Seq(selected))),
-            roles = Set(BuiltInStepRole.ProjectSelection),
-            isSelectionBoundary = true
+            roles = Set(BuiltInStepRole.ProjectSelection, BuiltInStepRole.SelectionBoundary)
           )
 
           val stepA = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
@@ -163,8 +161,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           val boundary    = ProcessStep.Single[MonorepoContext](
             name = "detect-or-select-projects",
             execute = c => log.update(_ :+ "select").as(c.withProjects(Seq(api))),
-            roles = Set(BuiltInStepRole.ProjectSelection),
-            isSelectionBoundary = true
+            roles = Set(BuiltInStepRole.ProjectSelection, BuiltInStepRole.SelectionBoundary)
           )
           val afterPer    = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
             name = "custom-project",

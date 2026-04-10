@@ -53,10 +53,6 @@ private[release] object CoreCommandExecution {
       plan: CoreReleasePlan
   )
 
-  final case class CompiledSteps(
-      steps: Seq[Step]
-  )
-
   def doHelp(state: State, commandName: String): State =
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core) {
       ReleaseCommandRunner
@@ -117,33 +113,28 @@ private[release] object CoreCommandExecution {
   def resolveProcessMode[T](
       state: State,
       runtime: CommandRuntime[T]
-  ): IO[CompiledSteps] =
+  ): IO[Seq[Step]] =
     compileMergedSteps(state, runtime, maybeResource = None)
 
   def resolveReleaseRun[T](
       state: State,
       resourceValue: T,
       runtime: CommandRuntime[T]
-  ): IO[CompiledSteps] =
+  ): IO[Seq[Step]] =
     compileMergedSteps(state, runtime, maybeResource = Some(resourceValue))
 
   private def compileMergedSteps[T](
       state: State,
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
-  ): IO[CompiledSteps] =
-    ReleaseCommandCompilation
-      .blockingMergeAndCompile(
-        state = state,
-        maybeResource = maybeResource,
-        resolveHooks = CoreHookConfiguration.resolve,
-        resolveResourceHooks = runtime.resolveResourceHooks,
-        materialize = (rh: ReleaseResourceHooks[T], opt: Option[T]) =>
-          ReleaseResourceHooks.materialize(rh, opt),
-        merge = (a: CoreHookConfiguration, b: CoreHookConfiguration) => a.mergeWith(b),
-        compile = CoreLifecycle.compile
-      )
-      .map(steps => CompiledSteps(steps))
+  ): IO[Seq[Step]] =
+    IO.blocking {
+      val resolvedHooks     = CoreHookConfiguration.resolve(state)
+      val resourceHooks     = runtime.resolveResourceHooks(state)
+      val materializedHooks = ReleaseResourceHooks.materialize(resourceHooks, maybeResource)
+      val mergedHooks       = resolvedHooks.mergeWith(materializedHooks)
+      CoreLifecycle.compile(mergedHooks)
+    }
 
   private def buildCommandInputs[T](
       cleanState: State,
@@ -212,11 +203,11 @@ private[release] object CoreCommandExecution {
     for {
       finalCtx <- runtime.resource.use { resourceValue =>
                     for {
-                      runProcess  <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
+                      steps       <- resolveReleaseRun(inputs.cleanState, resourceValue, runtime)
                       _           <- IO.blocking(
                                        logReleaseStart(
                                          inputs.cleanState,
-                                         runProcess.steps.length,
+                                         steps.length,
                                          inputs.crossEnabled
                                        )
                                      )
@@ -232,11 +223,11 @@ private[release] object CoreCommandExecution {
                       preparedCtx <-
                         VcsOps.preparePushReleaseIfNeeded(
                           seededCtx,
-                          runProcess.steps,
+                          steps,
                           ReleaseLogPrefixes.Core
                         )
                       finalCtx    <- ReleaseComposer.compose(
-                                       runProcess.steps,
+                                       steps,
                                        inputs.crossEnabled
                                      )(preparedCtx)
                     } yield finalCtx
@@ -253,11 +244,11 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T]
   ): IO[State] =
     for {
-      process <- resolveProcessMode(inputs.cleanState, runtime)
+      steps   <- resolveProcessMode(inputs.cleanState, runtime)
       _       <- CheckModeOutput.logCheckStart(
                    inputs.cleanState,
                    ReleaseLogPrefixes.Core,
-                   process.steps.length
+                   steps.length
                  )
       summary <- runtime
                    .initialContext(
@@ -269,7 +260,7 @@ private[release] object CoreCommandExecution {
                    .flatMap { initialCtx =>
                      CorePreflight.check(
                        initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
-                       process.steps,
+                       steps,
                        inputs.crossEnabled
                      )
                    }

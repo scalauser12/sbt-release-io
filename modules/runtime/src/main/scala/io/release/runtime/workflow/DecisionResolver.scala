@@ -2,7 +2,6 @@ package io.release.runtime.workflow
 
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
-import io.release.runtime.ReleaseCtxOps
 import io.release.runtime.sbt.PromptAdapter
 
 /** Shared runtime decision helpers for built-in release flows.
@@ -13,7 +12,7 @@ import io.release.runtime.sbt.PromptAdapter
   */
 private[release] object DecisionResolver {
 
-  def resolveVersionInput[C <: ReleaseCtx: ReleaseCtxOps](
+  def resolveVersionInput[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       override_ : Option[String],
       suggested: String,
@@ -46,7 +45,7 @@ private[release] object DecisionResolver {
               }
     }
 
-  def confirmOrAbort[C <: ReleaseCtx: ReleaseCtxOps](
+  def confirmOrAbort[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       configuredAnswer: Option[Boolean],
       logPrefix: String,
@@ -73,7 +72,7 @@ private[release] object DecisionResolver {
           }
     }
 
-  def handleSnapshotDependencies[C <: ReleaseCtx: ReleaseCtxOps](
+  def handleSnapshotDependencies[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       deps: Seq[_root_.sbt.ModuleID],
       logPrefix: String,
@@ -111,7 +110,7 @@ private[release] object DecisionResolver {
       }
     }
 
-  def resolvePushDecision[C <: ReleaseCtx: ReleaseCtxOps](
+  def resolvePushDecision[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       logPrefix: String
   )(doPush: C => IO[C], onDeclinePush: C => IO[C]): IO[C] =
@@ -140,7 +139,7 @@ private[release] object DecisionResolver {
             }
     }
 
-  def resolveTagAnswer[C <: ReleaseCtx: ReleaseCtxOps](
+  def resolveTagAnswer[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       configuredAnswer: Option[String],
       tagName: String,

@@ -3,8 +3,8 @@ package io.release.core.internal.steps
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseContext
-import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
+import io.release.ReleasePluginIO
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
@@ -65,7 +65,7 @@ class PublishStepsSpec extends CatsEffectSuite {
       )
     }.use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
-        PublishSteps.checkSnapshotDependencies.validate(ctx)
+        PublishSteps.checkSnapshotDependencies.validate(ctx).void
       ) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found"))
         assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
@@ -83,7 +83,7 @@ class PublishStepsSpec extends CatsEffectSuite {
     }.use { case (ctx, _) =>
       val validate = PublishSteps.checkSnapshotDependencies.validate
 
-      assertFailure[IllegalStateException, Unit](validate(ctx)) { err =>
+      assertFailure[IllegalStateException, Unit](validate(ctx).void) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found"))
         assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
       }
@@ -103,7 +103,7 @@ class PublishStepsSpec extends CatsEffectSuite {
       )
     ).use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
-        PublishSteps.checkSnapshotDependencies.validate(ctx)
+        PublishSteps.checkSnapshotDependencies.validate(ctx).void
       ) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found"))
         assertEquals(
@@ -118,7 +118,7 @@ class PublishStepsSpec extends CatsEffectSuite {
     loadedContextResource(s"$fixturePrefix-val-off") { _ =>
       () -> Seq(ReleasePluginIO.autoImport.releaseIOPublishChecks := false)
     }.use { case (ctx, _) =>
-      PublishSteps.publishArtifacts.validate(ctx)
+      PublishSteps.publishArtifacts.validate(ctx).void
     }
   }
 
@@ -129,7 +129,7 @@ class PublishStepsSpec extends CatsEffectSuite {
         publish / skip                                    := true
       )
     }.use { case (ctx, _) =>
-      PublishSteps.publishArtifacts.validate(ctx)
+      PublishSteps.publishArtifacts.validate(ctx).void
     }
   }
 
@@ -138,7 +138,7 @@ class PublishStepsSpec extends CatsEffectSuite {
       () -> Seq(ReleasePluginIO.autoImport.releaseIOPublishChecks := true)
     }.use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
-        PublishSteps.publishArtifacts.validate(ctx)
+        PublishSteps.publishArtifacts.validate(ctx).void
       )(err => assert(err.getMessage.contains("publishTo not configured")))
     }
   }
@@ -157,7 +157,7 @@ class PublishStepsSpec extends CatsEffectSuite {
 
       for {
         _   <- assertFailure[IllegalStateException, Unit](
-                 PublishSteps.publishArtifacts.validate(ctx)
+                 PublishSteps.publishArtifacts.validate(ctx).void
                )(err => assert(err.getMessage.contains("publishTo not configured")))
         log <- IO(consoleBuffer.toString("UTF-8"))
       } yield {
@@ -181,7 +181,7 @@ class PublishStepsSpec extends CatsEffectSuite {
         s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for root: "
 
       for {
-        _   <- PublishSteps.publishArtifacts.validate(ctx)
+        _   <- PublishSteps.publishArtifacts.validate(ctx).void
         log <- IO(consoleBuffer.toString("UTF-8"))
       } yield {
         assertEquals(TestSupport.warningCount(log, warningPrefix), 1)
@@ -204,7 +204,7 @@ class PublishStepsSpec extends CatsEffectSuite {
       ),
       childSettings = Seq.empty // no publishTo on child
     ).use { case (ctx, _) =>
-      PublishSteps.publishArtifacts.validate(ctx)
+      PublishSteps.publishArtifacts.validate(ctx).void
     }
   }
 
@@ -224,7 +224,7 @@ class PublishStepsSpec extends CatsEffectSuite {
       childSettings = Seq.empty // no publishTo on child
     ).use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
-        PublishSteps.publishArtifacts.validate(ctx)
+        PublishSteps.publishArtifacts.validate(ctx).void
       )(err => assert(err.getMessage.contains("publishTo not configured")))
     }
   }

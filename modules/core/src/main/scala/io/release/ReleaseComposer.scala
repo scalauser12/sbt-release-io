@@ -2,8 +2,8 @@ package io.release
 
 import cats.effect.IO
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -61,7 +61,7 @@ private[release] object ReleaseComposer {
   ): ExecutionEngine.PreparedStep[ReleaseContext] =
     ExecutionEngine.PreparedStep(
       name = step.name,
-      validate = wrapWithCrossBuild(step, crossBuild)(step.threadedValidation),
+      validate = wrapWithCrossBuild(step, crossBuild)(step.validate),
       execute = ExecutionEngine.withErrorRecovery(LogPrefix)(
         wrapWithCrossBuild(step, crossBuild) { ctx =>
           IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *>

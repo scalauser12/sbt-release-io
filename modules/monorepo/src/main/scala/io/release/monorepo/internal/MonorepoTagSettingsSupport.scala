@@ -1,9 +1,8 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
 import io.release.ReleasePluginIO
+import io.release.monorepo.*
 import sbt.{internal as _, *}
 
 /** Internal helpers for resolving monorepo tag settings from sbt state. */

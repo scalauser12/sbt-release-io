@@ -1,10 +1,8 @@
 package io.release.monorepo
 
 import io.release.monorepo.internal.*
-
-import io.release.runtime.ReleaseCtx
-import io.release.runtime.ReleaseCtxOps
 import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseCtx
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import sbt.internal.util.AttributeMap
@@ -102,6 +100,7 @@ case class MonorepoContext(
     failed: Boolean = false,
     failureCause: Option[Throwable] = None
 ) extends ReleaseCtx {
+  type Self = MonorepoContext
 
   def currentProjects: Seq[ProjectReleaseInfo] =
     projects.filterNot(_.failed)
@@ -117,16 +116,21 @@ case class MonorepoContext(
     copy(projects = projects.map(p => if (p.ref == ref) f(p) else p))
   }
 
-  def withState(s: State): MonorepoContext = copy(state = s)
+  override def withState(s: State): MonorepoContext = copy(state = s)
 
-  def withVcs(v: Vcs): MonorepoContext = copy(vcs = Some(v))
+  override def withVcs(v: Vcs): MonorepoContext = copy(vcs = Some(v))
 
   def withProjects(ps: Seq[ProjectReleaseInfo]): MonorepoContext = copy(projects = ps)
 
-  def withMetadata[A](key: AttributeKey[A], value: A): MonorepoContext =
+  override def withMetadata[A](
+      key: AttributeKey[A],
+      value: A
+  ): MonorepoContext =
     copy(metadataBag = metadataBag.put(key, value))
 
-  def withoutMetadata[A](key: AttributeKey[A]): MonorepoContext =
+  override def withoutMetadata[A](
+      key: AttributeKey[A]
+  ): MonorepoContext =
     if (metadata(key).isDefined) copy(metadataBag = metadataBag.remove(key))
     else this
 
@@ -159,39 +163,12 @@ case class MonorepoContext(
   private[release] def decisionDefaults: ReleaseDecisionDefaults =
     releasePlan.map(_.decisionDefaults).getOrElse(ReleaseDecisionDefaults.empty)
 
-  def fail: MonorepoContext                       = copy(failed = true)
-  def failWith(cause: Throwable): MonorepoContext = copy(failed = true, failureCause = Some(cause))
+  override def fail: MonorepoContext                       = copy(failed = true)
+  override def failWith(cause: Throwable): MonorepoContext =
+    copy(failed = true, failureCause = Some(cause))
 }
 
 private[monorepo] object MonorepoContext {
-
-  implicit val monorepoContextOps: ReleaseCtxOps[MonorepoContext] =
-    new ReleaseCtxOps[MonorepoContext] {
-      override def withState(ctx: MonorepoContext, state: State): MonorepoContext =
-        ctx.withState(state)
-
-      override def withVcs(ctx: MonorepoContext, vcs: Vcs): MonorepoContext =
-        ctx.withVcs(vcs)
-
-      override def fail(ctx: MonorepoContext): MonorepoContext =
-        ctx.fail
-
-      override def failWith(ctx: MonorepoContext, cause: Throwable): MonorepoContext =
-        ctx.failWith(cause)
-
-      override def withMetadata[A](
-          ctx: MonorepoContext,
-          key: AttributeKey[A],
-          value: A
-      ): MonorepoContext =
-        ctx.withMetadata(key, value)
-
-      override def withoutMetadata[A](
-          ctx: MonorepoContext,
-          key: AttributeKey[A]
-      ): MonorepoContext =
-        ctx.withoutMetadata(key)
-    }
 
   private val releaseVersionFilesValidatedKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalMonorepoReleaseVersionFilesValidated")

@@ -1,8 +1,7 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
+import io.release.monorepo.*
 import sbt.{internal as _, *}
 
 /** Frequently reused monorepo settings resolved from a single sbt state snapshot. */

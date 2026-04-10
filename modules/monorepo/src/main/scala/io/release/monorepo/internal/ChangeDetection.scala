@@ -1,8 +1,7 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
+import io.release.monorepo.*
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.StepHelpers.errorMessage
 import io.release.vcs.GitProcessSupport

@@ -1,10 +1,9 @@
 package io.release.monorepo.internal.steps
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.monorepo.MonorepoSpecSupport
+import io.release.monorepo.internal.*
 import sbt.Def
 
 import java.io.File

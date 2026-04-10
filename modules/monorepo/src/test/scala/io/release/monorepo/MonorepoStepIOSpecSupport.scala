@@ -1,9 +1,8 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.monorepo.internal.*
 import io.release.runtime.sbt.SbtRuntime
 import sbt.Keys.*
 import sbt.Project

@@ -1,10 +1,8 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import io.release.TestSupport
-import io.release.runtime.engine.LifecycleCatalogSupport
+import io.release.monorepo.internal.*
 import munit.CatsEffectSuite
 import sbt.*
 
@@ -12,10 +10,12 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
 
   test("defaultSettings - expose each lifecycle-derived setting key exactly once") {
     IO {
-      val labels = MonorepoHookConfiguration.defaultSettings.map(_.key.key.label)
+      val labels =
+        MonorepoHookConfiguration.defaultSettings.map(_.key.key.label)
 
       assertEquals(labels, labels.distinct)
-      assertEquals(labels.sorted, MonorepoLifecycle.slots.map(_.keyLabel).sorted)
+      // 6 policy + 19 hook = 25 settings
+      assertEquals(labels.size, 25)
     }
   }
 
@@ -78,7 +78,11 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
 
   test("hasCustomizations - detect disabled policies and non-empty hook buckets") {
     IO {
-      assert(!MonorepoHookConfiguration.hasCustomizations(MonorepoHookConfiguration.empty))
+      assert(
+        !MonorepoHookConfiguration.hasCustomizations(
+          MonorepoHookConfiguration.empty
+        )
+      )
       assert(
         MonorepoHookConfiguration.hasCustomizations(
           MonorepoHookConfiguration.empty.copy(enablePublish = false)
@@ -92,24 +96,6 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
           )
         )
       )
-    }
-  }
-
-  test("slot catalog validation fails fast on duplicate ids") {
-    IO {
-      val err = intercept[IllegalStateException] {
-        LifecycleCatalogSupport.validateUniqueSlots(
-          "monorepo",
-          Vector[MonorepoConfigSlot](
-            MonorepoPolicySlots.enablePublish,
-            MonorepoPolicySlots.enablePublish
-          )
-        )(_.id, _.keyLabel)
-      }
-
-      assert(err.getMessage.contains("monorepo lifecycle slot catalog"))
-      assert(err.getMessage.contains(MonorepoPolicySlots.enablePublish.id))
-      assert(err.getMessage.contains(MonorepoPolicySlots.enablePublish.keyLabel))
     }
   }
 

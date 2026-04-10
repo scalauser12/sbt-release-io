@@ -29,7 +29,7 @@ class ReleasePluginIOReleaseRunSpec extends CatsEffectSuite with ReleasePluginIO
                                         .filter(_.name.startsWith("before-tag:"))
                                         .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
                                           ioCtx
-                                            .flatTap(current => step.validate(current))
+                                            .flatMap(step.validate)
                                             .flatMap(step.execute)
                                         }
                                         .void
