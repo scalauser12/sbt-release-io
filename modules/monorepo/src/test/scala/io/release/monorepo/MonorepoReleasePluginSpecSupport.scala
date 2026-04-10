@@ -6,8 +6,6 @@ import cats.effect.Resource
 import io.release.TestSupport
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
-import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
-import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.runtime.command.PluginEntrypointSupport
 import io.release.runtime.engine.ProcessStep
 import sbt.*
@@ -234,15 +232,10 @@ trait MonorepoReleasePluginSpecSupport {
       )
       .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
         ioCtx.flatMap { current =>
-          step match {
-            case global: ProcessStep.Single[?]                    =>
-              val single = global.asInstanceOf[GlobalStep]
-              single.validate(current) *> single.execute(current)
-            case perProject: ProcessStep.PerItem[?, ?] @unchecked =>
-              val item = perProject
-                .asInstanceOf[ProjectStep]
-              item.validate(current, project) *> item.execute(current, project)
-          }
+          ProcessStep.fold(step)(
+            single => single.validate(current) *> single.execute(current),
+            item => item.validate(current, project) *> item.execute(current, project)
+          )
         }
       }
       .void

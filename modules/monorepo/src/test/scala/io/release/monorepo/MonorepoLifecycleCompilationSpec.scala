@@ -33,11 +33,8 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     hookFixtureResource("monorepo-hook-compiler-tag-step").use { fixture =>
       IO {
         val tagStep = compileLifecycle(fixture.state)
-          .collectFirst {
-            case step: ProcessStep.PerItem[?, ?] @unchecked
-                if step.hasRole(BuiltInStepRole.TagRelease) =>
-              step.asInstanceOf[ProjectStep]
-          }
+          .flatMap(asProjectStep)
+          .find(_.hasRole(BuiltInStepRole.TagRelease))
           .getOrElse(fail("Expected canonical tag-releases step"))
 
         assertEquals(tagStep, MonorepoReleaseSteps.tagReleasesPerProject)
@@ -176,12 +173,8 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
 
       hookFixtureResource("monorepo-hook-compiler-publish-gate", settings).use { fixture =>
         val publishHookSteps = compileLifecycle(fixture.state)
-          .collect {
-            case step: ProcessStep.PerItem[?, ?] @unchecked
-                if step.name
-                  .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-              step.asInstanceOf[ProjectStep]
-          }
+          .flatMap(asProjectStep)
+          .filter(p => p.name.startsWith("before-publish:") || p.name.startsWith("after-publish:"))
 
         val skippedCtx          = fixture.context(selectedProjectIds = Seq("core"), skipPublish = true)
         val publishSkippedState = TestSupport.appendSessionSettings(
@@ -246,6 +239,12 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       state: sbt.State
   ): Seq[AnyStep] =
     MonorepoLifecycle.compile(MonorepoHookConfiguration.resolve(state))
+
+  private def asProjectStep(step: AnyStep): Option[ProjectStep] =
+    ProcessStep.fold[MonorepoContext, ProjectReleaseInfo, Option[ProjectStep]](step)(
+      (_: ProcessStep.Single[MonorepoContext]) => None,
+      Some(_)
+    )
 
   private def repoPath(relative: String): Path = {
     @scala.annotation.tailrec
