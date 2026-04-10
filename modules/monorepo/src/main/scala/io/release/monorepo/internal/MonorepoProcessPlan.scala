@@ -24,7 +24,7 @@ private[monorepo] final case class MonorepoProcessPlan(
 private[monorepo] object MonorepoProcessPlan {
 
   def analyze(steps: Seq[AnyStep]): MonorepoProcessPlan = {
-    val boundaryIndex = steps.indexWhere {
+    val boundaryIndex           = steps.indexWhere {
       case step: ProcessStep.Single[?] => step.isSelectionBoundary
       case _                           => false
     }
@@ -32,15 +32,15 @@ private[monorepo] object MonorepoProcessPlan {
       if (boundaryIndex < 0) (Seq.empty, steps)
       else steps.splitAt(boundaryIndex + 1)
 
-    val shouldResolveSelection = steps.exists(_.hasRole(BuiltInStepRole.ProjectSelection))
-    val shouldResolveVersions  = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions))
-    val shouldPreflightTags    = steps.exists(_.hasRole(BuiltInStepRole.TagRelease))
-    val versionIndex           = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
-    val hasBuiltInVersionResolution = versionIndex >= 0
+    val shouldResolveSelection                                               = steps.exists(_.hasRole(BuiltInStepRole.ProjectSelection))
+    val shouldResolveVersions                                                = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions))
+    val shouldPreflightTags                                                  = steps.exists(_.hasRole(BuiltInStepRole.TagRelease))
+    val versionIndex                                                         = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
+    val hasBuiltInVersionResolution                                          = versionIndex >= 0
     val (mainStepsThroughVersionResolution, mainStepsAfterVersionResolution) =
       if (!hasBuiltInVersionResolution) (mainSteps, Seq.empty)
       else mainSteps.splitAt(versionIndex + 1)
-    val tagIndex = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.TagRelease))
+    val tagIndex                                                             = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.TagRelease))
 
     MonorepoProcessPlan(
       stepNames = steps.map(_.name),

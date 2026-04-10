@@ -5,6 +5,7 @@ import cats.effect.unsafe.implicits.global
 import cats.syntax.all.*
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.ReleaseCtxOps
+import io.release.runtime.ReleaseCtxOps.syntax.*
 import io.release.runtime.workflow.StepHelpers
 import _root_.sbt.State
 
@@ -44,4 +45,13 @@ private[release] object ReleaseCommandRunner {
     } else {
       IO.blocking(ctx.state.log.info(s"$prefix Release completed successfully!")).as(ctx.state)
     }
+
+  /** Apply `cleanState` to the wrapped sbt `State`, then [[handleReleaseResult]]. */
+  def finalizeWithCleanState[C <: ReleaseCtx: ReleaseCtxOps](
+      ctx: C,
+      cleanState: State => State,
+      prefix: String
+  ): IO[State] =
+    IO.blocking(ctx.withState(cleanState(ctx.state)))
+      .flatMap(cleanedCtx => handleReleaseResult(cleanedCtx, prefix))
 }

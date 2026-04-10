@@ -38,7 +38,8 @@ private[release] object ProcessStep {
       case None           => (validate, None)
       case Some(threaded) =>
         val composed =
-          (ctx: C, item: I) => validate(ctx, item).as(ctx).flatMap(updatedCtx => threaded(updatedCtx, item))
+          (ctx: C, item: I) =>
+            validate(ctx, item).as(ctx).flatMap(updatedCtx => threaded(updatedCtx, item))
         ((ctx: C, item: I) => composed(ctx, item).void, Some(composed))
     }
 

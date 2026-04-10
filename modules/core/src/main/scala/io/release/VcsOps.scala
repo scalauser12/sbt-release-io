@@ -4,6 +4,8 @@ import cats.effect.IO
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.ReleaseCtxOps
 import io.release.runtime.ReleaseCtxOps.syntax.*
+import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.ProcessStep
 import io.release.runtime.workflow.DecisionResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
@@ -227,6 +229,22 @@ private[release] object VcsOps {
     ensureVcs(ctx).flatMap { case (ctxWithVcs, vcs) =>
       refreshPushReadiness(ctxWithVcs, vcs, logPrefix, remoteCheckLog)
     }
+
+  /** When the compiled step list includes push, refresh remote readiness before other actions. */
+  def preparePushReleaseIfNeeded[C <: ReleaseCtx: ReleaseCtxOps](
+      ctx: C,
+      steps: Seq[ProcessStep[_, _]],
+      logPrefix: String
+  ): IO[C] =
+    if (steps.exists(_.hasRole(BuiltInStepRole.PushChanges)))
+      preparePushRelease(
+        ctx,
+        logPrefix,
+        remoteCheckLog = Some(remote =>
+          ctx.state.log.info(s"$logPrefix Checking remote [$remote] before release actions ...")
+        )
+      )
+    else IO.pure(ctx)
 
   /** After a fresh remote check, optionally prompt before pushing (interactive mode).
     */
