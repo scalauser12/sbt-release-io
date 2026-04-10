@@ -1,19 +1,18 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleasePluginIO.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.runtime.command.HelpDocsLinks
-import io.release.runtime.engine.ProcessStep
-import io.release.runtime.sbt.SbtRuntime
+import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.monorepo.internal.steps.MonorepoStepTestCompat
 import io.release.monorepo.internal.steps.MonorepoVcsSteps
+import io.release.runtime.command.HelpDocsLinks
+import io.release.runtime.engine.ProcessStep
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 
 import java.io.File

@@ -1,8 +1,7 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
+import io.release.monorepo.*
 import io.release.monorepo.internal.steps.MonorepoVersionWorkflow
 
 /** Shared preparation helpers used by both monorepo `run` and `check`.

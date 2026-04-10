@@ -2,8 +2,8 @@ package io.release.monorepo.internal
 
 import cats.effect.IO
 import io.release.ReleaseManifestMetadataSupport
-import io.release.runtime.sbt.SbtRuntime
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
+import io.release.runtime.sbt.SbtRuntime
 import sbt.{internal as _, *}
 
 /** Shared version-file resolution for monorepo release steps and project discovery. */

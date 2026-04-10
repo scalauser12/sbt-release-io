@@ -1,10 +1,10 @@
 package io.release.core.internal.steps
 
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleasePluginIO
-import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
-import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions
 import io.release.TestSupport
@@ -34,7 +34,7 @@ class VcsStepsSpec extends CatsEffectSuite {
 
   test("checkCleanWorkingDir.validate - succeed for a clean loaded repo") {
     ReleaseTestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
-      VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
+      VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state)).void
     }
   }
 
@@ -42,7 +42,7 @@ class VcsStepsSpec extends CatsEffectSuite {
     ReleaseTestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (repo, state) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
         TestAssertions.assertFailure[IllegalStateException, Unit](
-          VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state))
+          VcsSteps.checkCleanWorkingDir.validate(ReleaseContext(state = state)).void
         ) { err =>
           assert(err.getMessage.contains("unstaged modified files"))
           assert(err.getMessage.contains("file.txt"))
@@ -52,7 +52,7 @@ class VcsStepsSpec extends CatsEffectSuite {
 
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
     ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
-      VcsSteps.pushChanges.validate(ctx)
+      VcsSteps.pushChanges.validate(ctx).void
     }
   }
 
@@ -61,7 +61,7 @@ class VcsStepsSpec extends CatsEffectSuite {
       val validate = VcsSteps.pushChanges.validate
 
       TestAssertions.assertFailure[IllegalStateException, Unit](
-        validate(ReleaseContext(state = state))
+        validate(ReleaseContext(state = state)).void
       ) { err =>
         assertEquals(
           err.getMessage,
@@ -168,7 +168,7 @@ class VcsStepsSpec extends CatsEffectSuite {
         result <- VcsSteps.tagRelease.execute(
                     ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
                   )
-        _      <- VcsSteps.checkCleanWorkingDir.validate(result)
+        _      <- VcsSteps.checkCleanWorkingDir.validate(result).void
         tags   <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "v1.0.1"))
       } yield {
         assertEquals(tags.trim, "v1.0.1")

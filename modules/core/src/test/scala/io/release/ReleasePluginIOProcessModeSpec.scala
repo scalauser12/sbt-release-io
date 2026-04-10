@@ -44,7 +44,7 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
           _           <- checkSteps(processMode)
                            .filter(_.name.startsWith("before-tag:"))
                            .foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
-                             ioCtx.flatTap(current => step.validate(current)).flatMap(step.execute)
+                             ioCtx.flatMap(step.validate).flatMap(step.execute)
                            }
                            .void
           events      <- observed.get

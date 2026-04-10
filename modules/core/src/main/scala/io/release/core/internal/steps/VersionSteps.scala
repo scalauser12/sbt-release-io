@@ -4,8 +4,8 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.CoreStepFactory
-import io.release.runtime.engine.BuiltInStepRole
 import io.release.core.internal.VersionPlan
+import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.workflow.DefaultVersionFileIO
 import sbt.State

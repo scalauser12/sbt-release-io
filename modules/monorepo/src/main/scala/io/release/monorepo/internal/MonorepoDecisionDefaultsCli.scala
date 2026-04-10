@@ -1,9 +1,9 @@
 package io.release.monorepo.internal
 
+import io.release.core.internal.DecisionDefaultsFromPlugin
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.DecisionDefaultsSupport
-import io.release.core.internal.DecisionDefaultsFromPlugin
 import sbt.*
 
 private[monorepo] object MonorepoDecisionDefaultsCli {

@@ -1,17 +1,16 @@
 package io.release.runtime.workflow
 
-import cats.effect.IO
-import io.release.runtime.ReleaseCtx
-import io.release.runtime.ReleaseCtxOps
-import io.release.runtime.sbt.PromptAdapter
-import io.release.runtime.sbt.SbtRuntime
-import io.release.version.Version
 import _root_.sbt.EvaluateTask
 import _root_.sbt.Incomplete
 import _root_.sbt.Result
 import _root_.sbt.State
 import _root_.sbt.TaskKey
 import _root_.sbt.internal.Aggregation.KeyValue
+import cats.effect.IO
+import io.release.runtime.ReleaseCtx
+import io.release.runtime.sbt.PromptAdapter
+import io.release.runtime.sbt.SbtRuntime
+import io.release.version.Version
 
 import scala.sys.process.*
 import scala.util.control.Exception.catching
@@ -28,26 +27,26 @@ private[release] object StepHelpers {
     * turning `\r\n` into an empty extra line on the next `readLine()` call. Returns `None`
     * on EOF when no bytes were read for the current line.
     */
-  private[release] def readLine[C <: ReleaseCtx: ReleaseCtxOps](
+  private[release] def readLine[C <: ReleaseCtx { type Self = C }](
       ctx: C
   ): IO[(C, Option[String])] =
     PromptAdapter.readLine(ctx)
 
   /** Read a line from standard input and fail fast if stdin closes before input arrives. */
-  private[release] def readRequiredLine[C <: ReleaseCtx: ReleaseCtxOps](
+  private[release] def readRequiredLine[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       context: String
   ): IO[(C, String)] =
     PromptAdapter.readRequiredLine(ctx, context)
 
-  private[release] def askYesNo[C <: ReleaseCtx: ReleaseCtxOps](
+  private[release] def askYesNo[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Boolean)] =
     PromptAdapter.promptYesNo(ctx, prompt, defaultYes)
 
-  private[release] def askYesNoOrEof[C <: ReleaseCtx: ReleaseCtxOps](
+  private[release] def askYesNoOrEof[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
@@ -70,7 +69,7 @@ private[release] object StepHelpers {
     }
 
   /** Confirmation prompt shared by core and monorepo steps. */
-  def confirmContinue[C <: ReleaseCtx: ReleaseCtxOps](
+  def confirmContinue[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String,
       defaultYes: Boolean,
@@ -106,7 +105,7 @@ private[release] object StepHelpers {
   /** Handle snapshot dependencies found during validation. Shared by core and monorepo.
     * The caller's runtime metadata determines interactive defaulting behavior.
     */
-  def handleSnapshotDependencies[C <: ReleaseCtx: ReleaseCtxOps](
+  def handleSnapshotDependencies[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       deps: Seq[_root_.sbt.ModuleID],
       logPrefix: String,

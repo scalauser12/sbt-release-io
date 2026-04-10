@@ -1,14 +1,13 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.TestSupport
-import io.release.runtime.engine.ProcessStep
+import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
+import io.release.runtime.engine.ProcessStep
 import munit.CatsEffectSuite
 import sbt.Keys.*
 import sbt.Setting
@@ -210,71 +209,6 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     }
   }
 
-  test("compile - publish hook execute reuses cached enabled decisions from validation") {
-    Ref.of[IO, List[String]](Nil).flatMap { observed =>
-      val settings = publishHookSettings(observed)
-
-      hookFixtureResource("monorepo-hook-compiler-publish-cache-enabled", settings).use { fixture =>
-        val publishHookSteps = compileLifecycle(fixture.state)
-          .collect {
-            case step: ProcessStep.PerItem[?, ?] @unchecked
-                if step.name
-                  .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-              step.asInstanceOf[ProjectStep]
-          }
-        val enabledCtx       = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
-        val project          = fixture.projectInfo("core")
-
-        for {
-          validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx, project)
-          _            <- executePublishHooks(
-                            publishHookSteps,
-                            validatedCtx.copy(skipPublish = true),
-                            project
-                          )
-          events       <- observed.get
-        } yield assertEquals(
-          events,
-          List("validate-before", "validate-after", "execute-before", "execute-after")
-        )
-      }
-    }
-  }
-
-  test("compile - publish hook execute reuses cached skipped decisions from validation") {
-    Ref.of[IO, List[String]](Nil).flatMap { observed =>
-      val settings = publishHookSettings(observed)
-
-      hookFixtureResource("monorepo-hook-compiler-publish-cache-skipped", settings).use { fixture =>
-        val publishHookSteps = compileLifecycle(fixture.state)
-          .collect {
-            case step: ProcessStep.PerItem[?, ?] @unchecked
-                if step.name
-                  .startsWith("before-publish:") || step.name.startsWith("after-publish:") =>
-              step.asInstanceOf[ProjectStep]
-          }
-        val project          = fixture.projectInfo("core")
-        val skippedState     = TestSupport.appendSessionSettings(
-          fixture.state,
-          Seq(project.ref / publish / skip := true)
-        )
-        val skippedCtx       = fixture
-          .context(selectedProjectIds = Seq("core"), skipPublish = false)
-          .withState(skippedState)
-
-        for {
-          validatedCtx <- validatePublishHooks(publishHookSteps, skippedCtx, project)
-          _            <- executePublishHooks(
-                            publishHookSteps,
-                            validatedCtx.withState(fixture.state),
-                            project
-                          )
-          events       <- observed.get
-        } yield assertEquals(events, Nil)
-      }
-    }
-  }
-
   private def hookFixtureResource(
       prefix: String,
       rootSettings: Seq[Setting[?]] = Nil
@@ -355,7 +289,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
-      ioCtx.flatMap(currentCtx => step.threadedValidation(currentCtx, project))
+      ioCtx.flatMap(currentCtx => step.validate(currentCtx, project))
     }
 
   private def executePublishHooks(

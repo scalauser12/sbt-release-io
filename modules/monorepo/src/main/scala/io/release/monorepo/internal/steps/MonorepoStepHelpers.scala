@@ -1,13 +1,12 @@
 package io.release.monorepo.internal.steps
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
-import io.release.runtime.engine.ExecutionEngine
-import io.release.runtime.ReleaseLogPrefixes
-import io.release.runtime.sbt.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.ProjectReleaseInfo
+import io.release.monorepo.internal.*
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.errorMessage
 
 import scala.util.control.NonFatal

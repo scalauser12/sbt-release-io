@@ -1,7 +1,6 @@
 package io.release.monorepo.internal
 
 import io.release.monorepo.*
-
 import io.release.runtime.workflow.StepHelpers.errorMessage
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser

@@ -1,9 +1,7 @@
 package io.release.monorepo.internal
 
 import io.release.monorepo.*
-
 import io.release.runtime.sbt.SbtRuntime
-import io.release.runtime.engine.LifecycleCatalogSupport
 import sbt.*
 
 /** Monorepo hook/policy settings resolved from a single sbt state snapshot. */
@@ -35,7 +33,9 @@ private[monorepo] final case class MonorepoHookConfiguration(
     afterPushHooks: Seq[MonorepoGlobalHookIO] = Seq.empty
 ) {
 
-  def mergeWith(other: MonorepoHookConfiguration): MonorepoHookConfiguration =
+  def mergeWith(
+      other: MonorepoHookConfiguration
+  ): MonorepoHookConfiguration =
     MonorepoHookConfiguration.merge(this, other)
 
   def hasCustomizations: Boolean =
@@ -46,31 +46,164 @@ private[monorepo] object MonorepoHookConfiguration {
 
   val empty: MonorepoHookConfiguration = MonorepoHookConfiguration()
 
-  lazy val defaultSettings: Seq[Setting[?]] =
-    validatedSlots.map(_.defaultSetting)
+  private val ai = MonorepoReleasePlugin.autoImport
+
+  lazy val defaultSettings: Seq[Setting[?]] = Seq(
+    ai.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := true,
+    ai.releaseIOMonorepoPolicyEnableRunClean                  := true,
+    ai.releaseIOMonorepoPolicyEnableRunTests                  := true,
+    ai.releaseIOMonorepoPolicyEnableTagging                   := true,
+    ai.releaseIOMonorepoPolicyEnablePublish                   := true,
+    ai.releaseIOMonorepoPolicyEnablePush                      := true,
+    ai.releaseIOMonorepoHooksAfterCleanCheck                  :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksBeforeSelection                  :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksAfterSelection                   :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksBeforeVersionResolution          :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksAfterVersionResolution           :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksBeforeReleaseVersionWrite        :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksAfterReleaseVersionWrite         :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksBeforeReleaseCommit              :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksAfterReleaseCommit               :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksBeforeTag                        :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksAfterTag                         :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksBeforePublish                    :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksAfterPublish                     :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksBeforeNextVersionWrite           :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksAfterNextVersionWrite            :=
+      Seq.empty[MonorepoProjectHookIO],
+    ai.releaseIOMonorepoHooksBeforeNextCommit                 :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksAfterNextCommit                  :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksBeforePush                       :=
+      Seq.empty[MonorepoGlobalHookIO],
+    ai.releaseIOMonorepoHooksAfterPush                        :=
+      Seq.empty[MonorepoGlobalHookIO]
+  )
 
   def resolve(state: State): MonorepoHookConfiguration = {
-    val extracted = SbtRuntime.extracted(state)
-
-    validatedSlots.foldLeft(empty) { (config, slot) =>
-      slot.resolve(extracted, config)
-    }
+    val e = SbtRuntime.extracted(state)
+    MonorepoHookConfiguration(
+      enableSnapshotDependenciesCheck = e.get(
+        ai.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck
+      ),
+      enableRunClean = e.get(ai.releaseIOMonorepoPolicyEnableRunClean),
+      enableRunTests = e.get(ai.releaseIOMonorepoPolicyEnableRunTests),
+      enableTagging = e.get(ai.releaseIOMonorepoPolicyEnableTagging),
+      enablePublish = e.get(ai.releaseIOMonorepoPolicyEnablePublish),
+      enablePush = e.get(ai.releaseIOMonorepoPolicyEnablePush),
+      afterCleanCheckHooks = e.get(ai.releaseIOMonorepoHooksAfterCleanCheck),
+      beforeSelectionHooks = e.get(ai.releaseIOMonorepoHooksBeforeSelection),
+      afterSelectionHooks = e.get(ai.releaseIOMonorepoHooksAfterSelection),
+      beforeVersionResolutionHooks = e.get(ai.releaseIOMonorepoHooksBeforeVersionResolution),
+      afterVersionResolutionHooks = e.get(ai.releaseIOMonorepoHooksAfterVersionResolution),
+      beforeReleaseVersionWriteHooks = e.get(
+        ai.releaseIOMonorepoHooksBeforeReleaseVersionWrite
+      ),
+      afterReleaseVersionWriteHooks = e.get(
+        ai.releaseIOMonorepoHooksAfterReleaseVersionWrite
+      ),
+      beforeReleaseCommitHooks = e.get(ai.releaseIOMonorepoHooksBeforeReleaseCommit),
+      afterReleaseCommitHooks = e.get(ai.releaseIOMonorepoHooksAfterReleaseCommit),
+      beforeTagHooks = e.get(ai.releaseIOMonorepoHooksBeforeTag),
+      afterTagHooks = e.get(ai.releaseIOMonorepoHooksAfterTag),
+      beforePublishHooks = e.get(ai.releaseIOMonorepoHooksBeforePublish),
+      afterPublishHooks = e.get(ai.releaseIOMonorepoHooksAfterPublish),
+      beforeNextVersionWriteHooks = e.get(ai.releaseIOMonorepoHooksBeforeNextVersionWrite),
+      afterNextVersionWriteHooks = e.get(ai.releaseIOMonorepoHooksAfterNextVersionWrite),
+      beforeNextCommitHooks = e.get(ai.releaseIOMonorepoHooksBeforeNextCommit),
+      afterNextCommitHooks = e.get(ai.releaseIOMonorepoHooksAfterNextCommit),
+      beforePushHooks = e.get(ai.releaseIOMonorepoHooksBeforePush),
+      afterPushHooks = e.get(ai.releaseIOMonorepoHooksAfterPush)
+    )
   }
 
   def merge(
       left: MonorepoHookConfiguration,
       right: MonorepoHookConfiguration
   ): MonorepoHookConfiguration =
-    validatedSlots.foldLeft(left) { (config, slot) =>
-      slot.merge(config, right)
-    }
-
-  def hasCustomizations(config: MonorepoHookConfiguration): Boolean =
-    validatedSlots.exists(_.isCustomized(config))
-
-  private lazy val validatedSlots: Vector[MonorepoConfigSlot] =
-    LifecycleCatalogSupport.validateUniqueSlots("monorepo", MonorepoLifecycle.slots)(
-      _.id,
-      _.keyLabel
+    MonorepoHookConfiguration(
+      enableSnapshotDependenciesCheck = left.enableSnapshotDependenciesCheck &&
+        right.enableSnapshotDependenciesCheck,
+      enableRunClean = left.enableRunClean && right.enableRunClean,
+      enableRunTests = left.enableRunTests && right.enableRunTests,
+      enableTagging = left.enableTagging && right.enableTagging,
+      enablePublish = left.enablePublish && right.enablePublish,
+      enablePush = left.enablePush && right.enablePush,
+      afterCleanCheckHooks = left.afterCleanCheckHooks ++
+        right.afterCleanCheckHooks,
+      beforeSelectionHooks = left.beforeSelectionHooks ++
+        right.beforeSelectionHooks,
+      afterSelectionHooks = left.afterSelectionHooks ++
+        right.afterSelectionHooks,
+      beforeVersionResolutionHooks = left.beforeVersionResolutionHooks ++
+        right.beforeVersionResolutionHooks,
+      afterVersionResolutionHooks = left.afterVersionResolutionHooks ++
+        right.afterVersionResolutionHooks,
+      beforeReleaseVersionWriteHooks = left.beforeReleaseVersionWriteHooks ++
+        right.beforeReleaseVersionWriteHooks,
+      afterReleaseVersionWriteHooks = left.afterReleaseVersionWriteHooks ++
+        right.afterReleaseVersionWriteHooks,
+      beforeReleaseCommitHooks = left.beforeReleaseCommitHooks ++
+        right.beforeReleaseCommitHooks,
+      afterReleaseCommitHooks = left.afterReleaseCommitHooks ++
+        right.afterReleaseCommitHooks,
+      beforeTagHooks = left.beforeTagHooks ++ right.beforeTagHooks,
+      afterTagHooks = left.afterTagHooks ++ right.afterTagHooks,
+      beforePublishHooks = left.beforePublishHooks ++ right.beforePublishHooks,
+      afterPublishHooks = left.afterPublishHooks ++ right.afterPublishHooks,
+      beforeNextVersionWriteHooks = left.beforeNextVersionWriteHooks ++
+        right.beforeNextVersionWriteHooks,
+      afterNextVersionWriteHooks = left.afterNextVersionWriteHooks ++
+        right.afterNextVersionWriteHooks,
+      beforeNextCommitHooks = left.beforeNextCommitHooks ++
+        right.beforeNextCommitHooks,
+      afterNextCommitHooks = left.afterNextCommitHooks ++
+        right.afterNextCommitHooks,
+      beforePushHooks = left.beforePushHooks ++ right.beforePushHooks,
+      afterPushHooks = left.afterPushHooks ++ right.afterPushHooks
     )
+
+  def hasCustomizations(
+      config: MonorepoHookConfiguration
+  ): Boolean =
+    !config.enableSnapshotDependenciesCheck ||
+      !config.enableRunClean ||
+      !config.enableRunTests ||
+      !config.enableTagging ||
+      !config.enablePublish ||
+      !config.enablePush ||
+      config.afterCleanCheckHooks.nonEmpty ||
+      config.beforeSelectionHooks.nonEmpty ||
+      config.afterSelectionHooks.nonEmpty ||
+      config.beforeVersionResolutionHooks.nonEmpty ||
+      config.afterVersionResolutionHooks.nonEmpty ||
+      config.beforeReleaseVersionWriteHooks.nonEmpty ||
+      config.afterReleaseVersionWriteHooks.nonEmpty ||
+      config.beforeReleaseCommitHooks.nonEmpty ||
+      config.afterReleaseCommitHooks.nonEmpty ||
+      config.beforeTagHooks.nonEmpty ||
+      config.afterTagHooks.nonEmpty ||
+      config.beforePublishHooks.nonEmpty ||
+      config.afterPublishHooks.nonEmpty ||
+      config.beforeNextVersionWriteHooks.nonEmpty ||
+      config.afterNextVersionWriteHooks.nonEmpty ||
+      config.beforeNextCommitHooks.nonEmpty ||
+      config.afterNextCommitHooks.nonEmpty ||
+      config.beforePushHooks.nonEmpty ||
+      config.afterPushHooks.nonEmpty
 }

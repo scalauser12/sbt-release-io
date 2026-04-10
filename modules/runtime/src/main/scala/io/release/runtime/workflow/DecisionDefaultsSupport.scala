@@ -1,8 +1,7 @@
 package io.release.runtime.workflow
 
-import io.release.runtime.ReleaseDecisionDefaults
-
 import _root_.sbt.State
+import io.release.runtime.ReleaseDecisionDefaults
 
 private[release] object DecisionDefaultsSupport {
 

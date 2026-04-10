@@ -3,7 +3,6 @@ package io.release
 import io.release.core.internal.CoreExecutionState
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseCtx
-import io.release.runtime.ReleaseCtxOps
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
@@ -40,8 +39,9 @@ case class ReleaseContext(
     failed: Boolean = false,
     failureCause: Option[Throwable] = None
 ) extends ReleaseCtx {
+  type Self = ReleaseContext
 
-  def withState(s: State): ReleaseContext = copy(state = s)
+  override def withState(s: State): ReleaseContext = copy(state = s)
 
   /** Set the release and next version pair, updating both the context field
     * and the sbt State attribute so that sbt tasks can read the versions.
@@ -52,13 +52,18 @@ case class ReleaseContext(
       state = state.put(ReleaseKeys.versions, (release, next))
     )
 
-  def withVcs(v: Vcs): ReleaseContext =
+  override def withVcs(v: Vcs): ReleaseContext =
     copy(vcs = Some(v))
 
-  def withMetadata[A](key: AttributeKey[A], value: A): ReleaseContext =
+  override def withMetadata[A](
+      key: AttributeKey[A],
+      value: A
+  ): ReleaseContext =
     copy(metadataBag = metadataBag.put(key, value))
 
-  def withoutMetadata[A](key: AttributeKey[A]): ReleaseContext =
+  override def withoutMetadata[A](
+      key: AttributeKey[A]
+  ): ReleaseContext =
     if (metadata(key).isDefined) copy(metadataBag = metadataBag.remove(key))
     else this
 
@@ -79,37 +84,9 @@ case class ReleaseContext(
   private[release] def decisionDefaults: ReleaseDecisionDefaults =
     executionState.map(_.plan.decisionDefaults).getOrElse(ReleaseDecisionDefaults.empty)
 
-  def fail: ReleaseContext                       = copy(failed = true)
-  def failWith(cause: Throwable): ReleaseContext = copy(failed = true, failureCause = Some(cause))
+  override def fail: ReleaseContext                       = copy(failed = true)
+  override def failWith(cause: Throwable): ReleaseContext =
+    copy(failed = true, failureCause = Some(cause))
 }
 
-object ReleaseContext {
-
-  implicit val releaseContextOps: ReleaseCtxOps[ReleaseContext] =
-    new ReleaseCtxOps[ReleaseContext] {
-      override def withState(ctx: ReleaseContext, state: State): ReleaseContext =
-        ctx.withState(state)
-
-      override def withVcs(ctx: ReleaseContext, vcs: Vcs): ReleaseContext =
-        ctx.withVcs(vcs)
-
-      override def fail(ctx: ReleaseContext): ReleaseContext =
-        ctx.fail
-
-      override def failWith(ctx: ReleaseContext, cause: Throwable): ReleaseContext =
-        ctx.failWith(cause)
-
-      override def withMetadata[A](
-          ctx: ReleaseContext,
-          key: AttributeKey[A],
-          value: A
-      ): ReleaseContext =
-        ctx.withMetadata(key, value)
-
-      override def withoutMetadata[A](
-          ctx: ReleaseContext,
-          key: AttributeKey[A]
-      ): ReleaseContext =
-        ctx.withoutMetadata(key)
-    }
-}
+object ReleaseContext

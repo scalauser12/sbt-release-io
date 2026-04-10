@@ -9,8 +9,8 @@ import java.io.File
 import java.lang.ProcessBuilder.Redirect
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
 import scala.sys.process.Process
 import scala.sys.process.ProcessBuilder as ScalaProcessBuilder
 import scala.sys.process.ProcessLogger

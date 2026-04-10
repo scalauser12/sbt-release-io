@@ -1,8 +1,7 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
+import io.release.monorepo.internal.*
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import munit.CatsEffectSuite

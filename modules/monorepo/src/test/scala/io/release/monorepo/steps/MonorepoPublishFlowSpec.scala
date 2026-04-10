@@ -1,11 +1,10 @@
 package io.release.monorepo.internal.steps
 
-import io.release.monorepo.internal.*
-import io.release.monorepo.internal.steps.*
-
 import io.release.ReleasePluginIO
 import io.release.TestAssertions.assertFailure
+import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoComposer
+import io.release.monorepo.internal.steps.*
 import munit.CatsEffectSuite
 import sbt.*
 
@@ -25,7 +24,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val project = fixture.projectInfo("core")
 
       assertFailure[IllegalStateException, Unit](
-        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project)
+        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
       ) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found in core"))
         assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
@@ -45,7 +44,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val project  = fixture.projectInfo("core")
       val validate = MonorepoPublishSteps.checkSnapshotDependencies.validate
 
-      assertFailure[IllegalStateException, Unit](validate(ctx, project)) { err =>
+      assertFailure[IllegalStateException, Unit](validate(ctx, project).void) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found in core"))
         assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
       }
@@ -96,7 +95,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")
 
-      MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project)
+      MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
     }
   }
 

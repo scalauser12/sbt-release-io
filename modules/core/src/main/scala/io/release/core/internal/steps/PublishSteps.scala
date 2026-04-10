@@ -3,18 +3,18 @@ package io.release.core.internal.steps
 import cats.effect.IO
 import io.release.CleanCompat
 import io.release.ReleaseContext
+import io.release.ReleaseIOCompat
+import io.release.ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
 import io.release.ReleasePluginIO.autoImport.releaseIOPublishAction
 import io.release.ReleasePluginIO.autoImport.releaseIOPublishChecks
-import io.release.ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
-import io.release.ReleaseIOCompat
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.runtime.engine.BuiltInStepRole
-import io.release.runtime.workflow.DecisionResolver
-import io.release.runtime.engine.ProcessStep
-import io.release.runtime.workflow.PublishValidation
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.sbt.SnapshotDependencyTasks
+import io.release.runtime.workflow.DecisionResolver
+import io.release.runtime.workflow.PublishValidation
 import io.release.runtime.workflow.StepHelpers.*
 import sbt.Keys.*
 import sbt.{internal as _, *}

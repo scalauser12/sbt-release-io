@@ -1,18 +1,17 @@
 package io.release.monorepo.internal.steps
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseManifestMetadataSupport
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsSign
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsSignOff
 import io.release.VcsOps
-import io.release.runtime.sbt.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.ProjectReleaseInfo
+import io.release.monorepo.internal.*
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.logInfo
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.versionSummary
+import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.required
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}

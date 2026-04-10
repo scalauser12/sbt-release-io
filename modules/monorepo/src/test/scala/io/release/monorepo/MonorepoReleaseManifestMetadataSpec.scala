@@ -4,9 +4,9 @@ import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
 import io.release.TestSupport
-import io.release.runtime.sbt.SbtRuntime
 import io.release.monorepo.internal.steps.MonorepoVcsCommitHelpers
 import io.release.monorepo.internal.steps.MonorepoVersionSteps
+import io.release.runtime.sbt.SbtRuntime
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions

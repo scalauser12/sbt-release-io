@@ -1,15 +1,14 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
-import io.release.runtime.engine.ExecutionEngine
-import io.release.runtime.engine.ProcessStep
-import io.release.runtime.ReleaseLogPrefixes
+import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoCrossBuild
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.engine.ProcessStep
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
   */
@@ -89,7 +88,7 @@ private[monorepo] object MonorepoComposer {
       case single: GlobalStep =>
         ExecutionEngine.PreparedStep(
           name = single.name,
-          validate = single.threadedValidation,
+          validate = single.validate,
           execute = ExecutionEngine.withErrorRecovery(LogPrefix)(currentCtx =>
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${single.name}")) *>
               single.execute(currentCtx)
@@ -109,7 +108,7 @@ private[monorepo] object MonorepoComposer {
           validate = ctx =>
             MonorepoCrossBuild.validatePerProjectWithCrossBuild(
               ctx,
-              typed.threadedValidation,
+              typed.validate,
               crossBuild,
               typed.enableCrossBuild
             ),

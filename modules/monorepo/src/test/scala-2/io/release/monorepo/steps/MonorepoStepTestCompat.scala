@@ -1,8 +1,8 @@
 package io.release.monorepo.internal.steps
 
 import _root_.io.release.runtime.sbt.SbtCompat
-import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
+import io.release.ReleasePluginIO
 import sbt.*
 import sbt.Keys.*
 import sbt.Setting

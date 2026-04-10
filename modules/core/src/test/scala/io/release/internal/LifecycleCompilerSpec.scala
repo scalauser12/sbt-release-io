@@ -2,8 +2,9 @@ package io.release.runtime.engine
 
 import cats.effect.IO
 import cats.effect.Ref
-import LifecycleCompilerSpec.{ItemHook, SingleHook, TestConfig, TestContext}
 import munit.CatsEffectSuite
+
+import LifecycleCompilerSpec.{ItemHook, SingleHook, TestConfig, TestContext}
 
 class LifecycleCompilerSpec extends CatsEffectSuite {
 
@@ -11,8 +12,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       phase: String,
       resolveHooks: TestConfig => Seq[SingleHook],
       gate: TestContext => IO[Boolean],
-      crossBuild: Boolean = false,
-      cachedGate: Option[LifecycleCompiler.CachedSingleGate[TestContext, String]] = None
+      crossBuild: Boolean = false
   ): LifecycleCompiler.Phase[TestConfig, TestContext, I] =
     LifecycleCompiler.singleHookPhase(
       phase = phase,
@@ -21,16 +21,14 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       nameOf = (hook: SingleHook) => hook.name,
       executeOf = (hook: SingleHook) => hook.execute,
       validateOf = (hook: SingleHook) => hook.validate,
-      crossBuild = crossBuild,
-      cachedGate = cachedGate
+      crossBuild = crossBuild
     )
 
   private def itemHookPhase(
       phase: String,
       resolveHooks: TestConfig => Seq[ItemHook],
       gate: (TestContext, String) => IO[Boolean],
-      crossBuild: Boolean = false,
-      cachedGate: Option[LifecycleCompiler.CachedItemGate[TestContext, String, String]] = None
+      crossBuild: Boolean = false
   ): LifecycleCompiler.Phase[TestConfig, TestContext, String] =
     LifecycleCompiler.perItemHookPhase(
       phase = phase,
@@ -39,8 +37,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       nameOf = (hook: ItemHook) => hook.name,
       executeOf = (hook: ItemHook) => hook.execute,
       validateOf = (hook: ItemHook) => hook.validate,
-      crossBuild = crossBuild,
-      cachedGate = cachedGate
+      crossBuild = crossBuild
     )
 
   test("defaults - return built-in steps only in canonical order") {
@@ -120,97 +117,92 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
     assert(compiled.forall(_.enableCrossBuild))
   }
 
-  test("compileSingle - cached single-context gates reuse validation decisions during execute") {
-    Ref.of[IO, Map[String, Boolean]](Map.empty).flatMap { decisions =>
+  test("compile - frozen single gate reuses validation decision during execute") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
       Ref.of[IO, Int](0).flatMap { gateCalls =>
-        Ref.of[IO, List[String]](Nil).flatMap { events =>
-          val cachedGate = LifecycleCompiler.CachedSingleGate[TestContext, String](
-            tokenForIndex = hookIndex => s"before-publish:$hookIndex",
-            resolveDecision = (_, token, fallback) =>
-              decisions.get.flatMap(_.get(token) match {
-                case Some(decision) => IO.pure(decision)
-                case None           => fallback
-              }),
-            snapshotDecision = (ctx, token, evaluateGate) =>
-              evaluateGate(ctx)
-                .flatTap(decision => decisions.update(_.updated(token, decision)))
-                .map(decision => (ctx, decision))
-          )
-          val hook       = SingleHook(
-            name = "publish-check",
-            execute = ctx => events.update(_ :+ "execute").as(ctx),
-            validate = _ => events.update(_ :+ "validate")
-          )
-          val phases     = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, Nothing]](
-            singleHookPhase(
+        val hook   = SingleHook(
+          name = "publish-check",
+          execute = ctx => events.update(_ :+ "execute").as(ctx),
+          validate = _ => events.update(_ :+ "validate")
+        )
+        val phases =
+          Seq[LifecycleCompiler.Phase[TestConfig, TestContext, Nothing]](
+            LifecycleCompiler.singleHookPhase(
               phase = "before-publish",
               resolveHooks = _.singleHooks,
               gate = ctx => gateCalls.update(_ + 1).as(ctx.gateOpen),
-              cachedGate = Some(cachedGate)
+              nameOf = (h: SingleHook) => h.name,
+              executeOf = (h: SingleHook) => h.execute,
+              validateOf = (h: SingleHook) => h.validate,
+              freezeGate = true
             )
           )
+        val step   = LifecycleCompiler
+          .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
+          .head
 
-          val step = LifecycleCompiler
-            .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
-            .head
-
-          for {
-            validated <- step.threadedValidation(TestContext(gateOpen = true))
-            _         <- step.execute(validated.copy(gateOpen = false))
-            recorded  <- events.get
-            calls     <- gateCalls.get
-          } yield {
-            assertEquals(recorded, List("validate", "execute"))
-            assertEquals(calls, 1)
-          }
+        for {
+          validated <- step.validate(TestContext(gateOpen = true))
+          _         <- step.execute(validated.copy(gateOpen = false))
+          recorded  <- events.get
+          calls     <- gateCalls.get
+        } yield {
+          assertEquals(
+            recorded,
+            List("validate", "execute")
+          )
+          assertEquals(calls, 1)
         }
       }
     }
   }
 
-  test("compile - cached per-item gates reuse validation decisions during execute") {
-    Ref.of[IO, Map[(String, String), Boolean]](Map.empty).flatMap { decisions =>
+  test("compile - frozen per-item gate reuses validation decision during execute") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
       Ref.of[IO, Int](0).flatMap { gateCalls =>
-        Ref.of[IO, List[String]](Nil).flatMap { events =>
-          val cachedGate = LifecycleCompiler.CachedItemGate[TestContext, String, String](
-            tokenForIndex = hookIndex => s"before-publish:$hookIndex",
-            resolveDecision = (_, token, item, fallback) =>
-              decisions.get.flatMap(_.get(token -> item) match {
-                case Some(decision) => IO.pure(decision)
-                case None           => fallback
-              }),
-            snapshotDecision = (ctx, token, item, evaluateGate) =>
-              evaluateGate(ctx, item)
-                .flatTap(decision => decisions.update(_.updated(token -> item, decision)))
-                .map(decision => (ctx, decision))
+        val hook   = ItemHook(
+          name = "publish-check",
+          execute = (ctx, _) => events.update(_ :+ "execute").as(ctx),
+          validate = (_, _) => events.update(_ :+ "validate")
+        )
+        val phases = Seq[LifecycleCompiler.Phase[
+          TestConfig,
+          TestContext,
+          String
+        ]](
+          LifecycleCompiler.perItemHookPhase(
+            phase = "before-publish",
+            resolveHooks = _.itemHooks,
+            gate = (ctx, _) => gateCalls.update(_ + 1).as(ctx.gateOpen),
+            nameOf = (h: ItemHook) => h.name,
+            executeOf = (h: ItemHook) => h.execute,
+            validateOf = (h: ItemHook) => h.validate,
+            freezeGate = true,
+            gateKey = (_, item) => item
           )
-          val hook       = ItemHook(
-            name = "publish-check",
-            execute = (ctx, _) => events.update(_ :+ "execute").as(ctx),
-            validate = (_, _) => events.update(_ :+ "validate")
-          )
-          val phases     = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, String]](
-            itemHookPhase(
-              phase = "before-publish",
-              resolveHooks = _.itemHooks,
-              gate = (ctx, _) => gateCalls.update(_ + 1).as(ctx.gateOpen),
-              cachedGate = Some(cachedGate)
-            )
-          )
-          val step       = LifecycleCompiler
-            .compile(TestConfig(itemHooks = Seq(hook)), phases)
-            .head
-            .asInstanceOf[ProcessStep.PerItem[TestContext, String]]
+        )
+        val step   = LifecycleCompiler
+          .compile(TestConfig(itemHooks = Seq(hook)), phases)
+          .head
+          .asInstanceOf[ProcessStep.PerItem[TestContext, String]]
 
-          for {
-            validated <- step.threadedValidation(TestContext(gateOpen = true), "core")
-            _         <- step.execute(validated.copy(gateOpen = false), "core")
-            recorded  <- events.get
-            calls     <- gateCalls.get
-          } yield {
-            assertEquals(recorded, List("validate", "execute"))
-            assertEquals(calls, 1)
-          }
+        for {
+          validated <- step.validate(
+                         TestContext(gateOpen = true),
+                         "core"
+                       )
+          _         <- step.execute(
+                         validated.copy(gateOpen = false),
+                         "core"
+                       )
+          recorded  <- events.get
+          calls     <- gateCalls.get
+        } yield {
+          assertEquals(
+            recorded,
+            List("validate", "execute")
+          )
+          assertEquals(calls, 1)
         }
       }
     }

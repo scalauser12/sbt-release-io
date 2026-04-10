@@ -1,7 +1,7 @@
 package io.release.runtime.command
 
-import cats.effect.IO
 import _root_.sbt.State
+import cats.effect.IO
 
 /** Shared wording and summary helpers for `check` mode across both plugins. */
 private[release] object CheckModeOutput {

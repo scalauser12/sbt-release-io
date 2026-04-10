@@ -1,13 +1,11 @@
 package io.release.runtime.command
 
+import _root_.sbt.State
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.syntax.all.*
 import io.release.runtime.ReleaseCtx
-import io.release.runtime.ReleaseCtxOps
-import io.release.runtime.ReleaseCtxOps.syntax.*
 import io.release.runtime.workflow.StepHelpers
-import _root_.sbt.State
 
 import scala.util.control.NonFatal
 
@@ -37,7 +35,7 @@ private[release] object ReleaseCommandRunner {
     lines.toList.traverse_(line => IO.blocking(state.log.info(s"$prefix $line")))
 
   /** Map a finished release context to the appropriate sbt `State`. */
-  def handleReleaseResult[C <: ReleaseCtx: ReleaseCtxOps](ctx: C, prefix: String): IO[State] =
+  def handleReleaseResult[C <: ReleaseCtx { type Self = C }](ctx: C, prefix: String): IO[State] =
     if (ctx.failed) {
       val cause =
         ctx.failureCause.map(e => StepHelpers.errorMessage(e)).getOrElse("unknown error")
@@ -47,7 +45,7 @@ private[release] object ReleaseCommandRunner {
     }
 
   /** Apply `cleanState` to the wrapped sbt `State`, then [[handleReleaseResult]]. */
-  def finalizeWithCleanState[C <: ReleaseCtx: ReleaseCtxOps](
+  def finalizeWithCleanState[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       cleanState: State => State,
       prefix: String

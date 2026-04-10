@@ -1,65 +1,72 @@
 package io.release.monorepo.internal
 
-import io.release.runtime.engine.BuiltInStepRole
-import io.release.runtime.engine.ProcessStep
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
+import io.release.runtime.engine.BuiltInStepRole
 
 private[monorepo] final case class MonorepoProcessPlan(
     stepNames: Seq[String],
     setupSteps: Seq[AnyStep],
     mainSteps: Seq[AnyStep],
-    hasSelectionBoundary: Boolean,
-    pushConfigured: Boolean,
-    publishConfigured: Boolean,
-    shouldBootstrapVcs: Boolean,
-    shouldResolveSelection: Boolean,
-    shouldResolveVersions: Boolean,
-    shouldPreflightTags: Boolean,
-    hasBuiltInVersionResolution: Boolean,
-    mainStepsThroughVersionResolution: Seq[AnyStep],
-    mainStepsAfterVersionResolution: Seq[AnyStep],
-    builtInTagPreflightFollowsVersionResolution: Boolean
-)
+    hasSelectionBoundary: Boolean
+) {
+
+  def pushConfigured: Boolean =
+    allSteps.exists(_.hasRole(BuiltInStepRole.PushChanges))
+
+  def publishConfigured: Boolean =
+    allSteps.exists(_.hasRole(BuiltInStepRole.PublishArtifacts))
+
+  def shouldBootstrapVcs: Boolean =
+    allSteps.exists(_.hasRole(BuiltInStepRole.InitializeVcs)) ||
+      shouldResolveSelection ||
+      (shouldPreflightTags && shouldResolveVersions)
+
+  def shouldResolveSelection: Boolean =
+    allSteps.exists(_.hasRole(BuiltInStepRole.ProjectSelection))
+
+  def shouldResolveVersions: Boolean =
+    allSteps.exists(_.hasRole(BuiltInStepRole.ResolveVersions))
+
+  def shouldPreflightTags: Boolean =
+    allSteps.exists(_.hasRole(BuiltInStepRole.TagRelease))
+
+  def hasBuiltInVersionResolution: Boolean =
+    versionIndex >= 0
+
+  def mainStepsThroughVersionResolution: Seq[AnyStep] =
+    if (!hasBuiltInVersionResolution) mainSteps
+    else mainSteps.take(versionIndex + 1)
+
+  def mainStepsAfterVersionResolution: Seq[AnyStep] =
+    if (!hasBuiltInVersionResolution) Seq.empty
+    else mainSteps.drop(versionIndex + 1)
+
+  def builtInTagPreflightFollowsVersionResolution: Boolean = {
+    val tagIndex = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.TagRelease))
+    hasBuiltInVersionResolution && tagIndex > versionIndex
+  }
+
+  private def allSteps: Seq[AnyStep] =
+    if (hasSelectionBoundary) setupSteps ++ mainSteps else mainSteps
+
+  private lazy val versionIndex: Int =
+    mainSteps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
+}
 
 private[monorepo] object MonorepoProcessPlan {
 
   def analyze(steps: Seq[AnyStep]): MonorepoProcessPlan = {
-    val boundaryIndex           = steps.indexWhere {
-      case step: ProcessStep.Single[?] => step.isSelectionBoundary
-      case _                           => false
-    }
+    val boundaryIndex           =
+      steps.indexWhere(_.hasRole(BuiltInStepRole.SelectionBoundary))
     val (setupSteps, mainSteps) =
       if (boundaryIndex < 0) (Seq.empty, steps)
       else steps.splitAt(boundaryIndex + 1)
-
-    val shouldResolveSelection                                               = steps.exists(_.hasRole(BuiltInStepRole.ProjectSelection))
-    val shouldResolveVersions                                                = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions))
-    val shouldPreflightTags                                                  = steps.exists(_.hasRole(BuiltInStepRole.TagRelease))
-    val versionIndex                                                         = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
-    val hasBuiltInVersionResolution                                          = versionIndex >= 0
-    val (mainStepsThroughVersionResolution, mainStepsAfterVersionResolution) =
-      if (!hasBuiltInVersionResolution) (mainSteps, Seq.empty)
-      else mainSteps.splitAt(versionIndex + 1)
-    val tagIndex                                                             = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.TagRelease))
 
     MonorepoProcessPlan(
       stepNames = steps.map(_.name),
       setupSteps = setupSteps,
       mainSteps = mainSteps,
-      hasSelectionBoundary = boundaryIndex >= 0,
-      pushConfigured = steps.exists(_.hasRole(BuiltInStepRole.PushChanges)),
-      publishConfigured = steps.exists(_.hasRole(BuiltInStepRole.PublishArtifacts)),
-      shouldBootstrapVcs = steps.exists(_.hasRole(BuiltInStepRole.InitializeVcs)) ||
-        shouldResolveSelection ||
-        (shouldPreflightTags && shouldResolveVersions),
-      shouldResolveSelection = shouldResolveSelection,
-      shouldResolveVersions = shouldResolveVersions,
-      shouldPreflightTags = shouldPreflightTags,
-      hasBuiltInVersionResolution = hasBuiltInVersionResolution,
-      mainStepsThroughVersionResolution = mainStepsThroughVersionResolution,
-      mainStepsAfterVersionResolution = mainStepsAfterVersionResolution,
-      builtInTagPreflightFollowsVersionResolution =
-        hasBuiltInVersionResolution && tagIndex > versionIndex
+      hasSelectionBoundary = boundaryIndex >= 0
     )
   }
 }

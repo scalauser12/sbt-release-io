@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import io.release.core.internal.CoreHookConfiguration
-import io.release.core.internal.CoreLifecycle
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -69,9 +68,6 @@ case class ReleaseResourceHooks[T](
 object ReleaseResourceHooks {
   def empty[T]: ReleaseResourceHooks[T] = ReleaseResourceHooks[T]()
 
-  private type HookAssignment =
-    (CoreLifecycle.HookDescriptor, Seq[ReleaseHookIO])
-
   /** Convert resource-aware hooks into plain hooks by optionally binding the resource value.
     * Boolean policies default to `true` so the result is neutral when merged via
     * [[CoreHookConfiguration.mergeWith]].
@@ -80,25 +76,31 @@ object ReleaseResourceHooks {
       hooks: ReleaseResourceHooks[T],
       maybeResource: Option[T]
   ): CoreHookConfiguration = {
-    def plainHook(hook: ReleaseResourceHookIO[T]): ReleaseHookIO =
+    def plain(hook: ReleaseResourceHookIO[T]): ReleaseHookIO =
       ReleaseHookIO(
         name = hook.name,
-        execute = ctx =>
-          maybeResource.fold(IO.pure(ctx))(resourceValue => hook.execute(resourceValue)(ctx)),
+        execute = ctx => maybeResource.fold(IO.pure(ctx))(r => hook.execute(r)(ctx)),
         validate = hook.validate
       )
 
-    hookAssignments(hooks, plainHook).foldLeft(CoreHookConfiguration.empty) {
-      case (config, (slot, materializedHooks)) =>
-        slot.updated(config, materializedHooks)
-    }
+    CoreHookConfiguration(
+      afterCleanCheckHooks = hooks.afterCleanCheckHooks.map(plain),
+      beforeVersionResolutionHooks = hooks.beforeVersionResolutionHooks.map(plain),
+      afterVersionResolutionHooks = hooks.afterVersionResolutionHooks.map(plain),
+      beforeReleaseVersionWriteHooks = hooks.beforeReleaseVersionWriteHooks.map(plain),
+      afterReleaseVersionWriteHooks = hooks.afterReleaseVersionWriteHooks.map(plain),
+      beforeReleaseCommitHooks = hooks.beforeReleaseCommitHooks.map(plain),
+      afterReleaseCommitHooks = hooks.afterReleaseCommitHooks.map(plain),
+      beforeTagHooks = hooks.beforeTagHooks.map(plain),
+      afterTagHooks = hooks.afterTagHooks.map(plain),
+      beforePublishHooks = hooks.beforePublishHooks.map(plain),
+      afterPublishHooks = hooks.afterPublishHooks.map(plain),
+      beforeNextVersionWriteHooks = hooks.beforeNextVersionWriteHooks.map(plain),
+      afterNextVersionWriteHooks = hooks.afterNextVersionWriteHooks.map(plain),
+      beforeNextCommitHooks = hooks.beforeNextCommitHooks.map(plain),
+      afterNextCommitHooks = hooks.afterNextCommitHooks.map(plain),
+      beforePushHooks = hooks.beforePushHooks.map(plain),
+      afterPushHooks = hooks.afterPushHooks.map(plain)
+    )
   }
-
-  private[release] def hookAssignments[T](
-      hooks: ReleaseResourceHooks[T],
-      materialize: ReleaseResourceHookIO[T] => ReleaseHookIO
-  ): Seq[HookAssignment] =
-    CoreLifecycle.orderedHookDescriptors.map { descriptor =>
-      descriptor -> descriptor.resourceHooks(hooks).map(materialize)
-    }
 }

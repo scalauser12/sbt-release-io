@@ -1,8 +1,7 @@
 package io.release.monorepo.internal
 
-import io.release.monorepo.*
-
 import cats.effect.IO
+import io.release.monorepo.*
 import io.release.runtime.ExecutionFlags
 import sbt.State
 

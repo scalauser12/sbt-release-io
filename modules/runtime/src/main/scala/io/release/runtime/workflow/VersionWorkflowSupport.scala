@@ -1,10 +1,8 @@
 package io.release.runtime.workflow
 
+import _root_.sbt.TaskKey
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
-import io.release.runtime.ReleaseCtxOps
-import io.release.runtime.ReleaseCtxOps.syntax._
-import _root_.sbt.TaskKey
 
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -27,7 +25,7 @@ private[release] object VersionWorkflowSupport {
       else IO.raiseError(new IllegalStateException(notFoundMessage))
     }
 
-  def resolveVersionInputsFromTasks[C <: ReleaseCtx: ReleaseCtxOps](
+  def resolveVersionInputsFromTasks[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       currentVersion: String,
       releaseVersionTask: TaskKey[String => String],

@@ -1,19 +1,18 @@
 package io.release.monorepo.internal.steps
 
-import io.release.monorepo.internal.*
-import io.release.monorepo.internal.steps.*
-
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestAssertions
 import io.release.TestSupport
-import io.release.runtime.sbt.SbtRuntime
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
-import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.ProjectReleaseInfo
+import io.release.monorepo.internal.*
+import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.internal.SelectionMode
+import io.release.monorepo.internal.steps.*
+import io.release.runtime.sbt.SbtRuntime
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Def
@@ -42,7 +41,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     gitRepoWithLoadedStateResource().use { case (repo, state) =>
       IO.blocking(sbt.IO.write(new File(repo, "file.txt"), "modified")) *>
         TestAssertions.assertFailure[IllegalStateException, Unit](
-          MonorepoVcsSteps.checkCleanWorkingDir.validate(MonorepoContext(state = state))
+          MonorepoVcsSteps.checkCleanWorkingDir.validate(MonorepoContext(state = state)).void
         ) { err =>
           assert(err.getMessage.contains("unstaged modified files"))
           assert(err.getMessage.contains("file.txt"))
@@ -54,7 +53,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     perProjectTagContextResource.use { case (repo, project, ctx) =>
       for {
         result <- MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
-        _      <- MonorepoVcsSteps.checkCleanWorkingDir.validate(result)
+        _      <- MonorepoVcsSteps.checkCleanWorkingDir.validate(result).void
         tags   <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.0"))
       } yield {
         assertEquals(tags.trim, "core-v1.0.0")
@@ -367,7 +366,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("pushChanges.validate - fail when VCS was not initialized by initializeVcs") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
       TestAssertions.assertFailure[IllegalStateException, Unit](
-        MonorepoVcsSteps.pushChanges.validate(MonorepoContext(state = state))
+        MonorepoVcsSteps.pushChanges.validate(MonorepoContext(state = state)).void
       ) { err =>
         assertEquals(
           err.getMessage,
@@ -382,7 +381,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       val validate = MonorepoVcsSteps.pushChanges.validate
 
       TestAssertions.assertFailure[IllegalStateException, Unit](
-        validate(MonorepoContext(state = state))
+        validate(MonorepoContext(state = state)).void
       ) { err =>
         assertEquals(
           err.getMessage,

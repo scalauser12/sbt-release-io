@@ -2,8 +2,6 @@ package io.release.runtime.engine
 
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
-import io.release.runtime.ReleaseCtxOps
-import io.release.runtime.ReleaseCtxOps.syntax.*
 import io.release.runtime.sbt.SbtCompat
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers
@@ -43,7 +41,7 @@ private[release] object ExecutionEngine {
 
   // ── Orchestration ───────────────────────────────────────────────────
 
-  def runMainSegment[C <: ReleaseCtx: ReleaseCtxOps](
+  def runMainSegment[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,
       steps: Seq[PreparedStep[C]],
       startCtx: C,
@@ -56,7 +54,7 @@ private[release] object ExecutionEngine {
         else runActions(steps, armOnFailure(validatedCtx))
     } yield resultCtx
 
-  def runSequentialValidateThenExecute[C <: ReleaseCtx: ReleaseCtxOps](
+  def runSequentialValidateThenExecute[C <: ReleaseCtx { type Self = C }](
       steps: Seq[PreparedStep[C]],
       startCtx: C,
       armOnFailure: C => C,
@@ -78,7 +76,7 @@ private[release] object ExecutionEngine {
 
   // ── Validation ──────────────────────────────────────────────────────
 
-  def runValidations[C <: ReleaseCtx: ReleaseCtxOps](
+  def runValidations[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,
       steps: Seq[PreparedStep[C]],
       initialCtx: C
@@ -90,16 +88,16 @@ private[release] object ExecutionEngine {
       }
     }
 
-  def runActions[C <: ReleaseCtx: ReleaseCtxOps](
+  def runActions[C <: ReleaseCtx { type Self = C }](
       steps: Seq[PreparedStep[C]],
       startCtx: C
   ): IO[C] =
     runActionPhase(steps)(startCtx)
 
-  def armOnFailure[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): C =
+  def armOnFailure[C <: ReleaseCtx { type Self = C }](ctx: C): C =
     ctx.withState(ctx.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
 
-  def detectSbtFailure[C <: ReleaseCtx: ReleaseCtxOps](stepName: String, ctx: C): IO[C] = IO {
+  def detectSbtFailure[C <: ReleaseCtx { type Self = C }](stepName: String, ctx: C): IO[C] = IO {
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
       ctx
@@ -110,12 +108,12 @@ private[release] object ExecutionEngine {
     } else armOnFailure(ctx)
   }
 
-  def stripFailureCommand[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): IO[C] = IO {
+  def stripFailureCommand[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] = IO {
     val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
     ctx.withState(cleaned.copy(onFailure = None))
   }
 
-  def raiseIfFailed[C <: ReleaseCtx: ReleaseCtxOps](ctx: C): IO[C] =
+  def raiseIfFailed[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] =
     if (ctx.failed)
       IO.raiseError(
         ctx.failureCause.getOrElse(
@@ -124,7 +122,7 @@ private[release] object ExecutionEngine {
       )
     else IO.pure(ctx)
 
-  def withErrorRecovery[C <: ReleaseCtx: ReleaseCtxOps](logPrefix: String)(
+  def withErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(
       f: C => IO[C]
   ): C => IO[C] =
     (ctx: C) =>
@@ -136,7 +134,7 @@ private[release] object ExecutionEngine {
         ).flatMap(_ => IO.pure(ctx.failWith(err)))
       }
 
-  def runActionPhase[C <: ReleaseCtx: ReleaseCtxOps](
+  def runActionPhase[C <: ReleaseCtx { type Self = C }](
       steps: Seq[PreparedStep[C]]
   )(startCtx: C): IO[C] = {
     // After each action, check whether sbt injected a FailureCommand into
@@ -154,7 +152,7 @@ private[release] object ExecutionEngine {
       .flatMap(ctx => stripFailureCommand(ctx))
   }
 
-  private def runValidationStep[C <: ReleaseCtx: ReleaseCtxOps](
+  private def runValidationStep[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,
       step: PreparedStep[C],
       currentCtx: C

@@ -1,10 +1,9 @@
 package io.release.monorepo
 
-import io.release.monorepo.internal.*
-
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestSupport
+import io.release.monorepo.internal.*
 import io.release.vcs.Vcs
 import sbt.ProjectRef
 import sbt.State

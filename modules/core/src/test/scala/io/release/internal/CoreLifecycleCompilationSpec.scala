@@ -5,9 +5,9 @@ import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
+import io.release.TestSupport
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.steps.ReleaseSteps
-import io.release.TestSupport
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
@@ -204,60 +204,6 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     }
   }
 
-  test("compile - publish hook execute reuses cached enabled decisions from validation") {
-    Ref.of[IO, List[String]](Nil).flatMap { observed =>
-      val settings = publishHookSettings(observed)
-
-      hookStateResource("release-hook-compiler-publish-cache-enabled", settings).use { state =>
-        val publishHookSteps = compileLifecycle(state)
-          .filter(step =>
-            step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
-          )
-        val enabledCtx       = ReleaseContext(state = state, skipPublish = false)
-
-        for {
-          validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx)
-          _            <- executePublishHooks(
-                            publishHookSteps,
-                            validatedCtx.copy(skipPublish = true)
-                          )
-          events       <- observed.get
-        } yield assertEquals(
-          events,
-          List("validate-before", "validate-after", "execute-before", "execute-after")
-        )
-      }
-    }
-  }
-
-  test("compile - publish hook execute reuses cached skipped decisions from validation") {
-    Ref.of[IO, List[String]](Nil).flatMap { observed =>
-      val settings = publishHookSettings(observed)
-
-      hookStateResource("release-hook-compiler-publish-cache-skipped", settings).use { state =>
-        val publishHookSteps    = compileLifecycle(state)
-          .filter(step =>
-            step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
-          )
-        val publishSkippedState =
-          TestSupport.appendSessionSettings(
-            state,
-            Seq(publish / skip := true)
-          )
-        val skippedCtx          = ReleaseContext(state = publishSkippedState, skipPublish = false)
-
-        for {
-          validatedCtx <- validatePublishHooks(publishHookSteps, skippedCtx)
-          _            <- executePublishHooks(
-                            publishHookSteps,
-                            validatedCtx.withState(state)
-                          )
-          events       <- observed.get
-        } yield assertEquals(events, Nil)
-      }
-    }
-  }
-
   private def hookStateResource(
       prefix: String,
       rootSettings: Seq[Setting[?]] = Nil
@@ -345,7 +291,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
-      ioCtx.flatMap(step.threadedValidation)
+      ioCtx.flatMap(step.validate)
     }
 
   private def executePublishHooks(

@@ -4,10 +4,10 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.core.internal.CoreCommandExecution
 import io.release.core.internal.CoreDefaultSettings
-import io.release.runtime.command.PluginEntrypointSupport
 import io.release.core.internal.ReleaseCli
 import io.release.core.internal.ReleaseCommandParsers
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.command.PluginEntrypointSupport
 import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
 import io.release.version.Version
