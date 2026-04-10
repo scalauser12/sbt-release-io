@@ -19,6 +19,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.StepHelpers.*
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
@@ -27,7 +28,7 @@ import sbt.{internal as _, *}
 /** VCS-related release steps: initialize, check, tag, push. */
 private[release] object VcsSteps {
 
-  import StepHelpers.*
+  import CoreReleaseStepHelpers.requireVcs
 
   private val DefaultCommandName = "releaseIO"
 

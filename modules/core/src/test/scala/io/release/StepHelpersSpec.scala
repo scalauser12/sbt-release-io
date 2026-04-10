@@ -5,8 +5,9 @@ import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.core.internal.CoreExecutionState
 import io.release.core.internal.CoreReleasePlan
-import io.release.core.internal.steps.StepHelpers
+import io.release.core.internal.steps.CoreReleaseStepHelpers
 import io.release.runtime.ExecutionFlags
+import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
@@ -37,7 +38,7 @@ class StepHelpersSpec extends CatsEffectSuite {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val key = AttributeKey[String]("detected-vcs")
 
-      StepHelpers
+      CoreReleaseStepHelpers
         .requireVcs(ctx.copy(vcs = Some(stubVcs(ctx.state.configuration.baseDirectory)))) { vcs =>
           IO.pure(ctx.withMetadata(key, vcs.commandName))
         }
@@ -48,7 +49,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.requireVcs - raise IllegalStateException when VCS is missing") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       assertIllegalStateMessage(
-        StepHelpers.requireVcs(ctx)(_ => IO.pure(ctx)),
+        CoreReleaseStepHelpers.requireVcs(ctx)(_ => IO.pure(ctx)),
         "VCS not initialized. Ensure initializeVcs runs before this step."
       )
     }
@@ -59,7 +60,7 @@ class StepHelpersSpec extends CatsEffectSuite {
       val key = AttributeKey[String]("resolved-versions")
       val ctx = baseCtx.withVersions("1.0.0", "1.0.1-SNAPSHOT")
 
-      StepHelpers
+      CoreReleaseStepHelpers
         .requireVersions(ctx) { case (release, next) =>
           IO.pure(ctx.withMetadata(key, s"$release->$next"))
         }
@@ -70,7 +71,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.requireVersions - raise IllegalStateException when versions are missing") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       assertIllegalStateMessage(
-        StepHelpers.requireVersions(ctx)(_ => IO.pure(ctx)),
+        CoreReleaseStepHelpers.requireVersions(ctx)(_ => IO.pure(ctx)),
         "Versions not set. Ensure inquireVersions runs before this step."
       )
     }

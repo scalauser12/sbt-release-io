@@ -46,6 +46,32 @@ private[release] object ProcessStep {
       _ => None
     )
 
+  private def mergeValidate[C](
+      validate: C => IO[Unit],
+      validateWithContext: Option[C => IO[C]]
+  ): C => IO[C] = {
+    val baseValidate: C => IO[C] =
+      ctx => validate(ctx).as(ctx)
+    validateWithContext match {
+      case None           => baseValidate
+      case Some(threaded) =>
+        ctx => baseValidate(ctx).flatMap(threaded)
+    }
+  }
+
+  private def mergeValidatePerItem[C, I](
+      validate: (C, I) => IO[Unit],
+      validateWithContext: Option[(C, I) => IO[C]]
+  ): (C, I) => IO[C] = {
+    val baseValidate: (C, I) => IO[C] =
+      (ctx, item) => validate(ctx, item).as(ctx)
+    validateWithContext match {
+      case None           => baseValidate
+      case Some(threaded) =>
+        (ctx, item) => baseValidate(ctx, item).flatMap(c => threaded(c, item))
+    }
+  }
+
   final class Single[C] private (
       val name: String,
       val roles: Set[BuiltInStepRole],
@@ -62,22 +88,14 @@ private[release] object ProcessStep {
         roles: Set[BuiltInStepRole] = Set.empty,
         enableCrossBuild: Boolean = false,
         validateWithContext: Option[C => IO[C]] = None
-    ): Single[C] = {
-      val baseValidate: C => IO[C] =
-        ctx => validate(ctx).as(ctx)
-      val merged: C => IO[C]       = validateWithContext match {
-        case None           => baseValidate
-        case Some(threaded) =>
-          ctx => baseValidate(ctx).flatMap(threaded)
-      }
+    ): Single[C] =
       new Single(
         name = name,
         roles = roles,
         execute = execute,
-        validate = merged,
+        validate = mergeValidate(validate, validateWithContext),
         enableCrossBuild = enableCrossBuild
       )
-    }
   }
 
   final class PerItem[C, I] private (
@@ -96,21 +114,13 @@ private[release] object ProcessStep {
         roles: Set[BuiltInStepRole] = Set.empty,
         enableCrossBuild: Boolean = false,
         validateWithContext: Option[(C, I) => IO[C]] = None
-    ): PerItem[C, I] = {
-      val baseValidate: (C, I) => IO[C] =
-        (ctx, item) => validate(ctx, item).as(ctx)
-      val merged: (C, I) => IO[C]       = validateWithContext match {
-        case None           => baseValidate
-        case Some(threaded) =>
-          (ctx, item) => baseValidate(ctx, item).flatMap(c => threaded(c, item))
-      }
+    ): PerItem[C, I] =
       new PerItem(
         name = name,
         roles = roles,
         execute = execute,
-        validate = merged,
+        validate = mergeValidatePerItem(validate, validateWithContext),
         enableCrossBuild = enableCrossBuild
       )
-    }
   }
 }
