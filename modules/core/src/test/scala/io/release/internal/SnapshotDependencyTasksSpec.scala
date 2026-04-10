@@ -13,6 +13,25 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   private val fixturePrefix           = "snapshot-deps-spec"
   private val snapshotDependenciesKey =
     ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
+  private val failureCommandMessage   =
+    "Error checking for snapshot dependencies: sbt task " +
+      s"'${snapshotDependenciesKey.key.label}' reported failure via FailureCommand"
+
+  private def failureCommandSnapshotDependenciesSetting(
+      marker: File,
+      dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
+  ): Setting[?] =
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+      .task {
+        sbt.IO.write(marker, "ran")
+        dependencies
+      }
+      .updateState { (state: State, _: Seq[ModuleID]) =>
+        state.copy(
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
+        )
+      }
+      .value
 
   test("aggregatedSnapshotDependencies - return Right(empty) when no snapshots") {
     TestSupport.tempDirResource(s"$fixturePrefix-empty").use { dir =>
@@ -72,6 +91,26 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
     }
   }
 
+  test("aggregatedSnapshotDependencies - return Left when task reports FailureCommand") {
+    TestSupport.tempDirResource(s"$fixturePrefix-failure-command-agg").use { dir =>
+      val marker = new File(dir, "snapshot-deps-ran.txt")
+
+      IO.blocking {
+        TestSupport.loadedState(
+          dir,
+          Seq(Project("root", dir).settings(failureCommandSnapshotDependenciesSetting(marker))),
+          currentProjectId = Some("root")
+        )
+      }.flatMap { state =>
+        SnapshotDependencyTasks.aggregatedSnapshotDependencies(state, snapshotDependenciesKey).map {
+          result =>
+            assert(marker.exists())
+            assertEquals(result, Left(failureCommandMessage))
+        }
+      }
+    }
+  }
+
   test(
     "projectSnapshotDependencies - wrap evaluation failure in IllegalStateException"
   ) {
@@ -98,6 +137,39 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
             snapshotDependenciesKey
           )
         )(err => assert(err.getMessage.contains("test-project")))
+      }
+    }
+  }
+
+  test("projectSnapshotDependencies - wrap FailureCommand in IllegalStateException") {
+    TestSupport.tempDirResource(s"$fixturePrefix-failure-command-project").use { dir =>
+      val marker = new File(dir, "snapshot-deps-ran.txt")
+      val dep    = "org.example" % "dep" % "1.0.0-SNAPSHOT"
+
+      IO.blocking {
+        val state = TestSupport.loadedState(
+          dir,
+          Seq(
+            Project("root", dir).settings(
+              failureCommandSnapshotDependenciesSetting(marker, Seq(dep))
+            )
+          ),
+          currentProjectId = Some("root")
+        )
+        val ref   = ProjectRef(dir.toURI, "root")
+        (state, ref)
+      }.flatMap { case (state, ref) =>
+        assertFailure[IllegalStateException, Seq[ModuleID]](
+          SnapshotDependencyTasks.projectSnapshotDependencies(
+            state,
+            ref,
+            "test-project",
+            snapshotDependenciesKey
+          )
+        ) { err =>
+          assert(err.getMessage.contains("test-project"))
+          assert(err.getCause != null)
+        }
       }
     }
   }

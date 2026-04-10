@@ -17,7 +17,9 @@ import sbt.Keys.*
 import java.io.File
 
 class PublishStepsSpec extends CatsEffectSuite {
-  private val fixturePrefix = "publish-steps-spec"
+  private val fixturePrefix                = "publish-steps-spec"
+  private val snapshotDependenciesKeyLabel =
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies.key.label
 
   // ── publishArtifacts.execute ────────────────────────────────────────
 
@@ -86,6 +88,21 @@ class PublishStepsSpec extends CatsEffectSuite {
       assertFailure[IllegalStateException, Unit](validate(ctx).void) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found"))
         assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
+      }
+    }
+  }
+
+  test("checkSnapshotDependencies.validate - fail when diagnostics task reports FailureCommand") {
+    loadedContextResource(s"$fixturePrefix-snapshots-failure-command") { dir =>
+      val marker = new File(dir, "snapshot-deps-ran.txt")
+      marker -> Seq(CoreStepTestCompat.failureCommandSnapshotDependenciesTaskSetting(marker))
+    }.use { case (ctx, marker) =>
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.checkSnapshotDependencies.validate(ctx).void
+      ) { err =>
+        assert(marker.exists())
+        assert(err.getMessage.contains("FailureCommand"))
+        assert(err.getMessage.contains(snapshotDependenciesKeyLabel))
       }
     }
   }
