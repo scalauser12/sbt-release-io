@@ -136,7 +136,12 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
         ),
         phases
       )
-      .map(_.asInstanceOf[ProcessStep.PerItem[TestContext, String]])
+      .map { step =>
+        ProcessStep.fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](step)(
+          _ => fail("expected PerItem hook step"),
+          identity
+        )
+      }
 
     assertEquals(compiled.map(_.name), Seq("before-publish:prepare", "before-publish:verify"))
     assert(compiled.forall(_.enableCrossBuild))
@@ -206,10 +211,14 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
             gateKey = (_, item) => item
           )
         )
-        val step   = LifecycleCompiler
-          .compile(TestConfig(itemHooks = Seq(hook)), phases)
-          .head
-          .asInstanceOf[ProcessStep.PerItem[TestContext, String]]
+        val step   = ProcessStep.fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](
+          LifecycleCompiler
+            .compile(TestConfig(itemHooks = Seq(hook)), phases)
+            .head
+        )(
+          _ => fail("expected PerItem step"),
+          identity
+        )
 
         for {
           validated <- step.validate(
