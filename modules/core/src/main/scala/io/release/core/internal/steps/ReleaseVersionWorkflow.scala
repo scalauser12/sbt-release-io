@@ -8,6 +8,7 @@ import io.release.VcsOps
 import io.release.core.internal.VersionPlan
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.StepHelpers.*
 import io.release.runtime.workflow.VersionWorkflowSupport
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -20,7 +21,7 @@ import sbt.{internal as _, *}
   */
 private[release] object ReleaseVersionWorkflow {
 
-  import StepHelpers.*
+  import CoreReleaseStepHelpers.requireVersions
 
   final case class ResolvedSettings(
       versionFile: File,
