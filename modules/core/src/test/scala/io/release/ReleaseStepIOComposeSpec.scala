@@ -83,12 +83,11 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     contextResource.use { baseCtx =>
       val metadataKey = AttributeKey[String]("validation-metadata")
       val ctx         = promptContext(baseCtx, interactive = false, useDefaults = false)
-      val step1       = ProcessStep
-        .single[ReleaseContext]("seed-validation-metadata")
-        .withValidationContext(currentCtx =>
-          IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
+      val step1       =
+        validationOnlyStep(
+          "seed-validation-metadata",
+          currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
         )
-        .validateOnly
       val step2       = ProcessStep.Single[ReleaseContext](
         name = "observe-validation-metadata",
         execute = currentCtx =>
@@ -145,20 +144,19 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("validateOnly - stop later validations after ctx.failWith during validation") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val failing = ProcessStep
-          .single[ReleaseContext]("validation-fail-with")
-          .withValidationContext(currentCtx =>
-            observed
-              .update(_ :+ "validate1")
-              .as(
-                currentCtx.failWith(new RuntimeException("stop validation"))
-              )
+        val failing =
+          validationOnlyStep(
+            "validation-fail-with",
+            currentCtx =>
+              observed
+                .update(_ :+ "validate1")
+                .as(currentCtx.failWith(new RuntimeException("stop validation")))
           )
-          .validateOnly
-        val skipped = ProcessStep
-          .single[ReleaseContext]("validation-skipped")
-          .withValidationContext(currentCtx => observed.update(_ :+ "validate2").as(currentCtx))
-          .validateOnly
+        val skipped =
+          validationOnlyStep(
+            "validation-skipped",
+            currentCtx => observed.update(_ :+ "validate2").as(currentCtx)
+          )
 
         ReleaseComposer.validateOnly(Seq(failing, skipped), crossBuild = false)(ctx).flatMap {
           result =>
@@ -179,27 +177,27 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     contextResource.use { baseCtx =>
       val answersKey = AttributeKey[List[Boolean]]("validation-answers")
       val ctx        = promptContext(baseCtx, interactive = true, useDefaults = false)
-      val firstStep  = ProcessStep
-        .single[ReleaseContext]("first-validation-prompt")
-        .withValidationContext { currentCtx =>
-          StepHelpers
-            .askYesNo(currentCtx, "First validation prompt (y/n)? [n] ", defaultYes = false)
-            .map { case (nextCtx, answer) =>
-              nextCtx.withMetadata(answersKey, List(answer))
-            }
-        }
-        .validateOnly
-      val secondStep = ProcessStep
-        .single[ReleaseContext]("second-validation-prompt")
-        .withValidationContext { currentCtx =>
-          StepHelpers
-            .askYesNo(currentCtx, "Second validation prompt (y/n)? [y] ", defaultYes = true)
-            .map { case (nextCtx, answer) =>
-              val answers = nextCtx.metadata(answersKey).getOrElse(Nil) :+ answer
-              nextCtx.withMetadata(answersKey, answers)
-            }
-        }
-        .validateOnly
+      val firstStep  =
+        validationOnlyStep(
+          "first-validation-prompt",
+          currentCtx =>
+            StepHelpers
+              .askYesNo(currentCtx, "First validation prompt (y/n)? [n] ", defaultYes = false)
+              .map { case (nextCtx, answer) =>
+                nextCtx.withMetadata(answersKey, List(answer))
+              }
+        )
+      val secondStep =
+        validationOnlyStep(
+          "second-validation-prompt",
+          currentCtx =>
+            StepHelpers
+              .askYesNo(currentCtx, "Second validation prompt (y/n)? [y] ", defaultYes = true)
+              .map { case (nextCtx, answer) =>
+                val answers = nextCtx.metadata(answersKey).getOrElse(Nil) :+ answer
+                nextCtx.withMetadata(answersKey, answers)
+              }
+        )
 
       TestSupport.withInput("y\r\nn\r\n") {
         ReleaseComposer.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
@@ -214,16 +212,16 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       val validationKey = AttributeKey[Boolean]("validation-answer")
       val executionKey  = AttributeKey[Boolean]("execution-answer")
       val ctx           = promptContext(baseCtx, interactive = true, useDefaults = false)
-      val firstStep     = ProcessStep
-        .single[ReleaseContext]("validation-prompt")
-        .withValidationContext { currentCtx =>
-          StepHelpers
-            .askYesNo(currentCtx, "Validation prompt (y/n)? [n] ", defaultYes = false)
-            .map { case (nextCtx, answer) =>
-              nextCtx.withMetadata(validationKey, answer)
-            }
-        }
-        .validateOnly
+      val firstStep     =
+        validationOnlyStep(
+          "validation-prompt",
+          currentCtx =>
+            StepHelpers
+              .askYesNo(currentCtx, "Validation prompt (y/n)? [n] ", defaultYes = false)
+              .map { case (nextCtx, answer) =>
+                nextCtx.withMetadata(validationKey, answer)
+              }
+        )
       val secondStep    = ProcessStep.Single[ReleaseContext](
         name = "execution-prompt",
         validate = currentCtx =>
@@ -342,4 +340,14 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           )
         )
       )
+
+  private def validationOnlyStep(
+      name: String,
+      validateWithContext: ReleaseContext => IO[ReleaseContext]
+  ): ProcessStep.Single[ReleaseContext] =
+    ProcessStep.Single(
+      name = name,
+      execute = currentCtx => IO.pure(currentCtx),
+      validateWithContext = Some(validateWithContext)
+    )
 }

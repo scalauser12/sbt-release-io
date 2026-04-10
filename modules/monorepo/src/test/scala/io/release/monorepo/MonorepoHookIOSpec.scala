@@ -425,10 +425,10 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
       )
 
       IO {
-        val populatedSlots = MonorepoLifecycleSlots.globalHookSlots
+        val populatedSlots = MonorepoLifecycle.orderedGlobalHookDescriptors
           .filter(slot => slot.resolveHooks(config).nonEmpty)
           .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(MonorepoGlobalHookSlots.beforeSelectionHooks.keyLabel))
+        assertEquals(populatedSlots, Seq(MonorepoLifecycle.beforeSelectionDescriptor.keyLabel))
         assertEquals(config.beforeSelectionHooks.map(_.name), Seq("before-selection"))
       }
     }
@@ -443,10 +443,10 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
       )
 
       IO {
-        val populatedSlots = MonorepoLifecycleSlots.projectHookSlots
+        val populatedSlots = MonorepoLifecycle.orderedProjectHookDescriptors
           .filter(slot => slot.resolveHooks(config).nonEmpty)
           .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(MonorepoProjectHookSlots.beforeTagHooks.keyLabel))
+        assertEquals(populatedSlots, Seq(MonorepoLifecycle.beforeTagDescriptor.keyLabel))
         assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
       }
     }
@@ -480,7 +480,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         )
         assertEquals(
           assignments.map(_._1.keyLabel),
-          MonorepoLifecycleSlots.globalHookSlots.map(_.keyLabel)
+          MonorepoLifecycle.orderedGlobalHookDescriptors.map(_.keyLabel)
         )
       }
     }
@@ -496,7 +496,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         )
         assertEquals(
           assignments.map(_._1.keyLabel),
-          MonorepoLifecycleSlots.projectHookSlots.map(_.keyLabel)
+          MonorepoLifecycle.orderedProjectHookDescriptors.map(_.keyLabel)
         )
       }
     }

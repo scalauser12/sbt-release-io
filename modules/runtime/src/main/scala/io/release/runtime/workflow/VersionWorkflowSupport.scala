@@ -7,6 +7,8 @@ import io.release.runtime.ReleaseCtxOps.syntax._
 import _root_.sbt.TaskKey
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 private[release] object VersionWorkflowSupport {
 
@@ -16,8 +18,14 @@ private[release] object VersionWorkflowSupport {
       nextVersion: String
   )
 
-  def ensureVersionFileExists(versionFile: File, notFoundMessage: String): IO[Unit] =
-    VersionFileSupport.ensureExists(versionFile, notFoundMessage)
+  def ensureVersionFileExists(
+      versionFile: File,
+      notFoundMessage: String
+  ): IO[Unit] =
+    IO.blocking(versionFile.exists()).flatMap { exists =>
+      if (exists) IO.unit
+      else IO.raiseError(new IllegalStateException(notFoundMessage))
+    }
 
   def resolveVersionInputsFromTasks[C <: ReleaseCtx: ReleaseCtxOps](
       ctx: C,
@@ -75,6 +83,12 @@ private[release] object VersionWorkflowSupport {
   ): IO[Unit] =
     for {
       contents <- versionFileContents(versionFile, versionValue)
-      _        <- VersionFileSupport.writeUtf8(versionFile, contents)
+      _        <- IO.blocking {
+                    Files.write(
+                      versionFile.toPath,
+                      contents.getBytes(StandardCharsets.UTF_8)
+                    )
+                    ()
+                  }
     } yield ()
 }

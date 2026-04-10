@@ -3,8 +3,7 @@ package io.release
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.core.internal.CoreHookConfiguration
-import io.release.core.internal.CoreHookSlots
-import io.release.core.internal.CoreLifecycleSlots
+import io.release.core.internal.CoreLifecycle
 import munit.CatsEffectSuite
 
 class ReleaseHookIOSpec extends CatsEffectSuite {
@@ -340,10 +339,10 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
 
       IO {
         val populatedSlots =
-          CoreLifecycleSlots.hookSlots
+          CoreLifecycle.orderedHookDescriptors
             .filter(slot => slot.resolveHooks(config).nonEmpty)
             .map(_.keyLabel)
-        assertEquals(populatedSlots, Seq(CoreHookSlots.beforeTagHooks.keyLabel))
+        assertEquals(populatedSlots, Seq(CoreLifecycle.beforeTagDescriptor.keyLabel))
         assertEquals(config.beforeTagHooks.map(_.name), Seq("before-tag"))
       }
     }
@@ -376,7 +375,10 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
             (resourceHook: ReleaseResourceHookIO[String]) =>
               ReleaseHookIO.action(resourceHook.name)(_ => IO.unit)
           )
-        assertEquals(assignments.map(_._1.keyLabel), CoreLifecycleSlots.hookSlots.map(_.keyLabel))
+        assertEquals(
+          assignments.map(_._1.keyLabel),
+          CoreLifecycle.orderedHookDescriptors.map(_.keyLabel)
+        )
       }
     }
   }
