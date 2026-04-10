@@ -15,7 +15,7 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
       val labels = MonorepoHookConfiguration.defaultSettings.map(_.key.key.label)
 
       assertEquals(labels, labels.distinct)
-      assertEquals(labels.sorted, MonorepoLifecycleSlots.slots.map(_.keyLabel).sorted)
+      assertEquals(labels.sorted, MonorepoLifecycle.slots.map(_.keyLabel).sorted)
     }
   }
 

@@ -15,7 +15,7 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
       val labels = CoreHookConfiguration.defaultSettings.map(_.key.key.label)
 
       assertEquals(labels, labels.distinct)
-      assertEquals(labels.sorted, CoreLifecycleSlots.slots.map(_.keyLabel).sorted)
+      assertEquals(labels.sorted, CoreLifecycle.slots.map(_.keyLabel).sorted)
     }
   }
 

@@ -103,9 +103,9 @@ object MonorepoResourceHooks {
   def empty[T]: MonorepoResourceHooks[T] = MonorepoResourceHooks[T]()
 
   private type GlobalHookAssignment  =
-    (MonorepoGlobalHookSlot, Seq[MonorepoGlobalHookIO])
+    (MonorepoLifecycle.GlobalHookDescriptor, Seq[MonorepoGlobalHookIO])
   private type ProjectHookAssignment =
-    (MonorepoProjectHookSlot, Seq[MonorepoProjectHookIO])
+    (MonorepoLifecycle.ProjectHookDescriptor, Seq[MonorepoProjectHookIO])
 
   /** Convert resource-aware hooks into plain hooks by binding the resource value.
     * Boolean policies default to `true` so they are neutral when merged via
@@ -150,15 +150,15 @@ object MonorepoResourceHooks {
       hooks: MonorepoResourceHooks[T],
       materialize: MonorepoGlobalResourceHookIO[T] => MonorepoGlobalHookIO
   ): Seq[GlobalHookAssignment] =
-    MonorepoGlobalHookSlots.descriptors.map { descriptor =>
-      descriptor.slot -> descriptor.resourceHooks(hooks).map(materialize)
+    MonorepoLifecycle.orderedGlobalHookDescriptors.map { descriptor =>
+      descriptor -> descriptor.resourceHooks(hooks).map(materialize)
     }
 
   private[monorepo] def projectHookAssignments[T](
       hooks: MonorepoResourceHooks[T],
       materialize: MonorepoProjectResourceHookIO[T] => MonorepoProjectHookIO
   ): Seq[ProjectHookAssignment] =
-    MonorepoProjectHookSlots.descriptors.map { descriptor =>
-      descriptor.slot -> descriptor.resourceHooks(hooks).map(materialize)
+    MonorepoLifecycle.orderedProjectHookDescriptors.map { descriptor =>
+      descriptor -> descriptor.resourceHooks(hooks).map(materialize)
     }
 }

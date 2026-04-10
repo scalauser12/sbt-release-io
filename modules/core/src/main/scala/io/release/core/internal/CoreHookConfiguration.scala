@@ -66,5 +66,5 @@ private[release] object CoreHookConfiguration {
     validatedSlots.exists(_.isCustomized(config))
 
   private lazy val validatedSlots: Vector[CoreConfigSlot] =
-    LifecycleCatalogSupport.validateUniqueSlots("core", CoreLifecycleSlots.slots)(_.id, _.keyLabel)
+    LifecycleCatalogSupport.validateUniqueSlots("core", CoreLifecycle.slots)(_.id, _.keyLabel)
 }

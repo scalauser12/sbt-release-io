@@ -7,8 +7,6 @@ import io.release.VcsOps
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.command.HelpDocsLinks
-import io.release.runtime.engine.BuiltInStepRole
-import io.release.runtime.engine.ProcessStep
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
@@ -17,62 +15,9 @@ import io.release.monorepo.internal.steps.MonorepoVcsSteps
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
 
-  private val InitializeVcsStep          = MonorepoReleaseSteps.initializeVcs.name
   private val DetectOrSelectProjectsStep = MonorepoComposer.SelectionBoundary
   private val InquireVersionsStep        = MonorepoReleaseSteps.inquireVersions.name
   private val TagReleasesStep            = MonorepoReleaseSteps.tagReleasesPerProject.name
-  private val PushChangesStep            = MonorepoReleaseSteps.pushChanges.name
-  private val PublishArtifactsStep       = MonorepoReleaseSteps.publishArtifacts.name
-
-  private final case class CheckSteps(
-      stepNames: Seq[String],
-      pushConfigured: Boolean,
-      publishConfigured: Boolean,
-      shouldBootstrapVcs: Boolean,
-      shouldResolveSelection: Boolean,
-      shouldResolveVersions: Boolean,
-      shouldPreflightTags: Boolean
-  )
-
-  private object CheckSteps {
-    def apply(steps: Seq[AnyStep]): CheckSteps = {
-      val stepNames              = steps.map(_.name)
-      val shouldResolveSelection = steps.exists(_.hasRole(BuiltInStepRole.ProjectSelection))
-      val shouldResolveVersions  = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions))
-      val shouldPreflightTags    = steps.exists(_.hasRole(BuiltInStepRole.TagRelease))
-
-      CheckSteps(
-        stepNames = stepNames,
-        pushConfigured = steps.exists(_.hasRole(BuiltInStepRole.PushChanges)),
-        publishConfigured = steps.exists(_.hasRole(BuiltInStepRole.PublishArtifacts)),
-        shouldBootstrapVcs = steps.exists(_.hasRole(BuiltInStepRole.InitializeVcs)) ||
-          shouldResolveSelection ||
-          (shouldPreflightTags && shouldResolveVersions),
-        shouldResolveSelection = shouldResolveSelection,
-        shouldResolveVersions = shouldResolveVersions,
-        shouldPreflightTags = shouldPreflightTags
-      )
-    }
-  }
-
-  private final case class CheckSegments(
-      setupSteps: Seq[AnyStep],
-      mainSteps: Seq[AnyStep]
-  )
-
-  private object CheckSegments {
-    def apply(steps: Seq[AnyStep]): CheckSegments = {
-      val boundaryIndex = steps.indexWhere {
-        case step: ProcessStep.Single[?] => step.isSelectionBoundary
-        case _                           => false
-      }
-      if (boundaryIndex < 0) CheckSegments(Seq.empty, steps)
-      else {
-        val (setupSteps, mainSteps) = steps.splitAt(boundaryIndex + 1)
-        CheckSegments(setupSteps = setupSteps, mainSteps = mainSteps)
-      }
-    }
-  }
 
   sealed trait Evaluation[+A]
   object Evaluation {
@@ -168,56 +113,50 @@ private[monorepo] object MonorepoPreflight {
       session: MonorepoPreparedSession,
       steps: Seq[AnyStep]
   ): IO[Summary] = {
-    val checkSteps    = CheckSteps(steps)
-    val checkSegments = CheckSegments(steps)
+    val processPlan = MonorepoProcessPlan.analyze(steps)
 
     for {
-      baseCtx <- resolveBaseContext(session.context, checkSteps)
+      baseCtx <- resolveBaseContext(session.context, processPlan)
       checked <- ExecutionEngine.raiseIfFailed(baseCtx)
-      summary <- if (checkSegments.setupSteps.nonEmpty)
+      summary <- if (processPlan.hasSelectionBoundary)
                    checkWithSelectionBoundary(
                      checked,
                      session.plan,
-                     checkSegments,
-                     checkSteps,
+                     processPlan,
                      session.flags.crossBuild
                    )
                  else
                    checkWithoutSelectionBoundary(
-                     checked,
-                     checkSegments.mainSteps,
-                     checkSteps,
-                     session.flags.crossBuild
-                   )
+                      checked,
+                      processPlan,
+                      session.flags.crossBuild
+                    )
     } yield summary
   }
 
   private def checkWithSelectionBoundary(
       baseCtx: MonorepoContext,
       plan: MonorepoReleasePlan,
-      checkSegments: CheckSegments,
-      checkSteps: CheckSteps,
+      processPlan: MonorepoProcessPlan,
       crossBuildEnabled: Boolean
   ): IO[Summary] =
     for {
-      setupValidated <- validateSegment(checkSegments.setupSteps, crossBuildEnabled)(baseCtx)
+      setupValidated <- validateSegment(processPlan.setupSteps, crossBuildEnabled)(baseCtx)
       checkedSetup   <- ExecutionEngine.raiseIfFailed(setupValidated)
       selected       <-
-        resolveSelection(checkedSetup, plan, checkSteps.shouldResolveSelection)
+        resolveSelection(checkedSetup, plan, processPlan.shouldResolveSelection)
       checkedSelect  <- ExecutionEngine.raiseIfFailed(selected.context)
       summary        <- checkVersionAwareSegment(
                           baseCtx = checkedSelect,
                           selectionMode = selected.selectionMode,
-                          normalizedSteps = checkSegments.mainSteps,
-                          checkSteps = checkSteps,
+                          processPlan = processPlan,
                           crossBuildEnabled = crossBuildEnabled
                         )
     } yield summary
 
   private def checkWithoutSelectionBoundary(
       baseCtx: MonorepoContext,
-      normalizedSteps: Seq[AnyStep],
-      checkSteps: CheckSteps,
+      processPlan: MonorepoProcessPlan,
       crossBuildEnabled: Boolean
   ): IO[Summary] = {
     val selectionMode =
@@ -226,8 +165,7 @@ private[monorepo] object MonorepoPreflight {
     checkVersionAwareSegment(
       baseCtx = baseCtx,
       selectionMode = selectionMode,
-      normalizedSteps = normalizedSteps,
-      checkSteps = checkSteps,
+      processPlan = processPlan,
       crossBuildEnabled = crossBuildEnabled
     )
   }
@@ -235,65 +173,65 @@ private[monorepo] object MonorepoPreflight {
   private def checkVersionAwareSegment(
       baseCtx: MonorepoContext,
       selectionMode: Evaluation[SelectionMode],
-      normalizedSteps: Seq[AnyStep],
-      checkSteps: CheckSteps,
+      processPlan: MonorepoProcessPlan,
       crossBuildEnabled: Boolean
   ): IO[Summary] =
-    splitAtBuiltInVersionResolution(normalizedSteps) match {
-      case None =>
-        for {
-          validatedCtx <- validateSegment(normalizedSteps, crossBuildEnabled)(baseCtx)
-          checkedCtx   <- ExecutionEngine.raiseIfFailed(validatedCtx)
-          tagOutcomes  <-
-            resolveTagSnapshot(
-              checkedCtx,
-              checkSteps.shouldPreflightTags,
-              builtInVersionsResolved = false
-            )
-          summary      <- buildSummary(
-                            selectionMode = selectionMode,
-                            ctx = checkedCtx,
-                            versionsResolved = false,
-                            tagOutcomes = tagOutcomes,
-                            checkSteps = checkSteps,
-                            crossBuildEnabled = crossBuildEnabled
-                          )
-        } yield summary
-
-      case Some((prefixSteps, suffixSteps)) =>
-        for {
-          prefixValidated <- validateSegment(prefixSteps, crossBuildEnabled)(baseCtx)
-          checkedPrefix   <- ExecutionEngine.raiseIfFailed(prefixValidated)
-          withVersions    <- resolveVersionSnapshot(checkedPrefix, shouldResolveVersions = true)
-          checkedVersions <- ExecutionEngine.raiseIfFailed(withVersions)
-          validatedCtx    <- validateSegment(suffixSteps, crossBuildEnabled)(checkedVersions)
-          checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
-          tagOutcomes     <-
-            resolveTagSnapshot(
-              checkedCtx,
-              checkSteps.shouldPreflightTags,
-              builtInVersionsResolved = builtInTagPreflightFollowsVersionResolution(
-                normalizedSteps
-              )
-            )
-          summary         <- buildSummary(
-                               selectionMode = selectionMode,
-                               ctx = checkedCtx,
-                               versionsResolved = true,
-                               tagOutcomes = tagOutcomes,
-                               checkSteps = checkSteps,
-                               crossBuildEnabled = crossBuildEnabled
-                             )
-        } yield summary
-    }
+    if (!processPlan.hasBuiltInVersionResolution)
+      for {
+        validatedCtx <- validateSegment(processPlan.mainSteps, crossBuildEnabled)(baseCtx)
+        checkedCtx   <- ExecutionEngine.raiseIfFailed(validatedCtx)
+        tagOutcomes  <-
+          resolveTagSnapshot(
+            checkedCtx,
+            processPlan.shouldPreflightTags,
+            builtInVersionsResolved = false
+          )
+        summary      <- buildSummary(
+                          selectionMode = selectionMode,
+                          ctx = checkedCtx,
+                          versionsResolved = false,
+                          tagOutcomes = tagOutcomes,
+                          processPlan = processPlan,
+                          crossBuildEnabled = crossBuildEnabled
+                        )
+      } yield summary
+    else
+      for {
+        prefixValidated <- validateSegment(
+                             processPlan.mainStepsThroughVersionResolution,
+                             crossBuildEnabled
+                           )(baseCtx)
+        checkedPrefix   <- ExecutionEngine.raiseIfFailed(prefixValidated)
+        withVersions    <- resolveVersionSnapshot(checkedPrefix, processPlan.shouldResolveVersions)
+        checkedVersions <- ExecutionEngine.raiseIfFailed(withVersions)
+        validatedCtx    <- validateSegment(
+                             processPlan.mainStepsAfterVersionResolution,
+                             crossBuildEnabled
+                           )(checkedVersions)
+        checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
+        tagOutcomes     <-
+          resolveTagSnapshot(
+            checkedCtx,
+            processPlan.shouldPreflightTags,
+            builtInVersionsResolved = processPlan.builtInTagPreflightFollowsVersionResolution
+          )
+        summary         <- buildSummary(
+                             selectionMode = selectionMode,
+                             ctx = checkedCtx,
+                             versionsResolved = true,
+                             tagOutcomes = tagOutcomes,
+                             processPlan = processPlan,
+                             crossBuildEnabled = crossBuildEnabled
+                           )
+      } yield summary
 
   private def resolveBaseContext(
       ctx: MonorepoContext,
-      checkSteps: CheckSteps
+      processPlan: MonorepoProcessPlan
   ): IO[MonorepoContext] =
     // Check mode does not replay arbitrary setup executes, so bootstrap only the built-in
     // VCS context that later validations and summaries are allowed to depend on.
-    if (checkSteps.shouldBootstrapVcs)
+    if (processPlan.shouldBootstrapVcs)
       VcsOps.detectAndInit(ctx)
     else IO.pure(ctx)
 
@@ -348,35 +286,12 @@ private[monorepo] object MonorepoPreflight {
       ctx
     )
 
-  private def splitAtBuiltInVersionResolution(
-      steps: Seq[AnyStep]
-  ): Option[
-    (
-        Seq[AnyStep],
-        Seq[AnyStep]
-    )
-  ] = {
-    val versionIndex = steps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
-
-    if (versionIndex < 0) None
-    else Some(steps.splitAt(versionIndex + 1))
-  }
-
-  private def builtInTagPreflightFollowsVersionResolution(
-      steps: Seq[AnyStep]
-  ): Boolean = {
-    val versionIndex = steps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
-    val tagIndex     = steps.indexWhere(_.hasRole(BuiltInStepRole.TagRelease))
-
-    versionIndex >= 0 && tagIndex > versionIndex
-  }
-
   private def buildSummary(
       selectionMode: Evaluation[SelectionMode],
       ctx: MonorepoContext,
       versionsResolved: Boolean,
       tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]],
-      checkSteps: CheckSteps,
+      processPlan: MonorepoProcessPlan,
       crossBuildEnabled: Boolean
   ): IO[Summary] =
     renderProjects(ctx.currentProjects, versionsResolved, tagOutcomes).map { projects =>
@@ -385,12 +300,12 @@ private[monorepo] object MonorepoPreflight {
         projects = projects,
         crossBuildEnabled = crossBuildEnabled,
         publishSummary = CheckModeOutput.publishStatus(
-          publishConfigured = checkSteps.publishConfigured,
+          publishConfigured = processPlan.publishConfigured,
           skipPublish = ctx.skipPublish,
           skippedMessage = "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
         ),
-        pushSummary = CheckModeOutput.pushStatus(checkSteps.pushConfigured),
-        stepNames = checkSteps.stepNames
+        pushSummary = CheckModeOutput.pushStatus(processPlan.pushConfigured),
+        stepNames = processPlan.stepNames
       )
     }
 

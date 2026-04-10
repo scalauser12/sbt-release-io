@@ -4,6 +4,7 @@ import io.release.monorepo.internal.*
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
@@ -109,10 +110,12 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           val selected = api
           val pCtx     = ctx.withProjects(Seq(core, api))
 
-          val setupStep = ProcessStep
-            .single[MonorepoContext]("detect-or-select-projects")
-            .withSelectionBoundary
-            .execute(c => log.update(_ :+ "setup").as(c.withProjects(Seq(selected))))
+          val setupStep = ProcessStep.Single[MonorepoContext](
+            name = "detect-or-select-projects",
+            execute = c => log.update(_ :+ "setup").as(c.withProjects(Seq(selected))),
+            roles = Set(BuiltInStepRole.ProjectSelection),
+            isSelectionBoundary = true
+          )
 
           val stepA = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
             name = "step-a",
@@ -157,10 +160,12 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
               log.update(_ :+ s"validate-setup:${currentCtx.state.onFailure.isDefined}"),
             execute = c => log.update(_ :+ "execute-setup").as(c)
           )
-          val boundary    = ProcessStep
-            .single[MonorepoContext]("detect-or-select-projects")
-            .withSelectionBoundary
-            .execute(c => log.update(_ :+ "select").as(c.withProjects(Seq(api))))
+          val boundary    = ProcessStep.Single[MonorepoContext](
+            name = "detect-or-select-projects",
+            execute = c => log.update(_ :+ "select").as(c.withProjects(Seq(api))),
+            roles = Set(BuiltInStepRole.ProjectSelection),
+            isSelectionBoundary = true
+          )
           val afterPer    = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
             name = "custom-project",
             validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
@@ -218,12 +223,13 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
   test("compose - thread validateWithContext results into later validation and execute") {
     contextResource.use { ctx =>
       val metadataKey = sbt.AttributeKey[String]("validation-metadata")
-      val step1       = ProcessStep
-        .single[MonorepoContext]("seed-validation-metadata")
-        .withValidationContext(currentCtx =>
+      val step1       = ProcessStep.Single[MonorepoContext](
+        name = "seed-validation-metadata",
+        execute = currentCtx => IO.pure(currentCtx),
+        validateWithContext = Some(currentCtx =>
           IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
         )
-        .validateOnly
+      )
       val step2       = ProcessStep.Single[MonorepoContext](
         name = "observe-validation-metadata",
         execute = currentCtx =>

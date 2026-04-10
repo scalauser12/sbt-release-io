@@ -163,12 +163,12 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - fail fast when validation returns ctx.failWith before version resolution") {
     withInitialContext { case (_, _, initialCtx) =>
       val versionResolutionFailure = "version resolution should not run"
-      val failingStep              = ProcessStep
-        .single[ReleaseContext]("validation-fail-with")
-        .withValidationContext(currentCtx =>
-          IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))
+      val failingStep              =
+        validationOnlyStep(
+          "validation-fail-with",
+          validateWithContext = currentCtx =>
+            IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))
         )
-        .validateOnly
 
       for {
         mutatedState <- IO.blocking {
@@ -497,18 +497,18 @@ class CorePreflightSpec extends CatsEffectSuite {
     )
 
   private val skipPublishInValidationStep: Step =
-    ProcessStep
-      .single[ReleaseContext]("skip-publish-in-validation")
-      .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
-      .validateOnly
+    validationOnlyStep(
+      "skip-publish-in-validation",
+      validateWithContext = currentCtx => IO.pure(currentCtx.copy(skipPublish = true))
+    )
 
   private def overrideVersionTasksInValidationStep(
       releaseVersion: String,
       nextVersion: String
   ): Step =
-    ProcessStep
-      .single[ReleaseContext](s"override-version-tasks-$releaseVersion")
-      .withValidationContext { currentCtx =>
+    validationOnlyStep(
+      s"override-version-tasks-$releaseVersion",
+      validateWithContext = currentCtx =>
         IO.blocking {
           val newState = SbtRuntime.appendWithSession(
             currentCtx.state,
@@ -523,6 +523,18 @@ class CorePreflightSpec extends CatsEffectSuite {
           )
           currentCtx.withState(newState)
         }
-      }
-      .validateOnly
+    )
+
+  private def validationOnlyStep(
+      name: String,
+      validate: ReleaseContext => IO[Unit] = _ => IO.unit,
+      validateWithContext: ReleaseContext => IO[ReleaseContext] = currentCtx =>
+        IO.pure(currentCtx)
+  ): Step =
+    ProcessStep.Single(
+      name = name,
+      execute = currentCtx => IO.pure(currentCtx),
+      validate = validate,
+      validateWithContext = Some(validateWithContext)
+    )
 }

@@ -307,17 +307,17 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
       )
     ).use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val step = ProcessStep
-          .single[ReleaseContext]("cross-step")
-          .withCrossBuild
-          .execute { c =>
+        val step = ProcessStep.Single[ReleaseContext](
+          name = "cross-step",
+          execute = c =>
             scalaVersionOf(c.state).flatMap { version =>
               observed.update(_ :+ s"execute:$version") *>
                 (if (version == TestSupport.alternateScalaVersion)
                    IO.raiseError(new RuntimeException("boom"))
                  else IO.pure(c))
-            }
-          }
+            },
+          enableCrossBuild = true
+        )
 
         ReleaseComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           for {
@@ -430,10 +430,11 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
         Keys.crossScalaVersions := Seq(TestSupport.alternateScalaVersion)
       )
     ).use { ctx =>
-      val step = ProcessStep
-        .single[ReleaseContext]("cross-step")
-        .withCrossBuild
-        .execute(_ => IO.raiseError(new RuntimeException("boom")))
+      val step = ProcessStep.Single[ReleaseContext](
+        name = "cross-step",
+        execute = _ => IO.raiseError(new RuntimeException("boom")),
+        enableCrossBuild = true
+      )
 
       ReleaseComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         scalaVersionOf(result.state).map { finalVersion =>

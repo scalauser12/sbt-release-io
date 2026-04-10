@@ -216,12 +216,12 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
   test("check - fail fast when validation returns ctx.failWith") {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session     = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
-      val failingStep = ProcessStep
-        .single[MonorepoContext]("validation-fail-with")
-        .withValidationContext(currentCtx =>
-          IO.pure(currentCtx.failWith(new RuntimeException("fatal stop")))
+      val failingStep =
+        validationOnlyStep(
+          "validation-fail-with",
+          validateWithContext = currentCtx =>
+            IO.pure(currentCtx.failWith(new RuntimeException("fatal stop")))
         )
-        .validateOnly
 
       assertFailure[RuntimeException, MonorepoPreflight.Summary](
         MonorepoPreflight.check(session, Seq(failingStep))
@@ -233,10 +233,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     preflightFixtureResource.use { case (_, ctx, _) =>
       val versionResolutionFailure = "version resolution should not run"
       val validationFailure        = "after-selection validation failed"
-      val failAfterSelectionStep   = ProcessStep
-        .single[MonorepoContext]("fail-after-selection")
-        .withValidation(_ => IO.raiseError(new IllegalStateException(validationFailure)))
-        .validateOnly
+      val failAfterSelectionStep   =
+        validationOnlyStep(
+          "fail-after-selection",
+          validate = _ => IO.raiseError(new IllegalStateException(validationFailure))
+        )
 
       for {
         mutatedState <- IO.blocking {
@@ -660,25 +661,24 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
 
   private val requiresVcsValidationStep: GlobalStep =
-    ProcessStep
-      .single[MonorepoContext]("requires-vcs")
-      .withValidation(ctx =>
+    validationOnlyStep(
+      "requires-vcs",
+      validate = ctx =>
         IO.raiseUnless(ctx.vcs.nonEmpty)(
           new IllegalStateException("expected preflight VCS context")
         )
-      )
-      .validateOnly
+    )
 
   private val skipPublishInValidationStep: GlobalStep =
-    ProcessStep
-      .single[MonorepoContext]("skip-publish-in-validation")
-      .withValidationContext(currentCtx => IO.pure(currentCtx.copy(skipPublish = true)))
-      .validateOnly
+    validationOnlyStep(
+      "skip-publish-in-validation",
+      validateWithContext = currentCtx => IO.pure(currentCtx.copy(skipPublish = true))
+    )
 
   private val requiresResolvedVersionsValidationStep: GlobalStep =
-    ProcessStep
-      .single[MonorepoContext]("requires-resolved-versions")
-      .withValidation(currentCtx =>
+    validationOnlyStep(
+      "requires-resolved-versions",
+      validate = currentCtx =>
         IO.raiseUnless(
           currentCtx.currentProjects.forall(_.versions.exists {
             case (releaseVersion, nextVersion) =>
@@ -687,18 +687,29 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         )(
           new IllegalStateException("expected resolved versions during no-boundary validation")
         )
-      )
-      .validateOnly
+    )
 
   private def narrowProjectsInValidationStep(
       name: String
   ): GlobalStep =
-    ProcessStep
-      .single[MonorepoContext](s"narrow-projects-to-$name")
-      .withValidationContext(currentCtx =>
+    validationOnlyStep(
+      s"narrow-projects-to-$name",
+      validateWithContext = currentCtx =>
         IO.pure(currentCtx.withProjects(currentCtx.currentProjects.filter(_.name == name)))
-      )
-      .validateOnly
+    )
+
+  private def validationOnlyStep(
+      name: String,
+      validate: MonorepoContext => IO[Unit] = _ => IO.unit,
+      validateWithContext: MonorepoContext => IO[MonorepoContext] = currentCtx =>
+        IO.pure(currentCtx)
+  ): GlobalStep =
+    ProcessStep.Single(
+      name = name,
+      execute = currentCtx => IO.pure(currentCtx),
+      validate = validate,
+      validateWithContext = Some(validateWithContext)
+    )
 
   private val multiProjectPreflightFixtureResource: Resource[IO, (File, MonorepoContext)] =
     TestSupport.tempDirResource("monorepo-preflight-multi-spec").evalMap { repo =>

@@ -23,7 +23,6 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "ReleaseDecisionDefaults",
     "ReleaseLogPrefixes",
     "ProcessStep",
-    "StepKernel",
     "ExecutionEngine",
     "LifecycleCompiler",
     "LifecycleCatalogSupport",

@@ -69,7 +69,7 @@ private[monorepo] object MonorepoHookConfiguration {
     validatedSlots.exists(_.isCustomized(config))
 
   private lazy val validatedSlots: Vector[MonorepoConfigSlot] =
-    LifecycleCatalogSupport.validateUniqueSlots("monorepo", MonorepoLifecycleSlots.slots)(
+    LifecycleCatalogSupport.validateUniqueSlots("monorepo", MonorepoLifecycle.slots)(
       _.id,
       _.keyLabel
     )

@@ -30,44 +30,25 @@ private[monorepo] object MonorepoComposer {
       crossBuild: Boolean = false
   )(
       initialCtx: MonorepoContext
-  ): IO[MonorepoContext] =
-    splitAtBoundary(steps) match {
-      case Some((setupSteps, mainSteps)) =>
+  ): IO[MonorepoContext] = {
+    val plan = MonorepoProcessPlan.analyze(steps)
+
+    if (plan.hasSelectionBoundary)
         for {
           setupCtx <- runSequentialValidateThenExecute(
-                        setupSteps,
+                        plan.setupSteps,
                         initialCtx,
                         crossBuild
                       )
           finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
-                      else runMainSegment(mainSteps, setupCtx, crossBuild)
+                      else runMainSegment(plan.mainSteps, setupCtx, crossBuild)
         } yield finalCtx
-
-      case None =>
-        runSequentialValidateThenExecute(
-          steps,
-          initialCtx,
-          crossBuild
-        )
-    }
-
-  /** Split steps at the selection boundary into setup and main segments.
-    * Returns `None` if no boundary step exists (all steps run sequentially).
-    */
-  private def splitAtBoundary(
-      steps: Seq[AnyStep]
-  ): Option[
-    (
-        Seq[AnyStep],
-        Seq[AnyStep]
-    )
-  ] = {
-    val boundaryIndex = steps.indexWhere {
-      case step: ProcessStep.Single[?] => step.isSelectionBoundary
-      case _                           => false
-    }
-    if (boundaryIndex < 0) None
-    else Some(steps.splitAt(boundaryIndex + 1))
+    else
+      runSequentialValidateThenExecute(
+        steps,
+        initialCtx,
+        crossBuild
+      )
   }
 
   private def runMainSegment(
