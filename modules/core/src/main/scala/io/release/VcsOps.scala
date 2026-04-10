@@ -170,37 +170,31 @@ private[release] object VcsOps {
       remoteCheck <- vcs.checkRemoteWithTimeout(remote, timeout)
       resultCtx   <- remoteCheck match {
                        case Some(0) => IO.pure(RemoteCheckResult(ctx, refreshed = true))
-                       case Some(_) =>
-                         DecisionResolver
-                           .confirmOrAbort(
-                             ctx,
-                             configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
-                             logPrefix = logPrefix,
-                             eofContext = "remote check confirmation",
-                             defaultYes = false,
-                             prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                             abortMessage = "Aborting the release due to remote check failure."
-                           )
-                           .map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
+                       case Some(_) => continueAfterRemoteCheckFailure(ctx, logPrefix)
                        case None    =>
                          IO.blocking {
                            ctx.state.log.warn(
                              s"$logPrefix Remote check timed out after $timeout while fetching '$remote'."
                            )
-                         } *>
-                           DecisionResolver
-                             .confirmOrAbort(
-                               ctx,
-                               configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
-                               logPrefix = logPrefix,
-                               eofContext = "remote check confirmation",
-                               defaultYes = false,
-                               prompt = "Error while checking remote. Still continue (y/n)? [n] ",
-                               abortMessage = "Aborting the release due to remote check failure."
-                             )
-                             .map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
+                         } *> continueAfterRemoteCheckFailure(ctx, logPrefix)
                      }
     } yield resultCtx
+
+  private def continueAfterRemoteCheckFailure[C <: ReleaseCtx { type Self = C }](
+      ctx: C,
+      logPrefix: String
+  ): IO[RemoteCheckResult[C]] =
+    DecisionResolver
+      .confirmOrAbort(
+        ctx,
+        configuredAnswer = ctx.decisionDefaults.remoteCheckFailureAnswer,
+        logPrefix = logPrefix,
+        eofContext = "remote check confirmation",
+        defaultYes = false,
+        prompt = "Error while checking remote. Still continue (y/n)? [n] ",
+        abortMessage = "Aborting the release due to remote check failure."
+      )
+      .map(nextCtx => RemoteCheckResult(nextCtx, refreshed = false))
 
   /** Validate that a tracking branch exists and the local branch is not behind remote.
     * Shared by core and monorepo push steps.
