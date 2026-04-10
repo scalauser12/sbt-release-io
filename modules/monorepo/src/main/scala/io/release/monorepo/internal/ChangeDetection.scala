@@ -35,6 +35,7 @@ private[monorepo] object ChangeDetection {
       state: State,
       globalExcludes: Set[String],
       projectScopes: Seq[ResolvedProjectScope],
+      diffScopeByProject: Map[String, Either[String, String]],
       sharedPaths: Seq[String],
       tagNameFn: (String, String) => String
   )
@@ -137,13 +138,17 @@ private[monorepo] object ChangeDetection {
       sharedPaths: Seq[String] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     IO.blocking {
-      val projectScopes = resolveProjectScopes(vcs, projects)
+      val projectScopes      = resolveProjectScopes(vcs, projects)
       logUnresolvedProjectScopes(state, projectScopes.unresolved)
-      val inputs        = DetectionInputs(
+      val diffScopeByProject =
+        projectScopes.resolved.map(r => r.name -> Right(r.path)).toMap ++
+          projectScopes.unresolved.map(u => u.name -> Left(u.details)).toMap
+      val inputs             = DetectionInputs(
         vcs = vcs,
         state = state,
         globalExcludes = additionalExcludeFiles.flatMap(gitRelativize(vcs.baseDir, _)).toSet,
         projectScopes = projectScopes.resolved,
+        diffScopeByProject = diffScopeByProject,
         sharedPaths = sharedPaths,
         tagNameFn = tagNameFn
       )
@@ -204,7 +209,9 @@ private[monorepo] object ChangeDetection {
       inputs.globalExcludes ++ gitRelativize(inputs.vcs.baseDir, project.versionFile).toSet
     val (updatedCache, sharedChanged)           =
       sharedPathsChanged(inputs, sharedPathCache, tagLookup, excludes)
-    val excludedChildDirs                       = childDirPrefixes(inputs, project)
+    val diffScope                               =
+      inputs.diffScopeByProject.getOrElse(project.name, resolveDiffScope(inputs.vcs, project))
+    val excludedChildDirs                       = childDirPrefixes(inputs, project, diffScope)
     val changed                                 = sharedChanged || hasChangedSinceLastTag(
       inputs.vcs,
       project,
@@ -212,6 +219,7 @@ private[monorepo] object ChangeDetection {
       tagLookup,
       inputs.state,
       excludes,
+      diffScope,
       excludedChildDirs
     )
     (updatedCache, changed)
@@ -253,9 +261,10 @@ private[monorepo] object ChangeDetection {
 
   private def childDirPrefixes(
       inputs: DetectionInputs,
-      project: ProjectReleaseInfo
+      project: ProjectReleaseInfo,
+      diffScope: Either[String, String]
   ): Set[String] =
-    resolveDiffScope(inputs.vcs, project) match {
+    diffScope match {
       case Right(scope) =>
         inputs.projectScopes.collect {
           case ResolvedProjectScope(name, path)
@@ -312,6 +321,7 @@ private[monorepo] object ChangeDetection {
       tagLookup: TagLookupResult,
       state: State,
       excludePaths: Set[String],
+      diffScope: Either[String, String],
       childDirPrefixes: Set[String] = Set.empty
   ): Boolean = {
     import TagLookupResult.*
@@ -332,7 +342,7 @@ private[monorepo] object ChangeDetection {
         true
 
       case TagFound(tag) =>
-        resolveDiffScope(vcs, project) match {
+        diffScope match {
           case Left(details)       =>
             state.log.warn(
               s"${ReleaseLogPrefixes.Monorepo} Cannot diff ${project.name}: $details. " +
