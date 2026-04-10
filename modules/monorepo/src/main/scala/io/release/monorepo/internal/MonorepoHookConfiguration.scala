@@ -181,29 +181,5 @@ private[monorepo] object MonorepoHookConfiguration {
   def hasCustomizations(
       config: MonorepoHookConfiguration
   ): Boolean =
-    !config.enableSnapshotDependenciesCheck ||
-      !config.enableRunClean ||
-      !config.enableRunTests ||
-      !config.enableTagging ||
-      !config.enablePublish ||
-      !config.enablePush ||
-      config.afterCleanCheckHooks.nonEmpty ||
-      config.beforeSelectionHooks.nonEmpty ||
-      config.afterSelectionHooks.nonEmpty ||
-      config.beforeVersionResolutionHooks.nonEmpty ||
-      config.afterVersionResolutionHooks.nonEmpty ||
-      config.beforeReleaseVersionWriteHooks.nonEmpty ||
-      config.afterReleaseVersionWriteHooks.nonEmpty ||
-      config.beforeReleaseCommitHooks.nonEmpty ||
-      config.afterReleaseCommitHooks.nonEmpty ||
-      config.beforeTagHooks.nonEmpty ||
-      config.afterTagHooks.nonEmpty ||
-      config.beforePublishHooks.nonEmpty ||
-      config.afterPublishHooks.nonEmpty ||
-      config.beforeNextVersionWriteHooks.nonEmpty ||
-      config.afterNextVersionWriteHooks.nonEmpty ||
-      config.beforeNextCommitHooks.nonEmpty ||
-      config.afterNextCommitHooks.nonEmpty ||
-      config.beforePushHooks.nonEmpty ||
-      config.afterPushHooks.nonEmpty
+    config != empty
 }
