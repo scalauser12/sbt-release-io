@@ -123,10 +123,7 @@ private[monorepo] object MonorepoSelectionResolver {
       selectionResult: SelectionResult,
       plan: MonorepoReleasePlan
   ): IO[Unit] =
-    if (
-      selectionResult.selectionMode == SelectionMode.ExplicitSelection ||
-      selectionResult.selectionMode == SelectionMode.DetectChanges
-    )
+    if (selectionResult.selectionMode != SelectionMode.AllChanged)
       validateUnusedOverrides(selectionResult.projects, plan)
     else IO.unit
 
