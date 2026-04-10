@@ -127,10 +127,10 @@ private[monorepo] object MonorepoPreflight {
                    )
                  else
                    checkWithoutSelectionBoundary(
-                      checked,
-                      processPlan,
-                      session.flags.crossBuild
-                    )
+                     checked,
+                     processPlan,
+                     session.flags.crossBuild
+                   )
     } yield summary
   }
 

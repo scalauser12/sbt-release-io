@@ -226,9 +226,8 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       val step1       = ProcessStep.Single[MonorepoContext](
         name = "seed-validation-metadata",
         execute = currentCtx => IO.pure(currentCtx),
-        validateWithContext = Some(currentCtx =>
-          IO.pure(currentCtx.withMetadata(metadataKey, "seeded"))
-        )
+        validateWithContext =
+          Some(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "seeded")))
       )
       val step2       = ProcessStep.Single[MonorepoContext](
         name = "observe-validation-metadata",

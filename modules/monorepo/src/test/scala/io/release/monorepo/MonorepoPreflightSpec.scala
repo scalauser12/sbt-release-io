@@ -219,8 +219,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       val failingStep =
         validationOnlyStep(
           "validation-fail-with",
-          validateWithContext = currentCtx =>
-            IO.pure(currentCtx.failWith(new RuntimeException("fatal stop")))
+          validateWithContext =
+            currentCtx => IO.pure(currentCtx.failWith(new RuntimeException("fatal stop")))
         )
 
       assertFailure[RuntimeException, MonorepoPreflight.Summary](

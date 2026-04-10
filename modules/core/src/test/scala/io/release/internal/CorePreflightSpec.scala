@@ -166,8 +166,8 @@ class CorePreflightSpec extends CatsEffectSuite {
       val failingStep              =
         validationOnlyStep(
           "validation-fail-with",
-          validateWithContext = currentCtx =>
-            IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))
+          validateWithContext =
+            currentCtx => IO.pure(currentCtx.failWith(new RuntimeException("stop validation")))
         )
 
       for {
@@ -528,8 +528,7 @@ class CorePreflightSpec extends CatsEffectSuite {
   private def validationOnlyStep(
       name: String,
       validate: ReleaseContext => IO[Unit] = _ => IO.unit,
-      validateWithContext: ReleaseContext => IO[ReleaseContext] = currentCtx =>
-        IO.pure(currentCtx)
+      validateWithContext: ReleaseContext => IO[ReleaseContext] = currentCtx => IO.pure(currentCtx)
   ): Step =
     ProcessStep.Single(
       name = name,

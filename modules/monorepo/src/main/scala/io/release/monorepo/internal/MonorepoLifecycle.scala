@@ -113,7 +113,10 @@ private[release] object MonorepoLifecycle {
       val phase: String,
       val key: SettingKey[Seq[MonorepoGlobalHookIO]],
       val get: MonorepoHookConfiguration => Seq[MonorepoGlobalHookIO],
-      val updated: (MonorepoHookConfiguration, Seq[MonorepoGlobalHookIO]) => MonorepoHookConfiguration,
+      val updated: (
+          MonorepoHookConfiguration,
+          Seq[MonorepoGlobalHookIO]
+      ) => MonorepoHookConfiguration,
       val gate: MonorepoContext => IO[Boolean] = _ => IO.pure(true),
       val enabled: MonorepoHookConfiguration => Boolean = _ => true
   ) extends MonorepoConfigSlot {
@@ -144,7 +147,10 @@ private[release] object MonorepoLifecycle {
       val phase: String,
       val key: SettingKey[Seq[MonorepoProjectHookIO]],
       val get: MonorepoHookConfiguration => Seq[MonorepoProjectHookIO],
-      val updated: (MonorepoHookConfiguration, Seq[MonorepoProjectHookIO]) => MonorepoHookConfiguration,
+      val updated: (
+          MonorepoHookConfiguration,
+          Seq[MonorepoProjectHookIO]
+      ) => MonorepoHookConfiguration,
       val gate: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] = (_, _) => IO.pure(true),
       val crossBuild: Boolean = false,
       val cachedGatePhase: Option[String] = None,

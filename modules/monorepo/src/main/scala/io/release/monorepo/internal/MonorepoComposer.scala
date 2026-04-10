@@ -34,15 +34,15 @@ private[monorepo] object MonorepoComposer {
     val plan = MonorepoProcessPlan.analyze(steps)
 
     if (plan.hasSelectionBoundary)
-        for {
-          setupCtx <- runSequentialValidateThenExecute(
-                        plan.setupSteps,
-                        initialCtx,
-                        crossBuild
-                      )
-          finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
-                      else runMainSegment(plan.mainSteps, setupCtx, crossBuild)
-        } yield finalCtx
+      for {
+        setupCtx <- runSequentialValidateThenExecute(
+                      plan.setupSteps,
+                      initialCtx,
+                      crossBuild
+                    )
+        finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
+                    else runMainSegment(plan.mainSteps, setupCtx, crossBuild)
+      } yield finalCtx
     else
       runSequentialValidateThenExecute(
         steps,

@@ -4,15 +4,14 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseComposer
 import io.release.ReleaseContext
-import io.release.ReleasePluginIO
 import io.release.ReleaseResourceHooks
 import io.release.VcsOps
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
-import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
+import io.release.runtime.command.ReleaseCommandCompilation
 import io.release.runtime.command.ReleaseCommandRunner
 import io.release.runtime.workflow.DecisionDefaultsSupport
 import sbt.{internal as _, *}
@@ -70,9 +69,10 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    runPreparedCommand(
+    ReleaseCommandCompilation.runPreparedCommand(
       state = state,
-      cleanState = state => CommandStateSupport.cleanReleaseState(state)
+      cleanState = state => CommandStateSupport.cleanReleaseState(state),
+      logPrefix = ReleaseLogPrefixes.Core
     )(
       cleanState =>
         IO.pure(
@@ -94,9 +94,10 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    runPreparedCommand(
+    ReleaseCommandCompilation.runPreparedCommand(
       state = state,
-      cleanState = state => CommandStateSupport.cleanReleaseState(state)
+      cleanState = state => CommandStateSupport.cleanReleaseState(state),
+      logPrefix = ReleaseLogPrefixes.Core
     )(
       cleanState =>
         IO.pure(
@@ -131,14 +132,18 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
   ): IO[CompiledSteps] =
-    IO.blocking {
-      val resolvedHooks     = CoreHookConfiguration.resolve(state)
-      val resourceHooks     = runtime.resolveResourceHooks(state)
-      val materializedHooks = ReleaseResourceHooks.materialize(resourceHooks, maybeResource)
-      val mergedHooks       = resolvedHooks.mergeWith(materializedHooks)
-
-      CompiledSteps(steps = CoreLifecycle.compile(mergedHooks))
-    }
+    ReleaseCommandCompilation
+      .blockingMergeAndCompile(
+        state = state,
+        maybeResource = maybeResource,
+        resolveHooks = CoreHookConfiguration.resolve,
+        resolveResourceHooks = runtime.resolveResourceHooks,
+        materialize = (rh: ReleaseResourceHooks[T], opt: Option[T]) =>
+          ReleaseResourceHooks.materialize(rh, opt),
+        merge = (a: CoreHookConfiguration, b: CoreHookConfiguration) => a.mergeWith(b),
+        compile = CoreLifecycle.compile
+      )
+      .map(steps => CompiledSteps(steps))
 
   private def buildCommandInputs[T](
       cleanState: State,
@@ -190,7 +195,11 @@ private[release] object CoreCommandExecution {
         crossBuild = crossEnabled,
         releaseVersionOverride = releaseVersionArg,
         nextVersionOverride = nextVersionArg,
-        decisionDefaults = resolveDecisionDefaults(cleanState, args, warnOnDuplicates),
+        decisionDefaults = DecisionDefaultsFromPlugin.resolveFromCoreCli(
+          cleanState,
+          args,
+          warnOnDuplicates
+        ),
         commandName = runtime.commandName
       )
     )
@@ -221,7 +230,7 @@ private[release] object CoreCommandExecution {
                                        CoreExecutionState(inputs.plan)
                                      )
                       preparedCtx <-
-                        preparePushIfNeeded(
+                        VcsOps.preparePushReleaseIfNeeded(
                           seededCtx,
                           runProcess.steps,
                           ReleaseLogPrefixes.Core
@@ -232,9 +241,10 @@ private[release] object CoreCommandExecution {
                                      )(preparedCtx)
                     } yield finalCtx
                   }
-      result   <- finalizeReleaseResult(
+      result   <- ReleaseCommandRunner.finalizeWithCleanState(
                     finalCtx,
-                    cleanState = state => CommandStateSupport.cleanReleaseState(state)
+                    cleanState = state => CommandStateSupport.cleanReleaseState(state),
+                    prefix = ReleaseLogPrefixes.Core
                   )
     } yield result
 
@@ -270,31 +280,6 @@ private[release] object CoreCommandExecution {
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Core, lines)
 
-  private def runPreparedCommand[Inputs](
-      state: State,
-      cleanState: State => State
-  )(
-      prepare: State => IO[Either[State, Inputs]],
-      run: Inputs => IO[State]
-  ): State = {
-    val cleanedState = cleanState(state)
-    val program      = prepare(cleanedState).flatMap {
-      case Left(failedState) => IO.pure(failedState)
-      case Right(inputs)     => run(inputs)
-    }
-
-    ReleaseCommandRunner.runSync(cleanedState, ReleaseLogPrefixes.Core)(program)
-  }
-
-  private def finalizeReleaseResult(
-      ctx: ReleaseContext,
-      cleanState: State => State
-  ): IO[State] =
-    IO.blocking(ctx.withState(cleanState(ctx.state)))
-      .flatMap(cleanedCtx =>
-        ReleaseCommandRunner.handleReleaseResult(cleanedCtx, ReleaseLogPrefixes.Core)
-      )
-
   private def logReleaseStart(
       state: State,
       stepCount: Int,
@@ -310,60 +295,6 @@ private[release] object CoreCommandExecution {
       state: State,
       args: Seq[ReleaseCli.Arg],
       warnOnDuplicates: Boolean
-  ): ReleaseDecisionDefaults = {
-    import ReleaseCli.Arg.*
-
-    def allArgs[A](extract: PartialFunction[ReleaseCli.Arg, A]): Seq[A] =
-      args.collect(extract)
-
-    val extracted = Project.extract(state)
-    val settings  = ReleaseDecisionDefaults(
-      tagExistsAnswer =
-        extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer).flatten,
-      snapshotDependenciesAnswer = extracted
-        .getOpt(ReleasePluginIO.autoImport.releaseIODefaultsSnapshotDependenciesAnswer)
-        .flatten,
-      remoteCheckFailureAnswer = extracted
-        .getOpt(ReleasePluginIO.autoImport.releaseIODefaultsRemoteCheckFailureAnswer)
-        .flatten,
-      upstreamBehindAnswer =
-        extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer).flatten,
-      pushAnswer = extracted.getOpt(ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer).flatten
-    )
-
-    DecisionDefaultsSupport.resolve(
-      state = state,
-      prefix = ReleaseLogPrefixes.Core,
-      settings = settings,
-      cliInputs = DecisionDefaultsSupport.CliInputs(
-        tagExistsAnswers = allArgs { case TagDefault(value) => value },
-        snapshotDependenciesAnswers = allArgs { case SnapshotDependenciesDefault(value) =>
-          value
-        },
-        remoteCheckFailureAnswers = allArgs { case RemoteCheckFailureDefault(value) =>
-          value
-        },
-        upstreamBehindAnswers = allArgs { case UpstreamBehindDefault(value) =>
-          value
-        },
-        pushAnswers = allArgs { case PushDefault(value) => value }
-      ),
-      warnOnDuplicates = warnOnDuplicates
-    )
-  }
-
-  private def preparePushIfNeeded(
-      ctx: ReleaseContext,
-      steps: Seq[Step],
-      prefix: String
-  ): IO[ReleaseContext] =
-    if (steps.exists(_.hasRole(BuiltInStepRole.PushChanges)))
-      VcsOps.preparePushRelease(
-        ctx,
-        prefix,
-        remoteCheckLog = Some(remote =>
-          ctx.state.log.info(s"$prefix Checking remote [$remote] before release actions ...")
-        )
-      )
-    else IO.pure(ctx)
+  ): ReleaseDecisionDefaults =
+    DecisionDefaultsFromPlugin.resolveFromCoreCli(state, args, warnOnDuplicates)
 }
