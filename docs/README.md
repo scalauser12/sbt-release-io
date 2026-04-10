@@ -34,6 +34,10 @@
 - Repository build, test, and compatibility information:
   [../README.md](../README.md)
 
+## For contributors
+
+- **Architecture** (modules, command flow, internal types): [ARCHITECTURE.md](ARCHITECTURE.md)
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -70,6 +70,8 @@ docs/
 └── monorepo/   # Monorepo plugin documentation
 ```
 
+Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Key Source Files
 
 ### Core Module
