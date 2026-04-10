@@ -1,5 +1,7 @@
 # Contributing
 
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for module boundaries and how a release command flows through the runtime before changing core or monorepo internals.
+
 Contributions are welcome. Please ensure:
 
 1. All tests pass (`sbt scripted` — covers core and monorepo scripted tests)

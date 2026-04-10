@@ -200,25 +200,24 @@ private[release] object LifecycleCompiler {
       name = name,
       execute = ctx => {
         val key = gateKey(ctx)
-        cached.get.map(_.get(key)).flatMap {
-          case Some(true)  => execute(ctx)
-          case Some(false) => IO.pure(ctx)
-          case None        =>
-            gate(ctx).flatMap {
-              case true  => execute(ctx)
-              case false => IO.pure(ctx)
-            }
-        }
+        frozenGateRun(
+          cached,
+          key,
+          gate(ctx),
+          execute(ctx),
+          IO.pure(ctx)
+        )
       },
       enableCrossBuild = crossBuild,
       validateWithContext = Some(ctx => {
         val key = gateKey(ctx)
-        gate(ctx)
-          .flatTap(d => cached.update(_ + (key -> d)))
-          .flatMap {
-            case true  => validate(ctx).as(ctx)
-            case false => IO.pure(ctx)
-          }
+        frozenGateValidate(
+          cached,
+          key,
+          gate(ctx),
+          validate(ctx).as(ctx),
+          IO.pure(ctx)
+        )
       })
     )
   }
@@ -285,26 +284,56 @@ private[release] object LifecycleCompiler {
       name = name,
       execute = (ctx, item) => {
         val key = gateKey(ctx, item)
-        cached.get.map(_.get(key)).flatMap {
-          case Some(true)  => execute(ctx, item)
-          case Some(false) => IO.pure(ctx)
-          case None        =>
-            gate(ctx, item).flatMap {
-              case true  => execute(ctx, item)
-              case false => IO.pure(ctx)
-            }
-        }
+        frozenGateRun(
+          cached,
+          key,
+          gate(ctx, item),
+          execute(ctx, item),
+          IO.pure(ctx)
+        )
       },
       enableCrossBuild = crossBuild,
       validateWithContext = Some((ctx, item) => {
         val key = gateKey(ctx, item)
-        gate(ctx, item)
-          .flatTap(d => cached.update(_ + (key -> d)))
-          .flatMap {
-            case true  => validate(ctx, item).as(ctx)
-            case false => IO.pure(ctx)
-          }
+        frozenGateValidate(
+          cached,
+          key,
+          gate(ctx, item),
+          validate(ctx, item).as(ctx),
+          IO.pure(ctx)
+        )
       })
     )
   }
+
+  private def frozenGateRun[C](
+      cached: Ref[IO, Map[String, Boolean]],
+      key: String,
+      gateDecision: IO[Boolean],
+      executeIfTrue: IO[C],
+      skip: IO[C]
+  ): IO[C] =
+    cached.get.map(_.get(key)).flatMap {
+      case Some(true)  => executeIfTrue
+      case Some(false) => skip
+      case None        =>
+        gateDecision.flatMap {
+          case true  => executeIfTrue
+          case false => skip
+        }
+    }
+
+  private def frozenGateValidate[C](
+      cached: Ref[IO, Map[String, Boolean]],
+      key: String,
+      gateDecision: IO[Boolean],
+      validateIfTrue: IO[C],
+      skip: IO[C]
+  ): IO[C] =
+    gateDecision
+      .flatTap(d => cached.update(_ + (key -> d)))
+      .flatMap {
+        case true  => validateIfTrue
+        case false => skip
+      }
 }
