@@ -2,7 +2,16 @@ package io.release.runtime.engine
 
 import cats.effect.IO
 
-/** Shared internal step algebra used by the core and monorepo runtimes. */
+/** Shared internal step algebra used by the core and monorepo runtimes.
+  *
+  * @tparam C
+  *   Threaded release context (see [[io.release.runtime.ReleaseCtx]] and implementing types in the
+  *   core and monorepo modules).
+  * @tparam I
+  *   Per-item type for [[ProcessStep.PerItem]] steps. [[ProcessStep.Single]] uses `Nothing` for
+  *   `I` (phantom); covariance allows `ProcessStep[C, Nothing]` steps in the same homogeneous
+  *   sequence as `ProcessStep[C, I]` when `I` is fixed (e.g. monorepo `AnyStep`).
+  */
 private[release] sealed trait ProcessStep[C, +I] {
   def name: String
   def roles: Set[BuiltInStepRole]
@@ -12,6 +21,21 @@ private[release] sealed trait ProcessStep[C, +I] {
 }
 
 private[release] object ProcessStep {
+
+  /** Exhaustive eliminator for the sealed [[ProcessStep]] ADT.
+    *
+    * The `PerItem` branch uses a cast because `I` is erased at runtime; it is safe
+    * for values typed as `ProcessStep[C, I]`.
+    */
+  def fold[C, I, R](step: ProcessStep[C, I])(
+      ifSingle: ProcessStep.Single[C] => R,
+      ifPerItem: ProcessStep.PerItem[C, I] => R
+  ): R =
+    step match {
+      case s: ProcessStep.Single[C]     => ifSingle(s)
+      case p: ProcessStep.PerItem[?, ?] =>
+        ifPerItem(p.asInstanceOf[ProcessStep.PerItem[C, I]])
+    }
 
   final class Single[C] private (
       val name: String,
