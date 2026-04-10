@@ -40,6 +40,31 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       crossBuild = crossBuild
     )
 
+  test("fold - dispatch Single and PerItem branches") {
+    val single  = ProcessStep.Single[TestContext](
+      name = "a",
+      execute = ctx => IO.pure(ctx)
+    )
+    val perItem = ProcessStep.PerItem[TestContext, String](
+      name = "b",
+      execute = (ctx, _) => IO.pure(ctx)
+    )
+    assertEquals(
+      ProcessStep.fold[TestContext, Nothing, String](single)(
+        (s: ProcessStep.Single[TestContext]) => s.name,
+        (_: ProcessStep.PerItem[TestContext, Nothing]) => "wrong"
+      ),
+      "a"
+    )
+    assertEquals(
+      ProcessStep.fold[TestContext, String, String](perItem)(
+        (_: ProcessStep.Single[TestContext]) => "wrong",
+        (p: ProcessStep.PerItem[TestContext, String]) => p.name
+      ),
+      "b"
+    )
+  }
+
   test("defaults - return built-in steps only in canonical order") {
     val singleStep = ProcessStep.Single[TestContext](
       name = "initialize",

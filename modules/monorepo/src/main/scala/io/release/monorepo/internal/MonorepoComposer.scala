@@ -3,8 +3,6 @@ package io.release.monorepo.internal
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
-import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
-import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoCrossBuild
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.ExecutionEngine
@@ -84,8 +82,8 @@ private[monorepo] object MonorepoComposer {
       step: AnyStep,
       crossBuild: Boolean
   ): ExecutionEngine.PreparedStep[MonorepoContext] =
-    step match {
-      case single: GlobalStep =>
+    ProcessStep.fold(step)(
+      single =>
         ExecutionEngine.PreparedStep(
           name = single.name,
           validate = single.validate,
@@ -93,11 +91,8 @@ private[monorepo] object MonorepoComposer {
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${single.name}")) *>
               single.execute(currentCtx)
           )
-        )
-
-      // Safe: AnyStep is sealed with Single and PerItem; Single matched above.
-      case perItem: ProcessStep.PerItem[?, ?] =>
-        val typed: ProjectStep                                                   = perItem.asInstanceOf[ProjectStep]
+        ),
+      typed => {
         val logged: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
           (currentCtx, project) =>
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
@@ -121,5 +116,6 @@ private[monorepo] object MonorepoComposer {
             )
           )
         )
-    }
+      }
+    )
 }

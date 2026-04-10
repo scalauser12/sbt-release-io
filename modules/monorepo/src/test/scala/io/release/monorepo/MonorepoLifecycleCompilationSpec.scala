@@ -7,6 +7,7 @@ import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
+import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import munit.CatsEffectSuite
 import sbt.Keys.*
@@ -33,7 +34,8 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       IO {
         val tagStep = compileLifecycle(fixture.state)
           .collectFirst {
-            case step: ProcessStep.PerItem[?, ?] @unchecked if step.name == "tag-releases" =>
+            case step: ProcessStep.PerItem[?, ?] @unchecked
+                if step.hasRole(BuiltInStepRole.TagRelease) =>
               step.asInstanceOf[ProjectStep]
           }
           .getOrElse(fail("Expected canonical tag-releases step"))
