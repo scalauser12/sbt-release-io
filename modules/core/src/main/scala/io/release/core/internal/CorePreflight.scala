@@ -17,10 +17,8 @@ import java.io.File
 /** Preflight support for `releaseIO check` and command help text without release side effects. */
 private[release] object CorePreflight {
 
-  private val InquireVersionsStep  = ReleaseSteps.inquireVersions.name
-  private val TagReleaseStep       = ReleaseSteps.tagRelease.name
-  private val PushChangesStep      = ReleaseSteps.pushChanges.name
-  private val PublishArtifactsStep = ReleaseSteps.publishArtifacts.name
+  private val InquireVersionsStep = ReleaseSteps.inquireVersions.name
+  private val TagReleaseStep      = ReleaseSteps.tagRelease.name
 
   private final case class CheckSteps(
       stepNames: Seq[String],
