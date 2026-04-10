@@ -37,6 +37,15 @@ private[release] object ProcessStep {
         ifPerItem(p.asInstanceOf[ProcessStep.PerItem[C, I]])
     }
 
+  /** `Phase[..., Nothing]` pipelines only use [[Single]]; per-item steps with `I = Nothing` are
+    * dropped if present.
+    */
+  def toSingleOption[C](step: ProcessStep[C, Nothing]): Option[ProcessStep.Single[C]] =
+    fold[C, Nothing, Option[ProcessStep.Single[C]]](step)(
+      Some(_),
+      _ => None
+    )
+
   final class Single[C] private (
       val name: String,
       val roles: Set[BuiltInStepRole],

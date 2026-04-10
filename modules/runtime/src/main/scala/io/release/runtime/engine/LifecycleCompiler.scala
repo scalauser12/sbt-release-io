@@ -124,7 +124,7 @@ private[release] object LifecycleCompiler {
   def defaultsSingle[Config, C](
       phases: Seq[Phase[Config, C, Nothing]]
   ): Seq[ProcessStep.Single[C]] =
-    defaults(phases).flatMap(step => narrowToSingle(step))
+    defaults(phases).flatMap(step => ProcessStep.toSingleOption(step))
 
   def compile[Config, C, I](
       config: Config,
@@ -136,21 +136,7 @@ private[release] object LifecycleCompiler {
       config: Config,
       phases: Seq[Phase[Config, C, Nothing]]
   ): Seq[ProcessStep.Single[C]] =
-    compile(config, phases).flatMap(step => narrowToSingle(step))
-
-  /** Narrows steps typed with phantom `Nothing` to [[ProcessStep.Single]].
-    *
-    * `Phase[..., Nothing]` is used for pipelines that only contain global (single-context)
-    * steps; [[ProcessStep.PerItem]] with `I = Nothing` is not produced by this compiler and
-    * is dropped if present.
-    */
-  private def narrowToSingle[C](
-      step: ProcessStep[C, Nothing]
-  ): Option[ProcessStep.Single[C]] =
-    ProcessStep.fold[C, Nothing, Option[ProcessStep.Single[C]]](step)(
-      Some(_),
-      _ => None
-    )
+    compile(config, phases).flatMap(step => ProcessStep.toSingleOption(step))
 
   // ── Single-context hooks ────────────────────────────────────────────
 
