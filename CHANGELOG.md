@@ -6,13 +6,59 @@ This file is the canonical release history for the repository.
 
 ## Unreleased
 
+## v0.10.0
+
+Published: 2026-04-10
+GitHub release:
+[v0.10.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.10.0)
+
+`v0.10.0` is a breaking release for both plugins that removes the deprecated compatibility
+namespaces and mixin-based grouped-key access, continues the shared runtime cleanup, and refreshes
+the published docs around the grouped hook/policy customization model.
+
 ### Breaking changes
 
-- Remove the deprecated `ReleaseIO` and `MonorepoReleaseIO` compatibility namespaces.
-  Scala-source custom plugins and helpers must use `ReleasePluginIO.autoImport.*` or
+- Remove the deprecated `ReleaseIO` and `MonorepoReleaseIO` compatibility namespaces. Scala-source
+  custom plugins and helpers must use `ReleasePluginIO.autoImport.*` or
   `MonorepoReleasePlugin.autoImport.*` when they need grouped keys from `.scala` sources.
 - Stop exposing deprecated mixin-based grouped key access from `ReleasePluginIOLike` and
   `MonorepoReleasePluginLike`; grouped `.sbt` usage and grouped key labels remain unchanged.
+
+### Improvements
+
+- Extract more shared runtime, command, workflow, and packaging support so the core and monorepo
+  modules share the same release engine more consistently without changing the supported
+  build-facing customization surface.
+- Tighten runtime boundary checks, decision-default handling, and release command plumbing while
+  restoring core Scaladoc coverage and keeping publish behavior aligned across both sbt lines.
+
+### CI/Build
+
+- Run the sbt 2 scripted CI jobs via `./bin/sbt2-clean` so clean-checkout release verification does
+  not depend on local IDE-generated files.
+
+### Documentation
+
+- Refresh the root README, module READMEs, walkthroughs, onboarding guides, recipes, and
+  reference docs to reflect the `autoImport.*` migration path, the customization terminology
+  update, and clearer change-detection guidance.
+- Rename the core customization walkthrough and expand monorepo setup guidance around pinned
+  `project/build.properties`, explicit selectors, and cross-build hook inheritance for the
+  `publish-artifacts` phase.
+
+### Tests
+
+- Expand architecture-boundary, release-command, publish-smoke, grouped-key compatibility-removal,
+  and runtime/workflow coverage across the core and monorepo modules.
+- Keep publish-local smoke and tag-default warning coverage aligned with the refactored runtime.
+
+### Verification
+
+- sbt 1.12.3: `sbt scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
 
 ## v0.9.2
 
