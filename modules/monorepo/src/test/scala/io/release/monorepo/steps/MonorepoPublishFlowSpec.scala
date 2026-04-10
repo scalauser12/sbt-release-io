@@ -51,6 +51,34 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
     }
   }
 
+  test("checkSnapshotDependencies.validate - fail when diagnostics task reports FailureCommand") {
+    singleProjectFixtureResource("monorepo-publish-snapshots-failure-command") { projectBase =>
+      Seq(
+        MonorepoStepTestCompat.failureCommandSnapshotDependenciesTaskSetting(
+          new java.io.File(projectBase, "snapshot-deps-ran.txt")
+        )
+      )
+    }.use { fixture =>
+      val ctx     = fixture.context(Seq("core"))
+      val project = fixture.projectInfo("core")
+      val marker  = new java.io.File(fixture.dir, "core/snapshot-deps-ran.txt")
+
+      assertFailure[IllegalStateException, Unit](
+        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
+      ) { err =>
+        assert(marker.exists())
+        assert(err.getMessage.contains("core"))
+        assert(err.getCause != null)
+        assert(err.getCause.getMessage.contains("FailureCommand"))
+        assert(
+          err.getCause.getMessage.contains(
+            ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies.key.label
+          )
+        )
+      }
+    }
+  }
+
   test("runTests.execute - skip project tests when skipTests is enabled") {
     singleProjectFixtureResource("monorepo-publish-skip-tests") { projectBase =>
       Seq(

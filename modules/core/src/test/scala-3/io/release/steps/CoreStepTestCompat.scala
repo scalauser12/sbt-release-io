@@ -41,6 +41,22 @@ private[steps] object CoreStepTestCompat:
       }
       .value
 
+  def failureCommandSnapshotDependenciesTaskSetting(
+      marker: File,
+      dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
+  ): Setting[?] =
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+      .task[Seq[ModuleID]] {
+        sbt.IO.write(marker, "ran")
+        dependencies
+      }
+      .updateState { (state: State, _: Seq[ModuleID]) =>
+        state.copy(
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
+        )
+      }
+      .value
+
   def failureCommandVersionTaskSetting(marker: File): Setting[?] =
     ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := Def
       .task[String => String] {
