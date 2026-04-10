@@ -17,11 +17,11 @@ In `build.sbt`:
 import _root_.cats.effect.IO
 import _root_.io.release.ReleaseHookIO
 
-// Keep the built-in process and disable phases semantically
+// Disable push and publish phases
 releaseIOPolicyEnablePush    := false
 releaseIOPolicyEnablePublish := false
 
-// Add lifecycle hooks around the remaining phases
+// Add a lifecycle hook before tagging
 releaseIOHooksBeforeTag += ReleaseHookIO.action("before-tag-audit")(ctx =>
   IO.blocking {
     val version = ctx.releaseVersion.getOrElse("unknown")
@@ -42,17 +42,12 @@ releaseIOBehaviorInteractive := true
 
 // Fail the remote reachability check if it hangs for too long
 releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(30).seconds
-
-// Custom version file reader (default parses `[ThisBuild /] version := "x.y.z"`)
-releaseIOVersioningReadVersion := (file =>
-  IO.blocking(sbt.IO.read(file).trim)
-)
-
-// Custom version file content (default produces `ThisBuild / version := "x.y.z"\n`)
-releaseIOVersioningFileContents := ((_, version) =>
-  IO.pure(s"$version\n")
-)
 ```
+
+For custom version-file formats (non-sbt projects, polyglot monorepos), override the
+version settings together as shown in [Custom version formats](#custom-version-formats) below
+— overriding only the reader without also pointing `releaseIOVersioningFile` at a compatible
+file will cause the version bump step to fail.
 
 `releaseIOPolicyEnablePublish := false` removes publish from the compiled lifecycle entirely,
 including `beforePublish` / `afterPublish` hooks. `releaseIOBehaviorSkipPublish := true`

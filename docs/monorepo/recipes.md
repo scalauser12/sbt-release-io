@@ -118,24 +118,35 @@ validation and then restore the entry version.
 execution time. If you want to remove publish from the compiled lifecycle entirely,
 use `releaseIOMonorepoPolicyEnablePublish := false` instead.
 
-Then run the real release:
+Then run the real release with explicit project and versions so the tag names and commit
+count are predictable:
 
 ```bash
-sbt "releaseIOMonorepo with-defaults"
+sbt "releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 ```
 
-The second command creates local commits and tags but does not publish artifacts or push to the remote.
-
-Inspect the result:
+The command creates two local commits (`commit-release-versions` and `commit-next-versions`)
+and one tag per released project (for example `core/v1.0.0` under the default tag format),
+but does not publish artifacts (because `releaseIOMonorepoBehaviorSkipPublish := true`) or
+push to the remote (because `releaseIOMonorepoPolicyEnablePush := false`). Inspect the result:
 
 ```bash
 git log --oneline -5
 git tag
 cat core/version.sbt
-cat api/version.sbt
 ```
 
-To clean up after the rehearsal run, see [Recovery and rollback](operations.md#recovery-and-rollback).
+To clean up after the rehearsal run, verify that the last two commits are the release
+commits, then delete the tag and roll back:
+
+```bash
+git log -2 --oneline         # should show the two release commits
+git tag -d core/v1.0.0
+git reset --hard HEAD~2
+```
+
+For rollback in other scenarios (per-project tags for multiple projects, partial release,
+push already happened), see [Recovery and rollback](operations.md#recovery-and-rollback).
 
 ## Targeted project rehearsal
 

@@ -25,7 +25,7 @@ Use selectors to choose projects:
 project <project>
 ```
 
-Bare project ids work for ordinary names. Use `project <id>` to force project selection when an id collides with a CLI keyword or subcommand such as `help`, `check`, `cross`, `with-defaults`, `all-changed`, `release-version`, or `next-version`.
+Bare project ids work for ordinary names. Use `project <id>` to force project selection when an id collides with a CLI keyword or subcommand such as `help`, `check`, `cross`, `with-defaults`, `skip-tests`, `all-changed`, `release-version`, or `next-version`.
 
 ## Flags
 

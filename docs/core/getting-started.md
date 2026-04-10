@@ -45,7 +45,7 @@ Run the release (versions computed from `version.sbt`):
 sbt "releaseIO with-defaults"
 ```
 
-`with-defaults` strips `-SNAPSHOT` to produce the release version (e.g. `0.1.0-SNAPSHOT` → `0.1.0`) and bumps the last component for the next snapshot (→ `0.2.0-SNAPSHOT`). Override with `release-version` / `next-version`. If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
+`with-defaults` strips `-SNAPSHOT` to produce the release version (e.g. `0.1.0-SNAPSHOT` → `0.1.0`) and bumps the bugfix component for the next snapshot (→ `0.1.1-SNAPSHOT`). To bump a different component, set `releaseIOVersioningBump` (see [Version bump types](reference.md#version-bump-types)), or pass `release-version` / `next-version` to override explicitly. If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
 
 Or specify versions explicitly:
 

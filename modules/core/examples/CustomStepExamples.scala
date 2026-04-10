@@ -30,7 +30,7 @@ object CustomStepExamples {
 
   // ── Hook and policy customization ───────────────────────────────────
 
-  /** First customization: keep the compiled built-ins, disable push, and add one lifecycle hook.
+  /** First customization: disable push and add one lifecycle hook before tagging.
     *
     * Usage in build.sbt:
     * {{{

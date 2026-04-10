@@ -24,9 +24,9 @@ Enable on your root project in `build.sbt`:
 
 ```scala
 lazy val core = (project in file("core"))
-  .dependsOn(api)
 
 lazy val api = (project in file("api"))
+  .dependsOn(core)
 
 lazy val root = (project in file("."))
   .aggregate(core, api)
@@ -85,7 +85,7 @@ Additional examples:
 sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT"
 
 # Multiple projects with per-project versions
-sbt "releaseIOMonorepo api core with-defaults release-version api=2.0.0 core=1.0.0 next-version api=2.1.0-SNAPSHOT core=1.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo api core with-defaults release-version api=2.0.0 release-version core=1.0.0 next-version api=2.1.0-SNAPSHOT next-version core=1.1.0-SNAPSHOT"
 ```
 
 If a project id collides with a CLI keyword or subcommand, select it with `project <id>`:

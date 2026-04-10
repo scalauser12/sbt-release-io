@@ -71,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history for tag detection
+          fetch-depth: 0  # avoid false positives in the behind-remote check on shallow clones
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -110,13 +110,17 @@ sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAP
 
 `check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
-Then run the real release:
+Then run the real release with explicit versions so the tag name and commit count are
+predictable:
 
 ```bash
-sbt "releaseIO with-defaults"
+sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
-The second command creates local commits and a tag but does not publish artifacts or push to the remote. Inspect the result:
+The command creates two local commits (`commit-release-version` and `commit-next-version`)
+and one tag (`v1.0.0`), but does not publish artifacts (because
+`releaseIOBehaviorSkipPublish := true`) or push to the remote (because
+`releaseIOPolicyEnablePush := false`). Inspect the result:
 
 ```bash
 git log --oneline -5
@@ -124,9 +128,14 @@ git tag
 cat version.sbt
 ```
 
-To clean up after the rehearsal run, see [Recovery and rollback](operations.md#recovery-and-rollback):
+To clean up after the rehearsal run, verify that the last two commits are the release
+commits, then delete the tag and roll back:
 
 ```bash
+git log -2 --oneline         # should show the two release commits
 git tag -d v1.0.0
 git reset --hard HEAD~2
 ```
+
+For rollback in other scenarios (partial release, push already happened), see
+[Recovery and rollback](operations.md#recovery-and-rollback).

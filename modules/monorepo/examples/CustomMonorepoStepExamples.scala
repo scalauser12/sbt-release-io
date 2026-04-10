@@ -25,7 +25,7 @@ object CustomMonorepoStepExamples {
 
   private val releaseCompletedKey = AttributeKey[Boolean]("releaseCompleted")
 
-  /** First customization: keep the compiled defaults, disable push, and add one global hook.
+  /** First customization: disable push and add one global hook after selection.
     *
     * {{{
     * lazy val root = (project in file("."))

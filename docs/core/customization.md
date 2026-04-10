@@ -106,14 +106,26 @@ import sbt.*
 import _root_.cats.effect.{IO, Resource}
 import _root_.io.release.*
 
+// Placeholder for your preferred HTTP client library (sttp, http4s, etc.).
+// Swap this trait for the real type you use in your build.
+trait HttpClient {
+  def allowedBranches(): Set[String]
+  def notifyRelease(version: String): Unit
+  def close(): Unit
+}
+
 object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
   override def trigger = noTrigger
   override protected def commandName = "releaseWithClient"
 
   override def resource: Resource[IO, HttpClient] =
-    Resource.make(IO.blocking(new HttpClient("https://api.example.com")))(client =>
-      IO.blocking(client.close())
-    )
+    Resource.make(IO.blocking {
+      new HttpClient {
+        def allowedBranches(): Set[String]       = Set("main", "master")
+        def notifyRelease(version: String): Unit = ()
+        def close(): Unit                        = ()
+      }
+    })(client => IO.blocking(client.close()))
 
   private val validateBranch =
     ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client => ctx =>
@@ -152,6 +164,8 @@ Notes:
   (HTTP calls, temp-dir setup, etc.) in `execute`, not `validate`.
 - `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
   resource value, then releases it.
-- custom plugins already inherit `autoImport` (declared `final` on `ReleasePluginIOLike`),
-  so it cannot be overridden; grouped keys referenced from `.scala` sources should use
-  `ReleasePluginIO.autoImport`
+- `ReleasePluginIOLike` declares `autoImport` as `final`, so a custom plugin inherits the
+  same grouped keys and cannot override them. In `.sbt` files, the keys are imported
+  automatically when the plugin is enabled. In `.scala` sources under `project/`, import
+  from `ReleasePluginIO.autoImport.*` (or `MyReleasePlugin.autoImport.*`) to bring them
+  into scope.

@@ -10,6 +10,12 @@ through a typical setup:
 - add small lifecycle hooks around the built-in phases
 - use `releaseIO check` for local rehearsal
 
+**Prerequisites:** this walkthrough assumes an existing git-initialized Scala project
+with a clean working tree, on branch `main` or `master` (the `validate-main-branch` hook
+below enforces this). If you are adding the plugin to an existing project, commit any
+outstanding changes before running the rehearsal. If you are starting from scratch, run
+`git init && git add . && git commit -m "Initial commit"` after step 3.
+
 ## 1. Add the plugin
 
 `project/plugins.sbt`:
@@ -85,7 +91,7 @@ release side effects: no version-file writes, commits, tags, publish, or push.
 ## 6. Rehearse explicit versions
 
 ```bash
-sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+sbt "releaseIO check with-defaults release-version 0.3.0 next-version 0.4.0-SNAPSHOT"
 ```
 
 This is useful when you want to confirm tag names, commit messages, and hook execution against a
@@ -94,10 +100,31 @@ specific version pair before a real release.
 ## 7. Run the local-only release
 
 ```bash
-sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+sbt "releaseIO with-defaults release-version 0.3.0 next-version 0.4.0-SNAPSHOT"
 ```
 
-With push and publish disabled, this creates only local version-file changes, commits, and tags.
+With push and publish disabled, this creates only local version-file changes, two commits
+(`commit-release-version` and `commit-next-version`), and one tag (`v0.3.0`).
+
+Inspect the result:
+
+```bash
+git log --oneline -5
+git tag
+cat version.sbt
+```
+
+To clean up after the rehearsal, verify that the last two commits are the release commits,
+then delete the tag and roll back:
+
+```bash
+git log -2 --oneline         # should show the two release commits
+git tag -d v0.3.0
+git reset --hard HEAD~2
+```
+
+For rollback in other scenarios (partial release, push already happened), see
+[Recovery and rollback](operations.md#recovery-and-rollback).
 
 ## 8. Where to go next
 

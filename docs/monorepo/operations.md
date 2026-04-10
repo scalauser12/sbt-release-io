@@ -40,9 +40,8 @@ git reset --hard HEAD~2
 git push origin :refs/tags/core/v0.1.0
 git push origin :refs/tags/api/v0.1.0
 
-# Safe revert (keeps history)
-git revert HEAD     # revert commit-next-versions
-git revert HEAD~1   # revert commit-release-versions
+# Safe revert of both release commits (git applies them newest-first)
+git revert HEAD~2..HEAD
 git push origin main
 ```
 

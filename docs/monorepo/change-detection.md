@@ -4,12 +4,19 @@ The plugin detects which projects have changed since their last release tag usin
 
 ## How it works
 
-1. For each project, find the most recent matching tag:
-   - Pattern `<projectName>/v*` (e.g., `core/v*`)
+1. For each project, find the most recent matching tag. The tag pattern comes from
+   `releaseIOMonorepoVcsTagName(project.name, "*")`, so the default pattern is
+   `<projectName>/v*` (e.g., `core/v*`); if you override the tag name function, the
+   detection pattern follows automatically.
 2. If no tag exists, the project is treated as changed (first release).
 3. Run `git diff --name-only <tag>..HEAD -- <projectDir>`.
-4. Filter out version files and any files or directories in `releaseIOMonorepoDetectionExcludes`.
+4. Filter out each project's own version file and any files or directories in
+   `releaseIOMonorepoDetectionExcludes`.
 5. If any significant files remain, the project is changed.
+
+In addition, `releaseIOMonorepoDetectionSharedPaths` (see below) is checked against
+each project's tag — if shared paths changed, every project that resolves to that tag
+is marked as changed.
 
 Any git command failure conservatively treats the project as changed.
 
@@ -24,6 +31,42 @@ releaseIOMonorepoDetectionIncludeDownstream := true
 ```
 
 With this setting, if `core` changes and `api` depends on `core` and `web` depends on `api`, all three are released. This works with both the built-in git-based detector and custom change detectors.
+
+## Shared paths
+
+Some files affect every project even when they sit outside any project's directory — the
+root `build.sbt`, the `project/` directory with `plugins.sbt` and build-definition Scala
+files, CI workflows, etc. The plugin treats these as **shared paths**: if any shared path
+has changed since a project's last tag, that project is marked as changed.
+
+The default is:
+
+```scala
+releaseIOMonorepoDetectionSharedPaths := Seq("build.sbt", "project/")
+```
+
+This means that editing your root `build.sbt` or anything under `project/` — adding a
+plugin, bumping sbt, changing a shared library version — causes **every** project to be
+released on the next run. That's usually what you want: a build-system change affects all
+outputs.
+
+To change this behavior, override the setting with the root-relative paths you want to
+track, or set it to `Seq.empty` to disable the shared-path check entirely:
+
+```scala
+// Track only root build.sbt, not project/
+releaseIOMonorepoDetectionSharedPaths := Seq("build.sbt")
+
+// Track nothing as shared — only per-project file changes matter
+releaseIOMonorepoDetectionSharedPaths := Seq.empty
+```
+
+Shared paths are checked per tag, so projects that all point at the same last-tag commit
+share a single git diff lookup. Shared-path detection only runs for projects that have a
+prior tag — first-release projects are already marked as changed.
+
+Shared paths only apply to the built-in detector and are ignored when
+`releaseIOMonorepoDetectionChangeDetector` is set.
 
 ## Version overrides force-include projects
 
@@ -67,6 +110,15 @@ to reference subproject directories. Excluded directory paths suppress nested fi
 matching. Per-project version files are always excluded automatically.
 This setting only applies to the built-in detector and is ignored when `releaseIOMonorepoDetectionChangeDetector` is set.
 
-## First release shows no projects changed
+## First releases and renamed tag schemes
 
-On a brand-new repo with no prior release tags, change detection marks all projects as changed — this is expected. If tags exist but under a different scheme, some projects may appear unchanged. Use `all-changed` to bypass detection, or disable it permanently with `releaseIOMonorepoDetectionEnabled := false`.
+On a brand-new repo with no prior release tags, change detection marks all projects as
+changed — this is expected and is how first releases work.
+
+If you changed `releaseIOMonorepoVcsTagName` after previous releases, the new tag pattern
+won't match the old tags and projects may look unchanged because the detector can't find
+their prior release. In that case, either:
+
+- tag the current commit under the new scheme to re-establish a baseline,
+- use the `all-changed` flag to bypass detection for one invocation, or
+- disable detection permanently with `releaseIOMonorepoDetectionEnabled := false`.

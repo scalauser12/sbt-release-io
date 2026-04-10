@@ -61,5 +61,11 @@ def uploadArchive(ctx: ReleaseContext): IO[Unit] =
 releaseIOHooksAfterPublish += ReleaseHookIO.action("upload-archive")(uploadArchive)
 ```
 
-The supported build-facing customization path remains hook-based. Use hooks and
-resource hooks for build-facing integration work.
+**Cross-build gotcha:** `releaseIOHooksBeforePublish` and `releaseIOHooksAfterPublish` are the
+only hook slots that inherit cross-build iteration. With
+`releaseIOBehaviorCrossBuild := true`, hooks in these slots run **once per Scala version** in
+`crossScalaVersions`. If your side effect is per Scala version (uploading a per-version artifact,
+notifying per-version consumers), that's the right place. If your side effect should run
+exactly once per release (uploading a Scala-version-agnostic archive like the example above,
+sending a single release notification), attach it to a non-cross-built slot such as
+`releaseIOHooksAfterNextCommit` or `releaseIOHooksAfterPush` instead.

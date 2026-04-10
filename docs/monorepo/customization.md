@@ -55,11 +55,16 @@ The tagging lifecycle phase is still named `tag-releases`. Customize around it w
 | Remove `publish-artifacts` | `releaseIOMonorepoPolicyEnablePublish := false` |
 | Remove `run-clean` | `releaseIOMonorepoPolicyEnableRunClean := false` |
 | Remove `run-tests` | `releaseIOMonorepoPolicyEnableRunTests := false` |
-| Insert logic after clean working-dir validation | `releaseIOMonorepoHooksAfterCleanCheck` |
-| Insert logic before or after project selection | `releaseIOMonorepoHooksBeforeSelection` / `releaseIOMonorepoHooksAfterSelection` |
-| Insert logic around version resolution | `releaseIOMonorepoHooksBeforeVersionResolution` / `releaseIOMonorepoHooksAfterVersionResolution` |
-| Insert logic around tagging | `releaseIOMonorepoHooksBeforeTag` / `releaseIOMonorepoHooksAfterTag` |
-| Insert logic around publish | `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` |
+| Insert logic after clean working-dir validation | `releaseIOMonorepoHooksAfterCleanCheck` (global) |
+| Insert logic around project selection | `releaseIOMonorepoHooksBeforeSelection` / `AfterSelection` (global) |
+| Insert logic around version resolution | `releaseIOMonorepoHooksBeforeVersionResolution` / `AfterVersionResolution` (per-project) |
+| Insert logic around release-version writes | `releaseIOMonorepoHooksBeforeReleaseVersionWrite` / `AfterReleaseVersionWrite` (per-project) |
+| Insert logic around the release commit | `releaseIOMonorepoHooksBeforeReleaseCommit` / `AfterReleaseCommit` (global) |
+| Insert logic around tagging | `releaseIOMonorepoHooksBeforeTag` / `AfterTag` (per-project) |
+| Insert logic around publish | `releaseIOMonorepoHooksBeforePublish` / `AfterPublish` (per-project) |
+| Insert logic around next-version writes | `releaseIOMonorepoHooksBeforeNextVersionWrite` / `AfterNextVersionWrite` (per-project) |
+| Insert logic around the next-version commit | `releaseIOMonorepoHooksBeforeNextCommit` / `AfterNextCommit` (global) |
+| Insert logic around push | `releaseIOMonorepoHooksBeforePush` / `AfterPush` (global) |
 
 ### Snippets
 
@@ -129,12 +134,26 @@ import sbt.*
 import _root_.cats.effect.{IO, Resource}
 import _root_.io.release.monorepo.*
 
+// Placeholder for your preferred HTTP client library (sttp, http4s, etc.).
+// Swap this trait for the real type you use in your build.
+trait HttpClient {
+  def allowedProjects(): Set[String]
+  def notifyTagged(projects: Seq[String]): Unit
+  def close(): Unit
+}
+
 object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
   override def trigger = noTrigger
   override protected def commandName = "releaseMonorepoCustom"
 
   override def resource: Resource[IO, HttpClient] =
-    Resource.make(IO.blocking(new HttpClient()))(client => IO.blocking(client.close()))
+    Resource.make(IO.blocking {
+      new HttpClient {
+        def allowedProjects(): Set[String]            = Set("core", "api")
+        def notifyTagged(projects: Seq[String]): Unit = ()
+        def close(): Unit                             = ()
+      }
+    })(client => IO.blocking(client.close()))
 
   override protected def crossBuildEnabled(state: State): Boolean = true
 
@@ -171,6 +190,8 @@ Notes:
 - protected behavior hooks default to the corresponding `releaseIOMonorepoBehavior*`
   settings and are intended for custom plugin authors, not ordinary `build.sbt`
   customization
-- custom monorepo plugins already inherit `autoImport` (declared `final` on
-  `MonorepoReleasePluginLike`), so it cannot be overridden; grouped keys referenced from
-  `.scala` sources should use `MonorepoReleasePlugin.autoImport`
+- `MonorepoReleasePluginLike` declares `autoImport` as `final`, so a custom plugin
+  inherits the same grouped keys and cannot override them. In `.sbt` files, the keys are
+  imported automatically when the plugin is enabled. In `.scala` sources under `project/`,
+  import from `MonorepoReleasePlugin.autoImport.*` (or `MyMonorepoRelease.autoImport.*`)
+  to bring them into scope.

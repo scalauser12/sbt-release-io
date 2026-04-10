@@ -45,9 +45,8 @@ git reset --hard HEAD~1
 # Delete the remote tag
 git push origin :refs/tags/v1.0.0
 
-# Safe revert (keeps history)
-git revert HEAD     # revert commit-next-version
-git revert HEAD~1   # revert commit-release-version
+# Safe revert of both release commits (git applies them newest-first)
+git revert HEAD~2..HEAD
 git push origin main
 ```
 

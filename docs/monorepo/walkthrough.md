@@ -100,7 +100,7 @@ After the release:
 ```bash
 git log --oneline     # 3 commits: Initial, release versions, next versions
 git tag               # core/v0.1.0  api/v0.1.0
-cat core/version.sbt  # version := "0.2.0-SNAPSHOT"
+cat core/version.sbt  # version := "0.1.1-SNAPSHOT"
 ```
 
 > **Note:** The first release triggers all projects as changed because change detection looks for a prior release tag and finds none. On subsequent runs, only projects with file changes since their last tag are released. To force all projects regardless, use the `all-changed` flag.

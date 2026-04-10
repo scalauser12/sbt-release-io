@@ -1,6 +1,7 @@
 # sbt-release-io (core)
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
+[![Maven Central (sbt 1 / Scala 2.12)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0?label=sbt%201%20%2F%20Scala%202.12)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
+[![Maven Central (sbt 2 / Scala 3)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_sbt2_3?label=sbt%202%20%2F%20Scala%203)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_sbt2_3)
 
 A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for sbt, with composable error handling and resource safety.
 
@@ -16,7 +17,7 @@ A cats-effect IO port of [sbt-release](https://github.com/sbt/sbt-release) for s
 - [Configuration](configuration.md)
   Starter `build.sbt` patterns and common configuration recipes.
 - [Settings reference](reference.md)
-  Full grouped `releaseIOBehavior*`, `releaseIOPolicy*`, `releaseIOHooks*`, and related CLI reference.
+  Exhaustive catalog of `releaseIOBehavior*`, `releaseIODefaults*`, `releaseIOVersioning*`, `releaseIOVcs*`, `releaseIOPublish*`, `releaseIOPolicy*`, `releaseIOHooks*`, version bump types, and the CLI grammar.
 - [Concepts](concepts.md)
   Validate/execute semantics, execution model, and how the plugin compares to sbt-release.
 - [Typelevel libraries](typelevel.md)

@@ -25,7 +25,7 @@ walkthrough, start with [Getting started](getting-started.md).
 | `releaseIOBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step entirely at runtime |
 | `releaseIOBehaviorInteractive` | `Boolean` | `false` | Enable interactive prompting in `run` mode |
 
-When interactive mode is enabled and no decision default is configured, four prompts may appear:
+When interactive mode is enabled and no decision default is configured, five prompts may appear:
 
 | Prompt | When | Default |
 | ------ | ---- | ------- |
@@ -33,6 +33,7 @@ When interactive mode is enabled and no decision default is configured, four pro
 | `Push changes to the remote repository (y/n)? [y]` | Before pushing | yes |
 | `Tag [<name>] exists! Overwrite, keep or abort or enter a new tag (o/k/a)? [a]` | Tag already exists | abort |
 | `Error while checking remote. Still continue (y/n)? [n]` | Remote check fails or times out | no (abort) |
+| `The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n]` | Local branch is behind upstream | no (abort) |
 
 When interactive is `false` (the default) and no decision default is set: snapshot-dependency and tag-conflict issues raise errors, push is skipped, and remote-check failures abort. The `with-defaults` CLI flag pre-answers all prompts with safe defaults without enabling interactive mode.
 
@@ -62,10 +63,10 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOVcsTagName` | `String` | `s"v${version.value}"` | Git tag name |
-| `releaseIOVcsTagComment` | `String` | `s"Releasing ${version.value}"` | Git tag comment |
-| `releaseIOVcsReleaseCommitMessage` | `String` | `s"Setting release version to ${version.value}"` | Release-version commit message |
-| `releaseIOVcsNextCommitMessage` | `String` | `s"Setting next version to ${version.value}"` | Next-version commit message |
+| `releaseIOVcsTagName` | `String` | `s"v${releaseIORuntimeCurrentVersion.value}"` | Git tag name |
+| `releaseIOVcsTagComment` | `String` | `s"Releasing ${releaseIORuntimeCurrentVersion.value}"` | Git tag comment |
+| `releaseIOVcsReleaseCommitMessage` | `String` | `s"Setting release version to ${releaseIORuntimeCurrentVersion.value}"` | Release-version commit message |
+| `releaseIOVcsNextCommitMessage` | `String` | `s"Setting next version to ${releaseIORuntimeCurrentVersion.value}"` | Next-version commit message |
 | `releaseIOVcsSign` | `Boolean` | `false` | GPG-sign tags and commits |
 | `releaseIOVcsSignOff` | `Boolean` | `false` | Add `Signed-off-by` to commits |
 | `releaseIOVcsIgnoreUntrackedFiles` | `Boolean` | `false` | Ignore untracked files in the clean check |
@@ -75,7 +76,7 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOPublishAction` | `Unit` | `publish` | Task that performs the publish |
+| `releaseIOPublishAction` | `Unit` | `publish.value` | Task that performs the publish |
 | `releaseIOPublishChecks` | `Boolean` | `true` | Validate `publishTo` / `skip` before publish |
 
 ## Runtime and diagnostics
@@ -83,7 +84,7 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
 | `releaseIODiagnosticsSnapshotDependencies` | `Seq[ModuleID]` | auto-resolved | SNAPSHOT dependencies used by validation |
-| `releaseIORuntimeCurrentVersion` | `String` | scope-aware `version` | Reads the current release version from live sbt state |
+| `releaseIORuntimeCurrentVersion` | `String` | `(ThisBuild / version).value` if `releaseIOVersioningUseGlobal`, else `version.value` | Reads the current release version from live sbt state |
 
 ## Hook and policy settings
 

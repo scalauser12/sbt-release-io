@@ -22,9 +22,8 @@ through the run.
 
 ## Execution model: sbt-release-io vs sbt-release
 
-Both plugins share the same high-level structure: block the sbt command thread, run
-validation checks before actions, execute steps sequentially, and manually drain enqueued
-commands such as `+publish`. The main difference is the effect model:
+Both plugins share the same high-level structure: block the sbt command thread, and run
+validation checks before mutating actions. The main difference is the effect model:
 
 - `sbt-release` uses plain `State => State` functions composed with `Function.chain`
 - `sbt-release-io` wraps the flow in cats-effect `IO` and runs it with `unsafeRunSync()`
@@ -33,16 +32,16 @@ commands such as `+publish`. The main difference is the effect model:
 
 - **Synchronous blocking**: both plugins keep the sbt command thread until the release ends
 - **Validation before actions**: both separate preflight checks from the mutating steps
-- **Manual command draining**: both explicitly drain queued sbt commands for command-based steps
 
 ### What IO adds
 
 - **Resource safety**: `Resource.use` guarantees cleanup for shared resources
 - **Composability**: hooks and internal process helpers can use normal cats-effect combinators
-- **Typed validation boundary**: `validate` returns `IO[Unit]`, so checks cannot mutate the release context
+- **User-facing hooks cannot mutate context**: `ReleaseHookIO.validate` returns `IO[Unit]`, so a hook's pre-flight check cannot alter the release context
 - **Explicit blocking boundaries**: `IO.blocking` marks shell-outs and sbt task execution
 - **Typed context threading**: `ReleaseContext` carries versions, VCS state, flags, and typed metadata
 - **Cross-build validation**: both `validate` and `execute` phases can cross-build when enabled
+- **Direct task execution**: built-in steps run sbt tasks via `extracted.runAggregated(key, state)` instead of enqueuing commands like `+publish`. Cross-build iterates `crossScalaVersions` in Scala code rather than via the `+` command prefix.
 - **Resource-aware custom plugins**: `ReleasePluginIOLike[T]` can acquire one shared resource for the full release
 
 ### IO-specific costs

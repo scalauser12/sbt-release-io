@@ -1,6 +1,7 @@
 # sbt-release-io-monorepo
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
+[![Maven Central (sbt 1 / Scala 2.12)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0?label=sbt%201%20%2F%20Scala%202.12)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
+[![Maven Central (sbt 2 / Scala 3)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_sbt2_3?label=sbt%202%20%2F%20Scala%203)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_sbt2_3)
 
 A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/README.md) with per-project version files, per-project tags, change detection, topological ordering, and failure isolation.
 
