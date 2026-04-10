@@ -155,72 +155,34 @@ private[release] object LifecycleCompiler {
     hooks.map { hook =>
       val stepName = s"$phase:${nameOf(hook)}"
 
-      if (freezeGate)
-        frozenGateSingleStep(
-          stepName,
-          gate,
-          gateKey,
-          executeOf(hook),
-          validateOf(hook),
-          crossBuild
+      if (freezeGate) {
+        val (frozenExec, frozenVal) =
+          frozenGateFunctions[C, C](
+            gate,
+            gateKey,
+            execute = executeOf(hook),
+            validate = ctx => validateOf(hook)(ctx).as(ctx),
+            skip = ctx => IO.pure(ctx)
+          )
+        ProcessStep.Single[C](
+          name = stepName,
+          execute = frozenExec,
+          enableCrossBuild = crossBuild,
+          validateWithContext = Some(frozenVal)
         )
-      else
+      } else
         ProcessStep.Single[C](
           name = stepName,
           execute = ctx =>
-            gate(ctx).flatMap {
-              case true  => executeOf(hook)(ctx)
-              case false => IO.pure(ctx)
-            },
-          validate = ctx =>
-            gate(ctx).flatMap {
-              case true  => validateOf(hook)(ctx)
-              case false => IO.unit
-            },
+            gatedExecute(
+              gate(ctx),
+              executeOf(hook)(ctx),
+              IO.pure(ctx)
+            ),
+          validate = ctx => gatedValidate(gate(ctx), validateOf(hook)(ctx)),
           enableCrossBuild = crossBuild
         )
     }
-
-  /** Build a single-context step whose gate decision is frozen at
-    * validation time and reused during execution, keyed by
-    * `gateKey(ctx)` so cross-build iterations each preserve their
-    * own decision.
-    */
-  private def frozenGateSingleStep[C](
-      name: String,
-      gate: C => IO[Boolean],
-      gateKey: C => String,
-      execute: C => IO[C],
-      validate: C => IO[Unit],
-      crossBuild: Boolean
-  ): ProcessStep.Single[C] = {
-    val cached = Ref.unsafe[IO, Map[String, Boolean]](Map.empty)
-
-    ProcessStep.Single[C](
-      name = name,
-      execute = ctx => {
-        val key = gateKey(ctx)
-        frozenGateRun(
-          cached,
-          key,
-          gate(ctx),
-          execute(ctx),
-          IO.pure(ctx)
-        )
-      },
-      enableCrossBuild = crossBuild,
-      validateWithContext = Some(ctx => {
-        val key = gateKey(ctx)
-        frozenGateValidate(
-          cached,
-          key,
-          gate(ctx),
-          validate(ctx).as(ctx),
-          IO.pure(ctx)
-        )
-      })
-    )
-  }
 
   // ── Per-item hooks ──────────────────────────────────────────────────
 
@@ -239,71 +201,94 @@ private[release] object LifecycleCompiler {
     hooks.map { hook =>
       val stepName = s"$phase:${nameOf(hook)}"
 
-      if (freezeGate)
-        frozenGateItemStep(
-          stepName,
-          gate,
-          gateKey,
-          executeOf(hook),
-          validateOf(hook),
-          crossBuild
+      if (freezeGate) {
+        val (frozenExec, frozenVal) =
+          frozenGateFunctions[(C, I), C](
+            gate = { case (c, i) => gate(c, i) },
+            gateKey = { case (c, i) => gateKey(c, i) },
+            execute = { case (c, i) => executeOf(hook)(c, i) },
+            validate = { case (c, i) =>
+              validateOf(hook)(c, i).as(c)
+            },
+            skip = { case (c, _) => IO.pure(c) }
+          )
+        ProcessStep.PerItem[C, I](
+          name = stepName,
+          execute = (ctx, item) => frozenExec((ctx, item)),
+          enableCrossBuild = crossBuild,
+          validateWithContext = Some((ctx, item) => frozenVal((ctx, item)))
         )
-      else
+      } else
         ProcessStep.PerItem[C, I](
           name = stepName,
           execute = (ctx, item) =>
-            gate(ctx, item).flatMap {
-              case true  => executeOf(hook)(ctx, item)
-              case false => IO.pure(ctx)
-            },
+            gatedExecute(
+              gate(ctx, item),
+              executeOf(hook)(ctx, item),
+              IO.pure(ctx)
+            ),
           validate = (ctx, item) =>
-            gate(ctx, item).flatMap {
-              case true  => validateOf(hook)(ctx, item)
-              case false => IO.unit
-            },
+            gatedValidate(
+              gate(ctx, item),
+              validateOf(hook)(ctx, item)
+            ),
           enableCrossBuild = crossBuild
         )
     }
 
-  /** Build a per-item step whose gate decision is frozen at validation
-    * time and reused during execution, keyed by `gateKey(ctx, item)`
-    * so each project+scalaVersion combination preserves its own
-    * decision.
-    */
-  private def frozenGateItemStep[C, I](
-      name: String,
-      gate: (C, I) => IO[Boolean],
-      gateKey: (C, I) => String,
-      execute: (C, I) => IO[C],
-      validate: (C, I) => IO[Unit],
-      crossBuild: Boolean
-  ): ProcessStep.PerItem[C, I] = {
-    val cached = Ref.unsafe[IO, Map[String, Boolean]](Map.empty)
+  // ── Shared gate helpers ─────────────────────────────────────────────
 
-    ProcessStep.PerItem[C, I](
-      name = name,
-      execute = (ctx, item) => {
-        val key = gateKey(ctx, item)
-        frozenGateRun(
-          cached,
-          key,
-          gate(ctx, item),
-          execute(ctx, item),
-          IO.pure(ctx)
-        )
-      },
-      enableCrossBuild = crossBuild,
-      validateWithContext = Some((ctx, item) => {
-        val key = gateKey(ctx, item)
-        frozenGateValidate(
-          cached,
-          key,
-          gate(ctx, item),
-          validate(ctx, item).as(ctx),
-          IO.pure(ctx)
-        )
-      })
-    )
+  private def gatedExecute[C](
+      gate: IO[Boolean],
+      run: IO[C],
+      skip: IO[C]
+  ): IO[C] =
+    gate.flatMap {
+      case true  => run
+      case false => skip
+    }
+
+  private def gatedValidate(
+      gate: IO[Boolean],
+      run: IO[Unit]
+  ): IO[Unit] =
+    gate.flatMap {
+      case true  => run
+      case false => IO.unit
+    }
+
+  /** Build frozen-gate execute and validate functions that share a
+    * single `Ref` cache.  The validate function captures the gate
+    * decision; the execute function replays it.  Keyed by `gateKey`
+    * so cross-build or per-project iterations each preserve their
+    * own decision.
+    */
+  private def frozenGateFunctions[Args, C](
+      gate: Args => IO[Boolean],
+      gateKey: Args => String,
+      execute: Args => IO[C],
+      validate: Args => IO[C],
+      skip: Args => IO[C]
+  ): (Args => IO[C], Args => IO[C]) = {
+    val cached               =
+      Ref.unsafe[IO, Map[String, Boolean]](Map.empty)
+    val exec: Args => IO[C]  = args =>
+      frozenGateRun(
+        cached,
+        gateKey(args),
+        gate(args),
+        execute(args),
+        skip(args)
+      )
+    val valFn: Args => IO[C] = args =>
+      frozenGateValidate(
+        cached,
+        gateKey(args),
+        gate(args),
+        validate(args),
+        skip(args)
+      )
+    (exec, valFn)
   }
 
   private def frozenGateRun[C](
