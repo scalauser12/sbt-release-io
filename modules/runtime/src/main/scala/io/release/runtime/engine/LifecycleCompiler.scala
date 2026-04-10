@@ -173,13 +173,8 @@ private[release] object LifecycleCompiler {
       } else
         ProcessStep.Single[C](
           name = stepName,
-          execute = ctx =>
-            gatedExecute(
-              gate(ctx),
-              executeOf(hook)(ctx),
-              IO.pure(ctx)
-            ),
-          validate = ctx => gatedValidate(gate(ctx), validateOf(hook)(ctx)),
+          execute = ctx => gate(ctx).ifM(executeOf(hook)(ctx), IO.pure(ctx)),
+          validate = ctx => gate(ctx).ifM(validateOf(hook)(ctx), IO.unit),
           enableCrossBuild = crossBuild
         )
     }
@@ -222,40 +217,20 @@ private[release] object LifecycleCompiler {
         ProcessStep.PerItem[C, I](
           name = stepName,
           execute = (ctx, item) =>
-            gatedExecute(
-              gate(ctx, item),
+            gate(ctx, item).ifM(
               executeOf(hook)(ctx, item),
               IO.pure(ctx)
             ),
           validate = (ctx, item) =>
-            gatedValidate(
-              gate(ctx, item),
-              validateOf(hook)(ctx, item)
+            gate(ctx, item).ifM(
+              validateOf(hook)(ctx, item),
+              IO.unit
             ),
           enableCrossBuild = crossBuild
         )
     }
 
   // ── Shared gate helpers ─────────────────────────────────────────────
-
-  private def gatedExecute[C](
-      gate: IO[Boolean],
-      run: IO[C],
-      skip: IO[C]
-  ): IO[C] =
-    gate.flatMap {
-      case true  => run
-      case false => skip
-    }
-
-  private def gatedValidate(
-      gate: IO[Boolean],
-      run: IO[Unit]
-  ): IO[Unit] =
-    gate.flatMap {
-      case true  => run
-      case false => IO.unit
-    }
 
   /** Build frozen-gate execute and validate functions that share a
     * single `Ref` cache.  The validate function captures the gate
