@@ -79,24 +79,36 @@ private[monorepo] object MonorepoVersionWorkflow {
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
-    versionsPairOrFail(project).flatMap { case (releaseVersion, _) =>
-      ensureVersionFilesValidated(
-        ctx,
-        _.hasReleaseVersionFilesValidated,
-        _.markReleaseVersionFilesValidated
-      ).flatMap(writeProjectVersion(_, project, releaseVersion))
-    }
+    writeVersionFromPair(
+      ctx,
+      project,
+      _._1,
+      _.hasReleaseVersionFilesValidated,
+      _.markReleaseVersionFilesValidated
+    )
 
   def writeNextVersion(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
-    versionsPairOrFail(project).flatMap { case (_, nextVersion) =>
-      ensureVersionFilesValidated(
-        ctx,
-        _.hasNextVersionFilesValidated,
-        _.markNextVersionFilesValidated
-      ).flatMap(writeProjectVersion(_, project, nextVersion))
+    writeVersionFromPair(
+      ctx,
+      project,
+      _._2,
+      _.hasNextVersionFilesValidated,
+      _.markNextVersionFilesValidated
+    )
+
+  private def writeVersionFromPair(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      selectVersion: ((String, String)) => String,
+      hasValidated: MonorepoContext => Boolean,
+      markValidated: MonorepoContext => MonorepoContext
+  ): IO[MonorepoContext] =
+    versionsPairOrFail(project).flatMap { versions =>
+      ensureVersionFilesValidated(ctx, hasValidated, markValidated)
+        .flatMap(writeProjectVersion(_, project, selectVersion(versions)))
     }
 
   def withResolvedVersions(

@@ -80,38 +80,25 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                               )
                                             }
                                         }
-        finalResult                  <-
+        projectRefs                   = result.currentProjects.map(_.ref)
+        preserved                    <- MonorepoVersionFiles.preservedSettings(
+                                          result.state,
+                                          projectRefs
+                                        )
+        hashSettings                 <-
           if (persistReleaseHash)
-            for {
-              preserved   <- MonorepoVersionFiles.preservedSettings(
-                               result.state,
-                               result.currentProjects.map(_.ref)
-                             )
-              currentHash <- vcs.currentHash
-              updated     <- IO.blocking {
-                               val newState = SbtRuntime.appendWithSession(
-                                 result.state,
-                                 preserved ++
-                                   ReleaseManifestMetadataSupport.releaseManifestHashSettings(
-                                     result.currentProjects.map(_.ref),
-                                     currentHash
-                                   )
-                               )
-                               result.withState(newState)
-                             }
-            } yield updated
-          else
-            MonorepoVersionFiles
-              .preservedSettings(result.state, result.currentProjects.map(_.ref))
-              .flatMap(preserved =>
-                IO.blocking {
-                  val newState = SbtRuntime.appendWithSession(
-                    result.state,
-                    preserved
-                  )
-                  result.withState(newState)
-                }
-              )
+            vcs.currentHash.map(hash =>
+              ReleaseManifestMetadataSupport
+                .releaseManifestHashSettings(projectRefs, hash)
+            )
+          else IO.pure(Seq.empty[Setting[?]])
+        finalResult                  <- IO.blocking {
+                                          val newState = SbtRuntime.appendWithSession(
+                                            result.state,
+                                            preserved ++ hashSettings
+                                          )
+                                          result.withState(newState)
+                                        }
       } yield finalResult
     }
 }
