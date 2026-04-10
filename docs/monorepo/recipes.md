@@ -39,11 +39,10 @@ Both the `validate` and `execute` phases are cross-built.
 
 ### Custom steps
 
-For build-facing customization, prefer hooks. Only per-project hooks attached to the
-`publish-artifacts` phase inherit cross-build when `cross`
-(or `releaseIOMonorepoBehaviorCrossBuild := true`) is enabled. Per-project hooks around all
-other lifecycle phases still run once per project. Resource hooks follow the same phase-level
-rule as plain hooks:
+Only per-project hooks attached to the `publish-artifacts` phase inherit cross-build when
+`cross` (or `releaseIOMonorepoBehaviorCrossBuild := true`) is enabled. Per-project hooks
+around all other lifecycle phases still run once per project. Resource hooks follow the
+same phase-level rule as plain hooks:
 
 ```scala
 releaseIOMonorepoHooksBeforePublish +=
