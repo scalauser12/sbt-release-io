@@ -14,13 +14,15 @@ private[release] object ReleaseCommandCompilation {
   )(
       prepare: State => IO[Either[State, Inputs]],
       run: Inputs => IO[State]
-  ): State = {
-    val cleanedState = cleanState(state)
-    val program      = prepare(cleanedState).flatMap {
-      case Left(failedState) => IO.pure(failedState)
-      case Right(inputs)     => run(inputs)
+  ): State =
+    ReleaseCommandRunner.runSync(state, logPrefix) {
+      IO.blocking(cleanState(state)).flatMap { cleanedState =>
+        ReleaseCommandRunner.recoverNonFatal(cleanedState, logPrefix) {
+          IO.defer(prepare(cleanedState)).flatMap {
+            case Left(failedState) => IO.pure(failedState)
+            case Right(inputs)     => run(inputs)
+          }
+        }
+      }
     }
-
-    ReleaseCommandRunner.runSync(cleanedState, logPrefix)(program)
-  }
 }

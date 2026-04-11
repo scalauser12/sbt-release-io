@@ -71,8 +71,8 @@ private[release] object CoreCommandExecution {
       logPrefix = ReleaseLogPrefixes.Core
     )(
       cleanState =>
-        IO.pure(
-          Right(
+        IO
+          .blocking(
             buildCommandInputs(
               cleanState,
               args,
@@ -81,7 +81,7 @@ private[release] object CoreCommandExecution {
               runtime
             )
           )
-        ),
+          .map(Right(_)),
       (inputs: CoreCommandInputs) => runPlannedRelease(inputs, runtime)
     )
 
@@ -96,8 +96,8 @@ private[release] object CoreCommandExecution {
       logPrefix = ReleaseLogPrefixes.Core
     )(
       cleanState =>
-        IO.pure(
-          Right(
+        IO
+          .blocking(
             buildCommandInputs(
               cleanState,
               args,
@@ -106,7 +106,7 @@ private[release] object CoreCommandExecution {
               runtime
             )
           )
-        ),
+          .map(Right(_)),
       (inputs: CoreCommandInputs) => runPlannedCheck(inputs, runtime)
     )
 

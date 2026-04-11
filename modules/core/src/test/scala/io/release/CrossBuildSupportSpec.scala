@@ -1,6 +1,7 @@
 package io.release
 
 import cats.effect.IO
+import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.*
@@ -112,7 +113,12 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       )
 
       for {
-        switchedState   <- CrossBuildSupport.switchScalaVersion(entryState, switchedScala)
+        switchedState   <-
+          CrossBuildSupport.switchScalaVersion(
+            entryState,
+            switchedScala,
+            ReleaseLogPrefixes.Core
+          )
         switchedVersion <- projectScalaVersionOf(switchedState, coreRef)
         switchedHome    <- projectScalaHomeOf(switchedState, coreRef)
         currentState     = TestSupport.appendSessionSettings(
@@ -156,7 +162,12 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       val coreRef = SbtRuntime.extracted(baseState).currentRef
 
       for {
-        switchedState   <- CrossBuildSupport.switchScalaVersion(baseState, switchedScala)
+        switchedState   <-
+          CrossBuildSupport.switchScalaVersion(
+            baseState,
+            switchedScala,
+            ReleaseLogPrefixes.Core
+          )
         switchedVersion <- projectScalaVersionOf(switchedState, coreRef)
         currentState     = TestSupport.appendSessionSettings(
                              switchedState,
@@ -193,7 +204,12 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       )
 
       for {
-        switchedState   <- CrossBuildSupport.switchScalaVersion(entryState, switchedScala)
+        switchedState   <-
+          CrossBuildSupport.switchScalaVersion(
+            entryState,
+            switchedScala,
+            ReleaseLogPrefixes.Core
+          )
         switchedVersion <- projectTestScalaVersionOf(switchedState, coreRef)
         switchedHome    <- projectTestScalaHomeOf(switchedState, coreRef)
         currentState     = TestSupport.appendSessionSettings(
