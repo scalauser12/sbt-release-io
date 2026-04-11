@@ -42,34 +42,19 @@ object ReleasePluginIOAutoImport {
   // ── Defaults keys ───────────────────────────────────────────────────
 
   lazy val releaseIODefaultsTagExistsAnswer: SettingKey[Option[String]] =
-    SettingKey[Option[String]](
-      "releaseIODefaultsTagExistsAnswer",
-      "Default action when a release tag already exists"
-    )
+    ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer
 
   lazy val releaseIODefaultsSnapshotDependenciesAnswer: SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsSnapshotDependenciesAnswer",
-      "Default decision for continuing when SNAPSHOT dependencies are detected"
-    )
+    ReleaseSharedKeys.releaseIODefaultsSnapshotDependenciesAnswer
 
   lazy val releaseIODefaultsRemoteCheckFailureAnswer: SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsRemoteCheckFailureAnswer",
-      "Default decision for continuing after a remote-check failure"
-    )
+    ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer
 
   lazy val releaseIODefaultsUpstreamBehindAnswer: SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsUpstreamBehindAnswer",
-      "Default decision for continuing when the local branch is behind upstream"
-    )
+    ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer
 
   lazy val releaseIODefaultsPushAnswer: SettingKey[Option[Boolean]] =
-    SettingKey[Option[Boolean]](
-      "releaseIODefaultsPushAnswer",
-      "Default decision for whether to push changes at the end of the release"
-    )
+    ReleaseSharedKeys.releaseIODefaultsPushAnswer
 
   // ── Policy keys ─────────────────────────────────────────────────────
 
@@ -228,10 +213,7 @@ object ReleasePluginIOAutoImport {
     )
 
   lazy val releaseIOVersioningFile: SettingKey[File] =
-    SettingKey[File](
-      "releaseIOVersioningFile",
-      "Path to the version file"
-    )
+    ReleaseSharedKeys.releaseIOVersioningFile
 
   lazy val releaseIOVersioningUseGlobal: SettingKey[Boolean] =
     SettingKey[Boolean](
@@ -241,17 +223,11 @@ object ReleasePluginIOAutoImport {
 
   @transient
   lazy val releaseIOVersioningReleaseVersion: TaskKey[String => String] =
-    TaskKey[String => String](
-      "releaseIOVersioningReleaseVersion",
-      "Function that computes the release version from the current version"
-    )
+    ReleaseSharedKeys.releaseIOVersioningReleaseVersion
 
   @transient
   lazy val releaseIOVersioningNextVersion: TaskKey[String => String] =
-    TaskKey[String => String](
-      "releaseIOVersioningNextVersion",
-      "Function that computes the next development version from the release version"
-    )
+    ReleaseSharedKeys.releaseIOVersioningNextVersion
 
   @transient
   lazy val releaseIOVersioningBump: TaskKey[Version.Bump] =
@@ -263,28 +239,16 @@ object ReleasePluginIOAutoImport {
   // ── VCS keys ────────────────────────────────────────────────────────
 
   lazy val releaseIOVcsSign: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOVcsSign",
-      "Whether VCS tags and commits are GPG-signed"
-    )
+    ReleaseSharedKeys.releaseIOVcsSign
 
   lazy val releaseIOVcsSignOff: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOVcsSignOff",
-      "Whether VCS commits include a Signed-off-by line"
-    )
+    ReleaseSharedKeys.releaseIOVcsSignOff
 
   lazy val releaseIOVcsIgnoreUntrackedFiles: SettingKey[Boolean] =
-    SettingKey[Boolean](
-      "releaseIOVcsIgnoreUntrackedFiles",
-      "Whether untracked files are ignored during clean working dir check"
-    )
+    ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles
 
   lazy val releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
-    SettingKey[FiniteDuration](
-      "releaseIOVcsRemoteCheckTimeout",
-      "Timeout for the remote reachability check performed before push"
-    )
+    ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout
 
   @transient
   lazy val releaseIOVcsTagName: TaskKey[String] =
@@ -318,10 +282,7 @@ object ReleasePluginIOAutoImport {
 
   @transient
   lazy val releaseIOPublishAction: TaskKey[Unit] =
-    TaskKey[Unit](
-      "releaseIOPublishAction",
-      "Task that performs the actual publish action"
-    )
+    ReleaseSharedKeys.releaseIOPublishAction
 
   lazy val releaseIOPublishChecks: SettingKey[Boolean] =
     SettingKey[Boolean](
@@ -342,10 +303,7 @@ object ReleasePluginIOAutoImport {
 
   @transient
   lazy val releaseIODiagnosticsSnapshotDependencies: TaskKey[Seq[ModuleID]] =
-    TaskKey[Seq[ModuleID]](
-      "releaseIODiagnosticsSnapshotDependencies",
-      "Task that resolves SNAPSHOT dependencies for validation"
-    )
+    ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
 }
 
 /** Base trait for resource-parameterized release plugins.

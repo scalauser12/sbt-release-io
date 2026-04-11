@@ -19,11 +19,20 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
   private val coreInternalImportPattern: Regex =
     raw"(?m)^\s*import io\.release\.core\.internal(?:\.|\b)".r
 
+  private val releasePluginImportPattern: Regex =
+    raw"(?m)^\s*import io\.release\.ReleasePluginIO(?:\.|\b)".r
+
+  private val rootReleaseSymbolImportPattern: Regex =
+    raw"(?m)^\s*import io\.release\.([A-Z][A-Za-z0-9_]*)\b".r
+
   private val sharedRuntimeSymbols = Seq(
+    "CleanCompat",
+    "CrossBuildSupport",
     "ReleaseCtx",
     "ExecutionFlags",
     "ReleaseDecisionDefaults",
     "ReleaseLogPrefixes",
+    "ReleaseSharedKeys",
     "ProcessStep",
     "ExecutionEngine",
     "LifecycleCompiler",
@@ -38,8 +47,13 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "DecisionResolver",
     "PublishValidation",
     "VersionWorkflowSupport",
-    "DefaultVersionFileIO"
+    "DefaultVersionFileIO",
+    "ReleaseIOCompat",
+    "ReleaseManifestMetadataSupport",
+    "VcsOps"
   )
+
+  private val supportedMainScalaDirs = Seq("scala", "scala-2", "scala-3")
 
   private def sourceFiles(relativeDir: String): IO[List[Path]] =
     IO.blocking {
@@ -63,6 +77,13 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
         } finally stream.close()
       }
     }
+
+  private def moduleMainSourceFiles(moduleRelativeDir: String): IO[List[Path]] =
+    supportedMainScalaDirs.foldLeft(IO.pure(List.empty[Path])) { (acc, scalaDir) =>
+      acc.flatMap(existing =>
+        sourceFiles(s"$moduleRelativeDir/src/main/$scalaDir").map(existing ++ _)
+      )
+    }.map(_.distinct)
 
   private def relativePath(path: Path): String =
     repoRoot.relativize(path).toString
@@ -90,22 +111,85 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
   private def assertNoLegacyImports(relativeDir: String): IO[Unit] =
     assertNoImports(relativeDir, legacyImportPattern)
 
+  private def assertNoImportsInModuleMainSources(
+      moduleRelativeDir: String,
+      pattern: Regex
+  ): IO[Unit] =
+    moduleMainSourceFiles(moduleRelativeDir).flatMap { files =>
+      IO.blocking {
+        val offenders =
+          files
+            .filter(path => pattern.findFirstIn(Files.readString(path)).nonEmpty)
+            .map(relativePath)
+            .sorted
+
+        assertEquals(offenders, Nil)
+      }
+    }
+
+  private def assertNoLegacyImportsInModuleMainSources(moduleRelativeDir: String): IO[Unit] =
+    assertNoImportsInModuleMainSources(moduleRelativeDir, legacyImportPattern)
+
   test("core main sources do not import legacy internal or old step facades") {
-    assertNoLegacyImports("modules/core/src/main/scala")
+    assertNoLegacyImportsInModuleMainSources("modules/core")
   }
 
   test("monorepo main sources do not import legacy internal or old step facades") {
-    assertNoLegacyImports("modules/monorepo/src/main/scala")
+    assertNoLegacyImportsInModuleMainSources("modules/monorepo")
   }
 
   test("monorepo main sources do not import core internal packages") {
-    assertNoImports("modules/monorepo/src/main/scala", coreInternalImportPattern)
+    assertNoImportsInModuleMainSources("modules/monorepo", coreInternalImportPattern)
+  }
+
+  test("monorepo main sources only import ReleasePluginIO in MonorepoReleasePlugin.scala") {
+    moduleMainSourceFiles("modules/monorepo").flatMap { files =>
+      IO.blocking {
+        val allowedPath = "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala"
+        val offenders   =
+          files
+            .filter(path => relativePath(path) != allowedPath)
+            .filter(path => releasePluginImportPattern.findFirstIn(Files.readString(path)).nonEmpty)
+            .map(relativePath)
+            .sorted
+
+        assertEquals(offenders, Nil)
+      }
+    }
+  }
+
+  test("monorepo main sources only import runtime-owned io.release symbols plus ReleasePluginIO") {
+    moduleMainSourceFiles("modules/monorepo").flatMap { files =>
+      IO.blocking {
+        val allowedPluginPath = "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala"
+        val runtimeSymbols    = sharedRuntimeSymbols.toSet
+        val offenders         =
+          files
+            .flatMap { path =>
+              val relPath = relativePath(path)
+              val source  = Files.readString(path)
+
+              rootReleaseSymbolImportPattern.findAllMatchIn(source).flatMap { m =>
+                val symbol = m.group(1)
+                val allowed =
+                  if (symbol == "ReleasePluginIO") relPath == allowedPluginPath
+                  else runtimeSymbols.contains(symbol)
+
+                if (allowed) None else Some(s"$relPath imports $symbol")
+              }
+            }
+            .distinct
+            .sorted
+
+        assertEquals(offenders, Nil)
+      }
+    }
   }
 
   test("shared runtime kernel types are defined only in modules/runtime") {
     for {
-      coreFiles     <- sourceFiles("modules/core/src/main/scala")
-      monorepoFiles <- sourceFiles("modules/monorepo/src/main/scala")
+      coreFiles     <- moduleMainSourceFiles("modules/core")
+      monorepoFiles <- moduleMainSourceFiles("modules/monorepo")
       _             <- IO.blocking {
                          val offenders =
                            (coreFiles ++ monorepoFiles).flatMap { path =>

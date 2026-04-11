@@ -17,7 +17,7 @@ object ReleaseIOCompat:
     * and deserialize via `Classpaths.moduleIdJsonKeyFormat` (same approach as sbt-release).
     */
   def snapshotDependenciesSetting: Setting[?] =
-    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := {
+    ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies := {
       val modules = (Test / Keys.managedClasspath).value
         .flatMap(_.get(Keys.moduleIDStr))
         .map(sbt.Classpaths.moduleIdJsonKeyFormat.read)
