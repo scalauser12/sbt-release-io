@@ -286,6 +286,6 @@ private[release] object MonorepoLifecycle {
 
   def compile(
       hooks: MonorepoHookConfiguration
-  ): Seq[AnyStep] =
+  ): IO[Seq[AnyStep]] =
     LifecycleCompiler.compile(hooks, phases)
 }

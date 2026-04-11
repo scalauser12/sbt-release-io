@@ -22,22 +22,22 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     "compile - match the built-in release steps when no hook or policy customization is present"
   ) {
     hookStateResource("release-hook-compiler-defaults").use { state =>
-      IO {
-        assertEquals(compileLifecycle(state), ReleaseSteps.defaults)
+      compileLifecycle(state).map { steps =>
+        assertEquals(steps, ReleaseSteps.defaults)
       }
     }
   }
 
   test("production sources no longer reference removed hook or command wrappers") {
     hookStateResource("release-hook-compiler-overload").use { state =>
-      IO {
+      compileLifecycle(state).map { steps =>
         val commandExecution = Files.readString(
           repoPath(
             "modules/core/src/main/scala/io/release/core/internal/CoreCommandExecution.scala"
           )
         )
 
-        assertEquals(compileLifecycle(state).map(_.name), ReleaseSteps.defaults.map(_.name))
+        assertEquals(steps.map(_.name), ReleaseSteps.defaults.map(_.name))
         assert(
           !Files.exists(
             repoPath("modules/core/src/main/scala/io/release/internal/ReleaseHookCompiler.scala")
@@ -111,8 +111,8 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
     )
 
     hookStateResource("release-hook-compiler-order", settings).use { state =>
-      IO {
-        val stepNames = compileLifecycle(state).map(_.name)
+      compileLifecycle(state).map { steps =>
+        val stepNames = steps.map(_.name)
 
         assertEquals(
           stepNames,
@@ -143,10 +143,6 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookStateResource("release-hook-compiler-publish-gate", settings).use { state =>
-        val publishHookSteps    = compileLifecycle(state)
-          .filter(step =>
-            step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
-          )
         val skippedCtx          = ReleaseContext(state = state, skipPublish = true)
         val publishSkippedState =
           TestSupport.appendSessionSettings(
@@ -157,16 +153,21 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
         val enabledCtx          = ReleaseContext(state = state, skipPublish = false)
 
         for {
-          _              <- runPublishHooks(publishHookSteps, skippedCtx)
-          skipped        <- observed.get
-          _               = assertEquals(skipped, Nil)
-          _              <- observed.set(Nil)
-          _              <- runPublishHooks(publishHookSteps, publishSkippedCtx)
-          publishSkipped <- observed.get
-          _               = assertEquals(publishSkipped, Nil)
-          _              <- observed.set(Nil)
-          _              <- runPublishHooks(publishHookSteps, enabledCtx)
-          events         <- observed.get
+          steps           <- compileLifecycle(state)
+          publishHookSteps = steps.filter(step =>
+                               step.name.startsWith("before-publish:") ||
+                                 step.name.startsWith("after-publish:")
+                             )
+          _               <- runPublishHooks(publishHookSteps, skippedCtx)
+          skipped         <- observed.get
+          _                = assertEquals(skipped, Nil)
+          _               <- observed.set(Nil)
+          _               <- runPublishHooks(publishHookSteps, publishSkippedCtx)
+          publishSkipped  <- observed.get
+          _                = assertEquals(publishSkipped, Nil)
+          _               <- observed.set(Nil)
+          _               <- runPublishHooks(publishHookSteps, enabledCtx)
+          events          <- observed.get
         } yield assertEquals(
           events,
           List("validate-before", "validate-after", "execute-before", "execute-after")
@@ -186,20 +187,20 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
         rootSettings = settings ++ Seq(publish / skip := true),
         childSettings = Seq(publish / skip := false)
       ).use { state =>
-        val publishHookSteps = compileLifecycle(state)
-          .filter(step =>
-            step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
-          )
-        val ctx              = ReleaseContext(state = state, skipPublish = false)
+        val ctx = ReleaseContext(state = state, skipPublish = false)
 
-        runPublishHooks(publishHookSteps, ctx)
-          .flatMap(_ => observed.get)
-          .map(events =>
-            assertEquals(
-              events,
-              List("validate-before", "validate-after", "execute-before", "execute-after")
-            )
-          )
+        for {
+          steps           <- compileLifecycle(state)
+          publishHookSteps = steps.filter(step =>
+                               step.name.startsWith("before-publish:") ||
+                                 step.name.startsWith("after-publish:")
+                             )
+          _               <- runPublishHooks(publishHookSteps, ctx)
+          events          <- observed.get
+        } yield assertEquals(
+          events,
+          List("validate-before", "validate-after", "execute-before", "execute-after")
+        )
       }
     }
   }
@@ -246,7 +247,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
   private def hookSettingsDefaults: Seq[Setting[?]] =
     CoreLifecycle.configDefaultSettings
 
-  private def compileLifecycle(state: State): Seq[Step] =
+  private def compileLifecycle(state: State): IO[Seq[Step]] =
     CoreLifecycle.compile(CoreHookConfiguration.resolve(state))
 
   private def repoPath(relative: String): Path = {

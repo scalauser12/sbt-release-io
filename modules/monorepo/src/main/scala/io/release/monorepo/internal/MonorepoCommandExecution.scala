@@ -118,9 +118,8 @@ private[monorepo] object MonorepoCommandExecution {
       val resolvedHooks     = MonorepoHookConfiguration.resolve(state)
       val resourceHooks     = runtime.resolveResourceHooks(state)
       val materializedHooks = MonorepoResourceHooks.materialize(resourceHooks, maybeResource)
-      val mergedHooks       = resolvedHooks.mergeWith(materializedHooks)
-      MonorepoLifecycle.compile(mergedHooks)
-    }
+      resolvedHooks.mergeWith(materializedHooks)
+    }.flatMap(MonorepoLifecycle.compile)
 
   private[monorepo] def resolveFlags[T](
       cleanState: State,

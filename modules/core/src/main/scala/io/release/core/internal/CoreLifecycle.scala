@@ -200,6 +200,6 @@ private[release] object CoreLifecycle {
 
   def compile(
       hooks: CoreHookConfiguration
-  ): Seq[ProcessStep.Single[ReleaseContext]] =
+  ): IO[Seq[ProcessStep.Single[ReleaseContext]]] =
     LifecycleCompiler.compileSingle(hooks, phases)
 }
