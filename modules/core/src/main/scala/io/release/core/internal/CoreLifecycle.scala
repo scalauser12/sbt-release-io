@@ -13,13 +13,16 @@ import sbt.*
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
 
+  private val DefaultHookGateKey: ReleaseContext => String =
+    _ => ""
+
   private case class HookPhaseConfig(
       phase: String,
       resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],
       gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: ReleaseContext => String = _ => "",
+      gateKey: ReleaseContext => String = DefaultHookGateKey,
       enabled: CoreHookConfiguration => Boolean = _ => true
   )
 
@@ -36,7 +39,11 @@ private[release] object CoreLifecycle {
   ): Phase =
     LifecycleCompiler.singleBuiltIn(step = step, enabled = enabled)
 
-  private def hookPhase(config: HookPhaseConfig): Phase =
+  private def hookPhase(config: HookPhaseConfig): Phase = {
+    require(
+      !config.freezeGate || (config.gateKey ne DefaultHookGateKey),
+      s"phase '${config.phase}' requires an explicit stable gateKey when freezeGate = true"
+    )
     LifecycleCompiler.singleHookPhase(
       phase = config.phase,
       resolveHooks = config.resolveHooks,
@@ -49,10 +56,14 @@ private[release] object CoreLifecycle {
       gateKey = config.gateKey,
       enabled = config.enabled
     )
+  }
 
   private val publishGate: ReleaseContext => IO[Boolean] =
     PublishSteps.shouldRunPublishHooks
 
+  // Core runs against a single active release context, so after each
+  // cross-build switch the unscoped scalaVersion in state is the version
+  // for the current iteration.
   private val scalaVersionKey: ReleaseContext => String =
     ctx =>
       SbtRuntime

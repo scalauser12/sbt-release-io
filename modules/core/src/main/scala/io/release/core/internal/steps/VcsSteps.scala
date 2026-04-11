@@ -2,7 +2,6 @@ package io.release.core.internal.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsSign
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment
@@ -174,7 +173,10 @@ private[release] object VcsSteps {
       params: TagPlan,
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
-    expectedReleaseCommitHash(ctx.state, vcs).flatMap { expectedCommitHash =>
+    // releaseIOInternalReleaseHash remains provenance for manifests/publish, but hooks after the
+    // release commit may have advanced HEAD; tag conflicts must follow the commit `git tag` would
+    // tag right now.
+    vcs.currentHash.flatMap { expectedCommitHash =>
       TagConflictResolver
         .resolveConflict(
           ctx,
@@ -202,7 +204,7 @@ private[release] object VcsSteps {
       ctx: ReleaseContext,
       missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
   ): IO[PreflightTagOutcome] =
-    preflightExpectedCommitTarget(ctx.state, vcs, missingHashTarget).flatMap { target =>
+    missingHashTarget(vcs).flatMap { target =>
       val commandName = ctx.executionState.map(_.plan.commandName).getOrElse(DefaultCommandName)
 
       TagConflictResolver
@@ -219,29 +221,6 @@ private[release] object VcsSteps {
           )
         )
         .map(o => PreflightTagOutcome(o.tagName, o.status))
-    }
-
-  private def preflightExpectedCommitTarget(
-      state: State,
-      vcs: Vcs,
-      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
-  ): IO[TagConflictResolver.PreflightCommitTarget] =
-    missingHashTarget(vcs).flatMap {
-      case futureCommit @ TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit =>
-        IO.pure(futureCommit)
-      case fallbackTarget                                                               =>
-        IO.blocking(SbtRuntime.extracted(state).getOpt(releaseIOInternalReleaseHash).flatten)
-          .flatMap {
-            case Some(releaseHash) =>
-              IO.pure(TagConflictResolver.PreflightCommitTarget.ExactCommit(releaseHash))
-            case None              => IO.pure(fallbackTarget)
-          }
-    }
-
-  private def expectedReleaseCommitHash(state: State, vcs: Vcs): IO[String] =
-    IO.blocking(SbtRuntime.extracted(state).getOpt(releaseIOInternalReleaseHash).flatten).flatMap {
-      case Some(releaseHash) => IO.pure(releaseHash)
-      case None              => vcs.currentHash
     }
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is

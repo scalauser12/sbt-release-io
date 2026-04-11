@@ -274,6 +274,48 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagRelease.execute - keep a tag on HEAD when the persisted release hash is stale") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val baseState = ReleaseTestSupport.gitRootState(
+        repo,
+        releaseManifestSettings() ++ Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      for {
+        releaseCommitHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking {
+                               sbt.IO.write(new File(repo, "file.txt"), "updated-after-hook")
+                               TestSupport.commitAll(repo, "Post-commit hook commit")
+                             }
+        headRev           <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        staleState         = TestSupport.appendSessionSettings(
+                               baseState,
+                               Seq(releaseIOInternalReleaseHash := Some(releaseCommitHash))
+                             )
+        result            <- TestSupport.withInput("k\n") {
+                               VcsSteps.tagRelease.execute(
+                                 ReleaseContext(
+                                   state = staleState,
+                                   vcs = Some(vcs),
+                                   interactive = true
+                                 )
+                               )
+                             }
+        tagRev            <- IO.blocking(
+                               TestSupport.runGit(repo, "rev-list", "-n", "1", "v1.0.0").trim
+                             )
+      } yield {
+        assertEquals(tagRev, headRev)
+        assertEquals(result.vcs.map(_.commandName), Some("git"))
+      }
+    }
+  }
+
   test("tagRelease.execute - reject keep when the existing tag points at another commit") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val state = ReleaseTestSupport.gitRootState(
@@ -438,6 +480,55 @@ class VcsStepsSpec extends CatsEffectSuite {
           assertEquals(outcome.tagName, "v1.0.0")
           assertEquals(outcome.status, "exists; release will keep the existing tag")
         }
+    }
+  }
+
+  test("preflightTag - keep a tag on HEAD when the persisted release hash is stale") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val baseState = ReleaseTestSupport.gitRootState(
+        repo,
+        releaseManifestSettings() ++ Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      for {
+        releaseCommitHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking {
+                               sbt.IO.write(new File(repo, "file.txt"), "updated-after-hook")
+                               TestSupport.commitAll(repo, "Post-commit hook commit")
+                             }
+        _                 <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        staleState         = TestSupport.appendSessionSettings(
+                               baseState,
+                               Seq(releaseIOInternalReleaseHash := Some(releaseCommitHash))
+                             )
+        ctx                = ReleaseContext(state = staleState, vcs = Some(vcs), interactive = false)
+                               .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+                               .withExecutionState(
+                                 CoreExecutionState(
+                                   CoreReleasePlan(
+                                     flags = ExecutionFlags(
+                                       useDefaults = false,
+                                       skipTests = false,
+                                       skipPublish = false,
+                                       interactive = false,
+                                       crossBuild = false
+                                     ),
+                                     releaseVersionOverride = None,
+                                     nextVersionOverride = None,
+                                     decisionDefaults =
+                                       ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
+                                   )
+                                 )
+                               )
+        outcome           <- VcsSteps.preflightTag(ctx)
+      } yield {
+        assertEquals(outcome.tagName, "v1.0.0")
+        assertEquals(outcome.status, "exists; release will keep the existing tag")
+      }
     }
   }
 
