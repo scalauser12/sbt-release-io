@@ -7,7 +7,6 @@ import io.release.ReleaseContext
 import io.release.ReleaseResourceHooks
 import io.release.VcsOps
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
@@ -189,7 +188,7 @@ private[release] object CoreCommandExecution {
         crossBuild = crossEnabled,
         releaseVersionOverride = releaseVersionArg,
         nextVersionOverride = nextVersionArg,
-        decisionDefaults = DecisionDefaultsFromPlugin.resolveFromCoreCli(
+        decisionDefaults = CoreDecisionDefaultsCli.resolve(
           cleanState,
           args,
           warnOnDuplicates
@@ -284,11 +283,4 @@ private[release] object CoreCommandExecution {
     if (crossEnabled)
       state.log.info(s"${ReleaseLogPrefixes.Core} Cross-build enabled")
   }
-
-  private[core] def resolveDecisionDefaults(
-      state: State,
-      args: Seq[ReleaseCli.Arg],
-      warnOnDuplicates: Boolean
-  ): ReleaseDecisionDefaults =
-    DecisionDefaultsFromPlugin.resolveFromCoreCli(state, args, warnOnDuplicates)
 }

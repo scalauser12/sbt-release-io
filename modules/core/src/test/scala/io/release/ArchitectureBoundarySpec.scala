@@ -16,6 +16,9 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
   private val legacyImportPattern: Regex =
     raw"(?m)^\s*import io\.release\.(internal|steps)\.".r
 
+  private val coreInternalImportPattern: Regex =
+    raw"(?m)^\s*import io\.release\.core\.internal(?:\.|\b)".r
+
   private val sharedRuntimeSymbols = Seq(
     "ReleaseCtx",
     "ExecutionFlags",
@@ -71,12 +74,12 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
         raw"\b"
     ).r
 
-  private def assertNoLegacyImports(relativeDir: String): IO[Unit] =
+  private def assertNoImports(relativeDir: String, pattern: Regex): IO[Unit] =
     sourceFiles(relativeDir).flatMap { files =>
       IO.blocking {
         val offenders =
           files
-            .filter(path => legacyImportPattern.findFirstIn(Files.readString(path)).nonEmpty)
+            .filter(path => pattern.findFirstIn(Files.readString(path)).nonEmpty)
             .map(relativePath)
             .sorted
 
@@ -84,12 +87,19 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
       }
     }
 
+  private def assertNoLegacyImports(relativeDir: String): IO[Unit] =
+    assertNoImports(relativeDir, legacyImportPattern)
+
   test("core main sources do not import legacy internal or old step facades") {
     assertNoLegacyImports("modules/core/src/main/scala")
   }
 
-  test("monorepo main sources do not import legacy core internals or old step facades") {
+  test("monorepo main sources do not import legacy internal or old step facades") {
     assertNoLegacyImports("modules/monorepo/src/main/scala")
+  }
+
+  test("monorepo main sources do not import core internal packages") {
+    assertNoImports("modules/monorepo/src/main/scala", coreInternalImportPattern)
   }
 
   test("shared runtime kernel types are defined only in modules/runtime") {

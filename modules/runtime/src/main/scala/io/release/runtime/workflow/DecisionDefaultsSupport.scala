@@ -1,9 +1,17 @@
 package io.release.runtime.workflow
 
-import _root_.sbt.State
+import _root_.sbt.{Extracted, SettingKey, State}
 import io.release.runtime.ReleaseDecisionDefaults
 
 private[release] object DecisionDefaultsSupport {
+
+  final case class DefaultSettingKeys(
+      tagExists: SettingKey[Option[String]],
+      snapshotDependencies: SettingKey[Option[Boolean]],
+      remoteCheckFailure: SettingKey[Option[Boolean]],
+      upstreamBehind: SettingKey[Option[Boolean]],
+      push: SettingKey[Option[Boolean]]
+  )
 
   final case class CliInputs(
       tagExistsAnswers: Seq[String] = Nil,
@@ -15,6 +23,18 @@ private[release] object DecisionDefaultsSupport {
 
   def renderYesNo(value: Boolean): String =
     if (value) "y" else "n"
+
+  def settingsFromExtracted(
+      extracted: Extracted,
+      keys: DefaultSettingKeys
+  ): ReleaseDecisionDefaults =
+    ReleaseDecisionDefaults(
+      tagExistsAnswer = extracted.getOpt(keys.tagExists).flatten,
+      snapshotDependenciesAnswer = extracted.getOpt(keys.snapshotDependencies).flatten,
+      remoteCheckFailureAnswer = extracted.getOpt(keys.remoteCheckFailure).flatten,
+      upstreamBehindAnswer = extracted.getOpt(keys.upstreamBehind).flatten,
+      pushAnswer = extracted.getOpt(keys.push).flatten
+    )
 
   def resolve(
       state: State,

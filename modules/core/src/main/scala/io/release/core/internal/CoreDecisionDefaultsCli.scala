@@ -6,22 +6,17 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.DecisionDefaultsSupport
 import sbt.*
 
-private[release] object DecisionDefaultsFromPlugin {
+private[core] object CoreDecisionDefaultsCli {
 
-  def settingsFromExtracted(extracted: Extracted): ReleaseDecisionDefaults = {
-    import ReleasePluginIO.autoImport.*
-    ReleaseDecisionDefaults(
-      tagExistsAnswer = extracted.getOpt(releaseIODefaultsTagExistsAnswer).flatten,
-      snapshotDependenciesAnswer =
-        extracted.getOpt(releaseIODefaultsSnapshotDependenciesAnswer).flatten,
-      remoteCheckFailureAnswer =
-        extracted.getOpt(releaseIODefaultsRemoteCheckFailureAnswer).flatten,
-      upstreamBehindAnswer = extracted.getOpt(releaseIODefaultsUpstreamBehindAnswer).flatten,
-      pushAnswer = extracted.getOpt(releaseIODefaultsPushAnswer).flatten
-    )
-  }
+  private val defaultSettingKeys = DecisionDefaultsSupport.DefaultSettingKeys(
+    tagExists = ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer,
+    snapshotDependencies = ReleasePluginIO.autoImport.releaseIODefaultsSnapshotDependenciesAnswer,
+    remoteCheckFailure = ReleasePluginIO.autoImport.releaseIODefaultsRemoteCheckFailureAnswer,
+    upstreamBehind = ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer,
+    push = ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer
+  )
 
-  def cliInputsFromCoreArgs(args: Seq[ReleaseCli.Arg]): DecisionDefaultsSupport.CliInputs = {
+  def cliInputsFromArgs(args: Seq[ReleaseCli.Arg]): DecisionDefaultsSupport.CliInputs = {
     import ReleaseCli.Arg.*
     def allArgs[A](extract: PartialFunction[ReleaseCli.Arg, A]): Seq[A] =
       args.collect(extract)
@@ -40,7 +35,7 @@ private[release] object DecisionDefaultsFromPlugin {
     )
   }
 
-  def resolveFromCoreCli(
+  def resolve(
       state: State,
       args: Seq[ReleaseCli.Arg],
       warnOnDuplicates: Boolean
@@ -48,8 +43,11 @@ private[release] object DecisionDefaultsFromPlugin {
     DecisionDefaultsSupport.resolve(
       state = state,
       prefix = ReleaseLogPrefixes.Core,
-      settings = settingsFromExtracted(Project.extract(state)),
-      cliInputs = cliInputsFromCoreArgs(args),
+      settings = DecisionDefaultsSupport.settingsFromExtracted(
+        Project.extract(state),
+        defaultSettingKeys
+      ),
+      cliInputs = cliInputsFromArgs(args),
       warnOnDuplicates = warnOnDuplicates
     )
 }
