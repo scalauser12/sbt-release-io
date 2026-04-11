@@ -241,7 +241,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         assertEquals(tagRev, originalTagRev)
         assertNotEquals(tagRev, headRev)
         assertEquals(MonorepoSpecSupport.projectNamed(ctx.projects, "core").tagName, None)
-        assertEquals(TestSupport.manifestAttributes(ctx.state, project.ref), Set("Existing" -> "kept"))
+        assertEquals(
+          TestSupport.manifestAttributes(ctx.state, project.ref),
+          Set("Existing" -> "kept")
+        )
       }
     }
   }
@@ -321,19 +324,20 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       val ctx = withFlags(baseCtx, useDefaults = false, tagExistsAnswer = Some("k"))
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
-        TestAssertions.assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
-          MonorepoVcsSteps.preflightTags(
-            ctx,
-            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
-          )
-        ) { err =>
-          assert(
-            err.getMessage.contains(
-              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+        TestAssertions
+          .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
+            MonorepoVcsSteps.preflightTags(
+              ctx,
+              _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
             )
-          )
-          assert(err.getMessage.contains("releaseIOMonorepo help"))
-        }
+          ) { err =>
+            assert(
+              err.getMessage.contains(
+                "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+              )
+            )
+            assert(err.getMessage.contains("releaseIOMonorepo help"))
+          }
     }
   }
 
@@ -366,13 +370,14 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       for {
         _          <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
         headRev    <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
-        seededState = TestSupport.appendSessionSettings(
-                        baseCtx.state,
-                        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
-                          Seq(project.ref),
-                          headRev
-                        )
-                      )
+        seededState =
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+              Seq(project.ref),
+              headRev
+            )
+          )
         ctx         = withFlags(
                         baseCtx.withState(seededState),
                         useDefaults = false,
@@ -867,15 +872,17 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   ): MonorepoContext =
     MonorepoSpecSupport.withPlan(
       ctx,
-      MonorepoSpecSupport.releasePlan(
-        selectionMode = SelectionMode.AllChanged,
-        flags = MonorepoSpecSupport.defaultFlags.copy(
-          useDefaults = useDefaults,
-          interactive = ctx.interactive
+      MonorepoSpecSupport
+        .releasePlan(
+          selectionMode = SelectionMode.AllChanged,
+          flags = MonorepoSpecSupport.defaultFlags.copy(
+            useDefaults = useDefaults,
+            interactive = ctx.interactive
+          )
         )
-      ).copy(
-        decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = tagExistsAnswer)
-      )
+        .copy(
+          decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = tagExistsAnswer)
+        )
     )
 
   private def lateBoundVersionSettings(repo: File): Seq[Def.Setting[?]] =

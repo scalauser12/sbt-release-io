@@ -342,8 +342,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
 
   test("check - reject keep when the flow will create release commits before tagging") {
     preflightFixtureResource.use { case (repo, ctx, _) =>
-      val keepCtx  = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
-      val session  = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+      val keepCtx = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val session = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
         assertFailure[IllegalStateException, MonorepoPreflight.Summary](
@@ -373,7 +373,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       val interactiveCtx =
         withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
       val session        =
-        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+        MonorepoPreparedSession(
+          interactiveCtx.state,
+          interactiveCtx.releasePlan.get,
+          interactiveCtx
+        )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
         MonorepoPreflight
@@ -403,9 +407,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
-  test("check - ignore seeded project release hashes when a future release commit will rewrite them") {
+  test(
+    "check - ignore seeded project release hashes when a future release commit will rewrite them"
+  ) {
     preflightFixtureResource.use { case (repo, ctx, _) =>
-      val keepCtx                    =
+      val keepCtx                       =
         withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
       val seedProjectHashesInValidation =
         validationOnlyStep(
@@ -424,7 +430,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
               }
             }
         )
-      val session                    =
+      val session                       =
         MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
@@ -485,8 +491,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
 
   test("check - ignore a custom step that reuses the built-in release-write name") {
     preflightFixtureResource.use { case (repo, ctx, _) =>
-      val keepCtx = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
-      val session = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+      val keepCtx                          = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val session                          = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
       val customSetReleaseVersionsNameStep =
         validationOnlyStep(MonorepoReleaseSteps.setReleaseVersions.name)
 
@@ -523,7 +529,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       val interactiveCtx =
         withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
       val session        =
-        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+        MonorepoPreparedSession(
+          interactiveCtx.state,
+          interactiveCtx.releasePlan.get,
+          interactiveCtx
+        )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
         MonorepoPreflight
@@ -554,10 +564,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
 
   test("check - keep keep in the interactive summary for a custom step named set-release-version") {
     preflightFixtureResource.use { case (repo, ctx, _) =>
-      val interactiveCtx =
+      val interactiveCtx                   =
         withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
-      val session        =
-        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+      val session                          =
+        MonorepoPreparedSession(
+          interactiveCtx.state,
+          interactiveCtx.releasePlan.get,
+          interactiveCtx
+        )
       val customSetReleaseVersionsNameStep =
         validationOnlyStep(MonorepoReleaseSteps.setReleaseVersions.name)
 
@@ -627,7 +641,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       val interactiveCtx =
         withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
       val session        =
-        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+        MonorepoPreparedSession(
+          interactiveCtx.state,
+          interactiveCtx.releasePlan.get,
+          interactiveCtx
+        )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
         MonorepoPreflight
@@ -691,7 +709,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       val interactiveCtx =
         withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
       val session        =
-        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+        MonorepoPreparedSession(
+          interactiveCtx.state,
+          interactiveCtx.releasePlan.get,
+          interactiveCtx
+        )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
         MonorepoPreflight
@@ -727,7 +749,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       val interactiveCtx =
         withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
       val session        =
-        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+        MonorepoPreparedSession(
+          interactiveCtx.state,
+          interactiveCtx.releasePlan.get,
+          interactiveCtx
+        )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
         IO.blocking(TestSupport.runGit(repo, "tag", "api/v0.2.0")) *>

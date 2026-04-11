@@ -645,43 +645,43 @@ class VcsStepsSpec extends CatsEffectSuite {
       )
 
       for {
-        _         <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
-        headRev   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
-        state      = TestSupport.appendSessionSettings(
-                       baseState,
-                       Seq(releaseIOInternalReleaseHash := Some(headRev))
+        _       <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        headRev <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        state    = TestSupport.appendSessionSettings(
+                     baseState,
+                     Seq(releaseIOInternalReleaseHash := Some(headRev))
+                   )
+        ctx      = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+                     .withExecutionState(
+                       CoreExecutionState(
+                         CoreReleasePlan(
+                           flags = ExecutionFlags(
+                             useDefaults = false,
+                             skipTests = false,
+                             skipPublish = false,
+                             interactive = false,
+                             crossBuild = false
+                           ),
+                           releaseVersionOverride = None,
+                           nextVersionOverride = None,
+                           decisionDefaults =
+                             ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
+                         )
+                       )
                      )
-        ctx        = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
-                       .withExecutionState(
-                         CoreExecutionState(
-                           CoreReleasePlan(
-                             flags = ExecutionFlags(
-                               useDefaults = false,
-                               skipTests = false,
-                               skipPublish = false,
-                               interactive = false,
-                               crossBuild = false
-                             ),
-                             releaseVersionOverride = None,
-                             nextVersionOverride = None,
-                             decisionDefaults =
-                               ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
-                           )
-                         )
+        _       <- TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
+                     VcsSteps.preflightTag(
+                       ctx,
+                       _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+                     )
+                   ) { err =>
+                     assert(
+                       err.getMessage.contains(
+                         "This release will create a new commit before tagging, so keeping the existing tag is not valid."
                        )
-        _         <- TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
-                       VcsSteps.preflightTag(
-                         ctx,
-                         _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
-                       )
-                     ) { err =>
-                       assert(
-                         err.getMessage.contains(
-                           "This release will create a new commit before tagging, so keeping the existing tag is not valid."
-                         )
-                       )
-                       assert(err.getMessage.contains("releaseIO help"))
-                     }
+                     )
+                     assert(err.getMessage.contains("releaseIO help"))
+                   }
       } yield ()
     }
   }

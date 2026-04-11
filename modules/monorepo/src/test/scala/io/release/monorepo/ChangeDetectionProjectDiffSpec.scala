@@ -295,20 +295,20 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
         )
 
         for {
-          result <- IO.blocking(
-                      GitProcessSupport.runLinesResult(
-                        repo,
-                        Seq("diff", "--name-only", "magic-v0.1.0..HEAD", "--", ":(badmagic)")
-                      )
-                    )
-          _       = assert(result.exitCode != 0)
-          _       = assert(result.stderr.nonEmpty)
+          result  <- IO.blocking(
+                       GitProcessSupport.runLinesResult(
+                         repo,
+                         Seq("diff", "--name-only", "magic-v0.1.0..HEAD", "--", ":(badmagic)")
+                       )
+                     )
+          _        = assert(result.exitCode != 0)
+          _        = assert(result.stderr.nonEmpty)
           changed <- detectChanged(vcs, Seq(project), env.state)
           logs    <- readLogs(env, required = Seq("git diff failed for magic"))
         } yield {
-            assertEquals(changed.map(_.name), Seq("magic"))
-            assert(logs.contains("git diff failed for magic"))
-            assert(logs.contains(result.stderr))
+          assertEquals(changed.map(_.name), Seq("magic"))
+          assert(logs.contains("git diff failed for magic"))
+          assert(logs.contains(result.stderr))
         }
       }
     }

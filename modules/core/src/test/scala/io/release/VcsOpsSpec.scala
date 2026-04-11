@@ -829,22 +829,22 @@ private final class StubVcs(
 
   override def commandName: String = "git"
 
-  override def currentHash: IO[String]                  = currentHash0
-  override def currentBranch: IO[String]                = currentBranch0
-  override def trackingRemote: IO[String]               = trackingRemote0
-  override def upstreamTrackingHash: IO[Option[String]] =
+  override def currentHash: IO[String]                         = currentHash0
+  override def currentBranch: IO[String]                       = currentBranch0
+  override def trackingRemote: IO[String]                      = trackingRemote0
+  override def upstreamTrackingHash: IO[Option[String]]        =
     upstreamTrackingHash0
-  override def hasUpstream: IO[Boolean]                 = hasUpstream0
-  override def isBehindRemote: IO[Boolean]              = isBehindRemote0
-  override def existsTag(name: String): IO[Boolean]     =
+  override def hasUpstream: IO[Boolean]                        = hasUpstream0
+  override def isBehindRemote: IO[Boolean]                     = isBehindRemote0
+  override def existsTag(name: String): IO[Boolean]            =
     record(StubVcsCall.ExistsTag(name)) *> existsTag0
   override def tagCommitHash(name: String): IO[Option[String]] =
     tagCommitHash0
-  override def modifiedFiles: IO[Seq[String]]           = modifiedFiles0
-  override def stagedFiles: IO[Seq[String]]             = stagedFiles0
-  override def untrackedFiles: IO[Seq[String]]          = untrackedFiles0
-  override def status: IO[String]                       = status0
-  override def checkRemote(remote: String): IO[Int]     =
+  override def modifiedFiles: IO[Seq[String]]                  = modifiedFiles0
+  override def stagedFiles: IO[Seq[String]]                    = stagedFiles0
+  override def untrackedFiles: IO[Seq[String]]                 = untrackedFiles0
+  override def status: IO[String]                              = status0
+  override def checkRemote(remote: String): IO[Int]            =
     record(StubVcsCall.CheckRemote(remote)) *> checkRemote0
 
   override def checkRemoteWithTimeout(remote: String, timeout: FiniteDuration): IO[Option[Int]] =

@@ -28,16 +28,16 @@ object TestBuildState {
 
     def validateRef(ref: ProjectReference): Unit =
       ref match {
-        case _: ProjectRef     => ()
-        case LocalProject(_)   => ()
-        case LocalRootProject  => ()
+        case _: ProjectRef      => ()
+        case LocalProject(_)    => ()
+        case LocalRootProject   => ()
         case RootProject(`uri`) =>
           ()
         case RootProject(other) =>
           throw new IllegalArgumentException(
             s"Unsupported non-local RootProject reference in synthetic test state: $other"
           )
-        case other             =>
+        case other              =>
           throw new IllegalArgumentException(
             s"Unsupported project reference in synthetic test state: $other"
           )

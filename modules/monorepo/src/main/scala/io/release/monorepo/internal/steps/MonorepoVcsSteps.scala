@@ -201,7 +201,7 @@ private[monorepo] object MonorepoVcsSteps {
     missingHashTarget(vcs).flatMap {
       case futureCommit @ TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit =>
         IO.pure(futureCommit)
-      case fallbackTarget =>
+      case fallbackTarget                                                               =>
         IO
           .blocking(SbtRuntime.extracted(state).getOpt(project.ref / releaseIOInternalReleaseHash))
           .map(_.flatten)
