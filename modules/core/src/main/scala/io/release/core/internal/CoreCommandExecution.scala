@@ -132,9 +132,8 @@ private[release] object CoreCommandExecution {
       val resolvedHooks     = CoreHookConfiguration.resolve(state)
       val resourceHooks     = runtime.resolveResourceHooks(state)
       val materializedHooks = ReleaseResourceHooks.materialize(resourceHooks, maybeResource)
-      val mergedHooks       = resolvedHooks.mergeWith(materializedHooks)
-      CoreLifecycle.compile(mergedHooks)
-    }
+      resolvedHooks.mergeWith(materializedHooks)
+    }.flatMap(CoreLifecycle.compile)
 
   private def buildCommandInputs[T](
       cleanState: State,

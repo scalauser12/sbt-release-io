@@ -23,16 +23,16 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     "compile - match the built-in monorepo release steps when no hook or policy customization is present"
   ) {
     hookFixtureResource("monorepo-hook-compiler-defaults").use { fixture =>
-      IO {
-        assertEquals(compileLifecycle(fixture.state), MonorepoReleaseSteps.defaults)
+      compileLifecycle(fixture.state).map { steps =>
+        assertEquals(steps, MonorepoReleaseSteps.defaults)
       }
     }
   }
 
   test("compile - use the per-project tagging step in the canonical lifecycle") {
     hookFixtureResource("monorepo-hook-compiler-tag-step").use { fixture =>
-      IO {
-        val tagStep = compileLifecycle(fixture.state)
+      compileLifecycle(fixture.state).map { steps =>
+        val tagStep = steps
           .flatMap(asProjectStep)
           .find(_.hasRole(BuiltInStepRole.TagRelease))
           .getOrElse(fail("Expected canonical tag-releases step"))
@@ -44,7 +44,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
 
   test("production sources no longer reference thin monorepo hook compiler") {
     hookFixtureResource("monorepo-hook-compiler-overload").use { fixture =>
-      IO {
+      compileLifecycle(fixture.state).map { steps =>
         val commandExecution = Files.readString(
           repoPath(
             "modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandExecution.scala"
@@ -52,7 +52,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         )
 
         assertEquals(
-          compileLifecycle(fixture.state).map(_.name),
+          steps.map(_.name),
           MonorepoReleaseSteps.defaults.map(_.name)
         )
         assert(
@@ -136,8 +136,8 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     )
 
     hookFixtureResource("monorepo-hook-compiler-order", settings).use { fixture =>
-      IO {
-        val stepNames = compileLifecycle(fixture.state).map(_.name)
+      compileLifecycle(fixture.state).map { steps =>
+        val stepNames = steps.map(_.name)
 
         assertEquals(
           stepNames,
@@ -172,10 +172,6 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       val settings = publishHookSettings(observed)
 
       hookFixtureResource("monorepo-hook-compiler-publish-gate", settings).use { fixture =>
-        val publishHookSteps = compileLifecycle(fixture.state)
-          .flatMap(asProjectStep)
-          .filter(p => p.name.startsWith("before-publish:") || p.name.startsWith("after-publish:"))
-
         val skippedCtx          = fixture.context(selectedProjectIds = Seq("core"), skipPublish = true)
         val publishSkippedState = TestSupport.appendSessionSettings(
           fixture.state,
@@ -188,14 +184,21 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         val project             = fixture.projectInfo("core")
 
         for {
-          _              <- runPublishHooks(publishHookSteps, skippedCtx, project)
-          skipped        <- observed.get
-          _               = assertEquals(skipped, Nil)
-          _              <- runPublishHooks(publishHookSteps, publishSkippedCtx, project)
-          projectSkipped <- observed.get
-          _               = assertEquals(projectSkipped, Nil)
-          _              <- runPublishHooks(publishHookSteps, enabledCtx, project)
-          events         <- observed.get
+          steps           <- compileLifecycle(fixture.state)
+          publishHookSteps = steps
+                               .flatMap(asProjectStep)
+                               .filter(p =>
+                                 p.name.startsWith("before-publish:") ||
+                                   p.name.startsWith("after-publish:")
+                               )
+          _               <- runPublishHooks(publishHookSteps, skippedCtx, project)
+          skipped         <- observed.get
+          _                = assertEquals(skipped, Nil)
+          _               <- runPublishHooks(publishHookSteps, publishSkippedCtx, project)
+          projectSkipped  <- observed.get
+          _                = assertEquals(projectSkipped, Nil)
+          _               <- runPublishHooks(publishHookSteps, enabledCtx, project)
+          events          <- observed.get
         } yield assertEquals(
           events,
           List("validate-before", "validate-after", "execute-before", "execute-after")
@@ -237,7 +240,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
 
   private def compileLifecycle(
       state: sbt.State
-  ): Seq[AnyStep] =
+  ): IO[Seq[AnyStep]] =
     MonorepoLifecycle.compile(MonorepoHookConfiguration.resolve(state))
 
   private def asProjectStep(step: AnyStep): Option[ProjectStep] =

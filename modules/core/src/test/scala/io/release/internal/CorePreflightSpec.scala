@@ -294,29 +294,29 @@ class CorePreflightSpec extends CatsEffectSuite {
         )
       )
     ) { case (_, versionFile, initialCtx) =>
-      val steps = CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state))
-
-      CorePreflight
-        .check(initialCtx, steps, crossBuild = false)
-        .map { summary =>
-          assertEquals(
-            summary.versions,
-            CorePreflight.VersionsSummary.Resolved(
-              versionFile = versionFile,
-              currentVersion = "0.1.0-SNAPSHOT",
-              releaseVersion = "0.1.0",
-              nextVersion = "0.2.0-SNAPSHOT"
+      CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+        CorePreflight
+          .check(initialCtx, steps, crossBuild = false)
+          .map { summary =>
+            assertEquals(
+              summary.versions,
+              CorePreflight.VersionsSummary.Resolved(
+                versionFile = versionFile,
+                currentVersion = "0.1.0-SNAPSHOT",
+                releaseVersion = "0.1.0",
+                nextVersion = "0.2.0-SNAPSHOT"
+              )
             )
-          )
-          assertEquals(
-            summary.tag,
-            CorePreflight.TagSummary.Resolved("v0.1.0", "available")
-          )
-          assertEquals(summary.publishSummary, "step not configured")
-          assertEquals(summary.pushSummary, "step not configured")
-          assert(summary.stepNames.contains("before-tag:before-tag-marker"))
-          assertEquals(summary.stepNames, steps.map(_.name))
-        }
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved("v0.1.0", "available")
+            )
+            assertEquals(summary.publishSummary, "step not configured")
+            assertEquals(summary.pushSummary, "step not configured")
+            assert(summary.stepNames.contains("before-tag:before-tag-marker"))
+            assertEquals(summary.stepNames, steps.map(_.name))
+          }
+      }
     }
   }
 

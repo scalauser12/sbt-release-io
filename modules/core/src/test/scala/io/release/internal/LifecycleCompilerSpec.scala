@@ -102,18 +102,23 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       )
     )
 
-    val compiled = LifecycleCompiler.compileSingle(
-      TestConfig(
-        singleHooks = Seq(
-          SingleHook("resolve"),
-          SingleHook("confirm")
+    LifecycleCompiler
+      .compileSingle(
+        TestConfig(
+          singleHooks = Seq(
+            SingleHook("resolve"),
+            SingleHook("confirm")
+          )
+        ),
+        phases
+      )
+      .map { compiled =>
+        assertEquals(
+          compiled.map(_.name),
+          Seq("before-version:resolve", "before-version:confirm")
         )
-      ),
-      phases
-    )
-
-    assertEquals(compiled.map(_.name), Seq("before-version:resolve", "before-version:confirm"))
-    assert(compiled.forall(_.enableCrossBuild))
+        assert(compiled.forall(_.enableCrossBuild))
+      }
   }
 
   test("compile - compile named per-item hook steps in order") {
@@ -126,7 +131,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       )
     )
 
-    val compiled = LifecycleCompiler
+    LifecycleCompiler
       .compile(
         TestConfig(
           itemHooks = Seq(
@@ -136,15 +141,16 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
         ),
         phases
       )
-      .map { step =>
-        ProcessStep.fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](step)(
-          _ => fail("expected PerItem hook step"),
-          identity
-        )
+      .map { steps =>
+        val compiled = steps.map { step =>
+          ProcessStep.fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](step)(
+            _ => fail("expected PerItem hook step"),
+            identity
+          )
+        }
+        assertEquals(compiled.map(_.name), Seq("before-publish:prepare", "before-publish:verify"))
+        assert(compiled.forall(_.enableCrossBuild))
       }
-
-    assertEquals(compiled.map(_.name), Seq("before-publish:prepare", "before-publish:verify"))
-    assert(compiled.forall(_.enableCrossBuild))
   }
 
   test("compile - frozen single gate reuses validation decision during execute") {
@@ -167,11 +173,10 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
               freezeGate = true
             )
           )
-        val step   = LifecycleCompiler
-          .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
-          .head
-
         for {
+          steps     <- LifecycleCompiler
+                         .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
+          step       = steps.head
           validated <- step.validate(TestContext(gateOpen = true))
           _         <- step.execute(validated.copy(gateOpen = false))
           recorded  <- events.get
@@ -211,16 +216,16 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
             gateKey = (_, item) => item
           )
         )
-        val step   = ProcessStep.fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](
-          LifecycleCompiler
-            .compile(TestConfig(itemHooks = Seq(hook)), phases)
-            .head
-        )(
-          _ => fail("expected PerItem step"),
-          identity
-        )
-
         for {
+          steps     <- LifecycleCompiler
+                         .compile(TestConfig(itemHooks = Seq(hook)), phases)
+          step       = ProcessStep
+                         .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](
+                           steps.head
+                         )(
+                           _ => fail("expected PerItem step"),
+                           identity
+                         )
           validated <- step.validate(
                          TestContext(gateOpen = true),
                          "core"
