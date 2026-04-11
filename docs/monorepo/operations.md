@@ -24,6 +24,8 @@ cat core/version.sbt   # inspect a version file
 
 ### Rollback: push has not happened
 
+The tag names below are illustrative per-project tags. Delete the tags created by your release.
+
 ```bash
 # Delete tags created by tag-releases
 git tag -d core/v0.1.0
@@ -35,14 +37,26 @@ git reset --hard HEAD~2
 
 ### Rollback: push has already happened
 
+The tag names below are illustrative per-project tags. Delete the tags created by your release,
+and push the revert to the same tracking remote and upstream branch that `push-changes` used.
+
 ```bash
+# Inspect the tracked remote / upstream branch used by push-changes
+UPSTREAM="$(git rev-parse --abbrev-ref --symbolic-full-name @{upstream})"  # e.g. origin/main
+REMOTE="${UPSTREAM%%/*}"
+BRANCH="${UPSTREAM#*/}"
+
 # Delete remote tags
-git push origin :refs/tags/core/v0.1.0
-git push origin :refs/tags/api/v0.1.0
+git push "$REMOTE" :refs/tags/core/v0.1.0
+git push "$REMOTE" :refs/tags/api/v0.1.0
+
+# Delete the same tags locally so a retry from this checkout starts clean
+git tag -d core/v0.1.0
+git tag -d api/v0.1.0
 
 # Safe revert of both release commits (git applies them newest-first)
 git revert HEAD~2..HEAD
-git push origin main
+git push "$REMOTE" "HEAD:$BRANCH"
 ```
 
 > **Note:** Published artifacts cannot be retracted from most repositories. Publish a corrected patch release instead.

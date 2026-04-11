@@ -61,8 +61,11 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoDetectionIncludeDownstream := true,
     releaseIOMonorepoHooksAfterSelection +=
-      MonorepoGlobalHookIO.action("print-selected-projects")(ctx =>
-        IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
+      MonorepoGlobalHookIO(
+        name = "print-selected-projects",
+        execute = ctx => IO.pure(ctx),
+        validate = ctx =>
+          IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
       )
   )
 ```
@@ -73,7 +76,8 @@ What this config does:
 - `publish-artifacts` is disabled
 - `run-clean` is disabled to keep the rehearsal faster
 - downstream dependents are included when change detection picks an upstream project
-- an `afterSelection` hook prints the effective project set
+- an `afterSelection` hook prints the effective project set during validation, so it appears in
+  `check` output
 
 ## 3. Create version files
 
@@ -136,7 +140,7 @@ downstream dependents:
 - `api` is selected because it depends on `core`
 - `web` is selected because it depends on `api`
 
-The `afterSelection` hook prints the effective set, for example:
+The `afterSelection` hook prints the effective set during validation, for example:
 
 ```text
 [monorepo] selected: core, api, web

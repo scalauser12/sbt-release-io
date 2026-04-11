@@ -80,10 +80,13 @@ jobs:
           CORE_RELEASE_VERSION: ${{ github.event.inputs.core_version }}
           CORE_NEXT_VERSION: ${{ github.event.inputs.core_next_version }}
         run: |
-          sbt "releaseIOMonorepo with-defaults release-version core=$CORE_RELEASE_VERSION next-version core=$CORE_NEXT_VERSION"
+          sbt "releaseIOMonorepo core with-defaults release-version core=$CORE_RELEASE_VERSION next-version core=$CORE_NEXT_VERSION"
 ```
 
 > **Note:** `fetch-depth: 0` is important — change detection uses `git diff` against the last tag, so shallow clones may produce incorrect results.
+
+Use an explicit project selector in CI when you intend to release only one project. Version
+overrides force-include their target, but they do not narrow change-detection selection on their own.
 
 For the full list of CLI flags and subcommands, see [Usage](usage.md).
 
@@ -152,7 +155,8 @@ push already happened), see [Recovery and rollback](operations.md#recovery-and-r
 When change detection is too broad for the question you want to answer, keep the same safe local
 settings but drive the plan with explicit selectors and version overrides.
 
-In `build.sbt`:
+In `build.sbt`, use an `afterSelection` hook that prints during validation so it appears in
+`check` output:
 
 ```scala
 import _root_.cats.effect.IO
@@ -162,12 +166,15 @@ releaseIOMonorepoPolicyEnablePush := false
 releaseIOMonorepoPolicyEnablePublish := false
 releaseIOMonorepoPolicyEnableRunClean := false
 releaseIOMonorepoHooksAfterSelection +=
-  MonorepoGlobalHookIO.action("print-selected-projects")(ctx =>
-    IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
+  MonorepoGlobalHookIO(
+    name = "print-selected-projects",
+    execute = ctx => IO.pure(ctx),
+    validate = ctx =>
+      IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
   )
 ```
 
-Then rehearse one project directly:
+Then rehearse one project directly and confirm the selected-project output:
 
 ```bash
 sbt "releaseIOMonorepo check api with-defaults release-version api=1.1.0 next-version api=1.2.0-SNAPSHOT"

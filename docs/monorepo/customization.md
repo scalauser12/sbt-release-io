@@ -107,10 +107,12 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 releaseIOMonorepoHooksAfterTag +=
   MonorepoProjectHookIO.action("notify-tagged") { (_, project) =>
-    val version = project.versions.map(_._1).getOrElse("unknown")
-    IO.println(s"[monorepo] tagged ${project.name} $version")
+    val tagName = project.tagName.getOrElse("unknown-tag")
+    IO.println(s"[monorepo] tagged ${project.name} as $tagName")
   }
 ```
+
+`afterTag` hooks are where `project.tagName` reflects the finalized tag name that was created.
 
 ## Custom plugins with shared resources
 
@@ -138,7 +140,7 @@ import _root_.io.release.monorepo.*
 // Swap this trait for the real type you use in your build.
 trait HttpClient {
   def allowedProjects(): Set[String]
-  def notifyTagged(projects: Seq[String]): Unit
+  def notifyTagged(project: String, tagName: String): Unit
   def close(): Unit
 }
 
@@ -149,9 +151,9 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
   override def resource: Resource[IO, HttpClient] =
     Resource.make(IO.blocking {
       new HttpClient {
-        def allowedProjects(): Set[String]            = Set("core", "api")
-        def notifyTagged(projects: Seq[String]): Unit = ()
-        def close(): Unit                             = ()
+        def allowedProjects(): Set[String] = Set("core", "api")
+        def notifyTagged(project: String, tagName: String): Unit = ()
+        def close(): Unit = ()
       }
     })(client => IO.blocking(client.close()))
 
@@ -167,9 +169,12 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
       }
     )
 
-  private val notifySlack =
-    MonorepoGlobalResourceHookIO.action[HttpClient]("notify-slack")(client => ctx =>
-      IO.blocking(client.notifyTagged(ctx.currentProjects.map(_.name)))
+  private val notifyTaggedProject =
+    MonorepoProjectResourceHookIO.action[HttpClient]("notify-tagged-project")(
+      client => (_, project) => {
+        val tagName = project.tagName.getOrElse("unknown-tag")
+        IO.blocking(client.notifyTagged(project.name, tagName))
+      }
     )
 
   override protected def monorepoResourceHooks(
@@ -177,8 +182,7 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
   ): MonorepoResourceHooks[HttpClient] =
     MonorepoResourceHooks(
       afterSelectionHooks = Seq(validateProjects),
-      afterTagHooks = Seq.empty,
-      afterReleaseCommitHooks = Seq(notifySlack)
+      afterTagHooks = Seq(notifyTaggedProject)
     )
 }
 ```

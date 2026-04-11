@@ -82,7 +82,7 @@ exist when it is `false`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoVersioningFile` | `(ProjectRef, State) => File` | `<project>/releaseIOVersioningFile` per project | Resolve each project's version file |
+| `releaseIOMonorepoVersioningFile` | `(ProjectRef, State) => File` | `<project>/version.sbt` | Resolve each project's version file via the shared core `releaseIOVersioningFile` setting |
 | `releaseIOMonorepoVersioningReadVersion` | `File => IO[String]` | regex parser | Read a version from a project's version file |
 | `releaseIOMonorepoVersioningFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Produce version-file contents for a project |
 
