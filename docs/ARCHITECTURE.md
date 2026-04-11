@@ -10,10 +10,10 @@ sbt modules under `modules/`:
 | ---------- | ---- |
 | **runtime** | Shared engine: `ExecutionEngine`, `ProcessStep`, `LifecycleCompiler`, VCS, version model, command helpers (`ReleaseCommandCompilation`, `ReleaseCommandRunner`). No dependency on `core` or `monorepo`. |
 | **core**    | Single-project plugin (`ReleasePluginIO`), `ReleaseContext`, default steps, core lifecycle. Depends on **runtime** and **testkit** (tests). |
-| **monorepo** | Multi-project plugin (`MonorepoReleasePlugin`), `MonorepoContext`, change detection, per-project steps. Depends on **runtime** and **testkit** (tests). |
+| **monorepo** | Multi-project plugin (`MonorepoReleasePlugin`), `MonorepoContext`, change detection, per-project steps. Depends on **core**, **runtime**, and **testkit** (tests). |
 | **testkit** | Test fixtures and assertions. Used by core/monorepo tests. |
 
-There is **no** `core` ↔ `monorepo` dependency: the two products stay separate at the artifact boundary.
+At the code/build level, the layering is `monorepo -> core -> runtime`, while `core` and `monorepo` remain separate published plugins/artifacts.
 
 ```mermaid
 flowchart TB
@@ -22,6 +22,7 @@ flowchart TB
   core[Core]
   monorepo[Monorepo]
   core --> runtime
+  monorepo --> core
   monorepo --> runtime
   core --> testkit
   monorepo --> testkit
@@ -64,7 +65,7 @@ flowchart LR
 
 - Registration: [`MonorepoReleasePlugin`](../modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala)
 - CLI, planning, merge/compile: [`MonorepoCommandExecution`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandExecution.scala)
-- Selection boundary: setup segment uses sequential validate-then-execute; main segment uses validate-all-then-execute (same engine mode as core main): [`MonorepoComposer`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoComposer.scala)
+- Selection boundary (default built-in flow): setup segment uses sequential validate-then-execute; main segment uses validate-all-then-execute (same engine mode as core main). If no selection-boundary step is present, the whole process falls back to sequential validate-then-execute: [`MonorepoComposer`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoComposer.scala)
 
 ## Glossary
 
@@ -77,7 +78,7 @@ flowchart LR
 | `ReleaseContext` | Core threaded state (versions, VCS, sbt `State`, flags). |
 | `MonorepoContext` | Global monorepo state plus per-project info and selection. |
 
-For validate vs execute semantics and `releaseIO check`, see [Core concepts](core/concepts.md) and [Monorepo concepts](monorepo/concepts.md).
+For validate vs execute semantics and `releaseIO check` / `releaseIOMonorepo check`, see [Core concepts](core/concepts.md) and [Monorepo concepts](monorepo/concepts.md).
 
 ## Related reading
 
