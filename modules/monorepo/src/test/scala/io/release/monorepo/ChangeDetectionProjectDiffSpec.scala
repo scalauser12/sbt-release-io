@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.TestSupport
+import io.release.vcs.GitProcessSupport
 import munit.CatsEffectSuite
 
 import java.io.File
@@ -293,18 +294,21 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
           versionFile = new File(badDir, "version.sbt")
         )
 
-        detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
-          readLogs(
-            env,
-            required = Seq(
-              "git diff failed for magic",
-              "Invalid pathspec magic 'badmagic'"
-            )
-          ).map { logs =>
+        for {
+          result <- IO.blocking(
+                      GitProcessSupport.runLinesResult(
+                        repo,
+                        Seq("diff", "--name-only", "magic-v0.1.0..HEAD", "--", ":(badmagic)")
+                      )
+                    )
+          _       = assert(result.exitCode != 0)
+          _       = assert(result.stderr.nonEmpty)
+          changed <- detectChanged(vcs, Seq(project), env.state)
+          logs    <- readLogs(env, required = Seq("git diff failed for magic"))
+        } yield {
             assertEquals(changed.map(_.name), Seq("magic"))
             assert(logs.contains("git diff failed for magic"))
-            assert(logs.contains("Invalid pathspec magic 'badmagic'"))
-          }
+            assert(logs.contains(result.stderr))
         }
       }
     }

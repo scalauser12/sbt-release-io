@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.TestSupport
+import io.release.vcs.GitProcessSupport
 import munit.CatsEffectSuite
 
 import java.io.File
@@ -32,16 +33,22 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
       }.flatMap { case (vcs, env) =>
         val project = nestedProject(repo, "core")
 
-        detectChanged(vcs, Seq(project), env.state).flatMap { changed =>
-          readLogs(
-            env,
-            required = Seq("git describe failed for core", "not a git repository")
-          ).map { logs =>
+        for {
+          result <- IO.blocking(
+                      GitProcessSupport.runLinesResult(
+                        repo,
+                        Seq("describe", "--tags", "--match", "core-v*", "--abbrev=0")
+                      )
+                    )
+          _       = assert(result.exitCode != 0)
+          _       = assert(result.stderr.nonEmpty)
+          changed <- detectChanged(vcs, Seq(project), env.state)
+          logs    <- readLogs(env, required = Seq("git describe failed for core"))
+        } yield {
             assertEquals(changed.map(_.name), Seq("core"))
             assert(logs.contains("git describe failed for core"))
-            assert(logs.contains("not a git repository"))
+            assert(logs.contains(result.stderr))
             assert(!logs.contains("No previous tag matching"))
-          }
         }
       }
     }

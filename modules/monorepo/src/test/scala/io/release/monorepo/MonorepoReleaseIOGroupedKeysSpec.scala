@@ -57,7 +57,7 @@ class MonorepoReleaseIOGroupedKeysSpec
     "releaseIOMonorepoPublishChecks"
   )
 
-  private val actualLabels = Set(
+  private val compileTimeLabels = Set(
     keyLabel(MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects),
     keyLabel(MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild),
     keyLabel(MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests),
@@ -104,6 +104,28 @@ class MonorepoReleaseIOGroupedKeysSpec
     keyLabel(MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsNextCommitMessage),
     keyLabel(MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks)
   )
+
+  private lazy val reflectiveLabels = {
+    val autoImport      = MonorepoReleasePlugin.autoImport
+    val autoImportClass = autoImport.getClass
+
+    autoImportClass.getMethods.iterator
+      .filter(method =>
+        method.getDeclaringClass == autoImportClass &&
+          method.getParameterCount == 0 &&
+          classOf[SettingKey[?]].isAssignableFrom(method.getReturnType)
+      )
+      .map(method =>
+        method.invoke(autoImport) match {
+          case key: SettingKey[?] => keyLabel(key)
+          case other              =>
+            fail(
+              s"Expected ${method.getName} to return SettingKey, got ${other.getClass.getName}"
+            )
+        }
+      )
+      .toSet
+  }
 
   private val removedAliases = Seq(
     "releaseIOMonorepoProjects",
@@ -164,8 +186,9 @@ class MonorepoReleaseIOGroupedKeysSpec
     )
 
   test("MonorepoReleasePlugin.autoImport exposes the full set of 43 expected public keys") {
-    assertEquals(actualLabels, expectedLabels)
-    assertEquals(actualLabels.size, 43)
+    assertEquals(compileTimeLabels, expectedLabels)
+    assertEquals(reflectiveLabels, expectedLabels)
+    assertEquals(reflectiveLabels.size, 43)
   }
 
   test(
