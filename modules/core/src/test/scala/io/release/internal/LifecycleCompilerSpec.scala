@@ -193,6 +193,58 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
     }
   }
 
+  test("compile - frozen single gate caches independent decisions per key") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
+      Ref.of[IO, Int](0).flatMap { gateCalls =>
+        val hook   = SingleHook(
+          name = "publish-check",
+          execute = ctx => events.update(_ :+ s"execute:${ctx.gateKey}").as(ctx),
+          validate = ctx => events.update(_ :+ s"validate:${ctx.gateKey}")
+        )
+        val phases =
+          Seq[LifecycleCompiler.Phase[TestConfig, TestContext, Nothing]](
+            LifecycleCompiler.singleHookPhase(
+              phase = "before-publish",
+              resolveHooks = _.singleHooks,
+              gate = ctx =>
+                events.update(_ :+ s"gate:${ctx.gateKey}:${ctx.gateOpen}") *>
+                  gateCalls.update(_ + 1).as(ctx.gateOpen),
+              nameOf = (h: SingleHook) => h.name,
+              executeOf = (h: SingleHook) => h.execute,
+              validateOf = (h: SingleHook) => h.validate,
+              freezeGate = true,
+              gateKey = _.gateKey
+            )
+          )
+        val first  = TestContext(gateOpen = true, gateKey = "2.12")
+        val second = TestContext(gateOpen = false, gateKey = "3")
+
+        for {
+          steps           <- LifecycleCompiler
+                               .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
+          step             = steps.head
+          validatedFirst  <- step.validate(first)
+          validatedSecond <- step.validate(second)
+          _               <- step.execute(validatedFirst.copy(gateOpen = false))
+          _               <- step.execute(validatedSecond.copy(gateOpen = true))
+          recorded        <- events.get
+          calls           <- gateCalls.get
+        } yield {
+          assertEquals(
+            recorded,
+            List(
+              "gate:2.12:true",
+              "validate:2.12",
+              "gate:3:false",
+              "execute:2.12"
+            )
+          )
+          assertEquals(calls, 2)
+        }
+      }
+    }
+  }
+
   test("singleHookPhase - require an explicit gateKey when freezing is enabled") {
     val err = intercept[IllegalArgumentException] {
       LifecycleCompiler.singleHookPhase[TestConfig, TestContext, Nothing, SingleHook](
@@ -357,7 +409,7 @@ object LifecycleCompilerSpec {
       itemHooks: Seq[ItemHook] = Nil
   )
 
-  final case class TestContext(gateOpen: Boolean)
+  final case class TestContext(gateOpen: Boolean, gateKey: String = "default")
 
   final case class SingleHook(
       name: String,

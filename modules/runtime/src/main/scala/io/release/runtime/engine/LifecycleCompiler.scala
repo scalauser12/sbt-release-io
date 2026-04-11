@@ -268,7 +268,9 @@ private[release] object LifecycleCompiler {
     * single `Ref` cache.  The validate function captures the gate
     * decision; the execute function replays it.  Keyed by `gateKey`
     * so cross-build or per-project iterations each preserve their
-    * own decision.
+    * own decision.  Compiled release flows validate each hook step
+    * once before its matching execute, so a simple cache update is
+    * sufficient here.
     */
   private def frozenGateFunctions[Args, C](
       gate: Args => IO[Boolean],

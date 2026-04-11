@@ -203,6 +203,57 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     }
   }
 
+  test("compile - freeze publish hook decisions by project identity and scalaVersion") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed)
+
+      hookFixtureResource("monorepo-hook-compiler-publish-gate-key", settings).use { fixture =>
+        val baseProject    =
+          fixture.projectInfo(
+            "core",
+            versions = Some("0.1.0" -> "0.2.0-SNAPSHOT"),
+            tagName = Some("core/v0.1.0")
+          )
+        val mutatedProject =
+          baseProject.copy(
+            versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"),
+            tagName = Some("core/v1.0.0")
+          )
+
+        for {
+          scala212State <- stateWithScalaVersion(fixture.state, "2.12.21")
+          scala3State   <- stateWithScalaVersion(fixture.state, "3.8.1")
+          steps         <- compileLifecycle(fixture.state)
+          publishHooks   = publishProjectHooksOnly(steps)
+          validate212Ctx = fixture
+                             .context(selectedProjectIds = Seq("core"), skipPublish = false)
+                             .withState(scala212State)
+                             .withProjects(Seq(baseProject))
+          validate3Ctx   = fixture
+                             .context(selectedProjectIds = Seq("core"), skipPublish = true)
+                             .withState(scala3State)
+                             .withProjects(Seq(baseProject))
+          execute212Ctx  = fixture
+                             .context(selectedProjectIds = Seq("core"), skipPublish = false)
+                             .withState(scala212State)
+                             .withProjects(Seq(mutatedProject))
+          execute3Ctx    = fixture
+                             .context(selectedProjectIds = Seq("core"), skipPublish = false)
+                             .withState(scala3State)
+                             .withProjects(Seq(mutatedProject))
+          _             <- validatePublishHooks(publishHooks, validate212Ctx, baseProject)
+          _             <- validatePublishHooks(publishHooks, validate3Ctx, baseProject)
+          _             <- executePublishHooks(publishHooks, execute212Ctx, mutatedProject)
+          _             <- executePublishHooks(publishHooks, execute3Ctx, mutatedProject)
+          events        <- observed.get
+        } yield assertEquals(
+          events,
+          List("validate-before", "validate-after", "execute-before", "execute-after")
+        )
+      }
+    }
+  }
+
   private def hookFixtureResource(
       prefix: String,
       rootSettings: Seq[Setting[?]] = Nil
@@ -278,6 +329,17 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
           execute = (ctx, _) => observed.update(_ :+ "execute-after").as(ctx),
           validate = (_, _) => observed.update(_ :+ "validate-after")
         )
+      )
+    )
+
+  private def stateWithScalaVersion(
+      state: sbt.State,
+      value: String
+  ): IO[sbt.State] =
+    IO.blocking(
+      TestSupport.appendSessionSettings(
+        state,
+        Seq(scalaVersion := value)
       )
     )
 

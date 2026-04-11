@@ -61,9 +61,10 @@ private[release] object CoreLifecycle {
   private val publishGate: ReleaseContext => IO[Boolean] =
     PublishSteps.shouldRunPublishHooks
 
-  // Core runs against a single active release context, so after each
-  // cross-build switch the unscoped scalaVersion in state is the version
-  // for the current iteration.
+  // Publish hooks freeze their validate-time gate decision so publishTo / publish / skip
+  // drift between cross-build iterations cannot flip execute-time behavior. Core runs
+  // against a single active release context, so the current unscoped scalaVersion is the
+  // stable per-iteration key.
   private val scalaVersionKey: ReleaseContext => String =
     ctx =>
       SbtRuntime

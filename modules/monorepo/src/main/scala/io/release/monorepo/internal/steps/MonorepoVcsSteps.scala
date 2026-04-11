@@ -5,7 +5,6 @@ import cats.syntax.all.*
 import io.release.ReleaseManifestMetadataSupport
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
