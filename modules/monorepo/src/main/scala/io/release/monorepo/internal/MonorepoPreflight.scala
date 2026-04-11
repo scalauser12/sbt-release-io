@@ -1,6 +1,7 @@
 package io.release.monorepo.internal
 
 import cats.effect.IO
+import cats.syntax.all.*
 import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
@@ -10,6 +11,8 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.vcs.TagConflictResolver
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
@@ -183,7 +186,8 @@ private[monorepo] object MonorepoPreflight {
           resolveTagSnapshot(
             checkedCtx,
             processPlan.shouldPreflightTags,
-            builtInVersionsResolved = false
+            builtInVersionsResolved = false,
+            builtInTagPreflightIncludesReleaseWriteAndCommit = false
           )
         summary      <- buildSummary(
                           selectionMode = selectionMode,
@@ -212,7 +216,9 @@ private[monorepo] object MonorepoPreflight {
           resolveTagSnapshot(
             checkedCtx,
             processPlan.shouldPreflightTags,
-            builtInVersionsResolved = processPlan.builtInTagPreflightFollowsVersionResolution
+            builtInVersionsResolved = processPlan.builtInTagPreflightFollowsVersionResolution,
+            builtInTagPreflightIncludesReleaseWriteAndCommit =
+              processPlan.builtInTagPreflightIncludesReleaseWriteAndCommit
           )
         summary         <- buildSummary(
                              selectionMode = selectionMode,
@@ -266,14 +272,54 @@ private[monorepo] object MonorepoPreflight {
   private def resolveTagSnapshot(
       ctx: MonorepoContext,
       shouldPreflightTags: Boolean,
-      builtInVersionsResolved: Boolean
+      builtInVersionsResolved: Boolean,
+      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
   ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
     if (!shouldPreflightTags)
       IO.pure(Evaluation.NotEvaluated(s"$TagReleasesStep not in check process"))
     else if (!builtInVersionsResolved)
       IO.pure(Evaluation.NotEvaluated("tags depend on runtime/custom version setup"))
     else
-      MonorepoVcsSteps.preflightTags(ctx).map(Evaluation.Resolved(_))
+      preflightTags(ctx, builtInTagPreflightIncludesReleaseWriteAndCommit).map(Evaluation.Resolved(_))
+
+  private def preflightTags(
+      ctx: MonorepoContext,
+      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
+  ): IO[Seq[MonorepoVcsSteps.PreflightTagOutcome]] =
+    if (!builtInTagPreflightIncludesReleaseWriteAndCommit)
+      MonorepoVcsSteps.preflightTags(ctx)
+    else
+      builtInReleaseWritesWouldChange(ctx).flatMap { wouldChange =>
+        if (wouldChange)
+          MonorepoVcsSteps.preflightTags(
+            ctx,
+            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+          )
+        else
+          MonorepoVcsSteps.preflightTags(ctx)
+      }
+
+  private def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
+    ctx.currentProjects.toList
+      .traverse(projectReleaseWriteWouldChange(ctx, _))
+      .map(_.exists(identity))
+
+  private def projectReleaseWriteWouldChange(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Boolean] =
+    project.resolvedVersions match {
+      case Some((releaseVersion, _)) =>
+        MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
+          VersionWorkflowSupport.wouldChangeVersionFile(
+            versionInputs.versionFile,
+            releaseVersion,
+            versionInputs.versionFileContents
+          )
+        }
+      case None                      =>
+        IO.raiseError(new IllegalStateException(s"Resolved versions not set for ${project.name}"))
+    }
 
   private def validateSegment(
       steps: Seq[AnyStep],

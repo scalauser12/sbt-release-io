@@ -2,6 +2,7 @@ package io.release.core.internal.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsSign
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment
@@ -118,10 +119,19 @@ private[release] object VcsSteps {
     )
 
   private[release] def preflightTag(ctx: ReleaseContext): IO[PreflightTagOutcome] =
+    preflightTag(
+      ctx,
+      vcs => vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
+    )
+
+  private[release] def preflightTag(
+      ctx: ReleaseContext,
+      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+  ): IO[PreflightTagOutcome] =
     preparePreflightContext(ctx).flatMap { preflightCtx =>
       resolveTagPlan(preflightCtx).flatMap { params =>
         val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
-        detectedVcs.flatMap(vcs => resolveTagPreflight(vcs, params, preflightCtx))
+        detectedVcs.flatMap(vcs => resolveTagPreflight(vcs, params, preflightCtx, missingHashTarget))
       }
     }
 
@@ -162,46 +172,74 @@ private[release] object VcsSteps {
       params: TagPlan,
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
-    TagConflictResolver
-      .resolveConflict(
-        ctx,
-        vcs,
-        TagConflictResolver.TagParams(
-          tagName = params.tagName,
-          tagComment = params.tagComment,
-          sign = params.sign,
-          interactive = ctx.interactive,
-          useDefaults = ctx.useDefaults,
-          defaultAnswer = params.defaultAnswer,
-          logPrefix = ReleaseLogPrefixes.Core,
-          label = ""
+    expectedReleaseCommitHash(ctx.state, vcs).flatMap { expectedCommitHash =>
+      TagConflictResolver
+        .resolveConflict(
+          ctx,
+          vcs,
+          TagConflictResolver.TagParams(
+            tagName = params.tagName,
+            tagComment = params.tagComment,
+            sign = params.sign,
+            expectedCommitHash = expectedCommitHash,
+            interactive = ctx.interactive,
+            useDefaults = ctx.useDefaults,
+            defaultAnswer = params.defaultAnswer,
+            logPrefix = ReleaseLogPrefixes.Core,
+            label = ""
+          )
         )
-      )
-      .map { case (updatedCtx, result) =>
-        applyTagToState(updatedCtx, params, result.tagName)
-      }
+        .map { case (updatedCtx, result) =>
+          applyTagToState(updatedCtx, params, result.tagName)
+        }
+    }
 
   private def resolveTagPreflight(
       vcs: Vcs,
       params: TagPlan,
-      ctx: ReleaseContext
-  ): IO[PreflightTagOutcome] = {
-    val commandName = ctx.executionState.map(_.plan.commandName).getOrElse(DefaultCommandName)
+      ctx: ReleaseContext,
+      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+  ): IO[PreflightTagOutcome] =
+    preflightExpectedCommitTarget(ctx.state, vcs, missingHashTarget).flatMap { target =>
+      val commandName = ctx.executionState.map(_.plan.commandName).getOrElse(DefaultCommandName)
 
-    TagConflictResolver
-      .preflightConflict(
-        vcs,
-        TagConflictResolver.PreflightParams(
-          tagName = params.tagName,
-          interactive = ctx.interactive,
-          useDefaults = ctx.useDefaults,
-          defaultAnswer = params.defaultAnswer,
-          commandName = commandName,
-          label = ""
+      TagConflictResolver
+        .preflightConflict(
+          vcs,
+          TagConflictResolver.PreflightParams(
+            tagName = params.tagName,
+            target = target,
+            interactive = ctx.interactive,
+            useDefaults = ctx.useDefaults,
+            defaultAnswer = params.defaultAnswer,
+            commandName = commandName,
+            label = ""
+          )
         )
-      )
-      .map(o => PreflightTagOutcome(o.tagName, o.status))
-  }
+        .map(o => PreflightTagOutcome(o.tagName, o.status))
+    }
+
+  private def preflightExpectedCommitTarget(
+      state: State,
+      vcs: Vcs,
+      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+  ): IO[TagConflictResolver.PreflightCommitTarget] =
+    missingHashTarget(vcs).flatMap {
+      case futureCommit @ TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit =>
+        IO.pure(futureCommit)
+      case fallbackTarget =>
+        IO.blocking(SbtRuntime.extracted(state).getOpt(releaseIOInternalReleaseHash).flatten).flatMap {
+          case Some(releaseHash) =>
+            IO.pure(TagConflictResolver.PreflightCommitTarget.ExactCommit(releaseHash))
+          case None              => IO.pure(fallbackTarget)
+        }
+    }
+
+  private def expectedReleaseCommitHash(state: State, vcs: Vcs): IO[String] =
+    IO.blocking(SbtRuntime.extracted(state).getOpt(releaseIOInternalReleaseHash).flatten).flatMap {
+      case Some(releaseHash) => IO.pure(releaseHash)
+      case None              => vcs.currentHash
+    }
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call.

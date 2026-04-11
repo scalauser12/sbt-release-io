@@ -11,6 +11,8 @@ import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.vcs.TagConflictResolver
 
 import java.io.File
 
@@ -25,7 +27,8 @@ private[release] object CorePreflight {
       pushConfigured: Boolean,
       publishConfigured: Boolean,
       shouldResolveVersions: Boolean,
-      shouldPreflightTag: Boolean
+      shouldPreflightTag: Boolean,
+      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
   )
 
   private object CheckSteps {
@@ -37,9 +40,26 @@ private[release] object CorePreflight {
         pushConfigured = steps.exists(_.hasRole(BuiltInStepRole.PushChanges)),
         publishConfigured = steps.exists(_.hasRole(BuiltInStepRole.PublishArtifacts)),
         shouldResolveVersions = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions)),
-        shouldPreflightTag = steps.exists(_.hasRole(BuiltInStepRole.TagRelease))
+        shouldPreflightTag = steps.exists(_.hasRole(BuiltInStepRole.TagRelease)),
+        builtInTagPreflightIncludesReleaseWriteAndCommit =
+          containsOrderedSubsequence(
+            steps,
+            Seq(
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            )
+          )
       )
     }
+  }
+
+  private def containsOrderedSubsequence(
+      steps: Seq[Step],
+      orderedSteps: Seq[Step]
+  ): Boolean = {
+    val remaining = steps.iterator
+    orderedSteps.forall(target => remaining.exists(_ eq target))
   }
 
   private final case class VersionSnapshot(
@@ -195,13 +215,45 @@ private[release] object CorePreflight {
       IO.pure(TagSummary.NotEvaluated(s"$TagReleaseStep not in check process"))
     else
       snapshot.summary match {
-        case _: VersionsSummary.Resolved     =>
-          VcsSteps
-            .preflightTag(snapshot.context)
+        case _: VersionsSummary.Resolved =>
+          preflightTag(snapshot.context, checkSteps)
             .map(outcome => TagSummary.Resolved(outcome.tagName, outcome.status))
         case _: VersionsSummary.NotEvaluated =>
           IO.pure(TagSummary.NotEvaluated("tag depends on runtime/custom version setup"))
       }
+
+  private def preflightTag(
+      ctx: ReleaseContext,
+      checkSteps: CheckSteps
+  ): IO[VcsSteps.PreflightTagOutcome] =
+    if (!checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit)
+      VcsSteps.preflightTag(ctx)
+    else
+      builtInReleaseWriteWouldChange(ctx).flatMap { wouldChange =>
+        if (wouldChange)
+          VcsSteps.preflightTag(
+            ctx,
+            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+          )
+        else
+          VcsSteps.preflightTag(ctx)
+      }
+
+  private[release] def builtInReleaseWriteWouldChange(ctx: ReleaseContext): IO[Boolean] =
+    IO.fromOption(ctx.releaseVersion)(
+      new IllegalStateException(
+        "Built-in preflight release-write preview requires a resolved release version " +
+          "in the validated context."
+      )
+    ).flatMap { releaseVersion =>
+      IO.blocking(VersionSteps.resolveVersionPlan(ctx)).flatMap { versionPlan =>
+        VersionWorkflowSupport.wouldChangeVersionFile(
+          versionPlan.versionFile,
+          releaseVersion,
+          versionPlan.versionFileContents
+        )
+      }
+    }
 
   private def renderVersions(versions: VersionsSummary): List[String] =
     versions match {

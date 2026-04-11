@@ -13,6 +13,8 @@ import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.internal.SelectionMode
 import io.release.monorepo.internal.steps.*
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.ReleaseDecisionDefaults
+import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Def
@@ -207,6 +209,44 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   }
 
   test(
+    "tagReleasesPerProject.execute - reject keep when the existing tag points at another commit"
+  ) {
+    perProjectTagContextResource.use { case (repo, project, baseCtx) =>
+      val ctx = withFlags(baseCtx.copy(interactive = true), useDefaults = false)
+
+      for {
+        _              <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
+        originalTagRev <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim
+                          )
+        _              <- IO.blocking {
+                            sbt.IO.write(new File(repo, "file.txt"), "updated")
+                            TestSupport.commitAll(repo, "Second commit")
+                          }
+        headRev        <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _              <- TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
+                            TestSupport.withInput("k\n") {
+                              MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+                            }
+                          ) { err =>
+                            assert(err.getMessage.contains("Tag [core-v1.0.0] already exists"))
+                            assert(err.getMessage.contains(originalTagRev))
+                            assert(err.getMessage.contains(headRev))
+                            assert(err.getMessage.contains("Overwrite it or provide a new tag."))
+                          }
+        tagRev         <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim
+                          )
+      } yield {
+        assertEquals(tagRev, originalTagRev)
+        assertNotEquals(tagRev, headRev)
+        assertEquals(MonorepoSpecSupport.projectNamed(ctx.projects, "core").tagName, None)
+        assertEquals(TestSupport.manifestAttributes(ctx.state, project.ref), Set("Existing" -> "kept"))
+      }
+    }
+  }
+
+  test(
     "tagReleasesPerProject.execute - retry with a new tag name in interactive mode and store it"
   ) {
     perProjectTagContextResource.use { case (repo, project, baseCtx) =>
@@ -271,6 +311,91 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           Seq(MonorepoVcsSteps.PreflightTagOutcome("core-v1.0.0", "available"))
         )
       }
+    }
+  }
+
+  test(
+    "preflightTags - reject the configured keep answer when release will create a new commit"
+  ) {
+    perProjectTagContextResource.use { case (repo, _, baseCtx) =>
+      val ctx = withFlags(baseCtx, useDefaults = false, tagExistsAnswer = Some("k"))
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
+        TestAssertions.assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
+          MonorepoVcsSteps.preflightTags(
+            ctx,
+            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIOMonorepo help"))
+        }
+    }
+  }
+
+  test("preflightTags - omit keep from the interactive status for a future release commit") {
+    perProjectTagContextResource.use { case (repo, _, baseCtx) =>
+      val ctx = withFlags(baseCtx.copy(interactive = true), useDefaults = false)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
+        MonorepoVcsSteps
+          .preflightTags(
+            ctx,
+            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+          )
+          .map { outcomes =>
+            assertEquals(
+              outcomes,
+              Seq(
+                MonorepoVcsSteps.PreflightTagOutcome(
+                  "core-v1.0.0",
+                  "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("preflightTags - ignore the persisted project release hash for a future release commit") {
+    perProjectTagContextResource.use { case (repo, project, baseCtx) =>
+      for {
+        _          <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
+        headRev    <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        seededState = TestSupport.appendSessionSettings(
+                        baseCtx.state,
+                        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+                          Seq(project.ref),
+                          headRev
+                        )
+                      )
+        ctx         = withFlags(
+                        baseCtx.withState(seededState),
+                        useDefaults = false,
+                        tagExistsAnswer = Some("k")
+                      )
+        _          <- TestAssertions
+                        .assertFailure[
+                          IllegalStateException,
+                          Seq[MonorepoVcsSteps.PreflightTagOutcome]
+                        ](
+                          MonorepoVcsSteps.preflightTags(
+                            ctx,
+                            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+                          )
+                        ) { err =>
+                          assert(
+                            err.getMessage.contains(
+                              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+                            )
+                          )
+                          assert(err.getMessage.contains("releaseIOMonorepo help"))
+                        }
+      } yield ()
     }
   }
 
@@ -359,6 +484,30 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           Some(coreTag)
         )
         assertEquals(MonorepoSpecSupport.projectNamed(result.projects, "api").tagName, Some(apiTag))
+      }
+    }
+  }
+
+  test("pushChanges.execute - push recorded tags when a local branch has the same name") {
+    twoProjectPushContextResource.use { case (repo, remoteRepo, core, api, ctx) =>
+      val coreTag = core.tagName.getOrElse(fail("Expected core tag name"))
+      val apiTag  = api.tagName.getOrElse(fail("Expected api tag name"))
+
+      for {
+        _          <- IO.blocking {
+                        sbt.IO.write(new File(repo, "file.txt"), "updated")
+                        TestSupport.commitAll(repo, "Second commit")
+                        TestSupport.runGit(repo, "branch", coreTag)
+                        TestSupport.runGit(repo, "tag", "-a", coreTag, "-m", s"Release ${core.name} 1.0.0")
+                        TestSupport.runGit(repo, "tag", "-a", apiTag, "-m", s"Release ${api.name} 2.0.0")
+                      }
+        result     <- MonorepoVcsSteps.pushChanges.execute(ctx)
+        remoteCore <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", coreTag).trim)
+        remoteApi  <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", apiTag).trim)
+      } yield {
+        assert(!result.failed)
+        assertEquals(remoteCore, coreTag)
+        assertEquals(remoteApi, apiTag)
       }
     }
   }
@@ -713,7 +862,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private def withFlags(
       ctx: MonorepoContext,
-      useDefaults: Boolean
+      useDefaults: Boolean,
+      tagExistsAnswer: Option[String] = None
   ): MonorepoContext =
     MonorepoSpecSupport.withPlan(
       ctx,
@@ -723,6 +873,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           useDefaults = useDefaults,
           interactive = ctx.interactive
         )
+      ).copy(
+        decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = tagExistsAnswer)
       )
     )
 

@@ -28,6 +28,28 @@ class GitPushSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("pushTag - push the tag when a local branch has the same name") {
+    TestSupport.gitRepoWithBareRemoteResource(fixturePrefix).use { case (repo, remoteRepo) =>
+      val tagName = "release-v1.0.0"
+
+      Vcs.detect(repo).flatMap {
+        case Some(vcs) =>
+          for {
+            _         <- IO.blocking {
+                           TestSupport.runGit(repo, "branch", tagName)
+                           TestSupport.runGit(repo, "tag", tagName)
+                         }
+            _         <- GitPushSupport.pushTag(vcs, "origin", tagName)
+            remoteTag <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", tagName).trim)
+          } yield {
+            assertEquals(remoteTag, tagName)
+          }
+        case None      =>
+          IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
+      }
+    }
+  }
+
   private def stubVcs(dir: File): Vcs =
     new Vcs {
       override def commandName: String = "git"
@@ -47,6 +69,8 @@ class GitPushSupportSpec extends CatsEffectSuite {
       override def isBehindRemote: IO[Boolean] = IO.pure(false)
 
       override def existsTag(name: String): IO[Boolean] = IO.pure(false)
+
+      override def tagCommitHash(name: String): IO[Option[String]] = IO.pure(None)
 
       override def modifiedFiles: IO[Seq[String]] = IO.pure(Nil)
 

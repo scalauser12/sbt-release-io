@@ -3,8 +3,10 @@ package io.release.monorepo.internal.steps
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
+import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
@@ -56,6 +58,7 @@ private[monorepo] object MonorepoVcsSteps {
       tagName: String,
       comment: String,
       sign: Boolean,
+      expectedCommitHash: String,
       label: String
   ): IO[(MonorepoContext, String)] =
     TagConflictResolver
@@ -66,6 +69,7 @@ private[monorepo] object MonorepoVcsSteps {
           tagName = tagName,
           tagComment = comment,
           sign = sign,
+          expectedCommitHash = expectedCommitHash,
           interactive = ctx.interactive,
           useDefaults = useDefaults(ctx),
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
@@ -81,6 +85,7 @@ private[monorepo] object MonorepoVcsSteps {
       ctx: MonorepoContext,
       vcs: Vcs,
       rendered: String,
+      target: TagConflictResolver.PreflightCommitTarget,
       label: String
   ): IO[PreflightTagOutcome] = {
     val commandName = ctx.releasePlan.map(_.commandName).getOrElse(DefaultCommandName)
@@ -90,6 +95,7 @@ private[monorepo] object MonorepoVcsSteps {
         vcs,
         TagConflictResolver.PreflightParams(
           tagName = rendered,
+          target = target,
           interactive = ctx.interactive,
           useDefaults = useDefaults(ctx),
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
@@ -101,13 +107,25 @@ private[monorepo] object MonorepoVcsSteps {
   }
 
   private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
+    preflightTags(
+      ctx,
+      vcs => vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
+    )
+
+  private[monorepo] def preflightTags(
+      ctx: MonorepoContext,
+      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+  ): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
         ctx.currentProjects.toList.traverse { project =>
           required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
             case (releaseVer, _) =>
               val rendered = settings.perProjectTagName(project.name, releaseVer)
-              preflightCreateTag(ctx, vcs, rendered, project.name)
+              preflightExpectedCommitTarget(ctx.state, vcs, project, missingHashTarget).flatMap {
+                target =>
+                  preflightCreateTag(ctx, vcs, rendered, target, project.name)
+              }
           }
         }
       }
@@ -125,38 +143,74 @@ private[monorepo] object MonorepoVcsSteps {
               // which varies by project.
               MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
                 val initialTagName = settings.perProjectTagName(project.name, releaseVer)
-                createTag(
-                  ctx,
-                  vcs,
-                  initialTagName,
-                  settings.tagComment(project.name, releaseVer),
-                  settings.sign,
-                  project.name
-                ).flatMap { case (updatedCtx, resolvedTagName) =>
-                  for {
-                    preserved <- MonorepoVersionFiles.preservedSettings(
-                                   updatedCtx.state,
-                                   updatedCtx.currentProjects.map(_.ref)
-                                 )
-                    _         <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
-                    newState  <-
-                      IO.blocking {
-                        SbtRuntime.appendWithSession(
-                          updatedCtx.state,
-                          preserved ++ ReleaseManifestMetadataSupport.releaseManifestTagSettings(
-                            project.ref,
-                            resolvedTagName
+                expectedReleaseCommitHash(ctx, vcs, project).flatMap { expectedCommitHash =>
+                  createTag(
+                    ctx,
+                    vcs,
+                    initialTagName,
+                    settings.tagComment(project.name, releaseVer),
+                    settings.sign,
+                    expectedCommitHash,
+                    project.name
+                  ).flatMap { case (updatedCtx, resolvedTagName) =>
+                    for {
+                      preserved <- MonorepoVersionFiles.preservedSettings(
+                                     updatedCtx.state,
+                                     updatedCtx.currentProjects.map(_.ref)
+                                   )
+                      _         <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
+                      newState  <-
+                        IO.blocking {
+                          SbtRuntime.appendWithSession(
+                            updatedCtx.state,
+                            preserved ++ ReleaseManifestMetadataSupport.releaseManifestTagSettings(
+                              project.ref,
+                              resolvedTagName
+                            )
                           )
-                        )
-                      }
-                  } yield updatedCtx
-                    .withState(newState)
-                    .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
+                        }
+                    } yield updatedCtx
+                      .withState(newState)
+                      .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
+                  }
                 }
               }
           }
         }
     )
+
+  private def expectedReleaseCommitHash(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      project: ProjectReleaseInfo
+  ): IO[String] =
+    IO
+      .blocking(SbtRuntime.extracted(ctx.state).getOpt(project.ref / releaseIOInternalReleaseHash))
+      .map(_.flatten)
+      .flatMap {
+        case Some(releaseHash) => IO.pure(releaseHash)
+        case None              => vcs.currentHash
+      }
+
+  private def preflightExpectedCommitTarget(
+      state: sbt.State,
+      vcs: Vcs,
+      project: ProjectReleaseInfo,
+      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+  ): IO[TagConflictResolver.PreflightCommitTarget] =
+    missingHashTarget(vcs).flatMap {
+      case futureCommit @ TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit =>
+        IO.pure(futureCommit)
+      case fallbackTarget =>
+        IO
+          .blocking(SbtRuntime.extracted(state).getOpt(project.ref / releaseIOInternalReleaseHash))
+          .map(_.flatten)
+          .flatMap {
+            case Some(releaseHash) =>
+              IO.pure(TagConflictResolver.PreflightCommitTarget.ExactCommit(releaseHash))
+            case None              => IO.pure(fallbackTarget)
+          }
+    }
 
   private def gitPush(ctx: MonorepoContext, vcs: Vcs): IO[MonorepoContext] = {
     val tags = ctx.currentProjects.flatMap(_.tagName).distinct

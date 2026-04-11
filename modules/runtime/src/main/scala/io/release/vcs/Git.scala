@@ -76,6 +76,11 @@ class Git(val baseDir: File) extends Vcs {
         .!(GitProcessSupport.discardLogger) == 0
     )
 
+  override def tagCommitHash(name: String): IO[Option[String]] =
+    runSingleLine("rev-parse", "--verify", s"refs/tags/$name^{commit}")(
+      s"git rev-parse --verify refs/tags/$name^{commit}"
+    ).map(Some(_)).handleError(_ => None)
+
   def modifiedFiles: IO[Seq[String]] =
     runLines("ls-files", "--modified", "--exclude-standard")("git ls-files --modified")
 
