@@ -41,15 +41,14 @@ private[release] object CorePreflight {
         publishConfigured = steps.exists(_.hasRole(BuiltInStepRole.PublishArtifacts)),
         shouldResolveVersions = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions)),
         shouldPreflightTag = steps.exists(_.hasRole(BuiltInStepRole.TagRelease)),
-        builtInTagPreflightIncludesReleaseWriteAndCommit =
-          containsOrderedSubsequence(
-            steps,
-            Seq(
-              VersionSteps.setReleaseVersion,
-              VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
-            )
+        builtInTagPreflightIncludesReleaseWriteAndCommit = containsOrderedSubsequence(
+          steps,
+          Seq(
+            VersionSteps.setReleaseVersion,
+            VersionSteps.commitReleaseVersion,
+            VcsSteps.tagRelease
           )
+        )
       )
     }
   }
@@ -215,7 +214,7 @@ private[release] object CorePreflight {
       IO.pure(TagSummary.NotEvaluated(s"$TagReleaseStep not in check process"))
     else
       snapshot.summary match {
-        case _: VersionsSummary.Resolved =>
+        case _: VersionsSummary.Resolved     =>
           preflightTag(snapshot.context, checkSteps)
             .map(outcome => TagSummary.Resolved(outcome.tagName, outcome.status))
         case _: VersionsSummary.NotEvaluated =>

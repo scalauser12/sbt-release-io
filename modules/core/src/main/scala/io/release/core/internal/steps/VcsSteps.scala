@@ -131,7 +131,9 @@ private[release] object VcsSteps {
     preparePreflightContext(ctx).flatMap { preflightCtx =>
       resolveTagPlan(preflightCtx).flatMap { params =>
         val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
-        detectedVcs.flatMap(vcs => resolveTagPreflight(vcs, params, preflightCtx, missingHashTarget))
+        detectedVcs.flatMap(vcs =>
+          resolveTagPreflight(vcs, params, preflightCtx, missingHashTarget)
+        )
       }
     }
 
@@ -227,12 +229,13 @@ private[release] object VcsSteps {
     missingHashTarget(vcs).flatMap {
       case futureCommit @ TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit =>
         IO.pure(futureCommit)
-      case fallbackTarget =>
-        IO.blocking(SbtRuntime.extracted(state).getOpt(releaseIOInternalReleaseHash).flatten).flatMap {
-          case Some(releaseHash) =>
-            IO.pure(TagConflictResolver.PreflightCommitTarget.ExactCommit(releaseHash))
-          case None              => IO.pure(fallbackTarget)
-        }
+      case fallbackTarget                                                               =>
+        IO.blocking(SbtRuntime.extracted(state).getOpt(releaseIOInternalReleaseHash).flatten)
+          .flatMap {
+            case Some(releaseHash) =>
+              IO.pure(TagConflictResolver.PreflightCommitTarget.ExactCommit(releaseHash))
+            case None              => IO.pure(fallbackTarget)
+          }
     }
 
   private def expectedReleaseCommitHash(state: State, vcs: Vcs): IO[String] =

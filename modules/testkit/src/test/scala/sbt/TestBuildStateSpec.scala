@@ -184,20 +184,18 @@ class TestBuildStateSpec extends CatsEffectSuite {
   }
 
   test("synthetic loaded state - reject non-local RootProject aggregate references") {
-    assertRejectsNonLocalRootProject("test-build-state-non-local-aggregate") {
-      (dir, foreignUri) =>
-        Seq(Project("root", dir).aggregate(RootProject(foreignUri)))
+    assertRejectsNonLocalRootProject("test-build-state-non-local-aggregate") { (dir, foreignUri) =>
+      Seq(Project("root", dir).aggregate(RootProject(foreignUri)))
     }
   }
 
   test("synthetic loaded state - reject non-local RootProject dependency references") {
-    assertRejectsNonLocalRootProject("test-build-state-non-local-dependency") {
-      (dir, foreignUri) =>
-        Seq(
-          Project("root", dir).dependsOn(
-            ClasspathDependency(RootProject(foreignUri), None)
-          )
+    assertRejectsNonLocalRootProject("test-build-state-non-local-dependency") { (dir, foreignUri) =>
+      Seq(
+        Project("root", dir).dependsOn(
+          ClasspathDependency(RootProject(foreignUri), None)
         )
+      )
     }
   }
 

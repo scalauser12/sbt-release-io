@@ -280,7 +280,9 @@ private[monorepo] object MonorepoPreflight {
     else if (!builtInVersionsResolved)
       IO.pure(Evaluation.NotEvaluated("tags depend on runtime/custom version setup"))
     else
-      preflightTags(ctx, builtInTagPreflightIncludesReleaseWriteAndCommit).map(Evaluation.Resolved(_))
+      preflightTags(ctx, builtInTagPreflightIncludesReleaseWriteAndCommit).map(
+        Evaluation.Resolved(_)
+      )
 
   private def preflightTags(
       ctx: MonorepoContext,

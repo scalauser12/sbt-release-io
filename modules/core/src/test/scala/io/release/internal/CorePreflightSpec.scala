@@ -258,7 +258,8 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("check - reject keep when the flow will create a release commit before tagging") {
     withInitialContext { case (repo, _, initialCtx) =>
-      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val keepCtx =
+        withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
         assertFailure[IllegalStateException, CorePreflight.Summary](
@@ -316,7 +317,8 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("check - ignore a seeded release hash when a future release commit will rewrite it") {
     withInitialContext { case (repo, _, initialCtx) =>
-      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val keepCtx                     =
+        withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
       val seedReleaseHashInValidation =
         validationOnlyStep(
           "seed-release-hash-in-validation",
@@ -362,7 +364,8 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("check - keep the configured keep answer when no built-in release write precedes tagging") {
     withInitialContext { case (repo, _, initialCtx) =>
-      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val keepCtx =
+        withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
         CorePreflight
@@ -390,7 +393,8 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("check - ignore a custom step that reuses the built-in release-write name") {
     withInitialContext { case (repo, _, initialCtx) =>
-      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val keepCtx                         =
+        withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
       val customSetReleaseVersionNameStep =
         validationOnlyStep(VersionSteps.setReleaseVersion.name)
 
@@ -450,7 +454,7 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("check - keep keep in the interactive summary for a custom step named set-release-version") {
     withInitialContext { case (repo, _, initialCtx) =>
-      val interactiveCtx =
+      val interactiveCtx                  =
         withTagConflictDefaults(initialCtx, interactive = true, defaultAnswer = None)
       val customSetReleaseVersionNameStep =
         validationOnlyStep(VersionSteps.setReleaseVersion.name)
@@ -482,7 +486,8 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("check - keep the configured keep answer when the built-in release write is a no-op") {
     withInitialContextAtVersion("0.1.0") { case (repo, _, initialCtx) =>
-      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val keepCtx =
+        withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
         CorePreflight
@@ -551,7 +556,8 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("check - reject keep when a later built-in release chain creates the release commit") {
     withInitialContext { case (repo, _, initialCtx) =>
-      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val keepCtx =
+        withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
         assertFailure[IllegalStateException, CorePreflight.Summary](
@@ -861,21 +867,23 @@ class CorePreflightSpec extends CatsEffectSuite {
       interactive: Boolean,
       defaultAnswer: Option[String]
   ): ReleaseContext =
-    ctx.copy(interactive = interactive).withExecutionState(
-      CoreExecutionState(
-        CoreReleasePlan.fromFlags(
-          useDefaults = false,
-          skipTests = false,
-          skipPublish = false,
-          interactive = interactive,
-          crossBuild = false,
-          releaseVersionOverride = None,
-          nextVersionOverride = None,
-          decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = defaultAnswer),
-          commandName = "releaseIO"
+    ctx
+      .copy(interactive = interactive)
+      .withExecutionState(
+        CoreExecutionState(
+          CoreReleasePlan.fromFlags(
+            useDefaults = false,
+            skipTests = false,
+            skipPublish = false,
+            interactive = interactive,
+            crossBuild = false,
+            releaseVersionOverride = None,
+            nextVersionOverride = None,
+            decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = defaultAnswer),
+            commandName = "releaseIO"
+          )
         )
       )
-    )
 
   private val skipPublishInValidationStep: Step =
     validationOnlyStep(

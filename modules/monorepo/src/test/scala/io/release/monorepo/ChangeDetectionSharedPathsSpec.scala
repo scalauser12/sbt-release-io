@@ -34,21 +34,21 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         val project = nestedProject(repo, "core")
 
         for {
-          result <- IO.blocking(
-                      GitProcessSupport.runLinesResult(
-                        repo,
-                        Seq("describe", "--tags", "--match", "core-v*", "--abbrev=0")
-                      )
-                    )
-          _       = assert(result.exitCode != 0)
-          _       = assert(result.stderr.nonEmpty)
+          result  <- IO.blocking(
+                       GitProcessSupport.runLinesResult(
+                         repo,
+                         Seq("describe", "--tags", "--match", "core-v*", "--abbrev=0")
+                       )
+                     )
+          _        = assert(result.exitCode != 0)
+          _        = assert(result.stderr.nonEmpty)
           changed <- detectChanged(vcs, Seq(project), env.state)
           logs    <- readLogs(env, required = Seq("git describe failed for core"))
         } yield {
-            assertEquals(changed.map(_.name), Seq("core"))
-            assert(logs.contains("git describe failed for core"))
-            assert(logs.contains(result.stderr))
-            assert(!logs.contains("No previous tag matching"))
+          assertEquals(changed.map(_.name), Seq("core"))
+          assert(logs.contains("git describe failed for core"))
+          assert(logs.contains(result.stderr))
+          assert(!logs.contains("No previous tag matching"))
         }
       }
     }

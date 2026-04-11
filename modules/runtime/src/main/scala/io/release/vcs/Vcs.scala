@@ -20,6 +20,7 @@ trait Vcs {
   def hasUpstream: IO[Boolean]
   def isBehindRemote: IO[Boolean]
   def existsTag(name: String): IO[Boolean]
+
   /** Resolve the commit hash pointed to by a tag, peeling annotated tags.
     * Returns `None` when the tag cannot be resolved.
     */

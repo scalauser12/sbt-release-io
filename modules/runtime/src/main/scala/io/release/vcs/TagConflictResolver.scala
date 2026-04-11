@@ -78,7 +78,7 @@ private[release] object TagConflictResolver {
                 params,
                 allowKeep = matchesExpectedCommit
               ).flatMap {
-                case (nextCtx, ConflictAction.Abort)                  =>
+                case (nextCtx, ConflictAction.Abort)                         =>
                   IO.raiseError(
                     new IllegalStateException(s"Tag [$tagName] already exists. Aborting release!")
                   )
@@ -88,7 +88,7 @@ private[release] object TagConflictResolver {
                       s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
                     )
                   ).as(nextCtx -> TagResult(tagName, overwritten = false))
-                case (_, ConflictAction.Keep)                        =>
+                case (_, ConflictAction.Keep)                                =>
                   IO.raiseError(
                     new IllegalStateException(
                       keepMismatchMessage(
@@ -99,7 +99,7 @@ private[release] object TagConflictResolver {
                       )
                     )
                   )
-                case (nextCtx, ConflictAction.Overwrite)             =>
+                case (nextCtx, ConflictAction.Overwrite)                     =>
                   IO.blocking(
                     nextCtx.state.log.warn(
                       s"${params.logPrefix} Tag [$tagName] already exists. Overwriting."
@@ -108,7 +108,7 @@ private[release] object TagConflictResolver {
                     vcs
                       .tag(tagName, params.tagComment, params.sign, force = true)
                       .as(nextCtx -> TagResult(tagName, overwritten = true))
-                case (nextCtx, ConflictAction.Retry(newTag))         =>
+                case (nextCtx, ConflictAction.Retry(newTag))                 =>
                   IO.blocking(
                     nextCtx.state.log.info(
                       s"${params.logPrefix} Tag [$tagName] exists. Trying tag [$newTag]."
@@ -136,7 +136,7 @@ private[release] object TagConflictResolver {
                       IO.pure(
                         PreflightOutcome(tagName, "exists; release will keep the existing tag")
                       )
-                    case Some("k") | Some("K")                   =>
+                    case Some("k") | Some("K")                          =>
                       IO.raiseError(
                         new IllegalStateException(
                           preflightKeepMismatchMessage(
@@ -147,39 +147,39 @@ private[release] object TagConflictResolver {
                           )
                         )
                       )
-                    case Some("o") | Some("O")                   =>
+                    case Some("o") | Some("O")                          =>
                       IO.pure(
                         PreflightOutcome(tagName, "exists; release will overwrite the tag")
                       )
-                    case Some("a") | Some("A") | Some("")        =>
+                    case Some("a") | Some("A") | Some("")               =>
                       preflightAbort(tagName, params, "Current settings would abort the release.")
-                    case Some(newTagName)                        =>
+                    case Some(newTagName)                               =>
                       loop(newTagName, defaultAnswer = None).map { outcome =>
                         outcome.copy(
                           status =
                             s"[$tagName] exists; release will retry with [${outcome.tagName}] (${outcome.status})"
                         )
                       }
-                    case None if params.useDefaults              =>
+                    case None if params.useDefaults                     =>
                       preflightAbort(
                         tagName,
                         params,
                         "Current settings would abort in use-defaults mode."
                       )
-                    case None if !params.interactive             =>
+                    case None if !params.interactive                    =>
                       preflightAbort(
                         tagName,
                         params,
                         "Current settings would abort in non-interactive mode."
                       )
-                    case None if matchesExpectedCommit           =>
+                    case None if matchesExpectedCommit                  =>
                       IO.pure(
                         PreflightOutcome(
                           tagName,
                           "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
                         )
                       )
-                    case None                                    =>
+                    case None                                           =>
                       IO.pure(
                         PreflightOutcome(
                           tagName,
@@ -188,7 +188,7 @@ private[release] object TagConflictResolver {
                       )
                   }
               }
-            case PreflightCommitTarget.FutureReleaseCommit     =>
+            case PreflightCommitTarget.FutureReleaseCommit             =>
               normalizeAnswer(defaultAnswer) match {
                 case Some("k") | Some("K")            =>
                   IO.raiseError(
@@ -255,12 +255,14 @@ private[release] object TagConflictResolver {
       tagName: String,
       expectedCommitHash: String
   ): IO[MatchStatus] =
-    vcs.tagCommitHash(tagName).map(actualCommitHash =>
-      MatchStatus(
-        matchesExpectedCommit = actualCommitHash.contains(expectedCommitHash),
-        actualCommitHash = actualCommitHash
+    vcs
+      .tagCommitHash(tagName)
+      .map(actualCommitHash =>
+        MatchStatus(
+          matchesExpectedCommit = actualCommitHash.contains(expectedCommitHash),
+          actualCommitHash = actualCommitHash
+        )
       )
-    )
 
   private def resolveAnswer[C <: ReleaseCtx { type Self = C }](
       ctx: C,
