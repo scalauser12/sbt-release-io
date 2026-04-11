@@ -8,7 +8,7 @@
 | 2 | `check-clean-working-dir` | Global | Validation-only step that fails if uncommitted changes exist |
 | 3 | `resolve-release-order` | Global | Topologically sort projects by dependencies |
 | 4 | `detect-or-select-projects` | Global | Run change detection or use explicit CLI selection |
-| 5 | `check-snapshot-dependencies` | PerProject | Validation-only step that fails if any SNAPSHOT dependencies are found (cross-build) |
+| 5 | `check-snapshot-dependencies` | PerProject | Validation-only step that checks SNAPSHOT dependencies and aborts only if the operator or policy declines to continue (cross-build) |
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
 | 7 | `run-clean` | PerProject | Clean selected project outputs; sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide |
 | 8 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
@@ -27,7 +27,7 @@
 ### Validate / Execute Model
 
 1. **Setup segment**: Steps up to and including `detect-or-select-projects` run validate-then-execute sequentially. Custom steps inserted here can read state or perform checks before project selection is finalized.
-2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup. In this main segment, later step validation cannot depend on earlier step execution because all main-step validation finishes before any main-step execution begins.
+2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup. In this main segment, later step validation cannot depend on earlier step execution because all main-step validation finishes before any main-step execution begins. The strict "validate everything before mutations" guarantee starts at this boundary; setup steps intentionally interleave validation and execution.
 3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Task-level failures are detected between steps.
 
 Author implication: if a custom step needs strict validate -> execute ordering relative to later checks, place it in the setup segment or fold the dependent check and action into the same step.
@@ -61,7 +61,7 @@ During `run-tests`, `api` throws an exception. The error is logged and `api` is 
 
 > **Note:** There is no dependency-aware cascade. If `web` depends on `api`, `web` is not automatically marked failed — it continues in the current step.
 
-> **Note:** The isolation model above applies to the **execution** phase only. During the **main validation** segment, a failure in any project's validation immediately stops the entire release — there is no per-project isolation for validation. This fail-fast design ensures that no mutations begin if any project has a detectable problem.
+> **Note:** The isolation model above applies to the **execution** phase only. During the **main validation** segment, a failure in any project's validation immediately stops the entire release — there is no per-project isolation for validation. This fail-fast design ensures that no main-segment mutations begin if any project has a detectable problem after project selection. Setup-segment steps and hooks before `detect-or-select-projects` may already have run.
 
 A **Global** step failure immediately marks the context as failed and skips all subsequent steps.
 

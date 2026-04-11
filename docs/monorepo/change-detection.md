@@ -81,6 +81,8 @@ This releases `api` at version `1.0.0` regardless of whether change detection fo
 ## Custom change detector
 
 ```scala
+import _root_.cats.effect.IO
+
 releaseIOMonorepoDetectionChangeDetector := Some((ref: ProjectRef, baseDir: File, state: State) =>
   IO.pure(ref.project == "core") // only release "core"
 )
@@ -116,9 +118,9 @@ On a brand-new repo with no prior release tags, change detection marks all proje
 changed — this is expected and is how first releases work.
 
 If you changed `releaseIOMonorepoVcsTagName` after previous releases, the new tag pattern
-won't match the old tags and projects may look unchanged because the detector can't find
-their prior release. In that case, either:
+won't match the old tags, so affected projects are treated as changed because the detector
+can't find a matching prior release tag. In practice, this behaves like a first release
+under the new tag scheme for those projects until a new baseline tag exists. To re-establish
+that baseline:
 
-- tag the current commit under the new scheme to re-establish a baseline,
-- use the `all-changed` flag to bypass detection for one invocation, or
-- disable detection permanently with `releaseIOMonorepoDetectionEnabled := false`.
+- tag the current commit under the new scheme.

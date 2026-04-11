@@ -5,7 +5,7 @@
 - **Per-project release steps**: Steps run once per subproject in topological (dependency) order
 - **Change detection**: Git-based [change detection](change-detection.md) of which projects changed since the last release tag, with pluggable custom detectors
 - **Per-project failure isolation**: A failing project is marked failed without aborting the current step's remaining projects; once that step finishes, later steps are skipped entirely for the whole release (see [Concepts](concepts.md))
-- **Two-phase execution**: All checks run before any actions, so failures are caught before version files or tags are modified
+- **Two-phase execution**: Setup establishes project selection first, then the remaining release steps validate before main mutations begin (see [Concepts](concepts.md))
 - **Per-project tags**: Each released project gets its own tag (for example `core/v1.0.0`)
 - **Cross-build support**: Steps like test and publish run once per `crossScalaVersions` entry
 - **Resource-safe custom plugins**: `MonorepoReleasePluginLike[T]` acquires a shared resource (HTTP client, temp dir, etc.) once for the entire release with guaranteed cleanup
@@ -31,9 +31,16 @@ lazy val api = (project in file("api"))
 lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
+  .settings(
+    // Disable push and publish during initial setup — re-enable when ready
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false
+  )
 ```
 
 By default, each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The file path and format can be customized — see [Versioning settings](reference.md#versioning-settings).
+
+This starter path disables push and publish so your first run stays local. Re-enable them once `publishTo` and your remote release workflow are ready.
 
 If you are migrating from an older configuration, move any shared root version file setup to per-project `version.sbt` files and replace any global CLI overrides with `project=version` overrides.
 
@@ -60,13 +67,13 @@ sbt "releaseIOMonorepo check with-defaults"
 
 For resource-aware custom plugins, `check` stays resource-free: it runs resource-aware `validate` logic, but it does not acquire the shared plugin resource or execute resource-backed actions. See [Customization](customization.md) for the execution-model details.
 
-Run the release (changed projects detected automatically, versions computed from each subproject's `version.sbt`):
+Run the first local release (changed projects detected automatically, versions computed from each subproject's `version.sbt`):
 
 ```bash
 sbt "releaseIOMonorepo with-defaults"
 ```
 
-Change detection compares each project's files against its last release tag — projects with no prior tag are always included. For details, see [Change detection](change-detection.md). If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
+With the starter settings above, this performs a local release only: it computes versions, writes version files, creates the release and next-version commits, and tags each selected project, but it does not publish artifacts or push to the remote. Remove those two policy settings once you are ready to enable publish and push. For details, see [Change detection](change-detection.md). If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
 
 When a per-project step fails, the remaining projects in that same step still finish before the release stops. Later steps are then skipped globally. See [Concepts](concepts.md) for the full failure-propagation rules.
 
