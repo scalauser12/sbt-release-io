@@ -1,6 +1,6 @@
 package io.release.monorepo.internal
 
-import io.release.ReleasePluginIO
+import io.release.ReleaseSharedKeys
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.DecisionDefaultsSupport
@@ -9,11 +9,11 @@ import sbt.*
 private[monorepo] object MonorepoDecisionDefaultsCli {
 
   private val defaultSettingKeys = DecisionDefaultsSupport.DefaultSettingKeys(
-    tagExists = ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer,
-    snapshotDependencies = ReleasePluginIO.autoImport.releaseIODefaultsSnapshotDependenciesAnswer,
-    remoteCheckFailure = ReleasePluginIO.autoImport.releaseIODefaultsRemoteCheckFailureAnswer,
-    upstreamBehind = ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer,
-    push = ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer
+    tagExists = ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer,
+    snapshotDependencies = ReleaseSharedKeys.releaseIODefaultsSnapshotDependenciesAnswer,
+    remoteCheckFailure = ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer,
+    upstreamBehind = ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer,
+    push = ReleaseSharedKeys.releaseIODefaultsPushAnswer
   )
 
   def cliInputsFromArgs(args: Seq[MonorepoCli.Arg]): DecisionDefaultsSupport.CliInputs = {

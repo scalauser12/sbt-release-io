@@ -3,8 +3,8 @@ package io.release.monorepo.internal.steps
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseManifestMetadataSupport
-import io.release.ReleasePluginIO.autoImport.releaseIOVcsSign
-import io.release.ReleasePluginIO.autoImport.releaseIOVcsSignOff
+import io.release.ReleaseSharedKeys.releaseIOVcsSign
+import io.release.ReleaseSharedKeys.releaseIOVcsSignOff
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.ProjectReleaseInfo

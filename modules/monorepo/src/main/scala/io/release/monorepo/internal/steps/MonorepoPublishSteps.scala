@@ -6,8 +6,8 @@ import io.release.ReleaseIOCompat
 import io.release.ReleaseManifestMetadataSupport
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
-import io.release.ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
-import io.release.ReleasePluginIO.autoImport.releaseIOPublishAction
+import io.release.ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
+import io.release.ReleaseSharedKeys.releaseIOPublishAction
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks
 import io.release.monorepo.ProjectReleaseInfo

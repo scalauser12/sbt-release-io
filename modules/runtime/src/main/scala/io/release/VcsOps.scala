@@ -61,7 +61,7 @@ private[release] object VcsOps {
     IO.blocking {
       val extracted       = Project.extract(state)
       val ignoreUntracked =
-        extracted.get(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles)
+        extracted.get(ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles)
       val base            = extracted.get(thisProject).base
       (ignoreUntracked, base)
     }.flatMap { case (ignoreUntracked, base) =>
@@ -75,7 +75,7 @@ private[release] object VcsOps {
     IO.blocking(
       Project
         .extract(state)
-        .getOpt(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles)
+        .getOpt(ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles)
         .getOrElse(false)
     ).flatMap(ignoreUntracked => checkCleanFromVcs(vcs, ignoreUntracked))
 
@@ -163,7 +163,7 @@ private[release] object VcsOps {
                        .blocking(
                          Project
                            .extract(ctx.state)
-                           .getOpt(ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout)
+                           .getOpt(ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout)
                        )
                        .map(_.getOrElse(DefaultRemoteCheckTimeout))
       remoteCheck <- vcs.checkRemoteWithTimeout(remote, timeout)

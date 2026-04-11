@@ -1,7 +1,7 @@
 package io.release.monorepo.internal
 
 import cats.effect.IO
-import io.release.ReleasePluginIO
+import io.release.ReleaseSharedKeys
 import io.release.monorepo.*
 import sbt.{internal as _, *}
 
@@ -21,7 +21,7 @@ private[monorepo] object MonorepoTagSettingsSupport {
         perProjectTagName =
           extracted.get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName),
         tagComment = extracted.get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment),
-        sign = extracted.get(ReleasePluginIO.autoImport.releaseIOVcsSign)
+        sign = extracted.get(ReleaseSharedKeys.releaseIOVcsSign)
       )
     }
 }

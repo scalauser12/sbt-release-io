@@ -1,8 +1,8 @@
 package io.release.monorepo.internal.steps
 
 import cats.effect.IO
-import io.release.ReleasePluginIO.autoImport.releaseIOVersioningNextVersion
-import io.release.ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion
+import io.release.ReleaseSharedKeys.releaseIOVersioningNextVersion
+import io.release.ReleaseSharedKeys.releaseIOVersioningReleaseVersion
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.internal.*
