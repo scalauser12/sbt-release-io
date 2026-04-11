@@ -114,12 +114,16 @@ private[monorepo] object MonorepoCommandExecution {
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
   ): IO[Seq[AnyStep]] =
-    IO.blocking {
-      val resolvedHooks     = MonorepoHookConfiguration.resolve(state)
-      val resourceHooks     = runtime.resolveResourceHooks(state)
-      val materializedHooks = MonorepoResourceHooks.materialize(resourceHooks, maybeResource)
-      resolvedHooks.mergeWith(materializedHooks)
-    }.flatMap(MonorepoLifecycle.compile)
+    for {
+      mergedHooks <- IO.blocking {
+                       val resolvedHooks     = MonorepoHookConfiguration.resolve(state)
+                       val resourceHooks     = runtime.resolveResourceHooks(state)
+                       val materializedHooks =
+                         MonorepoResourceHooks.materialize(resourceHooks, maybeResource)
+                       resolvedHooks.mergeWith(materializedHooks)
+                     }
+      steps       <- MonorepoLifecycle.compile(mergedHooks)
+    } yield steps
 
   private[monorepo] def resolveFlags[T](
       cleanState: State,
