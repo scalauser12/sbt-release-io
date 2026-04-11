@@ -183,6 +183,24 @@ class TestBuildStateSpec extends CatsEffectSuite {
     }
   }
 
+  test("synthetic loaded state - reject non-local RootProject aggregate references") {
+    assertRejectsNonLocalRootProject("test-build-state-non-local-aggregate") {
+      (dir, foreignUri) =>
+        Seq(Project("root", dir).aggregate(RootProject(foreignUri)))
+    }
+  }
+
+  test("synthetic loaded state - reject non-local RootProject dependency references") {
+    assertRejectsNonLocalRootProject("test-build-state-non-local-dependency") {
+      (dir, foreignUri) =>
+        Seq(
+          Project("root", dir).dependsOn(
+            ClasspathDependency(RootProject(foreignUri), None)
+          )
+        )
+    }
+  }
+
   private val singleProjectStateResource: Resource[CEIO, State] =
     TestSupport.tempDirResource("test-build-state-single").evalMap { dir =>
       CEIO.blocking(
@@ -192,6 +210,27 @@ class TestBuildStateSpec extends CatsEffectSuite {
           currentProjectId = Some("root")
         )
       )
+    }
+
+  private def assertRejectsNonLocalRootProject(
+      prefix: String
+  )(projectsFor: (JFile, java.net.URI) => Seq[Project]): CEIO[Unit] =
+    TestSupport.tempDirResource(prefix).use { dir =>
+      CEIO.blocking {
+        val foreignUri = java.net.URI.create("https://example.invalid/synthetic-foreign-root/")
+        val error      = intercept[IllegalArgumentException] {
+          TestSupport.loadedState(
+            dir,
+            projectsFor(dir, foreignUri),
+            currentProjectId = Some("root")
+          )
+        }
+
+        assertEquals(
+          error.getMessage,
+          s"Unsupported non-local RootProject reference in synthetic test state: $foreignUri"
+        )
+      }
     }
 
   private def multiProjectStateResource(

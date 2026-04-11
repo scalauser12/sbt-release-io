@@ -26,6 +26,29 @@ object TestBuildState {
     }
     val rootProjectId  = rootProjectIds.head
 
+    def validateRef(ref: ProjectReference): Unit =
+      ref match {
+        case _: ProjectRef     => ()
+        case LocalProject(_)   => ()
+        case LocalRootProject  => ()
+        case RootProject(`uri`) =>
+          ()
+        case RootProject(other) =>
+          throw new IllegalArgumentException(
+            s"Unsupported non-local RootProject reference in synthetic test state: $other"
+          )
+        case other             =>
+          throw new IllegalArgumentException(
+            s"Unsupported project reference in synthetic test state: $other"
+          )
+      }
+
+    projects.foreach { project =>
+      val definition: ProjectDefinition[ProjectReference] = project
+      definition.aggregate.foreach(validateRef)
+      definition.dependencies.foreach(dep => validateRef(dep.project))
+    }
+
     def resolveRef(ref: ProjectReference): ProjectRef =
       ref match {
         case pr: ProjectRef     => pr
@@ -34,7 +57,9 @@ object TestBuildState {
         case RootProject(`uri`) =>
           ProjectRef(uri, rootProjectId)
         case RootProject(other) =>
-          ProjectRef(other, rootProjectId)
+          throw new IllegalArgumentException(
+            s"Unsupported non-local RootProject reference in synthetic test state: $other"
+          )
         case other              =>
           throw new IllegalArgumentException(
             s"Unsupported project reference in synthetic test state: $other"
