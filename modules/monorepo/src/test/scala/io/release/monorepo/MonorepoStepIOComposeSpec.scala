@@ -379,11 +379,13 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           val injectFailure     = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
             name = "inject-failure-command",
             execute = (c, project) =>
-              observed.update(_ :+ project.name).as(
-                c.withState(
-                  c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+              observed
+                .update(_ :+ project.name)
+                .as(
+                  c.withState(
+                    c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+                  )
                 )
-              )
           )
 
           MonorepoComposer.compose(Seq(injectFailure))(pCtx).flatMap { result =>

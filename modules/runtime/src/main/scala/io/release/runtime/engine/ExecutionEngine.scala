@@ -118,12 +118,12 @@ private[release] object ExecutionEngine {
   }
 
   def stripFailureCommand[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] = IO {
-    val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
+    val cleaned           = SbtRuntime.stripLeadingFailureCommand(ctx.state)
     val restoredOnFailure =
       ctx.metadata(originalOnFailureKey) match {
-        case Some(saved) => saved
+        case Some(saved)                                                  => saved
         case None if cleaned.onFailure.contains(SbtCompat.FailureCommand) => None
-        case None                                              => cleaned.onFailure
+        case None                                                         => cleaned.onFailure
       }
 
     ctx
