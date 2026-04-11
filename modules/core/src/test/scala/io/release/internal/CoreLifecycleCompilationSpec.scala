@@ -152,26 +152,24 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
         val publishSkippedCtx   = ReleaseContext(state = publishSkippedState, skipPublish = false)
         val enabledCtx          = ReleaseContext(state = state, skipPublish = false)
 
-        for {
-          steps           <- compileLifecycle(state)
-          publishHookSteps = steps.filter(step =>
-                               step.name.startsWith("before-publish:") ||
-                                 step.name.startsWith("after-publish:")
-                             )
-          _               <- runPublishHooks(publishHookSteps, skippedCtx)
-          skipped         <- observed.get
-          _                = assertEquals(skipped, Nil)
-          _               <- observed.set(Nil)
-          _               <- runPublishHooks(publishHookSteps, publishSkippedCtx)
-          publishSkipped  <- observed.get
-          _                = assertEquals(publishSkipped, Nil)
-          _               <- observed.set(Nil)
-          _               <- runPublishHooks(publishHookSteps, enabledCtx)
-          events          <- observed.get
-        } yield assertEquals(
-          events,
-          List("validate-before", "validate-after", "execute-before", "execute-after")
-        )
+        compileLifecycle(state).flatMap { steps =>
+          val publishHookSteps = publishHookStepsOnly(steps)
+          for {
+            _              <- runPublishHooks(publishHookSteps, skippedCtx)
+            skipped        <- observed.get
+            _               = assertEquals(skipped, Nil)
+            _              <- observed.set(Nil)
+            _              <- runPublishHooks(publishHookSteps, publishSkippedCtx)
+            publishSkipped <- observed.get
+            _               = assertEquals(publishSkipped, Nil)
+            _              <- observed.set(Nil)
+            _              <- runPublishHooks(publishHookSteps, enabledCtx)
+            events         <- observed.get
+          } yield assertEquals(
+            events,
+            List("validate-before", "validate-after", "execute-before", "execute-after")
+          )
+        }
       }
     }
   }
@@ -189,18 +187,16 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       ).use { state =>
         val ctx = ReleaseContext(state = state, skipPublish = false)
 
-        for {
-          steps           <- compileLifecycle(state)
-          publishHookSteps = steps.filter(step =>
-                               step.name.startsWith("before-publish:") ||
-                                 step.name.startsWith("after-publish:")
-                             )
-          _               <- runPublishHooks(publishHookSteps, ctx)
-          events          <- observed.get
-        } yield assertEquals(
-          events,
-          List("validate-before", "validate-after", "execute-before", "execute-after")
-        )
+        compileLifecycle(state).flatMap { steps =>
+          val publishHookSteps = publishHookStepsOnly(steps)
+          for {
+            _      <- runPublishHooks(publishHookSteps, ctx)
+            events <- observed.get
+          } yield assertEquals(
+            events,
+            List("validate-before", "validate-after", "execute-before", "execute-after")
+          )
+        }
       }
     }
   }
@@ -249,6 +245,11 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
 
   private def compileLifecycle(state: State): IO[Seq[Step]] =
     CoreLifecycle.compile(CoreHookConfiguration.resolve(state))
+
+  private def publishHookStepsOnly(steps: Seq[Step]): Seq[Step] =
+    steps.filter(step =>
+      step.name.startsWith("before-publish:") || step.name.startsWith("after-publish:")
+    )
 
   private def repoPath(relative: String): Path = {
     @scala.annotation.tailrec

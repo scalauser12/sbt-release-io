@@ -183,26 +183,22 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         val enabledCtx          = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
         val project             = fixture.projectInfo("core")
 
-        for {
-          steps           <- compileLifecycle(fixture.state)
-          publishHookSteps = steps
-                               .flatMap(asProjectStep)
-                               .filter(p =>
-                                 p.name.startsWith("before-publish:") ||
-                                   p.name.startsWith("after-publish:")
-                               )
-          _               <- runPublishHooks(publishHookSteps, skippedCtx, project)
-          skipped         <- observed.get
-          _                = assertEquals(skipped, Nil)
-          _               <- runPublishHooks(publishHookSteps, publishSkippedCtx, project)
-          projectSkipped  <- observed.get
-          _                = assertEquals(projectSkipped, Nil)
-          _               <- runPublishHooks(publishHookSteps, enabledCtx, project)
-          events          <- observed.get
-        } yield assertEquals(
-          events,
-          List("validate-before", "validate-after", "execute-before", "execute-after")
-        )
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val publishHookSteps = publishProjectHooksOnly(steps)
+          for {
+            _              <- runPublishHooks(publishHookSteps, skippedCtx, project)
+            skipped        <- observed.get
+            _               = assertEquals(skipped, Nil)
+            _              <- runPublishHooks(publishHookSteps, publishSkippedCtx, project)
+            projectSkipped <- observed.get
+            _               = assertEquals(projectSkipped, Nil)
+            _              <- runPublishHooks(publishHookSteps, enabledCtx, project)
+            events         <- observed.get
+          } yield assertEquals(
+            events,
+            List("validate-before", "validate-after", "execute-before", "execute-after")
+          )
+        }
       }
     }
   }
@@ -242,6 +238,11 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       state: sbt.State
   ): IO[Seq[AnyStep]] =
     MonorepoLifecycle.compile(MonorepoHookConfiguration.resolve(state))
+
+  private def publishProjectHooksOnly(steps: Seq[AnyStep]): Seq[ProjectStep] =
+    steps
+      .flatMap(asProjectStep)
+      .filter(p => p.name.startsWith("before-publish:") || p.name.startsWith("after-publish:"))
 
   private def asProjectStep(step: AnyStep): Option[ProjectStep] =
     ProcessStep.fold[MonorepoContext, ProjectReleaseInfo, Option[ProjectStep]](step)(

@@ -128,12 +128,16 @@ private[release] object CoreCommandExecution {
       runtime: CommandRuntime[T],
       maybeResource: Option[T]
   ): IO[Seq[Step]] =
-    IO.blocking {
-      val resolvedHooks     = CoreHookConfiguration.resolve(state)
-      val resourceHooks     = runtime.resolveResourceHooks(state)
-      val materializedHooks = ReleaseResourceHooks.materialize(resourceHooks, maybeResource)
-      resolvedHooks.mergeWith(materializedHooks)
-    }.flatMap(CoreLifecycle.compile)
+    for {
+      mergedHooks <- IO.blocking {
+                       val resolvedHooks     = CoreHookConfiguration.resolve(state)
+                       val resourceHooks     = runtime.resolveResourceHooks(state)
+                       val materializedHooks =
+                         ReleaseResourceHooks.materialize(resourceHooks, maybeResource)
+                       resolvedHooks.mergeWith(materializedHooks)
+                     }
+      steps       <- CoreLifecycle.compile(mergedHooks)
+    } yield steps
 
   private def buildCommandInputs[T](
       cleanState: State,
