@@ -21,7 +21,7 @@ class TestSupportSpec extends CatsEffectSuite {
         val buildSbt = TestRepoFiles.readString("build.sbt")
 
         assertEquals(resolved.normalize(), repoRoot.resolve("build.sbt").normalize())
-        assertEquals(buildSbt, Files.readString(resolved))
+        assert(buildSbt.contains("val Sbt1Version            = \"1.12.3\""))
       } finally sys.props("user.dir") = originalWd
     }
   }

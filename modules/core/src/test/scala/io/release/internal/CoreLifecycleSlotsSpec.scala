@@ -1,9 +1,11 @@
 package io.release.core.internal
 
+import io.release.ReleasePluginIO
 import io.release.ReleaseContext
 import io.release.core.internal.steps.ReleaseSteps
 import io.release.runtime.engine.LifecycleCompiler
 import munit.FunSuite
+import sbt.SettingKey
 
 class CoreLifecycleSlotsSpec extends FunSuite {
 
@@ -22,9 +24,7 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     val settingKeys =
       CoreLifecycle.configDefaultSettings.map(_.key.key.label).sorted
 
-    assert(settingKeys.nonEmpty)
-    // 6 policy + 17 hook = 23 settings
-    assertEquals(settingKeys.size, 23)
+    assertEquals(settingKeys, CoreLifecycleSlotsSpec.expectedSettingKeys.toSeq.sorted)
   }
 
   private def hookPhaseNames(
@@ -51,6 +51,23 @@ class CoreLifecycleSlotsSpec extends FunSuite {
 }
 
 object CoreLifecycleSlotsSpec {
+  private def keyLabel[A](key: SettingKey[A]): String = key.key.label
+
+  lazy val expectedSettingKeys: Set[String] = {
+    val autoImport      = ReleasePluginIO.autoImport
+    val autoImportClass = autoImport.getClass
+
+    autoImportClass.getMethods.iterator
+      .filter(method =>
+        method.getDeclaringClass == autoImportClass &&
+          method.getParameterCount == 0 &&
+          classOf[SettingKey[?]].isAssignableFrom(method.getReturnType)
+      )
+      .map(method => keyLabel(method.invoke(autoImport).asInstanceOf[SettingKey[?]]))
+      .filter(label => label.startsWith("releaseIOPolicy") || label.startsWith("releaseIOHooks"))
+      .toSet
+  }
+
   val expectedHookPhases: Seq[String] = Seq(
     "after-clean-check",
     "before-version-resolution",

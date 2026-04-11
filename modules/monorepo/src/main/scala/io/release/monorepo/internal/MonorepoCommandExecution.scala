@@ -307,11 +307,4 @@ private[monorepo] object MonorepoCommandExecution {
       flags: ReleaseFlags
   ): Unit =
     releaseStartLines(stepCount, projectCount, flags).foreach(line => state.log.info(line))
-
-  private[monorepo] def resolveDecisionDefaults(
-      state: State,
-      args: Seq[MonorepoCli.Arg],
-      warnOnDuplicates: Boolean
-  ): ReleaseDecisionDefaults =
-    MonorepoDecisionDefaultsCli.resolve(state, args, warnOnDuplicates)
 }

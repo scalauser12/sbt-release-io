@@ -1,12 +1,20 @@
 package io.release.monorepo.internal
 
-import io.release.core.internal.DecisionDefaultsFromPlugin
+import io.release.ReleasePluginIO
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.DecisionDefaultsSupport
 import sbt.*
 
 private[monorepo] object MonorepoDecisionDefaultsCli {
+
+  private val defaultSettingKeys = DecisionDefaultsSupport.DefaultSettingKeys(
+    tagExists = ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer,
+    snapshotDependencies = ReleasePluginIO.autoImport.releaseIODefaultsSnapshotDependenciesAnswer,
+    remoteCheckFailure = ReleasePluginIO.autoImport.releaseIODefaultsRemoteCheckFailureAnswer,
+    upstreamBehind = ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer,
+    push = ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer
+  )
 
   def cliInputsFromArgs(args: Seq[MonorepoCli.Arg]): DecisionDefaultsSupport.CliInputs = {
     import MonorepoCli.Arg.*
@@ -35,7 +43,10 @@ private[monorepo] object MonorepoDecisionDefaultsCli {
     DecisionDefaultsSupport.resolve(
       state = state,
       prefix = ReleaseLogPrefixes.Monorepo,
-      settings = DecisionDefaultsFromPlugin.settingsFromExtracted(Project.extract(state)),
+      settings = DecisionDefaultsSupport.settingsFromExtracted(
+        Project.extract(state),
+        defaultSettingKeys
+      ),
       cliInputs = cliInputsFromArgs(args),
       warnOnDuplicates = warnOnDuplicates
     )
