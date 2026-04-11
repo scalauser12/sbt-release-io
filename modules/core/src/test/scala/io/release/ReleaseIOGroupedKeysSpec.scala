@@ -63,7 +63,7 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     "releaseIODiagnosticsSnapshotDependencies"
   )
 
-  private val actualLabels = Set(
+  private val compileTimeLabels = Set(
     keyLabel(ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild),
     keyLabel(ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish),
     keyLabel(ReleasePluginIO.autoImport.releaseIOBehaviorInteractive),
@@ -115,6 +115,32 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     keyLabel(ReleasePluginIO.autoImport.releaseIORuntimeCurrentVersion),
     keyLabel(ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies)
   )
+
+  private lazy val reflectiveLabels = {
+    val autoImport      = ReleasePluginIO.autoImport
+    val autoImportClass = autoImport.getClass
+
+    autoImportClass.getMethods.iterator
+      .filter(method =>
+        method.getDeclaringClass == autoImportClass &&
+          method.getParameterCount == 0 &&
+          (
+            classOf[SettingKey[?]].isAssignableFrom(method.getReturnType) ||
+              classOf[TaskKey[?]].isAssignableFrom(method.getReturnType)
+          )
+      )
+      .map(method =>
+        method.invoke(autoImport) match {
+          case key: SettingKey[?] => keyLabel(key)
+          case key: TaskKey[?]    => keyLabel(key)
+          case other              =>
+            fail(
+              s"Expected ${method.getName} to return SettingKey or TaskKey, got ${other.getClass.getName}"
+            )
+        }
+      )
+      .toSet
+  }
 
   private val removedAliases = Seq(
     "releaseIOCrossBuild",
@@ -180,8 +206,9 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     TestRepoFiles.readString("modules/core/src/main/scala/io/release/ReleasePluginIO.scala")
 
   test("ReleasePluginIO.autoImport exposes the full set of 50 expected public keys") {
-    assertEquals(actualLabels, expectedLabels)
-    assertEquals(actualLabels.size, 50)
+    assertEquals(compileTimeLabels, expectedLabels)
+    assertEquals(reflectiveLabels, expectedLabels)
+    assertEquals(reflectiveLabels.size, 50)
   }
 
   test("grouped core settings resolve expected defaults from ReleasePluginIO.autoImport") {

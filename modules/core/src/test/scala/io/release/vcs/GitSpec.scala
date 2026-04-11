@@ -24,17 +24,26 @@ class GitSpec extends CatsEffectSuite {
 
   test("runLines - preserve stderr on git failure in a non-repository directory") {
     TestSupport.tempDirResource(s"$fixturePrefix-stderr").use { dir =>
-      GitProcessSupport.runLines(dir, Seq("status", "--porcelain"))("git status").attempt.map {
-        case Left(err: IllegalStateException) =>
-          assert(err.getMessage.contains("git status failed with exit code"))
-          assert(err.getMessage.contains("not a git repository"))
-        case Left(other)                      =>
-          fail(
-            s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
-          )
-        case Right(output)                    =>
-          fail(s"Expected git status failure, got output: ${output.mkString(", ")}")
-      }
+      for {
+        result <- IO.blocking(GitProcessSupport.runLinesResult(dir, Seq("status", "--porcelain")))
+        _       = assert(result.exitCode != 0)
+        _       = assert(result.stderr.nonEmpty)
+        _      <- GitProcessSupport.runLines(dir, Seq("status", "--porcelain"))("git status").attempt.map {
+                    case Left(err: IllegalStateException) =>
+                      assert(
+                        err.getMessage.contains(
+                          s"git status failed with exit code ${result.exitCode}"
+                        )
+                      )
+                      assert(err.getMessage.contains(result.stderr))
+                    case Left(other)                      =>
+                      fail(
+                        s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+                      )
+                    case Right(output)                    =>
+                      fail(s"Expected git status failure, got output: ${output.mkString(", ")}")
+                  }
+      } yield ()
     }
   }
 
