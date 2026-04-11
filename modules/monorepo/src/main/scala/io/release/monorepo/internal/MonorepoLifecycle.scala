@@ -14,6 +14,9 @@ import sbt.*
 /** Canonical monorepo lifecycle order and hook compilation. */
 private[release] object MonorepoLifecycle {
 
+  private val DefaultProjectHookGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
+    (_, _) => ""
+
   private case class GlobalHookPhaseConfig(
       phase: String,
       resolveHooks: MonorepoHookConfiguration => Seq[
@@ -33,7 +36,7 @@ private[release] object MonorepoLifecycle {
       ] = (_, _) => IO.pure(true),
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: (MonorepoContext, ProjectReleaseInfo) => String = (_, _) => "",
+      gateKey: (MonorepoContext, ProjectReleaseInfo) => String = DefaultProjectHookGateKey,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   )
 
@@ -77,7 +80,11 @@ private[release] object MonorepoLifecycle {
 
   private def projectHookPhase(
       config: ProjectHookPhaseConfig
-  ): Phase =
+  ): Phase = {
+    require(
+      !config.freezeGate || (config.gateKey ne DefaultProjectHookGateKey),
+      s"phase '${config.phase}' requires an explicit stable gateKey when freezeGate = true"
+    )
     LifecycleCompiler.perItemHookPhase(
       phase = config.phase,
       resolveHooks = config.resolveHooks,
@@ -90,6 +97,7 @@ private[release] object MonorepoLifecycle {
       gateKey = config.gateKey,
       enabled = config.enabled
     )
+  }
 
   /** Cache key combining stable project identity and current Scala
     * version so cross-build iterations each freeze independently.

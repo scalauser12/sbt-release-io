@@ -514,6 +514,51 @@ class CorePreflightSpec extends CatsEffectSuite {
     }
   }
 
+  test("check - keep a tag on HEAD when the persisted release hash is stale") {
+    withInitialContextAtVersion("0.1.0") { case (repo, _, initialCtx) =>
+      for {
+        releaseCommitHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking {
+                               sbt.IO.write(new File(repo, "tracked.txt"), "updated-after-hook")
+                               TestSupport.commitAll(repo, "Post-commit hook commit")
+                             }
+        _                 <- IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0"))
+        seededState        =
+          TestSupport.appendSessionSettings(
+            initialCtx.state,
+            Seq(
+              _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash :=
+                Some(releaseCommitHash)
+            )
+          )
+        keepCtx            = withTagConflictDefaults(
+                               initialCtx.withState(seededState),
+                               interactive = false,
+                               defaultAnswer = Some("k")
+                             )
+        summary           <- CorePreflight.check(
+                               keepCtx,
+                               Seq(
+                                 VcsSteps.checkCleanWorkingDir,
+                                 VersionSteps.inquireVersions,
+                                 VersionSteps.setReleaseVersion,
+                                 VersionSteps.commitReleaseVersion,
+                                 VcsSteps.tagRelease
+                               ),
+                               crossBuild = false
+                             )
+      } yield {
+        assertEquals(
+          summary.tag,
+          CorePreflight.TagSummary.Resolved(
+            "v0.1.0",
+            "exists; release will keep the existing tag"
+          )
+        )
+      }
+    }
+  }
+
   test("check - keep keep in the interactive summary when the release write is a no-op") {
     withInitialContextAtVersion("0.1.0") { case (repo, _, initialCtx) =>
       val interactiveCtx =

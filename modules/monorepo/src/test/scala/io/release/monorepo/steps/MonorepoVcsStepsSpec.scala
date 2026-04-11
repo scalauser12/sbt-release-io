@@ -68,6 +68,44 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagReleasesPerProject.execute - keep a tag on HEAD when the persisted hash is stale") {
+    perProjectTagContextResource.use { case (repo, project, baseCtx) =>
+      for {
+        releaseCommitHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking {
+                               sbt.IO.write(new File(repo, "file.txt"), "updated-after-hook")
+                               TestSupport.commitAll(repo, "Post-commit hook commit")
+                             }
+        headRev           <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
+        seededState        =
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+              Seq(project.ref),
+              releaseCommitHash
+            )
+          )
+        ctx                = withFlags(
+                               baseCtx.withState(seededState).copy(interactive = true),
+                               useDefaults = false
+                             )
+        result            <- TestSupport.withInput("k\n") {
+                               MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+                             }
+        tagRev            <- IO.blocking(
+                               TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim
+                             )
+      } yield {
+        assertEquals(tagRev, headRev)
+        assertEquals(
+          MonorepoSpecSupport.projectNamed(result.projects, "core").tagName,
+          Some("core-v1.0.0")
+        )
+      }
+    }
+  }
+
   test("tagReleasesPerProject.execute - expose tag metadata only for the tagged project") {
     twoProjectTagContextResource.use { case (_, coreProject, apiProject, ctx) =>
       for {
@@ -312,6 +350,43 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         assertEquals(
           outcomes,
           Seq(MonorepoVcsSteps.PreflightTagOutcome("core-v1.0.0", "available"))
+        )
+      }
+    }
+  }
+
+  test("preflightTags - keep a tag on HEAD when the persisted hash is stale") {
+    perProjectTagContextResource.use { case (repo, project, baseCtx) =>
+      for {
+        releaseCommitHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking {
+                               sbt.IO.write(new File(repo, "file.txt"), "updated-after-hook")
+                               TestSupport.commitAll(repo, "Post-commit hook commit")
+                             }
+        _                 <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
+        seededState        =
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+              Seq(project.ref),
+              releaseCommitHash
+            )
+          )
+        ctx                = withFlags(
+                               baseCtx.withState(seededState),
+                               useDefaults = false,
+                               tagExistsAnswer = Some("k")
+                             )
+        outcomes          <- MonorepoVcsSteps.preflightTags(ctx)
+      } yield {
+        assertEquals(
+          outcomes,
+          Seq(
+            MonorepoVcsSteps.PreflightTagOutcome(
+              "core-v1.0.0",
+              "exists; release will keep the existing tag"
+            )
+          )
         )
       }
     }

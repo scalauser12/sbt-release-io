@@ -6,6 +6,12 @@ import cats.syntax.traverse.*
 
 private[release] object LifecycleCompiler {
 
+  private val DefaultSingleGateKey: Any => String =
+    (_: Any) => ""
+
+  private val DefaultPerItemGateKey: (Any, Any) => String =
+    (_: Any, _: Any) => ""
+
   final case class Phase[Config, C, I](
       phaseName: Option[String],
       rawSteps: Seq[ProcessStep[C, I]],
@@ -52,9 +58,10 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: C => String = (_: C) => "",
+      gateKey: C => String = defaultSingleGateKey[C],
       enabled: Config => Boolean = (_: Config) => true
-  ): Phase[Config, C, I] =
+  ): Phase[Config, C, I] = {
+    requireExplicitGateKey(phase, freezeGate, gateKey, DefaultSingleGateKey)
     Phase(
       phaseName = Some(phase),
       rawSteps = Seq.empty,
@@ -74,6 +81,7 @@ private[release] object LifecycleCompiler {
           )
         else IO.pure(Seq.empty)
     )
+  }
 
   /** @param freezeGate when true, gate decisions are captured during
     *   validation and reused during execution so that state mutations
@@ -94,9 +102,10 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: (C, I) => String = (_: C, _: I) => "",
+      gateKey: (C, I) => String = defaultPerItemGateKey[C, I],
       enabled: Config => Boolean = (_: Config) => true
-  ): Phase[Config, C, I] =
+  ): Phase[Config, C, I] = {
+    requireExplicitGateKey(phase, freezeGate, gateKey, DefaultPerItemGateKey)
     Phase(
       phaseName = Some(phase),
       rawSteps = Seq.empty,
@@ -116,6 +125,7 @@ private[release] object LifecycleCompiler {
           )
         else IO.pure(Seq.empty)
     )
+  }
 
   def defaults[Config, C, I](
       phases: Seq[Phase[Config, C, I]]
@@ -138,6 +148,23 @@ private[release] object LifecycleCompiler {
       phases: Seq[Phase[Config, C, Nothing]]
   ): IO[Seq[ProcessStep.Single[C]]] =
     compile(config, phases).map(_.flatMap(step => ProcessStep.toSingleOption(step)))
+
+  private def defaultSingleGateKey[C]: C => String =
+    DefaultSingleGateKey.asInstanceOf[C => String]
+
+  private def defaultPerItemGateKey[C, I]: (C, I) => String =
+    DefaultPerItemGateKey.asInstanceOf[(C, I) => String]
+
+  private def requireExplicitGateKey(
+      phase: String,
+      freezeGate: Boolean,
+      gateKey: AnyRef,
+      defaultGateKey: AnyRef
+  ): Unit =
+    require(
+      !freezeGate || (gateKey ne defaultGateKey),
+      s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
+    )
 
   // ── Single-context hooks ────────────────────────────────────────────
 
@@ -255,7 +282,6 @@ private[release] object LifecycleCompiler {
         frozenGateRun(
           cached,
           gateKey(args),
-          gate(args),
           execute(args),
           skip(args)
         )
@@ -273,7 +299,6 @@ private[release] object LifecycleCompiler {
   private def frozenGateRun[C](
       cached: Ref[IO, Map[String, Boolean]],
       key: String,
-      gateDecision: IO[Boolean],
       executeIfTrue: IO[C],
       skip: IO[C]
   ): IO[C] =
@@ -281,10 +306,11 @@ private[release] object LifecycleCompiler {
       case Some(true)  => executeIfTrue
       case Some(false) => skip
       case None        =>
-        gateDecision.flatMap {
-          case true  => executeIfTrue
-          case false => skip
-        }
+        IO.raiseError(
+          new IllegalStateException(
+            s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGate = true"
+          )
+        )
     }
 
   private def frozenGateValidate[C](

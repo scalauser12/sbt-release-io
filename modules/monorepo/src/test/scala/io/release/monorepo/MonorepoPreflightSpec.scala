@@ -636,6 +636,59 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
+  test("check - keep a tag on HEAD when the persisted project hash is stale") {
+    noOpPreflightFixtureResource.use { case (repo, ctx, _) =>
+      for {
+        releaseCommitHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _                 <- IO.blocking {
+                               sbt.IO.write(new File(repo, "tracked.txt"), "updated-after-hook")
+                               TestSupport.commitAll(repo, "Post-commit hook commit")
+                             }
+        _                 <- IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0"))
+        seededState        =
+          TestSupport.appendSessionSettings(
+            ctx.state,
+            _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+              ctx.currentProjects.map(_.ref),
+              releaseCommitHash
+            )
+          )
+        keepCtx            = withTagConflictDefaults(
+                               ctx.withState(seededState),
+                               interactive = false,
+                               defaultAnswer = Some("k")
+                             )
+        session            = MonorepoPreparedSession(
+                               keepCtx.state,
+                               keepCtx.releasePlan.get,
+                               keepCtx
+                             )
+        summary           <- MonorepoPreflight.check(
+                               session,
+                               Seq(
+                                 MonorepoReleaseSteps.detectOrSelectProjects,
+                                 MonorepoReleaseSteps.inquireVersions,
+                                 MonorepoReleaseSteps.setReleaseVersions,
+                                 MonorepoReleaseSteps.commitReleaseVersions,
+                                 MonorepoReleaseSteps.tagReleasesPerProject
+                               )
+                             )
+      } yield {
+        assertEquals(
+          summary.projects.map(_.tag),
+          Seq(
+            MonorepoPreflight.Evaluation.Resolved(
+              MonorepoPreflight.ProjectTag(
+                "core/v0.1.0",
+                "exists; release will keep the existing tag"
+              )
+            )
+          )
+        )
+      }
+    }
+  }
+
   test("check - keep keep in the interactive summary when the release write is a no-op") {
     noOpPreflightFixtureResource.use { case (repo, ctx, _) =>
       val interactiveCtx =

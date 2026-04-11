@@ -14,6 +14,19 @@ private[release] object SnapshotDependencyTasks {
     s"Error checking for snapshot dependencies: sbt task '${taskKey.key.label}' " +
       "reported failure via FailureCommand"
 
+  private def stripFailureCommandOrContinue[A](
+      nextState: State,
+      taskKey: TaskKey[A]
+  ): Either[String, State] = {
+    val cleanedState =
+      if (SbtRuntime.hasFailureCommand(nextState))
+        SbtRuntime.stripLeadingFailureCommand(nextState)
+      else nextState
+
+    if (cleanedState eq nextState) Right(cleanedState)
+    else Left(failureCommandError(taskKey))
+  }
+
   /** Aggregated snapshot dependencies from the current project (same semantics as core `PublishSteps`). */
   def aggregatedSnapshotDependencies(
       state: State,
@@ -26,14 +39,13 @@ private[release] object SnapshotDependencyTasks {
         SbtCompat.runTaskAggregated(thisRef / taskKey, state)
       (nextState, result)
     }.map { case (nextState, result) =>
-      if (SbtRuntime.hasFailureCommand(nextState))
-        Left(failureCommandError(taskKey))
-      else
+      stripFailureCommandOrContinue(nextState, taskKey).flatMap { _ =>
         StepHelpers.aggregatedTaskValues(result) match {
           case Left(incomplete) =>
             Left("Error checking for snapshot dependencies: " + incomplete)
           case Right(deps)      => Right(deps.distinct)
         }
+      }
     }
 
   /** Snapshot dependencies for one project (same semantics as monorepo `evaluateProjectTask`). */
@@ -47,9 +59,10 @@ private[release] object SnapshotDependencyTasks {
       val extracted = Project.extract(state)
       extracted.runTask(ref / taskKey, state)
     }.flatMap { case (nextState, deps) =>
-      if (SbtRuntime.hasFailureCommand(nextState))
-        IO.raiseError(new IllegalStateException(failureCommandError(taskKey)))
-      else IO.pure(deps)
+      stripFailureCommandOrContinue(nextState, taskKey) match {
+        case Left(message) => IO.raiseError(new IllegalStateException(message))
+        case Right(_)      => IO.pure(deps)
+      }
     }.recoverWith { case NonFatal(cause) =>
       IO.raiseError(
         new IllegalStateException(

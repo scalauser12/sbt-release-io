@@ -170,7 +170,8 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
               nameOf = (h: SingleHook) => h.name,
               executeOf = (h: SingleHook) => h.execute,
               validateOf = (h: SingleHook) => h.validate,
-              freezeGate = true
+              freezeGate = true,
+              gateKey = _ => "publish"
             )
           )
         for {
@@ -190,6 +191,52 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
         }
       }
     }
+  }
+
+  test("singleHookPhase - require an explicit gateKey when freezing is enabled") {
+    val err = intercept[IllegalArgumentException] {
+      LifecycleCompiler.singleHookPhase[TestConfig, TestContext, Nothing, SingleHook](
+        phase = "before-publish",
+        resolveHooks = _.singleHooks,
+        gate = _ => IO.pure(true),
+        nameOf = (hook: SingleHook) => hook.name,
+        executeOf = (hook: SingleHook) => hook.execute,
+        validateOf = (hook: SingleHook) => hook.validate,
+        freezeGate = true
+      )
+    }
+
+    assertEquals(
+      err.getMessage,
+      "requirement failed: phase 'before-publish' requires an explicit stable gateKey when freezeGate = true"
+    )
+  }
+
+  test("compile - frozen single gate execute fails fast when validate did not run") {
+    val hook   = SingleHook(name = "publish-check")
+    val phases =
+      Seq[LifecycleCompiler.Phase[TestConfig, TestContext, Nothing]](
+        LifecycleCompiler.singleHookPhase(
+          phase = "before-publish",
+          resolveHooks = _.singleHooks,
+          gate = _ => IO.pure(true),
+          nameOf = (h: SingleHook) => h.name,
+          executeOf = (h: SingleHook) => h.execute,
+          validateOf = (h: SingleHook) => h.validate,
+          freezeGate = true,
+          gateKey = _ => "core"
+        )
+      )
+
+    LifecycleCompiler
+      .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
+      .flatMap { steps =>
+        interceptMessageIO[IllegalStateException](
+          "Frozen gate decision missing for key 'core'; validate must run before execute when freezeGate = true"
+        ) {
+          steps.head.execute(TestContext(gateOpen = true)).void
+        }
+      }
   }
 
   test("compile - frozen per-item gate reuses validation decision during execute") {
@@ -245,6 +292,61 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
         }
       }
     }
+  }
+
+  test("perItemHookPhase - require an explicit gateKey when freezing is enabled") {
+    val err = intercept[IllegalArgumentException] {
+      LifecycleCompiler.perItemHookPhase[TestConfig, TestContext, String, ItemHook](
+        phase = "before-publish",
+        resolveHooks = _.itemHooks,
+        gate = (_, _) => IO.pure(true),
+        nameOf = (hook: ItemHook) => hook.name,
+        executeOf = (hook: ItemHook) => hook.execute,
+        validateOf = (hook: ItemHook) => hook.validate,
+        freezeGate = true
+      )
+    }
+
+    assertEquals(
+      err.getMessage,
+      "requirement failed: phase 'before-publish' requires an explicit stable gateKey when freezeGate = true"
+    )
+  }
+
+  test("compile - frozen per-item gate execute fails fast when validate did not run") {
+    val hook   = ItemHook(name = "publish-check")
+    val phases = Seq[LifecycleCompiler.Phase[
+      TestConfig,
+      TestContext,
+      String
+    ]](
+      LifecycleCompiler.perItemHookPhase(
+        phase = "before-publish",
+        resolveHooks = _.itemHooks,
+        gate = (_, _) => IO.pure(true),
+        nameOf = (h: ItemHook) => h.name,
+        executeOf = (h: ItemHook) => h.execute,
+        validateOf = (h: ItemHook) => h.validate,
+        freezeGate = true,
+        gateKey = (_, item) => item
+      )
+    )
+
+    LifecycleCompiler
+      .compile(TestConfig(itemHooks = Seq(hook)), phases)
+      .flatMap { steps =>
+        val step = ProcessStep
+          .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](steps.head)(
+            _ => fail("expected PerItem step"),
+            identity
+          )
+
+        interceptMessageIO[IllegalStateException](
+          "Frozen gate decision missing for key 'core'; validate must run before execute when freezeGate = true"
+        ) {
+          step.execute(TestContext(gateOpen = true), "core").void
+        }
+      }
   }
 }
 
