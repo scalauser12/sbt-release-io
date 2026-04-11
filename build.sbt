@@ -2,6 +2,7 @@ val Sbt1Version            = "1.12.3"
 val Sbt2Version            = "2.0.0-RC9"
 val Scala212               = "2.12.21"
 val Scala3                 = "3.8.1"
+val CatsEffectVersion      = "3.7.0"
 val MunitVersion           = "1.2.4"
 val MunitCatsEffectVersion = "2.2.0"
 
@@ -37,7 +38,7 @@ lazy val commonSettings = Seq(
     )
   ),
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-effect"       % "3.7.0",
+    "org.typelevel" %% "cats-effect"       % CatsEffectVersion,
     "org.scalameta" %% "munit"             % MunitVersion           % Test,
     "org.typelevel" %% "munit-cats-effect" % MunitCatsEffectVersion % Test
   ),
