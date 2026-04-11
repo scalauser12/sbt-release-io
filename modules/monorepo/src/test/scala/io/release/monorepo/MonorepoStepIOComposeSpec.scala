@@ -7,6 +7,7 @@ import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
+import sbt.Exec
 
 class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecSupport {
 
@@ -361,6 +362,38 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
                 assertEquals(result.state.onFailure, None)
               }
             }
+        }
+      }
+    }
+  }
+
+  test("compose - restore a pre-existing onFailure hook after per-project FailureCommand") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        dummyProjects("core").flatMap { projects =>
+          val originalOnFailure = Exec("custom-on-failure", None, None)
+          val pCtx              =
+            ctx
+              .withProjects(projects)
+              .withState(ctx.state.copy(onFailure = Some(originalOnFailure)))
+          val injectFailure     = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "inject-failure-command",
+            execute = (c, project) =>
+              observed.update(_ :+ project.name).as(
+                c.withState(
+                  c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+                )
+              )
+          )
+
+          MonorepoComposer.compose(Seq(injectFailure))(pCtx).flatMap { result =>
+            observed.get.map { obs =>
+              assert(result.failed)
+              assertEquals(obs, List("core"))
+              assertEquals(result.state.remainingCommands, Nil)
+              assertEquals(result.state.onFailure, Some(originalOnFailure))
+            }
+          }
         }
       }
     }

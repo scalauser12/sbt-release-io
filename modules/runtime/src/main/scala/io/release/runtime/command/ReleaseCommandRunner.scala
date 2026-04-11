@@ -14,12 +14,14 @@ import scala.util.control.NonFatal
   */
 private[release] object ReleaseCommandRunner {
 
-  /** `logPrefix` is typically [[io.release.runtime.ReleaseLogPrefixes.Core]] or `.Monorepo`.
-    * `failureState` is the state returned and logged if `program` throws before it can produce a
-    * normal `State` value.
-    */
-  def runSync(failureState: State, logPrefix: String)(program: IO[State]): State =
-    program
+  def recoverNonFatal(
+      failureState: State,
+      logPrefix: String
+  )(
+      program: => IO[State]
+  ): IO[State] =
+    IO
+      .defer(program)
       .handleErrorWith {
         case NonFatal(e) =>
           IO.blocking(
@@ -28,7 +30,13 @@ private[release] object ReleaseCommandRunner {
         case fatal       =>
           IO.raiseError(fatal)
       }
-      .unsafeRunSync()
+
+  /** `logPrefix` is typically [[io.release.runtime.ReleaseLogPrefixes.Core]] or `.Monorepo`.
+    * `failureState` is the state returned and logged if `program` throws before it can produce a
+    * normal `State` value.
+    */
+  def runSync(failureState: State, logPrefix: String)(program: IO[State]): State =
+    recoverNonFatal(failureState, logPrefix)(program).unsafeRunSync()
 
   /** Log a sequence of lines with a shared prefix. Used by help and check output. */
   def logLines(state: State, prefix: String, lines: Seq[String]): IO[Unit] =

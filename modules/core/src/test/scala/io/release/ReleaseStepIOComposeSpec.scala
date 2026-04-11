@@ -11,7 +11,7 @@ import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
 import io.release.runtime.workflow.StepHelpers
 import munit.CatsEffectSuite
-import sbt.AttributeKey
+import sbt.{AttributeKey, Exec}
 
 class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
 
@@ -75,6 +75,20 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         .compose(Seq(CoreStepFactory.io("noop")(IO.pure)), crossBuild = false)(ctx)
         .map { result =>
           assertEquals(result.state.onFailure, None)
+        }
+    }
+  }
+
+  test("compose - restore a pre-existing onFailure hook after successful compose") {
+    contextResource.use { ctx =>
+      val originalOnFailure = Exec("custom-on-failure", None, None)
+
+      ReleaseComposer
+        .compose(Seq(CoreStepFactory.io("noop")(IO.pure)), crossBuild = false)(
+          ctx.withState(ctx.state.copy(onFailure = Some(originalOnFailure)))
+        )
+        .map { result =>
+          assertEquals(result.state.onFailure, Some(originalOnFailure))
         }
     }
   }

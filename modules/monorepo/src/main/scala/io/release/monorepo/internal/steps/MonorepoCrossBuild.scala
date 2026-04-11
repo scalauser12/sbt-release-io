@@ -142,7 +142,7 @@ private[monorepo] object MonorepoCrossBuild {
                                 )
                               )
                   switched <- SbtRuntime
-                                .switchScalaVersion(currentCtx.state, version)
+                                .switchScalaVersion(currentCtx.state, version, LogPrefix)
                                 .map(currentCtx.withState)
                   result   <- action(switched, refreshedProject(switched)).flatMap(nextCtx =>
                                 MonorepoStepHelpers.detectProjectFailureCommand(

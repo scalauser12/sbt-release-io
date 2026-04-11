@@ -1,5 +1,6 @@
 package io.release.runtime.engine
 
+import _root_.sbt.AttributeKey
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.sbt.SbtCompat
@@ -32,6 +33,9 @@ import io.release.runtime.workflow.StepHelpers
   * on the first failure.
   */
 private[release] object ExecutionEngine {
+
+  private val originalOnFailureKey: AttributeKey[Option[_root_.sbt.Exec]] =
+    AttributeKey[Option[_root_.sbt.Exec]]("releaseIOInternalOriginalOnFailure")
 
   final case class PreparedStep[C](
       name: String,
@@ -94,8 +98,13 @@ private[release] object ExecutionEngine {
   ): IO[C] =
     runActionPhase(steps)(startCtx)
 
-  def armOnFailure[C <: ReleaseCtx { type Self = C }](ctx: C): C =
-    ctx.withState(ctx.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
+  def armOnFailure[C <: ReleaseCtx { type Self = C }](ctx: C): C = {
+    val withSnapshot =
+      if (ctx.metadata(originalOnFailureKey).isDefined) ctx
+      else ctx.withMetadata(originalOnFailureKey, ctx.state.onFailure)
+
+    withSnapshot.withState(withSnapshot.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
+  }
 
   def detectSbtFailure[C <: ReleaseCtx { type Self = C }](stepName: String, ctx: C): IO[C] = IO {
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
@@ -110,7 +119,16 @@ private[release] object ExecutionEngine {
 
   def stripFailureCommand[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] = IO {
     val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
-    ctx.withState(cleaned.copy(onFailure = None))
+    val restoredOnFailure =
+      ctx.metadata(originalOnFailureKey) match {
+        case Some(saved) => saved
+        case None if cleaned.onFailure.contains(SbtCompat.FailureCommand) => None
+        case None                                              => cleaned.onFailure
+      }
+
+    ctx
+      .withState(cleaned.copy(onFailure = restoredOnFailure))
+      .withoutMetadata(originalOnFailureKey)
   }
 
   def raiseIfFailed[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] =

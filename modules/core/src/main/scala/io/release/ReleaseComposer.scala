@@ -91,7 +91,9 @@ private[release] object ReleaseComposer {
       (crossVersions, entryState)
     }.flatMap { case (crossVersions, entryState) =>
       def switchToVersion(currentCtx: ReleaseContext, version: String): IO[ReleaseContext] =
-        SbtRuntime.switchScalaVersion(currentCtx.state, version).map(currentCtx.withState)
+        SbtRuntime
+          .switchScalaVersion(currentCtx.state, version, LogPrefix)
+          .map(currentCtx.withState)
 
       def restoreEntry(currentCtx: ReleaseContext): IO[ReleaseContext] =
         CrossBuildSupport

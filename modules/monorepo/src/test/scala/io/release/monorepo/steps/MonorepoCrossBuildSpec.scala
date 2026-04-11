@@ -5,6 +5,7 @@ import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.internal.steps.*
+import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.Keys.*
 import sbt.LocalProject
@@ -21,7 +22,7 @@ import java.io.PrintStream
 
 class MonorepoCrossBuildSpec extends CatsEffectSuite {
 
-  test("multi-version cross-build logs include the project name") {
+  test("multi-version cross-build logs include the project name and monorepo prefix") {
     MonorepoSpecSupport
       .loadedFixtureResource("monorepo-cross-build-log") { dir =>
         val coreBase = new File(dir, "core")
@@ -72,6 +73,16 @@ class MonorepoCrossBuildSpec extends CatsEffectSuite {
                 assert(
                   log.contains(
                     s"Cross-building core with Scala ${TestSupport.alternateScalaVersion}"
+                  )
+                )
+                assert(
+                  log.contains(
+                    s"${ReleaseLogPrefixes.Monorepo} Setting scala version to ${TestSupport.CurrentScalaVersion}"
+                  )
+                )
+                assert(
+                  log.contains(
+                    s"${ReleaseLogPrefixes.Monorepo} Setting scala version to ${TestSupport.alternateScalaVersion}"
                   )
                 )
               }

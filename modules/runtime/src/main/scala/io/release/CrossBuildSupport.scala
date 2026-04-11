@@ -1,7 +1,6 @@
 package io.release
 
 import cats.effect.IO
-import io.release.runtime.ReleaseLogPrefixes
 import _root_.sbt.Def.ScopedKey
 import _root_.sbt.util.Show
 import _root_.sbt.{internal as _, *}
@@ -17,13 +16,13 @@ private[release] object CrossBuildSupport {
     * Wraps the entire operation in `IO.blocking` since it calls sbt internals
     * (`LoadCompat.reapply`, `Project.setProject`) that perform blocking I/O.
     */
-  def switchScalaVersion(state: State, version: String): IO[State] =
+  def switchScalaVersion(state: State, version: String, logPrefix: String): IO[State] =
     IO.blocking {
       val extracted                            = Project.extract(state)
       import extracted.*
       implicit val showKey: Show[ScopedKey[?]] = extracted.showKey
 
-      state.log.info(s"${ReleaseLogPrefixes.Core} Setting scala version to $version")
+      state.log.info(s"$logPrefix Setting scala version to $version")
 
       val add = Seq(
         GlobalScope / Keys.scalaVersion := version,
