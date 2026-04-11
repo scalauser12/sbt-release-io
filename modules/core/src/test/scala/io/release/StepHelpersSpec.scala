@@ -558,6 +558,8 @@ class StepHelpersSpec extends CatsEffectSuite {
       override def hasUpstream: IO[Boolean]                                                    = IO.pure(true)
       override def isBehindRemote: IO[Boolean]                                                 = IO.pure(false)
       override def existsTag(name: String): IO[Boolean]                                        = IO.pure(false)
+      override def tagCommitHash(name: String): IO[Option[String]]                             =
+        IO.pure(None)
       override def modifiedFiles: IO[Seq[String]]                                              = IO.pure(Nil)
       override def stagedFiles: IO[Seq[String]]                                                = IO.pure(Nil)
       override def untrackedFiles: IO[Seq[String]]                                             = IO.pure(Nil)

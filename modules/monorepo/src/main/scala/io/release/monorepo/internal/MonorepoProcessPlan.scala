@@ -1,6 +1,7 @@
 package io.release.monorepo.internal
 
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
+import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.engine.BuiltInStepRole
 
 private[monorepo] final case class MonorepoProcessPlan(
@@ -42,8 +43,25 @@ private[monorepo] final case class MonorepoProcessPlan(
     else mainSteps.drop(versionIndex + 1)
 
   def builtInTagPreflightFollowsVersionResolution: Boolean = {
-    val tagIndex = mainSteps.indexWhere(_.hasRole(BuiltInStepRole.TagRelease))
     hasBuiltInVersionResolution && tagIndex > versionIndex
+  }
+
+  def builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean =
+    containsOrderedSubsequence(
+      mainSteps,
+      Seq(
+        MonorepoReleaseSteps.setReleaseVersions,
+        MonorepoReleaseSteps.commitReleaseVersions,
+        MonorepoReleaseSteps.tagReleasesPerProject
+      )
+    )
+
+  private def containsOrderedSubsequence(
+      steps: Seq[AnyStep],
+      orderedSteps: Seq[AnyStep]
+  ): Boolean = {
+    val remaining = steps.iterator
+    orderedSteps.forall(target => remaining.exists(_ eq target))
   }
 
   private def allSteps: Seq[AnyStep] =
@@ -51,6 +69,9 @@ private[monorepo] final case class MonorepoProcessPlan(
 
   private lazy val versionIndex: Int =
     mainSteps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
+
+  private lazy val tagIndex: Int =
+    mainSteps.indexWhere(_.hasRole(BuiltInStepRole.TagRelease))
 }
 
 private[monorepo] object MonorepoProcessPlan {

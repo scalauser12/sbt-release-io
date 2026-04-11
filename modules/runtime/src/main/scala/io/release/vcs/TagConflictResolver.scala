@@ -18,11 +18,18 @@ private[release] object TagConflictResolver {
   /** Outcome of a preflight tag check. */
   final case class PreflightOutcome(tagName: String, status: String)
 
+  sealed trait PreflightCommitTarget
+  object PreflightCommitTarget {
+    final case class ExactCommit(hash: String) extends PreflightCommitTarget
+    case object FutureReleaseCommit            extends PreflightCommitTarget
+  }
+
   /** Parameters for execute-time tag resolution. */
   final case class TagParams(
       tagName: String,
       tagComment: String,
       sign: Boolean,
+      expectedCommitHash: String,
       interactive: Boolean,
       useDefaults: Boolean,
       defaultAnswer: Option[String],
@@ -33,6 +40,7 @@ private[release] object TagConflictResolver {
   /** Parameters for preflight tag checks. */
   final case class PreflightParams(
       tagName: String,
+      target: PreflightCommitTarget,
       interactive: Boolean,
       useDefaults: Boolean,
       defaultAnswer: Option[String],
@@ -61,32 +69,52 @@ private[release] object TagConflictResolver {
             .tag(tagName, params.tagComment, params.sign)
             .as(currentCtx -> TagResult(tagName, overwritten = false))
         case true  =>
-          resolveAnswer(currentCtx, tagName, defaultAnswer, params).flatMap {
-            case (nextCtx, ConflictAction.Abort)         =>
-              IO.raiseError(
-                new IllegalStateException(s"Tag [$tagName] already exists. Aborting release!")
-              )
-            case (nextCtx, ConflictAction.Keep)          =>
-              IO.blocking(
-                nextCtx.state.log.warn(
-                  s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
-                )
-              ).as(nextCtx -> TagResult(tagName, overwritten = false))
-            case (nextCtx, ConflictAction.Overwrite)     =>
-              IO.blocking(
-                nextCtx.state.log.warn(
-                  s"${params.logPrefix} Tag [$tagName] already exists. Overwriting."
-                )
-              ) *>
-                vcs
-                  .tag(tagName, params.tagComment, params.sign, force = true)
-                  .as(nextCtx -> TagResult(tagName, overwritten = true))
-            case (nextCtx, ConflictAction.Retry(newTag)) =>
-              IO.blocking(
-                nextCtx.state.log.info(
-                  s"${params.logPrefix} Tag [$tagName] exists. Trying tag [$newTag]."
-                )
-              ) *> loop(nextCtx, newTag, defaultAnswer = None)
+          existingTagMatch(vcs, tagName, params.expectedCommitHash).flatMap {
+            case MatchStatus(matchesExpectedCommit, actualCommitHash) =>
+              resolveAnswer(
+                currentCtx,
+                tagName,
+                defaultAnswer,
+                params,
+                allowKeep = matchesExpectedCommit
+              ).flatMap {
+                case (nextCtx, ConflictAction.Abort)                  =>
+                  IO.raiseError(
+                    new IllegalStateException(s"Tag [$tagName] already exists. Aborting release!")
+                  )
+                case (nextCtx, ConflictAction.Keep) if matchesExpectedCommit =>
+                  IO.blocking(
+                    nextCtx.state.log.warn(
+                      s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
+                    )
+                  ).as(nextCtx -> TagResult(tagName, overwritten = false))
+                case (_, ConflictAction.Keep)                        =>
+                  IO.raiseError(
+                    new IllegalStateException(
+                      keepMismatchMessage(
+                        tagName,
+                        params.label,
+                        params.expectedCommitHash,
+                        actualCommitHash
+                      )
+                    )
+                  )
+                case (nextCtx, ConflictAction.Overwrite)             =>
+                  IO.blocking(
+                    nextCtx.state.log.warn(
+                      s"${params.logPrefix} Tag [$tagName] already exists. Overwriting."
+                    )
+                  ) *>
+                    vcs
+                      .tag(tagName, params.tagComment, params.sign, force = true)
+                      .as(nextCtx -> TagResult(tagName, overwritten = true))
+                case (nextCtx, ConflictAction.Retry(newTag))         =>
+                  IO.blocking(
+                    nextCtx.state.log.info(
+                      s"${params.logPrefix} Tag [$tagName] exists. Trying tag [$newTag]."
+                    )
+                  ) *> loop(nextCtx, newTag, defaultAnswer = None)
+              }
           }
       }
 
@@ -99,53 +127,108 @@ private[release] object TagConflictResolver {
       vcs.existsTag(tagName).flatMap {
         case false => IO.pure(PreflightOutcome(tagName, "available"))
         case true  =>
-          normalizeAnswer(defaultAnswer) match {
-            case Some("k") | Some("K")            =>
-              IO.pure(
-                PreflightOutcome(tagName, "exists; release will keep the existing tag")
-              )
-            case Some("o") | Some("O")            =>
-              IO.pure(
-                PreflightOutcome(tagName, "exists; release will overwrite the tag")
-              )
-            case Some("a") | Some("A") | Some("") =>
-              IO.raiseError(
-                new IllegalStateException(
-                  s"Tag [$tagName] already exists${forLabel(params.label)}. " +
-                    s"Current settings would abort the release. " +
-                    s"Use `${params.commandName} help` for tag conflict options."
-                )
-              )
-            case Some(newTagName)                 =>
-              loop(newTagName, defaultAnswer = None).map { outcome =>
-                outcome.copy(
-                  status =
-                    s"[$tagName] exists; release will retry with [${outcome.tagName}] (${outcome.status})"
-                )
+          params.target match {
+            case PreflightCommitTarget.ExactCommit(expectedCommitHash) =>
+              existingTagMatch(vcs, tagName, expectedCommitHash).flatMap {
+                case MatchStatus(matchesExpectedCommit, actualCommitHash) =>
+                  normalizeAnswer(defaultAnswer) match {
+                    case Some("k") | Some("K") if matchesExpectedCommit =>
+                      IO.pure(
+                        PreflightOutcome(tagName, "exists; release will keep the existing tag")
+                      )
+                    case Some("k") | Some("K")                   =>
+                      IO.raiseError(
+                        new IllegalStateException(
+                          preflightKeepMismatchMessage(
+                            tagName,
+                            params,
+                            expectedCommitHash,
+                            actualCommitHash
+                          )
+                        )
+                      )
+                    case Some("o") | Some("O")                   =>
+                      IO.pure(
+                        PreflightOutcome(tagName, "exists; release will overwrite the tag")
+                      )
+                    case Some("a") | Some("A") | Some("")        =>
+                      preflightAbort(tagName, params, "Current settings would abort the release.")
+                    case Some(newTagName)                        =>
+                      loop(newTagName, defaultAnswer = None).map { outcome =>
+                        outcome.copy(
+                          status =
+                            s"[$tagName] exists; release will retry with [${outcome.tagName}] (${outcome.status})"
+                        )
+                      }
+                    case None if params.useDefaults              =>
+                      preflightAbort(
+                        tagName,
+                        params,
+                        "Current settings would abort in use-defaults mode."
+                      )
+                    case None if !params.interactive             =>
+                      preflightAbort(
+                        tagName,
+                        params,
+                        "Current settings would abort in non-interactive mode."
+                      )
+                    case None if matchesExpectedCommit           =>
+                      IO.pure(
+                        PreflightOutcome(
+                          tagName,
+                          "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                        )
+                      )
+                    case None                                    =>
+                      IO.pure(
+                        PreflightOutcome(
+                          tagName,
+                          "exists on a different commit; interactive release will prompt for overwrite, abort, or a new tag"
+                        )
+                      )
+                  }
               }
-            case None if params.useDefaults       =>
-              IO.raiseError(
-                new IllegalStateException(
-                  s"Tag [$tagName] already exists${forLabel(params.label)}. " +
-                    s"Current settings would abort in use-defaults mode. " +
-                    s"Use `${params.commandName} help` for tag conflict options."
-                )
-              )
-            case None if !params.interactive      =>
-              IO.raiseError(
-                new IllegalStateException(
-                  s"Tag [$tagName] already exists${forLabel(params.label)}. " +
-                    s"Current settings would abort in non-interactive mode. " +
-                    s"Use `${params.commandName} help` for tag conflict options."
-                )
-              )
-            case None                             =>
-              IO.pure(
-                PreflightOutcome(
-                  tagName,
-                  "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
-                )
-              )
+            case PreflightCommitTarget.FutureReleaseCommit     =>
+              normalizeAnswer(defaultAnswer) match {
+                case Some("k") | Some("K")            =>
+                  IO.raiseError(
+                    new IllegalStateException(
+                      preflightFutureCommitKeepMessage(tagName, params)
+                    )
+                  )
+                case Some("o") | Some("O")            =>
+                  IO.pure(
+                    PreflightOutcome(tagName, "exists; release will overwrite the tag")
+                  )
+                case Some("a") | Some("A") | Some("") =>
+                  preflightAbort(tagName, params, "Current settings would abort the release.")
+                case Some(newTagName)                 =>
+                  loop(newTagName, defaultAnswer = None).map { outcome =>
+                    outcome.copy(
+                      status =
+                        s"[$tagName] exists; release will retry with [${outcome.tagName}] (${outcome.status})"
+                    )
+                  }
+                case None if params.useDefaults       =>
+                  preflightAbort(
+                    tagName,
+                    params,
+                    "Current settings would abort in use-defaults mode."
+                  )
+                case None if !params.interactive      =>
+                  preflightAbort(
+                    tagName,
+                    params,
+                    "Current settings would abort in non-interactive mode."
+                  )
+                case None                             =>
+                  IO.pure(
+                    PreflightOutcome(
+                      tagName,
+                      "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                    )
+                  )
+              }
           }
       }
 
@@ -153,6 +236,11 @@ private[release] object TagConflictResolver {
   }
 
   // ── Internal ──────────────────────────────────────────────────────
+
+  private final case class MatchStatus(
+      matchesExpectedCommit: Boolean,
+      actualCommitHash: Option[String]
+  )
 
   private sealed trait ConflictAction
   private object ConflictAction {
@@ -162,11 +250,24 @@ private[release] object TagConflictResolver {
     final case class Retry(tag: String) extends ConflictAction
   }
 
+  private def existingTagMatch(
+      vcs: Vcs,
+      tagName: String,
+      expectedCommitHash: String
+  ): IO[MatchStatus] =
+    vcs.tagCommitHash(tagName).map(actualCommitHash =>
+      MatchStatus(
+        matchesExpectedCommit = actualCommitHash.contains(expectedCommitHash),
+        actualCommitHash = actualCommitHash
+      )
+    )
+
   private def resolveAnswer[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       tagName: String,
       defaultAnswer: Option[String],
-      params: TagParams
+      params: TagParams,
+      allowKeep: Boolean
   ): IO[(C, ConflictAction)] = {
     val effectiveAnswer: IO[(C, String)] =
       DecisionResolver.resolveTagAnswer(
@@ -174,7 +275,8 @@ private[release] object TagConflictResolver {
         configuredAnswer = defaultAnswer,
         tagName = tagName,
         label = params.label,
-        logPrefix = params.logPrefix
+        logPrefix = params.logPrefix,
+        prompt = promptFor(tagName, params.label, allowKeep)
       )
 
     effectiveAnswer.map { case (nextCtx, answer) =>
@@ -188,6 +290,69 @@ private[release] object TagConflictResolver {
       (nextCtx, action)
     }
   }
+
+  private def keepMismatchMessage(
+      tagName: String,
+      label: String,
+      expectedCommitHash: String,
+      actualCommitHash: Option[String]
+  ): String =
+    s"Tag [$tagName] already exists${forLabel(label)}, but " +
+      mismatchDetail(expectedCommitHash, actualCommitHash) +
+      ". Overwrite it or provide a new tag."
+
+  private def preflightKeepMismatchMessage(
+      tagName: String,
+      params: PreflightParams,
+      expectedCommitHash: String,
+      actualCommitHash: Option[String]
+  ): String =
+    keepMismatchMessage(
+      tagName,
+      params.label,
+      expectedCommitHash,
+      actualCommitHash
+    ) + s" Use `${params.commandName} help` for tag conflict options."
+
+  private def preflightFutureCommitKeepMessage(
+      tagName: String,
+      params: PreflightParams
+  ): String =
+    s"Tag [$tagName] already exists${forLabel(params.label)}. " +
+      "This release will create a new commit before tagging, so keeping the existing tag is not valid. " +
+      s"Use `${params.commandName} help` for tag conflict options."
+
+  private def preflightAbort(
+      tagName: String,
+      params: PreflightParams,
+      reason: String
+  ): IO[PreflightOutcome] =
+    IO.raiseError(
+      new IllegalStateException(
+        s"Tag [$tagName] already exists${forLabel(params.label)}. " +
+          s"$reason " +
+          s"Use `${params.commandName} help` for tag conflict options."
+      )
+    )
+
+  private def mismatchDetail(
+      expectedCommitHash: String,
+      actualCommitHash: Option[String]
+  ): String =
+    actualCommitHash match {
+      case Some(actualHash) =>
+        s"it points at commit [$actualHash] instead of the expected release commit [$expectedCommitHash]"
+      case None             =>
+        s"its target commit could not be resolved to the expected release commit [$expectedCommitHash]"
+    }
+
+  private def promptFor(tagName: String, label: String, allowKeep: Boolean): String =
+    if (allowKeep)
+      s"Tag [$tagName] exists${forLabel(label)}! " +
+        "Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
+    else
+      s"Tag [$tagName] exists${forLabel(label)} and points at a different commit! " +
+        "Overwrite, abort or enter a new tag (o/a/<tag-name>)? [a] "
 
   private def forLabel(label: String): String =
     if (label.isEmpty) "" else s" for $label"

@@ -144,7 +144,8 @@ private[release] object DecisionResolver {
       configuredAnswer: Option[String],
       tagName: String,
       label: String,
-      logPrefix: String
+      logPrefix: String,
+      prompt: String
   ): IO[(C, String)] =
     configuredAnswer match {
       case Some(answer) => IO.pure(ctx -> answer)
@@ -163,11 +164,7 @@ private[release] object DecisionResolver {
           )
         else
           PromptAdapter
-            .promptLine(
-              ctx,
-              s"Tag [$tagName] exists${forLabel(label)}! " +
-                "Overwrite, keep or abort or enter a new tag (o/k/a)? [a] "
-            )
+            .promptLine(ctx, prompt)
             .flatMap {
               case (nextCtx, Some(raw)) => IO.pure(nextCtx -> raw)
               case (nextCtx, None)      =>

@@ -13,6 +13,7 @@ import io.release.core.internal.CoreReleasePlan
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.vcs.TagConflictResolver
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
 import sbt.Project
@@ -273,6 +274,53 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagRelease.execute - reject keep when the existing tag points at another commit") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      for {
+        _              <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        originalTagRev <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "v1.0.0").trim
+                          )
+        _              <- IO.blocking {
+                            sbt.IO.write(new File(repo, "file.txt"), "updated")
+                            TestSupport.commitAll(repo, "Second commit")
+                          }
+        headRev        <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _              <- TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+                            TestSupport.withInput("k\n") {
+                              VcsSteps.tagRelease.execute(
+                                ReleaseContext(
+                                  state = state,
+                                  vcs = Some(vcs),
+                                  interactive = true
+                                )
+                              )
+                            }
+                          ) { err =>
+                            assert(err.getMessage.contains(s"Tag [v1.0.0] already exists"))
+                            assert(err.getMessage.contains(originalTagRev))
+                            assert(err.getMessage.contains(headRev))
+                            assert(err.getMessage.contains("Overwrite it or provide a new tag."))
+                          }
+        tagRev         <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "v1.0.0").trim
+                          )
+      } yield {
+        assertEquals(tagRev, originalTagRev)
+        assertNotEquals(tagRev, headRev)
+      }
+    }
+  }
+
   test("tagRelease.execute - treat EOF as the default abort answer when the tag already exists") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val buffered = bufferedGitRootState(
@@ -393,6 +441,106 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("preflightTag - reject the configured keep answer when the existing tag points elsewhere") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+      val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+        .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        .withExecutionState(
+          CoreExecutionState(
+            CoreReleasePlan(
+              flags = ExecutionFlags(
+                useDefaults = false,
+                skipTests = false,
+                skipPublish = false,
+                interactive = false,
+                crossBuild = false
+              ),
+              releaseVersionOverride = None,
+              nextVersionOverride = None,
+              decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
+            )
+          )
+        )
+
+      for {
+        _              <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        originalTagRev <- IO.blocking(
+                            TestSupport.runGit(repo, "rev-list", "-n", "1", "v1.0.0").trim
+                          )
+        _              <- IO.blocking {
+                            sbt.IO.write(new File(repo, "file.txt"), "updated")
+                            TestSupport.commitAll(repo, "Second commit")
+                          }
+        headRev        <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _              <-
+          TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
+            VcsSteps.preflightTag(ctx)
+          ) { err =>
+            assert(err.getMessage.contains(s"Tag [v1.0.0] already exists"))
+            assert(err.getMessage.contains(originalTagRev))
+            assert(err.getMessage.contains(headRev))
+            assert(err.getMessage.contains("releaseIO help"))
+          }
+      } yield ()
+    }
+  }
+
+  test(
+    "preflightTag - reject the configured keep answer when release will create a new commit"
+  ) {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+      val ctx   = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+        .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        .withExecutionState(
+          CoreExecutionState(
+            CoreReleasePlan(
+              flags = ExecutionFlags(
+                useDefaults = false,
+                skipTests = false,
+                skipPublish = false,
+                interactive = false,
+                crossBuild = false
+              ),
+              releaseVersionOverride = None,
+              nextVersionOverride = None,
+              decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
+            )
+          )
+        )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
+          VcsSteps.preflightTag(
+            ctx,
+            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIO help"))
+        }
+    }
+  }
+
   test("preflightTag - trim whitespace around the configured default answer") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val state = ReleaseTestSupport.gitRootState(
@@ -454,6 +602,87 @@ class VcsStepsSpec extends CatsEffectSuite {
               "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
             )
           }
+    }
+  }
+
+  test("preflightTag - omit keep from the interactive status for a future release commit") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        VcsSteps
+          .preflightTag(
+            ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT"),
+            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+          )
+          .map { outcome =>
+            assertEquals(outcome.tagName, "v1.0.0")
+            assertEquals(
+              outcome.status,
+              "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+            )
+          }
+    }
+  }
+
+  test("preflightTag - ignore the persisted release hash for a future release commit") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val baseState = ReleaseTestSupport.gitRootState(
+        repo,
+        releaseManifestSettings() ++ Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      for {
+        _         <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        headRev   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        state      = TestSupport.appendSessionSettings(
+                       baseState,
+                       Seq(releaseIOInternalReleaseHash := Some(headRev))
+                     )
+        ctx        = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+                       .withExecutionState(
+                         CoreExecutionState(
+                           CoreReleasePlan(
+                             flags = ExecutionFlags(
+                               useDefaults = false,
+                               skipTests = false,
+                               skipPublish = false,
+                               interactive = false,
+                               crossBuild = false
+                             ),
+                             releaseVersionOverride = None,
+                             nextVersionOverride = None,
+                             decisionDefaults =
+                               ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = Some("k"))
+                           )
+                         )
+                       )
+        _         <- TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
+                       VcsSteps.preflightTag(
+                         ctx,
+                         _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+                       )
+                     ) { err =>
+                       assert(
+                         err.getMessage.contains(
+                           "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+                         )
+                       )
+                       assert(err.getMessage.contains("releaseIO help"))
+                     }
+      } yield ()
     }
   }
 

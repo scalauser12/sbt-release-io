@@ -340,6 +340,430 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
+  test("check - reject keep when the flow will create release commits before tagging") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val keepCtx  = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val session  = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        assertFailure[IllegalStateException, MonorepoPreflight.Summary](
+          MonorepoPreflight.check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIOMonorepo help"))
+        }
+    }
+  }
+
+  test("check - omit keep from the interactive tag summary for future release commits") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val interactiveCtx =
+        withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
+      val session        =
+        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - ignore seeded project release hashes when a future release commit will rewrite them") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val keepCtx                    =
+        withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val seedProjectHashesInValidation =
+        validationOnlyStep(
+          "seed-project-release-hashes-in-validation",
+          validateWithContext = currentCtx =>
+            IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim).flatMap { headRev =>
+              IO.blocking {
+                val seededState = TestSupport.appendSessionSettings(
+                  currentCtx.state,
+                  _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+                    currentCtx.currentProjects.map(_.ref),
+                    headRev
+                  )
+                )
+                currentCtx.withState(seededState)
+              }
+            }
+        )
+      val session                    =
+        MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        assertFailure[IllegalStateException, MonorepoPreflight.Summary](
+          MonorepoPreflight.check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              seedProjectHashesInValidation,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIOMonorepo help"))
+        }
+    }
+  }
+
+  test("check - keep the configured keep answer when no built-in release write precedes tags") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val keepCtx = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val session = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; release will keep the existing tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - ignore a custom step that reuses the built-in release-write name") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val keepCtx = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val session = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+      val customSetReleaseVersionsNameStep =
+        validationOnlyStep(MonorepoReleaseSteps.setReleaseVersions.name)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              customSetReleaseVersionsNameStep,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; release will keep the existing tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep keep in the interactive tag summary without a built-in release write") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val interactiveCtx =
+        withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
+      val session        =
+        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep keep in the interactive summary for a custom step named set-release-version") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val interactiveCtx =
+        withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
+      val session        =
+        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+      val customSetReleaseVersionsNameStep =
+        validationOnlyStep(MonorepoReleaseSteps.setReleaseVersions.name)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              customSetReleaseVersionsNameStep,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep the configured keep answer when the built-in release write is a no-op") {
+    noOpPreflightFixtureResource.use { case (repo, ctx, _) =>
+      val keepCtx = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val session = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; release will keep the existing tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep keep in the interactive summary when the release write is a no-op") {
+    noOpPreflightFixtureResource.use { case (repo, ctx, _) =>
+      val interactiveCtx =
+        withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
+      val session        =
+        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - reject keep when a later built-in release chain creates release commits") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val keepCtx = withTagConflictDefaults(ctx, interactive = false, defaultAnswer = Some("k"))
+      val session = MonorepoPreparedSession(keepCtx.state, keepCtx.releasePlan.get, keepCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        assertFailure[IllegalStateException, MonorepoPreflight.Summary](
+          MonorepoPreflight.check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIOMonorepo help"))
+        }
+    }
+  }
+
+  test("check - omit keep when a later built-in release chain creates release commits") {
+    preflightFixtureResource.use { case (repo, ctx, _) =>
+      val interactiveCtx =
+        withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
+      val session        =
+        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
+  test("check - treat all project tags as future-commit tags when any release write changes") {
+    mixedPreflightFixtureResource.use { case (repo, ctx) =>
+      val interactiveCtx =
+        withTagConflictDefaults(ctx, interactive = true, defaultAnswer = None)
+      val session        =
+        MonorepoPreparedSession(interactiveCtx.state, interactiveCtx.releasePlan.get, interactiveCtx)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
+        IO.blocking(TestSupport.runGit(repo, "tag", "api/v0.2.0")) *>
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.setReleaseVersions,
+              MonorepoReleaseSteps.commitReleaseVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .map { summary =>
+            assertEquals(
+              summary.projects.map(_.tag),
+              Seq(
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "core/v0.1.0",
+                    "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                  )
+                ),
+                MonorepoPreflight.Evaluation.Resolved(
+                  MonorepoPreflight.ProjectTag(
+                    "api/v0.2.0",
+                    "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                  )
+                )
+              )
+            )
+          }
+    }
+  }
+
   test(
     "check - render selection, versions, and tags as not evaluated when the check process omits the built-in steps"
   ) {
@@ -593,6 +1017,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
   }
 
   private val preflightFixtureResource: Resource[IO, (File, MonorepoContext, File)] =
+    singleProjectPreflightFixtureResource("0.1.0-SNAPSHOT")
+
+  private val noOpPreflightFixtureResource: Resource[IO, (File, MonorepoContext, File)] =
+    singleProjectPreflightFixtureResource("0.1.0")
+
+  private def singleProjectPreflightFixtureResource(
+      initialVersion: String
+  ): Resource[IO, (File, MonorepoContext, File)] =
     TestSupport.tempDirResource("monorepo-preflight-spec").evalMap { repo =>
       for {
         fixture             <- IO.blocking {
@@ -602,7 +1034,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
                                  sbt.IO.write(new File(repo, "tracked.txt"), "initial")
                                  sbt.IO.write(
                                    versionFile,
-                                   """version := "0.1.0-SNAPSHOT"""" + "\n"
+                                   s"""version := "$initialVersion"""" + "\n"
                                  )
 
                                  TestSupport.initGitRepo(repo)
@@ -710,7 +1142,39 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       validateWithContext = Some(validateWithContext)
     )
 
+  private def withTagConflictDefaults(
+      ctx: MonorepoContext,
+      interactive: Boolean,
+      defaultAnswer: Option[String]
+  ): MonorepoContext =
+    ctx.releasePlan.getOrElse(fail("Expected release plan")) match {
+      case plan =>
+        ctx
+          .copy(interactive = interactive)
+          .withReleasePlan(
+            plan.copy(
+              flags = plan.flags.copy(interactive = interactive),
+              decisionDefaults = plan.decisionDefaults.copy(tagExistsAnswer = defaultAnswer)
+            )
+          )
+    }
+
   private val multiProjectPreflightFixtureResource: Resource[IO, (File, MonorepoContext)] =
+    buildMultiProjectPreflightFixtureResource(
+      coreVersion = "0.1.0-SNAPSHOT",
+      apiVersion = "0.2.0-SNAPSHOT"
+    )
+
+  private val mixedPreflightFixtureResource: Resource[IO, (File, MonorepoContext)] =
+    buildMultiProjectPreflightFixtureResource(
+      coreVersion = "0.1.0",
+      apiVersion = "0.2.0-SNAPSHOT"
+    )
+
+  private def buildMultiProjectPreflightFixtureResource(
+      coreVersion: String,
+      apiVersion: String
+  ): Resource[IO, (File, MonorepoContext)] =
     TestSupport.tempDirResource("monorepo-preflight-multi-spec").evalMap { repo =>
       for {
         state    <- IO.blocking {
@@ -722,11 +1186,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
                       sbt.IO.write(new File(repo, "tracked.txt"), "initial")
                       sbt.IO.write(
                         new File(coreBase, "version.sbt"),
-                        """version := "0.1.0-SNAPSHOT"""" + "\n"
+                        s"""version := "$coreVersion"""" + "\n"
                       )
                       sbt.IO.write(
                         new File(apiBase, "version.sbt"),
-                        """version := "0.2.0-SNAPSHOT"""" + "\n"
+                        s"""version := "$apiVersion"""" + "\n"
                       )
 
                       TestSupport.initGitRepo(repo)

@@ -256,6 +256,359 @@ class CorePreflightSpec extends CatsEffectSuite {
     }
   }
 
+  test("check - reject keep when the flow will create a release commit before tagging") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        assertFailure[IllegalStateException, CorePreflight.Summary](
+          CorePreflight.check(
+            keepCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIO help"))
+        }
+    }
+  }
+
+  test("check - omit keep from the interactive tag summary for a future release commit") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val interactiveCtx =
+        withTagConflictDefaults(initialCtx, interactive = true, defaultAnswer = None)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            interactiveCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+              )
+            )
+          }
+    }
+  }
+
+  test("check - ignore a seeded release hash when a future release commit will rewrite it") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val seedReleaseHashInValidation =
+        validationOnlyStep(
+          "seed-release-hash-in-validation",
+          validateWithContext = currentCtx =>
+            IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim).flatMap { headRev =>
+              IO.blocking {
+                val seededState = TestSupport.appendSessionSettings(
+                  currentCtx.state,
+                  Seq(
+                    _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash :=
+                      Some(headRev)
+                  )
+                )
+                currentCtx.withState(seededState)
+              }
+            }
+        )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        assertFailure[IllegalStateException, CorePreflight.Summary](
+          CorePreflight.check(
+            keepCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              seedReleaseHashInValidation,
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIO help"))
+        }
+    }
+  }
+
+  test("check - keep the configured keep answer when no built-in release write precedes tagging") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            keepCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; release will keep the existing tag"
+              )
+            )
+          }
+    }
+  }
+
+  test("check - ignore a custom step that reuses the built-in release-write name") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+      val customSetReleaseVersionNameStep =
+        validationOnlyStep(VersionSteps.setReleaseVersion.name)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            keepCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              customSetReleaseVersionNameStep,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; release will keep the existing tag"
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep keep in the interactive tag summary without a built-in release write") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val interactiveCtx =
+        withTagConflictDefaults(initialCtx, interactive = true, defaultAnswer = None)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            interactiveCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep keep in the interactive summary for a custom step named set-release-version") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val interactiveCtx =
+        withTagConflictDefaults(initialCtx, interactive = true, defaultAnswer = None)
+      val customSetReleaseVersionNameStep =
+        validationOnlyStep(VersionSteps.setReleaseVersion.name)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            interactiveCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              customSetReleaseVersionNameStep,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep the configured keep answer when the built-in release write is a no-op") {
+    withInitialContextAtVersion("0.1.0") { case (repo, _, initialCtx) =>
+      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            keepCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; release will keep the existing tag"
+              )
+            )
+          }
+    }
+  }
+
+  test("check - keep keep in the interactive summary when the release write is a no-op") {
+    withInitialContextAtVersion("0.1.0") { case (repo, _, initialCtx) =>
+      val interactiveCtx =
+        withTagConflictDefaults(initialCtx, interactive = true, defaultAnswer = None)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            interactiveCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+              )
+            )
+          }
+    }
+  }
+
+  test("builtInReleaseWriteWouldChange - use the release version from the validated context") {
+    withInitialContextAtVersion("0.1.0") { case (_, _, initialCtx) =>
+      CorePreflight
+        .builtInReleaseWriteWouldChange(
+          initialCtx.withVersions("0.2.0", "0.3.0-SNAPSHOT")
+        )
+        .map(wouldChange => assert(wouldChange))
+    }
+  }
+
+  test("check - reject keep when a later built-in release chain creates the release commit") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val keepCtx = withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        assertFailure[IllegalStateException, CorePreflight.Summary](
+          CorePreflight.check(
+            keepCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.commitReleaseVersion,
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+        ) { err =>
+          assert(
+            err.getMessage.contains(
+              "This release will create a new commit before tagging, so keeping the existing tag is not valid."
+            )
+          )
+          assert(err.getMessage.contains("releaseIO help"))
+        }
+    }
+  }
+
+  test("check - omit keep when a later built-in release chain creates the release commit") {
+    withInitialContext { case (repo, _, initialCtx) =>
+      val interactiveCtx =
+        withTagConflictDefaults(initialCtx, interactive = true, defaultAnswer = None)
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CorePreflight
+          .check(
+            interactiveCtx,
+            Seq(
+              VcsSteps.checkCleanWorkingDir,
+              VersionSteps.inquireVersions,
+              VersionSteps.commitReleaseVersion,
+              VersionSteps.setReleaseVersion,
+              VersionSteps.commitReleaseVersion,
+              VcsSteps.tagRelease
+            ),
+            crossBuild = false
+          )
+          .map { summary =>
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved(
+                "v0.1.0",
+                "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+              )
+            )
+          }
+    }
+  }
+
   test(
     "check - render versions and tags as not evaluated when the check process omits the built-in steps"
   ) {
@@ -323,6 +676,13 @@ class CorePreflightSpec extends CatsEffectSuite {
   private def withInitialContext[A](
       f: (File, File, ReleaseContext) => IO[A]
   ): IO[A] =
+    withInitialContextAtVersion("0.1.0-SNAPSHOT")(f)
+
+  private def withInitialContextAtVersion[A](
+      currentVersion: String
+  )(
+      f: (File, File, ReleaseContext) => IO[A]
+  ): IO[A] =
     ReleaseTestSupport
       .gitRepoWithCommitResource(
         "core-preflight-spec",
@@ -331,7 +691,7 @@ class CorePreflightSpec extends CatsEffectSuite {
             sbt.IO.write(new File(repo, "tracked.txt"), "initial")
             sbt.IO.write(
               new File(repo, "version.sbt"),
-              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+              s"""ThisBuild / version := "$currentVersion"""" + "\n"
             )
           }
       )
@@ -491,6 +851,27 @@ class CorePreflightSpec extends CatsEffectSuite {
           releaseVersionOverride = None,
           nextVersionOverride = None,
           decisionDefaults = ReleaseDecisionDefaults.empty,
+          commandName = "releaseIO"
+        )
+      )
+    )
+
+  private def withTagConflictDefaults(
+      ctx: ReleaseContext,
+      interactive: Boolean,
+      defaultAnswer: Option[String]
+  ): ReleaseContext =
+    ctx.copy(interactive = interactive).withExecutionState(
+      CoreExecutionState(
+        CoreReleasePlan.fromFlags(
+          useDefaults = false,
+          skipTests = false,
+          skipPublish = false,
+          interactive = interactive,
+          crossBuild = false,
+          releaseVersionOverride = None,
+          nextVersionOverride = None,
+          decisionDefaults = ReleaseDecisionDefaults.empty.copy(tagExistsAnswer = defaultAnswer),
           commandName = "releaseIO"
         )
       )

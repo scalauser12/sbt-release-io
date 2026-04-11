@@ -67,6 +67,10 @@ private[release] object GitPushSupport {
   def pushTag(vcs: Vcs, remote: String, tag: String): IO[Unit] =
     IO.raiseWhen(tag.trim.isEmpty)(
       new IllegalStateException("Tag name cannot be empty when pushing to the remote.")
-    ) *>
-      GitProcessSupport.runCmd(vcs.baseDir, Seq("push", remote, tag))(s"git push tag '$tag'")
+    ) *> {
+      val tagRef = s"refs/tags/$tag"
+      GitProcessSupport.runCmd(vcs.baseDir, Seq("push", remote, s"$tagRef:$tagRef"))(
+        s"git push tag '$tag'"
+      )
+    }
 }

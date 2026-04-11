@@ -89,4 +89,16 @@ private[release] object VersionWorkflowSupport {
                     ()
                   }
     } yield ()
+
+  def wouldChangeVersionFile(
+      versionFile: File,
+      versionValue: String,
+      versionFileContents: (File, String) => IO[String]
+  ): IO[Boolean] =
+    for {
+      currentContents  <- IO.blocking(
+                            Files.readString(versionFile.toPath, StandardCharsets.UTF_8)
+                          )
+      renderedContents <- versionFileContents(versionFile, versionValue)
+    } yield currentContents != renderedContents
 }

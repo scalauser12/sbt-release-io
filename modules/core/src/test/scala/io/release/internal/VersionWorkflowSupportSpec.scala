@@ -127,6 +127,43 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("wouldChangeVersionFile returns false when rendered contents already match") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val versionFile = new File(dir, "version.sbt")
+
+      for {
+        _           <- IO.blocking(
+                         sbt.IO.write(versionFile, """ThisBuild / version := "1.0.0"""" + "\n")
+                       )
+        wouldChange <- VersionWorkflowSupport.wouldChangeVersionFile(
+                         versionFile,
+                         "1.0.0",
+                         DefaultVersionFileIO.defaultWriteVersion(useGlobalVersion = true)
+                       )
+      } yield assert(!wouldChange)
+    }
+  }
+
+  test("wouldChangeVersionFile returns true when rendered contents differ") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val versionFile = new File(dir, "version.sbt")
+
+      for {
+        _           <- IO.blocking(
+                         sbt.IO.write(
+                           versionFile,
+                           """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+                         )
+                       )
+        wouldChange <- VersionWorkflowSupport.wouldChangeVersionFile(
+                         versionFile,
+                         "0.1.0",
+                         DefaultVersionFileIO.defaultWriteVersion(useGlobalVersion = true)
+                       )
+      } yield assert(wouldChange)
+    }
+  }
+
   private def promptingContext(state: sbt.State): ReleaseContext =
     ReleaseContext(state = state, interactive = true).withExecutionState(
       CoreExecutionState(

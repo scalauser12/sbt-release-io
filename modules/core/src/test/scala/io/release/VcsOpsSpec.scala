@@ -811,6 +811,7 @@ private final class StubVcs(
     hasUpstream0: IO[Boolean] = IO.pure(true),
     isBehindRemote0: IO[Boolean] = IO.pure(false),
     existsTag0: IO[Boolean] = IO.pure(false),
+    tagCommitHash0: IO[Option[String]] = IO.pure(None),
     modifiedFiles0: IO[Seq[String]] = IO.pure(Nil),
     stagedFiles0: IO[Seq[String]] = IO.pure(Nil),
     untrackedFiles0: IO[Seq[String]] = IO.pure(Nil),
@@ -837,6 +838,8 @@ private final class StubVcs(
   override def isBehindRemote: IO[Boolean]              = isBehindRemote0
   override def existsTag(name: String): IO[Boolean]     =
     record(StubVcsCall.ExistsTag(name)) *> existsTag0
+  override def tagCommitHash(name: String): IO[Option[String]] =
+    tagCommitHash0
   override def modifiedFiles: IO[Seq[String]]           = modifiedFiles0
   override def stagedFiles: IO[Seq[String]]             = stagedFiles0
   override def untrackedFiles: IO[Seq[String]]          = untrackedFiles0
