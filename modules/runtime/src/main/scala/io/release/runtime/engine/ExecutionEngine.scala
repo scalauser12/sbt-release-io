@@ -122,6 +122,8 @@ private[release] object ExecutionEngine {
     val restoredOnFailure =
       ctx.metadata(originalOnFailureKey) match {
         case Some(saved)                                                  => saved
+        // Some validation-only paths may call this helper without first arming onFailure.
+        // If the stripped state still points at the sentinel, drop it instead of preserving it.
         case None if cleaned.onFailure.contains(SbtCompat.FailureCommand) => None
         case None                                                         => cleaned.onFailure
       }

@@ -99,8 +99,11 @@ private[release] object MonorepoLifecycle {
     )
   }
 
-  /** Cache key combining stable project identity and current Scala
-    * version so cross-build iterations each freeze independently.
+  /** Publish hooks freeze their validate-time gate decision, so the
+    * cache key must ignore mutable project fields like `versions` and
+    * `tagName` while still distinguishing cross-build iterations.
+    * Stable project identity plus the current Scala version gives each
+    * project/version pair its own frozen decision.
     */
   private val publishGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
     (ctx, project) => {
