@@ -7,8 +7,8 @@ scalaVersion := "2.12.18"
 releaseIOVcsTagName := s"release-${version.value}"
 
 // Skip push and publish steps in tests
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

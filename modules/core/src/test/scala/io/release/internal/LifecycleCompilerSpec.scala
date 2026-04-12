@@ -171,7 +171,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
               executeOf = (h: SingleHook) => h.execute,
               validateOf = (h: SingleHook) => h.validate,
               freezeGate = true,
-              gateKey = _ => "publish"
+              gateKey = Some(_ => "publish")
             )
           )
         for {
@@ -213,7 +213,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
               executeOf = (h: SingleHook) => h.execute,
               validateOf = (h: SingleHook) => h.validate,
               freezeGate = true,
-              gateKey = _.gateKey
+              gateKey = Some(_.gateKey)
             )
           )
         val first  = TestContext(gateOpen = true, gateKey = "2.12")
@@ -276,7 +276,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
           executeOf = (h: SingleHook) => h.execute,
           validateOf = (h: SingleHook) => h.validate,
           freezeGate = true,
-          gateKey = _ => "core"
+          gateKey = Some(_ => "core")
         )
       )
 
@@ -312,7 +312,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
             executeOf = (h: ItemHook) => h.execute,
             validateOf = (h: ItemHook) => h.validate,
             freezeGate = true,
-            gateKey = (_, item) => item
+            gateKey = Some((_, item) => item)
           )
         )
         for {
@@ -380,7 +380,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
         executeOf = (h: ItemHook) => h.execute,
         validateOf = (h: ItemHook) => h.validate,
         freezeGate = true,
-        gateKey = (_, item) => item
+        gateKey = Some((_, item) => item)
       )
     )
 

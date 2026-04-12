@@ -15,7 +15,7 @@ lazy val root = (project in file("."))
     name := "push-behind-remote-test",
 
     // Keep push-changes enabled; only filter publish/clean/tests
-    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

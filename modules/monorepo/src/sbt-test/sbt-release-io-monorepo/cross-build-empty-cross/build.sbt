@@ -22,7 +22,7 @@ lazy val api = (project in file("api"))
 
 val checkFailureArtifacts =
   taskKey[Unit]("Verify empty crossScalaVersions fails release before api marker/tag/commit steps")
-val crossBuildMarkerHook = MonorepoProjectHookIO.action("write-cross-markers") { (ctx, project) =>
+val crossBuildMarkerHook  = MonorepoProjectHookIO.action("write-cross-markers") { (ctx, project) =>
   _root_.cats.effect.IO.blocking {
     val extracted = sbt.Project.extract(ctx.state)
     val sv        = extracted.get(project.ref / scalaVersion)
@@ -39,11 +39,11 @@ lazy val root = (project in file("."))
   .settings(
     name := "cross-build-empty-cross-test",
 
-    releaseIOMonorepoHooksBeforePublish := Seq(crossBuildMarkerHook),
-    releaseIOVcsIgnoreUntrackedFiles       := true,
-    releaseIOMonorepoPolicyEnablePush         := false,
-    releaseIOMonorepoPolicyEnableRunClean     := false,
-    releaseIOMonorepoPolicyEnableRunTests     := false,
+    releaseIOMonorepoHooksBeforePublish   := Seq(crossBuildMarkerHook),
+    releaseIOVcsIgnoreUntrackedFiles      := true,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
     checkFailureArtifacts := {
       val coreBase         = file("core/marker")

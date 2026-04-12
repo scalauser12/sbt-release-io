@@ -21,8 +21,8 @@ lazy val root = (project in file("."))
 
     releaseIOMonorepoDetectionEnabled := true,
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

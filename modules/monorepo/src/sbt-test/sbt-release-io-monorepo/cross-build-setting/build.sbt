@@ -20,7 +20,7 @@ lazy val api = (project in file("api"))
     publishTo          := Some(Resolver.file("test-repo", file("repo")))
   )
 
-val checkAll = taskKey[Unit]("Run all verification checks")
+val checkAll             = taskKey[Unit]("Run all verification checks")
 val crossBuildMarkerHook = MonorepoProjectHookIO.action("write-cross-markers") { (ctx, project) =>
   _root_.cats.effect.IO.blocking {
     val extracted = sbt.Project.extract(ctx.state)
@@ -39,12 +39,12 @@ lazy val root = (project in file("."))
     name := "cross-build-setting-test",
 
     // Enable cross-build via the SETTING (not the CLI flag)
-    releaseIOMonorepoBehaviorCrossBuild      := true,
-    releaseIOMonorepoHooksBeforePublish := Seq(crossBuildMarkerHook),
-    releaseIOVcsIgnoreUntrackedFiles    := true,
-    releaseIOMonorepoPolicyEnablePush      := false,
-    releaseIOMonorepoPolicyEnableRunClean  := false,
-    releaseIOMonorepoPolicyEnableRunTests  := false,
+    releaseIOMonorepoBehaviorCrossBuild   := true,
+    releaseIOMonorepoHooksBeforePublish   := Seq(crossBuildMarkerHook),
+    releaseIOVcsIgnoreUntrackedFiles      := true,
+    releaseIOMonorepoPolicyEnablePush     := false,
+    releaseIOMonorepoPolicyEnableRunClean := false,
+    releaseIOMonorepoPolicyEnableRunTests := false,
 
     checkAll := {
       // core has crossScalaVersions := Seq(2.13, 2.12) -> action runs twice

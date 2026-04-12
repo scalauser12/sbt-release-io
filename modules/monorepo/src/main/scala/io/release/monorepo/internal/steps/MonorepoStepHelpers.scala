@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
   *
   * Cross-build iteration is in [[MonorepoCrossBuild]].
   * VCS commit helpers and version consistency are in [[MonorepoVcsCommitHelpers]].
-  */
+ */
 private[monorepo] object MonorepoStepHelpers {
 
   // ── Per-project execution ─────────────────────────────────────────────

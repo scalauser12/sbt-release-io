@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
+import io.release.ReleaseSharedPlugin
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
@@ -831,22 +832,22 @@ class CorePreflightSpec extends CatsEffectSuite {
       includeExplicitTagName: Boolean = true
   ): Seq[sbt.Setting[?]] =
     Seq(
-      io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile           := versionFile,
-      io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
-      io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents   := VersionSteps
+      io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningFile           := versionFile,
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion        := VersionSteps.defaultReadVersion,
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents       := VersionSteps
         .defaultWriteVersion(
           useGlobalVersion = true
         ),
-      io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal      := true,
-      io.release.ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
+      io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal          := true,
+      io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
         "0.1.0"
       ),
-      io.release.ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
+      io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
         "0.2.0-SNAPSHOT"
       ),
-      io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment            := "Releasing 0.1.0",
-      io.release.ReleasePluginIO.autoImport.releaseIOVcsSign                  := false,
-      io.release.ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles  := false
+      io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment                := "Releasing 0.1.0",
+      io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsSign                  := false,
+      io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles  := false
     ) ++
       (if (includeExplicitTagName)
          Seq(io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName          := "v0.1.0")
@@ -947,10 +948,10 @@ class CorePreflightSpec extends CatsEffectSuite {
           val newState = SbtRuntime.appendWithSession(
             currentCtx.state,
             Seq(
-              ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
+              ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
                 releaseVersion
               ),
-              ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
+              ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
                 nextVersion
               )
             )

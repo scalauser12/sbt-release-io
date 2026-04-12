@@ -24,11 +24,11 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                           := "per-project-failure-test",
-    releaseIOVcsIgnoreUntrackedFiles  := true,
+    name                                 := "per-project-failure-test",
+    releaseIOVcsIgnoreUntrackedFiles     := true,
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
-    checkFailureArtifacts          := {
+    checkFailureArtifacts                := {
       val commitCount = "git rev-list --count HEAD".!!.trim.toInt
       assert(
         commitCount == 1,

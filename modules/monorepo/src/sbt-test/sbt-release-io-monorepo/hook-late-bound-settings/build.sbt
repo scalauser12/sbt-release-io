@@ -18,7 +18,7 @@ def lateBoundVersionSettings: Seq[Setting[?]] =
     releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / baseDirectory) / "version.properties"
     },
-    releaseIOMonorepoVersioningReadVersion         := { file =>
+    releaseIOMonorepoVersioningReadVersion  := { file =>
       IO.blocking(sbt.IO.read(file).trim)
     },
     releaseIOMonorepoVersioningFileContents := { (_, version) =>
@@ -30,11 +30,11 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "hook-late-bound-settings-monorepo",
-    releaseIOVcsIgnoreUntrackedFiles := true,
-    releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush   := false,
+    name                                          := "hook-late-bound-settings-monorepo",
+    releaseIOVcsIgnoreUntrackedFiles              := true,
+    releaseIOMonorepoPolicyEnableRunTests         := false,
+    releaseIOMonorepoPolicyEnablePublish          := false,
+    releaseIOMonorepoPolicyEnablePush             := false,
     releaseIOMonorepoHooksBeforeVersionResolution := Seq(
       MonorepoProjectHookIO.io("late-bound-version-settings") { (ctx, _) =>
         IO.blocking {
@@ -48,7 +48,7 @@ lazy val root = (project in file("."))
         }
       }
     ),
-    releaseIOMonorepoHooksBeforeTag := Seq(
+    releaseIOMonorepoHooksBeforeTag               := Seq(
       MonorepoProjectHookIO.io("late-bound-tag-settings") { (ctx, _) =>
         IO.blocking {
           val extracted    = Project.extract(ctx.state)
@@ -63,7 +63,7 @@ lazy val root = (project in file("."))
         }
       }
     ),
-    checkLateBoundVersionFile     := {
+    checkLateBoundVersionFile                     := {
       val runtimeVersion = sbt.IO.read(file("core/version.properties")).trim
       val scopedVersion  = sbt.IO.read(file("core/version.sbt")).trim
 
@@ -76,7 +76,7 @@ lazy val root = (project in file("."))
         s"core/version.sbt should stay unchanged, but was: $scopedVersion"
       )
     },
-    checkLateBoundTag             := {
+    checkLateBoundTag                             := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
       assert(tags == List("late-bound-runtime-tag"), s"Unexpected tags: ${tags.mkString(", ")}")
     }

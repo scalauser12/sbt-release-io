@@ -44,56 +44,56 @@ def plainAfterTagHook(base: File): MonorepoProjectHookIO =
       }
   )
 
-val checkGlobalValidateOrder = taskKey[Unit]("Check global validate order")
+val checkGlobalValidateOrder  = taskKey[Unit]("Check global validate order")
 val checkProjectValidateOrder = taskKey[Unit]("Check per-project validate order")
-val checkGlobalExecuteOrder = taskKey[Unit]("Check global execute order")
-val checkProjectExecuteOrder = taskKey[Unit]("Check per-project execute order")
-val checkTag = taskKey[Unit]("Check git tags")
-val checkCoreVersion = taskKey[Unit]("Check core version.sbt")
+val checkGlobalExecuteOrder   = taskKey[Unit]("Check global execute order")
+val checkProjectExecuteOrder  = taskKey[Unit]("Check per-project execute order")
+val checkTag                  = taskKey[Unit]("Check git tags")
+val checkCoreVersion          = taskKey[Unit]("Check core version.sbt")
 
 lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(CustomReleasePlugin)
   .settings(
-    name                          := "custom-plugin-resource-hooks-monorepo",
-    releaseIOVcsIgnoreUntrackedFiles := true,
+    name                                 := "custom-plugin-resource-hooks-monorepo",
+    releaseIOVcsIgnoreUntrackedFiles     := true,
     releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush   := false,
+    releaseIOMonorepoPolicyEnablePush    := false,
     releaseIOMonorepoHooksAfterSelection := Seq(plainAfterSelectionHook(baseDirectory.value)),
-    releaseIOMonorepoHooksAfterTag := Seq(plainAfterTagHook(baseDirectory.value)),
-    checkGlobalValidateOrder      := {
+    releaseIOMonorepoHooksAfterTag       := Seq(plainAfterTagHook(baseDirectory.value)),
+    checkGlobalValidateOrder             := {
       val lines = sbt.IO.readLines(baseDirectory.value / "global-validate-order.log")
       assert(
         lines == List("plain-global-validate", "resource-global-validate"),
         s"Unexpected global validate order: ${lines.mkString(", ")}"
       )
     },
-    checkProjectValidateOrder     := {
+    checkProjectValidateOrder            := {
       val lines = sbt.IO.readLines(baseDirectory.value / "project-validate-order.log")
       assert(
         lines == List("core:plain-project-validate", "core:resource-project-validate"),
         s"Unexpected project validate order: ${lines.mkString(", ")}"
       )
     },
-    checkGlobalExecuteOrder       := {
+    checkGlobalExecuteOrder              := {
       val lines = sbt.IO.readLines(baseDirectory.value / "global-execute-order.log")
       assert(
         lines == List("plain-global-execute", "resource-global-execute"),
         s"Unexpected global execute order: ${lines.mkString(", ")}"
       )
     },
-    checkProjectExecuteOrder      := {
+    checkProjectExecuteOrder             := {
       val lines = sbt.IO.readLines(baseDirectory.value / "project-execute-order.log")
       assert(
         lines == List("core:plain-project-execute", "core:resource-project-execute"),
         s"Unexpected project execute order: ${lines.mkString(", ")}"
       )
     },
-    checkTag                      := {
+    checkTag                             := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
       assert(tags == List("core/v1.0.0"), s"Unexpected git tags: ${tags.mkString(", ")}")
     },
-    checkCoreVersion              := {
+    checkCoreVersion                     := {
       val contents = sbt.IO.read(file("core/version.sbt"))
       assert(
         contents.contains("1.1.0-SNAPSHOT"),

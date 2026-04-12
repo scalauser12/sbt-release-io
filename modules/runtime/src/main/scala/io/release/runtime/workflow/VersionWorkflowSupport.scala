@@ -16,6 +16,49 @@ private[release] object VersionWorkflowSupport {
       nextVersion: String
   )
 
+  def resolveVersionInputs[C <: ReleaseCtx { type Self = C }](
+      ctx: C,
+      currentVersion: String,
+      releaseVersionFn: String => String,
+      nextVersionFn: String => String,
+      releaseVersionOverride: Option[String],
+      nextVersionOverride: Option[String],
+      logPrefix: String,
+      releaseLabel: String,
+      nextLabel: String,
+      allowPrompts: Boolean,
+      beforeReleasePrompt: IO[Unit] = IO.unit
+  ): IO[ResolvedVersionInputs[C]] = {
+    val suggestedRelease = releaseVersionFn(currentVersion)
+
+    for {
+      releaseData  <- DecisionResolver.resolveVersionInput(
+                        ctx,
+                        override_ = releaseVersionOverride,
+                        suggested = suggestedRelease,
+                        logPrefix = logPrefix,
+                        prompt = s"$releaseLabel [$suggestedRelease] : ",
+                        promptContext = releaseLabel,
+                        allowPrompts = allowPrompts,
+                        beforePrompt = beforeReleasePrompt
+                      )
+      suggestedNext = nextVersionFn(releaseData._2)
+      nextData     <- DecisionResolver.resolveVersionInput(
+                        releaseData._1,
+                        override_ = nextVersionOverride,
+                        suggested = suggestedNext,
+                        logPrefix = logPrefix,
+                        prompt = s"$nextLabel [$suggestedNext] : ",
+                        promptContext = nextLabel,
+                        allowPrompts = allowPrompts
+                      )
+    } yield ResolvedVersionInputs(
+      context = nextData._1,
+      releaseVersion = releaseData._2,
+      nextVersion = nextData._2
+    )
+  }
+
   def ensureVersionFileExists(
       versionFile: File,
       notFoundMessage: String
@@ -47,32 +90,20 @@ private[release] object VersionWorkflowSupport {
         StepHelpers.runTaskChecked(releaseState, nextVersionTask, actionName)
       (nextState, nextFn)       = nextTaskData
       taskCtx                   = ctx.withState(nextState)
-      suggestedRelease          = releaseFn(currentVersion)
-      releaseData              <- DecisionResolver.resolveVersionInput(
-                                    taskCtx,
-                                    override_ = releaseVersionOverride,
-                                    suggested = suggestedRelease,
+      resolvedInputs           <- resolveVersionInputs(
+                                    ctx = taskCtx,
+                                    currentVersion = currentVersion,
+                                    releaseVersionFn = releaseFn,
+                                    nextVersionFn = nextFn,
+                                    releaseVersionOverride = releaseVersionOverride,
+                                    nextVersionOverride = nextVersionOverride,
                                     logPrefix = logPrefix,
-                                    prompt = s"$releaseLabel [$suggestedRelease] : ",
-                                    promptContext = releaseLabel,
+                                    releaseLabel = releaseLabel,
+                                    nextLabel = nextLabel,
                                     allowPrompts = allowPrompts,
-                                    beforePrompt = beforeReleasePrompt
+                                    beforeReleasePrompt = beforeReleasePrompt
                                   )
-      suggestedNext             = nextFn(releaseData._2)
-      nextData                 <- DecisionResolver.resolveVersionInput(
-                                    releaseData._1,
-                                    override_ = nextVersionOverride,
-                                    suggested = suggestedNext,
-                                    logPrefix = logPrefix,
-                                    prompt = s"$nextLabel [$suggestedNext] : ",
-                                    promptContext = nextLabel,
-                                    allowPrompts = allowPrompts
-                                  )
-    } yield ResolvedVersionInputs(
-      context = nextData._1,
-      releaseVersion = releaseData._2,
-      nextVersion = nextData._2
-    )
+    } yield resolvedInputs
 
   def writeVersionFile(
       versionFile: File,

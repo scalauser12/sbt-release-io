@@ -17,13 +17,13 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name := "grouped-keys-monorepo-test",
+    name                                 := "grouped-keys-monorepo-test",
     releaseIOMonorepoBehaviorInteractive := true,
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
     releaseIOVcsIgnoreUntrackedFiles     := true,
     releaseIOMonorepoPublishChecks       := true,
-    checkAll := {
+    checkAll                             := {
       val coreContents = IO.read(file("core/version.sbt"))
       assert(
         coreContents.contains("0.2.0-SNAPSHOT"),

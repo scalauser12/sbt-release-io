@@ -306,8 +306,10 @@ object MonorepoReleasePluginAutoImport {
   *
   * Custom plugins inherit [[autoImport]] automatically, so build-facing project keys remain
   * available without adding another `autoImport` definition. When grouped keys are needed in
-  * `.scala` sources under `project/`, import them explicitly from
-  * [[MonorepoReleasePlugin.autoImport]].
+  * `.scala` sources under `project/`, import monorepo-specific keys from
+  * `MonorepoReleasePlugin.autoImport` and shared `releaseIO*` keys from
+  * `io.release.ReleaseSharedPlugin.autoImport`. Existing `ReleasePluginIO.autoImport` imports
+  * remain supported because the monorepo plugin still depends on the core plugin surface.
   */
 trait MonorepoReleasePluginLike[T] extends AutoPlugin {
 

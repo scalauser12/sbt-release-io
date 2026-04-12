@@ -7,8 +7,8 @@ scalaVersion := "2.12.18"
 releaseIOVcsIgnoreUntrackedFiles := true
 
 // Standard release process - verifies release completes with version 0.1.0-SNAPSHOT
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")
 checkGitCommitCount := {

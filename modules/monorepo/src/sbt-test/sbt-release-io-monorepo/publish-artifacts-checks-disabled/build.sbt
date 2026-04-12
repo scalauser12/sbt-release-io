@@ -2,8 +2,8 @@ import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
-    name                            := "core",
-    scalaVersion                    := "2.12.18",
+    name                   := "core",
+    scalaVersion           := "2.12.18",
     // publishTo is intentionally NOT set, and publish / skip is NOT set.
     // Override publish action to no-op so the publish step runs without error.
     releaseIOPublishAction := {}
@@ -23,7 +23,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPublishChecks := false,
 
     // Keep publish-artifacts step in process so its validation phase runs
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

@@ -1,7 +1,7 @@
 lazy val lib = (project in file("lib"))
   .settings(
-    name                            := "lib",
-    scalaVersion                    := "2.12.18",
+    name                   := "lib",
+    scalaVersion           := "2.12.18",
     // Custom publish action: write a marker file
     releaseIOPublishAction := {
       val marker = baseDirectory.value / "marker" / "publish.log"
@@ -20,9 +20,9 @@ lazy val root = (project in file("."))
     releaseIOPublishChecks := false,
 
     releaseIOVcsIgnoreUntrackedFiles := true,
-    releaseIOPolicyEnablePush           := false,
-    releaseIOPolicyEnableRunClean       := false,
-    releaseIOPolicyEnableRunTests       := false
+    releaseIOPolicyEnablePush        := false,
+    releaseIOPolicyEnableRunClean    := false,
+    releaseIOPolicyEnableRunTests    := false
   )
 
 val checkPublished = taskKey[Unit]("Verify child publish ran despite root skip")

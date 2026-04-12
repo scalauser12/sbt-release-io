@@ -88,8 +88,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
         hashSettings                 <-
           if (persistReleaseHash)
             vcs.currentHash.map(hash =>
-              ReleaseManifestMetadataSupport
-                .releaseManifestHashSettings(projectRefs, hash)
+              ReleaseManifestMetadataSupport.releaseManifestHashSettings(projectRefs, hash)
             )
           else IO.pure(Seq.empty[Setting[?]])
         finalResult                  <- IO.blocking {

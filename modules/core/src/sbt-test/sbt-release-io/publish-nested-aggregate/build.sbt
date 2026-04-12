@@ -19,13 +19,13 @@ lazy val libA = (project in file("libA"))
 lazy val root = (project in file("."))
   .aggregate(libA)
   .settings(
-    name                          := "publish-nested-aggregate-test",
-    scalaVersion                  := "2.12.18",
-    publishTo                     := Some(Resolver.file("file", new File("."))),
+    name                             := "publish-nested-aggregate-test",
+    scalaVersion                     := "2.12.18",
+    publishTo                        := Some(Resolver.file("file", new File("."))),
     releaseIOVcsIgnoreUntrackedFiles := true,
-    releaseIOPolicyEnablePush           := false,
-    releaseIOPolicyEnableRunClean       := false,
-    releaseIOPolicyEnableRunTests       := false
+    releaseIOPolicyEnablePush        := false,
+    releaseIOPolicyEnableRunClean    := false,
+    releaseIOPolicyEnableRunTests    := false
   )
 
 val checkGitCommitCount = inputKey[Unit]("Assert git has the expected number of commits")

@@ -7,9 +7,9 @@ name := "push-race-before-push-test"
 
 scalaVersion := "2.12.18"
 
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnableRunClean       := false
-releaseIOPolicyEnableRunTests       := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnableRunClean    := false
+releaseIOPolicyEnableRunTests    := false
 releaseIOVcsIgnoreUntrackedFiles := true
 
 def runCommand(command: Seq[String]): Unit = {
@@ -51,7 +51,7 @@ val checkRemoteUnchanged =
   taskKey[Unit]("Verify origin did not receive the release commit or release tag")
 
 checkRemoteUnchanged := {
-  val localHead = "git rev-parse HEAD".!!.trim
+  val localHead        = "git rev-parse HEAD".!!.trim
   val originHeadOutput =
     "git ls-remote --heads origin refs/heads/main".!!.trim
   assert(originHeadOutput.nonEmpty, "Expected origin/main to exist")

@@ -4,9 +4,9 @@ import cats.effect.IO
 import io.release.CleanCompat
 import io.release.ReleaseContext
 import io.release.ReleaseIOCompat
-import io.release.ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
-import io.release.ReleasePluginIO.autoImport.releaseIOPublishAction
 import io.release.ReleasePluginIO.autoImport.releaseIOPublishChecks
+import io.release.ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies
+import io.release.ReleaseSharedPlugin.autoImport.releaseIOPublishAction
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole

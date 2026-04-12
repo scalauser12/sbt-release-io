@@ -8,7 +8,7 @@ name := "hook-lifecycle"
 scalaVersion := "2.12.18"
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePush        := false
 
 publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
 

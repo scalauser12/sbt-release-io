@@ -10,6 +10,16 @@ import sbt.{internal as _, *}
 /** Core-only helpers for building steps backed by sbt tasks or commands. */
 private[release] object CoreStepFactory {
 
+  private def failOnSbtTaskFailure(
+      ctx: ReleaseContext,
+      newState: State,
+      failureMessage: String
+  ): ReleaseContext =
+    if (SbtRuntime.hasFailureCommand(newState)) {
+      val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
+      ctx.withState(cleaned).failWith(new IllegalStateException(failureMessage))
+    } else ctx.withState(newState)
+
   def pure(name: String)(f: ReleaseContext => ReleaseContext): Step =
     ProcessStep.Single(name, ctx => IO(f(ctx)))
 
@@ -27,7 +37,11 @@ private[release] object CoreStepFactory {
       execute = ctx =>
         IO.blocking {
           val (newState, _) = SbtRuntime.runTask(ctx.state, key)
-          ctx.withState(newState)
+          failOnSbtTaskFailure(
+            ctx,
+            newState,
+            s"sbt task '${key.key.label}' reported failure via FailureCommand"
+          )
         },
       enableCrossBuild = enableCrossBuild
     )
@@ -42,7 +56,11 @@ private[release] object CoreStepFactory {
       execute = ctx =>
         IO.blocking {
           val (newState, _) = SbtRuntime.runInputTask(ctx.state, key, args)
-          ctx.withState(newState)
+          failOnSbtTaskFailure(
+            ctx,
+            newState,
+            s"sbt input task '${key.key.label}' reported failure via FailureCommand"
+          )
         },
       enableCrossBuild = enableCrossBuild
     )
@@ -57,7 +75,11 @@ private[release] object CoreStepFactory {
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
           val newState  = extracted.runAggregated(extracted.currentRef / key, ctx.state)
-          ctx.withState(newState)
+          failOnSbtTaskFailure(
+            ctx,
+            newState,
+            s"aggregated sbt task '${key.key.label}' reported failure via FailureCommand"
+          )
         },
       enableCrossBuild = enableCrossBuild
     )

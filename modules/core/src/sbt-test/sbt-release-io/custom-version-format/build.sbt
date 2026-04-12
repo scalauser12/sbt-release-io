@@ -36,8 +36,8 @@ releaseIOVersioningFileContents := { (f: File, ver: String) =>
 
 releaseIOVcsIgnoreUntrackedFiles := true
 
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 val checkVersionProps =
   taskKey[Unit]("Verify version.properties has custom format with next version")

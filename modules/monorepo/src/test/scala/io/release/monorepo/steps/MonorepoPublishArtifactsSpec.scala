@@ -2,17 +2,21 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleasePluginIO
+import io.release.ReleaseSharedPlugin
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin
+import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.internal.steps.*
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
 import sbt.Resolver
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishStepsSpecSupport {
@@ -78,8 +82,8 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
   test("publishArtifacts.execute - skip the publish task when publish / skip is true") {
     singleProjectFixtureResource("monorepo-publish-skip-action") { _ =>
       Seq(
-        publish / skip                                    := true,
-        ReleasePluginIO.autoImport.releaseIOPublishAction := {
+        publish / skip                                        := true,
+        ReleaseSharedPlugin.autoImport.releaseIOPublishAction := {
           throw new RuntimeException("publish action should not run")
         }
       )
@@ -95,23 +99,147 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
 
   test("publishArtifacts.execute - run the configured publish task when publish is enabled") {
     singleProjectFixtureResource("monorepo-publish-run-action") { projectBase =>
-      val marker = new File(projectBase.getParentFile, "published.txt")
+      val marker         = new File(projectBase.getParentFile, "published.txt")
+      val fallbackMarker = new File(projectBase.getParentFile, "publish-fallback.txt")
 
       Seq(
-        publish / skip                                    := false,
-        publishTo                                         := Some(Resolver.file("local-test", projectBase.getParentFile)),
-        ReleasePluginIO.autoImport.releaseIOPublishAction := {
+        publish / skip                                        := false,
+        publishTo                                             := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        publish                                               := {
+          sbt.IO.write(fallbackMarker, "fallback")
+        },
+        ReleaseSharedPlugin.autoImport.releaseIOPublishAction := {
           sbt.IO.write(marker, "published")
         }
       )
     }.use { fixture =>
-      val ctx     = fixture.context(Seq("core"))
-      val project = fixture.projectInfo("core")
+      val buffered = MonorepoPublishArtifactsSpec.bufferedFixture(fixture)
+      val ctx      = buffered.fixture.context(Seq("core"))
+      val project  = buffered.fixture.projectInfo("core")
+      val warning  = MonorepoPublishArtifactsSpec.publishFallbackWarning("core")
 
-      MonorepoPublishSteps.publishArtifacts.execute(ctx, project).map { _ =>
+      for {
+        _   <- MonorepoPublishSteps.publishArtifacts.execute(ctx, project)
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
         assert(new File(fixture.dir, "published.txt").exists())
+        assert(!new File(fixture.dir, "publish-fallback.txt").exists())
+        assertEquals(TestSupport.warningCount(log, warning), 0)
       }
     }
+  }
+
+  test(
+    "publishArtifacts.execute - fall back to publish and warn when releaseIOPublishAction is undefined"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-fallback-action") { dir =>
+        val projectBase = new File(dir, "core")
+        projectBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core")),
+          MonorepoSpecSupport
+            .versionedProject(
+              "core",
+              projectBase,
+              settings = Seq(
+                publish / skip := false,
+                publishTo      := Some(Resolver.file("local-test", projectBase.getParentFile)),
+                publish        := {
+                  Def
+                    .task(())
+                    .updateState { (state: State, _: Unit) =>
+                      state.put(MonorepoPublishArtifactsSpec.executionStateKey, "publish")
+                    }
+                    .value
+                }
+              )
+            )
+            .enablePlugins(sbt.plugins.JvmPlugin)
+        )
+      }
+      .use { fixture =>
+        val buffered = MonorepoPublishArtifactsSpec.bufferedFixture(fixture)
+        val ctx      = buffered.fixture.context(Seq("core"))
+        val project  = buffered.fixture.projectInfo("core")
+        val warning  = MonorepoPublishArtifactsSpec.publishFallbackWarning("core")
+
+        for {
+          result <- MonorepoPublishSteps.publishArtifacts.execute(ctx, project)
+          log    <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+        } yield {
+          assertEquals(
+            result.state.get(MonorepoPublishArtifactsSpec.executionStateKey),
+            Some("publish")
+          )
+          assertEquals(TestSupport.warningCount(log, warning), 1)
+        }
+      }
+  }
+
+  test(
+    "publishArtifacts.execute - honor ThisBuild releaseIOPublishAction without fallback warning"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-thisbuild-action") { dir =>
+        val projectBase     = new File(dir, "core")
+        projectBase.mkdirs()
+        val rootSettings    = Seq(
+          ThisBuild / ReleaseSharedPlugin.autoImport.releaseIOPublishAction := {
+            Def
+              .task(())
+              .updateState { (state: State, _: Unit) =>
+                state.put(MonorepoPublishArtifactsSpec.executionStateKey, "thisbuild")
+              }
+              .value
+          }
+        )
+        val projectSettings = Seq(
+          publish / skip := false,
+          publishTo      := Some(Resolver.file("local-test", projectBase.getParentFile)),
+          publish        := {
+            Def
+              .task(())
+              .updateState { (state: State, _: Unit) =>
+                state.put(MonorepoPublishArtifactsSpec.executionStateKey, "fallback")
+              }
+              .value
+          }
+        )
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core"),
+            settings = rootSettings
+          ),
+          MonorepoSpecSupport
+            .versionedProject(
+              "core",
+              projectBase,
+              settings = projectSettings
+            )
+            .enablePlugins(sbt.plugins.JvmPlugin)
+        )
+      }
+      .use { fixture =>
+        val buffered = MonorepoPublishArtifactsSpec.bufferedFixture(fixture)
+        val ctx      = buffered.fixture.context(Seq("core"))
+        val project  = buffered.fixture.projectInfo("core")
+        val warning  = MonorepoPublishArtifactsSpec.publishFallbackWarning("core")
+
+        for {
+          result <- MonorepoPublishSteps.publishArtifacts.execute(ctx, project)
+          log    <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+        } yield {
+          assertEquals(
+            result.state.get(MonorepoPublishArtifactsSpec.executionStateKey),
+            Some("thisbuild")
+          )
+          assertEquals(TestSupport.warningCount(log, warning), 0)
+        }
+      }
   }
 
   test("publishArtifacts.execute - run publish with the release version and release metadata") {
@@ -130,7 +258,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
             _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
             _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
           ),
-        ReleasePluginIO.autoImport.releaseIOPublishAction                             := {
+        ReleaseSharedPlugin.autoImport.releaseIOPublishAction                         := {
           def manifestEntries(options: Seq[PackageOption]): Map[String, String] =
             options.flatMap {
               case product: Product if product.productPrefix == "ManifestAttributes" =>
@@ -198,4 +326,41 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       MonorepoPublishSteps.publishArtifacts.validate(ctx, project)
     }
   }
+}
+
+private object MonorepoPublishArtifactsSpec {
+  val executionStateKey: AttributeKey[String] =
+    AttributeKey[String]("monorepoPublishArtifactsSpecExecution")
+
+  final case class BufferedFixture(
+      fixture: MonorepoSpecSupport.LoadedFixture,
+      consoleBuffer: ByteArrayOutputStream
+  )
+
+  def bufferedFixture(fixture: MonorepoSpecSupport.LoadedFixture): BufferedFixture = {
+    val buffered = TestSupport.bufferedState(fixture.dir)
+    val state    = sbt.TestBuildState(
+      baseState = buffered.state,
+      baseDir = fixture.dir,
+      projects = fixture.projects,
+      currentProjectId = Some("root")
+    )
+    val refsById =
+      SbtRuntime.extracted(state).structure.allProjectRefs.map(ref => ref.project -> ref).toMap
+
+    BufferedFixture(
+      fixture = MonorepoSpecSupport.LoadedFixture(
+        dir = fixture.dir,
+        state = state,
+        projects = fixture.projects,
+        refsById = refsById
+      ),
+      consoleBuffer = buffered.consoleBuffer
+    )
+  }
+
+  def publishFallbackWarning(projectName: String): String =
+    s"${ReleaseLogPrefixes.Monorepo} $projectName: " +
+      s"${ReleaseSharedPlugin.autoImport.releaseIOPublishAction.key.label} is undefined; " +
+      s"falling back to ${publish.key.label}"
 }

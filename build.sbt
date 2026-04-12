@@ -1,5 +1,20 @@
-val Sbt1Version            = "1.12.3"
-val Sbt2Version            = "2.0.0-RC9"
+def readVersionFile(path: String): String =
+  IO.read(file(path)).trim
+
+def readSbt1Version(path: String): String =
+  readVersionFile(path)
+    .split("\\R")
+    .iterator
+    .map(_.trim)
+    .collectFirst {
+      case line if line.startsWith("sbt.version=") =>
+        line.stripPrefix("sbt.version=").trim
+    }
+    .filter(_.nonEmpty)
+    .getOrElse(sys.error(s"Missing sbt.version entry in $path"))
+
+val Sbt1Version            = readSbt1Version("project/build.properties")
+val Sbt2Version            = readVersionFile("project/sbt2.version")
 val Scala212               = "2.12.21"
 val Scala3                 = "3.8.1"
 val CatsEffectVersion      = "3.7.0"
@@ -7,6 +22,15 @@ val MunitVersion           = "1.2.4"
 val MunitCatsEffectVersion = "2.2.0"
 
 ThisBuild / versionScheme := Some("early-semver")
+
+def forwardedScriptedJvmArgs: Seq[String] =
+  Seq(
+    "sbt.ivy.home",
+    "sbt.boot.directory",
+    "sbt.global.base",
+    "sbt.repository.config",
+    "sbt.override.build.repos"
+  ).flatMap(key => sys.props.get(key).map(value => s"-D$key=$value"))
 
 lazy val commonSettings = Seq(
   organization                  := "io.github.scalauser12",
@@ -57,7 +81,8 @@ lazy val commonSettings = Seq(
   scriptedLaunchOpts            := {
     scriptedLaunchOpts.value ++
       Seq("-Xmx1024M", "-Dplugin.version=" + version.value) ++
-      sys.props.get("sbt.version").map(v => s"-Dsbt.version=$v").toSeq
+      sys.props.get("sbt.version").map(v => s"-Dsbt.version=$v").toSeq ++
+      forwardedScriptedJvmArgs
   },
   scriptedBufferLog             := true,
   scriptedParallelInstances     := 4,
@@ -85,9 +110,28 @@ lazy val runtime = (project in file("modules/runtime"))
     publish / skip := true
   )
 
+lazy val shared = (project in file("modules/shared"))
+  .enablePlugins(SbtPlugin)
+  .dependsOn(
+    runtime % "compile-internal->compile;test-internal->test",
+    testkit % "test->compile"
+  )
+  .settings(
+    commonSettings,
+    name        := "sbt-release-io-shared",
+    description := "Shared plugin contract and defaults for sbt-release-io",
+    Compile / doc / sources ++= (runtime / Compile / sources).value,
+    Compile / tastyFiles ++= (runtime / Compile / tastyFiles).value,
+    Compile / packageBin / mappings ++= RuntimePackagingCompat.classMappings(runtime).value,
+    Compile / packageSrc / mappings ++= RuntimePackagingCompat.sourceMappings(runtime).value,
+    // Prevent the shared jar from auto-registering a second plugin alongside core/monorepo.
+    Compile / packageBin / mappings ~= (_.filterNot(_._2 == "sbt/sbt.autoplugins"))
+  )
+
 lazy val core = (project in file("modules/core"))
   .enablePlugins(SbtPlugin)
   .dependsOn(
+    shared,
     runtime % "compile-internal->compile;test-internal->test",
     testkit % "test->compile"
   )
@@ -95,10 +139,6 @@ lazy val core = (project in file("modules/core"))
     commonSettings,
     name        := "sbt-release-io",
     description := "A cats-effect IO port of sbt-release for sbt",
-    Compile / doc / sources ++= (runtime / Compile / sources).value,
-    Compile / tastyFiles ++= (runtime / Compile / tastyFiles).value,
-    Compile / packageBin / mappings ++= RuntimePackagingCompat.classMappings(runtime).value,
-    Compile / packageSrc / mappings ++= RuntimePackagingCompat.sourceMappings(runtime).value,
     Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
@@ -106,18 +146,20 @@ lazy val monorepo = (project in file("modules/monorepo"))
   .enablePlugins(SbtPlugin)
   .dependsOn(
     core,
+    shared,
     runtime % "compile-internal->compile;test-internal->test",
     testkit % "test->compile"
   )
   .settings(
     commonSettings,
-    name        := "sbt-release-io-monorepo",
-    description := "Monorepo extension for sbt-release-io",
+    name                 := "sbt-release-io-monorepo",
+    description          := "Monorepo extension for sbt-release-io",
+    scriptedDependencies := scriptedDependencies.dependsOn(core / publishLocal).value,
     Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
 lazy val root = (project in file("."))
-  .aggregate(testkit, runtime, core, monorepo)
+  .aggregate(testkit, runtime, shared, core, monorepo)
   .settings(
     name           := "sbt-release-io-root",
     publish / skip := true
@@ -127,6 +169,7 @@ Global / excludeLintKeys ++= Set(
   ThisBuild / git.gitUncommittedChanges,
   testkit / git.gitDescribedVersion,
   runtime / git.gitDescribedVersion,
+  shared / git.gitDescribedVersion,
   core / git.gitDescribedVersion,
   monorepo / git.gitDescribedVersion,
   root / git.gitDescribedVersion

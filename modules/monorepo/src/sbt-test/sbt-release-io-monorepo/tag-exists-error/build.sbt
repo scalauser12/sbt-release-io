@@ -19,13 +19,13 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "tag-exists-per-project-collision-test",
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    name                                  := "tag-exists-per-project-collision-test",
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles := true,
-    checkAll                      := {
+    releaseIOVcsIgnoreUntrackedFiles      := true,
+    checkAll                              := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty)
       assert(
         tags.contains("core/v1.0.0"),

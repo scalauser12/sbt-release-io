@@ -22,8 +22,8 @@ lazy val root = (project in file("."))
     // Change detection enabled (default), default shared paths (build.sbt, project/)
     releaseIOMonorepoDetectionEnabled := true,
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

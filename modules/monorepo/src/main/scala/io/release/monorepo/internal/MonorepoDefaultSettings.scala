@@ -71,7 +71,8 @@ private[monorepo] object MonorepoDefaultSettings {
     },
     MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile          := {
       (ref: ProjectRef, state: State) =>
-        Project.extract(state).get(ref / releaseIOVersioningFile)
+        val extracted = Project.extract(state)
+        extracted.get(ref / releaseIOVersioningFile)
     }
   )
 

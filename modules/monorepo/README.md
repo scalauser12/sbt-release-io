@@ -2,7 +2,9 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
 
-A monorepo release plugin for sbt, extending [sbt-release-io](../../docs/core/README.md) with per-project version files, git-based change detection, topological ordering, per-project failure isolation, and per-project tags.
+A monorepo release plugin for sbt, built on the same shared release contract as
+[sbt-release-io](../../docs/core/README.md), with per-project version files, git-based change
+detection, topological ordering, per-project failure isolation, and per-project tags.
 
 ## Features
 

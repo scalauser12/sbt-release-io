@@ -27,12 +27,12 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                           := "skip-tests-setting-test",
-    releaseIOMonorepoBehaviorSkipTests     := true,
-    releaseIOVcsIgnoreUntrackedFiles  := true,
+    name                                 := "skip-tests-setting-test",
+    releaseIOMonorepoBehaviorSkipTests   := true,
+    releaseIOVcsIgnoreUntrackedFiles     := true,
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
-    checkAll                       := {
+    checkAll                             := {
       val coreMarker = file("core/marker/tests-ran")
       assert(
         !coreMarker.exists(),

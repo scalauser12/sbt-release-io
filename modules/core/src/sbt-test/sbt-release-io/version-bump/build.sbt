@@ -6,8 +6,8 @@ scalaVersion := "2.12.18"
 releaseIOVcsIgnoreUntrackedFiles := true
 
 // Skip push and publish in tests
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 val checkVersionSbt = inputKey[Unit]("Assert version.sbt contains a specific version string")
 checkVersionSbt := {

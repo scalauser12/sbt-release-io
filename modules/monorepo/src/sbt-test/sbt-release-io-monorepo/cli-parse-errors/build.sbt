@@ -8,8 +8,8 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "cli-parse-errors-test",
+    name                                 := "cli-parse-errors-test",
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
-    releaseIOVcsIgnoreUntrackedFiles := true
+    releaseIOVcsIgnoreUntrackedFiles     := true
   )

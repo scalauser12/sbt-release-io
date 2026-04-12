@@ -8,21 +8,22 @@ import sbt.PackageOption
 
 lazy val core = (project in file("core"))
   .settings(
-    name      := "core",
+    name         := "core",
     scalaVersion := "2.12.18",
-    publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
+    publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 
 lazy val api = (project in file("api"))
   .dependsOn(core)
   .settings(
-    name      := "api",
+    name         := "api",
     scalaVersion := "2.12.18",
-    publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
+    publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 
 val checkPublishedMetadata = taskKey[Unit]("Check manifest metadata on published jars")
-val checkVisibleMetadata   = taskKey[Unit]("Check manifest metadata visible after commit-next-versions")
+val checkVisibleMetadata   =
+  taskKey[Unit]("Check manifest metadata visible after commit-next-versions")
 val checkSessionCleaned    = taskKey[Unit]("Check release metadata is cleaned from the sbt session")
 
 def visibleMetadataFile(projectName: String): File =
@@ -36,28 +37,35 @@ def packageManifestEntries(options: Seq[PackageOption]): Map[String, String] =
           entries.collect { case (name, value: String) =>
             name.toString -> value
           }
-        case _                         => Seq.empty
+        case _                          => Seq.empty
       }
-    case _                                                       => Seq.empty
+    case _                                                                 => Seq.empty
   }.toMap
 
 def jarManifestEntries(jar: File): Map[String, String] = {
   val jarFile = new JarFile(jar)
   try
-    jarFile.getManifest.getMainAttributes.entrySet().asScala.map { entry =>
-      entry.getKey.toString -> entry.getValue.toString
-    }.toMap
+    jarFile.getManifest.getMainAttributes
+      .entrySet()
+      .asScala
+      .map { entry =>
+        entry.getKey.toString -> entry.getValue.toString
+      }
+      .toMap
   finally jarFile.close()
 }
 
 def publishedBinaryJar(repo: File, moduleName: String): File = {
-  val jars = (repo ** "*.jar").get().filter { file =>
+  val jars     = (repo ** "*.jar").get().filter { file =>
     file.isFile &&
     !file.getName.contains("-sources") &&
     !file.getName.contains("-javadoc")
   }
   val matching = jars.filter(_.getName.startsWith(moduleName))
-  assert(matching.size == 1, s"Expected one published binary jar for $moduleName but found: ${matching.mkString(", ")}")
+  assert(
+    matching.size == 1,
+    s"Expected one published binary jar for $moduleName but found: ${matching.mkString(", ")}"
+  )
   matching.head
 }
 
@@ -65,16 +73,17 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "manifest-metadata-monorepo",
-    scalaVersion                  := "2.12.18",
-    releaseIOMonorepoPolicyEnablePush   := false,
+    name                                  := "manifest-metadata-monorepo",
+    scalaVersion                          := "2.12.18",
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoHooksAfterNextCommit := Seq(
       MonorepoGlobalHookIO.action("record-visible-release-metadata") { ctx =>
         CatsIO.blocking {
           val extracted = Project.extract(ctx.state)
 
           List("core", "api").foreach { projectName =>
-            val (_, options) = extracted.runTask(LocalProject(projectName) / packageOptions, ctx.state)
+            val (_, options) =
+              extracted.runTask(LocalProject(projectName) / packageOptions, ctx.state)
             val entries      = packageManifestEntries(options)
 
             IO.write(
@@ -88,8 +97,8 @@ lazy val root = (project in file("."))
         }
       }
     ),
-    releaseIOVcsIgnoreUntrackedFiles := true,
-    checkPublishedMetadata        := {
+    releaseIOVcsIgnoreUntrackedFiles      := true,
+    checkPublishedMetadata                := {
       val coreReleaseHash = "git rev-parse core/v0.1.0^{commit}".!!.trim
       val apiReleaseHash  = "git rev-parse api/v0.1.0^{commit}".!!.trim
       assert(
@@ -116,7 +125,7 @@ lazy val root = (project in file("."))
         )
       }
     },
-    checkVisibleMetadata          := {
+    checkVisibleMetadata                  := {
       val releaseHash = "git rev-parse core/v0.1.0^{commit}".!!.trim
       val nextHash    = "git rev-parse HEAD".!!.trim
 
@@ -131,11 +140,14 @@ lazy val root = (project in file("."))
       )
 
       expectedTags.foreach { case (projectName, expectedTag) =>
-        val entries = IO.readLines(visibleMetadataFile(projectName)).collect {
-          case line if line.contains("=") =>
-            val Array(key, value) = line.split("=", 2)
-            key -> value
-        }.toMap
+        val entries = IO
+          .readLines(visibleMetadataFile(projectName))
+          .collect {
+            case line if line.contains("=") =>
+              val Array(key, value) = line.split("=", 2)
+              key -> value
+          }
+          .toMap
 
         assert(
           entries.get("hash").contains(releaseHash),
@@ -147,7 +159,7 @@ lazy val root = (project in file("."))
         )
       }
     },
-    checkSessionCleaned           := {
+    checkSessionCleaned                   := {
       val coreEntries = packageManifestEntries((LocalProject("core") / packageOptions).value)
       val apiEntries  = packageManifestEntries((LocalProject("api") / packageOptions).value)
 

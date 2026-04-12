@@ -10,9 +10,9 @@ class CoreDefaultSettingsSpec extends FunSuite {
 
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild.key.label))
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPolicyEnablePush.key.label))
-    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOVersioningFile.key.label))
+    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOVersioningReadVersion.key.label))
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOVcsTagName.key.label))
-    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPublishAction.key.label))
+    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPublishChecks.key.label))
   }
 
   test("pluginDefaultSettings include each lifecycle-derived default exactly once") {

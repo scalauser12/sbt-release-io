@@ -3,9 +3,9 @@ import scala.sys.process.*
 name         := "push-behind-remote-test"
 scalaVersion := "2.12.18"
 
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnableRunClean       := false
-releaseIOPolicyEnableRunTests       := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnableRunClean    := false
+releaseIOPolicyEnableRunTests    := false
 releaseIOVcsIgnoreUntrackedFiles := true
 
 val checkNoReleaseSideEffects =

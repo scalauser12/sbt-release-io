@@ -15,10 +15,10 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "zero-changed-projects-test",
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    name                                  := "zero-changed-projects-test",
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles := true
+    releaseIOVcsIgnoreUntrackedFiles      := true
   )

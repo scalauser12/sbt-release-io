@@ -8,8 +8,8 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "cli-all-changed-with-selection-test",
+    name                                 := "cli-all-changed-with-selection-test",
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
-    releaseIOVcsIgnoreUntrackedFiles := true
+    releaseIOVcsIgnoreUntrackedFiles     := true
   )

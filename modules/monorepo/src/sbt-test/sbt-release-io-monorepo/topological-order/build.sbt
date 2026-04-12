@@ -21,7 +21,7 @@ lazy val api = (project in file("api"))
     scalaVersion := "2.12.18"
   )
 
-val checkAll = taskKey[Unit]("Run all verification checks")
+val checkAll        = taskKey[Unit]("Run all verification checks")
 val recordOrderHook = MonorepoProjectHookIO.action("record-order") { (_, project) =>
   _root_.cats.effect.IO.blocking {
     val writer = new java.io.FileWriter(file("order.txt"), true)
@@ -36,8 +36,8 @@ lazy val root = (project in file("."))
   .settings(
     name := "topological-order-test",
 
-    releaseIOMonorepoHooksBeforeTag := Seq(recordOrderHook),
-    releaseIOVcsIgnoreUntrackedFiles   := true,
+    releaseIOMonorepoHooksBeforeTag       := Seq(recordOrderHook),
+    releaseIOVcsIgnoreUntrackedFiles      := true,
     releaseIOMonorepoPolicyEnablePublish  := false,
     releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,

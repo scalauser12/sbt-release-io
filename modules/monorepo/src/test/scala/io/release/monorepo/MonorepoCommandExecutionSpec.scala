@@ -150,6 +150,30 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
     }
   }
 
+  test("doRelease preserves duplicate default warnings through command preparation") {
+    import MonorepoCli.Arg.*
+
+    stateResource("monorepo-command-release-duplicate-defaults", MonorepoReleasePlugin).use {
+      loaded =>
+        IO {
+          val _   = MonorepoCommandExecution.doRelease(
+            loaded.state,
+            Seq(PushDefault(true), PushDefault(false), AllChanged, SelectProject("core")),
+            runtime()
+          )
+          val log = loaded.consoleBuffer.toString("UTF-8")
+
+          assert(log.contains("Multiple default-push-answer args provided; using 'n'"))
+          assert(
+            log.contains(
+              "Cannot combine 'all-changed' with explicit project selection. " +
+                "Either use 'all-changed' alone or specify projects explicitly."
+            )
+          )
+        }
+    }
+  }
+
   test("releaseStartLines include cross-build and skip messages when enabled") {
     val lines = MonorepoCommandExecution.releaseStartLines(
       stepCount = 12,

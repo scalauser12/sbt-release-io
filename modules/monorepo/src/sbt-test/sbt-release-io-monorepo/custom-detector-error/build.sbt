@@ -19,7 +19,7 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                            := "custom-detector-error-test",
+    name                                     := "custom-detector-error-test",
     // Custom change detector: throws for "api", succeeds for "core"
     releaseIOMonorepoDetectionChangeDetector := Some { (ref: ProjectRef, _: File, _: State) =>
       if (ref.project == "api")
@@ -29,12 +29,12 @@ lazy val root = (project in file("."))
       else
         _root_.cats.effect.IO.pure(true)
     },
-    releaseIOMonorepoPolicyEnablePublish  := false,
-    releaseIOMonorepoPolicyEnablePush     := false,
-    releaseIOMonorepoPolicyEnableRunClean := false,
-    releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles   := true,
-    checkAll                        := {
+    releaseIOMonorepoPolicyEnablePublish     := false,
+    releaseIOMonorepoPolicyEnablePush        := false,
+    releaseIOMonorepoPolicyEnableRunClean    := false,
+    releaseIOMonorepoPolicyEnableRunTests    := false,
+    releaseIOVcsIgnoreUntrackedFiles         := true,
+    checkAll                                 := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       // Both should be tagged: core detected as changed, api conservatively treated as changed
       assert(

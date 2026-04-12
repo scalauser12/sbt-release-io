@@ -19,11 +19,11 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
   private val coreInternalImportPattern: Regex =
     raw"(?m)^\s*import io\.release\.core\.internal(?:\.|\b)".r
 
-  private val releasePluginImportPattern: Regex =
-    raw"(?m)^\s*import io\.release\.ReleasePluginIO(?:\.|\b)".r
-
-  private val rootReleaseSymbolImportPattern: Regex =
+  private val rootReleaseDirectImportPattern: Regex =
     raw"(?m)^\s*import io\.release\.([A-Z][A-Za-z0-9_]*)\b".r
+
+  private val rootReleaseGroupedImportPattern: Regex =
+    raw"(?m)^\s*import io\.release\.\{([^}]*)\}".r
 
   private val sharedRuntimeSymbols = Seq(
     "CleanCompat",
@@ -33,6 +33,7 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "ReleaseDecisionDefaults",
     "ReleaseLogPrefixes",
     "ReleaseSharedKeys",
+    "ReleaseSharedDefaultSettingsSupport",
     "ProcessStep",
     "ExecutionEngine",
     "LifecycleCompiler",
@@ -40,6 +41,7 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "HelpDocsLinks",
     "PluginEntrypointSupport",
     "ReleaseCommandRunner",
+    "LoadCompat",
     "CommandStateSupport",
     "SbtRuntime",
     "PromptAdapter",
@@ -51,6 +53,11 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "ReleaseIOCompat",
     "ReleaseManifestMetadataSupport",
     "VcsOps"
+  )
+
+  private val sharedPublicPluginSymbols = Seq(
+    "ReleaseSharedPluginAutoImport",
+    "ReleaseSharedPlugin"
   )
 
   private val supportedMainScalaDirs = Seq("scala", "scala-2", "scala-3")
@@ -79,11 +86,13 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     }
 
   private def moduleMainSourceFiles(moduleRelativeDir: String): IO[List[Path]] =
-    supportedMainScalaDirs.foldLeft(IO.pure(List.empty[Path])) { (acc, scalaDir) =>
-      acc.flatMap(existing =>
-        sourceFiles(s"$moduleRelativeDir/src/main/$scalaDir").map(existing ++ _)
-      )
-    }.map(_.distinct)
+    supportedMainScalaDirs
+      .foldLeft(IO.pure(List.empty[Path])) { (acc, scalaDir) =>
+        acc.flatMap(existing =>
+          sourceFiles(s"$moduleRelativeDir/src/main/$scalaDir").map(existing ++ _)
+        )
+      }
+      .map(_.distinct)
 
   private def relativePath(path: Path): String =
     repoRoot.relativize(path).toString
@@ -94,6 +103,18 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
         Pattern.quote(symbol) +
         raw"\b"
     ).r
+
+  private def importedRootReleaseSymbols(source: String): List[String] = {
+    val direct  = rootReleaseDirectImportPattern.findAllMatchIn(source).map(_.group(1))
+    val grouped =
+      rootReleaseGroupedImportPattern.findAllMatchIn(source).flatMap { groupedImport =>
+        groupedImport.group(1).split(",").iterator.flatMap { entry =>
+          raw"\b([A-Z][A-Za-z0-9_]*)\b".r.findFirstMatchIn(entry).map(_.group(1))
+        }
+      }
+
+    (direct ++ grouped).toList
+  }
 
   private def assertNoImports(relativeDir: String, pattern: Regex): IO[Unit] =
     sourceFiles(relativeDir).flatMap { files =>
@@ -142,14 +163,18 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     assertNoImportsInModuleMainSources("modules/monorepo", coreInternalImportPattern)
   }
 
-  test("monorepo main sources only import ReleasePluginIO in MonorepoReleasePlugin.scala") {
+  test("monorepo main sources only import ReleasePluginIO from the compatibility bridge") {
     moduleMainSourceFiles("modules/monorepo").flatMap { files =>
       IO.blocking {
-        val allowedPath = "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala"
-        val offenders   =
+        val allowedPluginPath =
+          "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala"
+        val offenders         =
           files
-            .filter(path => relativePath(path) != allowedPath)
-            .filter(path => releasePluginImportPattern.findFirstIn(Files.readString(path)).nonEmpty)
+            .filter { path =>
+              val relPath = relativePath(path)
+              importedRootReleaseSymbols(Files.readString(path)).contains("ReleasePluginIO") &&
+              relPath != allowedPluginPath
+            }
             .map(relativePath)
             .sorted
 
@@ -158,10 +183,13 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     }
   }
 
-  test("monorepo main sources only import runtime-owned io.release symbols plus ReleasePluginIO") {
+  test(
+    "monorepo main sources only import runtime-owned io.release symbols plus plugin bridges"
+  ) {
     moduleMainSourceFiles("modules/monorepo").flatMap { files =>
       IO.blocking {
-        val allowedPluginPath = "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala"
+        val allowedPluginPath =
+          "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala"
         val runtimeSymbols    = sharedRuntimeSymbols.toSet
         val offenders         =
           files
@@ -169,10 +197,10 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
               val relPath = relativePath(path)
               val source  = Files.readString(path)
 
-              rootReleaseSymbolImportPattern.findAllMatchIn(source).flatMap { m =>
-                val symbol = m.group(1)
+              importedRootReleaseSymbols(source).flatMap { symbol =>
                 val allowed =
-                  if (symbol == "ReleasePluginIO") relPath == allowedPluginPath
+                  if (symbol == "ReleaseSharedPlugin" || symbol == "ReleasePluginIO")
+                    relPath == allowedPluginPath
                   else runtimeSymbols.contains(symbol)
 
                 if (allowed) None else Some(s"$relPath imports $symbol")
@@ -188,14 +216,36 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
 
   test("shared runtime kernel types are defined only in modules/runtime") {
     for {
+      sharedFiles   <- moduleMainSourceFiles("modules/shared")
       coreFiles     <- moduleMainSourceFiles("modules/core")
       monorepoFiles <- moduleMainSourceFiles("modules/monorepo")
       _             <- IO.blocking {
                          val offenders =
-                           (coreFiles ++ monorepoFiles).flatMap { path =>
+                           (sharedFiles ++ coreFiles ++ monorepoFiles).flatMap { path =>
                              val source = Files.readString(path)
 
                              sharedRuntimeSymbols.collectFirst {
+                               case symbol if symbolDefinitionPattern(symbol).findFirstIn(source).nonEmpty =>
+                                 s"${relativePath(path)} defines $symbol"
+                             }
+                           }.sorted
+
+                         assertEquals(offenders, Nil)
+                       }
+    } yield ()
+  }
+
+  test("shared public plugin types are defined only in modules/shared") {
+    for {
+      runtimeFiles  <- moduleMainSourceFiles("modules/runtime")
+      coreFiles     <- moduleMainSourceFiles("modules/core")
+      monorepoFiles <- moduleMainSourceFiles("modules/monorepo")
+      _             <- IO.blocking {
+                         val offenders =
+                           (runtimeFiles ++ coreFiles ++ monorepoFiles).flatMap { path =>
+                             val source = Files.readString(path)
+
+                             sharedPublicPluginSymbols.collectFirst {
                                case symbol if symbolDefinitionPattern(symbol).findFirstIn(source).nonEmpty =>
                                  s"${relativePath(path)} defines $symbol"
                              }

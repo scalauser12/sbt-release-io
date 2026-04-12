@@ -26,11 +26,11 @@ lazy val root = (project in file("."))
   .settings(
     name := "change-detection-downstream-test",
 
-    releaseIOMonorepoDetectionEnabled     := true,
+    releaseIOMonorepoDetectionEnabled           := true,
     releaseIOMonorepoDetectionIncludeDownstream := true,
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

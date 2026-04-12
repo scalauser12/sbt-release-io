@@ -1,0 +1,10 @@
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+$ exec touch ignored-untracked.txt
+
+> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+> checkAll

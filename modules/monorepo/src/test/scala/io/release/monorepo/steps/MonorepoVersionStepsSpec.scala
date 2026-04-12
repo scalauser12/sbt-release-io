@@ -2,7 +2,7 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleasePluginIO.autoImport.*
+import io.release.ReleaseSharedPlugin.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
@@ -16,6 +16,7 @@ import io.release.monorepo.internal.steps.*
 import io.release.monorepo.internal.steps.MonorepoVersionStepsSpec.VersionFixture
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.sbt.SbtRuntime
+import io.release.version.Version
 import munit.CatsEffectSuite
 
 import java.io.ByteArrayOutputStream
@@ -63,6 +64,114 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         assertEquals(updated.versionFile, fixture.versionFile)
       }
     }
+  }
+
+  test("inquireVersions.execute - fall back to the built-in release version task and warn once") {
+    MonorepoVersionStepsSpec
+      .fixtureResource(
+        "monorepo-version-release-fallback",
+        projectSettings = Seq(
+          releaseIOVersioningBump        := Version.Bump.Next,
+          releaseIOVersioningNextVersion := ((_: String) => "9.9.9-SNAPSHOT")
+        )
+      )
+      .use { fixture =>
+        val buffered = MonorepoVersionStepsSpec.bufferedFixture(fixture)
+        val ctx      = MonorepoSpecSupport.withPlan(
+          buffered.fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        val project  = buffered.fixture.projectInfo("core")
+        val warning  = MonorepoVersionStepsSpec.missingTaskWarning(
+          "core",
+          releaseIOVersioningReleaseVersion.key.label,
+          s"built-in defaults from ${releaseIOVersioningBump.key.label}"
+        )
+
+        for {
+          result <- MonorepoVersionSteps.inquireVersions.execute(ctx, project)
+          log    <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+        } yield {
+          val updated = MonorepoSpecSupport.projectNamed(result.projects, "core")
+          assertEquals(updated.versions, Some("0.1.0" -> "9.9.9-SNAPSHOT"))
+          assertEquals(TestSupport.warningCount(log, warning), 1)
+        }
+      }
+  }
+
+  test("inquireVersions.execute - fall back to the built-in next version task and warn once") {
+    MonorepoVersionStepsSpec
+      .fixtureResource(
+        "monorepo-version-next-fallback",
+        projectSettings = Seq(
+          releaseIOVersioningBump           := Version.Bump.Major,
+          releaseIOVersioningReleaseVersion := ((version: String) =>
+            version.stripSuffix("-SNAPSHOT")
+          )
+        )
+      )
+      .use { fixture =>
+        val buffered = MonorepoVersionStepsSpec.bufferedFixture(fixture)
+        val ctx      = MonorepoSpecSupport.withPlan(
+          buffered.fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        val project  = buffered.fixture.projectInfo("core")
+        val warning  = MonorepoVersionStepsSpec.missingTaskWarning(
+          "core",
+          releaseIOVersioningNextVersion.key.label,
+          s"built-in defaults from ${releaseIOVersioningBump.key.label}"
+        )
+
+        for {
+          result <- MonorepoVersionSteps.inquireVersions.execute(ctx, project)
+          log    <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+        } yield {
+          val updated = MonorepoSpecSupport.projectNamed(result.projects, "core")
+          assertEquals(updated.versions, Some("0.1.0" -> "1.0.0-SNAPSHOT"))
+          assertEquals(TestSupport.warningCount(log, warning), 1)
+        }
+      }
+  }
+
+  test("inquireVersions.execute - fall back to Version.Bump.default and warn once") {
+    MonorepoVersionStepsSpec
+      .fixtureResource(
+        "monorepo-version-bump-fallback",
+        projectSettings = Seq(
+          releaseIOVersioningReleaseVersion := ((version: String) =>
+            version.stripSuffix("-SNAPSHOT")
+          )
+        )
+      )
+      .use { fixture =>
+        val buffered    = MonorepoVersionStepsSpec.bufferedFixture(fixture)
+        val ctx         = MonorepoSpecSupport.withPlan(
+          buffered.fixture.context(Seq("core")),
+          MonorepoSpecSupport.releasePlan(selectionMode = SelectionMode.ExplicitSelection)
+        )
+        val project     = buffered.fixture.projectInfo("core")
+        val nextWarning = MonorepoVersionStepsSpec.missingTaskWarning(
+          "core",
+          releaseIOVersioningNextVersion.key.label,
+          s"built-in defaults from ${releaseIOVersioningBump.key.label}"
+        )
+        val bumpWarning = MonorepoVersionStepsSpec.missingTaskWarning(
+          "core",
+          releaseIOVersioningBump.key.label,
+          s"${Version.Bump.default}"
+        )
+
+        for {
+          result <- MonorepoVersionSteps.inquireVersions.execute(ctx, project)
+          log    <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+        } yield {
+          val updated = MonorepoSpecSupport.projectNamed(result.projects, "core")
+          assertEquals(updated.versions, Some("0.1.0" -> "0.1.1-SNAPSHOT"))
+          assertEquals(TestSupport.warningCount(log, nextWarning), 1)
+          assertEquals(TestSupport.warningCount(log, bumpWarning), 1)
+        }
+      }
   }
 
   test("inquireVersions.execute - fail when release version task reports FailureCommand") {
@@ -411,33 +520,15 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
   }
 
   private val fixtureResource: Resource[IO, VersionFixture] =
-    MonorepoSpecSupport
-      .loadedFixtureResource("monorepo-version-steps") { dir =>
-        val coreBase    = new File(dir, "core")
-        coreBase.mkdirs()
-        val versionFile = new File(coreBase, "version.sbt")
-        sbt.IO.write(versionFile, """version := "0.1.0-SNAPSHOT"""" + "\n")
-
-        Seq(
-          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core")),
-          MonorepoSpecSupport.versionedProject(
-            "core",
-            coreBase,
-            settings = Seq(
-              releaseIOVersioningReleaseVersion := ((version: String) =>
-                version.stripSuffix("-SNAPSHOT")
-              ),
-              releaseIOVersioningNextVersion    := ((_: String) => "0.2.0-SNAPSHOT")
-            )
-          )
-        )
-      }
-      .map { fixture =>
-        VersionFixture(
-          loaded = fixture,
-          versionFile = new File(new File(fixture.dir, "core"), "version.sbt")
-        )
-      }
+    MonorepoVersionStepsSpec.fixtureResource(
+      "monorepo-version-steps",
+      projectSettings = Seq(
+        releaseIOVersioningReleaseVersion := ((version: String) =>
+          version.stripSuffix("-SNAPSHOT")
+        ),
+        releaseIOVersioningNextVersion    := ((_: String) => "0.2.0-SNAPSHOT")
+      )
+    )
 }
 
 private object MonorepoVersionStepsSpec {
@@ -486,6 +577,41 @@ private object MonorepoVersionStepsSpec {
       consoleBuffer = buffered.consoleBuffer
     )
   }
+
+  def fixtureResource(
+      prefix: String,
+      rootSettings: Seq[sbt.Def.Setting[?]] = Nil,
+      projectSettings: Seq[sbt.Def.Setting[?]] = Nil
+  ): Resource[IO, VersionFixture] =
+    MonorepoSpecSupport
+      .loadedFixtureResource(prefix) { dir =>
+        val coreBase    = new File(dir, "core")
+        coreBase.mkdirs()
+        val versionFile = new File(coreBase, "version.sbt")
+        sbt.IO.write(versionFile, """version := "0.1.0-SNAPSHOT"""" + "\n")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core"),
+            settings = rootSettings
+          ),
+          MonorepoSpecSupport.versionedProject(
+            "core",
+            coreBase,
+            settings = projectSettings
+          )
+        )
+      }
+      .map { fixture =>
+        VersionFixture(
+          loaded = fixture,
+          versionFile = new File(new File(fixture.dir, "core"), "version.sbt")
+        )
+      }
+
+  def missingTaskWarning(projectName: String, keyLabel: String, fallback: String): String =
+    s"${ReleaseLogPrefixes.Monorepo} $projectName: $keyLabel is undefined; falling back to $fallback"
 
   def promptingContext(fixture: VersionFixture): MonorepoContext =
     MonorepoSpecSupport.withPlan(

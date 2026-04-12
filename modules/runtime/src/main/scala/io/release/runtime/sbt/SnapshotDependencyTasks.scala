@@ -1,6 +1,8 @@
 package io.release.runtime.sbt
 
 import cats.effect.IO
+import io.release.LoadCompat
+import io.release.ReleaseIOCompat
 import io.release.runtime.workflow.StepHelpers
 import _root_.sbt.Keys.*
 import _root_.sbt.{internal as _, *}
@@ -71,4 +73,26 @@ private[release] object SnapshotDependencyTasks {
         )
       )
     }
+
+  /** Built-in fallback used when `releaseIODiagnosticsSnapshotDependencies` is not defined
+    * for a leaf project in a monorepo build.
+    */
+  def projectManagedClasspathSnapshotDependencies(
+      state: State,
+      ref: ProjectRef
+  ): IO[Seq[ModuleID]] =
+    if (SbtRuntime.hasFailureCommand(state))
+      IO.raiseError(new IllegalStateException(failureCommandError(Keys.managedClasspath)))
+    else if (!LoadCompat.containsScopedKey(state, ref / Test / Keys.managedClasspath))
+      IO.pure(Seq.empty[ModuleID])
+    else
+      IO.blocking {
+        val extracted = Project.extract(state)
+        extracted.runTask(ref / Test / Keys.managedClasspath, state)
+      }.flatMap { case (nextState, classpath) =>
+        if (SbtRuntime.hasFailureCommand(nextState))
+          IO.raiseError(new IllegalStateException(failureCommandError(Keys.managedClasspath)))
+        else
+          IO.pure(ReleaseIOCompat.snapshotDependenciesFromManagedClasspath(classpath).distinct)
+      }
 }

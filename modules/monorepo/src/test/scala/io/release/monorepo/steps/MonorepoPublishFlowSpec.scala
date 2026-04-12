@@ -1,12 +1,16 @@
 package io.release.monorepo.internal.steps
 
-import io.release.ReleasePluginIO
+import io.release.ReleaseSharedPlugin
 import io.release.TestAssertions.assertFailure
+import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoComposer
 import io.release.monorepo.internal.steps.*
+import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
 import sbt.*
+
+import java.io.File
 
 class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsSpecSupport {
 
@@ -15,7 +19,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   ) {
     singleProjectFixtureResource("monorepo-publish-snapshots") { _ =>
       Seq(
-        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -35,7 +39,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-snapshots-field") { _ =>
       Seq(
-        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -72,11 +76,89 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
         assert(err.getCause.getMessage.contains("FailureCommand"))
         assert(
           err.getCause.getMessage.contains(
-            ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies.key.label
+            ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies.key.label
           )
         )
       }
     }
+  }
+
+  test(
+    "checkSnapshotDependencies.validate - fall back to managedClasspath when diagnostics task is undefined"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-managed-classpath-fallback") { dir =>
+        val projectBase = new File(dir, "core")
+        projectBase.mkdirs()
+        val marker      = new File(projectBase, "managed-classpath-ran.txt")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core")
+          ),
+          MonorepoSpecSupport
+            .versionedProject(
+              "core",
+              projectBase,
+              settings = Seq(MonorepoStepTestCompat.managedClasspathSetting(marker))
+            )
+            .enablePlugins(sbt.plugins.JvmPlugin)
+        )
+      }
+      .use { fixture =>
+        val ctx     = fixture.context(Seq("core"))
+        val project = fixture.projectInfo("core")
+
+        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).map { result =>
+          assertEquals(result.failed, false)
+          assert(new File(fixture.dir, "core/managed-classpath-ran.txt").exists())
+        }
+      }
+  }
+
+  test(
+    "checkSnapshotDependencies.validate - fail when managedClasspath fallback reports FailureCommand"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-publish-managed-classpath-failure-command") { dir =>
+        val projectBase = new File(dir, "core")
+        projectBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core")
+          ),
+          MonorepoSpecSupport
+            .versionedProject(
+              "core",
+              projectBase,
+              settings = Seq(
+                MonorepoStepTestCompat.managedClasspathSetting(
+                  new File(projectBase, "managed-classpath-ran.txt")
+                )
+              )
+            )
+            .enablePlugins(sbt.plugins.JvmPlugin)
+        )
+      }
+      .use { fixture =>
+        val baseCtx = fixture.context(Seq("core"))
+        val ctx     = baseCtx.withState(
+          baseCtx.state.copy(
+            remainingCommands = SbtCompat.FailureCommand :: baseCtx.state.remainingCommands
+          )
+        )
+        val project = fixture.projectInfo("core")
+
+        assertFailure[IllegalStateException, Unit](
+          MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
+        ) { err =>
+          assert(err.getMessage.contains("FailureCommand"))
+          assert(err.getMessage.contains(Keys.managedClasspath.key.label))
+        }
+      }
   }
 
   test("runTests.execute - skip project tests when skipTests is enabled") {
@@ -117,7 +199,8 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   test("checkSnapshotDependencies.validate - pass when no snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-no-snapshots") { _ =>
       Seq(
-        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq.empty[ModuleID]
+        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq
+          .empty[ModuleID]
       )
     }.use { fixture =>
       val ctx     = fixture.context(Seq("core"))

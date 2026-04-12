@@ -5,6 +5,7 @@ import cats.effect.Resource
 import io.release.ReleaseContext
 import io.release.ReleaseIOCompat
 import io.release.ReleasePluginIO
+import io.release.ReleaseSharedPlugin
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
@@ -19,7 +20,7 @@ import java.io.File
 class PublishStepsSpec extends CatsEffectSuite {
   private val fixturePrefix                = "publish-steps-spec"
   private val snapshotDependenciesKeyLabel =
-    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies.key.label
+    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies.key.label
 
   // ── publishArtifacts.execute ────────────────────────────────────────
 
@@ -39,7 +40,7 @@ class PublishStepsSpec extends CatsEffectSuite {
           result.failureCause.exists(
             _.getMessage.contains(
               "publish-artifacts: sbt task " +
-                s"'${ReleasePluginIO.autoImport.releaseIOPublishAction.key.label}'"
+                s"'${ReleaseSharedPlugin.autoImport.releaseIOPublishAction.key.label}'"
             )
           )
         )
@@ -61,7 +62,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("checkSnapshotDependencies.validate - fail on snapshot dependencies") {
     loadedContextResource(s"$fixturePrefix-snapshots") { _ =>
       () -> Seq(
-        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -78,7 +79,7 @@ class PublishStepsSpec extends CatsEffectSuite {
   test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
     loadedContextResource(s"$fixturePrefix-snapshots-field") { _ =>
       () -> Seq(
-        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -113,10 +114,10 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-snapshots-distinct",
       rootSettings = Seq(
-        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
+        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
       ),
       childSettings = Seq(
-        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
+        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(dep)
       )
     ).use { case (ctx, _) =>
       assertFailure[IllegalStateException, Unit](
@@ -213,9 +214,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-false",
       rootSettings = Seq(
-        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
-        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := false,
-        publishTo                                                          := Some(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                      := true,
+        ReleaseSharedPlugin.autoImport.releaseIOPublishAction / Keys.aggregate := false,
+        publishTo                                                              := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),
@@ -232,9 +233,9 @@ class PublishStepsSpec extends CatsEffectSuite {
     multiProjectContextResource(
       s"$fixturePrefix-val-agg-true",
       rootSettings = Seq(
-        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
-        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
-        publishTo                                                          := Some(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                      := true,
+        ReleaseSharedPlugin.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                                              := Some(
           Resolver.file("local", new File("target/repo"))
         )
       ),

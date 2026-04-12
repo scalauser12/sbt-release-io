@@ -4,8 +4,11 @@ This page is the exhaustive reference for monorepo settings. If you want a small
 example, see [Configuration](configuration.md). If you want a guided walkthrough, start
 with [Getting started](getting-started.md).
 
-Settings prefixed `releaseIO` come from the core plugin. Settings prefixed
-`releaseIOMonorepo` are the monorepo-specific layer.
+Settings prefixed `releaseIO` come from the shared plugin contract (`ReleaseSharedPlugin`).
+Settings prefixed `releaseIOMonorepo` are the monorepo-specific layer.
+This page focuses on monorepo-specific settings plus the shared settings most relevant to the
+monorepo flow. For the full shared `releaseIO*` catalog, see the
+[core settings reference](../core/reference.md).
 
 ## Selection settings
 
@@ -22,7 +25,7 @@ Settings prefixed `releaseIO` come from the core plugin. Settings prefixed
 | `releaseIOMonorepoBehaviorSkipPublish` | `Boolean` | `false` | Skip publish |
 | `releaseIOMonorepoBehaviorInteractive` | `Boolean` | `false` | Enable prompting in `run` mode |
 
-## Shared core settings
+## Shared release settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -30,7 +33,7 @@ Settings prefixed `releaseIO` come from the core plugin. Settings prefixed
 
 ## Shared decision-default settings
 
-These shared core settings also apply to `releaseIOMonorepo`.
+These shared release settings also apply to `releaseIOMonorepo`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -82,7 +85,7 @@ exist when it is `false`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoVersioningFile` | `(ProjectRef, State) => File` | `<project>/version.sbt` | Resolve each project's version file via the shared core `releaseIOVersioningFile` setting |
+| `releaseIOMonorepoVersioningFile` | `(ProjectRef, State) => File` | `<project>/version.sbt` | Resolve each project's version file via the shared `releaseIOVersioningFile` setting |
 | `releaseIOMonorepoVersioningReadVersion` | `File => IO[String]` | regex parser | Read a version from a project's version file |
 | `releaseIOMonorepoVersioningFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Produce version-file contents for a project |
 

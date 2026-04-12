@@ -20,12 +20,12 @@ object TestBuildState:
   ): State =
     require(projects.nonEmpty, "Synthetic test states require at least one project.")
 
-    val canonicalBase = baseDir.getCanonicalFile
-    val uri           = canonicalBase.toURI
+    val canonicalBase  = baseDir.getCanonicalFile
+    val uri            = canonicalBase.toURI
     val rootProjectIds =
       val atBase = projects.filter(_.base.getCanonicalFile == canonicalBase).map(_.id)
       if atBase.nonEmpty then atBase else Seq(projects.head.id)
-    val rootProjectId = rootProjectIds.head
+    val rootProjectId  = rootProjectIds.head
 
     def validateRef(ref: ProjectReference): Unit =
       ref match
@@ -47,10 +47,10 @@ object TestBuildState:
       project.dependencies.foreach(dep => validateRef(dep.project))
     }
 
-    val preGlobal  = Load.defaultPreGlobal(baseState, canonicalBase, canonicalBase, baseState.log)
-    val converter  = preGlobal.converter
-    val buildDefBase = new File(canonicalBase, "project")
-    val definitions = LoadedDefinitions(
+    val preGlobal                  = Load.defaultPreGlobal(baseState, canonicalBase, canonicalBase, baseState.log)
+    val converter                  = preGlobal.converter
+    val buildDefBase               = new File(canonicalBase, "project")
+    val definitions                = LoadedDefinitions(
       base = buildDefBase,
       target = Nil,
       loader = getClass.getClassLoader,
@@ -59,32 +59,32 @@ object TestBuildState:
       buildNames = Nil,
       dslDefinitions = DefinedSbtValues.empty
     )
-    val plugins = LoadedPlugins(
+    val plugins                    = LoadedPlugins(
       base = buildDefBase,
       pluginData = PluginData(Nil, converter),
       loader = getClass.getClassLoader,
       detected = DetectedPlugins(Nil, DetectedModules[BuildDef](Nil))
     )
-    val unit = BuildUnit(uri, canonicalBase, definitions, plugins, converter)
-    val projectMap = projects.iterator.map(project => project.id -> project).toMap
-    val partUnit   = PartBuildUnit(
+    val unit                       = BuildUnit(uri, canonicalBase, definitions, plugins, converter)
+    val projectMap                 = projects.iterator.map(project => project.id -> project).toMap
+    val partUnit                   = PartBuildUnit(
       unit,
       projectMap,
       rootProjectIds,
       buildSettings
     )
-    val partBuild  = PartBuild(
+    val partBuild                  = PartBuild(
       uri,
       Map(uri -> partUnit),
       converter
     )
-    val loaded     = Load.resolveProjects(partBuild)
-    val units      = loaded.units
-    val delegates  = Util.withCaching(preGlobal.delegates(loaded))
+    val loaded                     = Load.resolveProjects(partBuild)
+    val units                      = loaded.units
+    val delegates                  = Util.withCaching(preGlobal.delegates(loaded))
     val scopeLocal: Def.ScopeLocal = preGlobal.scopeLocal
-    val syntheticCacheGlobals = Seq(
+    val syntheticCacheGlobals      = Seq(
       allowMachinePath :== true,
-      rootPaths := Defaults.getRootPaths(rootOutputDirectory.value, appConfiguration.value),
+      rootPaths     := Defaults.getRootPaths(rootOutputDirectory.value, appConfiguration.value),
       fileConverter := MappedFileConverter(rootPaths.value, allowMachinePath.value)
     )
     // Keep the synthetic test state minimal: `Defaults.globalCore` pulls in `globalSbtCore`,
@@ -92,19 +92,18 @@ object TestBuildState:
     // classpath after the tests finish, producing noisy shutdown errors outside the project code.
     // The harness still needs the cache globals for settings such as `fileConverter` and
     // `localDigestCacheByteSize`, so inject only the narrow subset required by `RemoteCache`.
-    val inject     = preGlobal.injectSettings.copy(
-      global =
-        preGlobal.injectSettings.global ++
-          Defaults.globalDefaults(syntheticCacheGlobals ++ RemoteCache.globalSettings)
+    val inject                     = preGlobal.injectSettings.copy(
+      global = preGlobal.injectSettings.global ++
+        Defaults.globalDefaults(syntheticCacheGlobals ++ RemoteCache.globalSettings)
     )
-    val settings =
+    val settings                   =
       Load.finalTransforms(
         Load.buildConfigurations(loaded, Load.getRootProject(units), inject)
       )
-    val (compiledMap, data) =
+    val (compiledMap, data)        =
       Def.makeWithCompiledMap(settings)(using delegates, scopeLocal, Project.showLoadingKey(loaded))
-    val index = Load.structureIndex(data, settings, loaded.extra(data), units)
-    val structure = BuildStructure(
+    val index                      = Load.structureIndex(data, settings, loaded.extra(data), units)
+    val structure                  = BuildStructure(
       units = units,
       root = uri,
       settings = settings,
@@ -116,8 +115,8 @@ object TestBuildState:
       compiledMap = compiledMap,
       converter = converter
     )
-    val session0   = Load.initialSession(structure, Load.lazyEval(unit), baseState)
-    val session    = session0.copy(
+    val session0                   = Load.initialSession(structure, Load.lazyEval(unit), baseState)
+    val session                    = session0.copy(
       currentBuild = uri,
       currentProject = Map(uri -> currentProjectId.getOrElse(rootProjectId)),
       original = settings

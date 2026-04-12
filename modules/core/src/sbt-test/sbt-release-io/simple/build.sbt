@@ -5,8 +5,8 @@ name := "simple-test"
 scalaVersion := "2.12.18"
 
 // Skip push and publish steps in tests (following upstream sbt-release pattern)
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 // Ignore untracked files in tests (test script itself is untracked)
 releaseIOVcsIgnoreUntrackedFiles := true

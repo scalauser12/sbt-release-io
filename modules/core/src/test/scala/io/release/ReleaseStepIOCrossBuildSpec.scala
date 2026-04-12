@@ -371,9 +371,9 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
 
         readFile(marker).flatMap { contents =>
           scalaVersionOf(result.state).map { finalVersion =>
-            val executedVersions = contents.split('\n').toList.filter(_.nonEmpty)
+            val executedRuns = contents.split('\n').toList.filter(_.nonEmpty)
             assert(result.failed)
-            assertEquals(executedVersions, List(TestSupport.CurrentScalaVersion))
+            assertEquals(executedRuns, List("task-ran"))
             assert(
               result.failureCause
                 .exists(_.getMessage.contains("reported failure via FailureCommand"))

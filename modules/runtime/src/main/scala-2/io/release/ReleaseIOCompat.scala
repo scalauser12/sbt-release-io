@@ -8,6 +8,15 @@ import sbt.{internal as _, *}
 object ReleaseIOCompat {
   def testKey: TaskKey[Unit] = sbt.Keys.test
 
+  def uncached[A](body: => A): A = body
+
+  def snapshotDependenciesFromManagedClasspath(
+      classpath: Seq[Attributed[_]]
+  ): Seq[ModuleID] =
+    classpath
+      .flatMap(_.get(Keys.moduleID.key))
+      .filter(m => m.isChanging || m.revision.endsWith("-SNAPSHOT"))
+
   /** Snapshot dependency setting initializer.
     * Checks resolved library dependencies from the Test classpath (which includes Runtime),
     * not inter-project dependencies (projectDependencies) — those are resolved internally
@@ -16,8 +25,6 @@ object ReleaseIOCompat {
     */
   def snapshotDependenciesSetting: Setting[?] =
     ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies := {
-      val modules =
-        (Test / Keys.managedClasspath).value.flatMap(_.get(Keys.moduleID.key))
-      modules.filter(m => m.isChanging || m.revision.endsWith("-SNAPSHOT"))
+      snapshotDependenciesFromManagedClasspath((Test / Keys.managedClasspath).value)
     }
 }

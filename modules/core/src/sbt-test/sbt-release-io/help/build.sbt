@@ -34,7 +34,7 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
       val timeoutMessage =
         s"Nested sbt process timed out after ${NestedSbtTimeout.toMinutes} minutes"
       outputBuffer.append(timeoutMessage).append(System.lineSeparator())
-      val output = outputBuffer.result()
+      val output         = outputBuffer.result()
       IO.write(outputFile, output)
       sys.error(timeoutMessage)
   }
@@ -70,11 +70,11 @@ scalaVersion := "2.12.18"
 releaseIOVcsIgnoreUntrackedFiles := true
 
 expectReleaseHelp := {
-  val before            = snapshot()
-  val outputFile        = target.value / "release-help.log"
-  val pluginVersionProp =
+  val before             = snapshot()
+  val outputFile         = target.value / "release-help.log"
+  val pluginVersionProp  =
     sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))
-  val sbtScript         = sys.props.getOrElse("sbt.script", "sbt")
+  val sbtScript          = sys.props.getOrElse("sbt.script", "sbt")
   val (exitCode, output) =
     runNestedSbt(
       Seq(
@@ -110,7 +110,7 @@ expectReleaseHelp := {
     )
   }
 
-  val extraOutputFile               = target.value / "release-help-extra.log"
+  val extraOutputFile              = target.value / "release-help-extra.log"
   val (extraExitCode, extraOutput) =
     runNestedSbt(
       Seq(

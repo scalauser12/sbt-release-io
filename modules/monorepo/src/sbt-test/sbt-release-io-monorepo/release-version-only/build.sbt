@@ -19,13 +19,13 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "release-version-only-test",
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    name                                  := "release-version-only-test",
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles := true,
-    checkAll                      := {
+    releaseIOVcsIgnoreUntrackedFiles      := true,
+    checkAll                              := {
       val coreContents = IO.read(file("core/version.sbt"))
       // next-version computed automatically: 5.0.0 -> bugfix bump -> 5.0.1-SNAPSHOT
       assert(

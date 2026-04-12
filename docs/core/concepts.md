@@ -9,8 +9,14 @@ Internally, the compiled core lifecycle is expressed in terms of `ProcessStep`, 
 validate/execute runtime model that policies and hooks compile into. Each compiled step has two
 phases:
 
-- `validate: ReleaseContext => IO[Unit]`
+- `validate: ReleaseContext => IO[ReleaseContext]`
 - `execute: ReleaseContext => IO[ReleaseContext]`
+
+Author-facing hooks use a narrower API: `ReleaseHookIO.validate` (and the resource-hook
+variants) return `IO[Unit]`, while `ReleaseHookIO.execute` returns `IO[ReleaseContext]`.
+When those hooks compile into `ProcessStep.Single` and then `ExecutionEngine.PreparedStep`,
+the runtime wraps unit-returning validations and side-effect-only hook actions so the internal
+lifecycle still threads `ReleaseContext` through both phases.
 
 The release engine validates the planned lifecycle before it performs any release actions.
 That means `releaseIO check` can resolve versions and tags, run validations, and print the
@@ -54,7 +60,7 @@ validation checks before mutating actions. The main difference is the effect mod
 | Aspect                  | sbt-release                                 | sbt-release-io                                    |
 | ----------------------- | ------------------------------------------- | ------------------------------------------------- |
 | Effect system           | Plain `State => State` via `Function.chain` | `IO`-wrapped via `unsafeRunSync`                  |
-| Internal step type      | `ReleaseStep(action, check)`                | `ProcessStep(validate, execute)`              |
+| Internal step type      | `ReleaseStep(action, check)`                | `ProcessStep(validate: C => IO[C], execute: C => IO[C])` |
 | Supported customization | Direct process editing and step surgery     | Policies, hooks, and resource hooks               |
 | Resource management     | Manual                                      | `Resource.use` with guaranteed cleanup            |
 | Cross-build validation  | Actions only                                | Both `validate` and `execute` phases              |
