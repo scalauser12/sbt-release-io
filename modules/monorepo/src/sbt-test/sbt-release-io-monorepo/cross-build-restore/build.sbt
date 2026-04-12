@@ -22,7 +22,7 @@ lazy val api = (project in file("api"))
     publishTo          := Some(Resolver.file("test-repo", file("repo")))
   )
 
-val checkAll = taskKey[Unit]("Run all verification checks")
+val checkAll             = taskKey[Unit]("Run all verification checks")
 val crossBuildMarkerHook = MonorepoProjectHookIO.action("write-cross-markers") { (ctx, project) =>
   _root_.cats.effect.IO.blocking {
     val extracted = sbt.Project.extract(ctx.state)
@@ -51,13 +51,13 @@ lazy val root = (project in file("."))
   .settings(
     name := "cross-build-restore-test",
 
-    releaseIOMonorepoBehaviorCrossBuild           := true,
-    releaseIOMonorepoHooksBeforePublish   := Seq(crossBuildMarkerHook),
+    releaseIOMonorepoBehaviorCrossBuild          := true,
+    releaseIOMonorepoHooksBeforePublish          := Seq(crossBuildMarkerHook),
     releaseIOMonorepoHooksBeforeNextVersionWrite := Seq(checkRestoredVersionHook),
-    releaseIOVcsIgnoreUntrackedFiles         := true,
-    releaseIOMonorepoPolicyEnablePush           := false,
-    releaseIOMonorepoPolicyEnableRunClean       := false,
-    releaseIOMonorepoPolicyEnableRunTests       := false,
+    releaseIOVcsIgnoreUntrackedFiles             := true,
+    releaseIOMonorepoPolicyEnablePush            := false,
+    releaseIOMonorepoPolicyEnableRunClean        := false,
+    releaseIOMonorepoPolicyEnableRunTests        := false,
 
     checkAll := {
       // core was cross-built with both 2.13 and 2.12

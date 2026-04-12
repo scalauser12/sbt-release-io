@@ -14,7 +14,7 @@ lazy val api = (project in file("services/api"))
       System
         .setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
     ),
-    releaseIOPublishAction        := {
+    releaseIOPublishAction                 := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
       IO.append(marker, "api\n")
@@ -35,7 +35,7 @@ lazy val services = (project in file("services"))
       System
         .setProperty("marker.path", (baseDirectory.value / "marker" / "tests.log").getAbsolutePath)
     ),
-    releaseIOPublishAction        := {
+    releaseIOPublishAction                 := {
       val marker = baseDirectory.value / "marker" / "publish.log"
       IO.createDirectory(marker.getParentFile)
       IO.append(marker, "services\n")

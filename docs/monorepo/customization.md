@@ -49,6 +49,9 @@ The tagging lifecycle phase is still named `tag-releases`. Customize around it w
 
 ## Hook and policy recipes
 
+These are common recipes, not the exhaustive hook/policy catalog; see
+[Settings reference](reference.md) for the full key list.
+
 | Intent | Setting |
 | ------ | ------- |
 | Remove `push-changes` | `releaseIOMonorepoPolicyEnablePush := false` |
@@ -121,14 +124,24 @@ as an HTTP client. The supported extension points are `monorepoResourceHooks` pl
 protected behavior hooks `crossBuildEnabled`, `skipTestsEnabled`, `skipPublishEnabled`,
 and `interactiveEnabled`.
 
-For new `.scala` sources, prefer the plugin auto-import explicitly:
+For new `.scala` sources, import monorepo-specific grouped keys from the monorepo plugin:
 
 ```scala
-import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
+import _root_.io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 ```
 
-When grouped keys are needed in custom Scala build code under `project/`, import them from
-`MonorepoReleasePlugin.autoImport.*` or qualify them through `MonorepoReleasePlugin.autoImport`.
+Shared `releaseIO*` keys now come from the shared plugin contract instead:
+
+```scala
+import _root_.io.release.ReleaseSharedPlugin.autoImport.*
+```
+
+Compatibility: existing `ReleasePluginIO.autoImport.*` imports for shared `releaseIO*` keys
+remain supported. Prefer `ReleaseSharedPlugin.autoImport.*` for new Scala build code.
+
+When grouped keys are needed in custom Scala build code under `project/`, import
+`releaseIOMonorepo*` keys from `MonorepoReleasePlugin.autoImport.*` and shared `releaseIO*`
+keys from `ReleaseSharedPlugin.autoImport.*`.
 
 ```scala
 // project/MyMonorepoRelease.scala
@@ -197,5 +210,6 @@ Notes:
 - `MonorepoReleasePluginLike` declares `autoImport` as `final`, so a custom plugin
   inherits the same grouped keys and cannot override them. In `.sbt` files, the keys are
   imported automatically when the plugin is enabled. In `.scala` sources under `project/`,
-  import from `MonorepoReleasePlugin.autoImport.*` (or `MyMonorepoRelease.autoImport.*`)
-  to bring them into scope.
+  import monorepo-specific keys from `MonorepoReleasePlugin.autoImport.*` (or
+  `MyMonorepoRelease.autoImport.*`) and shared `releaseIO*` keys from
+  `ReleaseSharedPlugin.autoImport.*`.

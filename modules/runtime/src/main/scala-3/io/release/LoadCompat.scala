@@ -14,3 +14,19 @@ private[release] object LoadCompat:
       display: Show[ScopedKey[?]]
   ): BuildStructure =
     _root_.sbt.ReleaseIOLoadCompatBridge.reapply(newSettings, structure)
+
+  def containsScopedKey(
+      state: State,
+      scopedKey: ScopedKey[?]
+  ): Boolean =
+    containsScopedKey(Project.extract(state).structure, scopedKey)
+
+  def containsScopedKey(
+      structure: BuildStructure,
+      scopedKey: ScopedKey[?]
+  ): Boolean =
+    val definedKeys     = structure.settings.iterator.map(_.key).toSet
+    val candidateScopes =
+      Iterator.single(scopedKey.scope) ++ structure.delegates(scopedKey.scope).iterator
+
+    candidateScopes.exists(scope => definedKeys.contains(ScopedKey(scope, scopedKey.key)))

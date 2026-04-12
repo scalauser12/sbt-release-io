@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/sbt-release-io-sbt2.XXXXXX")"
+sbt2_version="$(tr -d '[:space:]' < "$repo_root/project/sbt2.version")"
 
 cleanup() {
   rm -rf "$tmp_dir"
@@ -39,4 +40,4 @@ fi
 
 exec env \
   SBT_OPTS="${SBT_OPTS:-} -Dsbt.global.base=$tmp_dir/.sbt-global" \
-  sbt -Dsbt.version=2.0.0-RC9 "${args[@]}"
+  sbt -Dsbt.version="$sbt2_version" "${args[@]}"

@@ -1,6 +1,9 @@
 package io.release.monorepo.internal.steps
 
 import cats.effect.IO
+import io.release.LoadCompat
+import io.release.ReleaseSharedDefaultSettingsSupport
+import io.release.ReleaseSharedKeys.releaseIOVersioningBump
 import io.release.ReleaseSharedKeys.releaseIOVersioningNextVersion
 import io.release.ReleaseSharedKeys.releaseIOVersioningReleaseVersion
 import io.release.monorepo.*
@@ -9,7 +12,9 @@ import io.release.monorepo.internal.*
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.version.Version
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -26,6 +31,13 @@ private[monorepo] object MonorepoVersionWorkflow {
       releaseVersion: String,
       nextVersion: String
   )
+
+  private def missingVersionTaskWarning(
+      projectRef: ProjectRef,
+      taskKey: TaskKey[?],
+      fallback: String
+  ): String =
+    s"${projectRef.project}: ${taskKey.key.label} is undefined; falling back to $fallback"
 
   def validateInquireVersions(
       ctx: MonorepoContext,
@@ -129,28 +141,44 @@ private[monorepo] object MonorepoVersionWorkflow {
       allowPrompts: Boolean
   ): IO[(MonorepoContext, ResolvedProjectVersions)] =
     for {
-      versionInputs  <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
-      _              <- ensureVersionFileExists(
-                          versionInputs,
-                          missingVersionFileMessage(
-                            project,
-                            versionInputs.versionFile,
-                            includeConfigurationGuidance = false
-                          )
-                        )
-      currentVersion <- versionInputs.readVersion(versionInputs.versionFile)
-      resolvedInputs <- VersionWorkflowSupport.resolveVersionInputsFromTasks(
-                          ctx = ctx,
-                          currentVersion = currentVersion,
-                          releaseVersionTask = project.ref / releaseIOVersioningReleaseVersion,
-                          nextVersionTask = project.ref / releaseIOVersioningNextVersion,
-                          releaseVersionOverride = project.releaseVersion,
-                          nextVersionOverride = project.nextVersion,
-                          logPrefix = ReleaseLogPrefixes.Monorepo,
-                          releaseLabel = s"Release version for ${project.name}",
-                          nextLabel = s"Next version for ${project.name}",
-                          allowPrompts = allowPrompts
-                        )
+      versionInputs          <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
+      _                      <- ensureVersionFileExists(
+                                  versionInputs,
+                                  missingVersionFileMessage(
+                                    project,
+                                    versionInputs.versionFile,
+                                    includeConfigurationGuidance = false
+                                  )
+                                )
+      currentVersion         <- versionInputs.readVersion(versionInputs.versionFile)
+      releaseData            <- resolveVersionFunction(
+                                  ctx,
+                                  project.ref,
+                                  releaseIOVersioningReleaseVersion,
+                                  ReleaseSharedDefaultSettingsSupport.defaultReleaseVersionTask,
+                                  "inquire-versions"
+                                )
+      (releaseCtx, releaseFn) = releaseData
+      nextData               <- resolveVersionFunction(
+                                  releaseCtx,
+                                  project.ref,
+                                  releaseIOVersioningNextVersion,
+                                  ReleaseSharedDefaultSettingsSupport.defaultNextVersionTask,
+                                  "inquire-versions"
+                                )
+      (taskCtx, nextFn)       = nextData
+      resolvedInputs         <- VersionWorkflowSupport.resolveVersionInputs(
+                                  ctx = taskCtx,
+                                  currentVersion = currentVersion,
+                                  releaseVersionFn = releaseFn,
+                                  nextVersionFn = nextFn,
+                                  releaseVersionOverride = project.releaseVersion,
+                                  nextVersionOverride = project.nextVersion,
+                                  logPrefix = ReleaseLogPrefixes.Monorepo,
+                                  releaseLabel = s"Release version for ${project.name}",
+                                  nextLabel = s"Next version for ${project.name}",
+                                  allowPrompts = allowPrompts
+                                )
     } yield (
       resolvedInputs.context,
       ResolvedProjectVersions(
@@ -169,6 +197,53 @@ private[monorepo] object MonorepoVersionWorkflow {
       case None       =>
         IO.raiseError(new IllegalStateException(s"Resolved versions not set for ${project.name}"))
     }
+
+  private def resolveVersionFunction(
+      ctx: MonorepoContext,
+      projectRef: ProjectRef,
+      taskKey: TaskKey[String => String],
+      defaultForBump: Version.Bump => (String => String),
+      actionName: String
+  ): IO[(MonorepoContext, String => String)] =
+    if (LoadCompat.containsScopedKey(ctx.state, projectRef / taskKey))
+      StepHelpers
+        .runTaskChecked(ctx.state, projectRef / taskKey, actionName)
+        .map { case (nextState, fn) =>
+          (ctx.withState(nextState), fn)
+        }
+    else
+      logWarn(
+        ctx,
+        missingVersionTaskWarning(
+          projectRef,
+          taskKey,
+          s"built-in defaults from ${releaseIOVersioningBump.key.label}"
+        )
+      ) *>
+        resolveVersionBump(ctx, projectRef, actionName).map { case (bumpCtx, bump) =>
+          (bumpCtx, defaultForBump(bump))
+        }
+
+  private def resolveVersionBump(
+      ctx: MonorepoContext,
+      projectRef: ProjectRef,
+      actionName: String
+  ): IO[(MonorepoContext, Version.Bump)] =
+    if (LoadCompat.containsScopedKey(ctx.state, projectRef / releaseIOVersioningBump))
+      StepHelpers
+        .runTaskChecked(ctx.state, projectRef / releaseIOVersioningBump, actionName)
+        .map { case (nextState, bump) =>
+          (ctx.withState(nextState), bump)
+        }
+    else
+      logWarn(
+        ctx,
+        missingVersionTaskWarning(
+          projectRef,
+          releaseIOVersioningBump,
+          s"${Version.Bump.default}"
+        )
+      ).as((ctx, Version.Bump.default))
 
   private def ensureVersionFileExists(
       versionInputs: MonorepoVersionFiles.VersionInputs,

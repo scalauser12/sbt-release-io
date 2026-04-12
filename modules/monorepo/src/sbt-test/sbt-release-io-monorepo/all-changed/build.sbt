@@ -19,15 +19,15 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                           := "all-changed-test",
-    releaseIOMonorepoDetectionEnabled := true,
+    name                                  := "all-changed-test",
+    releaseIOMonorepoDetectionEnabled     := true,
     releaseIOMonorepoPolicyEnablePublish  := false,
     releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles  := true,
+    releaseIOVcsIgnoreUntrackedFiles      := true,
     // Consolidated verification task
-    checkAll                       := {
+    checkAll                              := {
       // Check tags: original 2 manual tags + core/v0.2.0 + api/v0.2.0 = 4 tags
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 4, s"Expected 4 tags but found ${tags.length}: ${tags.mkString(", ")}")

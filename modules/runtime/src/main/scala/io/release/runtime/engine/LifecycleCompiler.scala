@@ -6,12 +6,6 @@ import cats.syntax.traverse.*
 
 private[release] object LifecycleCompiler {
 
-  private val DefaultSingleGateKey: Any => String =
-    (_: Any) => ""
-
-  private val DefaultPerItemGateKey: (Any, Any) => String =
-    (_: Any, _: Any) => ""
-
   final case class Phase[Config, C, I](
       phaseName: Option[String],
       rawSteps: Seq[ProcessStep[C, I]],
@@ -58,10 +52,10 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: C => String = defaultSingleGateKey[C],
+      gateKey: Option[C => String] = None,
       enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] = {
-    requireExplicitGateKey(phase, freezeGate, gateKey, DefaultSingleGateKey)
+    requireExplicitGateKey(phase, freezeGate, gateKey.isDefined)
     Phase(
       phaseName = Some(phase),
       rawSteps = Seq.empty,
@@ -102,10 +96,10 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: (C, I) => String = defaultPerItemGateKey[C, I],
+      gateKey: Option[(C, I) => String] = None,
       enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] = {
-    requireExplicitGateKey(phase, freezeGate, gateKey, DefaultPerItemGateKey)
+    requireExplicitGateKey(phase, freezeGate, gateKey.isDefined)
     Phase(
       phaseName = Some(phase),
       rawSteps = Seq.empty,
@@ -149,20 +143,13 @@ private[release] object LifecycleCompiler {
   ): IO[Seq[ProcessStep.Single[C]]] =
     compile(config, phases).map(_.flatMap(step => ProcessStep.toSingleOption(step)))
 
-  private def defaultSingleGateKey[C]: C => String =
-    DefaultSingleGateKey.asInstanceOf[C => String]
-
-  private def defaultPerItemGateKey[C, I]: (C, I) => String =
-    DefaultPerItemGateKey.asInstanceOf[(C, I) => String]
-
   private def requireExplicitGateKey(
       phase: String,
       freezeGate: Boolean,
-      gateKey: AnyRef,
-      defaultGateKey: AnyRef
+      hasGateKey: Boolean
   ): Unit =
     require(
-      !freezeGate || (gateKey ne defaultGateKey),
+      !freezeGate || hasGateKey,
       s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
     )
 
@@ -173,7 +160,7 @@ private[release] object LifecycleCompiler {
       hooks: Seq[Hook],
       gate: C => IO[Boolean],
       freezeGate: Boolean,
-      gateKey: C => String
+      gateKey: Option[C => String]
   )(
       nameOf: Hook => String,
       executeOf: Hook => C => IO[C],
@@ -184,19 +171,28 @@ private[release] object LifecycleCompiler {
       val stepName = s"$phase:${nameOf(hook)}"
 
       if (freezeGate)
-        frozenGateFunctions[C, C](
-          gate,
-          gateKey,
-          execute = executeOf(hook),
-          validate = ctx => validateOf(hook)(ctx).as(ctx),
-          skip = ctx => IO.pure(ctx)
-        ).map { case (frozenExec, frozenVal) =>
-          ProcessStep.Single[C](
-            name = stepName,
-            execute = frozenExec,
-            enableCrossBuild = crossBuild,
-            validateWithContext = Some(frozenVal)
-          )
+        gateKey match {
+          case Some(stableGateKey) =>
+            frozenGateFunctions[C, C](
+              gate,
+              stableGateKey,
+              execute = executeOf(hook),
+              validate = ctx => validateOf(hook)(ctx).as(ctx),
+              skip = ctx => IO.pure(ctx)
+            ).map { case (frozenExec, frozenVal) =>
+              ProcessStep.Single[C](
+                name = stepName,
+                execute = frozenExec,
+                enableCrossBuild = crossBuild,
+                validateWithContext = Some(frozenVal)
+              )
+            }
+          case None                =>
+            IO.raiseError(
+              new IllegalStateException(
+                s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
+              )
+            )
         }
       else
         IO.pure(
@@ -216,7 +212,7 @@ private[release] object LifecycleCompiler {
       hooks: Seq[Hook],
       gate: (C, I) => IO[Boolean],
       freezeGate: Boolean,
-      gateKey: (C, I) => String
+      gateKey: Option[(C, I) => String]
   )(
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],
@@ -227,21 +223,30 @@ private[release] object LifecycleCompiler {
       val stepName = s"$phase:${nameOf(hook)}"
 
       if (freezeGate)
-        frozenGateFunctions[(C, I), C](
-          gate = { case (c, i) => gate(c, i) },
-          gateKey = { case (c, i) => gateKey(c, i) },
-          execute = { case (c, i) => executeOf(hook)(c, i) },
-          validate = { case (c, i) =>
-            validateOf(hook)(c, i).as(c)
-          },
-          skip = { case (c, _) => IO.pure(c) }
-        ).map { case (frozenExec, frozenVal) =>
-          ProcessStep.PerItem[C, I](
-            name = stepName,
-            execute = (ctx, item) => frozenExec((ctx, item)),
-            enableCrossBuild = crossBuild,
-            validateWithContext = Some((ctx, item) => frozenVal((ctx, item)))
-          )
+        gateKey match {
+          case Some(stableGateKey) =>
+            frozenGateFunctions[(C, I), C](
+              gate = { case (c, i) => gate(c, i) },
+              gateKey = { case (c, i) => stableGateKey(c, i) },
+              execute = { case (c, i) => executeOf(hook)(c, i) },
+              validate = { case (c, i) =>
+                validateOf(hook)(c, i).as(c)
+              },
+              skip = { case (c, _) => IO.pure(c) }
+            ).map { case (frozenExec, frozenVal) =>
+              ProcessStep.PerItem[C, I](
+                name = stepName,
+                execute = (ctx, item) => frozenExec((ctx, item)),
+                enableCrossBuild = crossBuild,
+                validateWithContext = Some((ctx, item) => frozenVal((ctx, item)))
+              )
+            }
+          case None                =>
+            IO.raiseError(
+              new IllegalStateException(
+                s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
+              )
+            )
         }
       else
         IO.pure(

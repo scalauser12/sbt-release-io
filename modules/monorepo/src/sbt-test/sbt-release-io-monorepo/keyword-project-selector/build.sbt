@@ -19,11 +19,11 @@ lazy val root = (project in file("."))
   .aggregate(core, cross)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name := "keyword-project-selector-test",
+    name                                 := "keyword-project-selector-test",
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
-    releaseIOVcsIgnoreUntrackedFiles := true,
-    checkKeywordProjectRelease := {
+    releaseIOVcsIgnoreUntrackedFiles     := true,
+    checkKeywordProjectRelease           := {
       val coreContents  = IO.read(file("core/version.sbt"))
       val crossContents = IO.read(file("cross/version.sbt"))
 

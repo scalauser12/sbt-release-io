@@ -44,26 +44,28 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
 
   test("production sources no longer reference thin monorepo hook compiler") {
     hookFixtureResource("monorepo-hook-compiler-overload").use { fixture =>
-      compileLifecycle(fixture.state).map { steps =>
-        val commandExecution = Files.readString(
-          repoPath(
-            "modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandExecution.scala"
-          )
-        )
-
-        assertEquals(
-          steps.map(_.name),
-          MonorepoReleaseSteps.defaults.map(_.name)
-        )
-        assert(
-          !Files.exists(
+      compileLifecycle(fixture.state).flatMap { steps =>
+        IO.blocking(
+          Files.readString(
             repoPath(
-              "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoHookCompiler.scala"
+              "modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandExecution.scala"
             )
           )
-        )
-        assert(!commandExecution.contains("MonorepoHookCompiler"))
-        assert(!commandExecution.contains("SharedCommandKernel"))
+        ).map { commandExecution =>
+          assertEquals(
+            steps.map(_.name),
+            MonorepoReleaseSteps.defaults.map(_.name)
+          )
+          assert(
+            !Files.exists(
+              repoPath(
+                "modules/monorepo/src/main/scala/io/release/monorepo/MonorepoHookCompiler.scala"
+              )
+            )
+          )
+          assert(!commandExecution.contains("MonorepoHookCompiler"))
+          assert(!commandExecution.contains("SharedCommandKernel"))
+        }
       }
     }
   }

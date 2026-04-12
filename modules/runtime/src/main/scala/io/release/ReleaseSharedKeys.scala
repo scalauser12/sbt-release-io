@@ -6,8 +6,8 @@ import scala.concurrent.duration.FiniteDuration
 
 /** Runtime-owned shared key instances reused by core, monorepo, and shared helpers.
   *
-  * These keys remain publicly exposed through [[ReleasePluginIO.autoImport]]; this object only
-  * centralizes ownership so shared runtime code does not depend on the core plugin module.
+  * These keys remain publicly exposed through [[ReleaseSharedPlugin.autoImport]]; this object
+  * only centralizes ownership so shared runtime code does not depend on a public plugin module.
   */
 private[release] object ReleaseSharedKeys {
 
@@ -45,6 +45,13 @@ private[release] object ReleaseSharedKeys {
     SettingKey[File](
       "releaseIOVersioningFile",
       "Path to the version file"
+    )
+
+  @transient
+  lazy val releaseIOVersioningBump: TaskKey[_root_.io.release.version.Version.Bump] =
+    TaskKey[_root_.io.release.version.Version.Bump](
+      "releaseIOVersioningBump",
+      "Version bump strategy"
     )
 
   @transient

@@ -6,9 +6,9 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 lazy val core = (project in file("core"))
   .settings(
-    name      := "core",
+    name         := "core",
     scalaVersion := "2.12.18",
-    publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
+    publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 
 val checkHookMarkers = taskKey[Unit]("Check hook markers")
@@ -26,24 +26,24 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "hook-lifecycle-monorepo",
-    releaseIOVcsIgnoreUntrackedFiles := true,
+    name                                := "hook-lifecycle-monorepo",
+    releaseIOVcsIgnoreUntrackedFiles    := true,
     releaseIOMonorepoPolicyEnablePush   := false,
-    releaseIOMonorepoHooksBeforeTag := Seq(markerHook("before-tag")),
-    releaseIOMonorepoHooksAfterTag := Seq(markerHook("after-tag")),
+    releaseIOMonorepoHooksBeforeTag     := Seq(markerHook("before-tag")),
+    releaseIOMonorepoHooksAfterTag      := Seq(markerHook("after-tag")),
     releaseIOMonorepoHooksBeforePublish := Seq(markerHook("before-publish")),
-    releaseIOMonorepoHooksAfterPublish := Seq(markerHook("after-publish")),
-    checkHookMarkers              := {
+    releaseIOMonorepoHooksAfterPublish  := Seq(markerHook("after-publish")),
+    checkHookMarkers                    := {
       List("before-tag", "after-tag", "before-publish", "after-publish").foreach { marker =>
         val markerFile = file("core") / s"$marker.marker"
         assert(markerFile.exists, s"Expected marker at ${markerFile.getAbsolutePath}")
       }
     },
-    checkGitTag                   := {
+    checkGitTag                         := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
       assert(tags == List("core/v0.1.0"), s"Unexpected tags: ${tags.mkString(", ")}")
     },
-    checkPublished                := {
+    checkPublished                      := {
       val repo           = file("core") / "target" / "test-repo"
       val publishedFiles = (repo ** "*").get().filter(_.isFile)
       assert(repo.exists, s"Expected publish repo at ${repo.getAbsolutePath}")

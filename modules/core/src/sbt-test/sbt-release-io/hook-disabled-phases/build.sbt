@@ -11,9 +11,9 @@ libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOPolicyEnableRunTests       := false
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnableRunTests    := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnablePush        := false
 
 def markerHook(marker: String): ReleaseHookIO =
   ReleaseHookIO.action(marker) { ctx =>

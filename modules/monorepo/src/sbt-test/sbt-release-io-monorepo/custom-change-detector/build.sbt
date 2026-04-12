@@ -19,17 +19,17 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                            := "custom-change-detector-test",
+    name                                     := "custom-change-detector-test",
     // Custom change detector: only "core" is considered changed
     releaseIOMonorepoDetectionChangeDetector := Some { (ref: ProjectRef, _: File, _: State) =>
       _root_.cats.effect.IO.pure(ref.project == "core")
     },
-    releaseIOMonorepoPolicyEnablePublish  := false,
-    releaseIOMonorepoPolicyEnablePush     := false,
-    releaseIOMonorepoPolicyEnableRunClean := false,
-    releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles   := true,
-    checkAll                        := {
+    releaseIOMonorepoPolicyEnablePublish     := false,
+    releaseIOMonorepoPolicyEnablePush        := false,
+    releaseIOMonorepoPolicyEnableRunClean    := false,
+    releaseIOMonorepoPolicyEnableRunTests    := false,
+    releaseIOVcsIgnoreUntrackedFiles         := true,
+    checkAll                                 := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       // Only core should be tagged (api was not detected as changed)
       assert(

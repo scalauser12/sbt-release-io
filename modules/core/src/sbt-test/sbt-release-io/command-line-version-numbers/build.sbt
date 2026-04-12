@@ -4,8 +4,8 @@ name         := "command-line-version-numbers"
 scalaVersion := "2.12.18"
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnablePush        := false
 
 val checkContentsOfVersionSbt =
   inputKey[Unit]("Check that version.sbt contains the expected version string")

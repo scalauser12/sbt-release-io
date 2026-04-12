@@ -10,11 +10,8 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.PluginEntrypointSupport
 import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
-import io.release.version.Version
 import sbt.complete.Parser
 import sbt.{internal as _, *}
-
-import scala.concurrent.duration.FiniteDuration
 
 /** Build-facing project keys imported into `.sbt` files via `ReleasePluginIO.autoImport`. */
 object ReleasePluginIOAutoImport {
@@ -39,7 +36,7 @@ object ReleasePluginIOAutoImport {
       "Whether to enable interactive prompts during release"
     )
 
-  // ── Defaults keys ───────────────────────────────────────────────────
+  // ── Shared compatibility aliases ────────────────────────────────────
 
   lazy val releaseIODefaultsTagExistsAnswer: SettingKey[Option[String]] =
     ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer
@@ -222,19 +219,16 @@ object ReleasePluginIOAutoImport {
     )
 
   @transient
+  lazy val releaseIOVersioningBump: TaskKey[_root_.io.release.version.Version.Bump] =
+    ReleaseSharedKeys.releaseIOVersioningBump
+
+  @transient
   lazy val releaseIOVersioningReleaseVersion: TaskKey[String => String] =
     ReleaseSharedKeys.releaseIOVersioningReleaseVersion
 
   @transient
   lazy val releaseIOVersioningNextVersion: TaskKey[String => String] =
     ReleaseSharedKeys.releaseIOVersioningNextVersion
-
-  @transient
-  lazy val releaseIOVersioningBump: TaskKey[Version.Bump] =
-    TaskKey[Version.Bump](
-      "releaseIOVersioningBump",
-      "Version bump strategy"
-    )
 
   // ── VCS keys ────────────────────────────────────────────────────────
 
@@ -247,7 +241,7 @@ object ReleasePluginIOAutoImport {
   lazy val releaseIOVcsIgnoreUntrackedFiles: SettingKey[Boolean] =
     ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles
 
-  lazy val releaseIOVcsRemoteCheckTimeout: SettingKey[FiniteDuration] =
+  lazy val releaseIOVcsRemoteCheckTimeout: SettingKey[scala.concurrent.duration.FiniteDuration] =
     ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout
 
   @transient
@@ -304,6 +298,7 @@ object ReleasePluginIOAutoImport {
   @transient
   lazy val releaseIODiagnosticsSnapshotDependencies: TaskKey[Seq[ModuleID]] =
     ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
+
 }
 
 /** Base trait for resource-parameterized release plugins.
@@ -322,8 +317,10 @@ object ReleasePluginIOAutoImport {
   * }}}
   *
   * Custom plugins inherit [[autoImport]] automatically, so build-facing project keys remain
-  * available without adding another `autoImport` definition. When grouped keys are needed in
-  * `.scala` sources under `project/`, import them explicitly from [[ReleasePluginIO.autoImport]].
+  * available without adding another `autoImport` definition. Shared `releaseIO*` keys are also
+  * exposed through [[ReleaseSharedPlugin.autoImport]], which is the preferred import for new
+  * `.scala` build code, but existing `ReleasePluginIO.autoImport` imports remain supported for
+  * source compatibility.
   */
 trait ReleasePluginIOLike[T] extends AutoPlugin {
 
@@ -373,16 +370,28 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
       ReleasePluginIO.autoImport.releaseIOBehaviorInteractive
     )
 
-  /** Base settings that include all default `releaseIO*` values plus command registration.
-    * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`
-    * so the release command and required default keys stay defined.
+  /** Base settings that include the shared/core default values plus command registration.
+    * Custom plugins that override `projectSettings` should start from `baseReleaseSettings` so
+    * the release command and required keys stay defined.
     */
   protected def baseReleaseSettings: Seq[Setting[?]] =
-    PluginEntrypointSupport.pluginSettings(defaultSettingsValues, releaseIOCommand)
+    PluginEntrypointSupport.pluginSettings(
+      ReleaseSharedDefaultSettingsSupport.pluginDefaultSettings ++ defaultSettingsValues,
+      releaseIOCommand
+    )
 
-  /** Default values for the release-io setting keys. */
+  /** Base build-level defaults for shared `releaseIO*` settings.
+    * Custom plugins that override `buildSettings` should start from `baseBuildSettings`.
+    */
+  protected def baseBuildSettings: Seq[Setting[?]] =
+    ReleaseSharedDefaultSettingsSupport.buildDefaultSettings
+
+  /** Default values for the core-owned release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] =
     CoreDefaultSettings.pluginDefaultSettings
+
+  override lazy val buildSettings: Seq[Setting[?]] =
+    baseBuildSettings
 
   override lazy val projectSettings: Seq[Setting[?]] =
     baseReleaseSettings

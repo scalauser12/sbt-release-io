@@ -5,8 +5,8 @@ name := "untracked-files-test"
 scalaVersion := "2.12.18"
 
 // Skip push and publish steps in tests (following upstream sbt-release pattern)
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

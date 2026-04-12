@@ -19,16 +19,16 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                           := "detect-changes-disabled-test",
+    name                                  := "detect-changes-disabled-test",
     // Disable change detection — all projects should be released regardless of changes
-    releaseIOMonorepoDetectionEnabled := false,
+    releaseIOMonorepoDetectionEnabled     := false,
     releaseIOMonorepoPolicyEnablePublish  := false,
     releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles  := true,
+    releaseIOVcsIgnoreUntrackedFiles      := true,
     // Consolidated verification task
-    checkAll                       := {
+    checkAll                              := {
       // Check tags: both core and api should be released even though only core has changes
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(tags.length == 4, s"Expected 4 tags but found ${tags.length}: ${tags.mkString(", ")}")

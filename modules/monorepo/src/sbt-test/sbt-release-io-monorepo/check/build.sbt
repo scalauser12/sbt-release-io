@@ -4,17 +4,17 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future, TimeoutException, blocking}
 import scala.sys.process.*
 
-val expectExplicitCheckSuccess =
+val expectExplicitCheckSuccess       =
   taskKey[Unit]("Run an explicit monorepo check and assert the preflight summary")
-val expectDetectChangesCheckSuccess =
+val expectDetectChangesCheckSuccess  =
   taskKey[Unit]("Run a detect-changes monorepo check and assert the preflight summary")
-val expectUnknownOverrideFailure =
+val expectUnknownOverrideFailure     =
   taskKey[Unit]("Run monorepo check with an unknown override target and assert the failure output")
-val expectMissingVersionFileFailure =
+val expectMissingVersionFileFailure  =
   taskKey[Unit]("Run monorepo check without a project version file and assert the failure output")
 val expectZeroChangedProjectsFailure =
   taskKey[Unit]("Run monorepo check with zero detected projects and assert the failure output")
-val expectTagCollisionFailure =
+val expectTagCollisionFailure        =
   taskKey[Unit]("Run monorepo check with an existing tag and assert the failure output")
 
 val NestedSbtTimeout = 5.minutes
@@ -45,7 +45,7 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
       val timeoutMessage =
         s"Nested sbt process timed out after ${NestedSbtTimeout.toMinutes} minutes"
       outputBuffer.append(timeoutMessage).append(System.lineSeparator())
-      val output = outputBuffer.result()
+      val output         = outputBuffer.result()
       IO.write(outputFile, output)
       sys.error(timeoutMessage)
   }
@@ -83,6 +83,15 @@ def assertUnchanged(before: (Int, List[String], Map[String, Option[String]])): U
   )
 }
 
+def forwardedNestedJvmArgs: Seq[String] =
+  Seq(
+    "sbt.ivy.home",
+    "sbt.boot.directory",
+    "sbt.global.base",
+    "sbt.repository.config",
+    "sbt.override.build.repos"
+  ).flatMap(key => sys.props.get(key).map(value => s"-D$key=$value"))
+
 def nestedBaseCommand(sbtVersion0: String): Seq[String] = {
   val pluginVersionProp = sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))
   val sbtScript         = sys.props.getOrElse("sbt.script", "sbt")
@@ -91,10 +100,13 @@ def nestedBaseCommand(sbtVersion0: String): Seq[String] = {
     sbtScript,
     "--server",
     s"-Dsbt.version=$sbtVersion0",
-    s"-Dplugin.version=$pluginVersionProp",
-    "-Dsbt.log.noformat=true",
-    "-batch"
-  )
+    s"-Dplugin.version=$pluginVersionProp"
+  ) ++
+    forwardedNestedJvmArgs ++
+    Seq(
+      "-Dsbt.log.noformat=true",
+      "-batch"
+    )
 }
 
 def assertNestedRun(
@@ -105,7 +117,7 @@ def assertNestedRun(
     sbtVersion0: String,
     workingDir: File
 ): String = {
-  val before            = snapshot()
+  val before             = snapshot()
   val (exitCode, output) =
     runNestedSbt(nestedBaseCommand(sbtVersion0) ++ commands, outputFile, workingDir)
 
@@ -141,11 +153,11 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name := "check-monorepo-test",
+    name                                 := "check-monorepo-test",
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
-    releaseIOVcsIgnoreUntrackedFiles := true,
-    expectExplicitCheckSuccess := {
+    releaseIOVcsIgnoreUntrackedFiles     := true,
+    expectExplicitCheckSuccess           := {
       assertNestedRun(
         commands = Seq(
           "releaseIOMonorepo check core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT"
@@ -163,7 +175,7 @@ lazy val root = (project in file("."))
       )
       ()
     },
-    expectDetectChangesCheckSuccess := {
+    expectDetectChangesCheckSuccess      := {
       val output = assertNestedRun(
         commands = Seq("releaseIOMonorepo check with-defaults"),
         outputFile = target.value / "detect-changes-check.log",
@@ -182,7 +194,7 @@ lazy val root = (project in file("."))
         s"Expected detect-changes check to exclude api, but it did not.\n$output"
       )
     },
-    expectUnknownOverrideFailure := {
+    expectUnknownOverrideFailure         := {
       assertNestedRun(
         commands = Seq(
           "releaseIOMonorepo check core with-defaults release-version missing=0.1.0 next-version missing=0.2.0-SNAPSHOT"
@@ -198,7 +210,7 @@ lazy val root = (project in file("."))
       )
       ()
     },
-    expectMissingVersionFileFailure := {
+    expectMissingVersionFileFailure      := {
       assertNestedRun(
         commands = Seq(
           """set releaseIOMonorepoVersioningFile := { (_: ProjectRef, _: State) =>
@@ -218,7 +230,7 @@ lazy val root = (project in file("."))
       )
       ()
     },
-    expectZeroChangedProjectsFailure := {
+    expectZeroChangedProjectsFailure     := {
       assertNestedRun(
         commands = Seq("releaseIOMonorepo check with-defaults"),
         outputFile = target.value / "zero-changed-projects.log",
@@ -233,7 +245,7 @@ lazy val root = (project in file("."))
       )
       ()
     },
-    expectTagCollisionFailure := {
+    expectTagCollisionFailure            := {
       assertNestedRun(
         commands = Seq(
           "releaseIOMonorepo check core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT"

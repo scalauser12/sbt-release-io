@@ -35,7 +35,7 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
       val timeoutMessage =
         s"Nested sbt process timed out after ${NestedSbtTimeout.toMinutes} minutes"
       outputBuffer.append(timeoutMessage).append(System.lineSeparator())
-      val output = outputBuffer.result()
+      val output         = outputBuffer.result()
       IO.write(outputFile, output)
       sys.error(timeoutMessage)
   }
@@ -48,10 +48,10 @@ libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
 expectReleaseFailure := {
-  val outputFile        = target.value / "release.log"
-  val pluginVersionProp =
+  val outputFile         = target.value / "release.log"
+  val pluginVersionProp  =
     sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))
-  val sbtScript         = sys.props.getOrElse("sbt.script", "sbt")
+  val sbtScript          = sys.props.getOrElse("sbt.script", "sbt")
   val (exitCode, output) =
     runNestedSbt(
       Seq(
@@ -79,5 +79,5 @@ expectReleaseFailure := {
 }
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnablePush        := false

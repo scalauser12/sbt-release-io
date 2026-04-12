@@ -164,7 +164,9 @@ private[release] object ReleaseVersionWorkflow {
                           nextLabel = "Next version",
                           allowPrompts = allowPrompts,
                           beforeReleasePrompt = IO.blocking(
-                            ctx.state.log.info("Press enter to use the default value")
+                            ctx.state.log.info(
+                              s"${ReleaseLogPrefixes.Core} Press enter to use the default value"
+                            )
                           )
                         )
     } yield (

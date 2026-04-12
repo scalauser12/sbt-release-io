@@ -19,11 +19,11 @@ lazy val root = (project in file("."))
   .settings(
     name := "detect-changes-excludes-test",
 
-    releaseIOMonorepoDetectionEnabled         := true,
+    releaseIOMonorepoDetectionEnabled  := true,
     releaseIOMonorepoDetectionExcludes := Seq((core / baseDirectory).value / "CHANGELOG.md"),
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

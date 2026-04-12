@@ -15,8 +15,8 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "cli-unused-overrides-test",
+    name                                 := "cli-unused-overrides-test",
     releaseIOMonorepoPolicyEnablePublish := false,
     releaseIOMonorepoPolicyEnablePush    := false,
-    releaseIOVcsIgnoreUntrackedFiles := true
+    releaseIOVcsIgnoreUntrackedFiles     := true
   )

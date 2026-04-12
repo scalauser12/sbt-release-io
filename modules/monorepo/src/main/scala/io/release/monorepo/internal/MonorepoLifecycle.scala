@@ -36,7 +36,7 @@ private[release] object MonorepoLifecycle {
       ] = (_, _) => IO.pure(true),
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: (MonorepoContext, ProjectReleaseInfo) => String = DefaultProjectHookGateKey,
+      gateKey: Option[(MonorepoContext, ProjectReleaseInfo) => String] = None,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   )
 
@@ -80,11 +80,7 @@ private[release] object MonorepoLifecycle {
 
   private def projectHookPhase(
       config: ProjectHookPhaseConfig
-  ): Phase = {
-    require(
-      !config.freezeGate || (config.gateKey ne DefaultProjectHookGateKey),
-      s"phase '${config.phase}' requires an explicit stable gateKey when freezeGate = true"
-    )
+  ): Phase =
     LifecycleCompiler.perItemHookPhase(
       phase = config.phase,
       resolveHooks = config.resolveHooks,
@@ -97,7 +93,6 @@ private[release] object MonorepoLifecycle {
       gateKey = config.gateKey,
       enabled = config.enabled
     )
-  }
 
   /** Publish hooks freeze their validate-time gate decision, so the
     * cache key must ignore mutable project fields like `versions` and
@@ -176,7 +171,7 @@ private[release] object MonorepoLifecycle {
     gate = publishGate,
     crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
-    gateKey = publishGateKey,
+    gateKey = Some(publishGateKey),
     enabled = _.enablePublish
   )
   private val afterPublish = ProjectHookPhaseConfig(
@@ -185,7 +180,7 @@ private[release] object MonorepoLifecycle {
     gate = publishGate,
     crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
-    gateKey = publishGateKey,
+    gateKey = Some(publishGateKey),
     enabled = _.enablePublish
   )
   private val beforeNextVersionWrite = ProjectHookPhaseConfig(

@@ -180,12 +180,18 @@ private[monorepo] object MonorepoCommandExecution {
       warnOnDuplicates: Boolean
   ): IO[Either[State, PlannedCommand]] =
     for {
-      flags   <- IO.blocking(resolveFlags(cleanState, args, runtime, interactiveEnabled))
-      defaults = MonorepoDecisionDefaultsCli.resolve(cleanState, args, warnOnDuplicates)
-      planned <- MonorepoReleasePlan.build(
-                   cleanState,
-                   plannerInputs(args, flags, defaults, runtime.commandName)
-                 )
+      flags    <- IO.blocking(resolveFlags(cleanState, args, runtime, interactiveEnabled))
+      defaults <- IO.blocking(
+                    MonorepoDecisionDefaultsCli.resolve(
+                      cleanState,
+                      args,
+                      warnOnDuplicates
+                    )
+                  )
+      planned  <- MonorepoReleasePlan.build(
+                    cleanState,
+                    plannerInputs(args, flags, defaults, runtime.commandName)
+                  )
     } yield planned.map(plan => PlannedCommand(cleanState, flags, plan))
 
   private def runMonorepoCommand[T](

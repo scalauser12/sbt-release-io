@@ -15,7 +15,7 @@ lazy val root = (project in file("."))
     name := "push-changes-tracking-remote-test",
 
     // Keep push-changes enabled; skip unrelated heavy steps for speed.
-    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

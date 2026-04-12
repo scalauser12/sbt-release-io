@@ -35,7 +35,7 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
       val timeoutMessage =
         s"Nested sbt process timed out after ${NestedSbtTimeout.toMinutes} minutes"
       outputBuffer.append(timeoutMessage).append(System.lineSeparator())
-      val output = outputBuffer.result()
+      val output         = outputBuffer.result()
       IO.write(outputFile, output)
       sys.error(timeoutMessage)
   }
@@ -68,6 +68,15 @@ def assertUnchanged(before: (Int, List[String], Map[String, String])): Unit = {
   )
 }
 
+def forwardedNestedJvmArgs: Seq[String] =
+  Seq(
+    "sbt.ivy.home",
+    "sbt.boot.directory",
+    "sbt.global.base",
+    "sbt.repository.config",
+    "sbt.override.build.repos"
+  ).flatMap(key => sys.props.get(key).map(value => s"-D$key=$value"))
+
 def nestedBaseCommand(sbtVersion0: String): Seq[String] = {
   val pluginVersionProp = sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))
   val sbtScript         = sys.props.getOrElse("sbt.script", "sbt")
@@ -76,10 +85,13 @@ def nestedBaseCommand(sbtVersion0: String): Seq[String] = {
     sbtScript,
     "--server",
     s"-Dsbt.version=$sbtVersion0",
-    s"-Dplugin.version=$pluginVersionProp",
-    "-Dsbt.log.noformat=true",
-    "-batch"
-  )
+    s"-Dplugin.version=$pluginVersionProp"
+  ) ++
+    forwardedNestedJvmArgs ++
+    Seq(
+      "-Dsbt.log.noformat=true",
+      "-batch"
+    )
 }
 
 lazy val core = (project in file("core"))
@@ -98,11 +110,11 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name := "help-monorepo-test",
+    name                             := "help-monorepo-test",
     releaseIOVcsIgnoreUntrackedFiles := true,
-    expectMonorepoHelp := {
-      val before            = snapshot()
-      val outputFile        = target.value / "monorepo-help.log"
+    expectMonorepoHelp               := {
+      val before             = snapshot()
+      val outputFile         = target.value / "monorepo-help.log"
       val (exitCode, output) =
         runNestedSbt(
           nestedBaseCommand(sbtVersion.value) ++ Seq("releaseIOMonorepo help"),
@@ -130,6 +142,20 @@ lazy val root = (project in file("."))
           s"Expected nested sbt output to include '$expected', but it did not.\n$output"
         )
       }
+
+      val coreHelpOutputFile              = target.value / "core-help.log"
+      val (coreHelpExitCode, coreHelpOut) =
+        runNestedSbt(
+          nestedBaseCommand(sbtVersion.value) ++ Seq("releaseIO help"),
+          coreHelpOutputFile,
+          baseDirectory.value
+        )
+
+      assert(coreHelpExitCode == 0, s"Expected releaseIO help to succeed but got $coreHelpExitCode")
+      assert(
+        coreHelpOut.contains("""Usage: sbt "releaseIO [flags]"""),
+        s"Expected nested sbt output to include core help usage, but it did not.\n$coreHelpOut"
+      )
 
       val extraOutputFile              = target.value / "monorepo-help-extra.log"
       val (extraExitCode, extraOutput) =

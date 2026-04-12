@@ -24,8 +24,8 @@ lazy val root = (project in file("."))
     // Disable shared path detection
     releaseIOMonorepoDetectionSharedPaths := Seq.empty,
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

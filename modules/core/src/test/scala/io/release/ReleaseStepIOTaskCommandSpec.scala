@@ -75,6 +75,72 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
     }
   }
 
+  test("task steps - mark the context failed for fromTask when the task reports FailureCommand") {
+    val failureCommandTask = taskKey[Unit](s"failureCommandTask${System.nanoTime()}")
+
+    loadedContextResource(
+      "release-step-io-from-task-failure-command",
+      root =>
+        root.settings(
+          ReleaseStepIOCrossBuildCompat.failureCommandTaskSetting(
+            failureCommandTask,
+            new File(root.base, "from-task-failure.txt")
+          )
+        )
+    ).use { ctx =>
+      CoreStepFactory.fromTask(failureCommandTask).execute(ctx).map { result =>
+        assert(result.failed)
+        assert(!SbtRuntime.hasFailureCommand(result.state))
+        assert(
+          result.failureCause
+            .exists(_.getMessage.contains("reported failure via FailureCommand"))
+        )
+      }
+    }
+  }
+
+  test(
+    "task steps - mark the context failed for fromInputTask when the task reports FailureCommand"
+  ) {
+    ReleaseTestSupport
+      .loadedContextResource(
+        "release-step-io-from-input-task-failure-command",
+        buildSettings = ReleaseStepIOCrossBuildCompat.inputTaskBuildSettings,
+        currentProjectId = Some("root")
+      ) { dir =>
+        Seq(
+          Project("root", dir).settings(
+            ReleaseStepIOCrossBuildCompat.failureCommandInputTaskSetting(
+              stateUpdateInputTask,
+              new File(dir, "from-input-task-failure.txt")
+            )
+          )
+        )
+      }
+      .use { ctx =>
+        CoreStepFactory
+          .fromInputTask(stateUpdateInputTask, args = " alpha beta")
+          .execute(ctx)
+          .flatMap { result =>
+            val marker =
+              new File(
+                SbtRuntime.extracted(result.state).get(Keys.baseDirectory),
+                "from-input-task-failure.txt"
+              )
+
+            readFile(marker).map { contents =>
+              assertEquals(contents, "alpha:beta")
+              assert(result.failed)
+              assert(!SbtRuntime.hasFailureCommand(result.state))
+              assert(
+                result.failureCause
+                  .exists(_.getMessage.contains("reported failure via FailureCommand"))
+              )
+            }
+          }
+      }
+  }
+
   test("task steps - run fromTaskAggregated across aggregated projects") {
     val aggregatedTask = taskKey[String](s"aggregatedStateTask${System.nanoTime()}")
 
@@ -133,6 +199,53 @@ class ReleaseStepIOTaskCommandSpec extends CatsEffectSuite with ReleaseStepIOSpe
           assertEquals(api, "api")
           assertEquals(core, "core")
         }
+      }
+    }
+  }
+
+  test(
+    "task steps - mark the context failed for fromTaskAggregated when the task reports FailureCommand"
+  ) {
+    val aggregatedTask = taskKey[Unit](s"aggregatedFailureCommandTask${System.nanoTime()}")
+
+    loadedContextWithProjectsResource("release-step-io-from-task-aggregated-failure-command") {
+      dir =>
+        val apiBase  = new File(dir, "api")
+        val coreBase = new File(dir, "core")
+        apiBase.mkdirs()
+        coreBase.mkdirs()
+
+        val api  = Project("api", apiBase).settings(
+          aggregatedTask := sbt.IO.write(
+            new File(Keys.baseDirectory.value, "aggregated-api.txt"),
+            "api"
+          )
+        )
+        val core = Project("core", coreBase).settings(
+          aggregatedTask := sbt.IO.write(
+            new File(Keys.baseDirectory.value, "aggregated-core.txt"),
+            "core"
+          )
+        )
+        val root = Project("root", dir)
+          .aggregate(LocalProject("api"), LocalProject("core"))
+          .settings(
+            aggregatedTask / Keys.aggregate := true,
+            ReleaseStepIOCrossBuildCompat.failureCommandTaskSetting(
+              aggregatedTask,
+              new File(dir, "aggregated-root.txt")
+            )
+          )
+
+        Seq(root, api, core)
+    }.use { ctx =>
+      CoreStepFactory.fromTaskAggregated(aggregatedTask).execute(ctx).map { result =>
+        assert(result.failed)
+        assert(!SbtRuntime.hasFailureCommand(result.state))
+        assert(
+          result.failureCause
+            .exists(_.getMessage.contains("reported failure via FailureCommand"))
+        )
       }
     }
   }

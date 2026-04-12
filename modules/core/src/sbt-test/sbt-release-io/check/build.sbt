@@ -4,17 +4,17 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future, TimeoutException, blocking}
 import scala.sys.process.*
 
-val expectCheckSuccess =
+val expectCheckSuccess                   =
   taskKey[Unit]("Run releaseIO check successfully and assert the preflight summary")
 val expectCheckMissingVersionFileFailure =
   taskKey[Unit]("Run releaseIO check without a version file and assert the failure output")
-val expectCheckDirtyWorkingTreeFailure =
+val expectCheckDirtyWorkingTreeFailure   =
   taskKey[Unit]("Run releaseIO check with a dirty working tree and assert the failure output")
-val expectCheckInvalidVersionFailure =
+val expectCheckInvalidVersionFailure     =
   taskKey[Unit]("Run releaseIO check with invalid CLI version input and assert the failure output")
-val expectCheckMissingPublishToFailure =
+val expectCheckMissingPublishToFailure   =
   taskKey[Unit]("Run releaseIO check without publishTo and assert the failure output")
-val expectCheckTagCollisionFailure =
+val expectCheckTagCollisionFailure       =
   taskKey[Unit]("Run releaseIO check with an existing tag and assert the failure output")
 
 val NestedSbtTimeout = 5.minutes
@@ -45,7 +45,7 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
       val timeoutMessage =
         s"Nested sbt process timed out after ${NestedSbtTimeout.toMinutes} minutes"
       outputBuffer.append(timeoutMessage).append(System.lineSeparator())
-      val output = outputBuffer.result()
+      val output         = outputBuffer.result()
       IO.write(outputFile, output)
       sys.error(timeoutMessage)
   }
@@ -102,7 +102,7 @@ def assertNestedRun(
     sbtVersion0: String,
     workingDir: File
 ): Unit = {
-  val before            = snapshot()
+  val before             = snapshot()
   val (exitCode, output) =
     runNestedSbt(nestedBaseCommand(sbtVersion0) ++ commands, outputFile, workingDir)
 
@@ -124,9 +124,9 @@ def assertNestedRun(
 name         := "check-test"
 scalaVersion := "2.12.18"
 
-releaseIOPolicyEnablePush := false
+releaseIOPolicyEnablePush        := false
 releaseIOVcsIgnoreUntrackedFiles := true
-publishTo := Some(Resolver.file("test-repo", target.value / "repo"))
+publishTo                        := Some(Resolver.file("test-repo", target.value / "repo"))
 
 expectCheckSuccess := {
   assertNestedRun(

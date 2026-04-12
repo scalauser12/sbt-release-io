@@ -2,8 +2,8 @@ import scala.sys.process.*
 
 lazy val core = (project in file("core"))
   .settings(
-    name                 := "core",
-    scalaVersion         := "2.12.18",
+    name                    := "core",
+    scalaVersion            := "2.12.18",
     releaseIOVersioningFile := baseDirectory.value / "version.properties"
   )
 
@@ -71,8 +71,8 @@ lazy val root = (project in file("."))
         _root_.cats.effect.IO.pure(s"""version := "$ver"\n""")
     },
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

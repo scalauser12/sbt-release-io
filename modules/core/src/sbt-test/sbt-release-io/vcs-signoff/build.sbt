@@ -5,8 +5,8 @@ scalaVersion := "2.12.18"
 
 releaseIOVcsSignOff := true
 
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

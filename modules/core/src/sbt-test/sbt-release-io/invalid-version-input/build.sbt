@@ -4,8 +4,8 @@ import sbt.IO
 name         := "invalid-version-input-test"
 scalaVersion := "2.12.18"
 
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

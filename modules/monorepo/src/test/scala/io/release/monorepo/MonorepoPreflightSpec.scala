@@ -2,7 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleasePluginIO.autoImport.*
+import io.release.ReleaseSharedPlugin.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.monorepo.internal.*
@@ -1124,16 +1124,16 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
                                      repo,
                                      projectIds = Seq("core"),
                                      settings = Seq(
-                                       io.release.ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true
+                                       io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := true
                                      )
                                    ),
                                    MonorepoSpecSupport.versionedProject(
                                      "core",
                                      coreBase,
                                      settings = Seq(
-                                       io.release.ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion :=
+                                       io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion :=
                                          ((version: String) => version.stripSuffix("-SNAPSHOT")),
-                                       io.release.ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    :=
+                                       io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion    :=
                                          ((_: String) => "0.2.0-SNAPSHOT")
                                      )
                                    )
@@ -1276,9 +1276,9 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
                       TestSupport.commitAll(repo, "Initial commit")
 
                       val versionSettings = Seq(
-                        io.release.ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion :=
+                        io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion :=
                           ((version: String) => version.stripSuffix("-SNAPSHOT")),
-                        io.release.ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    :=
+                        io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion    :=
                           ((_: String) => "0.2.0-SNAPSHOT")
                       )
                       val projects        = Seq(
@@ -1286,7 +1286,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
                           repo,
                           projectIds = Seq("core", "api"),
                           settings = Seq(
-                            io.release.ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true
+                            io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := true
                           )
                         ),
                         MonorepoSpecSupport.versionedProject(

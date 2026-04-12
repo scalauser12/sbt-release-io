@@ -8,6 +8,34 @@ import java.io.File
 
 class MonorepoVersionFilesSpec extends CatsEffectSuite {
 
+  test("resolve - honor ThisBuild releaseIOVersioningFile when project scope is unset") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-files-thisbuild") { dir =>
+        val coreBase        = new File(dir, "core")
+        val rootVersionFile = new File(dir, "root-version.sbt")
+        coreBase.mkdirs()
+        sbt.IO.write(rootVersionFile, """version := "root-only"""" + "\n")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(
+            dir,
+            projectIds = Seq("core"),
+            settings = Seq(
+              sbt.ThisBuild / io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningFile := rootVersionFile
+            )
+          ),
+          sbt.Project("core", coreBase)
+        )
+      }
+      .use { loaded =>
+        IO {
+          val resolved = MonorepoVersionFiles.resolve(loaded.state, loaded.projectInfo("core").ref)
+          assertEquals(resolved, new File(loaded.dir, "root-version.sbt"))
+          assertNotEquals(resolved, new File(new File(loaded.dir, "core"), "version.sbt"))
+        }
+      }
+  }
+
   test(
     "resolve - use the monorepo per-project resolver instead of the root releaseIOVersioningFile"
   ) {
@@ -25,8 +53,8 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             dir,
             projectIds = Seq("core"),
             settings = Seq(
-              io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile    := rootVersionFile,
-              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
+              io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningFile := rootVersionFile,
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile  := {
                 (_: sbt.ProjectRef, _: sbt.State) =>
                   monorepoProjectVersion
               }
@@ -36,7 +64,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             "core",
             coreBase,
             settings = Seq(
-              io.release.ReleasePluginIO.autoImport.releaseIOVersioningFile := new File(
+              io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningFile := new File(
                 coreBase,
                 "ignored-version.sbt"
               )

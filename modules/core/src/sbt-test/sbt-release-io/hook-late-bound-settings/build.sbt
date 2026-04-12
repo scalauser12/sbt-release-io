@@ -8,14 +8,14 @@ name := "hook-late-bound-settings"
 scalaVersion := "2.12.18"
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOPolicyEnableRunTests       := false
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnableRunTests    := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnablePush        := false
 
 def lateBoundVersionSettings(runtimeVersion: File): Seq[Setting[?]] =
   Seq(
     releaseIOVersioningFile         := runtimeVersion,
-    releaseIOVersioningReadVersion         := { file =>
+    releaseIOVersioningReadVersion  := { file =>
       _root_.cats.effect.IO.blocking(sbt.IO.read(file).trim)
     },
     releaseIOVersioningFileContents := { (_, version) =>
@@ -42,10 +42,10 @@ releaseIOHooksBeforeVersionResolution := Seq(
 releaseIOHooksBeforeTag := Seq(
   ReleaseHookIO.io("late-bound-tag-settings") { ctx =>
     _root_.cats.effect.IO.blocking {
-      val extracted    = Project.extract(ctx.state)
-      val base         = extracted.get(baseDirectory)
+      val extracted      = Project.extract(ctx.state)
+      val base           = extracted.get(baseDirectory)
       val runtimeVersion = base / "version.properties"
-      val updatedState = extracted.appendWithSession(
+      val updatedState   = extracted.appendWithSession(
         lateBoundVersionSettings(runtimeVersion) ++ Seq(
           releaseIOVcsTagName := "late-bound-runtime-tag"
         ),

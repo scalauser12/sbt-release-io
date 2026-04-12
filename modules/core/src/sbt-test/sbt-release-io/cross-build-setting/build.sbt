@@ -19,10 +19,10 @@ releaseIOBehaviorCrossBuild := true
 libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
-releaseIOPolicyEnablePush    := false
+releaseIOPolicyEnablePush := false
 
 releaseIOVcsIgnoreUntrackedFiles := true
-publishTo := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
+publishTo                        := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
 
 val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
   _root_.cats.effect.IO.blocking {

@@ -16,16 +16,19 @@ import java.io.File
 trait ReleasePluginIOSpecSupport {
 
   private val settingsDefaults: Seq[Setting[?]] = Seq(
-    ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild                 := false,
-    ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish                := false,
-    ReleasePluginIO.autoImport.releaseIOBehaviorInteractive                := false,
-    ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer            := None,
-    ReleasePluginIO.autoImport.releaseIODefaultsSnapshotDependenciesAnswer := None,
-    ReleasePluginIO.autoImport.releaseIODefaultsRemoteCheckFailureAnswer   := None,
-    ReleasePluginIO.autoImport.releaseIODefaultsUpstreamBehindAnswer       := None,
-    ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer                 := None
+    ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild                     := false,
+    ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish                    := false,
+    ReleasePluginIO.autoImport.releaseIOBehaviorInteractive                    := false,
+    ReleaseSharedPlugin.autoImport.releaseIODefaultsTagExistsAnswer            := None,
+    ReleaseSharedPlugin.autoImport.releaseIODefaultsSnapshotDependenciesAnswer := None,
+    ReleaseSharedPlugin.autoImport.releaseIODefaultsRemoteCheckFailureAnswer   := None,
+    ReleaseSharedPlugin.autoImport.releaseIODefaultsUpstreamBehindAnswer       := None,
+    ReleaseSharedPlugin.autoImport.releaseIODefaultsPushAnswer                 := None,
+    ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles            := false,
+    ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal                    := true,
+    ReleasePluginIO.autoImport.releaseIOPublishChecks                          := true
   ) ++ CoreLifecycle.configDefaultSettings ++ Seq(
-    ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
+    ReleaseSharedPlugin.autoImport.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
       .DurationInt(60)
       .seconds
   )

@@ -24,9 +24,9 @@ trait MonorepoReleasePluginSpecSupport {
     MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests   := false,
     MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish := false
   ) ++ MonorepoLifecycle.configDefaultSettings ++ Seq(
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks             := true,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive       := false,
-    _root_.io.release.ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks                 := true,
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive           := false,
+    _root_.io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
       .DurationInt(60)
       .seconds
   )

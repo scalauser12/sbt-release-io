@@ -17,10 +17,14 @@ Start with the plugin-specific onboarding guides:
 
 ## Modules
 
-| Module | Artifact | README | Description |
-|--------|----------|--------|-------------|
+| Module | Artifact | Docs | Description |
+|--------|----------|------|-------------|
 | [core](modules/core/README.md) | `sbt-release-io` | [docs/core](docs/core/README.md) | IO-based release plugin for single-project builds. Independent codebase porting sbt-release onto cats-effect IO with `Resource` lifecycle, cross-build validation, and typed context threading. |
 | [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | [docs/monorepo](docs/monorepo/README.md) | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and per-project tags. |
+| [shared](modules/shared) | `sbt-release-io-shared` | [architecture docs](docs/ARCHITECTURE.md) | Shared public plugin contract (`ReleaseSharedPlugin`) for shared `releaseIO*` keys/defaults and advanced Scala build-code imports. Published support artifact rather than the normal end-user plugin entrypoint. |
+
+Most users install `sbt-release-io` or `sbt-release-io-monorepo` directly. The `shared` artifact is
+the shared contract layer for contributor architecture and advanced Scala build customization.
 
 ## Quick Start
 
@@ -96,7 +100,7 @@ For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) an
 ## Build & Test
 
 ```bash
-sbt compile              # compile both modules
+sbt compile              # compile all modules
 sbt test                 # run unit tests (MUnit)
 sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2 / Scala 3 (version defined as Sbt2Version in build.sbt)
 sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2 / Scala 3

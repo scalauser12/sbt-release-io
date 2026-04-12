@@ -19,7 +19,7 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                            := "custom-detector-uses-basedir-test",
+    name                                     := "custom-detector-uses-basedir-test",
     // Custom change detector: uses baseDir to diff against HEAD~1, excluding version.sbt
     releaseIOMonorepoDetectionChangeDetector := Some { (_: ProjectRef, baseDir: File, _: State) =>
       _root_.cats.effect.IO.blocking {
@@ -33,12 +33,12 @@ lazy val root = (project in file("."))
           .nonEmpty
       }
     },
-    releaseIOMonorepoPolicyEnablePublish  := false,
-    releaseIOMonorepoPolicyEnablePush     := false,
-    releaseIOMonorepoPolicyEnableRunClean := false,
-    releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles   := true,
-    checkAll                        := {
+    releaseIOMonorepoPolicyEnablePublish     := false,
+    releaseIOMonorepoPolicyEnablePush        := false,
+    releaseIOMonorepoPolicyEnableRunClean    := false,
+    releaseIOMonorepoPolicyEnableRunTests    := false,
+    releaseIOVcsIgnoreUntrackedFiles         := true,
+    checkAll                                 := {
       val tags = "git tag".!!.trim.split("\n").filter(_.nonEmpty).sorted
       assert(
         tags.length == 1,

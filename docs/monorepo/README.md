@@ -21,7 +21,7 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
 - [Configuration](configuration.md)
   Starter `build.sbt` patterns and configuration recipes.
 - [Settings reference](reference.md)
-  Exhaustive catalog of `releaseIOMonorepoSelection*`, `releaseIOMonorepoPolicy*`, `releaseIOMonorepoHooks*`, and shared core settings.
+  Exhaustive catalog of `releaseIOMonorepoSelection*`, `releaseIOMonorepoPolicy*`, `releaseIOMonorepoHooks*`, and shared release settings.
 - [Concepts](concepts.md)
   Default release phases, validate/execute flow, failure isolation, and topological ordering.
 - [Change detection](change-detection.md)

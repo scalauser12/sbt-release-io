@@ -22,12 +22,12 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                          := "selection-aware-validation-test",
-    releaseIOMonorepoPolicyEnablePush    := false,
+    name                                  := "selection-aware-validation-test",
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
-    releaseIOVcsIgnoreUntrackedFiles := true,
-    checkSelectionAwareValidation := {
+    releaseIOVcsIgnoreUntrackedFiles      := true,
+    checkSelectionAwareValidation         := {
       val tags        = "git tag".!!.trim.split("\n").filter(_.nonEmpty).toList
       val coreVersion = IO.read(file("core/version.sbt"))
       val apiVersion  = IO.read(file("api/version.sbt"))

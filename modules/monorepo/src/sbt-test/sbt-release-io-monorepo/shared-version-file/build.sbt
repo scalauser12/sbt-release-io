@@ -1,6 +1,7 @@
 import scala.sys.process.*
 
-val checkUnchanged = taskKey[Unit]("Verify the shared version file, tags, and commits are unchanged")
+val checkUnchanged =
+  taskKey[Unit]("Verify the shared version file, tags, and commits are unchanged")
 
 lazy val core = (project in file("core"))
   .settings(
@@ -18,18 +19,18 @@ lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name := "shared-version-file-test",
+    name                                  := "shared-version-file-test",
     // Point all projects at the same root version.sbt — simulates a stale
     // global-version-mode config left over from before the removal.
-    releaseIOMonorepoVersioningFile := { (_: ProjectRef, _: sbt.State) =>
+    releaseIOMonorepoVersioningFile       := { (_: ProjectRef, _: sbt.State) =>
       baseDirectory.value / "version.sbt"
     },
-    releaseIOVcsIgnoreUntrackedFiles   := true,
+    releaseIOVcsIgnoreUntrackedFiles      := true,
     releaseIOMonorepoPolicyEnablePublish  := false,
     releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
-    checkUnchanged := {
+    checkUnchanged                        := {
       val versionContents = IO.read(baseDirectory.value / "version.sbt")
       assert(
         versionContents.contains("0.1.0-SNAPSHOT"),

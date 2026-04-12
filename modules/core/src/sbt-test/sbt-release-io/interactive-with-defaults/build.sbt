@@ -4,7 +4,7 @@ name         := "interactive-with-defaults-test"
 scalaVersion := "2.12.18"
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOBehaviorInteractive          := true
+releaseIOBehaviorInteractive     := true
 
 // Skip push/publish in scripted environment.
 releaseIOPolicyEnablePublish := false

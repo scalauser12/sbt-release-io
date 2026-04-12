@@ -1,6 +1,6 @@
 package io.release.monorepo.internal.steps
 
-import io.release.ReleasePluginIO
+import io.release.ReleaseSharedPlugin
 import io.release.ReleaseIOCompat
 import sjsonnew.BasicJsonProtocol
 import sbt.Keys.*
@@ -55,7 +55,7 @@ private[monorepo] object MonorepoStepTestCompat:
       marker: File,
       dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
   ): Setting[?] =
-    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
       .task[Seq[ModuleID]] {
         sbt.IO.write(marker, "ran")
         dependencies
@@ -67,8 +67,16 @@ private[monorepo] object MonorepoStepTestCompat:
       }
       .value
 
+  def managedClasspathSetting(marker: File): Setting[?] =
+    Test / Keys.managedClasspath := {
+      Def.uncached {
+        sbt.IO.write(marker, "ran")
+        Nil
+      }
+    }
+
   def failureCommandVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := Def.uncached {
+    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -83,7 +91,7 @@ private[monorepo] object MonorepoStepTestCompat:
     }
 
   def failureCommandNextVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def.uncached {
+    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -102,7 +110,7 @@ private[monorepo] object MonorepoStepTestCompat:
       key: AttributeKey[String],
       value: String
   ): Setting[?] =
-    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def.uncached {
+    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>

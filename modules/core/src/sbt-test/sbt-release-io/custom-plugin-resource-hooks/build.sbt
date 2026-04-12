@@ -7,8 +7,8 @@ name := "custom-plugin-resource-hooks"
 scalaVersion := "2.12.18"
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnablePush        := false
 
 enablePlugins(CustomPlugin)
 

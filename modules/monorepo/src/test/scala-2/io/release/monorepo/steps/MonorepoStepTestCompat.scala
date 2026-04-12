@@ -2,7 +2,7 @@ package io.release.monorepo.internal.steps
 
 import _root_.io.release.runtime.sbt.SbtCompat
 import io.release.ReleaseIOCompat
-import io.release.ReleasePluginIO
+import io.release.ReleaseSharedPlugin
 import sbt.*
 import sbt.Keys.*
 import sbt.Setting
@@ -45,7 +45,7 @@ private[monorepo] object MonorepoStepTestCompat {
       marker: File,
       dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
   ): Setting[?] =
-    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
       .task {
         sbt.IO.write(marker, "ran")
         dependencies
@@ -57,8 +57,14 @@ private[monorepo] object MonorepoStepTestCompat {
       }
       .value
 
+  def managedClasspathSetting(marker: File): Setting[?] =
+    Test / Keys.managedClasspath := {
+      sbt.IO.write(marker, "ran")
+      Nil
+    }
+
   def failureCommandVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := {
+    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion := {
       val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -72,7 +78,7 @@ private[monorepo] object MonorepoStepTestCompat {
     }
 
   def failureCommandNextVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := {
+    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := {
       val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -90,7 +96,7 @@ private[monorepo] object MonorepoStepTestCompat {
       key: AttributeKey[String],
       value: String
   ): Setting[?] =
-    project / ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := {
+    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := {
       val _ = Def
         .task(())
         .updateState { (state: State, _: Unit) =>

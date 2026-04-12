@@ -17,5 +17,5 @@ lazy val sub  = (project in file("sub"))
   )
 
 releaseIOVcsIgnoreUntrackedFiles := true
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish     := false
+releaseIOPolicyEnablePush        := false

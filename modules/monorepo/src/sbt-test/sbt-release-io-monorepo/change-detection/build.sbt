@@ -22,8 +22,8 @@ lazy val root = (project in file("."))
     // Enable change detection (default is true, but be explicit)
     releaseIOMonorepoDetectionEnabled := true,
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

@@ -35,12 +35,13 @@ object CustomPlugin extends ReleasePluginIOLike[java.io.File] {
       beforeTagHooks = Seq(
         ReleaseResourceHookIO[java.io.File](
           name = "resource-before-tag",
-          execute = base => ctx =>
-            IO.blocking {
-              appendLine(new java.io.File(base, "execute-order.log"), "resource-execute")
-              sbt.IO.touch(new java.io.File(base, "resource-execute.marker"))
-              ctx
-            },
+          execute = base =>
+            ctx =>
+              IO.blocking {
+                appendLine(new java.io.File(base, "execute-order.log"), "resource-execute")
+                sbt.IO.touch(new java.io.File(base, "resource-execute.marker"))
+                ctx
+              },
           validate = _ =>
             IO.blocking {
               appendLine(rootFile("validate-order.log"), "resource-validate")

@@ -4,6 +4,16 @@ This page is the exhaustive reference for core settings and CLI flags. If you wa
 smaller starter example, see [Configuration](configuration.md). If you want a guided
 walkthrough, start with [Getting started](getting-started.md).
 
+In `.scala` build sources under `project/`, import core-only grouped keys from
+`ReleasePluginIO.autoImport.*` and shared `releaseIO*` keys from
+`ReleaseSharedPlugin.autoImport.*`. In `.sbt` files, use the normal `ReleasePluginIO`
+surface; `ReleaseSharedPlugin` is an explicit support/import layer and does not need to be
+enabled alongside the core plugin.
+
+Existing Scala build code that imports shared `releaseIO*` keys from
+`ReleasePluginIO.autoImport.*` remains supported for compatibility. Prefer
+`ReleaseSharedPlugin.autoImport.*` for new shared-key imports.
+
 > **Coming from sbt-release?** The original plugin enables interactive prompts by default.
 > This plugin defaults to `releaseIOBehaviorInteractive := false` — decision points that
 > have no configured answer **fail fast** instead of prompting.
@@ -37,7 +47,7 @@ When interactive mode is enabled and no decision default is configured, five pro
 
 When interactive is `false` (the default) and no decision default is set: snapshot-dependency and tag-conflict issues raise errors, push is skipped, and remote-check failures abort. The `with-defaults` CLI flag pre-answers all prompts with safe defaults without enabling interactive mode.
 
-## Decision-default settings
+## Shared decision-default settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -47,7 +57,7 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 | `releaseIODefaultsUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Pre-answer when branch is behind upstream: `true` = continue, `false` = abort. `None` = prompt or abort |
 | `releaseIODefaultsPushAnswer` | `Option[Boolean]` | `None` | Pre-answer for push: `true` = push, `false` = skip push. `None` = prompt or skip |
 
-## Versioning settings
+## Shared and core versioning settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -59,7 +69,7 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 | `releaseIOVersioningReleaseVersion` | `String => String` | strips qualifier/snapshot | Compute the release version from the current one |
 | `releaseIOVersioningNextVersion` | `String => String` | bumps and appends `-SNAPSHOT` | Compute the next development version |
 
-## VCS settings
+## Shared and core VCS settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -72,14 +82,14 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 | `releaseIOVcsIgnoreUntrackedFiles` | `Boolean` | `false` | Ignore untracked files in the clean check |
 | `releaseIOVcsRemoteCheckTimeout` | `FiniteDuration` | `60.seconds` | Timeout for the remote reachability check before push |
 
-## Publish settings
+## Shared and core publish settings
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
 | `releaseIOPublishAction` | `Unit` | `publish.value` | Task that performs the publish |
 | `releaseIOPublishChecks` | `Boolean` | `true` | Validate `publishTo` / `skip` before publish |
 
-## Runtime and diagnostics
+## Shared diagnostics and core runtime
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |

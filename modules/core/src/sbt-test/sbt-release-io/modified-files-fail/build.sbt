@@ -4,8 +4,8 @@ import sbt.IO
 name         := "modified-files-fail-test"
 scalaVersion := "2.12.18"
 
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnablePush           := false
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
 
 val checkNoGitTags = taskKey[Unit]("Check that no git tags were created")
 checkNoGitTags := {

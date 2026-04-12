@@ -20,11 +20,11 @@ lazy val root = (project in file("."))
     name := "shared-paths-custom-test",
 
     // Change detection enabled, custom shared path instead of defaults
-    releaseIOMonorepoDetectionEnabled := true,
-    releaseIOMonorepoDetectionSharedPaths   := Seq(".scalafmt.conf"),
+    releaseIOMonorepoDetectionEnabled     := true,
+    releaseIOMonorepoDetectionSharedPaths := Seq(".scalafmt.conf"),
 
-    releaseIOMonorepoPolicyEnablePublish := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish  := false,
+    releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
 

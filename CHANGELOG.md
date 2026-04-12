@@ -6,6 +6,24 @@ This file is the canonical release history for the repository.
 
 ## Unreleased
 
+### Breaking changes
+
+- Shared `releaseIO*` keys in `.scala` build code now come from
+  `ReleaseSharedPlugin.autoImport.*`. `ReleasePluginIO.autoImport.*` keeps only core-owned keys.
+  Unqualified `.sbt` usage remains unchanged when `ReleasePluginIO` or
+  `MonorepoReleasePlugin` is enabled.
+
+### CI/Build
+
+- Extend publish-local smoke on both supported sbt lines to
+  `shared/publishLocal`, `core/publishLocal`, and `monorepo/publishLocal` so the new published
+  shared artifact is verified explicitly.
+
+### Documentation
+
+- Refresh contributor docs and architecture notes to include the `shared` module and the
+  shared-key migration path.
+
 ## v0.10.0
 
 Published: 2026-04-10

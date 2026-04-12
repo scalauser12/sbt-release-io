@@ -2,6 +2,7 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import io.release.CleanCompat
+import io.release.LoadCompat
 import io.release.ReleaseIOCompat
 import io.release.ReleaseManifestMetadataSupport
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
@@ -32,6 +33,10 @@ import scala.util.control.NonFatal
   * Step implementations here just run their sbt tasks and return the updated context.
   */
 private[monorepo] object MonorepoPublishSteps {
+
+  private def fallbackToPublishWarning(project: ProjectReleaseInfo): String =
+    s"${project.name}: ${releaseIOPublishAction.key.label} is undefined; " +
+      s"falling back to ${publish.key.label}"
 
   private def runProjectTask[A](
       ctx: MonorepoContext,
@@ -151,12 +156,24 @@ private[monorepo] object MonorepoPublishSteps {
       execute = (ctx, _) => IO.pure(ctx),
       validateWithContext = Some((ctx, project) =>
         for {
-          externalSnapshots <- SnapshotDependencyTasks.projectSnapshotDependencies(
-                                 ctx.state,
-                                 project.ref,
-                                 project.name,
-                                 releaseIODiagnosticsSnapshotDependencies
-                               )
+          externalSnapshots <-
+            if (
+              LoadCompat.containsScopedKey(
+                ctx.state,
+                project.ref / releaseIODiagnosticsSnapshotDependencies
+              )
+            )
+              SnapshotDependencyTasks.projectSnapshotDependencies(
+                ctx.state,
+                project.ref,
+                project.name,
+                releaseIODiagnosticsSnapshotDependencies
+              )
+            else
+              SnapshotDependencyTasks.projectManagedClasspathSnapshotDependencies(
+                ctx.state,
+                project.ref
+              )
           updatedCtx        <-
             DecisionResolver.handleSnapshotDependencies(
               ctx,
@@ -204,7 +221,14 @@ private[monorepo] object MonorepoPublishSteps {
               logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
             else
               withProjectReleaseState(ctx, project).flatMap(publishCtx =>
-                runProjectTask(publishCtx, project.ref / releaseIOPublishAction)
+                if (
+                  LoadCompat
+                    .containsScopedKey(publishCtx.state, project.ref / releaseIOPublishAction)
+                )
+                  runProjectTask(publishCtx, project.ref / releaseIOPublishAction)
+                else
+                  logWarn(publishCtx, fallbackToPublishWarning(project)) *>
+                    runProjectTask(publishCtx, project.ref / publish)
               )
           },
       validate = (ctx, project) =>

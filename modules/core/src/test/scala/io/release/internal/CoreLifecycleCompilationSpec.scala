@@ -30,26 +30,28 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
 
   test("production sources no longer reference removed hook or command wrappers") {
     hookStateResource("release-hook-compiler-overload").use { state =>
-      compileLifecycle(state).map { steps =>
-        val commandExecution = Files.readString(
-          repoPath(
-            "modules/core/src/main/scala/io/release/core/internal/CoreCommandExecution.scala"
+      compileLifecycle(state).flatMap { steps =>
+        IO.blocking(
+          Files.readString(
+            repoPath(
+              "modules/core/src/main/scala/io/release/core/internal/CoreCommandExecution.scala"
+            )
           )
-        )
-
-        assertEquals(steps.map(_.name), ReleaseSteps.defaults.map(_.name))
-        assert(
-          !Files.exists(
-            repoPath("modules/core/src/main/scala/io/release/internal/ReleaseHookCompiler.scala")
+        ).map { commandExecution =>
+          assertEquals(steps.map(_.name), ReleaseSteps.defaults.map(_.name))
+          assert(
+            !Files.exists(
+              repoPath("modules/core/src/main/scala/io/release/internal/ReleaseHookCompiler.scala")
+            )
           )
-        )
-        assert(
-          !Files.exists(
-            repoPath("modules/core/src/main/scala/io/release/internal/SharedCommandKernel.scala")
+          assert(
+            !Files.exists(
+              repoPath("modules/core/src/main/scala/io/release/internal/SharedCommandKernel.scala")
+            )
           )
-        )
-        assert(!commandExecution.contains("ReleaseHookCompiler"))
-        assert(!commandExecution.contains("SharedCommandKernel"))
+          assert(!commandExecution.contains("ReleaseHookCompiler"))
+          assert(!commandExecution.contains("SharedCommandKernel"))
+        }
       }
     }
   }

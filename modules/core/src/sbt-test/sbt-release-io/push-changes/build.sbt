@@ -4,9 +4,9 @@ name         := "push-changes-test"
 scalaVersion := "2.12.18"
 
 // Keep push-changes; filter out publish-artifacts, run-clean, run-tests
-releaseIOPolicyEnablePublish        := false
-releaseIOPolicyEnableRunClean       := false
-releaseIOPolicyEnableRunTests       := false
+releaseIOPolicyEnablePublish  := false
+releaseIOPolicyEnableRunClean := false
+releaseIOPolicyEnableRunTests := false
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

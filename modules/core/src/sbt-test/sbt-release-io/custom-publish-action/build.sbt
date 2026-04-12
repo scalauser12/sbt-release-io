@@ -12,9 +12,9 @@ releaseIOPublishAction := {
 releaseIOPublishChecks := false
 
 // Keep publish-artifacts; filter out push-changes, run-clean, run-tests
-releaseIOPolicyEnablePush           := false
-releaseIOPolicyEnableRunClean       := false
-releaseIOPolicyEnableRunTests       := false
+releaseIOPolicyEnablePush     := false
+releaseIOPolicyEnableRunClean := false
+releaseIOPolicyEnableRunTests := false
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

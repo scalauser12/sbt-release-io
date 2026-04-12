@@ -35,12 +35,16 @@ object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
       afterSelectionHooks = Seq(
         MonorepoGlobalResourceHookIO[java.io.File](
           name = "resource-after-selection",
-          execute = base => ctx =>
-            IO.blocking {
-              appendLine(new java.io.File(base, "global-execute-order.log"), "resource-global-execute")
-              sbt.IO.touch(new java.io.File(base, "resource-global-execute.marker"))
-              ctx
-            },
+          execute = base =>
+            ctx =>
+              IO.blocking {
+                appendLine(
+                  new java.io.File(base, "global-execute-order.log"),
+                  "resource-global-execute"
+                )
+                sbt.IO.touch(new java.io.File(base, "resource-global-execute.marker"))
+                ctx
+              },
           validate = _ =>
             IO.blocking {
               appendLine(rootFile("global-validate-order.log"), "resource-global-validate")
@@ -51,15 +55,16 @@ object CustomReleasePlugin extends MonorepoReleasePluginLike[java.io.File] {
       afterTagHooks = Seq(
         MonorepoProjectResourceHookIO[java.io.File](
           name = "resource-after-tag",
-          execute = base => (ctx, project) =>
-            IO.blocking {
-              appendLine(
-                new java.io.File(base, "project-execute-order.log"),
-                s"${project.name}:resource-project-execute"
-              )
-              sbt.IO.touch(project.baseDir / "resource-after-tag-execute.marker")
-              ctx
-            },
+          execute = base =>
+            (ctx, project) =>
+              IO.blocking {
+                appendLine(
+                  new java.io.File(base, "project-execute-order.log"),
+                  s"${project.name}:resource-project-execute"
+                )
+                sbt.IO.touch(project.baseDir / "resource-after-tag-execute.marker")
+                ctx
+              },
           validate = (_, project) =>
             IO.blocking {
               appendLine(

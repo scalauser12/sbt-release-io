@@ -22,7 +22,7 @@ private[release] object CoreLifecycle {
       gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
-      gateKey: ReleaseContext => String = DefaultHookGateKey,
+      gateKey: Option[ReleaseContext => String] = None,
       enabled: CoreHookConfiguration => Boolean = _ => true
   )
 
@@ -39,11 +39,7 @@ private[release] object CoreLifecycle {
   ): Phase =
     LifecycleCompiler.singleBuiltIn(step = step, enabled = enabled)
 
-  private def hookPhase(config: HookPhaseConfig): Phase = {
-    require(
-      !config.freezeGate || (config.gateKey ne DefaultHookGateKey),
-      s"phase '${config.phase}' requires an explicit stable gateKey when freezeGate = true"
-    )
+  private def hookPhase(config: HookPhaseConfig): Phase =
     LifecycleCompiler.singleHookPhase(
       phase = config.phase,
       resolveHooks = config.resolveHooks,
@@ -56,7 +52,6 @@ private[release] object CoreLifecycle {
       gateKey = config.gateKey,
       enabled = config.enabled
     )
-  }
 
   private val publishGate: ReleaseContext => IO[Boolean] =
     PublishSteps.shouldRunPublishHooks
@@ -118,7 +113,7 @@ private[release] object CoreLifecycle {
     crossBuild =
       ReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
-    gateKey = scalaVersionKey,
+    gateKey = Some(scalaVersionKey),
     enabled = _.enablePublish
   )
   private val afterPublish = HookPhaseConfig(
@@ -128,7 +123,7 @@ private[release] object CoreLifecycle {
     crossBuild =
       ReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
-    gateKey = scalaVersionKey,
+    gateKey = Some(scalaVersionKey),
     enabled = _.enablePublish
   )
   private val beforeNextVersionWrite = HookPhaseConfig(

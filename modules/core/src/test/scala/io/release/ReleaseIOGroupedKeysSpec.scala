@@ -46,9 +46,9 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     "releaseIOVersioningFileContents",
     "releaseIOVersioningFile",
     "releaseIOVersioningUseGlobal",
+    "releaseIOVersioningBump",
     "releaseIOVersioningReleaseVersion",
     "releaseIOVersioningNextVersion",
-    "releaseIOVersioningBump",
     "releaseIOVcsSign",
     "releaseIOVcsSignOff",
     "releaseIOVcsIgnoreUntrackedFiles",
@@ -99,9 +99,9 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     keyLabel(ReleasePluginIO.autoImport.releaseIOVersioningFileContents),
     keyLabel(ReleasePluginIO.autoImport.releaseIOVersioningFile),
     keyLabel(ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal),
+    keyLabel(ReleasePluginIO.autoImport.releaseIOVersioningBump),
     keyLabel(ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion),
     keyLabel(ReleasePluginIO.autoImport.releaseIOVersioningNextVersion),
-    keyLabel(ReleasePluginIO.autoImport.releaseIOVersioningBump),
     keyLabel(ReleasePluginIO.autoImport.releaseIOVcsSign),
     keyLabel(ReleasePluginIO.autoImport.releaseIOVcsSignOff),
     keyLabel(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles),
@@ -211,7 +211,7 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     assertEquals(reflectiveLabels.size, 50)
   }
 
-  test("grouped core settings resolve expected defaults from ReleasePluginIO.autoImport") {
+  test("grouped core settings resolve representative defaults from ReleasePluginIO.autoImport") {
     stateResource("release-io-grouped-keys", HookFriendlyPlugin).use { loaded =>
       IO {
         val extracted = TestkitSbtCompat.extract(loaded.state)
@@ -223,8 +223,15 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
           extracted.get(ReleasePluginIO.autoImport.releaseIODefaultsTagExistsAnswer),
           None
         )
+        assertEquals(extracted.get(ReleasePluginIO.autoImport.releaseIODefaultsPushAnswer), None)
         assertEquals(extracted.get(ReleasePluginIO.autoImport.releaseIOPolicyEnablePush), true)
         assertEquals(extracted.get(ReleasePluginIO.autoImport.releaseIOHooksBeforeTag), Seq.empty)
+        assertEquals(extracted.get(ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal), true)
+        assertEquals(
+          extracted.get(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles),
+          false
+        )
+        assertEquals(extracted.get(ReleasePluginIO.autoImport.releaseIOPublishChecks), true)
       }
     }
   }

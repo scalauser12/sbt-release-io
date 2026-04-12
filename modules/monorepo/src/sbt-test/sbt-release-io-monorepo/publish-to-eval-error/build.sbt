@@ -40,6 +40,31 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
   }
 }
 
+def forwardedNestedJvmArgs: Seq[String] =
+  Seq(
+    "sbt.ivy.home",
+    "sbt.boot.directory",
+    "sbt.global.base",
+    "sbt.repository.config",
+    "sbt.override.build.repos"
+  ).flatMap(key => sys.props.get(key).map(value => s"-D$key=$value"))
+
+def nestedBaseCommand(sbtVersion0: String, pluginVersion0: String): Seq[String] = {
+  val sbtScript = sys.props.getOrElse("sbt.script", "sbt")
+
+  Seq(
+    sbtScript,
+    "--server",
+    s"-Dsbt.version=$sbtVersion0",
+    s"-Dplugin.version=$pluginVersion0"
+  ) ++
+    forwardedNestedJvmArgs ++
+    Seq(
+      "-Dsbt.log.noformat=true",
+      "-batch"
+    )
+}
+
 lazy val core = (project in file("core"))
   .settings(
     name         := "publish-to-eval-error-core",
@@ -50,26 +75,19 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
-    name                           := "publish-to-eval-error-test",
-    releaseIOVcsIgnoreUntrackedFiles  := true,
+    name                                                   := "publish-to-eval-error-test",
+    releaseIOVcsIgnoreUntrackedFiles                       := true,
     releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := false,
-    releaseIOMonorepoPolicyEnablePush    := false,
-    releaseIOMonorepoPolicyEnableRunClean := false,
-    releaseIOMonorepoPolicyEnableRunTests := false,
-    expectPublishToEvalFailure    := {
+    releaseIOMonorepoPolicyEnablePush                      := false,
+    releaseIOMonorepoPolicyEnableRunClean                  := false,
+    releaseIOMonorepoPolicyEnableRunTests                  := false,
+    expectPublishToEvalFailure                             := {
       val sbtVersionProp     = sbtVersion.value
       val pluginVersionProp  =
         sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))
-      val sbtScript          = sys.props.getOrElse("sbt.script", "sbt")
       val outputFile         = file("out.log")
       val (exitCode, output) = runNestedSbt(
-        Seq(
-          sbtScript,
-          "--server",
-          s"-Dsbt.version=$sbtVersionProp",
-          s"-Dplugin.version=$pluginVersionProp",
-          "-Dsbt.log.noformat=true",
-          "-batch",
+        nestedBaseCommand(sbtVersionProp, pluginVersionProp) ++ Seq(
           "set core / publishTo := sys.error(\"publishTo exploded\")",
           "releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT"
         ),
@@ -87,7 +105,7 @@ lazy val root = (project in file("."))
         s"Expected original publishTo error message. Output was:\n$output"
       )
     },
-    checkNoReleaseChanges         := {
+    checkNoReleaseChanges                                  := {
       val commits = "git log --oneline".!!.trim.linesIterator.toList
       assert(commits.length == 1, s"Expected 1 commit (initial only) but found ${commits.length}")
 
