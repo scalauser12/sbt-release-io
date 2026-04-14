@@ -2,7 +2,7 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseSharedPlugin.autoImport.*
+import io.release.ReleaseSharedKeys.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport

@@ -1,6 +1,6 @@
 package io.release.monorepo.internal.steps
 
-import io.release.ReleaseSharedPlugin
+import io.release.ReleaseSharedKeys
 import io.release.ReleaseIOCompat
 import sjsonnew.BasicJsonProtocol
 import sbt.Keys.*
@@ -55,7 +55,7 @@ private[monorepo] object MonorepoStepTestCompat:
       marker: File,
       dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
   ): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+    ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies := Def
       .task[Seq[ModuleID]] {
         sbt.IO.write(marker, "ran")
         dependencies
@@ -76,7 +76,7 @@ private[monorepo] object MonorepoStepTestCompat:
     }
 
   def failureCommandVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion := Def.uncached {
+    project / ReleaseSharedKeys.releaseIOVersioningReleaseVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -91,7 +91,7 @@ private[monorepo] object MonorepoStepTestCompat:
     }
 
   def failureCommandNextVersionTaskSetting(project: ProjectRef, marker: File): Setting[?] =
-    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := Def.uncached {
+    project / ReleaseSharedKeys.releaseIOVersioningNextVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>
@@ -110,7 +110,7 @@ private[monorepo] object MonorepoStepTestCompat:
       key: AttributeKey[String],
       value: String
   ): Setting[?] =
-    project / ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := Def.uncached {
+    project / ReleaseSharedKeys.releaseIOVersioningNextVersion := Def.uncached {
       Def
         .task(())
         .updateState { (state: State, _: Unit) =>

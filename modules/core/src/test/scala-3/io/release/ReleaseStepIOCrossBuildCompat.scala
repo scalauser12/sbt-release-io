@@ -6,7 +6,7 @@ import sbt.{Def, InputKey, Setting, State, TaskKey, *}
 import java.io.File
 import _root_.io.release.runtime.sbt.SbtCompat
 
-private[release] object ReleaseStepIOCrossBuildCompat:
+private[release] object ReleaseStepIOCrossBuildCompat {
 
   private def failureCommandInputTaskResult(
       parsedArgs: Seq[String],
@@ -56,3 +56,4 @@ private[release] object ReleaseStepIOCrossBuildCompat:
         }
       }
       .evaluated
+}

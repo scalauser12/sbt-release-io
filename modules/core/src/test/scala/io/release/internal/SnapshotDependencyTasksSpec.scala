@@ -2,7 +2,7 @@ package io.release.runtime.sbt
 
 import cats.effect.IO
 import io.release.SnapshotDependencyTasksTestCompat
-import io.release.ReleaseSharedPlugin
+import io.release.ReleasePluginIO
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import munit.CatsEffectSuite
@@ -13,7 +13,7 @@ import java.io.File
 class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   private val fixturePrefix                         = "snapshot-deps-spec"
   private val snapshotDependenciesKey               =
-    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies
   private val failureCommandMessage                 =
     "Error checking for snapshot dependencies: sbt task " +
       s"'${snapshotDependenciesKey.key.label}' reported failure via FailureCommand"
@@ -25,7 +25,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
       marker: File,
       dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
   ): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
       .task {
         sbt.IO.write(marker, "ran")
         dependencies
@@ -44,7 +44,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
           dir,
           Seq(
             Project("root", dir).settings(
-              ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq
+              ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq
                 .empty[ModuleID]
             )
           ),
@@ -74,11 +74,11 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
             Project("root", dir)
               .aggregate(LocalProject("child"))
               .settings(
-                ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(depA)
+                ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(depA)
               ),
             Project("child", childBase)
               .settings(
-                ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+                ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
                   depA,
                   depB
                 )
@@ -120,7 +120,7 @@ class SnapshotDependencyTasksSpec extends CatsEffectSuite {
   ) {
     TestSupport.tempDirResource(s"$fixturePrefix-throw").use { dir =>
       val throwingSetting: Setting[?] =
-        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := {
+        ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := {
           throw new RuntimeException("snapshot deps eval error")
           Seq.empty[ModuleID]
         }

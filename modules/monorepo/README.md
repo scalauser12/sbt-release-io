@@ -2,7 +2,7 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
 
-A monorepo release plugin for sbt, built on the same shared release contract as
+A monorepo release plugin for sbt, built on top of
 [sbt-release-io](../../docs/core/README.md), with per-project version files, git-based change
 detection, topological ordering, per-project failure isolation, and per-project tags.
 
@@ -20,6 +20,10 @@ validate-then-execute phases, per-project tags, cross-build, and
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.10.0")
 ```
 
+> **Note:** This README describes the current `main` / `Unreleased` monorepo contract. `0.10.0`
+> is still the latest published version; see [CHANGELOG.md](../../CHANGELOG.md) for the release
+> status of the behavior described below.
+
 `build.sbt` (root):
 
 ```scala
@@ -35,6 +39,11 @@ First command:
 ```bash
 sbt "releaseIOMonorepo check with-defaults"
 ```
+
+Monorepo installs also expose the shared/core `releaseIO*` settings surface transitively.
+Use `MonorepoReleasePlugin.autoImport` for `releaseIOMonorepo*` keys and
+`ReleasePluginIO.autoImport` for shared/core grouped keys in Scala build sources.
+Use `releaseIOMonorepo` as the release command in the documented monorepo setup.
 
 Customization uses grouped `releaseIOMonorepoPolicy*` keys, `releaseIOMonorepoHooks*`, and
 resource-aware custom plugins. The older flat key names and lower-level step DSL were removed

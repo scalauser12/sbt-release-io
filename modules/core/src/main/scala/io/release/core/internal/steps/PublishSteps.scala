@@ -5,8 +5,8 @@ import io.release.CleanCompat
 import io.release.ReleaseContext
 import io.release.ReleaseIOCompat
 import io.release.ReleasePluginIO.autoImport.releaseIOPublishChecks
-import io.release.ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies
-import io.release.ReleaseSharedPlugin.autoImport.releaseIOPublishAction
+import io.release.ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
+import io.release.ReleaseSharedKeys.releaseIOPublishAction
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole

@@ -5,8 +5,9 @@ exhaustive settings catalog, see [Settings reference](reference.md). For an onbo
 tutorial, start with [Getting started](getting-started.md). For CLI syntax and examples,
 see [Usage](usage.md).
 
-Settings prefixed `releaseIO` come from the shared plugin contract (`ReleaseSharedPlugin`).
 Settings prefixed `releaseIOMonorepo` are the monorepo-specific layer.
+Shared/core settings prefixed `releaseIO` are owned by the core plugin surface and are available
+transitively because `MonorepoReleasePlugin` requires `ReleasePluginIO`.
 
 `releaseIOMonorepo` also consumes shared `releaseIODefaults*` and
 `releaseIOVcsRemoteCheckTimeout` settings for decision defaults and the pre-push remote check.

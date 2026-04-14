@@ -307,9 +307,9 @@ object MonorepoReleasePluginAutoImport {
   * Custom plugins inherit [[autoImport]] automatically, so build-facing project keys remain
   * available without adding another `autoImport` definition. When grouped keys are needed in
   * `.scala` sources under `project/`, import monorepo-specific keys from
-  * `MonorepoReleasePlugin.autoImport` and shared `releaseIO*` keys from
-  * `io.release.ReleaseSharedPlugin.autoImport`. Existing `ReleasePluginIO.autoImport` imports
-  * remain supported because the monorepo plugin still depends on the core plugin surface.
+  * `MonorepoReleasePlugin.autoImport`. Because monorepo extends the core plugin, shared
+  * `releaseIO*` keys and the `releaseIO` command remain available transitively through
+  * `ReleasePluginIO`.
   */
 trait MonorepoReleasePluginLike[T] extends AutoPlugin {
 
@@ -374,7 +374,10 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     */
   protected def commandName: String = "releaseIOMonorepo"
 
-  override lazy val projectSettings: Seq[Setting[?]] =
+  /** Base settings that include monorepo defaults plus command registration.
+    * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`.
+    */
+  protected def baseReleaseSettings: Seq[Setting[?]] =
     PluginEntrypointSupport.pluginSettings(
       MonorepoDefaultSettings.pluginDefaultSettings,
       PluginEntrypointSupport.commandSetting(commandName)(
@@ -382,6 +385,18 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
         (state, tokens) => handleMonorepoCommandTokens(state, tokens)
       )
     )
+
+  /** Base build-level defaults for monorepo plugin settings.
+    * Custom plugins that override `buildSettings` should start from `baseBuildSettings`.
+    */
+  protected def baseBuildSettings: Seq[Setting[?]] =
+    Nil
+
+  override lazy val buildSettings: Seq[Setting[?]] =
+    baseBuildSettings
+
+  override lazy val projectSettings: Seq[Setting[?]] =
+    baseReleaseSettings
 
   // ── Parser ──────────────────────────────────────────────────────────
 

@@ -8,21 +8,20 @@ This file is the canonical release history for the repository.
 
 ### Breaking changes
 
-- Shared `releaseIO*` keys in `.scala` build code now come from
-  `ReleaseSharedPlugin.autoImport.*`. `ReleasePluginIO.autoImport.*` keeps only core-owned keys.
-  Unqualified `.sbt` usage remains unchanged when `ReleasePluginIO` or
-  `MonorepoReleasePlugin` is enabled.
+- Remove `ReleaseSharedPlugin` as a public plugin contract and stop publishing the
+  `sbt-release-io-shared` support artifact.
+- Shared `releaseIO*` keys in `.scala` build code are owned by `ReleasePluginIO.autoImport.*`
+  again, and `MonorepoReleasePlugin` once more requires the core plugin surface transitively.
 
 ### CI/Build
 
-- Extend publish-local smoke on both supported sbt lines to
-  `shared/publishLocal`, `core/publishLocal`, and `monorepo/publishLocal` so the new published
-  shared artifact is verified explicitly.
+- Fold the packaged runtime/shared support classes back into `sbt-release-io` and keep
+  `monorepo/publishLocal` verifying against `core/publishLocal` on both supported sbt lines.
 
 ### Documentation
 
-- Refresh contributor docs and architecture notes to include the `shared` module and the
-  shared-key migration path.
+- Refresh contributor docs and architecture notes to describe the restored `monorepo -> core`
+  contract and the removal of the published shared support artifact.
 
 ## v0.10.0
 

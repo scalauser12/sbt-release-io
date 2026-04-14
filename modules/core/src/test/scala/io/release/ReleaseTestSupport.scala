@@ -41,7 +41,7 @@ object ReleaseTestSupport {
       Seq(
         Project("root", repo).settings(
           (Seq(
-            ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
+            ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
           ) ++ rootSettings)*
         )
       ),

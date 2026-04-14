@@ -94,24 +94,15 @@ releaseIOHooksAfterTag += ReleaseHookIO.action("notify-tagged") { ctx =>
 Use `ReleasePluginIOLike[T]` when release behavior needs one shared resource, such as an
 HTTP client. The supported extension point is `releaseResourceHooks`.
 
-For new `.scala` sources, import core-specific grouped keys explicitly:
+For `.scala` sources under `project/`, import grouped keys from the core plugin surface:
 
 ```scala
 import io.release.ReleasePluginIO.autoImport.*
 ```
 
-Shared `releaseIO*` keys now come from the shared plugin contract instead:
-
-```scala
-import io.release.ReleaseSharedPlugin.autoImport.*
-```
-
-Compatibility: existing `ReleasePluginIO.autoImport.*` imports for shared `releaseIO*` keys
-remain supported. Prefer `ReleaseSharedPlugin.autoImport.*` for new Scala build code.
-
-When grouped keys are needed in custom Scala build code under `project/`, import core-specific
-keys from `ReleasePluginIO.autoImport.*` (or `MyReleasePlugin.autoImport.*`) and shared keys
-from `ReleaseSharedPlugin.autoImport.*`.
+`ReleasePluginIO.autoImport.*` is the supported grouped-key surface for both core-only and shared
+`releaseIO*` settings. Custom plugins that extend `ReleasePluginIOLike` inherit the same surface
+through `MyReleasePlugin.autoImport.*`.
 
 ```scala
 // project/MyReleasePlugin.scala
@@ -178,8 +169,6 @@ Notes:
 - `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
   resource value, then releases it.
 - `ReleasePluginIOLike` declares `autoImport` as `final`, so a custom plugin inherits the
-  same core-specific grouped keys and cannot override them. In `.sbt` files, bare shared
-  `releaseIO*` keys still work automatically when the plugin is enabled. In `.scala`
-  sources under `project/`, import core-specific keys from `ReleasePluginIO.autoImport.*`
-  (or `MyReleasePlugin.autoImport.*`) and shared keys from
-  `ReleaseSharedPlugin.autoImport.*`.
+  same grouped keys and cannot override them. In `.sbt` files, bare `releaseIO*` keys still work
+  automatically when the plugin is enabled. In `.scala` sources under `project/`, import grouped
+  keys from `ReleasePluginIO.autoImport.*` (or `MyReleasePlugin.autoImport.*`).

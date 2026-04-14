@@ -1,6 +1,6 @@
 package io.release.core.internal
 
-import io.release.ReleaseSharedPlugin
+import io.release.ReleaseSharedKeys
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.DecisionDefaultsSupport
@@ -9,12 +9,11 @@ import sbt.*
 private[core] object CoreDecisionDefaultsCli {
 
   private val defaultSettingKeys = DecisionDefaultsSupport.DefaultSettingKeys(
-    tagExists = ReleaseSharedPlugin.autoImport.releaseIODefaultsTagExistsAnswer,
-    snapshotDependencies =
-      ReleaseSharedPlugin.autoImport.releaseIODefaultsSnapshotDependenciesAnswer,
-    remoteCheckFailure = ReleaseSharedPlugin.autoImport.releaseIODefaultsRemoteCheckFailureAnswer,
-    upstreamBehind = ReleaseSharedPlugin.autoImport.releaseIODefaultsUpstreamBehindAnswer,
-    push = ReleaseSharedPlugin.autoImport.releaseIODefaultsPushAnswer
+    tagExists = ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer,
+    snapshotDependencies = ReleaseSharedKeys.releaseIODefaultsSnapshotDependenciesAnswer,
+    remoteCheckFailure = ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer,
+    upstreamBehind = ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer,
+    push = ReleaseSharedKeys.releaseIODefaultsPushAnswer
   )
 
   def cliInputsFromArgs(args: Seq[ReleaseCli.Arg]): DecisionDefaultsSupport.CliInputs = {

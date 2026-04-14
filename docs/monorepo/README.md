@@ -3,7 +3,9 @@
 [![Maven Central (sbt 1 / Scala 2.12)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0?label=sbt%201%20%2F%20Scala%202.12)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_2.12_1.0)
 [![Maven Central (sbt 2 / Scala 3)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io-monorepo_sbt2_3?label=sbt%202%20%2F%20Scala%203)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io-monorepo_sbt2_3)
 
-A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/README.md) with per-project version files, per-project tags, change detection, topological ordering, and failure isolation.
+A monorepo release plugin for sbt, built on top of
+[sbt-release-io (core)](../core/README.md), with per-project version files, per-project tags,
+change detection, topological ordering, and failure isolation.
 
 ## Start
 
@@ -42,5 +44,12 @@ A monorepo release plugin for sbt, extending [sbt-release-io (core)](../core/REA
   Rollback and recovery after a failed or partial monorepo release.
 
 Core plugin docs (shared settings and single-project behavior): [../core/README.md](../core/README.md).
+
+> **Note:** This page describes the current `main` / `Unreleased` monorepo contract. `0.10.0`
+> remains the latest published version; see [CHANGELOG.md](../CHANGELOG.md) for release status.
+
+Monorepo installs inherit the shared/core `releaseIO*` settings surface transitively, while
+`MonorepoReleasePlugin.autoImport` remains the grouped surface for `releaseIOMonorepo*`.
+Use `releaseIOMonorepo` as the release command in the documented monorepo setup.
 
 Maven artifact entry point: [README](../../modules/monorepo/README.md).

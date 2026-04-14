@@ -9,29 +9,24 @@ sbt modules under `modules/`:
 | Module     | Role |
 | ---------- | ---- |
 | **runtime** | Shared engine: `ExecutionEngine`, `ProcessStep`, `LifecycleCompiler`, VCS, version model, command helpers (`ReleaseCommandCompilation`, `ReleaseCommandRunner`). No dependency on `core` or `monorepo`. |
-| **shared**  | Shared public plugin contract (`ReleaseSharedPlugin`) for shared `releaseIO*` keys/defaults and Scala build-code imports. It is opt-in and support-layer only, not a normal end-user entrypoint. Depends on **runtime** and **testkit** (tests). |
-| **core**    | Single-project plugin (`ReleasePluginIO`), `ReleaseContext`, default steps, core lifecycle. Depends on **shared**, **runtime**, and **testkit** (tests). |
-| **monorepo** | Multi-project plugin (`MonorepoReleasePlugin`), `MonorepoContext`, change detection, per-project steps. Depends on **core**, **shared**, **runtime**, and **testkit** (tests). |
+| **core**    | Single-project plugin (`ReleasePluginIO`), `ReleaseContext`, default steps, core lifecycle. Depends on **runtime** and **testkit** (tests) and packages the shared/runtime support classes needed by downstream consumers. |
+| **monorepo** | Multi-project plugin (`MonorepoReleasePlugin`), `MonorepoContext`, change detection, per-project steps. Depends on **core**, **runtime**, and **testkit** (tests). |
 | **testkit** | Test fixtures and assertions. Used by core/monorepo tests. |
 
-At the code/build level, `shared` still owns the shared-key/defaults contract on top of
-`runtime`, while the public monorepo plugin keeps a compatibility dependency on the core plugin
-surface so monorepo-only builds still inherit the `releaseIO` command and legacy core auto-imports.
+At the code/build level, `runtime` owns the shared-key/defaults implementation.
+`ReleasePluginIO` is the public grouped-key surface for shared `releaseIO*` settings, and
+`MonorepoReleasePlugin` requires `ReleasePluginIO`, so monorepo-only installs inherit both
+`releaseIOMonorepo*` and the shared/core `releaseIO*` layer transitively.
 
 ```mermaid
 flowchart TB
   testkit[Testkit]
   runtime[Runtime]
-  shared[Shared]
   core[Core]
   monorepo[Monorepo]
-  shared --> runtime
-  core --> shared
   core --> runtime
   monorepo --> core
-  monorepo --> shared
   monorepo --> runtime
-  shared -. tests .-> testkit
   core -. tests .-> testkit
   monorepo -. tests .-> testkit
 ```
@@ -40,12 +35,13 @@ Dashed edges are test-only dependencies.
 
 ## Command and execution flow
 
-Both plugins block the sbt command thread, prepare a plan, compile hooks/policies into steps, then run them with cats-effect `IO` (`unsafeRunSync` at the command boundary). Shared pieces live in **runtime**; plugin-specific wiring lives in **core** or **monorepo**.
+Both plugins block the sbt command thread, prepare a plan, compile hooks/policies into steps, then
+run them with cats-effect `IO` (`unsafeRunSync` at the command boundary). Shared engine pieces
+live in **runtime**; plugin-specific wiring lives in **core** or **monorepo**.
 
-`ReleaseSharedPlugin` does not register commands. It contributes the shared `releaseIO*` key
-contract and can be imported explicitly from Scala build code, while the public core plugin
-owns the shared/core defaults applied in normal builds and remains the compatibility surface
-that `MonorepoReleasePlugin` still requires.
+There is no public shared AutoPlugin. `ReleasePluginIO` owns the public shared/core `releaseIO*`
+import surface, and `MonorepoReleasePlugin` requires it while keeping its own
+`releaseIOMonorepo*` contract.
 
 ### Core (single-project)
 

@@ -5,7 +5,6 @@ import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
-import sbt.internal.util.AttributeMap
 import sbt.{internal as _, *}
 
 /** Metadata for a single subproject participating in a monorepo release.
