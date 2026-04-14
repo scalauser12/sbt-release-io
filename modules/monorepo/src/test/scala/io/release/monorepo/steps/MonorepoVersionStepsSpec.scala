@@ -17,6 +17,7 @@ import io.release.monorepo.internal.steps.MonorepoVersionStepsSpec.VersionFixtur
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.sbt.SbtRuntime
 import io.release.version.Version
+import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 
 import java.io.ByteArrayOutputStream
@@ -320,6 +321,58 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
   }
 
   test(
+    "setReleaseVersions.validate - fail when a late-bound resolver mutates configured projects to a shared path"
+  ) {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-version-late-shared-validate") { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+        sbt.IO.write(new File(coreBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(apiBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport.versionedProject("core", coreBase),
+          MonorepoSpecSupport.versionedProject("api", apiBase)
+        )
+      }
+      .use { fixture =>
+        val sharedFile   = new File(fixture.dir, "version.sbt")
+        sbt.IO.write(sharedFile, """version := "0.1.0-SNAPSHOT"""" + "\n")
+        val mutatedState = SbtRuntime.appendWithSession(
+          fixture.state,
+          Seq(
+            MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
+              (_: sbt.ProjectRef, _: sbt.State) =>
+                sharedFile
+            }
+          )
+        )
+        val ctx          = MonorepoContext(
+          state = mutatedState,
+          vcs = Some(MonorepoVersionStepsSpec.testVcs(fixture.dir)),
+          projects = Seq(
+            fixture.projectInfo("core", versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+          )
+        )
+        val project      = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+        assertFailure[IllegalStateException, MonorepoContext](
+          MonorepoVersionSteps.setReleaseVersions.validate(ctx, project)
+        ) { err =>
+          assert(
+            err.getMessage.contains("Multiple projects resolve to the same version file"),
+            s"Expected shared-file error but got: ${err.getMessage}"
+          )
+          assert(err.getMessage.contains("core"))
+          assert(err.getMessage.contains("api"))
+        }
+      }
+  }
+
+  test(
     "setReleaseVersions.execute - fail when a late-bound resolver mutates version files to a shared path"
   ) {
     // Start with distinct per-project version files (the normal setup), then mutate the
@@ -355,6 +408,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         )
         val ctx          = MonorepoContext(
           state = mutatedState,
+          vcs = Some(MonorepoVersionStepsSpec.testVcs(fixture.dir)),
           projects = Seq(
             fixture.projectInfo("core", versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"))
           )
@@ -371,6 +425,134 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
           assert(err.getMessage.contains("core"))
           assert(err.getMessage.contains("api"))
         }
+      }
+  }
+
+  test(
+    "setReleaseVersions.execute - fail before mutating an external version file returned by a late-bound resolver"
+  ) {
+    Resource
+      .both(
+        fixtureResource,
+        TestSupport.tempDirResource("monorepo-version-outside-repo")
+      )
+      .use { case (fixture, outsideDir) =>
+        val outsideVersionFile = new File(outsideDir, "external-version.sbt")
+        val initialContents    = """version := "9.9.9-SNAPSHOT"""" + "\n"
+        val mutatedState       = SbtRuntime.appendWithSession(
+          fixture.loaded.state,
+          Seq(
+            MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
+              (_: sbt.ProjectRef, _: sbt.State) =>
+                outsideVersionFile
+            }
+          )
+        )
+        val ctx                = fixture
+          .context(
+            Seq("core"),
+            versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+          )
+          .withState(mutatedState)
+        val project            = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+        IO.blocking(sbt.IO.write(outsideVersionFile, initialContents)) *>
+          assertFailure[IllegalStateException, MonorepoContext](
+            MonorepoVersionSteps.setReleaseVersions.execute(ctx, project)
+          ) { err =>
+            assert(err.getMessage.contains("outside the VCS root"))
+            assert(err.getMessage.contains("core"))
+            assert(err.getMessage.contains(outsideVersionFile.getCanonicalPath))
+            assert(err.getMessage.contains(fixture.loaded.dir.getCanonicalPath))
+          } *>
+          IO.blocking {
+            assertEquals(sbt.IO.read(outsideVersionFile), initialContents)
+          }
+      }
+  }
+
+  test(
+    "setReleaseVersions.execute - re-check the VCS root before each project write in a multi-project phase"
+  ) {
+    Resource
+      .both(
+        MonorepoSpecSupport.loadedFixtureResource("monorepo-version-per-project-outside-repo") {
+          dir =>
+            val coreBase = new File(dir, "core")
+            val apiBase  = new File(dir, "api")
+            coreBase.mkdirs()
+            apiBase.mkdirs()
+            sbt.IO.write(
+              new File(coreBase, "version.sbt"),
+              """version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+            sbt.IO.write(
+              new File(apiBase, "version.sbt"),
+              """version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+
+            Seq(
+              MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+              MonorepoSpecSupport.versionedProject("core", coreBase),
+              MonorepoSpecSupport.versionedProject("api", apiBase)
+            )
+        },
+        TestSupport.tempDirResource("monorepo-version-per-project-outside-target")
+      )
+      .use { case (fixture, outsideDir) =>
+        val coreVersionFile    = new File(new File(fixture.dir, "core"), "version.sbt")
+        val apiVersionFile     = new File(new File(fixture.dir, "api"), "version.sbt")
+        val outsideVersionFile = new File(outsideDir, "api-version.sbt")
+        val initialContents    = """version := "9.9.9-SNAPSHOT"""" + "\n"
+        val mutatedState       = SbtRuntime.appendWithSession(
+          fixture.state,
+          Seq(
+            MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
+              (ref: sbt.ProjectRef, state: sbt.State) =>
+                val defaultFile = new File(new File(fixture.dir, ref.project), "version.sbt")
+                val coreVersion =
+                  SbtRuntime.extracted(state).getOpt(fixture.refsById("core") / sbt.Keys.version)
+
+                if (ref.project == "api" && coreVersion.contains("1.0.0")) outsideVersionFile
+                else defaultFile
+            }
+          )
+        )
+        val ctx                = fixture
+          .context(
+            selectedProjectIds = Seq("core", "api"),
+            versionsById = Map(
+              "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+              "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
+            ),
+            vcs = Some(MonorepoVersionStepsSpec.testVcs(fixture.dir))
+          )
+          .withState(mutatedState)
+        val coreProject        = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+        for {
+          _          <- IO.blocking(sbt.IO.write(outsideVersionFile, initialContents))
+          afterCore  <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, coreProject)
+          apiProject  = MonorepoSpecSupport.projectNamed(afterCore.projects, "api")
+          _          <- assertFailure[IllegalStateException, MonorepoContext](
+                          MonorepoVersionSteps.setReleaseVersions.execute(afterCore, apiProject)
+                        ) { err =>
+                          assert(err.getMessage.contains("outside the VCS root"))
+                          assert(err.getMessage.contains("api"))
+                          assert(err.getMessage.contains(outsideVersionFile.getCanonicalPath))
+                        }
+          _          <- IO.blocking {
+                          assertEquals(
+                            sbt.IO.read(coreVersionFile),
+                            """version := "1.0.0"""" + "\n"
+                          )
+                          assertEquals(
+                            sbt.IO.read(apiVersionFile),
+                            """version := "0.1.0-SNAPSHOT"""" + "\n"
+                          )
+                          assertEquals(sbt.IO.read(outsideVersionFile), initialContents)
+                        }
+        } yield ()
       }
   }
 
@@ -408,13 +590,14 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
             versionsById = Map(
               "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
               "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
-            )
+            ),
+            vcs = Some(MonorepoVersionStepsSpec.testVcs(fixture.dir))
           )
           .withState(countingState)
 
         MonorepoComposer.compose(Seq(MonorepoVersionSteps.setReleaseVersions))(ctx).flatMap { _ =>
           IO.blocking {
-            assertEquals(resolverCalls.get(), 4)
+            assertEquals(resolverCalls.get(), 10)
             assertEquals(
               sbt.IO.read(new File(new File(fixture.dir, "core"), "version.sbt")),
               """version := "1.0.0"""" + "\n"
@@ -519,6 +702,41 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("setNextVersions.validate - fail when the selected version file resolves outside the VCS root") {
+    Resource
+      .both(
+        fixtureResource,
+        TestSupport.tempDirResource("monorepo-next-version-outside-repo")
+      )
+      .use { case (fixture, outsideDir) =>
+        val outsideVersionFile = new File(outsideDir, "next-version.sbt")
+        val mutatedState       = SbtRuntime.appendWithSession(
+          fixture.loaded.state,
+          Seq(
+            MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
+              (_: sbt.ProjectRef, _: sbt.State) =>
+                outsideVersionFile
+            }
+          )
+        )
+        val ctx                = fixture
+          .context(
+            Seq("core"),
+            versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+          )
+          .withState(mutatedState)
+        val project            = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+        assertFailure[IllegalStateException, MonorepoContext](
+          MonorepoVersionSteps.setNextVersions.validate(ctx, project)
+        ) { err =>
+          assert(err.getMessage.contains("outside the VCS root"))
+          assert(err.getMessage.contains("core"))
+          assert(err.getMessage.contains(outsideVersionFile.getCanonicalPath))
+        }
+      }
+  }
+
   private val fixtureResource: Resource[IO, VersionFixture] =
     MonorepoVersionStepsSpec.fixtureResource(
       "monorepo-version-steps",
@@ -548,10 +766,46 @@ private object MonorepoVersionStepsSpec {
         selectedProjectIds: Seq[String],
         versionsById: Map[String, (String, String)] = Map.empty
     ): MonorepoContext =
-      loaded.context(selectedProjectIds, versionsById = versionsById)
+      loaded.context(
+        selectedProjectIds,
+        versionsById = versionsById,
+        vcs = Some(testVcs(loaded.dir))
+      )
 
     def projectInfo(id: String) = loaded.projectInfo(id)
   }
+
+  def testVcs(repoDir: File): Vcs =
+    new Vcs {
+      override val commandName: String = "test"
+      override val baseDir: File       = repoDir
+
+      override def currentHash: IO[String]                = IO.pure("test-hash")
+      override def currentBranch: IO[String]              = IO.pure("main")
+      override def trackingRemote: IO[String]             = IO.pure("origin")
+      override def upstreamTrackingHash: IO[Option[String]] = IO.pure(None)
+      override def hasUpstream: IO[Boolean]               = IO.pure(false)
+      override def isBehindRemote: IO[Boolean]            = IO.pure(false)
+      override def existsTag(name: String): IO[Boolean]   = IO.pure(false)
+      override def modifiedFiles: IO[Seq[String]]         = IO.pure(Seq.empty)
+      override def stagedFiles: IO[Seq[String]]           = IO.pure(Seq.empty)
+      override def untrackedFiles: IO[Seq[String]]        = IO.pure(Seq.empty)
+      override def status: IO[String]                     = IO.pure("")
+      override def checkRemote(remote: String): IO[Int]   = IO.pure(0)
+      override def add(files: String*): IO[Unit]          = IO.unit
+      override def commit(
+          message: String,
+          sign: Boolean,
+          signOff: Boolean
+      ): IO[Unit] = IO.unit
+      override def tag(
+          name: String,
+          comment: String,
+          sign: Boolean,
+          force: Boolean
+      ): IO[Unit] = IO.unit
+      override def pushChanges: IO[Unit]                  = IO.unit
+    }
 
   def bufferedFixture(fixture: VersionFixture): BufferedVersionFixture = {
     val buffered = TestSupport.bufferedState(fixture.loaded.dir)

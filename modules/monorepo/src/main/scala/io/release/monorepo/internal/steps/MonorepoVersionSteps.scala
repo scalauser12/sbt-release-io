@@ -26,14 +26,16 @@ private[monorepo] object MonorepoVersionSteps {
   val setReleaseVersions: ProjectStep =
     ProcessStep.PerItem(
       name = "set-release-version",
-      execute = MonorepoVersionWorkflow.writeReleaseVersion
+      execute = MonorepoVersionWorkflow.writeReleaseVersion,
+      validateWithContext = Some(MonorepoVersionWorkflow.validateReleaseVersionWrite)
     )
 
   /** Write next snapshot versions to per-project version files. */
   val setNextVersions: ProjectStep =
     ProcessStep.PerItem(
       name = "set-next-version",
-      execute = MonorepoVersionWorkflow.writeNextVersion
+      execute = MonorepoVersionWorkflow.writeNextVersion,
+      validateWithContext = Some(MonorepoVersionWorkflow.validateNextVersionWrite)
     )
 
   /** Single commit for all release version files. */

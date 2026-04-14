@@ -19,6 +19,9 @@ $ exec git tag -d core/v0.1.0
 # Missing version-file configuration should still leave the repository unchanged
 > expectMissingVersionFileFailure
 
+# Shared version-file configuration should now fail in check mode before any write phase
+> expectSharedVersionFileFailure
+
 # With all projects already tagged and no new commits, change detection should report nothing to release
 $ exec git tag core/v0.1.0
 $ exec git tag api/v0.1.0

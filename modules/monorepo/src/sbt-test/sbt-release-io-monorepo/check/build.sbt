@@ -12,6 +12,8 @@ val expectUnknownOverrideFailure     =
   taskKey[Unit]("Run monorepo check with an unknown override target and assert the failure output")
 val expectMissingVersionFileFailure  =
   taskKey[Unit]("Run monorepo check without a project version file and assert the failure output")
+val expectSharedVersionFileFailure   =
+  taskKey[Unit]("Run monorepo check with a shared version-file resolver and assert the failure output")
 val expectZeroChangedProjectsFailure =
   taskKey[Unit]("Run monorepo check with zero detected projects and assert the failure output")
 val expectTagCollisionFailure        =
@@ -223,6 +225,26 @@ lazy val root = (project in file("."))
         expectedSubstrings = Seq(
           "Version file not found for core",
           "releaseIOMonorepoVersioningFile",
+          "releaseIOMonorepo help"
+        ),
+        sbtVersion0 = sbtVersion.value,
+        workingDir = baseDirectory.value
+      )
+      ()
+    },
+    expectSharedVersionFileFailure       := {
+      assertNestedRun(
+        commands = Seq(
+          """set releaseIOMonorepoVersioningFile := { (_: ProjectRef, _: State) =>
+            |  baseDirectory.value / "core" / "version.sbt"
+            |}""".stripMargin,
+          "releaseIOMonorepo check core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT"
+        ),
+        outputFile = target.value / "shared-version-file.log",
+        shouldSucceed = false,
+        expectedSubstrings = Seq(
+          "Multiple projects resolve to the same version file",
+          "core, api",
           "releaseIOMonorepo help"
         ),
         sbtVersion0 = sbtVersion.value,

@@ -6,6 +6,7 @@ import io.release.ReleaseSharedDefaultSettingsSupport
 import io.release.ReleaseSharedKeys.releaseIOVersioningBump
 import io.release.ReleaseSharedKeys.releaseIOVersioningNextVersion
 import io.release.ReleaseSharedKeys.releaseIOVersioningReleaseVersion
+import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.internal.*
@@ -15,6 +16,7 @@ import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.workflow.VersionWorkflowSupport
 import io.release.version.Version
+import io.release.vcs.Vcs
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -99,6 +101,17 @@ private[monorepo] object MonorepoVersionWorkflow {
       _.markReleaseVersionFilesValidated
     )
 
+  def validateReleaseVersionWrite(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] =
+    validateWritePhase(
+      ctx,
+      project,
+      _.hasReleaseVersionFilesPrevalidated,
+      _.markReleaseVersionFilesPrevalidated
+    )
+
   def writeNextVersion(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
@@ -111,6 +124,17 @@ private[monorepo] object MonorepoVersionWorkflow {
       _.markNextVersionFilesValidated
     )
 
+  def validateNextVersionWrite(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] =
+    validateWritePhase(
+      ctx,
+      project,
+      _.hasNextVersionFilesPrevalidated,
+      _.markNextVersionFilesPrevalidated
+    )
+
   private def writeVersionFromPair(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
@@ -119,9 +143,21 @@ private[monorepo] object MonorepoVersionWorkflow {
       markValidated: MonorepoContext => MonorepoContext
   ): IO[MonorepoContext] =
     versionsPairOrFail(project).flatMap { versions =>
-      ensureVersionFilesValidated(ctx, hasValidated, markValidated)
+      ensureDistinctVersionFilesValidated(ctx, hasValidated, markValidated)
+        .flatMap(ensureCurrentProjectVersionFileUnderVcsRoot(_, project))
         .flatMap(writeProjectVersion(_, project, selectVersion(versions)))
     }
+
+  private def validateWritePhase(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      alreadyValidated: MonorepoContext => Boolean,
+      markValidated: MonorepoContext => MonorepoContext
+  ): IO[MonorepoContext] =
+    if (alreadyValidated(ctx)) IO.pure(ctx)
+    else
+      runWritePhaseValidation(ctx, ctx.currentProjects, Some(project.ref))
+        .as(markValidated(ctx))
 
   def withResolvedVersions(
       ctx: MonorepoContext,
@@ -251,6 +287,29 @@ private[monorepo] object MonorepoVersionWorkflow {
   ): IO[Unit] =
     VersionWorkflowSupport.ensureVersionFileExists(versionInputs.versionFile, notFoundMessage)
 
+  private def resolveCurrentVcs(ctx: MonorepoContext): IO[Vcs] =
+    ctx.vcs match {
+      case Some(vcs) => IO.pure(vcs)
+      case None      => VcsOps.detectVcs(ctx.state)
+    }
+
+  private def runWritePhaseValidation(
+      ctx: MonorepoContext,
+      selectedProjects: Seq[ProjectReleaseInfo],
+      highlightedProjectRef: Option[ProjectRef]
+  ): IO[Unit] =
+    for {
+      runtime <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
+      _       <- validateDistinctVersionFiles(runtime)
+      vcs     <- resolveCurrentVcs(ctx)
+      _       <- validateSelectedVersionFilesUnderVcsRoot(
+                   runtime,
+                   vcs,
+                   selectedProjects,
+                   highlightedProjectRef
+                 )
+    } yield ()
+
   /** Fail fast when any configured monorepo projects resolve to the same physical version file.
     * Runs once at the start of each version-write phase so it sees the current state after any
     * late-bound steps that may have mutated `releaseIOMonorepoVersioningFile`. Checks all projects
@@ -288,7 +347,45 @@ private[monorepo] object MonorepoVersionWorkflow {
       case None          => IO.unit
     }
 
-  private def ensureVersionFilesValidated(
+  private def validateSelectedVersionFilesUnderVcsRoot(
+      runtime: MonorepoRuntime,
+      vcs: Vcs,
+      selectedProjects: Seq[ProjectReleaseInfo],
+      highlightedProjectRef: Option[ProjectRef]
+  ): IO[Unit] =
+    selectedProjects.foldLeft(IO.unit) { (validated, project) =>
+      validated *>
+        validateSelectedVersionFileUnderVcsRoot(
+          vcs,
+          project,
+          MonorepoVersionFiles.resolve(runtime, project.ref),
+          highlightedProjectRef.contains(project.ref)
+        )
+    }
+
+  private def validateSelectedVersionFileUnderVcsRoot(
+      vcs: Vcs,
+      project: ProjectReleaseInfo,
+      versionFile: File,
+      includeSelectedMarker: Boolean
+  ): IO[Unit] =
+    VcsOps.relativizeToBase(vcs, versionFile).void.handleErrorWith { _ =>
+      IO.blocking {
+        val selectedMarker =
+          if (includeSelectedMarker) "selected " else ""
+        val versionPath    = versionFile.getCanonicalPath
+        val repoRoot       = vcs.baseDir.getCanonicalFile.getAbsolutePath
+
+        new IllegalStateException(
+          s"Resolved ${selectedMarker}version file for ${project.name} is outside the VCS root: " +
+            s"$versionPath (repo root: $repoRoot). " +
+            "Configure releaseIOMonorepoVersioningFile to return a file under the repository. " +
+            "See `releaseIOMonorepo help`."
+        )
+      }.flatMap(IO.raiseError)
+    }
+
+  private def ensureDistinctVersionFilesValidated(
       ctx: MonorepoContext,
       alreadyValidated: MonorepoContext => Boolean,
       markValidated: MonorepoContext => MonorepoContext
@@ -298,6 +395,21 @@ private[monorepo] object MonorepoVersionWorkflow {
       IO.blocking(MonorepoRuntime.fromState(ctx.state)).flatMap { runtime =>
         validateDistinctVersionFiles(runtime).as(markValidated(ctx))
       }
+
+  private def ensureCurrentProjectVersionFileUnderVcsRoot(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] =
+    for {
+      runtime <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
+      vcs     <- resolveCurrentVcs(ctx)
+      _       <- validateSelectedVersionFileUnderVcsRoot(
+                   vcs,
+                   project,
+                   MonorepoVersionFiles.resolve(runtime, project.ref),
+                   includeSelectedMarker = false
+                 )
+    } yield ctx
 
   private def writeProjectVersion(
       ctx: MonorepoContext,
