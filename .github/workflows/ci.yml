@@ -163,12 +163,12 @@ jobs:
           java-version: 17
           cache: sbt
       - uses: sbt/setup-sbt@v1
-      - name: Run publishLocal smoke for shared, core, and monorepo
+      - name: Run publishLocal smoke for core and monorepo
         run: |
           if [ "${{ matrix.sbt-line }}" = "sbt2" ]; then
-            ./bin/sbt2-clean 'shared/publishLocal' 'core/publishLocal' 'monorepo/publishLocal'
+            ./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'
           else
-            sbt -Dsbt.version="$SBT1_VERSION" 'shared/publishLocal' 'core/publishLocal' 'monorepo/publishLocal'
+            sbt -Dsbt.version="$SBT1_VERSION" 'core/publishLocal' 'monorepo/publishLocal'
           fi
 
   publish:
