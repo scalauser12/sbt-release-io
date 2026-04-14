@@ -4,7 +4,11 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
-## Unreleased
+## v0.11.0
+
+Published: 2026-04-14
+GitHub release:
+[v0.11.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.11.0)
 
 ### Breaking changes
 
@@ -22,6 +26,18 @@ This file is the canonical release history for the repository.
 
 - Refresh contributor docs and architecture notes to describe the restored `monorepo -> core`
   contract and the removal of the published shared support artifact.
+
+### Verification
+
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 core/scripted`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean core/scripted`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 monorepo/scripted`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean monorepo/scripted`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
 
 ## v0.10.0
 

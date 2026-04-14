@@ -45,8 +45,8 @@ change detection, topological ordering, and failure isolation.
 
 Core plugin docs (shared settings and single-project behavior): [../core/README.md](../core/README.md).
 
-> **Note:** This page describes the current `main` / `Unreleased` monorepo contract. `0.10.0`
-> remains the latest published version; see [CHANGELOG.md](../CHANGELOG.md) for release status.
+> **Note:** This page describes the current published monorepo contract in `v0.11.0`; see
+> [CHANGELOG.md](../CHANGELOG.md) for the full release history.
 
 Monorepo installs inherit the shared/core `releaseIO*` settings surface transitively, while
 `MonorepoReleasePlugin.autoImport` remains the grouped surface for `releaseIOMonorepo*`.

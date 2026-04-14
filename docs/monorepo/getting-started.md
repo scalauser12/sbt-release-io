@@ -17,12 +17,11 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.10.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.11.0")
 ```
 
-> **Note:** This page describes the current `main` / `Unreleased` monorepo contract. `0.10.0`
-> remains the latest published version; see [CHANGELOG.md](../CHANGELOG.md) for what is already
-> released versus pending the next tag.
+> **Note:** This page describes the current published monorepo contract in `v0.11.0`; see
+> [CHANGELOG.md](../CHANGELOG.md) for the full release history and upgrade notes.
 
 This installs the monorepo plugin plus the transitive core settings surface, so
 `releaseIOMonorepo`, `releaseIOMonorepo*`, and shared/core `releaseIO*` settings are

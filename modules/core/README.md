@@ -15,7 +15,7 @@ optional interactive prompts, and configurable version files and VCS behavior.
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.10.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.11.0")
 ```
 
 Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin loads automatically
