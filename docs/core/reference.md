@@ -4,15 +4,9 @@ This page is the exhaustive reference for core settings and CLI flags. If you wa
 smaller starter example, see [Configuration](configuration.md). If you want a guided
 walkthrough, start with [Getting started](getting-started.md).
 
-In `.scala` build sources under `project/`, import core-only grouped keys from
-`ReleasePluginIO.autoImport.*` and shared `releaseIO*` keys from
-`ReleaseSharedPlugin.autoImport.*`. In `.sbt` files, use the normal `ReleasePluginIO`
-surface; `ReleaseSharedPlugin` is an explicit support/import layer and does not need to be
-enabled alongside the core plugin.
-
-Existing Scala build code that imports shared `releaseIO*` keys from
-`ReleasePluginIO.autoImport.*` remains supported for compatibility. Prefer
-`ReleaseSharedPlugin.autoImport.*` for new shared-key imports.
+In `.scala` build sources under `project/`, import grouped keys from
+`ReleasePluginIO.autoImport.*`. That surface owns both the core-only keys and the shared
+`releaseIO*` settings. In `.sbt` files, use the normal `ReleasePluginIO` surface.
 
 > **Coming from sbt-release?** The original plugin enables interactive prompts by default.
 > This plugin defaults to `releaseIOBehaviorInteractive := false` — decision points that

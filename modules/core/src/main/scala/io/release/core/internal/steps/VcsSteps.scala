@@ -8,8 +8,8 @@ import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal
-import io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsSign
-import io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningFile
+import io.release.ReleaseSharedKeys.releaseIOVcsSign
+import io.release.ReleaseSharedKeys.releaseIOVersioningFile
 import io.release.VcsOps
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.CoreStepFactory

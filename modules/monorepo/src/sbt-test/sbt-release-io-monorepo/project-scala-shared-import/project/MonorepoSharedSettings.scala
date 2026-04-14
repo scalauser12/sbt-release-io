@@ -1,4 +1,4 @@
-import _root_.io.release.ReleaseSharedPlugin.autoImport.*
+import _root_.io.release.ReleasePluginIO.autoImport.*
 import sbt.*
 
 object MonorepoSharedSettings {

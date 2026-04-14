@@ -13,13 +13,14 @@ def readSbt1Version(path: String): String =
     .filter(_.nonEmpty)
     .getOrElse(sys.error(s"Missing sbt.version entry in $path"))
 
-val Sbt1Version            = readSbt1Version("project/build.properties")
-val Sbt2Version            = readVersionFile("project/sbt2.version")
-val Scala212               = "2.12.21"
-val Scala3                 = "3.8.1"
-val CatsEffectVersion      = "3.7.0"
-val MunitVersion           = "1.2.4"
-val MunitCatsEffectVersion = "2.2.0"
+val Sbt1Version             = readSbt1Version("project/build.properties")
+val Sbt2Version             = readVersionFile("project/sbt2.version")
+val Scala212                = "2.12.21"
+val Scala3                  = "3.8.1"
+val CatsEffectVersion       = "3.7.0"
+val MunitVersion            = "1.2.4"
+val MunitCatsEffectVersion  = "2.2.0"
+val ScalametaParsersVersion = "4.13.8"
 
 ThisBuild / versionScheme := Some("early-semver")
 
@@ -110,7 +111,7 @@ lazy val runtime = (project in file("modules/runtime"))
     publish / skip := true
   )
 
-lazy val shared = (project in file("modules/shared"))
+lazy val core: Project = (project in file("modules/core"))
   .enablePlugins(SbtPlugin)
   .dependsOn(
     runtime % "compile-internal->compile;test-internal->test",
@@ -118,35 +119,23 @@ lazy val shared = (project in file("modules/shared"))
   )
   .settings(
     commonSettings,
-    name        := "sbt-release-io-shared",
-    description := "Shared plugin contract and defaults for sbt-release-io",
-    Compile / doc / sources ++= (runtime / Compile / sources).value,
-    Compile / tastyFiles ++= (runtime / Compile / tastyFiles).value,
+    name                                   := "sbt-release-io",
+    description                            := "A cats-effect IO port of sbt-release for sbt",
+    libraryDependencies += "org.scalameta" %% "parsers" % ScalametaParsersVersion % Test,
     Compile / packageBin / mappings ++= RuntimePackagingCompat.classMappings(runtime).value,
     Compile / packageSrc / mappings ++= RuntimePackagingCompat.sourceMappings(runtime).value,
-    // Prevent the shared jar from auto-registering a second plugin alongside core/monorepo.
-    Compile / packageBin / mappings ~= (_.filterNot(_._2 == "sbt/sbt.autoplugins"))
-  )
-
-lazy val core = (project in file("modules/core"))
-  .enablePlugins(SbtPlugin)
-  .dependsOn(
-    shared,
-    runtime % "compile-internal->compile;test-internal->test",
-    testkit % "test->compile"
-  )
-  .settings(
-    commonSettings,
-    name        := "sbt-release-io",
-    description := "A cats-effect IO port of sbt-release for sbt",
+    scriptedDependencies                   := scriptedDependencies
+      .dependsOn(
+        LocalProject("monorepo") / publishLocal
+      )
+      .value,
     Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
-lazy val monorepo = (project in file("modules/monorepo"))
+lazy val monorepo: Project = (project in file("modules/monorepo"))
   .enablePlugins(SbtPlugin)
   .dependsOn(
     core,
-    shared,
     runtime % "compile-internal->compile;test-internal->test",
     testkit % "test->compile"
   )
@@ -154,12 +143,16 @@ lazy val monorepo = (project in file("modules/monorepo"))
     commonSettings,
     name                 := "sbt-release-io-monorepo",
     description          := "Monorepo extension for sbt-release-io",
-    scriptedDependencies := scriptedDependencies.dependsOn(core / publishLocal).value,
+    scriptedDependencies := scriptedDependencies
+      .dependsOn(
+        LocalProject("core") / publishLocal
+      )
+      .value,
     Test / unmanagedSourceDirectories += baseDirectory.value / "examples"
   )
 
 lazy val root = (project in file("."))
-  .aggregate(testkit, runtime, shared, core, monorepo)
+  .aggregate(testkit, runtime, core, monorepo)
   .settings(
     name           := "sbt-release-io-root",
     publish / skip := true
@@ -169,7 +162,6 @@ Global / excludeLintKeys ++= Set(
   ThisBuild / git.gitUncommittedChanges,
   testkit / git.gitDescribedVersion,
   runtime / git.gitDescribedVersion,
-  shared / git.gitDescribedVersion,
   core / git.gitDescribedVersion,
   monorepo / git.gitDescribedVersion,
   root / git.gitDescribedVersion

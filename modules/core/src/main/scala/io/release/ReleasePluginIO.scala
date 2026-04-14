@@ -317,10 +317,8 @@ object ReleasePluginIOAutoImport {
   * }}}
   *
   * Custom plugins inherit [[autoImport]] automatically, so build-facing project keys remain
-  * available without adding another `autoImport` definition. Shared `releaseIO*` keys are also
-  * exposed through [[ReleaseSharedPlugin.autoImport]], which is the preferred import for new
-  * `.scala` build code, but existing `ReleasePluginIO.autoImport` imports remain supported for
-  * source compatibility.
+  * available without adding another `autoImport` definition. Shared `releaseIO*` keys are part
+  * of this public surface for both `.sbt` and `.scala` build code.
   */
 trait ReleasePluginIOLike[T] extends AutoPlugin {
 

@@ -9,12 +9,11 @@
 - [**Monorepo**](monorepo/README.md)
   `sbt-release-io-monorepo` for per-project version files, change detection, per-project tags, and topological ordering.
 
-## Advanced / shared contract
+## Advanced / contributor docs
 
-- [**Shared contract layer**](ARCHITECTURE.md)
-  `sbt-release-io-shared` / `ReleaseSharedPlugin` provide the shared `releaseIO*`
-  settings contract for advanced Scala build-code imports and contributor architecture. It is a
-  support layer, not the normal plugin entrypoint for end users.
+- [**Architecture**](ARCHITECTURE.md)
+  Module layout, command flow, and the internal runtime/shared support boundaries behind the
+  public plugins.
 
 ## Start here
 

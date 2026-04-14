@@ -3,7 +3,6 @@ package io.release.core.internal.steps
 import _root_.io.release.runtime.sbt.SbtCompat
 import io.release.ReleaseIOCompat
 import io.release.ReleasePluginIO
-import io.release.ReleaseSharedPlugin
 import sbt.*
 import sbt.Def
 import sbt.Keys.*
@@ -15,7 +14,7 @@ import java.io.File
 private[steps] object CoreStepTestCompat {
 
   def failureCommandPublishTaskSetting(marker: File): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIOPublishAction := Def
+    ReleasePluginIO.autoImport.releaseIOPublishAction := Def
       .task {
         sbt.IO.write(marker, "ran")
       }
@@ -42,7 +41,7 @@ private[steps] object CoreStepTestCompat {
       marker: File,
       dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
   ): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
       .task {
         sbt.IO.write(marker, "ran")
         dependencies
@@ -55,7 +54,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := Def
       .task {
         sbt.IO.write(marker, "ran")
         (currentVersion: String) => currentVersion.stripSuffix("-SNAPSHOT")
@@ -68,7 +67,7 @@ private[steps] object CoreStepTestCompat {
       .value
 
   def failureCommandNextVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def
       .task {
         sbt.IO.write(marker, "ran")
         (_: String) => "0.2.0-SNAPSHOT"

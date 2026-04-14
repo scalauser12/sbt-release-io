@@ -3,7 +3,7 @@ package io.release.runtime.workflow
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.ReleaseContext
-import io.release.ReleaseSharedPlugin.autoImport.*
+import io.release.ReleasePluginIO.autoImport.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.core.internal.CoreExecutionState

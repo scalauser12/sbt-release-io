@@ -13,9 +13,6 @@ import sbt.*
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
 
-  private val DefaultHookGateKey: ReleaseContext => String =
-    _ => ""
-
   private case class HookPhaseConfig(
       phase: String,
       resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],

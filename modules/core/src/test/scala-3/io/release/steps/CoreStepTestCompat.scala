@@ -2,7 +2,6 @@ package io.release.core.internal.steps
 
 import io.release.ReleasePluginIO
 import io.release.ReleaseIOCompat
-import io.release.ReleaseSharedPlugin
 import sjsonnew.BasicJsonProtocol
 import sbt.Keys.*
 import sbt.{Def, Setting, State, *}
@@ -17,7 +16,7 @@ private[steps] object CoreStepTestCompat:
   import TestResultJsonProtocol.given
 
   def failureCommandPublishTaskSetting(marker: File): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIOPublishAction := Def
+    ReleasePluginIO.autoImport.releaseIOPublishAction := Def
       .task[Unit] {
         sbt.IO.write(marker, "ran")
       }
@@ -46,7 +45,7 @@ private[steps] object CoreStepTestCompat:
       marker: File,
       dependencies: Seq[ModuleID] = Seq.empty[ModuleID]
   ): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
+    ReleasePluginIO.autoImport.releaseIODiagnosticsSnapshotDependencies := Def
       .task[Seq[ModuleID]] {
         sbt.IO.write(marker, "ran")
         dependencies
@@ -59,7 +58,7 @@ private[steps] object CoreStepTestCompat:
       .value
 
   def failureCommandVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIOVersioningReleaseVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := Def
       .task[String => String] {
         sbt.IO.write(marker, "ran")
         { currentVersion =>
@@ -74,7 +73,7 @@ private[steps] object CoreStepTestCompat:
       .value
 
   def failureCommandNextVersionTaskSetting(marker: File): Setting[?] =
-    ReleaseSharedPlugin.autoImport.releaseIOVersioningNextVersion := Def
+    ReleasePluginIO.autoImport.releaseIOVersioningNextVersion := Def
       .task[String => String] {
         sbt.IO.write(marker, "ran")
         _ => "0.2.0-SNAPSHOT"

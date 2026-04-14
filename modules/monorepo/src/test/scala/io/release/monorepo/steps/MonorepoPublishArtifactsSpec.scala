@@ -2,7 +2,7 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseSharedPlugin
+import io.release.ReleaseSharedKeys
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
@@ -82,8 +82,8 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
   test("publishArtifacts.execute - skip the publish task when publish / skip is true") {
     singleProjectFixtureResource("monorepo-publish-skip-action") { _ =>
       Seq(
-        publish / skip                                        := true,
-        ReleaseSharedPlugin.autoImport.releaseIOPublishAction := {
+        publish / skip                           := true,
+        ReleaseSharedKeys.releaseIOPublishAction := {
           throw new RuntimeException("publish action should not run")
         }
       )
@@ -103,12 +103,12 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val fallbackMarker = new File(projectBase.getParentFile, "publish-fallback.txt")
 
       Seq(
-        publish / skip                                        := false,
-        publishTo                                             := Some(Resolver.file("local-test", projectBase.getParentFile)),
-        publish                                               := {
+        publish / skip                           := false,
+        publishTo                                := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        publish                                  := {
           sbt.IO.write(fallbackMarker, "fallback")
         },
-        ReleaseSharedPlugin.autoImport.releaseIOPublishAction := {
+        ReleaseSharedKeys.releaseIOPublishAction := {
           sbt.IO.write(marker, "published")
         }
       )
@@ -186,7 +186,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         val projectBase     = new File(dir, "core")
         projectBase.mkdirs()
         val rootSettings    = Seq(
-          ThisBuild / ReleaseSharedPlugin.autoImport.releaseIOPublishAction := {
+          ThisBuild / ReleaseSharedKeys.releaseIOPublishAction := {
             Def
               .task(())
               .updateState { (state: State, _: Unit) =>
@@ -258,7 +258,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
             _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
             _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
           ),
-        ReleaseSharedPlugin.autoImport.releaseIOPublishAction                         := {
+        ReleaseSharedKeys.releaseIOPublishAction                                      := {
           def manifestEntries(options: Seq[PackageOption]): Map[String, String] =
             options.flatMap {
               case product: Product if product.productPrefix == "ManifestAttributes" =>
@@ -361,6 +361,6 @@ private object MonorepoPublishArtifactsSpec {
 
   def publishFallbackWarning(projectName: String): String =
     s"${ReleaseLogPrefixes.Monorepo} $projectName: " +
-      s"${ReleaseSharedPlugin.autoImport.releaseIOPublishAction.key.label} is undefined; " +
+      s"${ReleaseSharedKeys.releaseIOPublishAction.key.label} is undefined; " +
       s"falling back to ${publish.key.label}"
 }

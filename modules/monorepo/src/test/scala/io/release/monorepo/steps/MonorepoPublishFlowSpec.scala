@@ -1,6 +1,6 @@
 package io.release.monorepo.internal.steps
 
-import io.release.ReleaseSharedPlugin
+import io.release.ReleaseSharedKeys
 import io.release.TestAssertions.assertFailure
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.internal.*
@@ -19,7 +19,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   ) {
     singleProjectFixtureResource("monorepo-publish-snapshots") { _ =>
       Seq(
-        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -39,7 +39,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   test("checkSnapshotDependencies.validate function value - fail on snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-snapshots-field") { _ =>
       Seq(
-        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq(
+        ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies := Seq(
           "org.example" % "dep" % "1.0.0-SNAPSHOT"
         )
       )
@@ -76,7 +76,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
         assert(err.getCause.getMessage.contains("FailureCommand"))
         assert(
           err.getCause.getMessage.contains(
-            ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies.key.label
+            ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies.key.label
           )
         )
       }
@@ -199,7 +199,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
   test("checkSnapshotDependencies.validate - pass when no snapshot dependencies") {
     singleProjectFixtureResource("monorepo-publish-no-snapshots") { _ =>
       Seq(
-        ReleaseSharedPlugin.autoImport.releaseIODiagnosticsSnapshotDependencies := Seq
+        ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies := Seq
           .empty[ModuleID]
       )
     }.use { fixture =>

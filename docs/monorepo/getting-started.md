@@ -20,6 +20,15 @@ Add to `project/plugins.sbt`:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.10.0")
 ```
 
+> **Note:** This page describes the current `main` / `Unreleased` monorepo contract. `0.10.0`
+> remains the latest published version; see [CHANGELOG.md](../CHANGELOG.md) for what is already
+> released versus pending the next tag.
+
+This installs the monorepo plugin plus the transitive core settings surface, so
+`releaseIOMonorepo`, `releaseIOMonorepo*`, and shared/core `releaseIO*` settings are
+available once the plugin is enabled. In the documented monorepo setup, the supported release
+workflow still uses `releaseIOMonorepo`.
+
 Enable on your root project in `build.sbt`:
 
 ```scala

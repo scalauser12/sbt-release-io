@@ -2,7 +2,8 @@
 
 Scala/sbt plugin porting sbt-release to cats-effect IO. Public plugin modules:
 **core** (single-project releases) and **monorepo** (multi-project releases with change
-detection), plus **shared** as the published shared `releaseIO*` contract layer.
+detection). Shared `releaseIO*` key/default support lives in `runtime` and is packaged through
+the published core artifact.
 
 ## Build & Test
 
@@ -51,8 +52,6 @@ sbt scalafmtSbtCheck       # check sbt/build file formatting
 
 ```
 modules/
-├── shared/                                   # io.release, io.release.shared.internal
-│   └── src/main/scala/io/release/            # ReleaseSharedPlugin, shared defaults bridge
 ├── core/                                     # io.release, io.release.core.internal
 │   ├── src/main/scala/io/release/            # Public API: ReleasePluginIO, ReleaseContext, ReleaseHookIO, ReleaseResourceHookIO, ReleaseComposer, VcsOps
 │   ├── src/main/scala/io/release/core/internal/  # CoreLifecycle, CoreCommandExecution, CoreDefaultSettings, steps/
@@ -106,13 +105,6 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `monorepo/internal/MonorepoProjectResolver.scala` | Dependency graph resolution and topological sorting |
 | `monorepo/internal/MonorepoSelectionResolver.scala` | Project selection (by name or change detection) |
 
-### Shared Module
-
-| File | Purpose |
-|------|---------|
-| `shared/ReleaseSharedPlugin.scala` | Shared public AutoPlugin exposing grouped shared `releaseIO*` keys/defaults for `.scala` build code |
-| `shared/internal/ReleaseSharedDefaultSettings.scala` | Thin shared-plugin bridge to the runtime-owned shared default settings support |
-
 ### Runtime Module
 
 | File | Purpose |
@@ -123,8 +115,8 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `runtime/engine/ProcessStep.scala` | `sealed trait ProcessStep[C, +I]` ADT (internal) |
 | `runtime/command/ReleaseCommandCompilation.scala` | Shared blocking hook merge/compile and command preparation helpers |
 | `runtime/command/ReleaseCommandRunner.scala` | Shared command-boundary execution, logging, and final state handling |
-| `ReleaseSharedKeys.scala` | Runtime-owned shared sbt setting/task keys exposed publicly through `ReleaseSharedPlugin.autoImport.*` |
-| `ReleaseSharedDefaultSettingsSupport.scala` | Runtime-owned shared default-setting logic reused by the shared plugin and internal workflows |
+| `ReleaseSharedKeys.scala` | Runtime-owned shared sbt setting/task keys reused by `core` and `monorepo` without duplicating key identity |
+| `ReleaseSharedDefaultSettingsSupport.scala` | Runtime-owned shared default-setting logic reused by internal workflows and plugin setup |
 | `runtime/workflow/VersionWorkflowSupport.scala` | Default version-file IO and publish validation helpers |
 | `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
 | `version/Version.scala` | Version model |
@@ -147,8 +139,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 - Immutable context threading — steps return updated context, no mutable state
 - Hook-based customization is the supported build-facing model
 - Keep changes narrow by module boundary: `modules/core` for single-project behavior,
-  `modules/monorepo` for monorepo-specific behavior, `modules/shared` for the shared public
-  contract, `modules/runtime` for shared internals
+  `modules/monorepo` for monorepo-specific behavior, `modules/runtime` for shared internals
 - Always check README examples and `examples/` folders when planning code changes
 
 ## Architecture
@@ -184,8 +175,8 @@ helpers, but build-facing customization should use hooks, policies, and resource
 ## CI
 
 GitHub Actions (`ci.yml`) runs format checks, unit tests on sbt 1 and sbt 2, scripted tests for
-the core and monorepo plugins on both sbt versions, and publish-local smoke for the shared, core,
-and monorepo artifacts. Releases are published by GitHub Actions from pushed `v*` tags; treat that
+the core and monorepo plugins on both sbt versions, plus publish-local smoke for the published
+plugin artifacts. Releases are published by GitHub Actions from pushed `v*` tags; treat that
 workflow as the canonical release path.
 
 Do not run `sbt ci-release`, publish to Maven Central manually, or modify release credentials or

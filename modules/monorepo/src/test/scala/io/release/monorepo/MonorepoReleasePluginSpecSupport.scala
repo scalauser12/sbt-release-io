@@ -3,10 +3,10 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
+import io.release.ReleasePluginIO
 import io.release.TestSupport
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
-import io.release.runtime.command.PluginEntrypointSupport
 import io.release.runtime.engine.ProcessStep
 import sbt.*
 import sbt.Project
@@ -24,9 +24,9 @@ trait MonorepoReleasePluginSpecSupport {
     MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests   := false,
     MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish := false
   ) ++ MonorepoLifecycle.configDefaultSettings ++ Seq(
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks                 := true,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive           := false,
-    _root_.io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks       := true,
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive := false,
+    ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout             := scala.concurrent.duration
       .DurationInt(60)
       .seconds
   )
@@ -97,13 +97,7 @@ trait MonorepoReleasePluginSpecSupport {
     override def resource: Resource[IO, Unit] = Resource.unit
 
     override lazy val projectSettings: Seq[Setting[?]] =
-      PluginEntrypointSupport.pluginSettings(
-        MonorepoDefaultSettings.pluginDefaultSettings,
-        PluginEntrypointSupport.commandSetting(commandName)(
-          monorepoParser,
-          (state, tokens) => handleMonorepoCommandTokens(state, tokens)
-        )
-      ) ++ Seq(
+      baseReleaseSettings ++ Seq(
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection +=
           MonorepoGlobalHookIO.action("base-after-selection")(_ => IO.unit)
       )

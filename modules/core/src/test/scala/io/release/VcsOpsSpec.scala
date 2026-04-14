@@ -106,7 +106,7 @@ class VcsOpsSpec extends CatsEffectSuite {
         ReleaseTestSupport
           .gitRootState(
             repo,
-            Seq(ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
+            Seq(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
           )
       ).flatMap { state =>
         VcsOps.detectVcs(state).map { vcs =>
@@ -122,7 +122,7 @@ class VcsOpsSpec extends CatsEffectSuite {
         ReleaseTestSupport
           .gitRootState(
             repo,
-            Seq(ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
+            Seq(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
           )
       ).flatMap { state =>
         VcsOps.checkCleanWorkingDir(state).map { result =>
@@ -139,7 +139,7 @@ class VcsOpsSpec extends CatsEffectSuite {
         ReleaseTestSupport
           .gitRootState(
             repo,
-            Seq(ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
+            Seq(ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true)
           )
       ).flatMap { state =>
         for {
@@ -309,7 +309,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
         val logged = VcsOpsSpec.bufferedState(
           dir,
-          Seq(ReleaseSharedPlugin.autoImport.releaseIOVcsRemoteCheckTimeout := 5.millis)
+          Seq(ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := 5.millis)
         )
         val ctx    = VcsOpsSpec.promptContext(logged.state, interactive = false, useDefaults = false)
 
@@ -339,7 +339,7 @@ class VcsOpsSpec extends CatsEffectSuite {
       Ref.of[IO, Vector[StubVcsCall]](Vector.empty).flatMap { calls =>
         val logged = VcsOpsSpec.bufferedState(
           dir,
-          Seq(ReleaseSharedPlugin.autoImport.releaseIOVcsRemoteCheckTimeout := 5.millis)
+          Seq(ReleasePluginIO.autoImport.releaseIOVcsRemoteCheckTimeout := 5.millis)
         )
         val ctx    =
           VcsOpsSpec.promptContext(logged.state, interactive = false, useDefaults = false)

@@ -130,18 +130,20 @@ For new `.scala` sources, import monorepo-specific grouped keys from the monorep
 import _root_.io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 ```
 
-Shared `releaseIO*` keys now come from the shared plugin contract instead:
+Shared/core `releaseIO*` keys are owned by the core plugin surface. When grouped keys are needed
+from `.scala` sources, import them from
+`ReleasePluginIO.autoImport.*`:
 
 ```scala
-import _root_.io.release.ReleaseSharedPlugin.autoImport.*
+import _root_.io.release.ReleasePluginIO.autoImport.*
 ```
 
-Compatibility: existing `ReleasePluginIO.autoImport.*` imports for shared `releaseIO*` keys
-remain supported. Prefer `ReleaseSharedPlugin.autoImport.*` for new Scala build code.
+Because `MonorepoReleasePlugin` requires `ReleasePluginIO`, monorepo installs already bring the
+shared/core `releaseIO*` settings surface along transitively.
 
 When grouped keys are needed in custom Scala build code under `project/`, import
-`releaseIOMonorepo*` keys from `MonorepoReleasePlugin.autoImport.*` and shared `releaseIO*`
-keys from `ReleaseSharedPlugin.autoImport.*`.
+`releaseIOMonorepo*` keys from `MonorepoReleasePlugin.autoImport.*` and shared/core `releaseIO*`
+keys from `ReleasePluginIO.autoImport.*`.
 
 ```scala
 // project/MyMonorepoRelease.scala
@@ -208,8 +210,8 @@ Notes:
   settings and are intended for custom plugin authors, not ordinary `build.sbt`
   customization
 - `MonorepoReleasePluginLike` declares `autoImport` as `final`, so a custom plugin
-  inherits the same grouped keys and cannot override them. In `.sbt` files, the keys are
-  imported automatically when the plugin is enabled. In `.scala` sources under `project/`,
-  import monorepo-specific keys from `MonorepoReleasePlugin.autoImport.*` (or
-  `MyMonorepoRelease.autoImport.*`) and shared `releaseIO*` keys from
-  `ReleaseSharedPlugin.autoImport.*`.
+  inherits the same grouped keys and cannot override them. In `.sbt` files, monorepo builds get
+  both `releaseIOMonorepo*` and the shared/core `releaseIO*` settings when the plugin is enabled.
+  In `.scala` sources under `project/`, import monorepo-specific keys from
+  `MonorepoReleasePlugin.autoImport.*` (or `MyMonorepoRelease.autoImport.*`) and shared/core
+  settings from `ReleasePluginIO.autoImport.*`.

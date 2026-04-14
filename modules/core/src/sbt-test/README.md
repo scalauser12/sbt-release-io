@@ -22,6 +22,7 @@ Legacy step-list editing fixtures were retired. New scripted tests should use li
 ## Coverage areas
 
 - Core flow and CLI: `simple`, `help`, `check`, `with-defaults`, `interactive-with-defaults`, `command-line-version-numbers`
+- Grouped-key surface and plugin coexistence: `grouped-keys`, `coexisting-plugins-shared-keys`
 - Hook and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`
 - Versioning and tags: `custom-tag`, `custom-version-format`, `global-version-false`, `invalid-version-input`, `version-bump`, `tag-default`
 - Cross-build behavior: `cross`, `cross-build-setting`

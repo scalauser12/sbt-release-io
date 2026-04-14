@@ -6,8 +6,8 @@ import scala.concurrent.duration.FiniteDuration
 
 /** Runtime-owned shared key instances reused by core, monorepo, and shared helpers.
   *
-  * These keys remain publicly exposed through [[ReleaseSharedPlugin.autoImport]]; this object
-  * only centralizes ownership so shared runtime code does not depend on a public plugin module.
+  * These keys remain publicly exposed through [[ReleasePluginIO.autoImport]]; this object only
+  * centralizes ownership so shared runtime code does not depend on a public plugin facade.
   */
 private[release] object ReleaseSharedKeys {
 

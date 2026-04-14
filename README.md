@@ -21,10 +21,6 @@ Start with the plugin-specific onboarding guides:
 |--------|----------|------|-------------|
 | [core](modules/core/README.md) | `sbt-release-io` | [docs/core](docs/core/README.md) | IO-based release plugin for single-project builds. Independent codebase porting sbt-release onto cats-effect IO with `Resource` lifecycle, cross-build validation, and typed context threading. |
 | [monorepo](modules/monorepo/README.md) | `sbt-release-io-monorepo` | [docs/monorepo](docs/monorepo/README.md) | Monorepo extension with per-project versioning, git-based change detection, topological ordering, per-project failure isolation, and per-project tags. |
-| [shared](modules/shared) | `sbt-release-io-shared` | [architecture docs](docs/ARCHITECTURE.md) | Shared public plugin contract (`ReleaseSharedPlugin`) for shared `releaseIO*` keys/defaults and advanced Scala build-code imports. Published support artifact rather than the normal end-user plugin entrypoint. |
-
-Most users install `sbt-release-io` or `sbt-release-io-monorepo` directly. The `shared` artifact is
-the shared contract layer for contributor architecture and advanced Scala build customization.
 
 ## Quick Start
 
@@ -58,6 +54,10 @@ Install in `project/plugins.sbt`:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.10.0")
 ```
 
+> **Note:** The guidance below describes the current `main` / `Unreleased` monorepo contract.
+> `0.10.0` is still the latest published version. Check [CHANGELOG.md](CHANGELOG.md) to see which
+> behavior is already released versus still pending the next tag.
+
 In `build.sbt`:
 
 ```scala
@@ -67,6 +67,9 @@ lazy val root = (project in file("."))
 ```
 
 By default, each subproject needs its own `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
+Because the monorepo plugin requires the core plugin, it also provides the shared/core
+`releaseIO*` settings surface transitively. The supported command in this setup remains
+`releaseIOMonorepo`.
 
 First command:
 
@@ -80,17 +83,17 @@ Read next:
 - [Selective release walkthrough](docs/monorepo/selective-release-walkthrough.md)
 - [Monorepo customization](docs/monorepo/customization.md)
 
-Customization is layered: flip a `releaseIOBehavior*` toggle or pass a CLI flag
-(`with-defaults`, `skip-tests`, `cross`) for one-off tweaks, pre-answer decision
-prompts with `releaseIODefaults*`, redefine a specific task key
-(`releaseIOPublishAction`, `releaseIOVcsTagName`, the `releaseIOVersioning*`
-family), or inject logic around phases with `releaseIOHooks*` / `releaseIOPolicy*`
-(and their `releaseIOMonorepo*` counterparts). For shared-resource integration —
-an HTTP client, a temp workspace, anything acquired once per run — extend
-`ReleasePluginIOLike[T]` / `MonorepoReleasePluginLike[T]` and use the
-resource-hook APIs. See [docs/core/customization.md](docs/core/customization.md)
-and [docs/monorepo/customization.md](docs/monorepo/customization.md) for the
-full catalog.
+Customization is layered: flip a `releaseIOBehavior*` or `releaseIOMonorepoBehavior*` toggle, pass
+a CLI flag (`with-defaults`, `skip-tests`, `cross`) for one-off tweaks, pre-answer decision prompts
+with `releaseIODefaults*`, redefine a specific task key (`releaseIOPublishAction`,
+`releaseIOVcsTagName`, the `releaseIOVersioning*` family), or inject logic around phases with
+`releaseIOHooks*` / `releaseIOPolicy*` and their `releaseIOMonorepo*` counterparts. Shared
+`releaseIO*` settings live on the core plugin surface and remain available transitively when
+monorepo is installed. For shared-resource integration — an HTTP client, a temp workspace,
+anything acquired once per run — extend
+`ReleasePluginIOLike[T]` / `MonorepoReleasePluginLike[T]` and use the resource-hook APIs. See
+[docs/core/customization.md](docs/core/customization.md) and
+[docs/monorepo/customization.md](docs/monorepo/customization.md) for the full catalog.
 
 For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) and
 [docs/monorepo/recipes.md](docs/monorepo/recipes.md). For rollback and recovery, see

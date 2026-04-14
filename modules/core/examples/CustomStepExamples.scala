@@ -194,9 +194,9 @@ trait HttpClient {
  *
  * If this plugin needs grouped keys in `.scala` sources, import core-specific keys from
  * `ReleasePluginIO.autoImport.*` and shared `releaseIO*` keys from
- * `ReleaseSharedPlugin.autoImport.*`. Existing shared-key imports through
+ * `ReleasePluginIO.autoImport.*`. Existing shared-key imports through
  * `ReleasePluginIO.autoImport.*` remain supported for compatibility, but
- * `ReleaseSharedPlugin.autoImport.*` is the preferred import for new Scala build code.
+ * `ReleasePluginIO.autoImport.*` is the preferred import for new Scala build code.
  *
  * Run with:
  * {{{

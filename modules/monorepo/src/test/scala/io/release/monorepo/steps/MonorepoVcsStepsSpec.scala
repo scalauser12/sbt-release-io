@@ -678,7 +678,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   private def gitRepoWithLoadedStateResource(
       rootSettings: Seq[Def.Setting[?]] = Seq(
-        io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
+        io.release.ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles := false
       )
   ): Resource[IO, (File, State)] =
     gitRepoWithVcsResource { repo =>
@@ -708,7 +708,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
               MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment := (
                 (name: String, ver: String) => s"Release $name $ver"
               ),
-              io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsSign      := false
+              io.release.ReleaseSharedKeys.releaseIOVcsSign                   := false
             )
           ),
           versionedProject(coreBase, "core")
@@ -759,7 +759,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
               MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment := (
                 (name: String, ver: String) => s"Release $name $ver"
               ),
-              io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsSign      := false
+              io.release.ReleaseSharedKeys.releaseIOVcsSign                   := false
             )
           ),
           versionedProject(coreBase, "core"),
@@ -897,13 +897,13 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       (
         _root_.io.release.monorepo.internal.MonorepoDefaultSettings.pluginDefaultSettings ++
           Seq(
-            io.release.ReleaseSharedPlugin.autoImport.releaseIOVersioningFile          := new File(
+            io.release.ReleaseSharedKeys.releaseIOVersioningFile          := new File(
               repo,
               "version.sbt"
             ),
-            io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsSign                 := false,
-            io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsSignOff              := false,
-            io.release.ReleaseSharedPlugin.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
+            io.release.ReleaseSharedKeys.releaseIOVcsSign                 := false,
+            io.release.ReleaseSharedKeys.releaseIOVcsSignOff              := false,
+            io.release.ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles := false
           ) ++
           settings
       )*

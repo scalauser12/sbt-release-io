@@ -4,11 +4,11 @@ This page is the exhaustive reference for monorepo settings. If you want a small
 example, see [Configuration](configuration.md). If you want a guided walkthrough, start
 with [Getting started](getting-started.md).
 
-Settings prefixed `releaseIO` come from the shared plugin contract (`ReleaseSharedPlugin`).
-Settings prefixed `releaseIOMonorepo` are the monorepo-specific layer.
-This page focuses on monorepo-specific settings plus the shared settings most relevant to the
-monorepo flow. For the full shared `releaseIO*` catalog, see the
-[core settings reference](../core/reference.md).
+Settings prefixed `releaseIOMonorepo` come from the monorepo plugin. Shared/core settings prefixed
+`releaseIO` are owned by the core plugin surface and are available transitively because
+`MonorepoReleasePlugin` requires `ReleasePluginIO`. This page focuses on monorepo-specific settings
+plus the shared settings most relevant to the monorepo flow. For the full shared `releaseIO*`
+catalog, see the [core settings reference](../core/reference.md).
 
 ## Selection settings
 

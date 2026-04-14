@@ -81,18 +81,20 @@ private[release] object SnapshotDependencyTasks {
       state: State,
       ref: ProjectRef
   ): IO[Seq[ModuleID]] =
-    if (SbtRuntime.hasFailureCommand(state))
-      IO.raiseError(new IllegalStateException(failureCommandError(Keys.managedClasspath)))
-    else if (!LoadCompat.containsScopedKey(state, ref / Test / Keys.managedClasspath))
-      IO.pure(Seq.empty[ModuleID])
-    else
-      IO.blocking {
-        val extracted = Project.extract(state)
-        extracted.runTask(ref / Test / Keys.managedClasspath, state)
-      }.flatMap { case (nextState, classpath) =>
+    IO.blocking {
+      if (SbtRuntime.hasFailureCommand(state))
+        Left(new IllegalStateException(failureCommandError(Keys.managedClasspath)))
+      else if (!LoadCompat.containsScopedKey(state, ref / Test / Keys.managedClasspath))
+        Right(None)
+      else
+        Right(Some(Project.extract(state).runTask(ref / Test / Keys.managedClasspath, state)))
+    }.flatMap {
+      case Left(error)                         => IO.raiseError(error)
+      case Right(None)                         => IO.pure(Seq.empty[ModuleID])
+      case Right(Some((nextState, classpath))) =>
         if (SbtRuntime.hasFailureCommand(nextState))
           IO.raiseError(new IllegalStateException(failureCommandError(Keys.managedClasspath)))
         else
           IO.pure(ReleaseIOCompat.snapshotDependenciesFromManagedClasspath(classpath).distinct)
-      }
+    }
 }
