@@ -37,7 +37,7 @@ Run a preflight to validate the release setup without side effects:
 sbt "releaseIO check with-defaults"
 ```
 
-`check` resolves versions and tag names, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` runs release-step validations and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hook state cannot still change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
 Run the release (versions computed from `version.sbt`):
 

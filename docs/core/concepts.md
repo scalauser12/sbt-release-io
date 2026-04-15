@@ -19,8 +19,9 @@ the runtime wraps unit-returning validations and side-effect-only hook actions s
 lifecycle still threads `ReleaseContext` through both phases.
 
 The release engine validates the planned lifecycle before it performs any release actions.
-That means `releaseIO check` can resolve versions and tags, run validations, and print the
-plan without writing version files, creating commits or tags, publishing, or pushing.
+That means `releaseIO check` can run validations and print the plan without writing version
+files, creating commits or tags, publishing, or pushing. When runtime hook state cannot still
+change them, it also resolves versions and tags; otherwise it marks them as not evaluated.
 
 Hook and policy settings compile into the validate/execute lifecycle that `releaseIO` runs.
 The release command then executes the planned steps sequentially, threading `ReleaseContext`

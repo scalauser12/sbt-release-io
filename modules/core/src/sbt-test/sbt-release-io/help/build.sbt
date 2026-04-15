@@ -97,6 +97,7 @@ expectReleaseHelp := {
     """releaseIO check [flags]""",
     "No release side effects: no version-file writes, commits, tags, publish, or push",
     "may temporarily switch Scala versions during validation and then restore the entry version",
+    "Versions and tags are summarized only when runtime hook state cannot still change them",
     "A readable version file (default: version.sbt)",
     "default-tag-exists-answer <o|k|a|<tag-name>>",
     "Default flow:",

@@ -94,8 +94,9 @@ release side effects: no version-file writes, commits, tags, publish, or push.
 sbt "releaseIO check with-defaults release-version 0.3.0 next-version 0.4.0-SNAPSHOT"
 ```
 
-This is useful when you want to confirm tag names, commit messages, and hook execution against a
-specific version pair before a real release.
+This is useful when you want to confirm commit messages and hook execution against a specific
+version pair before a real release. Version and tag summaries remain available as long as
+execute-time hooks do not late-bind them.
 
 ## 7. Run the local-only release
 

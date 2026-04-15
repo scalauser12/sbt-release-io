@@ -1,9 +1,9 @@
 package io.release.core.internal
 
 import cats.effect.IO
+import io.release.ReleaseComposer
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
-import io.release.ReleasePluginIO
 import io.release.ReleasePluginIO
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
@@ -72,6 +72,13 @@ class CorePreflightSpec extends CatsEffectSuite {
       lines.exists(
         _.contains(
           "may temporarily switch Scala versions during validation and then restore the entry version"
+        )
+      )
+    )
+    assert(
+      lines.exists(
+        _.contains(
+          "Versions and tags are summarized only when runtime hook state cannot still change them"
         )
       )
     )
@@ -254,6 +261,142 @@ class CorePreflightSpec extends CatsEffectSuite {
             CorePreflight.TagSummary.Resolved("v1.2.3", "available")
           )
         }
+    }
+  }
+
+  test(
+    "check - render versions and tag as not evaluated when version resolution depends on runtime hooks"
+  ) {
+    withPluginInitialContext(
+      Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution := Seq(
+          ReleaseHookIO.io("late-bound-version-settings") { ctx =>
+            IO.blocking {
+              val newState = SbtRuntime.appendWithSession(
+                ctx.state,
+                Seq(
+                  ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
+                    "1.2.3"
+                  ),
+                  ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
+                    "1.2.4-SNAPSHOT"
+                  )
+                )
+              )
+              ctx.withState(newState)
+            }
+          }
+        )
+      )
+    ) { case (_, _, initialCtx) =>
+      CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+        CorePreflight
+          .check(initialCtx, steps, crossBuild = false)
+          .map { summary =>
+            assertEquals(
+              summary.versions,
+              CorePreflight.VersionsSummary.NotEvaluated(
+                "versions depend on runtime hook state"
+              )
+            )
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.NotEvaluated(
+                "tag depends on runtime/custom version setup"
+              )
+            )
+            assert(summary.stepNames.contains("before-version-resolution:late-bound-version-settings"))
+          }
+      }
+    }
+  }
+
+  test(
+    "check - render versions and tag as not evaluated when after-clean-check hooks affect version resolution"
+  ) {
+    withPluginInitialContext(
+      Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck := Seq(
+          ReleaseHookIO.io("late-bound-after-clean-version-settings") { ctx =>
+            IO.blocking {
+              val newState = SbtRuntime.appendWithSession(
+                ctx.state,
+                Seq(
+                  ReleasePluginIO.autoImport.releaseIOVersioningReleaseVersion := ((_: String) =>
+                    "1.2.3"
+                  ),
+                  ReleasePluginIO.autoImport.releaseIOVersioningNextVersion    := ((_: String) =>
+                    "1.2.4-SNAPSHOT"
+                  )
+                )
+              )
+              ctx.withState(newState)
+            }
+          }
+        )
+      )
+    ) { case (_, _, initialCtx) =>
+      CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+        CorePreflight
+          .check(initialCtx, steps, crossBuild = false)
+          .map { summary =>
+            assertEquals(
+              summary.versions,
+              CorePreflight.VersionsSummary.NotEvaluated(
+                "versions depend on runtime hook state"
+              )
+            )
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.NotEvaluated(
+                "tag depends on runtime/custom version setup"
+              )
+            )
+            assert(
+              summary.stepNames.contains(
+                "after-clean-check:late-bound-after-clean-version-settings"
+              )
+            )
+          }
+      }
+    }
+  }
+
+  test(
+    "validateOnly - do not resolve late-bound version tasks before before-version-resolution hooks execute"
+  ) {
+    withPluginInitialContext(
+      Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOVersioningReadVersion := { (_: File) =>
+          IO.raiseError(new IllegalStateException("default readVersion should not run"))
+        },
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution := Seq(
+          ReleaseHookIO.io("late-bound-version-settings") { ctx =>
+            IO.blocking {
+              val newState = SbtRuntime.appendWithSession(
+                ctx.state,
+                Seq(
+                  ReleasePluginIO.autoImport.releaseIOVersioningReadVersion := VersionSteps.defaultReadVersion
+                )
+              )
+              ctx.withState(newState)
+            }
+          }
+        )
+      )
+    ) { case (_, _, initialCtx) =>
+      CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+        ReleaseComposer.validateOnly(steps, crossBuild = false)(initialCtx).map { validated =>
+          assert(!validated.failed)
+          assert(steps.map(_.name).contains("before-version-resolution:late-bound-version-settings"))
+        }
+      }
     }
   }
 
@@ -714,12 +857,96 @@ class CorePreflightSpec extends CatsEffectSuite {
             )
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved("v0.1.0", "available")
+              CorePreflight.TagSummary.NotEvaluated("tag depends on runtime hook state")
             )
             assertEquals(summary.publishSummary, "step not configured")
             assertEquals(summary.pushSummary, "step not configured")
             assert(summary.stepNames.contains("before-tag:before-tag-marker"))
             assertEquals(summary.stepNames, steps.map(_.name))
+          }
+      }
+    }
+  }
+
+  test("check - render tag as not evaluated when release-commit hooks can change the tag target") {
+    withPluginInitialContext(
+      Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish           := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush              := false,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseVersionWrite := Seq(
+          ReleaseHookIO.action("touch-tracked-file") { ctx =>
+            IO.blocking {
+              val trackedFile = new File(ctx.state.configuration.baseDirectory, "tracked.txt")
+              sbt.IO.write(
+                trackedFile,
+                "updated-after-hook",
+                java.nio.charset.StandardCharsets.UTF_8,
+                append = false
+              )
+            }
+          }
+        )
+      )
+    ) { case (repo, _, initialCtx) =>
+      val keepCtx =
+        withTagConflictDefaults(initialCtx, interactive = false, defaultAnswer = Some("k"))
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v0.1.0")) *>
+        CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+          CorePreflight
+            .check(keepCtx, steps, crossBuild = false)
+            .map { summary =>
+              assertEquals(
+                summary.tag,
+                CorePreflight.TagSummary.NotEvaluated("tag depends on runtime hook state")
+              )
+              assert(summary.stepNames.contains("after-release-version-write:touch-tracked-file"))
+            }
+        }
+    }
+  }
+
+  test("check - render tag as not evaluated when after-clean-check hooks affect tagging") {
+    withPluginInitialContext(
+      Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck := Seq(
+          ReleaseHookIO.io("late-bound-after-clean-tag-settings") { ctx =>
+            IO.blocking {
+              val newState = SbtRuntime.appendWithSession(
+                ctx.state,
+                Seq(
+                  ReleasePluginIO.autoImport.releaseIOVcsTagName := "late-bound-runtime-tag"
+                )
+              )
+              ctx.withState(newState)
+            }
+          }
+        )
+      )
+    ) { case (_, _, initialCtx) =>
+      CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+        CorePreflight
+          .check(initialCtx, steps, crossBuild = false)
+          .map { summary =>
+            assertEquals(
+              summary.versions,
+              CorePreflight.VersionsSummary.NotEvaluated(
+                "versions depend on runtime hook state"
+              )
+            )
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.NotEvaluated(
+                "tag depends on runtime/custom version setup"
+              )
+            )
+            assert(
+              summary.stepNames.contains(
+                "after-clean-check:late-bound-after-clean-tag-settings"
+              )
+            )
           }
       }
     }

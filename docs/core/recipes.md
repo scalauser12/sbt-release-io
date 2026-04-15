@@ -108,7 +108,7 @@ Or with explicit versions:
 sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
-`check` has no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` has no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hook state cannot still change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
 Then run the real release with explicit versions so the tag name and commit count are
 predictable:

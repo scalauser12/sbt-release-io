@@ -201,6 +201,65 @@ class VersionStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("inquireVersions.validate - fail when the configured version file is missing") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val versionFile = new File(dir, "missing-version.sbt")
+      val state       = TestSupport.loadedState(
+        dir,
+        Seq(
+          Project("root", dir).settings(
+            releaseIOVersioningFile           := versionFile,
+            releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+            releaseIOVersioningFileContents   := VersionSteps
+              .defaultWriteVersion(useGlobalVersion = true),
+            releaseIOVersioningUseGlobal      := true,
+            releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+            releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+          )
+        )
+      )
+
+      TestAssertions.assertFailure[IllegalStateException, Unit](
+        VersionSteps.inquireVersions.validate(promptingContext(state)).void
+      ) { err =>
+        assert(err.getMessage.contains("Version file not found"))
+        assert(err.getMessage.contains(versionFile.getName))
+      }
+    }
+  }
+
+  test("resolveVersions - fail when version file cannot be parsed") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(
+        dir,
+        """lazy val root = project""" + "\n"
+      ).flatMap { versionFile =>
+        val state = TestSupport.loadedState(
+          dir,
+          Seq(
+            Project("root", dir).settings(
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps
+                .defaultWriteVersion(useGlobalVersion = true),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+              releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+            )
+          )
+        )
+
+        TestAssertions
+          .assertFailure[IllegalStateException, (ReleaseContext, VersionSteps.ResolvedVersions)](
+            VersionSteps.resolveVersions(promptingContext(state), allowPrompts = false)
+          ) { err =>
+            assert(err.getMessage.contains("Could not parse version"))
+            assert(err.getMessage.contains(versionFile.getName))
+          }
+      }
+    }
+  }
+
   test("resolveVersions - compute defaults without prompting when prompts are disabled") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
