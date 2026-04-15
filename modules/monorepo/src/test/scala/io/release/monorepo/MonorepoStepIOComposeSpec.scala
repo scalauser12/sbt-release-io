@@ -198,6 +198,51 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 
+  test("compose - run immediate after-selection hooks in setup before main-step validation") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { log =>
+        dummyProjects("core", "api").flatMap { projects =>
+          val api  = projects(1)
+          val pCtx = ctx.withProjects(projects)
+
+          val boundary = ProcessStep.Single[MonorepoContext](
+            name = "detect-or-select-projects",
+            execute = currentCtx => log.update(_ :+ "select").as(currentCtx.withProjects(Seq(api))),
+            roles = Set(BuiltInStepRole.ProjectSelection, BuiltInStepRole.SelectionBoundary)
+          )
+          val hook     = ProcessStep.Single[MonorepoContext](
+            name = "after-selection:observe-selected-projects",
+            validate = currentCtx =>
+              log.update(_ :+ s"validate-after-selection:${currentCtx.currentProjects.map(_.name).mkString(",")}"),
+            execute = currentCtx =>
+              log.update(_ :+ s"execute-after-selection:${currentCtx.currentProjects.map(_.name).mkString(",")}")
+                .as(currentCtx)
+          )
+          val main     = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "project-step",
+            validate = (_, project) => log.update(_ :+ s"validate-project:${project.name}"),
+            execute = (currentCtx, project) =>
+              log.update(_ :+ s"execute-project:${project.name}").as(currentCtx)
+          )
+
+          MonorepoComposer.compose(Seq(boundary, hook, main))(pCtx) *>
+            log.get.map { obs =>
+              assertEquals(
+                obs,
+                List(
+                  "select",
+                  "validate-after-selection:api",
+                  "execute-after-selection:api",
+                  "validate-project:api",
+                  "execute-project:api"
+                )
+              )
+            }
+        }
+      }
+    }
+  }
+
   test("compose - thread MonorepoContext metadata through sequential execute steps") {
     contextResource.use { ctx =>
       val metadataKey = sbt.AttributeKey[String]("verified")

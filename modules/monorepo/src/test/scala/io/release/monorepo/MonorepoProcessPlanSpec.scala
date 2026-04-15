@@ -39,4 +39,41 @@ class MonorepoProcessPlanSpec extends FunSuite {
 
     assert(!plan.builtInTagPreflightIncludesReleaseWriteAndCommit)
   }
+
+  test("analyze - keep contiguous after-selection hooks in setup before main steps") {
+    val afterSelectionHook = ProcessStep.Single[MonorepoContext](
+      name = "after-selection:observe-selected-projects",
+      execute = ctx => IO.pure(ctx)
+    )
+    val mainStep           = ProcessStep.Single[MonorepoContext](
+      name = "custom-main-step",
+      execute = ctx => IO.pure(ctx)
+    )
+    val plan               = MonorepoProcessPlan.analyze(
+      Seq(
+        MonorepoReleaseSteps.checkCleanWorkingDir,
+        MonorepoReleaseSteps.detectOrSelectProjects,
+        afterSelectionHook,
+        mainStep
+      )
+    )
+
+    assertEquals(
+      plan.setupSteps.map(_.name),
+      Seq(
+        MonorepoReleaseSteps.checkCleanWorkingDir.name,
+        MonorepoReleaseSteps.detectOrSelectProjects.name,
+        "after-selection:observe-selected-projects"
+      )
+    )
+    assertEquals(plan.preSelectionSetupSteps.map(_.name), Seq(
+      MonorepoReleaseSteps.checkCleanWorkingDir.name,
+      MonorepoReleaseSteps.detectOrSelectProjects.name
+    ))
+    assertEquals(
+      plan.postSelectionSetupSteps.map(_.name),
+      Seq("after-selection:observe-selected-projects")
+    )
+    assertEquals(plan.mainSteps.map(_.name), Seq("custom-main-step"))
+  }
 }

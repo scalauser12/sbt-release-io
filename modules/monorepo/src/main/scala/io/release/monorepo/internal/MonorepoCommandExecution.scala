@@ -26,6 +26,8 @@ import sbt.{internal as _, *}
   *   → MonorepoCommandExecution.runPreparedCommand    (resolve hooks, compile into steps)
   *   → MonorepoComposer.compose                       (split at selection boundary)
   *       ├─ setup segment  → ExecutionEngine.runSequentialValidateThenExecute
+  *       │                    (through `detect-or-select-projects` and any immediate
+  *       │                     `after-selection:*` hooks)
   *       └─ main segment   → ExecutionEngine.runMainSegment
   * }}}
   *

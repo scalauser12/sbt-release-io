@@ -11,6 +11,14 @@ private[monorepo] final case class MonorepoProcessPlan(
     hasSelectionBoundary: Boolean
 ) {
 
+  def preSelectionSetupSteps: Seq[AnyStep] =
+    if (!hasSelectionBoundary) Seq.empty
+    else setupSteps.takeWhile(step => !MonorepoProcessPlan.isAfterSelectionHookStep(step))
+
+  def postSelectionSetupSteps: Seq[AnyStep] =
+    if (!hasSelectionBoundary) Seq.empty
+    else setupSteps.drop(preSelectionSetupSteps.length)
+
   def pushConfigured: Boolean =
     allSteps.exists(_.hasRole(BuiltInStepRole.PushChanges))
 
@@ -76,12 +84,25 @@ private[monorepo] final case class MonorepoProcessPlan(
 
 private[monorepo] object MonorepoProcessPlan {
 
+  private val AfterSelectionHookStepPrefix = "after-selection:"
+
+  private def isAfterSelectionHookStep(step: AnyStep): Boolean =
+    step.name.startsWith(AfterSelectionHookStepPrefix)
+
   def analyze(steps: Seq[AnyStep]): MonorepoProcessPlan = {
-    val boundaryIndex           =
+    val boundaryIndex =
       steps.indexWhere(_.hasRole(BuiltInStepRole.SelectionBoundary))
+    val setupStepCount =
+      if (boundaryIndex < 0) 0
+      else
+        boundaryIndex + 1 +
+          steps
+            .drop(boundaryIndex + 1)
+            .takeWhile(isAfterSelectionHookStep)
+            .length
     val (setupSteps, mainSteps) =
       if (boundaryIndex < 0) (Seq.empty, steps)
-      else steps.splitAt(boundaryIndex + 1)
+      else steps.splitAt(setupStepCount)
 
     MonorepoProcessPlan(
       stepNames = steps.map(_.name),

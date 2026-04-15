@@ -42,7 +42,9 @@ Hook semantics:
 - disabled phases do not run their hooks
 - global lifecycle points use `MonorepoGlobalHookIO`
 - per-project lifecycle points use `MonorepoProjectHookIO`
-- `releaseIOMonorepo check` validates the same lifecycle shape that `releaseIOMonorepo` executes
+- `releaseIOMonorepo check` validates the same lifecycle shape that `releaseIOMonorepo`
+  executes, but defers downstream selection/version-dependent validation when runtime hook
+  state can still change those inputs
 
 The tagging lifecycle phase is still named `tag-releases`. Customize around it with
 `releaseIOMonorepoHooksBeforeTag` and `releaseIOMonorepoHooksAfterTag`.

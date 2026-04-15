@@ -1,12 +1,14 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import cats.effect.Ref
 import cats.effect.Resource
 import io.release.ReleaseSharedKeys.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
+import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.monorepo.internal.steps.MonorepoStepTestCompat
 import io.release.monorepo.internal.steps.MonorepoVcsSteps
@@ -22,14 +24,16 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
   test("renderSummary - include selection and per-project tag summaries") {
     val summary = MonorepoPreflight.Summary(
       selectionMode = MonorepoPreflight.Evaluation.Resolved(SelectionMode.ExplicitSelection),
-      projects = Seq(
-        MonorepoPreflight.ProjectSummary(
-          name = "core",
-          versions = MonorepoPreflight.Evaluation.Resolved(
-            MonorepoPreflight.ProjectVersions("1.0.0", "1.1.0-SNAPSHOT")
-          ),
-          tag = MonorepoPreflight.Evaluation.Resolved(
-            MonorepoPreflight.ProjectTag("core/v1.0.0", "available")
+      projects = MonorepoPreflight.Evaluation.Resolved(
+        Seq(
+          MonorepoPreflight.ProjectSummary(
+            name = "core",
+            versions = MonorepoPreflight.Evaluation.Resolved(
+              MonorepoPreflight.ProjectVersions("1.0.0", "1.1.0-SNAPSHOT")
+            ),
+            tag = MonorepoPreflight.Evaluation.Resolved(
+              MonorepoPreflight.ProjectTag("core/v1.0.0", "available")
+            )
           )
         )
       ),
@@ -46,6 +50,27 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     assert(lines.exists(_.contains("push          : configured (not executed in check mode)")))
     assert(lines.exists(_.contains("core: release 1.0.0, next 1.1.0-SNAPSHOT")))
     assert(lines.exists(_.contains("tag core/v1.0.0 (available)")))
+  }
+
+  test("renderSummary - show deferred projects as a single not-evaluated line") {
+    val summary = MonorepoPreflight.Summary(
+      selectionMode = MonorepoPreflight.Evaluation.NotEvaluated(
+        "selection depends on runtime hook state"
+      ),
+      projects = MonorepoPreflight.Evaluation.NotEvaluated(
+        "projects depend on runtime hook state"
+      ),
+      crossBuildEnabled = false,
+      publishSummary = "step not configured",
+      pushSummary = "step not configured",
+      stepNames = Seq("after-clean-check:late-bound-selection", "detect-or-select-projects")
+    )
+
+    val lines = MonorepoPreflight.renderSummary(summary)
+
+    assert(
+      lines.contains("  projects      : not evaluated (projects depend on runtime hook state)")
+    )
   }
 
   test("helpLines - describe per-project override syntax and check-mode caveats") {
@@ -77,6 +102,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         )
       )
     )
+    assert(
+      lines.exists(
+        _.contains(
+          "Selection, projects, versions, and tags are summarized only when runtime hook state"
+        )
+      )
+    )
+    assert(lines.exists(_.contains("Otherwise the preflight reports them as not evaluated")))
     assert(lines.exists(_.contains(HelpDocsLinks.MonorepoReadme)))
     assert(lines.exists(_.contains(HelpDocsLinks.MonorepoUsage)))
   }
@@ -470,6 +503,399 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
               )
             )
           )
+        }
+    }
+  }
+
+  test(
+    "check - defer selection and project summaries when after-clean-check hooks can change selection"
+  ) {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            MonorepoReleaseSteps.checkCleanWorkingDir,
+            validationOnlyStep("after-clean-check:late-bound-selection-settings"),
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            MonorepoReleaseSteps.inquireVersions,
+            MonorepoReleaseSteps.tagReleasesPerProject
+          )
+        )
+        .map { summary =>
+          assertEquals(
+            summary.selectionMode,
+            MonorepoPreflight.Evaluation.NotEvaluated(
+              "selection depends on runtime hook state"
+            )
+          )
+          assertProjectsNotEvaluated(summary, "projects depend on runtime hook state")
+          assert(
+            MonorepoPreflight
+              .renderSummary(summary)
+              .contains(
+                "  projects      : not evaluated (projects depend on runtime hook state)"
+              )
+          )
+          assert(summary.stepNames.contains("after-clean-check:late-bound-selection-settings"))
+        }
+    }
+  }
+
+  test(
+    "check - defer selection and project summaries when before-selection hooks can change selection"
+  ) {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            validationOnlyStep("before-selection:late-bound-selection-settings"),
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            MonorepoReleaseSteps.inquireVersions,
+            MonorepoReleaseSteps.tagReleasesPerProject
+          )
+        )
+        .map { summary =>
+          assertEquals(
+            summary.selectionMode,
+            MonorepoPreflight.Evaluation.NotEvaluated(
+              "selection depends on runtime hook state"
+            )
+          )
+          assertProjectsNotEvaluated(summary, "projects depend on runtime hook state")
+          assert(summary.stepNames.contains("before-selection:late-bound-selection-settings"))
+        }
+    }
+  }
+
+  test(
+    "check - run after-selection hook validation on the selected context and defer project summaries"
+  ) {
+    multiProjectPreflightFixtureResource.use { case (_, ctx) =>
+      val selectedPlan = MonorepoSpecSupport.releasePlan(
+        selectionMode = SelectionMode.ExplicitSelection,
+        selectedNames = Seq("api")
+      )
+      val selectedCtx  = ctx.withReleasePlan(selectedPlan)
+      val session      = MonorepoPreparedSession(selectedCtx.state, selectedPlan, selectedCtx)
+      val afterSelect  =
+        validationOnlyStep(
+          "after-selection:observe-selected-projects",
+          validate = currentCtx =>
+            IO(assertEquals(currentCtx.currentProjects.map(_.name), Seq("api")))
+        )
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            afterSelect,
+            MonorepoReleaseSteps.inquireVersions,
+            MonorepoReleaseSteps.tagReleasesPerProject
+          )
+        )
+        .map { summary =>
+          assertEquals(
+            summary.selectionMode,
+            MonorepoPreflight.Evaluation.Resolved(SelectionMode.ExplicitSelection)
+          )
+          assertProjectsNotEvaluated(summary, "projects depend on runtime hook state")
+          assert(summary.stepNames.contains("after-selection:observe-selected-projects"))
+        }
+    }
+  }
+
+  test(
+    "check - validate only the safe after-selection hook prefix when later hooks depend on execute state"
+  ) {
+    multiProjectPreflightFixtureResource.use { case (_, ctx) =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val selectedPlan = MonorepoSpecSupport.releasePlan(
+          selectionMode = SelectionMode.ExplicitSelection,
+          selectedNames = Seq("api")
+        )
+        val selectedCtx  = ctx.withReleasePlan(selectedPlan)
+        val session      = MonorepoPreparedSession(selectedCtx.state, selectedPlan, selectedCtx)
+        val firstHook    = ProcessStep.Single[MonorepoContext](
+          name = "after-selection:retarget-projects",
+          validate = (currentCtx: MonorepoContext) =>
+            observed
+              .update(_ :+ s"validate-first:${currentCtx.currentProjects.map(_.name).mkString(",")}")
+              .void,
+          execute = (currentCtx: MonorepoContext) =>
+            observed
+              .update(_ :+ "execute-first")
+              .as(currentCtx.withProjects(currentCtx.currentProjects.filter(_.name == "core")))
+        )
+        val secondHook   = ProcessStep.Single[MonorepoContext](
+          name = "after-selection:requires-retargeted-projects",
+          validate = (currentCtx: MonorepoContext) =>
+            if (currentCtx.currentProjects.map(_.name) == Seq("core"))
+              observed
+                .update(
+                  _ :+ s"validate-second:${currentCtx.currentProjects.map(_.name).mkString(",")}"
+                )
+                .void
+            else
+              IO.raiseError(
+                new IllegalStateException(
+                  s"expected retargeted projects, got ${currentCtx.currentProjects.map(_.name).mkString(",")}"
+                )
+              ),
+          execute = (currentCtx: MonorepoContext) =>
+            observed
+              .update(_ :+ "execute-second")
+              .as(currentCtx)
+        )
+
+        MonorepoPreflight
+          .check(
+            session,
+            Seq(
+              MonorepoReleaseSteps.detectOrSelectProjects,
+              firstHook,
+              secondHook,
+              MonorepoReleaseSteps.inquireVersions,
+              MonorepoReleaseSteps.tagReleasesPerProject
+            )
+          )
+          .flatMap { summary =>
+            observed.get.map { logged =>
+              assertEquals(
+                summary.selectionMode,
+                MonorepoPreflight.Evaluation.Resolved(SelectionMode.ExplicitSelection)
+              )
+              assertProjectsNotEvaluated(summary, "projects depend on runtime hook state")
+              assertEquals(logged, List("validate-first:api"))
+            }
+          }
+      }
+    }
+  }
+
+  test("check - skip main validation when before-selection hooks defer project selection") {
+    multiProjectPreflightFixtureResource.use { case (_, ctx) =>
+      val selectedPlan = MonorepoSpecSupport.releasePlan(
+        selectionMode = SelectionMode.ExplicitSelection,
+        selectedNames = Seq("api")
+      )
+      val selectedCtx  = ctx.withReleasePlan(selectedPlan)
+      val session      = MonorepoPreparedSession(selectedCtx.state, selectedPlan, selectedCtx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            executeOnlyStep(
+              "before-selection:retarget-selection",
+              execute = currentCtx =>
+                IO.pure(
+                  currentCtx.withReleasePlan(
+                    selectedPlan.copy(selectedNames = Seq("core"))
+                  )
+                )
+            ),
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            failOnProjectValidationStep(
+              projectName = "api",
+              message = "stale prepared-session project should not be validated"
+            ),
+            MonorepoReleaseSteps.inquireVersions
+          )
+        )
+        .map { summary =>
+          assertEquals(
+            summary.selectionMode,
+            MonorepoPreflight.Evaluation.NotEvaluated(
+              "selection depends on runtime hook state"
+            )
+          )
+          assertProjectsNotEvaluated(summary, "projects depend on runtime hook state")
+        }
+    }
+  }
+
+  test("check - skip main validation when after-selection hooks can still rewrite projects") {
+    multiProjectPreflightFixtureResource.use { case (_, ctx) =>
+      val selectedPlan = MonorepoSpecSupport.releasePlan(
+        selectionMode = SelectionMode.ExplicitSelection,
+        selectedNames = Seq("api")
+      )
+      val selectedCtx  = ctx.withReleasePlan(selectedPlan)
+      val session      = MonorepoPreparedSession(selectedCtx.state, selectedPlan, selectedCtx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            executeOnlyStep(
+              "after-selection:swap-projects",
+              execute = currentCtx =>
+                IO.pure(
+                  currentCtx.withProjects(currentCtx.currentProjects.filter(_.name == "core"))
+                )
+            ),
+            failOnProjectValidationStep(
+              projectName = "api",
+              message = "pre-hook selected project should not be validated"
+            ),
+            MonorepoReleaseSteps.inquireVersions
+          )
+        )
+        .map { summary =>
+          assertEquals(
+            summary.selectionMode,
+            MonorepoPreflight.Evaluation.Resolved(SelectionMode.ExplicitSelection)
+          )
+          assertProjectsNotEvaluated(summary, "projects depend on runtime hook state")
+        }
+    }
+  }
+
+  test(
+    "check - defer versions and tags when after-version-resolution hooks can rewrite project versions"
+  ) {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            MonorepoReleaseSteps.inquireVersions,
+            validationOnlyStep("after-version-resolution:rewrite-version-pair"),
+            MonorepoReleaseSteps.tagReleasesPerProject
+          )
+        )
+        .map { summary =>
+          assertEquals(summary.projects.map(_.name), Seq("core"))
+          assertEquals(
+            summary.projects.map(_.versions),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("versions depend on runtime hook state"))
+          )
+          assertEquals(
+            summary.projects.map(_.tag),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("tags depend on runtime hook state"))
+          )
+          assert(summary.stepNames.contains("after-version-resolution:rewrite-version-pair"))
+        }
+    }
+  }
+
+  test(
+    "check - skip post-version validation when before-version-resolution hooks defer inquiry"
+  ) {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            executeOnlyStep(
+              "before-version-resolution:late-bound-version-overrides",
+              execute = currentCtx =>
+                IO.pure(
+                  currentCtx.withReleasePlan(
+                    currentCtx.releasePlan.getOrElse(
+                      fail("Expected release plan in preflight context")
+                    ).copy(
+                      releaseVersionOverrides = Map("core" -> "1.2.3"),
+                      nextVersionOverrides = Map("core" -> "1.2.4-SNAPSHOT")
+                    )
+                  )
+                )
+            ),
+            MonorepoReleaseSteps.inquireVersions,
+            requiresResolvedVersionsValidationStep,
+            MonorepoReleaseSteps.tagReleasesPerProject
+          )
+        )
+        .map { summary =>
+          assertEquals(summary.projects.map(_.name), Seq("core"))
+          assertEquals(
+            summary.projects.map(_.versions),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("versions depend on runtime hook state"))
+          )
+          assertEquals(
+            summary.projects.map(_.tag),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("tags depend on runtime hook state"))
+          )
+        }
+    }
+  }
+
+  test(
+    "check - keep post-version validation when versions were resolved before later hooks"
+  ) {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            MonorepoReleaseSteps.inquireVersions,
+            validationOnlyStep("after-version-resolution:rewrite-version-pair"),
+            requiresResolvedVersionsValidationStep,
+            skipPublishInValidationStep,
+            MonorepoReleaseSteps.publishArtifacts,
+            MonorepoReleaseSteps.tagReleasesPerProject
+          )
+        )
+        .map { summary =>
+          assertEquals(summary.projects.map(_.name), Seq("core"))
+          assertEquals(
+            summary.projects.map(_.versions),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("versions depend on runtime hook state"))
+          )
+          assertEquals(
+            summary.publishSummary,
+            "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
+          )
+          assertEquals(
+            summary.projects.map(_.tag),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("tags depend on runtime hook state"))
+          )
+        }
+    }
+  }
+
+  test("check - defer versions and tags when before-tag hooks can change tag inputs") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+
+      MonorepoPreflight
+        .check(
+          session,
+          Seq(
+            MonorepoReleaseSteps.detectOrSelectProjects,
+            MonorepoReleaseSteps.inquireVersions,
+            validationOnlyStep("before-tag:before-tag-marker"),
+            MonorepoReleaseSteps.tagReleasesPerProject
+          )
+        )
+        .map { summary =>
+          assertEquals(summary.projects.map(_.name), Seq("core"))
+          assertEquals(
+            summary.projects.map(_.versions),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("versions depend on runtime hook state"))
+          )
+          assertEquals(
+            summary.projects.map(_.tag),
+            Seq(MonorepoPreflight.Evaluation.NotEvaluated("tags depend on runtime hook state"))
+          )
+          assert(summary.stepNames.contains("before-tag:before-tag-marker"))
         }
     }
   }
@@ -1222,12 +1648,33 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       assertFailure[IllegalStateException, Seq[MonorepoPreflight.ProjectSummary]](
         MonorepoPreflight.renderProjects(
           projects,
-          builtInVersionsResolved = true,
+          versions = MonorepoPreflight.Evaluation.Resolved(()),
           tagOutcomes = tags
         )
       )(err => assert(err.getMessage.contains("inconsistent project/tag counts")))
     }
   }
+
+  private implicit final class ProjectSummaryEvaluationOps(
+      private val projects: MonorepoPreflight.Evaluation[Seq[MonorepoPreflight.ProjectSummary]]
+  ) {
+    def map[A](f: MonorepoPreflight.ProjectSummary => A): Seq[A] =
+      projects match {
+        case MonorepoPreflight.Evaluation.Resolved(resolvedProjects) =>
+          resolvedProjects.map(f)
+        case MonorepoPreflight.Evaluation.NotEvaluated(reason)       =>
+          fail(s"Expected projects to be resolved, but got not evaluated ($reason)")
+      }
+  }
+
+  private def assertProjectsNotEvaluated(
+      summary: MonorepoPreflight.Summary,
+      reason: String
+  ): Unit =
+    assertEquals(
+      summary.projects,
+      MonorepoPreflight.Evaluation.NotEvaluated(reason)
+    )
 
   private val preflightFixtureResource: Resource[IO, (File, MonorepoContext, File)] =
     singleProjectPreflightFixtureResource("0.1.0-SNAPSHOT")
@@ -1353,6 +1800,40 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       execute = currentCtx => IO.pure(currentCtx),
       validate = validate,
       validateWithContext = Some(validateWithContext)
+    )
+
+  private def executeOnlyStep(
+      name: String,
+      execute: MonorepoContext => IO[MonorepoContext]
+  ): GlobalStep =
+    ProcessStep.Single(
+      name = name,
+      execute = execute
+    )
+
+  private def validationOnlyProjectStep(
+      name: String,
+      validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
+        (_: MonorepoContext, _: ProjectReleaseInfo) => IO.unit,
+      validateWithContext: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
+        (currentCtx, _: ProjectReleaseInfo) => IO.pure(currentCtx)
+  ): ProjectStep =
+    ProcessStep.PerItem(
+      name = name,
+      execute = (currentCtx, _: ProjectReleaseInfo) => IO.pure(currentCtx),
+      validate = validate,
+      validateWithContext = Some(validateWithContext)
+    )
+
+  private def failOnProjectValidationStep(
+      projectName: String,
+      message: String
+  ): ProjectStep =
+    validationOnlyProjectStep(
+      s"fail-on-$projectName-validation",
+      validate = (_, project) =>
+        if (project.name == projectName) IO.raiseError(new IllegalStateException(message))
+        else IO.unit
     )
 
   private def withTagConflictDefaults(

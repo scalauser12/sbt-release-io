@@ -15,10 +15,13 @@ private[monorepo] object MonorepoComposer {
   private val LogPrefix = ReleaseLogPrefixes.Monorepo
 
   /** Step name that divides the release process into two segments:
-    *  - '''Setup''' (before boundary): steps run sequentially, each validated then executed
-    *    before the next begins. Used for VCS init, working-dir checks, project selection.
-    *  - '''Main''' (after boundary): all validations run upfront, then all executions run
-    *    in order. This ensures the release is fully validated before any mutations begin.
+    *  - '''Setup''' (through post-selection hooks): steps run sequentially, each validated then
+    *    executed before the next begins. Used for VCS init, working-dir checks, project
+    *    selection, and any immediately following `after-selection:*` hooks that can still
+    *    mutate the selected project snapshot.
+    *  - '''Main''' (after setup): all validations run upfront, then all executions run in
+    *    order. This ensures the release is fully validated before any main-segment mutations
+    *    begin.
     */
   private[monorepo] val SelectionBoundary = "detect-or-select-projects"
 
