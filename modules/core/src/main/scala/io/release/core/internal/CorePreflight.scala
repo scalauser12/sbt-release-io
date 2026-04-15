@@ -19,31 +19,31 @@ import java.io.File
 /** Preflight support for `releaseIO check` and command help text without release side effects. */
 private[release] object CorePreflight {
 
-  private val InquireVersionsStep = ReleaseSteps.inquireVersions.name
-  private val TagReleaseStep      = ReleaseSteps.tagRelease.name
-  private val VersionsRuntimeHookStateReason =
+  private val InquireVersionsStep             = ReleaseSteps.inquireVersions.name
+  private val TagReleaseStep                  = ReleaseSteps.tagRelease.name
+  private val VersionsRuntimeHookStateReason  =
     "versions depend on runtime hook state"
-  private val TagRuntimeHookStateReason      =
+  private val TagRuntimeHookStateReason       =
     "tag depends on runtime hook state"
-  private val TagRuntimeSetupReason          =
+  private val TagRuntimeSetupReason           =
     "tag depends on runtime/custom version setup"
-  private val AfterCleanCheckPhase           = "after-clean-check"
-  private val BeforeVersionResolutionPhase   = "before-version-resolution"
-  private val AfterVersionResolutionPhase    = "after-version-resolution"
-  private val BeforeReleaseVersionWritePhase = "before-release-version-write"
-  private val AfterReleaseVersionWritePhase  = "after-release-version-write"
-  private val BeforeReleaseCommitPhase       = "before-release-commit"
-  private val AfterReleaseCommitPhase        = "after-release-commit"
-  private val BeforeTagPhase                 = "before-tag"
-  private val AfterTagPhase                  = "after-tag"
-  private val BeforePublishPhase             = "before-publish"
-  private val AfterPublishPhase              = "after-publish"
-  private val BeforeNextVersionWritePhase    = "before-next-version-write"
-  private val AfterNextVersionWritePhase     = "after-next-version-write"
-  private val BeforeNextCommitPhase          = "before-next-commit"
+  private val AfterCleanCheckPhase            = "after-clean-check"
+  private val BeforeVersionResolutionPhase    = "before-version-resolution"
+  private val AfterVersionResolutionPhase     = "after-version-resolution"
+  private val BeforeReleaseVersionWritePhase  = "before-release-version-write"
+  private val AfterReleaseVersionWritePhase   = "after-release-version-write"
+  private val BeforeReleaseCommitPhase        = "before-release-commit"
+  private val AfterReleaseCommitPhase         = "after-release-commit"
+  private val BeforeTagPhase                  = "before-tag"
+  private val AfterTagPhase                   = "after-tag"
+  private val BeforePublishPhase              = "before-publish"
+  private val AfterPublishPhase               = "after-publish"
+  private val BeforeNextVersionWritePhase     = "before-next-version-write"
+  private val AfterNextVersionWritePhase      = "after-next-version-write"
+  private val BeforeNextCommitPhase           = "before-next-commit"
   private val VersionResolutionBlockingPhases = Set(
     AfterCleanCheckPhase,
-    BeforeVersionResolutionPhase,
+    BeforeVersionResolutionPhase
   )
   private val VersionSummaryMutationPhases    = Set(
     AfterVersionResolutionPhase,
@@ -93,15 +93,12 @@ private[release] object CorePreflight {
         publishConfigured = steps.exists(_.hasRole(BuiltInStepRole.PublishArtifacts)),
         shouldResolveVersions = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions)),
         shouldPreflightTag = steps.exists(_.hasRole(BuiltInStepRole.TagRelease)),
-        versionsRequireRuntimeHookResolution = VersionResolutionBlockingPhases.exists(phase =>
-          hasHookPhase(stepNames, phase)
-        ),
-        versionsDependOnPostResolutionRuntimeHookState = VersionSummaryMutationPhases.exists(
-          phase => hasHookPhase(stepNames, phase)
-        ),
-        tagDependsOnRuntimeHookState = TagAffectingPhases.exists(phase =>
-          hasHookPhase(stepNames, phase)
-        ),
+        versionsRequireRuntimeHookResolution =
+          VersionResolutionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
+        versionsDependOnPostResolutionRuntimeHookState =
+          VersionSummaryMutationPhases.exists(phase => hasHookPhase(stepNames, phase)),
+        tagDependsOnRuntimeHookState =
+          TagAffectingPhases.exists(phase => hasHookPhase(stepNames, phase)),
         builtInTagPreflightIncludesReleaseWriteAndCommit = containsOrderedSubsequence(
           steps,
           Seq(

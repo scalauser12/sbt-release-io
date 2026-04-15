@@ -176,126 +176,124 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
   ) {
     TestSupport.tempDirResource("monorepo-preflight-shared-version-file").use { repo =>
       for {
-        fixture                            <- IO.blocking {
-                                              val coreBase          = new File(repo, "core")
-                                              val apiBase           = new File(repo, "api")
-                                              val sharedVersionFile = new File(repo, "version.sbt")
-                                              val coreVersionFile   = new File(coreBase, "version.sbt")
-                                              val apiVersionFile    = new File(apiBase, "version.sbt")
-                                              coreBase.mkdirs()
-                                              apiBase.mkdirs()
-                                              sbt.IO.write(new File(repo, "tracked.txt"), "initial")
-                                              sbt.IO.write(
-                                                sharedVersionFile,
-                                                """version := "0.1.0-SNAPSHOT"""" + "\n"
-                                              )
-                                              sbt.IO.write(
-                                                coreVersionFile,
-                                                """version := "0.1.0-SNAPSHOT"""" + "\n"
-                                              )
-                                              sbt.IO.write(
-                                                apiVersionFile,
-                                                """version := "0.1.0-SNAPSHOT"""" + "\n"
-                                              )
+        fixture                                                    <- IO.blocking {
+                                                                        val coreBase          = new File(repo, "core")
+                                                                        val apiBase           = new File(repo, "api")
+                                                                        val sharedVersionFile = new File(repo, "version.sbt")
+                                                                        val coreVersionFile   = new File(coreBase, "version.sbt")
+                                                                        val apiVersionFile    = new File(apiBase, "version.sbt")
+                                                                        coreBase.mkdirs()
+                                                                        apiBase.mkdirs()
+                                                                        sbt.IO.write(new File(repo, "tracked.txt"), "initial")
+                                                                        sbt.IO.write(
+                                                                          sharedVersionFile,
+                                                                          """version := "0.1.0-SNAPSHOT"""" + "\n"
+                                                                        )
+                                                                        sbt.IO.write(
+                                                                          coreVersionFile,
+                                                                          """version := "0.1.0-SNAPSHOT"""" + "\n"
+                                                                        )
+                                                                        sbt.IO.write(
+                                                                          apiVersionFile,
+                                                                          """version := "0.1.0-SNAPSHOT"""" + "\n"
+                                                                        )
 
-                                              TestSupport.initGitRepo(repo)
-                                              TestSupport.commitAll(repo, "Initial commit")
+                                                                        TestSupport.initGitRepo(repo)
+                                                                        TestSupport.commitAll(repo, "Initial commit")
 
-                                              val projectSettings = Seq(
-                                                releaseIOVersioningReleaseVersion := ((version: String) =>
-                                                  version.stripSuffix("-SNAPSHOT")
-                                                ),
-                                                releaseIOVersioningNextVersion    := ((_: String) =>
-                                                  "0.2.0-SNAPSHOT"
-                                                )
-                                              )
-                                              val projects         = Seq(
-                                                MonorepoSpecSupport.monorepoRootProject(
-                                                  repo,
-                                                  projectIds = Seq("core", "api"),
-                                                  settings = Seq(
-                                                    releaseIOVcsIgnoreUntrackedFiles := true,
-                                                    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
-                                                      (_: sbt.ProjectRef, _: sbt.State) =>
-                                                        sharedVersionFile
-                                                    }
-                                                  )
-                                                ),
-                                                MonorepoSpecSupport.versionedProject(
-                                                  "core",
-                                                  coreBase,
-                                                  settings = projectSettings
-                                                ),
-                                                MonorepoSpecSupport.versionedProject(
-                                                  "api",
-                                                  apiBase,
-                                                  settings = projectSettings
-                                                )
-                                              )
-                                              val state            =
-                                                TestSupport.loadedState(
-                                                  repo,
-                                                  projects,
-                                                  currentProjectId = Some("root")
-                                                )
+                                                                        val projectSettings = Seq(
+                                                                          releaseIOVersioningReleaseVersion := ((version: String) =>
+                                                                            version.stripSuffix("-SNAPSHOT")
+                                                                          ),
+                                                                          releaseIOVersioningNextVersion    := ((_: String) => "0.2.0-SNAPSHOT")
+                                                                        )
+                                                                        val projects        = Seq(
+                                                                          MonorepoSpecSupport.monorepoRootProject(
+                                                                            repo,
+                                                                            projectIds = Seq("core", "api"),
+                                                                            settings = Seq(
+                                                                              releaseIOVcsIgnoreUntrackedFiles                                 := true,
+                                                                              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
+                                                                                (_: sbt.ProjectRef, _: sbt.State) =>
+                                                                                  sharedVersionFile
+                                                                              }
+                                                                            )
+                                                                          ),
+                                                                          MonorepoSpecSupport.versionedProject(
+                                                                            "core",
+                                                                            coreBase,
+                                                                            settings = projectSettings
+                                                                          ),
+                                                                          MonorepoSpecSupport.versionedProject(
+                                                                            "api",
+                                                                            apiBase,
+                                                                            settings = projectSettings
+                                                                          )
+                                                                        )
+                                                                        val state           =
+                                                                          TestSupport.loadedState(
+                                                                            repo,
+                                                                            projects,
+                                                                            currentProjectId = Some("root")
+                                                                          )
 
-                                              (
-                                                state,
-                                                sharedVersionFile,
-                                                coreVersionFile,
-                                                apiVersionFile
-                                              )
-                                            }
+                                                                        (
+                                                                          state,
+                                                                          sharedVersionFile,
+                                                                          coreVersionFile,
+                                                                          apiVersionFile
+                                                                        )
+                                                                      }
         (state, sharedVersionFile, coreVersionFile, apiVersionFile) = fixture
-        resolved                           <- MonorepoProjectResolver.resolveAll(state)
-        current                             = Seq(
-                                                resolved.find(_.name == "core").getOrElse {
-                                                  fail(
-                                                    "Expected resolved project 'core' in shared-version-file fixture"
-                                                  )
-                                                }
-                                              )
-        ctx                                 = MonorepoContext(
-                                                state = state,
-                                                projects = current,
-                                                interactive = false
-                                              ).withReleasePlan(
-                                                MonorepoSpecSupport.releasePlan(
-                                                  selectionMode = SelectionMode.ExplicitSelection,
-                                                  selectedNames = Seq("core")
-                                                )
-                                              )
-        session                             = MonorepoPreparedSession(
-                                                ctx.state,
-                                                ctx.releasePlan.get,
-                                                ctx
-                                              )
-        beforeShared                       <- IO.blocking(sbt.IO.read(sharedVersionFile))
-        beforeCore                         <- IO.blocking(sbt.IO.read(coreVersionFile))
-        beforeApi                          <- IO.blocking(sbt.IO.read(apiVersionFile))
-        beforeTags                         <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
-        _                                  <- assertFailure[IllegalStateException, MonorepoPreflight.Summary](
-                                                MonorepoPreflight.check(
-                                                  session,
-                                                  Seq(
-                                                    MonorepoReleaseSteps.detectOrSelectProjects,
-                                                    MonorepoReleaseSteps.inquireVersions,
-                                                    MonorepoReleaseSteps.setReleaseVersions
-                                                  )
-                                                )
-                                              ) { err =>
-                                                assert(
-                                                  err.getMessage.contains(
-                                                    "Multiple projects resolve to the same version file"
-                                                  )
-                                                )
-                                                assert(err.getMessage.contains("core"))
-                                                assert(err.getMessage.contains("api"))
-                                              }
-        afterShared                        <- IO.blocking(sbt.IO.read(sharedVersionFile))
-        afterCore                          <- IO.blocking(sbt.IO.read(coreVersionFile))
-        afterApi                           <- IO.blocking(sbt.IO.read(apiVersionFile))
-        afterTags                          <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
+        resolved                                                   <- MonorepoProjectResolver.resolveAll(state)
+        current                                                     = Seq(
+                                                                        resolved.find(_.name == "core").getOrElse {
+                                                                          fail(
+                                                                            "Expected resolved project 'core' in shared-version-file fixture"
+                                                                          )
+                                                                        }
+                                                                      )
+        ctx                                                         = MonorepoContext(
+                                                                        state = state,
+                                                                        projects = current,
+                                                                        interactive = false
+                                                                      ).withReleasePlan(
+                                                                        MonorepoSpecSupport.releasePlan(
+                                                                          selectionMode = SelectionMode.ExplicitSelection,
+                                                                          selectedNames = Seq("core")
+                                                                        )
+                                                                      )
+        session                                                     = MonorepoPreparedSession(
+                                                                        ctx.state,
+                                                                        ctx.releasePlan.get,
+                                                                        ctx
+                                                                      )
+        beforeShared                                               <- IO.blocking(sbt.IO.read(sharedVersionFile))
+        beforeCore                                                 <- IO.blocking(sbt.IO.read(coreVersionFile))
+        beforeApi                                                  <- IO.blocking(sbt.IO.read(apiVersionFile))
+        beforeTags                                                 <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
+        _                                                          <- assertFailure[IllegalStateException, MonorepoPreflight.Summary](
+                                                                        MonorepoPreflight.check(
+                                                                          session,
+                                                                          Seq(
+                                                                            MonorepoReleaseSteps.detectOrSelectProjects,
+                                                                            MonorepoReleaseSteps.inquireVersions,
+                                                                            MonorepoReleaseSteps.setReleaseVersions
+                                                                          )
+                                                                        )
+                                                                      ) { err =>
+                                                                        assert(
+                                                                          err.getMessage.contains(
+                                                                            "Multiple projects resolve to the same version file"
+                                                                          )
+                                                                        )
+                                                                        assert(err.getMessage.contains("core"))
+                                                                        assert(err.getMessage.contains("api"))
+                                                                      }
+        afterShared                                                <- IO.blocking(sbt.IO.read(sharedVersionFile))
+        afterCore                                                  <- IO.blocking(sbt.IO.read(coreVersionFile))
+        afterApi                                                   <- IO.blocking(sbt.IO.read(apiVersionFile))
+        afterTags                                                  <- IO.blocking(TestSupport.runGit(repo, "tag", "--list"))
       } yield {
         assertEquals(beforeShared, afterShared)
         assertEquals(beforeCore, afterCore)
@@ -586,8 +584,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       val afterSelect  =
         validationOnlyStep(
           "after-selection:observe-selected-projects",
-          validate = currentCtx =>
-            IO(assertEquals(currentCtx.currentProjects.map(_.name), Seq("api")))
+          validate =
+            currentCtx => IO(assertEquals(currentCtx.currentProjects.map(_.name), Seq("api")))
         )
 
       MonorepoPreflight
@@ -626,7 +624,9 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
           name = "after-selection:retarget-projects",
           validate = (currentCtx: MonorepoContext) =>
             observed
-              .update(_ :+ s"validate-first:${currentCtx.currentProjects.map(_.name).mkString(",")}")
+              .update(
+                _ :+ s"validate-first:${currentCtx.currentProjects.map(_.name).mkString(",")}"
+              )
               .void,
           execute = (currentCtx: MonorepoContext) =>
             observed
@@ -806,12 +806,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
               execute = currentCtx =>
                 IO.pure(
                   currentCtx.withReleasePlan(
-                    currentCtx.releasePlan.getOrElse(
-                      fail("Expected release plan in preflight context")
-                    ).copy(
-                      releaseVersionOverrides = Map("core" -> "1.2.3"),
-                      nextVersionOverrides = Map("core" -> "1.2.4-SNAPSHOT")
-                    )
+                    currentCtx.releasePlan
+                      .getOrElse(
+                        fail("Expected release plan in preflight context")
+                      )
+                      .copy(
+                        releaseVersionOverrides = Map("core" -> "1.2.3"),
+                        nextVersionOverrides = Map("core" -> "1.2.4-SNAPSHOT")
+                      )
                   )
                 )
             ),

@@ -90,9 +90,9 @@ private[monorepo] object MonorepoProcessPlan {
     step.name.startsWith(AfterSelectionHookStepPrefix)
 
   def analyze(steps: Seq[AnyStep]): MonorepoProcessPlan = {
-    val boundaryIndex =
+    val boundaryIndex           =
       steps.indexWhere(_.hasRole(BuiltInStepRole.SelectionBoundary))
-    val setupStepCount =
+    val setupStepCount          =
       if (boundaryIndex < 0) 0
       else
         boundaryIndex + 1 +

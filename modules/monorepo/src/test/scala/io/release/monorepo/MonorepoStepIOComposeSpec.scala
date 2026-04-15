@@ -213,9 +213,14 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           val hook     = ProcessStep.Single[MonorepoContext](
             name = "after-selection:observe-selected-projects",
             validate = currentCtx =>
-              log.update(_ :+ s"validate-after-selection:${currentCtx.currentProjects.map(_.name).mkString(",")}"),
+              log.update(
+                _ :+ s"validate-after-selection:${currentCtx.currentProjects.map(_.name).mkString(",")}"
+              ),
             execute = currentCtx =>
-              log.update(_ :+ s"execute-after-selection:${currentCtx.currentProjects.map(_.name).mkString(",")}")
+              log
+                .update(
+                  _ :+ s"execute-after-selection:${currentCtx.currentProjects.map(_.name).mkString(",")}"
+                )
                 .as(currentCtx)
           )
           val main     = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](

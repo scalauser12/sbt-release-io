@@ -269,8 +269,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   ) {
     withPluginInitialContext(
       Seq(
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish          := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush             := false,
         ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution := Seq(
           ReleaseHookIO.io("late-bound-version-settings") { ctx =>
             IO.blocking {
@@ -307,7 +307,9 @@ class CorePreflightSpec extends CatsEffectSuite {
                 "tag depends on runtime/custom version setup"
               )
             )
-            assert(summary.stepNames.contains("before-version-resolution:late-bound-version-settings"))
+            assert(
+              summary.stepNames.contains("before-version-resolution:late-bound-version-settings")
+            )
           }
       }
     }
@@ -318,8 +320,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   ) {
     withPluginInitialContext(
       Seq(
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish  := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush     := false,
         ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck := Seq(
           ReleaseHookIO.io("late-bound-after-clean-version-settings") { ctx =>
             IO.blocking {
@@ -371,8 +373,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   ) {
     withPluginInitialContext(
       Seq(
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish         := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush            := false,
         ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution := Seq(
           ReleaseHookIO.io("rewrite-version-pair-after-resolution") { ctx =>
             IO.pure(ctx.withVersions("9.9.9", "10.0.0-SNAPSHOT"))
@@ -409,9 +411,9 @@ class CorePreflightSpec extends CatsEffectSuite {
   ) {
     withPluginInitialContext(
       Seq(
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
-        ReleasePluginIO.autoImport.releaseIOVersioningReadVersion := { (_: File) =>
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish          := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush             := false,
+        ReleasePluginIO.autoImport.releaseIOVersioningReadVersion        := { (_: File) =>
           IO.raiseError(new IllegalStateException("default readVersion should not run"))
         },
         ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution := Seq(
@@ -432,7 +434,9 @@ class CorePreflightSpec extends CatsEffectSuite {
       CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
         ReleaseComposer.validateOnly(steps, crossBuild = false)(initialCtx).map { validated =>
           assert(!validated.failed)
-          assert(steps.map(_.name).contains("before-version-resolution:late-bound-version-settings"))
+          assert(
+            steps.map(_.name).contains("before-version-resolution:late-bound-version-settings")
+          )
         }
       }
     }
@@ -946,8 +950,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   ) {
     withPluginInitialContext(
       Seq(
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish         := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush            := false,
         ReleasePluginIO.autoImport.releaseIOHooksBeforeNextVersionWrite := Seq(
           ReleaseHookIO.io("rewrite-version-pair-before-next-version-write") { ctx =>
             IO.pure(ctx.withVersions("9.9.9", "10.0.0-SNAPSHOT"))
@@ -982,8 +986,8 @@ class CorePreflightSpec extends CatsEffectSuite {
   test("check - render tag as not evaluated when after-clean-check hooks affect tagging") {
     withPluginInitialContext(
       Seq(
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
-        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish  := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush     := false,
         ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck := Seq(
           ReleaseHookIO.io("late-bound-after-clean-tag-settings") { ctx =>
             IO.blocking {

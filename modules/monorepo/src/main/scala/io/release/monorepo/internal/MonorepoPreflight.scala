@@ -18,9 +18,9 @@ import io.release.vcs.TagConflictResolver
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
 
-  private val DetectOrSelectProjectsStep = MonorepoComposer.SelectionBoundary
-  private val InquireVersionsStep        = MonorepoReleaseSteps.inquireVersions.name
-  private val TagReleasesStep            = MonorepoReleaseSteps.tagReleasesPerProject.name
+  private val DetectOrSelectProjectsStep      = MonorepoComposer.SelectionBoundary
+  private val InquireVersionsStep             = MonorepoReleaseSteps.inquireVersions.name
+  private val TagReleasesStep                 = MonorepoReleaseSteps.tagReleasesPerProject.name
   private val SelectionRuntimeHookStateReason = "selection depends on runtime hook state"
   private val ProjectsRuntimeHookStateReason  = "projects depend on runtime hook state"
   private val VersionsRuntimeHookStateReason  = "versions depend on runtime hook state"
@@ -132,21 +132,16 @@ private[monorepo] object MonorepoPreflight {
         shouldResolveSelection = steps.exists(_.hasRole(BuiltInStepRole.ProjectSelection)),
         shouldResolveVersions = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions)),
         shouldPreflightTags = steps.exists(_.hasRole(BuiltInStepRole.TagRelease)),
-        selectionDependsOnRuntimeHookState = SelectionBlockingPhases.exists(phase =>
-          hasHookPhase(stepNames, phase)
-        ),
-        projectsDependOnRuntimeHookState = ProjectSummaryMutationPhases.exists(phase =>
-          hasHookPhase(stepNames, phase)
-        ),
-        versionsRequireRuntimeHookResolution = VersionResolutionBlockingPhases.exists(phase =>
-          hasHookPhase(stepNames, phase)
-        ),
-        versionsDependOnPostResolutionRuntimeHookState = VersionSummaryMutationPhases.exists(
-          phase => hasHookPhase(stepNames, phase)
-        ),
-        tagDependsOnRuntimeHookState = TagAffectingPhases.exists(phase =>
-          hasHookPhase(stepNames, phase)
-        )
+        selectionDependsOnRuntimeHookState =
+          SelectionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
+        projectsDependOnRuntimeHookState =
+          ProjectSummaryMutationPhases.exists(phase => hasHookPhase(stepNames, phase)),
+        versionsRequireRuntimeHookResolution =
+          VersionResolutionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
+        versionsDependOnPostResolutionRuntimeHookState =
+          VersionSummaryMutationPhases.exists(phase => hasHookPhase(stepNames, phase)),
+        tagDependsOnRuntimeHookState =
+          TagAffectingPhases.exists(phase => hasHookPhase(stepNames, phase))
       )
     }
   }
@@ -250,17 +245,17 @@ private[monorepo] object MonorepoPreflight {
       crossBuildEnabled: Boolean
   ): IO[Summary] =
     for {
-      preSelectionValidated <- validateSegment(
-                                 processPlan.preSelectionSetupSteps,
-                                 crossBuildEnabled
-                               )(baseCtx)
-      checkedPreSelection   <- ExecutionEngine.raiseIfFailed(preSelectionValidated)
-      selected              <-
+      preSelectionValidated  <- validateSegment(
+                                  processPlan.preSelectionSetupSteps,
+                                  crossBuildEnabled
+                                )(baseCtx)
+      checkedPreSelection    <- ExecutionEngine.raiseIfFailed(preSelectionValidated)
+      selected               <-
         resolveSelectionSnapshot(checkedPreSelection, plan, checkSteps)
-      checkedSelect         <- ExecutionEngine.raiseIfFailed(selected.context)
+      checkedSelect          <- ExecutionEngine.raiseIfFailed(selected.context)
       postSelectionValidated <-
         selected.selectionMode match {
-          case Evaluation.Resolved(_)      =>
+          case Evaluation.Resolved(_)     =>
             validatePostSelectionSetupPrefix(
               processPlan.postSelectionSetupSteps,
               crossBuildEnabled
@@ -268,8 +263,8 @@ private[monorepo] object MonorepoPreflight {
           case Evaluation.NotEvaluated(_) =>
             IO.pure(checkedSelect)
         }
-      checkedSetup         <- ExecutionEngine.raiseIfFailed(postSelectionValidated)
-      summary              <-
+      checkedSetup           <- ExecutionEngine.raiseIfFailed(postSelectionValidated)
+      summary                <-
         selected.projects match {
           case Evaluation.NotEvaluated(_) =>
             buildSummary(
@@ -372,7 +367,8 @@ private[monorepo] object MonorepoPreflight {
       IO.pure(
         SelectionSnapshot(
           context = ctx,
-          selectionMode = Evaluation.NotEvaluated(s"$DetectOrSelectProjectsStep not in check process"),
+          selectionMode =
+            Evaluation.NotEvaluated(s"$DetectOrSelectProjectsStep not in check process"),
           projects = Evaluation.Resolved(())
         )
       )
@@ -557,7 +553,7 @@ private[monorepo] object MonorepoPreflight {
             stepNames = processPlan.stepNames
           )
         )
-      case Evaluation.Resolved(_)         =>
+      case Evaluation.Resolved(_)          =>
         renderProjects(ctx.currentProjects, versions, tagOutcomes).map { resolvedProjects =>
           Summary(
             selectionMode = selectionMode,
@@ -646,7 +642,7 @@ private[monorepo] object MonorepoPreflight {
     projects match {
       case Evaluation.Resolved(resolvedProjects) =>
         "  projects      :" :: resolvedProjects.map(renderProject).toList
-      case Evaluation.NotEvaluated(reason)      =>
+      case Evaluation.NotEvaluated(reason)       =>
         List(s"  projects      : not evaluated ($reason)")
     }
 

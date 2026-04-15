@@ -396,31 +396,31 @@ private[monorepo] object MonorepoVersionWorkflow {
       versionInputs: MonorepoVersionFiles.VersionInputs
   ): IO[MonorepoContext] =
     for {
-      preserved   <- MonorepoVersionFiles.preservedSettings(
+      preserved  <- MonorepoVersionFiles.preservedSettings(
+                      ctx.state,
+                      ctx.currentProjects.map(_.ref)
+                    )
+      versionFile = versionInputs.versionFile
+      _          <- VersionWorkflowSupport.writeVersionFile(
+                      versionInputs.versionFile,
+                      versionValue,
+                      versionInputs.versionFileContents
+                    )
+      newState   <- IO.blocking {
+                      SbtRuntime.appendWithSession(
                         ctx.state,
-                        ctx.currentProjects.map(_.ref)
-                      )
-      versionFile  = versionInputs.versionFile
-      _           <- VersionWorkflowSupport.writeVersionFile(
-                        versionInputs.versionFile,
-                        versionValue,
-                        versionInputs.versionFileContents
-                      )
-      newState    <- IO.blocking {
-                        SbtRuntime.appendWithSession(
-                          ctx.state,
-                          preserved ++ Seq(
-                            project.ref / version := versionValue
-                          )
+                        preserved ++ Seq(
+                          project.ref / version := versionValue
                         )
-                      }
-      updated       = ctx
-                        .withState(newState)
-                        .updateProject(project.ref)(_.copy(versionFile = versionFile))
-      _            <- logInfo(
-                        updated,
-                        s"Wrote version $versionValue to ${versionFile.getPath} for ${project.name}"
                       )
+                    }
+      updated     = ctx
+                      .withState(newState)
+                      .updateProject(project.ref)(_.copy(versionFile = versionFile))
+      _          <- logInfo(
+                      updated,
+                      s"Wrote version $versionValue to ${versionFile.getPath} for ${project.name}"
+                    )
     } yield updated
 
   private def missingVersionFileMessage(

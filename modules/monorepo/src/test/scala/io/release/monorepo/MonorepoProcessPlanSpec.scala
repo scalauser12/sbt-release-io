@@ -66,10 +66,13 @@ class MonorepoProcessPlanSpec extends FunSuite {
         "after-selection:observe-selected-projects"
       )
     )
-    assertEquals(plan.preSelectionSetupSteps.map(_.name), Seq(
-      MonorepoReleaseSteps.checkCleanWorkingDir.name,
-      MonorepoReleaseSteps.detectOrSelectProjects.name
-    ))
+    assertEquals(
+      plan.preSelectionSetupSteps.map(_.name),
+      Seq(
+        MonorepoReleaseSteps.checkCleanWorkingDir.name,
+        MonorepoReleaseSteps.detectOrSelectProjects.name
+      )
+    )
     assertEquals(
       plan.postSelectionSetupSteps.map(_.name),
       Seq("after-selection:observe-selected-projects")

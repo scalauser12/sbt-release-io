@@ -60,7 +60,7 @@ class MonorepoPreparedSessionSpec extends CatsEffectSuite {
           MonorepoPreflight.Evaluation.Resolved(SelectionMode.ExplicitSelection)
         )
         summary.projects match {
-          case MonorepoPreflight.Evaluation.Resolved(projects) =>
+          case MonorepoPreflight.Evaluation.Resolved(projects)   =>
             assertEquals(projects.map(_.name), Seq("api"))
           case MonorepoPreflight.Evaluation.NotEvaluated(reason) =>
             fail(s"Expected projects to be resolved, but got not evaluated ($reason)")

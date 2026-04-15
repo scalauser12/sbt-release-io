@@ -529,27 +529,27 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val coreProject        = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
 
         for {
-          _          <- IO.blocking(sbt.IO.write(outsideVersionFile, initialContents))
-          afterCore  <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, coreProject)
-          apiProject  = MonorepoSpecSupport.projectNamed(afterCore.projects, "api")
-          _          <- assertFailure[IllegalStateException, MonorepoContext](
-                          MonorepoVersionSteps.setReleaseVersions.execute(afterCore, apiProject)
-                        ) { err =>
-                          assert(err.getMessage.contains("outside the VCS root"))
-                          assert(err.getMessage.contains("api"))
-                          assert(err.getMessage.contains(outsideVersionFile.getCanonicalPath))
-                        }
-          _          <- IO.blocking {
-                          assertEquals(
-                            sbt.IO.read(coreVersionFile),
-                            """version := "1.0.0"""" + "\n"
-                          )
-                          assertEquals(
-                            sbt.IO.read(apiVersionFile),
-                            """version := "0.1.0-SNAPSHOT"""" + "\n"
-                          )
-                          assertEquals(sbt.IO.read(outsideVersionFile), initialContents)
-                        }
+          _         <- IO.blocking(sbt.IO.write(outsideVersionFile, initialContents))
+          afterCore <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, coreProject)
+          apiProject = MonorepoSpecSupport.projectNamed(afterCore.projects, "api")
+          _         <- assertFailure[IllegalStateException, MonorepoContext](
+                         MonorepoVersionSteps.setReleaseVersions.execute(afterCore, apiProject)
+                       ) { err =>
+                         assert(err.getMessage.contains("outside the VCS root"))
+                         assert(err.getMessage.contains("api"))
+                         assert(err.getMessage.contains(outsideVersionFile.getCanonicalPath))
+                       }
+          _         <- IO.blocking {
+                         assertEquals(
+                           sbt.IO.read(coreVersionFile),
+                           """version := "1.0.0"""" + "\n"
+                         )
+                         assertEquals(
+                           sbt.IO.read(apiVersionFile),
+                           """version := "0.1.0-SNAPSHOT"""" + "\n"
+                         )
+                         assertEquals(sbt.IO.read(outsideVersionFile), initialContents)
+                       }
         } yield ()
       }
   }
@@ -602,26 +602,28 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val coreProject     = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
 
         for {
-          afterCore  <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, coreProject)
-          apiProject  = MonorepoSpecSupport.projectNamed(afterCore.projects, "api")
-          _          <- assertFailure[IllegalStateException, MonorepoContext](
-                          MonorepoVersionSteps.setReleaseVersions.execute(afterCore, apiProject)
-                        ) { err =>
-                          assert(err.getMessage.contains("Multiple projects resolve to the same version file"))
-                          assert(err.getMessage.contains("core"))
-                          assert(err.getMessage.contains("api"))
-                          assert(err.getMessage.contains(coreVersionFile.getCanonicalPath))
-                        }
-          _          <- IO.blocking {
-                          assertEquals(
-                            sbt.IO.read(coreVersionFile),
-                            """version := "1.0.0"""" + "\n"
-                          )
-                          assertEquals(
-                            sbt.IO.read(apiVersionFile),
-                            """version := "0.1.0-SNAPSHOT"""" + "\n"
-                          )
-                        }
+          afterCore <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, coreProject)
+          apiProject = MonorepoSpecSupport.projectNamed(afterCore.projects, "api")
+          _         <- assertFailure[IllegalStateException, MonorepoContext](
+                         MonorepoVersionSteps.setReleaseVersions.execute(afterCore, apiProject)
+                       ) { err =>
+                         assert(
+                           err.getMessage.contains("Multiple projects resolve to the same version file")
+                         )
+                         assert(err.getMessage.contains("core"))
+                         assert(err.getMessage.contains("api"))
+                         assert(err.getMessage.contains(coreVersionFile.getCanonicalPath))
+                       }
+          _         <- IO.blocking {
+                         assertEquals(
+                           sbt.IO.read(coreVersionFile),
+                           """version := "1.0.0"""" + "\n"
+                         )
+                         assertEquals(
+                           sbt.IO.read(apiVersionFile),
+                           """version := "0.1.0-SNAPSHOT"""" + "\n"
+                         )
+                       }
         } yield ()
       }
   }
@@ -717,7 +719,9 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
     }
   }
 
-  test("setNextVersions.validate - fail when the selected version file resolves outside the VCS root") {
+  test(
+    "setNextVersions.validate - fail when the selected version file resolves outside the VCS root"
+  ) {
     Resource
       .both(
         fixtureResource,
@@ -795,31 +799,31 @@ private object MonorepoVersionStepsSpec {
       override val commandName: String = "test"
       override val baseDir: File       = repoDir
 
-      override def currentHash: IO[String]                = IO.pure("test-hash")
-      override def currentBranch: IO[String]              = IO.pure("main")
-      override def trackingRemote: IO[String]             = IO.pure("origin")
+      override def currentHash: IO[String]                  = IO.pure("test-hash")
+      override def currentBranch: IO[String]                = IO.pure("main")
+      override def trackingRemote: IO[String]               = IO.pure("origin")
       override def upstreamTrackingHash: IO[Option[String]] = IO.pure(None)
-      override def hasUpstream: IO[Boolean]               = IO.pure(false)
-      override def isBehindRemote: IO[Boolean]            = IO.pure(false)
-      override def existsTag(name: String): IO[Boolean]   = IO.pure(false)
-      override def modifiedFiles: IO[Seq[String]]         = IO.pure(Seq.empty)
-      override def stagedFiles: IO[Seq[String]]           = IO.pure(Seq.empty)
-      override def untrackedFiles: IO[Seq[String]]        = IO.pure(Seq.empty)
-      override def status: IO[String]                     = IO.pure("")
-      override def checkRemote(remote: String): IO[Int]   = IO.pure(0)
-      override def add(files: String*): IO[Unit]          = IO.unit
+      override def hasUpstream: IO[Boolean]                 = IO.pure(false)
+      override def isBehindRemote: IO[Boolean]              = IO.pure(false)
+      override def existsTag(name: String): IO[Boolean]     = IO.pure(false)
+      override def modifiedFiles: IO[Seq[String]]           = IO.pure(Seq.empty)
+      override def stagedFiles: IO[Seq[String]]             = IO.pure(Seq.empty)
+      override def untrackedFiles: IO[Seq[String]]          = IO.pure(Seq.empty)
+      override def status: IO[String]                       = IO.pure("")
+      override def checkRemote(remote: String): IO[Int]     = IO.pure(0)
+      override def add(files: String*): IO[Unit]            = IO.unit
       override def commit(
           message: String,
           sign: Boolean,
           signOff: Boolean
-      ): IO[Unit] = IO.unit
+      ): IO[Unit]                                           = IO.unit
       override def tag(
           name: String,
           comment: String,
           sign: Boolean,
           force: Boolean
-      ): IO[Unit] = IO.unit
-      override def pushChanges: IO[Unit]                  = IO.unit
+      ): IO[Unit]                                           = IO.unit
+      override def pushChanges: IO[Unit]                    = IO.unit
     }
 
   def bufferedFixture(fixture: VersionFixture): BufferedVersionFixture = {
