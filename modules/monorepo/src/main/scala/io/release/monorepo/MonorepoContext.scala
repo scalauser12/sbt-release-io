@@ -137,23 +137,11 @@ case class MonorepoContext(
   private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
     metadata(MonorepoReleasePlan.metadataKey)
 
-  private[monorepo] def hasReleaseVersionFilesValidated: Boolean =
-    metadata(MonorepoContext.releaseVersionFilesValidatedKey).nonEmpty
-
-  private[monorepo] def markReleaseVersionFilesValidated: MonorepoContext =
-    withMetadata(MonorepoContext.releaseVersionFilesValidatedKey, ())
-
   private[monorepo] def hasReleaseVersionFilesPrevalidated: Boolean =
     metadata(MonorepoContext.releaseVersionFilesPrevalidatedKey).nonEmpty
 
   private[monorepo] def markReleaseVersionFilesPrevalidated: MonorepoContext =
     withMetadata(MonorepoContext.releaseVersionFilesPrevalidatedKey, ())
-
-  private[monorepo] def hasNextVersionFilesValidated: Boolean =
-    metadata(MonorepoContext.nextVersionFilesValidatedKey).nonEmpty
-
-  private[monorepo] def markNextVersionFilesValidated: MonorepoContext =
-    withMetadata(MonorepoContext.nextVersionFilesValidatedKey, ())
 
   private[monorepo] def hasNextVersionFilesPrevalidated: Boolean =
     metadata(MonorepoContext.nextVersionFilesPrevalidatedKey).nonEmpty
@@ -181,14 +169,8 @@ case class MonorepoContext(
 
 private[monorepo] object MonorepoContext {
 
-  private val releaseVersionFilesValidatedKey: AttributeKey[Unit] =
-    AttributeKey[Unit]("releaseIOInternalMonorepoReleaseVersionFilesValidated")
-
   private val releaseVersionFilesPrevalidatedKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalMonorepoReleaseVersionFilesPrevalidated")
-
-  private val nextVersionFilesValidatedKey: AttributeKey[Unit] =
-    AttributeKey[Unit]("releaseIOInternalMonorepoNextVersionFilesValidated")
 
   private val nextVersionFilesPrevalidatedKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalMonorepoNextVersionFilesPrevalidated")

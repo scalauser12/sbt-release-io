@@ -29,17 +29,43 @@ private[release] object CorePreflight {
     "tag depends on runtime/custom version setup"
   private val AfterCleanCheckPhase           = "after-clean-check"
   private val BeforeVersionResolutionPhase   = "before-version-resolution"
-  private val VersionAffectingPhases         = Set(
+  private val AfterVersionResolutionPhase    = "after-version-resolution"
+  private val BeforeReleaseVersionWritePhase = "before-release-version-write"
+  private val AfterReleaseVersionWritePhase  = "after-release-version-write"
+  private val BeforeReleaseCommitPhase       = "before-release-commit"
+  private val AfterReleaseCommitPhase        = "after-release-commit"
+  private val BeforeTagPhase                 = "before-tag"
+  private val AfterTagPhase                  = "after-tag"
+  private val BeforePublishPhase             = "before-publish"
+  private val AfterPublishPhase              = "after-publish"
+  private val BeforeNextVersionWritePhase    = "before-next-version-write"
+  private val AfterNextVersionWritePhase     = "after-next-version-write"
+  private val BeforeNextCommitPhase          = "before-next-commit"
+  private val VersionResolutionBlockingPhases = Set(
     AfterCleanCheckPhase,
     BeforeVersionResolutionPhase,
   )
-  private val TagAffectingPhases             = VersionAffectingPhases ++ Set(
-    "after-version-resolution",
-    "before-release-version-write",
-    "after-release-version-write",
-    "before-release-commit",
-    "after-release-commit",
-    "before-tag"
+  private val VersionSummaryMutationPhases    = Set(
+    AfterVersionResolutionPhase,
+    BeforeReleaseVersionWritePhase,
+    AfterReleaseVersionWritePhase,
+    BeforeReleaseCommitPhase,
+    AfterReleaseCommitPhase,
+    BeforeTagPhase,
+    AfterTagPhase,
+    BeforePublishPhase,
+    AfterPublishPhase,
+    BeforeNextVersionWritePhase,
+    AfterNextVersionWritePhase,
+    BeforeNextCommitPhase
+  )
+  private val TagAffectingPhases              = VersionResolutionBlockingPhases ++ Set(
+    AfterVersionResolutionPhase,
+    BeforeReleaseVersionWritePhase,
+    AfterReleaseVersionWritePhase,
+    BeforeReleaseCommitPhase,
+    AfterReleaseCommitPhase,
+    BeforeTagPhase
   )
 
   private final case class CheckSteps(
@@ -48,7 +74,8 @@ private[release] object CorePreflight {
       publishConfigured: Boolean,
       shouldResolveVersions: Boolean,
       shouldPreflightTag: Boolean,
-      versionsDependOnRuntimeHookState: Boolean,
+      versionsRequireRuntimeHookResolution: Boolean,
+      versionsDependOnPostResolutionRuntimeHookState: Boolean,
       tagDependsOnRuntimeHookState: Boolean,
       builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
   )
@@ -66,8 +93,11 @@ private[release] object CorePreflight {
         publishConfigured = steps.exists(_.hasRole(BuiltInStepRole.PublishArtifacts)),
         shouldResolveVersions = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions)),
         shouldPreflightTag = steps.exists(_.hasRole(BuiltInStepRole.TagRelease)),
-        versionsDependOnRuntimeHookState = VersionAffectingPhases.exists(phase =>
+        versionsRequireRuntimeHookResolution = VersionResolutionBlockingPhases.exists(phase =>
           hasHookPhase(stepNames, phase)
+        ),
+        versionsDependOnPostResolutionRuntimeHookState = VersionSummaryMutationPhases.exists(
+          phase => hasHookPhase(stepNames, phase)
         ),
         tagDependsOnRuntimeHookState = TagAffectingPhases.exists(phase =>
           hasHookPhase(stepNames, phase)
@@ -94,7 +124,8 @@ private[release] object CorePreflight {
 
   private final case class VersionSnapshot(
       context: ReleaseContext,
-      summary: VersionsSummary
+      summary: VersionsSummary,
+      versionsResolved: Boolean
   )
 
   sealed trait VersionsSummary
@@ -223,26 +254,35 @@ private[release] object CorePreflight {
       IO.pure(
         VersionSnapshot(
           context = ctx,
-          summary = VersionsSummary.NotEvaluated(s"$InquireVersionsStep not in check process")
+          summary = VersionsSummary.NotEvaluated(s"$InquireVersionsStep not in check process"),
+          versionsResolved = false
         )
       )
-    else if (checkSteps.versionsDependOnRuntimeHookState)
+    else if (checkSteps.versionsRequireRuntimeHookResolution)
       IO.pure(
         VersionSnapshot(
           context = ctx,
-          summary = VersionsSummary.NotEvaluated(VersionsRuntimeHookStateReason)
+          summary = VersionsSummary.NotEvaluated(VersionsRuntimeHookStateReason),
+          versionsResolved = false
         )
       )
     else
       VersionSteps.resolveVersions(ctx, allowPrompts = false).map { case (updatedCtx, resolved) =>
+        val summary =
+          if (checkSteps.versionsDependOnPostResolutionRuntimeHookState)
+            VersionsSummary.NotEvaluated(VersionsRuntimeHookStateReason)
+          else
+            VersionsSummary.Resolved(
+              versionFile = resolved.versionFile,
+              currentVersion = resolved.currentVersion,
+              releaseVersion = resolved.releaseVersion,
+              nextVersion = resolved.nextVersion
+            )
+
         VersionSnapshot(
           context = updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion),
-          summary = VersionsSummary.Resolved(
-            versionFile = resolved.versionFile,
-            currentVersion = resolved.currentVersion,
-            releaseVersion = resolved.releaseVersion,
-            nextVersion = resolved.nextVersion
-          )
+          summary = summary,
+          versionsResolved = true
         )
       }
 
@@ -252,16 +292,13 @@ private[release] object CorePreflight {
   ): IO[TagSummary] =
     if (!checkSteps.shouldPreflightTag)
       IO.pure(TagSummary.NotEvaluated(s"$TagReleaseStep not in check process"))
+    else if (!snapshot.versionsResolved)
+      IO.pure(TagSummary.NotEvaluated(TagRuntimeSetupReason))
+    else if (checkSteps.tagDependsOnRuntimeHookState)
+      IO.pure(TagSummary.NotEvaluated(TagRuntimeHookStateReason))
     else
-      snapshot.summary match {
-        case _: VersionsSummary.Resolved if checkSteps.tagDependsOnRuntimeHookState =>
-          IO.pure(TagSummary.NotEvaluated(TagRuntimeHookStateReason))
-        case _: VersionsSummary.Resolved                                    =>
-          preflightTag(snapshot.context, checkSteps)
-            .map(outcome => TagSummary.Resolved(outcome.tagName, outcome.status))
-        case _: VersionsSummary.NotEvaluated =>
-          IO.pure(TagSummary.NotEvaluated(TagRuntimeSetupReason))
-      }
+      preflightTag(snapshot.context, checkSteps)
+        .map(outcome => TagSummary.Resolved(outcome.tagName, outcome.status))
 
   private def preflightTag(
       ctx: ReleaseContext,

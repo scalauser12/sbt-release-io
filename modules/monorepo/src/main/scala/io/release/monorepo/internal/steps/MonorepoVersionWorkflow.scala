@@ -96,9 +96,7 @@ private[monorepo] object MonorepoVersionWorkflow {
     writeVersionFromPair(
       ctx,
       project,
-      _._1,
-      _.hasReleaseVersionFilesValidated,
-      _.markReleaseVersionFilesValidated
+      _._1
     )
 
   def validateReleaseVersionWrite(
@@ -119,9 +117,7 @@ private[monorepo] object MonorepoVersionWorkflow {
     writeVersionFromPair(
       ctx,
       project,
-      _._2,
-      _.hasNextVersionFilesValidated,
-      _.markNextVersionFilesValidated
+      _._2
     )
 
   def validateNextVersionWrite(
@@ -138,14 +134,22 @@ private[monorepo] object MonorepoVersionWorkflow {
   private def writeVersionFromPair(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
-      selectVersion: ((String, String)) => String,
-      hasValidated: MonorepoContext => Boolean,
-      markValidated: MonorepoContext => MonorepoContext
+      selectVersion: ((String, String)) => String
   ): IO[MonorepoContext] =
     versionsPairOrFail(project).flatMap { versions =>
-      ensureDistinctVersionFilesValidated(ctx, hasValidated, markValidated)
-        .flatMap(ensureCurrentProjectVersionFileUnderVcsRoot(_, project))
-        .flatMap(writeProjectVersion(_, project, selectVersion(versions)))
+      for {
+        runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
+        _            <- validateDistinctVersionFiles(runtime)
+        versionInputs = MonorepoVersionFiles.resolveInputs(runtime, project.ref)
+        vcs          <- resolveCurrentVcs(ctx)
+        _            <- validateSelectedVersionFileUnderVcsRoot(
+                          vcs,
+                          project,
+                          versionInputs.versionFile,
+                          includeSelectedMarker = false
+                        )
+        updatedCtx   <- writeProjectVersion(ctx, project, selectVersion(versions), versionInputs)
+      } yield updatedCtx
     }
 
   private def validateWritePhase(
@@ -385,51 +389,24 @@ private[monorepo] object MonorepoVersionWorkflow {
       }.flatMap(IO.raiseError)
     }
 
-  private def ensureDistinctVersionFilesValidated(
-      ctx: MonorepoContext,
-      alreadyValidated: MonorepoContext => Boolean,
-      markValidated: MonorepoContext => MonorepoContext
-  ): IO[MonorepoContext] =
-    if (alreadyValidated(ctx)) IO.pure(ctx)
-    else
-      IO.blocking(MonorepoRuntime.fromState(ctx.state)).flatMap { runtime =>
-        validateDistinctVersionFiles(runtime).as(markValidated(ctx))
-      }
-
-  private def ensureCurrentProjectVersionFileUnderVcsRoot(
-      ctx: MonorepoContext,
-      project: ProjectReleaseInfo
-  ): IO[MonorepoContext] =
-    for {
-      runtime <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-      vcs     <- resolveCurrentVcs(ctx)
-      _       <- validateSelectedVersionFileUnderVcsRoot(
-                   vcs,
-                   project,
-                   MonorepoVersionFiles.resolve(runtime, project.ref),
-                   includeSelectedMarker = false
-                 )
-    } yield ctx
-
   private def writeProjectVersion(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
-      versionValue: String
+      versionValue: String,
+      versionInputs: MonorepoVersionFiles.VersionInputs
   ): IO[MonorepoContext] =
     for {
-      runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
-      versionInputs = MonorepoVersionFiles.resolveInputs(runtime, project.ref)
-      preserved    <- MonorepoVersionFiles.preservedSettings(
+      preserved   <- MonorepoVersionFiles.preservedSettings(
                         ctx.state,
                         ctx.currentProjects.map(_.ref)
                       )
-      versionFile   = versionInputs.versionFile
-      _            <- VersionWorkflowSupport.writeVersionFile(
-                        versionFile,
+      versionFile  = versionInputs.versionFile
+      _           <- VersionWorkflowSupport.writeVersionFile(
+                        versionInputs.versionFile,
                         versionValue,
                         versionInputs.versionFileContents
                       )
-      newState     <- IO.blocking {
+      newState    <- IO.blocking {
                         SbtRuntime.appendWithSession(
                           ctx.state,
                           preserved ++ Seq(

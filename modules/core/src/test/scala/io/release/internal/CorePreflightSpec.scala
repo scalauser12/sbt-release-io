@@ -367,6 +367,44 @@ class CorePreflightSpec extends CatsEffectSuite {
   }
 
   test(
+    "check - render versions and tag as not evaluated when after-version-resolution hooks can rewrite the version pair"
+  ) {
+    withPluginInitialContext(
+      Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution := Seq(
+          ReleaseHookIO.io("rewrite-version-pair-after-resolution") { ctx =>
+            IO.pure(ctx.withVersions("9.9.9", "10.0.0-SNAPSHOT"))
+          }
+        )
+      )
+    ) { case (_, _, initialCtx) =>
+      CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+        CorePreflight
+          .check(initialCtx, steps, crossBuild = false)
+          .map { summary =>
+            assertEquals(
+              summary.versions,
+              CorePreflight.VersionsSummary.NotEvaluated(
+                "versions depend on runtime hook state"
+              )
+            )
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.NotEvaluated("tag depends on runtime hook state")
+            )
+            assert(
+              summary.stepNames.contains(
+                "after-version-resolution:rewrite-version-pair-after-resolution"
+              )
+            )
+          }
+      }
+    }
+  }
+
+  test(
     "validateOnly - do not resolve late-bound version tasks before before-version-resolution hooks execute"
   ) {
     withPluginInitialContext(
@@ -841,18 +879,15 @@ class CorePreflightSpec extends CatsEffectSuite {
           ReleaseHookIO.action("before-tag-marker")(_ => IO.unit)
         )
       )
-    ) { case (_, versionFile, initialCtx) =>
+    ) { case (_, _, initialCtx) =>
       CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
         CorePreflight
           .check(initialCtx, steps, crossBuild = false)
           .map { summary =>
             assertEquals(
               summary.versions,
-              CorePreflight.VersionsSummary.Resolved(
-                versionFile = versionFile,
-                currentVersion = "0.1.0-SNAPSHOT",
-                releaseVersion = "0.1.0",
-                nextVersion = "0.2.0-SNAPSHOT"
+              CorePreflight.VersionsSummary.NotEvaluated(
+                "versions depend on runtime hook state"
               )
             )
             assertEquals(
@@ -903,6 +938,44 @@ class CorePreflightSpec extends CatsEffectSuite {
               assert(summary.stepNames.contains("after-release-version-write:touch-tracked-file"))
             }
         }
+    }
+  }
+
+  test(
+    "check - keep tag summary resolved when only before-next-version-write hooks can rewrite the version pair"
+  ) {
+    withPluginInitialContext(
+      Seq(
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
+        ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeNextVersionWrite := Seq(
+          ReleaseHookIO.io("rewrite-version-pair-before-next-version-write") { ctx =>
+            IO.pure(ctx.withVersions("9.9.9", "10.0.0-SNAPSHOT"))
+          }
+        )
+      )
+    ) { case (_, _, initialCtx) =>
+      CoreLifecycle.compile(CoreHookConfiguration.resolve(initialCtx.state)).flatMap { steps =>
+        CorePreflight
+          .check(initialCtx, steps, crossBuild = false)
+          .map { summary =>
+            assertEquals(
+              summary.versions,
+              CorePreflight.VersionsSummary.NotEvaluated(
+                "versions depend on runtime hook state"
+              )
+            )
+            assertEquals(
+              summary.tag,
+              CorePreflight.TagSummary.Resolved("v0.1.0", "available")
+            )
+            assert(
+              summary.stepNames.contains(
+                "before-next-version-write:rewrite-version-pair-before-next-version-write"
+              )
+            )
+          }
+      }
     }
   }
 

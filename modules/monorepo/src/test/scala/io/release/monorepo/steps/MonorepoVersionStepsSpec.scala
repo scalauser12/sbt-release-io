@@ -10,7 +10,6 @@ import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.internal.*
-import io.release.monorepo.internal.MonorepoComposer
 import io.release.monorepo.internal.SelectionMode
 import io.release.monorepo.internal.steps.*
 import io.release.monorepo.internal.steps.MonorepoVersionStepsSpec.VersionFixture
@@ -22,7 +21,6 @@ import munit.CatsEffectSuite
 
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
 
 class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
@@ -556,9 +554,11 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
       }
   }
 
-  test("setReleaseVersions.execute - validate distinct version files once per write phase") {
+  test(
+    "setReleaseVersions.execute - re-check shared version-file collisions before each project write"
+  ) {
     MonorepoSpecSupport
-      .loadedFixtureResource("monorepo-version-write-phase") { dir =>
+      .loadedFixtureResource("monorepo-version-write-phase-shared-after-core") { dir =>
         val coreBase = new File(dir, "core")
         val apiBase  = new File(dir, "api")
         coreBase.mkdirs()
@@ -573,18 +573,23 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         )
       }
       .use { fixture =>
-        val resolverCalls = new AtomicInteger(0)
-        val countingState = SbtRuntime.appendWithSession(
+        val coreVersionFile = new File(new File(fixture.dir, "core"), "version.sbt")
+        val apiVersionFile  = new File(new File(fixture.dir, "api"), "version.sbt")
+        val mutatedState    = SbtRuntime.appendWithSession(
           fixture.state,
           Seq(
             MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
-              (ref: sbt.ProjectRef, _: sbt.State) =>
-                resolverCalls.incrementAndGet()
-                new File(new File(fixture.dir, ref.project), "version.sbt")
+              (ref: sbt.ProjectRef, state: sbt.State) =>
+                val defaultFile = new File(new File(fixture.dir, ref.project), "version.sbt")
+                val coreVersion =
+                  SbtRuntime.extracted(state).getOpt(fixture.refsById("core") / sbt.Keys.version)
+
+                if (ref.project == "api" && coreVersion.contains("1.0.0")) coreVersionFile
+                else defaultFile
             }
           )
         )
-        val ctx           = fixture
+        val ctx             = fixture
           .context(
             Seq("core", "api"),
             versionsById = Map(
@@ -593,21 +598,31 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
             ),
             vcs = Some(MonorepoVersionStepsSpec.testVcs(fixture.dir))
           )
-          .withState(countingState)
+          .withState(mutatedState)
+        val coreProject     = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
 
-        MonorepoComposer.compose(Seq(MonorepoVersionSteps.setReleaseVersions))(ctx).flatMap { _ =>
-          IO.blocking {
-            assertEquals(resolverCalls.get(), 10)
-            assertEquals(
-              sbt.IO.read(new File(new File(fixture.dir, "core"), "version.sbt")),
-              """version := "1.0.0"""" + "\n"
-            )
-            assertEquals(
-              sbt.IO.read(new File(new File(fixture.dir, "api"), "version.sbt")),
-              """version := "2.0.0"""" + "\n"
-            )
-          }
-        }
+        for {
+          afterCore  <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, coreProject)
+          apiProject  = MonorepoSpecSupport.projectNamed(afterCore.projects, "api")
+          _          <- assertFailure[IllegalStateException, MonorepoContext](
+                          MonorepoVersionSteps.setReleaseVersions.execute(afterCore, apiProject)
+                        ) { err =>
+                          assert(err.getMessage.contains("Multiple projects resolve to the same version file"))
+                          assert(err.getMessage.contains("core"))
+                          assert(err.getMessage.contains("api"))
+                          assert(err.getMessage.contains(coreVersionFile.getCanonicalPath))
+                        }
+          _          <- IO.blocking {
+                          assertEquals(
+                            sbt.IO.read(coreVersionFile),
+                            """version := "1.0.0"""" + "\n"
+                          )
+                          assertEquals(
+                            sbt.IO.read(apiVersionFile),
+                            """version := "0.1.0-SNAPSHOT"""" + "\n"
+                          )
+                        }
+        } yield ()
       }
   }
 
