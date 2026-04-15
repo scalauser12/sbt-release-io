@@ -71,9 +71,9 @@ Run a preflight to validate the release setup without side effects:
 sbt "releaseIOMonorepo check with-defaults"
 ```
 
-`check` resolves the selected projects, computes versions and tags, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` resolves the selected projects, computes versions and tags when their inputs are stable, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
-For resource-aware custom plugins, `check` stays resource-free: it runs resource-aware `validate` logic, but it does not acquire the shared plugin resource or execute resource-backed actions. See [Customization](customization.md) for the execution-model details.
+For resource-aware custom plugins, `check` stays resource-free: it validates only hook phases whose validation context is stable without replaying earlier hook executes, and it never acquires the shared plugin resource or executes resource-backed actions. See [Customization](customization.md) for the execution-model details.
 
 Run the first local release (changed projects detected automatically, versions computed from each subproject's `version.sbt`):
 

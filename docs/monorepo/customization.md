@@ -206,7 +206,8 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
 
 Notes:
 
-- `check` validates resource-aware hooks without acquiring the resource
+- `check` never acquires the resource and validates only resource-aware hook phases whose
+  validation context is stable without replaying earlier hook executes
 - `run` acquires the resource once, executes compiled hooks, then releases it
 - protected behavior hooks default to the corresponding `releaseIOMonorepoBehavior*`
   settings and are intended for custom plugin authors, not ordinary `build.sbt`

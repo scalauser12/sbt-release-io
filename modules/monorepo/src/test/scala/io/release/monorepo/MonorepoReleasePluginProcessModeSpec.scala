@@ -25,7 +25,7 @@ class MonorepoReleasePluginProcessModeSpec
   }
 
   test(
-    "resolveProcessMode validates resource-aware global and per-project hooks during check without acquiring resource"
+    "resolveProcessMode compiles resource-aware hooks with resource-free validation for check mode"
   ) {
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val plugin                    = resourceAwareHookPlugin(observed)

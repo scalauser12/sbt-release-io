@@ -324,8 +324,9 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     *
     * Use this when the built-in lifecycle points are sufficient but the hook logic needs the
     * shared plugin resource. Overriding this method keeps the plugin on compiled hook mode:
-    * `check` runs only the resource-free `validate` functions, while `run` acquires [[resource]]
-    * and runs both validation and execution.
+    * `check` never acquires [[resource]] and validates only the hook phases whose validation
+    * context is stable without replaying earlier hook executes, while `run` acquires
+    * [[resource]] and runs both validation and execution.
     */
   protected def monorepoResourceHooks(state: State): MonorepoResourceHooks[T] =
     MonorepoResourceHooks.empty
