@@ -29,7 +29,7 @@ Start with the plugin-specific onboarding guides:
 Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.11.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.11.1")
 ```
 
 The plugin activates automatically. Add `version.sbt` with `ThisBuild / version := "0.1.0-SNAPSHOT"`.
@@ -51,10 +51,10 @@ Read next:
 Install in `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.11.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.11.1")
 ```
 
-> **Note:** The guidance below describes the current published monorepo contract in `v0.11.0`.
+> **Note:** The guidance below describes the current published monorepo contract in `v0.11.1`.
 > See [CHANGELOG.md](CHANGELOG.md) for the full release history and upgrade notes.
 
 In `build.sbt`:

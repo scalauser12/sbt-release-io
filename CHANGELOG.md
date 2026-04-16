@@ -4,6 +4,51 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.11.1
+
+Published: 2026-04-16
+GitHub release:
+[v0.11.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.11.1)
+
+`v0.11.1` is a patch release for both plugins that hardens monorepo preflight/version-file
+handling, keeps build packaging and published metadata tidy, and refreshes the published docs to
+point at the latest release.
+
+### Fixes
+
+- Validate monorepo version files before write steps so missing or malformed files fail earlier.
+- Defer check-mode version and tag summaries when runtime hooks can still change them, and keep
+  preflight hook deferral plus monorepo write revalidation aligned with the resolved release
+  state.
+- Align monorepo `check` mode with hook-aware setup validation so rehearsal output matches the
+  real release flow more closely.
+
+### Improvements
+
+- Hide the internal `testkit` module from published metadata while keeping local test wiring
+  intact.
+- Refactor the build definition around shared helper objects and merge `BuildVersions` into
+  `BuildSettings` for simpler build wiring.
+- Bundle runtime docs into the core plugin Javadoc and apply formatting cleanup across the build
+  definition and related compat sources.
+
+### Documentation
+
+- Refresh monorepo hook/check-mode wording and update published version snippets across the root,
+  module, and walkthrough docs to reference `0.11.1`.
+
+### Verification
+
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 core/scripted`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean core/scripted`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 monorepo/scripted`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean monorepo/scripted`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.11.0
 
 Published: 2026-04-14
