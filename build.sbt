@@ -34,7 +34,8 @@ lazy val core: Project = (project in file("modules/core"))
     description                            := "A cats-effect IO port of sbt-release for sbt",
     libraryDependencies += "org.scalameta" %% "parsers" % BuildVersions.scalametaParsersVersion % Test,
     Compile / packageBin / mappings ++= RuntimePackagingCompat.classMappings(runtime).value,
-    Compile / packageSrc / mappings ++= RuntimePackagingCompat.sourceMappings(runtime).value
+    Compile / packageSrc / mappings ++= RuntimePackagingCompat.sourceMappings(runtime).value,
+    Compile / packageDoc / mappings ++= RuntimePackagingCompat.docMappings(runtime).value
   )
 
 lazy val monorepo: Project = (project in file("modules/monorepo"))

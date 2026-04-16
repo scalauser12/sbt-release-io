@@ -4,6 +4,16 @@ import xsbti.HashedVirtualFileRef
 
 object RuntimePackagingCompat:
 
+  private def currentPaths(docDir: File): Set[String] =
+    Path.allSubpaths(docDir).toSeq.collect {
+      case (file, path) if file.isFile => path
+    }.toSet
+
+  private def shouldIncludeDoc(path: String, existingPaths: Set[String]): Boolean =
+    path.endsWith(".html") &&
+      (path.startsWith("io/release/") || path.startsWith("sbt/")) &&
+      !existingPaths.contains(path)
+
   def classMappings(
       project: ProjectReference
   ): Def.Initialize[Task[Seq[(HashedVirtualFileRef, String)]]] =
@@ -40,5 +50,20 @@ object RuntimePackagingCompat:
             (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
           )
         case _                       => None
+      }
+    }
+
+  def docMappings(
+      project: ProjectReference
+  ): Def.Initialize[Task[Seq[(HashedVirtualFileRef, String)]]] =
+    Def.task {
+      val converter     = fileConverter.value
+      val currentDocDir = (Compile / doc).value
+      val projectDocDir = (project / Compile / doc).value
+      val existingPaths = currentPaths(currentDocDir)
+
+      Path.allSubpaths(projectDocDir).toSeq.collect {
+        case (file, path) if file.isFile && shouldIncludeDoc(path, existingPaths) =>
+          (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
       }
     }
