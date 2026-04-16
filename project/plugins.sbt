@@ -1,5 +1,8 @@
-if (!sys.props.get("sbt.version").exists(_.startsWith("2.")))
+// sbt 2 provides native formatting support, so only load sbt-scalafmt on sbt 1.
+if (!sys.props.get("sbt.version").exists(_.startsWith("2."))) {
   addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.6")
-else
+} else {
   libraryDependencies ++= Nil
+}
+
 addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.11.2")
