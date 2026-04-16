@@ -23,7 +23,9 @@ lazy val core: Project = (project in file("modules/core"))
   .enablePlugins(SbtPlugin)
   .dependsOn(
     runtime % "compile-internal->compile;test-internal->test",
-    testkit % "test->compile"
+    // Keep the shared test harness off published metadata while still wiring
+    // it into the local test classpath.
+    testkit % "test-internal->compile"
   )
   .settings(
     BuildSettings.commonSettings,
@@ -40,7 +42,9 @@ lazy val monorepo: Project = (project in file("modules/monorepo"))
   .dependsOn(
     core,
     runtime % "compile-internal->compile;test-internal->test",
-    testkit % "test->compile"
+    // Keep the shared test harness off published metadata while still wiring
+    // it into the local test classpath.
+    testkit % "test-internal->compile"
   )
   .settings(
     BuildSettings.commonSettings,
