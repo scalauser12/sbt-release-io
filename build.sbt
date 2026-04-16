@@ -50,15 +50,15 @@ lazy val monorepo: Project = (project in file("modules/monorepo"))
   .settings(
     BuildSettings.commonSettings,
     BuildSettings.scriptedModuleSettings("core"),
-    name                 := "sbt-release-io-monorepo",
-    description          := "Monorepo extension for sbt-release-io"
+    name        := "sbt-release-io-monorepo",
+    description := "Monorepo extension for sbt-release-io"
   )
 
-lazy val allModules = Seq(testkit, runtime, core, monorepo)
+lazy val allModules    = Seq(testkit, runtime, core, monorepo)
 lazy val allModuleRefs = allModules.map(project => LocalProject(project.id))
 
 lazy val root = (project in file("."))
-  .aggregate(allModuleRefs*)
+  .aggregate(allModuleRefs *)
   .settings(
     name           := "sbt-release-io-root",
     publish / skip := true

@@ -5,9 +5,13 @@ import xsbti.HashedVirtualFileRef
 object RuntimePackagingCompat:
 
   private def currentPaths(docDir: File): Set[String] =
-    Path.allSubpaths(docDir).toSeq.collect {
-      case (file, path) if file.isFile => path
-    }.toSet
+    Path
+      .allSubpaths(docDir)
+      .toSeq
+      .collect {
+        case (file, path) if file.isFile => path
+      }
+      .toSet
 
   private def shouldIncludeDoc(path: String, existingPaths: Set[String]): Boolean =
     path.endsWith(".html") &&

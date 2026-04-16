@@ -4,9 +4,13 @@ import sbt.Keys._
 object RuntimePackagingCompat {
 
   private def currentPaths(docDir: File): Set[String] =
-    Path.allSubpaths(docDir).toSeq.collect {
-      case (file, path) if file.isFile => path
-    }.toSet
+    Path
+      .allSubpaths(docDir)
+      .toSeq
+      .collect {
+        case (file, path) if file.isFile => path
+      }
+      .toSet
 
   private def shouldIncludeDoc(path: String, existingPaths: Set[String]): Boolean =
     path.endsWith(".html") &&
@@ -49,9 +53,9 @@ object RuntimePackagingCompat {
       project: ProjectReference
   ): Def.Initialize[Task[Seq[(File, String)]]] =
     Def.task {
-      val currentDocDir  = (Compile / doc).value
-      val projectDocDir  = (project / Compile / doc).value
-      val existingPaths  = currentPaths(currentDocDir)
+      val currentDocDir = (Compile / doc).value
+      val projectDocDir = (project / Compile / doc).value
+      val existingPaths = currentPaths(currentDocDir)
 
       Path.allSubpaths(projectDocDir).toSeq.collect {
         case (file, path) if file.isFile && shouldIncludeDoc(path, existingPaths) =>
