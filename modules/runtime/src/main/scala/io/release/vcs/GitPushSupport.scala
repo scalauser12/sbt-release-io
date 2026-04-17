@@ -15,23 +15,31 @@ private[release] object GitPushSupport {
   def resolvePushTarget(vcs: Vcs): IO[GitPushTarget] =
     for {
       localBranch   <- vcs.currentBranch
-      remote        <- vcs.trackingRemote
+      rawRemote     <- vcs.trackingRemote
+      remote         = rawRemote.trim
+      _             <- IO.raiseWhen(remote.isEmpty)(
+                         new IllegalStateException(
+                           s"Tracking remote for branch '$localBranch' is empty; " +
+                             s"configure branch.$localBranch.remote before releasing."
+                         )
+                       )
       _             <- IO.raiseWhen(remote == ".")(
                          new IllegalStateException(
                            s"Branch '$localBranch' tracks a local branch (branch.$localBranch.remote = '.'); " +
                              "configure a real remote before releasing."
                          )
                        )
-      mergeRef      <- GitProcessSupport.runSingleLine(
+      rawMergeRef   <- GitProcessSupport.runSingleLine(
                          vcs.baseDir,
                          Seq("config", s"branch.$localBranch.merge")
                        )(s"git config branch.$localBranch.merge")
-      upstreamBranch = mergeRef.stripPrefix(HeadsRefPrefix)
+      mergeRef       = rawMergeRef.trim
       _             <- IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
                          new IllegalStateException(
                            s"Tracking branch ref '$mergeRef' for branch '$localBranch' must use the '$HeadsRefPrefix' format."
                          )
                        )
+      upstreamBranch = mergeRef.stripPrefix(HeadsRefPrefix)
       _             <- IO.raiseWhen(upstreamBranch.isEmpty)(
                          new IllegalStateException(
                            s"Unable to resolve tracking branch from '$mergeRef' for remote '$remote' and branch '$localBranch'."

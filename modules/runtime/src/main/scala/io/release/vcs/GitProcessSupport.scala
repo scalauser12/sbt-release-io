@@ -287,7 +287,7 @@ private[release] object GitProcessSupport {
           Clock[IO].monotonic.flatMap { now =>
             val remaining = deadline - now
             if (remaining <= Duration.Zero)
-              IO.blocking(terminate(process, destroyGracePeriod)).as(None)
+              IO.blocking(terminate(process, destroyGracePeriod)).as(currentCode)
             else
               IO.sleep(remaining.min(ProcessPollInterval)) *>
                 waitForExitUntil(process, deadline, destroyGracePeriod, currentCode)

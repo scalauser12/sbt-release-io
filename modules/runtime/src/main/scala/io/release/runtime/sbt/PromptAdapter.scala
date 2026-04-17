@@ -56,7 +56,9 @@ private[release] object PromptAdapter {
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
-    promptYesNoLoop(ctx, prompt, prompt, defaultYes)
+    interaction(ctx).flatMap { case (nextCtx, service) =>
+      promptYesNoLoop(nextCtx, service, prompt, prompt, defaultYes)
+    }
 
   def promptYesNo[C <: ReleaseCtx { type Self = C }](
       ctx: C,
@@ -69,18 +71,20 @@ private[release] object PromptAdapter {
 
   private def promptYesNoLoop[C <: ReleaseCtx { type Self = C }](
       ctx: C,
+      service: InteractionService,
       currentPrompt: String,
       basePrompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
-    promptLine(ctx, currentPrompt).flatMap {
-      case (nextCtx, None)           => IO.pure((nextCtx, None))
-      case (nextCtx, Some(rawInput)) =>
+    IO.blocking(service.readLine(currentPrompt, mask = false)).flatMap {
+      case None           => IO.pure((ctx, None))
+      case Some(rawInput) =>
         parseYesNoInput(rawInput, defaultYes) match {
-          case Some(answer) => IO.pure((nextCtx, Some(answer)))
+          case Some(answer) => IO.pure((ctx, Some(answer)))
           case None         =>
             promptYesNoLoop(
-              nextCtx,
+              ctx,
+              service,
               retryPrompt(basePrompt),
               basePrompt,
               defaultYes

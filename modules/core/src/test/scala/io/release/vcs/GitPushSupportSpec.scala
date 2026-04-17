@@ -51,6 +51,50 @@ class GitPushSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolvePushTarget - reject when the configured tracking remote is blank") {
+    TestSupport.tempDirResource(s"$fixturePrefix-blank-remote").use { dir =>
+      val vcs = stubVcs(dir, trackingRemoteOverride = IO.pure("   "))
+
+      assertFailure[IllegalStateException, GitPushSupport.GitPushTarget](
+        GitPushSupport.resolvePushTarget(vcs)
+      ) { err =>
+        assert(err.getMessage.contains("Tracking remote for branch 'main' is empty"))
+        assert(err.getMessage.contains("branch.main.remote"))
+      }
+    }
+  }
+
+  test(
+    "resolvePushTarget - reject '.' remotes even when surrounded by whitespace in git config"
+  ) {
+    TestSupport.tempDirResource(s"$fixturePrefix-padded-local-dot").use { dir =>
+      val vcs = stubVcs(dir, trackingRemoteOverride = IO.pure(" . "))
+
+      assertFailure[IllegalStateException, GitPushSupport.GitPushTarget](
+        GitPushSupport.resolvePushTarget(vcs)
+      ) { err =>
+        assert(err.getMessage.contains("tracks a local branch"))
+        assert(err.getMessage.contains("branch.main.remote = '.'"))
+      }
+    }
+  }
+
+  test("resolvePushTarget - reject merge refs that do not start with refs/heads/") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-bad-merge-ref").use { repo =>
+      IO.blocking {
+        TestSupport.runGit(repo, "branch", "-M", "main")
+        TestSupport.runGit(repo, "config", "branch.main.remote", "origin")
+        TestSupport.runGit(repo, "config", "branch.main.merge", "refs/tags/v1.0.0")
+      } *>
+        assertFailure[IllegalStateException, GitPushSupport.GitPushTarget](
+          GitPushSupport.resolvePushTarget(new Git(repo))
+        ) { err =>
+          assert(err.getMessage.contains("refs/tags/v1.0.0"))
+          assert(err.getMessage.contains("must use the 'refs/heads/' format"))
+        }
+    }
+  }
+
   test("resolvePushTarget - reject branches that track a local branch via '.' as their remote") {
     TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-local-dot-remote").use { repo =>
       IO.blocking {
@@ -91,7 +135,10 @@ class GitPushSupportSpec extends CatsEffectSuite {
       }
   }
 
-  private def stubVcs(dir: File): Vcs =
+  private def stubVcs(
+      dir: File,
+      trackingRemoteOverride: IO[String] = IO.pure("origin")
+  ): Vcs =
     new Vcs {
       override def commandName: String = "git"
 
@@ -101,7 +148,7 @@ class GitPushSupportSpec extends CatsEffectSuite {
 
       override def currentBranch: IO[String] = IO.pure("main")
 
-      override def trackingRemote: IO[String] = IO.pure("origin")
+      override def trackingRemote: IO[String] = trackingRemoteOverride
 
       override def upstreamTrackingHash: IO[Option[String]] = IO.pure(Some("origin/main"))
 
