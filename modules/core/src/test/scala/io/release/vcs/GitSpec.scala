@@ -279,7 +279,7 @@ class GitSpec extends CatsEffectSuite {
   }
 
   test(
-    "runCommandWithTimeout - time out while descendants from an exited root process are still alive"
+    "runCommandWithTimeout - report the root exit code and terminate descendants that linger past the deadline"
   ) {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 
@@ -303,7 +303,7 @@ class GitSpec extends CatsEffectSuite {
         pid    <- readPid(pidFile)
         alive  <- waitForProcessToExit(pid, 2.seconds)
       } yield {
-        assertEquals(result, None)
+        assertEquals(result, Some(0))
         assertEquals(alive, false)
       }
     }

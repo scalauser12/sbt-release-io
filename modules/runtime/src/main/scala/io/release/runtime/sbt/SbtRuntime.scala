@@ -24,6 +24,18 @@ private[release] object SbtRuntime {
   def runTask[A](state: State, key: TaskKey[A]): (State, A) =
     extracted(state).runTask(key, state)
 
+  /** Resolves the active `InteractionService` for the given `State`.
+    *
+    * Precedence:
+    *   - Loaded project: the `interactionService` task value always wins. A user-installed
+    *     override in [[InteractionServiceStateKey]] is intentionally ignored so builds that
+    *     define their own `interactionService` task can replace the CLI service without
+    *     another plugin silently overriding them.
+    *   - Unloaded project: falls back to the state attribute ([[InteractionServiceStateKey]]),
+    *     then to [[_root_.sbt.CommandLineUIService]]. Tests that synthesise an unloaded
+    *     state and want stdin-based prompts must install a service explicitly via
+    *     [[withInteractionService]].
+    */
   def currentInteractionService(state: State): (State, InteractionService) =
     if (Project.isProjectLoaded(state))
       runTask(state, interactionServiceKey)
