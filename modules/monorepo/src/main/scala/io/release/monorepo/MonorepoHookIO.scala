@@ -1,6 +1,7 @@
 package io.release.monorepo
 
 import cats.effect.IO
+import io.release.runtime.TrackedContextHandle
 
 /** A semantic global hook that runs at a supported lifecycle point in the monorepo flow.
   *
@@ -10,6 +11,9 @@ import cats.effect.IO
   *
   * Hooks do not control phase ordering. The plugin decides when a lifecycle point exists and
   * whether it runs at all.
+  *
+  * Legacy `execute` hooks recover only the last returned context. Hooks that need recovery from
+  * intermediate context checkpoints should use the tracked constructors in the companion object.
   *
   * @param name     human-readable hook name, used in step names and log output
   * @param execute  the main hook logic; receives and returns a [[MonorepoContext]]
@@ -23,19 +27,74 @@ case class MonorepoGlobalHookIO(
 
 object MonorepoGlobalHookIO {
 
+  private trait TrackedExecute extends (MonorepoContext => IO[MonorepoContext]) {
+    def trackedExecute: TrackedContextHandle[MonorepoContext] => IO[Unit]
+  }
+
+  private[release] def withTrackedExecute(
+      execute: MonorepoContext => IO[MonorepoContext],
+      executeTracked: TrackedContextHandle[MonorepoContext] => IO[Unit]
+  ): MonorepoContext => IO[MonorepoContext] =
+    new TrackedExecute {
+      override def apply(ctx: MonorepoContext): IO[MonorepoContext] =
+        execute(ctx)
+
+      override val trackedExecute: TrackedContextHandle[MonorepoContext] => IO[Unit] =
+        executeTracked
+    }
+
+  private[release] def trackedExecute(
+      hook: MonorepoGlobalHookIO
+  ): TrackedContextHandle[MonorepoContext] => IO[Unit] =
+    hook.execute match {
+      case tracked: TrackedExecute => tracked.trackedExecute
+      case execute                 => TrackedContextHandle.lift(execute)
+    }
+
   /** Create a hook from a context-transforming function. */
+  @deprecated(
+    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
+    "next"
+  )
   def io(name: String)(f: MonorepoContext => IO[MonorepoContext]): MonorepoGlobalHookIO =
     MonorepoGlobalHookIO(name, f)
 
+  /** Create a hook from tracked context updates. */
+  def ioTracked(
+      name: String
+  )(f: TrackedContextHandle[MonorepoContext] => IO[Unit]): MonorepoGlobalHookIO =
+    MonorepoGlobalHookIO(
+      name = name,
+      execute = withTrackedExecute(
+        execute = ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
+          f(handle) *> handle.get
+        },
+        executeTracked = f
+      )
+    )
+
   /** Create a hook from an effect that leaves the context unchanged. */
+  @deprecated(
+    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
+    "next"
+  )
   def action(name: String)(f: MonorepoContext => IO[Unit]): MonorepoGlobalHookIO =
     MonorepoGlobalHookIO(name, ctx => f(ctx).as(ctx))
+
+  /** Create a tracked hook from an effect that mutates the current context via the handle. */
+  def actionTracked(
+      name: String
+  )(f: TrackedContextHandle[MonorepoContext] => IO[Unit]): MonorepoGlobalHookIO =
+    ioTracked(name)(f)
 }
 
 /** A semantic per-project hook that runs at a supported lifecycle point in the monorepo flow.
   *
   * Per-project hooks are compiled into lifecycle phases that iterate the selected projects.
   * They receive the current [[MonorepoContext]] and the active [[ProjectReleaseInfo]].
+  *
+  * Legacy `execute` hooks recover only the last returned context. Hooks that need recovery from
+  * intermediate context checkpoints should use the tracked constructors in the companion object.
   *
   * @param name     human-readable hook name, used in step names and log output
   * @param execute  the main hook logic; receives the current context and project
@@ -50,15 +109,76 @@ case class MonorepoProjectHookIO(
 
 object MonorepoProjectHookIO {
 
+  private trait TrackedExecute
+      extends ((MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]) {
+    def trackedExecute: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
+  }
+
+  private[release] def withTrackedExecute(
+      execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
+      executeTracked: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
+  ): (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
+    new TrackedExecute {
+      override def apply(
+          ctx: MonorepoContext,
+          project: ProjectReleaseInfo
+      ): IO[MonorepoContext] =
+        execute(ctx, project)
+
+      override val trackedExecute
+          : (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit] =
+        executeTracked
+    }
+
+  private[release] def trackedExecute(
+      hook: MonorepoProjectHookIO
+  ): (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit] =
+    hook.execute match {
+      case tracked: TrackedExecute => tracked.trackedExecute
+      case execute                 => TrackedContextHandle.liftPerItem(execute)
+    }
+
   /** Create a hook from a context-transforming function. */
+  @deprecated(
+    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
+    "next"
+  )
   def io(
       name: String
   )(f: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]): MonorepoProjectHookIO =
     MonorepoProjectHookIO(name, f)
 
+  /** Create a hook from tracked context updates. */
+  def ioTracked(
+      name: String
+  )(
+      f: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
+  ): MonorepoProjectHookIO =
+    MonorepoProjectHookIO(
+      name = name,
+      execute = withTrackedExecute(
+        execute = (ctx, project) => TrackedContextHandle.create(ctx).flatMap { handle =>
+          f(handle, project) *> handle.get
+        },
+        executeTracked = f
+      )
+    )
+
   /** Create a hook from an effect that leaves the context unchanged. */
+  @deprecated(
+    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
+    "next"
+  )
   def action(name: String)(
       f: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
   ): MonorepoProjectHookIO =
     MonorepoProjectHookIO(name, (ctx, project) => f(ctx, project).as(ctx))
+
+  /** Create a tracked hook from an effectful handle mutation. */
+  def actionTracked(
+      name: String
+  )(
+      f: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
+  ): MonorepoProjectHookIO =
+    ioTracked(name)(f)
 }

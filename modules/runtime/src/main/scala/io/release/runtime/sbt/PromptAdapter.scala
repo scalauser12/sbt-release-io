@@ -1,33 +1,44 @@
 package io.release.runtime.sbt
 
+import _root_.sbt.InteractionService
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
 
-import java.io.ByteArrayOutputStream
-import java.nio.charset.Charset
-import scala.annotation.tailrec
-
-/** Runtime adapter for interactive stdin prompting.
+/** Runtime adapter for interactive prompting through sbt's UI service.
   *
   * Built-ins should call this at the edge when they truly need operator input.
-  * The adapter owns prompt-state threading so release logic can stay expressed
-  * in terms of explicit decisions first and prompting as a final fallback.
+  * The adapter threads the updated sbt `State` back through the release context so
+  * prompt behavior follows the active sbt runtime on both supported sbt lines.
   */
 private[release] object PromptAdapter {
 
-  private val stdinCharset = Charset.defaultCharset()
+  private val RetryYesNoPromptPrefix =
+    "Please answer 'y' or 'n' (or press Enter for the default)."
+
+  private def interaction[C <: ReleaseCtx { type Self = C }](
+      ctx: C
+  ): IO[(C, InteractionService)] =
+    IO.blocking(SbtRuntime.currentInteractionService(ctx.state)).map { case (nextState, service) =>
+      (ctx.withState(nextState), service)
+    }
+
+  private def readLineWithPrompt[C <: ReleaseCtx { type Self = C }](
+      ctx: C,
+      prompt: String
+  ): IO[(C, Option[String])] =
+    interaction(ctx).flatMap { case (nextCtx, service) =>
+      IO.blocking(service.readLine(prompt, mask = false)).map(line => (nextCtx, line))
+    }
 
   def readLine[C <: ReleaseCtx { type Self = C }](ctx: C): IO[(C, Option[String])] =
-    IO.blocking(readLineBlocking(promptState(ctx))).map { case (nextState, line) =>
-      (ctx.withMetadata(PromptState.key, nextState), line)
-    }
+    readLineWithPrompt(ctx, "")
 
   def readRequiredLine[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       context: String
   ): IO[(C, String)] =
     readLine(ctx).flatMap {
-      case (_, None)              => // updated prompt state lost; error terminates flow
+      case (_, None)              =>
         IO.raiseError(
           new IllegalStateException(s"Standard input closed while waiting for $context.")
         )
@@ -38,14 +49,14 @@ private[release] object PromptAdapter {
       ctx: C,
       prompt: String
   ): IO[(C, Option[String])] =
-    IO.print(prompt) *> readLine(ctx)
+    readLineWithPrompt(ctx, prompt)
 
   def promptYesNoOrEof[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
-    promptYesNoLoop(ctx, prompt, defaultYes)
+    promptYesNoLoop(ctx, prompt, prompt, defaultYes)
 
   def promptYesNo[C <: ReleaseCtx { type Self = C }](
       ctx: C,
@@ -56,60 +67,29 @@ private[release] object PromptAdapter {
       (nextCtx, decision.getOrElse(defaultYes))
     }
 
-  private def promptState[C <: ReleaseCtx](ctx: C): PromptState =
-    ctx.metadata(PromptState.key).getOrElse(PromptState.empty)
-
   private def promptYesNoLoop[C <: ReleaseCtx { type Self = C }](
       ctx: C,
-      prompt: String,
+      currentPrompt: String,
+      basePrompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
-    promptLine(ctx, prompt).flatMap {
+    promptLine(ctx, currentPrompt).flatMap {
       case (nextCtx, None)           => IO.pure((nextCtx, None))
       case (nextCtx, Some(rawInput)) =>
         parseYesNoInput(rawInput, defaultYes) match {
           case Some(answer) => IO.pure((nextCtx, Some(answer)))
           case None         =>
-            IO.println("Please answer 'y' or 'n' (or press Enter for the default).") *>
-              promptYesNoLoop(nextCtx, prompt, defaultYes)
+            promptYesNoLoop(
+              nextCtx,
+              retryPrompt(basePrompt),
+              basePrompt,
+              defaultYes
+            )
         }
     }
 
-  private def readLineBlocking(state: PromptState): (PromptState, Option[String]) = {
-    val currentIn    = System.in
-    val initialState =
-      if (state.currentIn.exists(_ eq currentIn)) state
-      else PromptState(currentIn = Some(currentIn), skipLeadingLf = false)
-    val buffer       = new ByteArrayOutputStream()
-
-    @tailrec def loop(skipLf: Boolean): (PromptState, Option[String]) = {
-      val nextByte = currentIn.read()
-
-      if (skipLf && nextByte == '\n') loop(skipLf = false)
-      else {
-        def exitState(skipLeadingLf: Boolean = false) =
-          PromptState(Some(currentIn), skipLeadingLf)
-
-        nextByte match {
-          case -1   =>
-            if (buffer.size() == 0) (exitState(), None)
-            else (exitState(), Some(decode(buffer)))
-          case '\n' =>
-            (exitState(), Some(decode(buffer)))
-          case '\r' =>
-            (exitState(skipLeadingLf = true), Some(decode(buffer)))
-          case byte =>
-            buffer.write(byte)
-            loop(skipLf = false)
-        }
-      }
-    }
-
-    loop(initialState.skipLeadingLf)
-  }
-
-  private def decode(buffer: ByteArrayOutputStream): String =
-    new String(buffer.toByteArray, stdinCharset)
+  private def retryPrompt(prompt: String): String =
+    s"$RetryYesNoPromptPrefix\n$prompt"
 
   private def parseYesNoInput(raw: String, defaultYes: Boolean): Option[Boolean] =
     raw.trim.toLowerCase match {

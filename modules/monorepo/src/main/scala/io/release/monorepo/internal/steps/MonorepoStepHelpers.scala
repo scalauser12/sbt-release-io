@@ -5,6 +5,7 @@ import io.release.monorepo.MonorepoContext
 import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.*
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.errorMessage
@@ -38,6 +39,14 @@ private[monorepo] object MonorepoStepHelpers {
   ): IO[MonorepoContext] =
     runPerProjectInternal(ctx, action).map(propagateFailures)
 
+  /** Tracked variant of [[runPerProject]] that checkpoints the latest context in-place. */
+  def runPerProjectTracked(
+      handle: TrackedContextHandle[MonorepoContext],
+      action: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
+  ): IO[Unit] =
+    runPerProjectTrackedInternal(handle, action) *>
+      handle.update(ctx => IO.pure(propagateFailures(ctx))).void
+
   /** Internal per-project fold without propagation — used by cross-build iteration
     * which needs to run multiple version iterations before propagating.
     */
@@ -68,6 +77,42 @@ private[monorepo] object MonorepoStepHelpers {
               }
         }
       }
+
+  private def runPerProjectTrackedInternal(
+      handle: TrackedContextHandle[MonorepoContext],
+      action: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
+  ): IO[Unit] =
+    handle.get.flatMap { initialCtx =>
+      initialCtx.currentProjects.foldLeft(IO.unit) { (ioUnit, proj) =>
+        ioUnit.flatMap { _ =>
+          handle.get.flatMap { currentCtx =>
+            val latestProj = currentCtx.projects.find(_.ref == proj.ref).getOrElse(proj)
+            if (currentCtx.failed || latestProj.failed) IO.unit
+            else
+              action(handle, latestProj)
+                .flatMap(_ => handle.update(ctx => detectProjectFailureCommand(ctx, latestProj)).void)
+                .handleErrorWith {
+                  case NonFatal(err) =>
+                    handle.get.flatMap { latestCtx =>
+                      IO.blocking(
+                        latestCtx.state.log.error(
+                          s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
+                        )
+                      ) *>
+                        handle.update(ctx =>
+                          IO.pure(
+                            ctx.updateProject(latestProj.ref)(
+                              _.copy(failed = true, failureCause = Some(err))
+                            )
+                          )
+                        ).void
+                    }
+                  case fatal         => IO.raiseError(fatal)
+                }
+          }
+        }
+      }
+    }
 
   /** If any project is marked failed, propagate failure to the global context.
     * Package-private so validation paths can reuse the same project-to-global

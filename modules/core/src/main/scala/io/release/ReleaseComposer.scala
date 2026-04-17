@@ -3,6 +3,7 @@ package io.release
 import cats.effect.IO
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import sbt.Keys.*
@@ -67,6 +68,14 @@ private[release] object ReleaseComposer {
           IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *>
             step.execute(ctx)
         }
+      ),
+      executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(
+        wrapWithCrossBuildTracked(step, crossBuild) { handle =>
+          handle.get.flatMap(ctx =>
+            IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *>
+              step.executeTracked(handle)
+          )
+        }
       )
     )
 
@@ -76,6 +85,15 @@ private[release] object ReleaseComposer {
   )(action: ReleaseContext => IO[ReleaseContext]): ReleaseContext => IO[ReleaseContext] =
     if (step.enableCrossBuild && crossBuild)
       (ctx: ReleaseContext) => runCrossBuild(step.name, action)(ctx)
+    else action
+
+  private def wrapWithCrossBuildTracked(
+      step: Step,
+      crossBuild: Boolean
+  )(action: TrackedContextHandle[ReleaseContext] => IO[Unit])
+      : TrackedContextHandle[ReleaseContext] => IO[Unit] =
+    if (step.enableCrossBuild && crossBuild)
+      handle => runCrossBuildTracked(step.name, action)(handle)
     else action
 
   /** Run a step function across all crossScalaVersions using proper project reload. */
@@ -153,5 +171,87 @@ private[release] object ReleaseComposer {
                   IO.raiseError(restoreErr)
             }
           )
+    }
+
+  private def runCrossBuildTracked(
+      stepName: String,
+      action: TrackedContextHandle[ReleaseContext] => IO[Unit]
+  )(handle: TrackedContextHandle[ReleaseContext]): IO[Unit] =
+    handle.get.flatMap { ctx =>
+      IO.blocking {
+        val entryState    = ctx.state
+        val extracted     = SbtRuntime.extracted(entryState)
+        val crossVersions =
+          extracted.get(crossScalaVersions).distinct
+        (crossVersions, entryState)
+      }.flatMap { case (crossVersions, entryState) =>
+        def restoreEntry(currentCtx: ReleaseContext): IO[ReleaseContext] =
+          CrossBuildSupport
+            .restoreEntryScalaSession(entryState, currentCtx.state)
+            .map(currentCtx.withState)
+
+        def logRestoreAfterCompletionFailure(
+            currentCtx: ReleaseContext,
+            restoreErr: Throwable
+        ): IO[Unit] =
+          IO.blocking {
+            currentCtx.state.log.error(
+              s"$LogPrefix Failed to restore the entry Scala settings after cross-build completion: " +
+                s"${Option(restoreErr.getMessage).getOrElse(restoreErr.toString)}"
+            )
+          }
+
+        def restoreTrackedContext: IO[Unit] =
+          TrackedContextHandle.restoreLatest(handle)(
+            restore = restoreEntry,
+            onRestoreError = logRestoreAfterCompletionFailure
+          )
+
+        def restoreAfterFailure(actionErr: Throwable): IO[Unit] =
+          restoreTrackedContext *> IO.raiseError(actionErr)
+
+        def detectIterationFailure(currentCtx: ReleaseContext): IO[ReleaseContext] = IO {
+          if (SbtRuntime.hasFailureCommand(currentCtx.state)) {
+            val cleaned = SbtRuntime.stripLeadingFailureCommand(currentCtx.state)
+            currentCtx
+              .withState(cleaned)
+              .failWith(
+                new IllegalStateException(
+                  s"$stepName: sbt task reported failure via FailureCommand"
+                )
+              )
+          } else currentCtx
+        }
+
+        if (crossVersions.isEmpty)
+          IO.raiseError(
+            new IllegalStateException(
+              s"$LogPrefix Cross-build enabled but crossScalaVersions is empty"
+            )
+          )
+        else
+          crossVersions
+            .foldLeft(IO.unit) { (ioUnit, version) =>
+              ioUnit.flatMap { _ =>
+                handle.get.flatMap { currentCtx =>
+                  if (currentCtx.failed) IO.unit
+                  else
+                    for {
+                      _        <- IO.blocking(
+                                    currentCtx.state.log.info(
+                                      s"$LogPrefix Cross-building with Scala $version"
+                                    )
+                                  )
+                      switched <- SbtRuntime.switchScalaVersion(currentCtx.state, version, LogPrefix)
+                      _        <- handle.set(currentCtx.withState(switched))
+                      _        <- action(handle)
+                      _        <- handle.update(detectIterationFailure).void
+                    } yield ()
+                }
+              }
+            }
+            .handleErrorWith(restoreAfterFailure)
+            .flatMap(_ => restoreTrackedContext)
+      }
     }
 }

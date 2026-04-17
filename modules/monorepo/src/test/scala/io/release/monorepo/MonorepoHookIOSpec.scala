@@ -3,7 +3,9 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.monorepo.internal.*
+import io.release.runtime.TrackedContextHandle
 import munit.CatsEffectSuite
+import sbt.AttributeKey
 
 class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSupport {
 
@@ -64,6 +66,61 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val hook = MonorepoGlobalHookIO.action("validate-noop-action")(_ => IO.unit)
       hook.validate(ctx).map(_ => assert(true))
+    }
+  }
+
+  test("MonorepoGlobalHookIO - preserve the legacy constructor, copy, and extractor shape") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("copied").flatMap { marker =>
+        val hook   = MonorepoGlobalHookIO(
+          name = "legacy-global-hook",
+          execute = currentCtx => IO.pure(currentCtx.withProjects(Seq(marker))),
+          validate = _ => IO.unit
+        )
+        val copied = hook.copy(name = "copied-global-hook")
+
+        copied.execute(ctx).map { result =>
+          val MonorepoGlobalHookIO(name, execute, validate) = hook
+          assertEquals(name, "legacy-global-hook")
+          assertEquals(validate, hook.validate)
+          assertEquals(execute, hook.execute)
+          assertEquals(copied.name, "copied-global-hook")
+          assertEquals(result.projects, Seq(marker))
+        }
+      }
+    }
+  }
+
+  test("MonorepoGlobalHookIO.ioTracked - checkpoint updates through the tracked handle") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-global-hook")
+      val hook        = MonorepoGlobalHookIO.ioTracked("tracked-global") { handle =>
+        handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "updated"))).void
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalHookIO.trackedExecute(hook)(handle) *> handle.get.map { result =>
+          assertEquals(result.metadata(metadataKey), Some("updated"))
+        }
+      }
+    }
+  }
+
+  test("MonorepoGlobalHookIO.ioTracked - copy preserves tracked execution") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-global-hook-copy")
+      val hook        = MonorepoGlobalHookIO
+        .ioTracked("tracked-global") { handle =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "copied"))).void
+        }
+        .copy(name = "tracked-global-copy")
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalHookIO.trackedExecute(hook)(handle) *> handle.get.map { result =>
+          assertEquals(hook.name, "tracked-global-copy")
+          assertEquals(result.metadata(metadataKey), Some("copied"))
+        }
+      }
     }
   }
 
@@ -133,6 +190,68 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     }
   }
 
+  test("MonorepoProjectHookIO - preserve the legacy constructor, copy, and extractor shape") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val hook   = MonorepoProjectHookIO(
+          name = "legacy-project-hook",
+          execute = (currentCtx, currentProject) =>
+            IO.pure(currentCtx.withProjects(Seq(currentProject.copy(tagName = Some("tagged"))))),
+          validate = (_, _) => IO.unit
+        )
+        val copied = hook.copy(name = "copied-project-hook")
+
+        copied.execute(ctx, project).map { result =>
+          val MonorepoProjectHookIO(name, execute, validate) = hook
+          assertEquals(name, "legacy-project-hook")
+          assertEquals(validate, hook.validate)
+          assertEquals(execute, hook.execute)
+          assertEquals(copied.name, "copied-project-hook")
+          assertEquals(result.projects.head.tagName, Some("tagged"))
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectHookIO.ioTracked - checkpoint project-aware updates through the handle") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[String]("tracked-project-hook")
+        val hook        = MonorepoProjectHookIO.ioTracked("tracked-project") { (handle, p) =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, p.name))).void
+        }
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectHookIO.trackedExecute(hook)(handle, project) *> handle.get.map { result =>
+            assertEquals(result.metadata(metadataKey), Some("core"))
+          }
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectHookIO.ioTracked - copy preserves tracked execution") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[String]("tracked-project-hook-copy")
+        val hook        = MonorepoProjectHookIO
+          .ioTracked("tracked-project") { (handle, currentProject) =>
+            handle
+              .update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, currentProject.name)))
+              .void
+          }
+          .copy(name = "tracked-project-copy")
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectHookIO.trackedExecute(hook)(handle, project) *> handle.get.map { result =>
+            assertEquals(hook.name, "tracked-project-copy")
+            assertEquals(result.metadata(metadataKey), Some("core"))
+          }
+        }
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // MonorepoGlobalResourceHookIO
   // ---------------------------------------------------------------------------
@@ -183,6 +302,47 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val hook = MonorepoGlobalResourceHookIO.io[String]("resource-validate-noop")(_ => IO.pure)
       hook.validate(ctx).map(_ => assert(true))
+    }
+  }
+
+  test("MonorepoGlobalResourceHookIO.ioTracked - checkpoint resource-backed updates") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-global-resource-hook")
+      val hook        = MonorepoGlobalResourceHookIO.ioTracked[String]("tracked-resource-global") {
+        resource => handle =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalResourceHookIO.trackedExecute(hook)("resource")(handle) *> handle.get.map {
+          result =>
+            assertEquals(result.metadata(metadataKey), Some("resource"))
+        }
+      }
+    }
+  }
+
+  test(
+    "MonorepoGlobalResourceHookIO - preserve the legacy constructor, copy, and extractor shape"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[String]("legacy-global-resource")
+      val hook        = MonorepoGlobalResourceHookIO[String](
+        name = "legacy-global-resource-hook",
+        execute = resource =>
+          currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource)),
+        validate = _ => IO.unit
+      )
+      val copied      = hook.copy(name = "copied-global-resource-hook")
+
+      copied.execute("bound")(ctx).map { result =>
+        val MonorepoGlobalResourceHookIO(name, execute, validate) = hook
+        assertEquals(name, "legacy-global-resource-hook")
+        assertEquals(validate, hook.validate)
+        assertEquals(execute, hook.execute)
+        assertEquals(copied.name, "copied-global-resource-hook")
+        assertEquals(result.metadata(metadataKey), Some("bound"))
+      }
     }
   }
 
@@ -248,6 +408,52 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
             _ => (c, _) => IO.pure(c)
           }
         hook.validate(ctx, project).map(_ => assert(true))
+      }
+    }
+  }
+
+  test(
+    "MonorepoProjectResourceHookIO - preserve the legacy constructor, copy, and extractor shape"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val hook   = MonorepoProjectResourceHookIO[String](
+          name = "legacy-project-resource-hook",
+          execute = resource => (currentCtx, currentProject) =>
+            IO.pure(currentCtx.withProjects(Seq(currentProject.copy(tagName = Some(resource))))),
+          validate = (_, _) => IO.unit
+        )
+        val copied = hook.copy(name = "copied-project-resource-hook")
+
+        copied.execute("bound")(ctx, project).map { result =>
+          val MonorepoProjectResourceHookIO(name, execute, validate) = hook
+          assertEquals(name, "legacy-project-resource-hook")
+          assertEquals(validate, hook.validate)
+          assertEquals(execute, hook.execute)
+          assertEquals(copied.name, "copied-project-resource-hook")
+          assertEquals(result.projects.head.tagName, Some("bound"))
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectResourceHookIO.ioTracked - copy preserves tracked execution") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[String]("tracked-project-resource-hook-copy")
+        val hook        = MonorepoProjectResourceHookIO
+          .ioTracked[String]("tracked-project-resource") { resource => (handle, _) =>
+            handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
+          }
+          .copy(name = "tracked-project-resource-copy")
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectResourceHookIO
+            .trackedExecute(hook)("copied-resource")(handle, project) *> handle.get.map { result =>
+              assertEquals(hook.name, "tracked-project-resource-copy")
+              assertEquals(result.metadata(metadataKey), Some("copied-resource"))
+            }
+        }
       }
     }
   }
@@ -469,8 +675,8 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val resourceHook = MonorepoGlobalResourceHookIO[String](
           name = "hook-with-validate",
-          execute = _ => IO.pure,
-          validate = _ => log.update(_ :+ "validated")
+          execute = (_: String) => (currentCtx: MonorepoContext) => IO.pure(currentCtx),
+          validate = (_: MonorepoContext) => log.update(_ :+ "validated")
         )
         val hooks        =
           MonorepoResourceHooks[String](beforeSelectionHooks = Seq(resourceHook))
@@ -478,6 +684,54 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
 
         config.beforeSelectionHooks.head.validate(ctx).flatMap { _ =>
           log.get.map(events => assertEquals(events, List("validated")))
+        }
+      }
+    }
+  }
+
+  test("MonorepoResourceHooks.materialize - preserve tracked global execute when binding resource") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[String]("materialized-tracked-global-resource-hook")
+      val hook        = MonorepoGlobalResourceHookIO.ioTracked[String]("tracked-global") {
+        resource => handle =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
+      }
+      val config      = MonorepoResourceHooks.materialize(
+        MonorepoResourceHooks[String](beforeSelectionHooks = Seq(hook)),
+        Some("bound-global")
+      )
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalHookIO.trackedExecute(config.beforeSelectionHooks.head)(handle) *>
+          handle.get.map { result =>
+            assertEquals(result.metadata(metadataKey), Some("bound-global"))
+          }
+      }
+    }
+  }
+
+  test("MonorepoResourceHooks.materialize - preserve tracked project execute when binding resource") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[String]("materialized-tracked-project-resource-hook")
+        val hook        = MonorepoProjectResourceHookIO.ioTracked[String]("tracked-project") {
+          resource => (handle, currentProject) =>
+            handle
+              .update(currentCtx =>
+                IO.pure(currentCtx.withMetadata(metadataKey, s"$resource:${currentProject.name}"))
+              )
+              .void
+        }
+        val config      = MonorepoResourceHooks.materialize(
+          MonorepoResourceHooks[String](beforeTagHooks = Seq(hook)),
+          Some("bound-project")
+        )
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectHookIO.trackedExecute(config.beforeTagHooks.head)(handle, project) *>
+            handle.get.map { result =>
+              assertEquals(result.metadata(metadataKey), Some("bound-project:core"))
+            }
         }
       }
     }

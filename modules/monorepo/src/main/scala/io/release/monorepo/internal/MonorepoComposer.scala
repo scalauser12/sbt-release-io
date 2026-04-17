@@ -5,6 +5,7 @@ import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoCrossBuild
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 
@@ -93,6 +94,12 @@ private[monorepo] object MonorepoComposer {
           execute = ExecutionEngine.withErrorRecovery(LogPrefix)(currentCtx =>
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${single.name}")) *>
               single.execute(currentCtx)
+          ),
+          executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(handle =>
+            handle.get.flatMap(currentCtx =>
+              IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${single.name}")) *>
+                single.executeTracked(handle)
+            )
           )
         ),
       typed => {
@@ -100,6 +107,14 @@ private[monorepo] object MonorepoComposer {
           (currentCtx, project) =>
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
               typed.execute(currentCtx, project)
+
+        val loggedTracked
+            : (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit] =
+          (handle, project) =>
+            handle.get.flatMap(currentCtx =>
+              IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
+                typed.executeTracked(handle, project)
+            )
 
         ExecutionEngine.PreparedStep(
           name = typed.name,
@@ -114,6 +129,14 @@ private[monorepo] object MonorepoComposer {
             MonorepoCrossBuild.runPerProjectWithCrossBuild(
               ctx,
               logged,
+              crossBuild,
+              typed.enableCrossBuild
+            )
+          ),
+          executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(handle =>
+            MonorepoCrossBuild.runPerProjectWithCrossBuildTracked(
+              handle,
+              loggedTracked,
               crossBuild,
               typed.enableCrossBuild
             )

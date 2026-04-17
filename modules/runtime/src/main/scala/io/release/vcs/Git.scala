@@ -61,10 +61,13 @@ class Git(val baseDir: File) extends Vcs {
 
   def hasUpstream: IO[Boolean] =
     currentBranch.flatMap { branch =>
-      IO.blocking {
-        cmd("config", s"branch.$branch.remote").!(GitProcessSupport.discardLogger) == 0 &&
-        cmd("config", s"branch.$branch.merge").!(GitProcessSupport.discardLogger) == 0
-      }
+      for {
+        hasRemote <- GitProcessSupport.runExitCode(baseDir, Seq("config", s"branch.$branch.remote"))
+        hasMerge  <-
+          if (hasRemote == 0)
+            GitProcessSupport.runExitCode(baseDir, Seq("config", s"branch.$branch.merge"))
+          else IO.pure(1)
+      } yield hasRemote == 0 && hasMerge == 0
     }
 
   def isBehindRemote: IO[Boolean] =
@@ -78,10 +81,9 @@ class Git(val baseDir: File) extends Vcs {
     } yield behind
 
   def existsTag(name: String): IO[Boolean] =
-    IO.blocking(
-      cmd("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name")
-        .!(GitProcessSupport.discardLogger) == 0
-    )
+    GitProcessSupport
+      .runExitCode(baseDir, Seq("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name"))
+      .map(_ == 0)
 
   override def tagCommitHash(name: String): IO[Option[String]] =
     recoverMissingRef(

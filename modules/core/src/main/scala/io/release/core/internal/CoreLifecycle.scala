@@ -43,6 +43,7 @@ private[release] object CoreLifecycle {
       gate = config.gate,
       nameOf = (hook: ReleaseHookIO) => hook.name,
       executeOf = (hook: ReleaseHookIO) => hook.execute,
+      executeTrackedOf = Some((hook: ReleaseHookIO) => ReleaseHookIO.trackedExecute(hook)),
       validateOf = (hook: ReleaseHookIO) => hook.validate,
       crossBuild = config.crossBuild,
       freezeGate = config.freezeGate,

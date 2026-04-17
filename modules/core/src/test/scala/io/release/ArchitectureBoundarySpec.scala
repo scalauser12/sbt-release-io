@@ -56,6 +56,7 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "CleanCompat",
     "CrossBuildSupport",
     "ReleaseCtx",
+    "TrackedContextHandle",
     "ExecutionFlags",
     "ReleaseDecisionDefaults",
     "ReleaseLogPrefixes",

@@ -21,12 +21,7 @@ private[release] object StepHelpers {
   def errorMessage(err: Throwable): String =
     Option(err.getMessage).getOrElse(err.toString)
 
-  /** Read a line from standard input without reading ahead into later answers.
-    *
-    * The reader tracks only the current `System.in` identity and enough CRLF state to avoid
-    * turning `\r\n` into an empty extra line on the next `readLine()` call. Returns `None`
-    * on EOF when no bytes were read for the current line.
-    */
+  /** Read a line through sbt's interaction service. Returns `None` on EOF. */
   private[release] def readLine[C <: ReleaseCtx { type Self = C }](
       ctx: C
   ): IO[(C, Option[String])] =

@@ -2,6 +2,7 @@ package io.release
 
 import cats.effect.IO
 import io.release.core.internal.CoreHookConfiguration
+import io.release.runtime.TrackedContextHandle
 
 /** A resource-aware semantic hook for custom plugins that need a shared release resource.
   *
@@ -11,6 +12,9 @@ import io.release.core.internal.CoreHookConfiguration
   *
   * Resource-aware hooks are available only through [[ReleasePluginIOLike.releaseResourceHooks]].
   * They are not exposed as public sbt settings.
+  *
+  * Legacy `execute` hooks recover only the last returned context. Hooks that need recovery from
+  * intermediate context checkpoints should use the tracked constructors in the companion object.
   *
   * @param name     human-readable hook name, used in step names and log output
   * @param execute  the main hook logic; receives the shared resource and the current context
@@ -24,15 +28,70 @@ case class ReleaseResourceHookIO[T](
 
 object ReleaseResourceHookIO {
 
+  private trait TrackedExecute[T] extends (T => ReleaseContext => IO[ReleaseContext]) {
+    def trackedExecute: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
+  }
+
+  private[release] def withTrackedExecute[T](
+      execute: T => ReleaseContext => IO[ReleaseContext],
+      executeTracked: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
+  ): T => ReleaseContext => IO[ReleaseContext] =
+    new TrackedExecute[T] {
+      override def apply(resource: T): ReleaseContext => IO[ReleaseContext] =
+        execute(resource)
+
+      override val trackedExecute: T => TrackedContextHandle[ReleaseContext] => IO[Unit] =
+        executeTracked
+    }
+
+  private[release] def trackedExecute[T](
+      hook: ReleaseResourceHookIO[T]
+  ): T => TrackedContextHandle[ReleaseContext] => IO[Unit] =
+    hook.execute match {
+      case tracked: TrackedExecute[_] =>
+        tracked
+          .asInstanceOf[TrackedExecute[T]]
+          .trackedExecute
+      case execute                   => t => TrackedContextHandle.lift(execute(t))
+    }
+
   /** Create a resource-aware hook from a context-transforming function. */
+  @deprecated(
+    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
+    "next"
+  )
   def io[T](name: String)(
       f: T => ReleaseContext => IO[ReleaseContext]
   ): ReleaseResourceHookIO[T] =
     ReleaseResourceHookIO(name, f)
 
+  /** Create a tracked resource-aware hook from context handle updates. */
+  def ioTracked[T](name: String)(
+      f: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
+  ): ReleaseResourceHookIO[T] =
+    ReleaseResourceHookIO(
+      name = name,
+      execute = withTrackedExecute(
+        execute = t => ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
+          f(t)(handle) *> handle.get
+        },
+        executeTracked = f
+      )
+    )
+
   /** Create a resource-aware hook from an effect that leaves the context unchanged. */
+  @deprecated(
+    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
+    "next"
+  )
   def action[T](name: String)(f: T => ReleaseContext => IO[Unit]): ReleaseResourceHookIO[T] =
     ReleaseResourceHookIO(name, t => ctx => f(t)(ctx).as(ctx))
+
+  /** Create a tracked resource-aware hook from an effectful handle mutation. */
+  def actionTracked[T](name: String)(
+      f: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
+  ): ReleaseResourceHookIO[T] =
+    ioTracked(name)(f)
 }
 
 /** Resource-aware hook buckets for every supported core lifecycle point.
@@ -79,7 +138,11 @@ object ReleaseResourceHooks {
     def plain(hook: ReleaseResourceHookIO[T]): ReleaseHookIO =
       ReleaseHookIO(
         name = hook.name,
-        execute = ctx => maybeResource.fold(IO.pure(ctx))(r => hook.execute(r)(ctx)),
+        execute = ReleaseHookIO.withTrackedExecute(
+          execute = ctx => maybeResource.fold(IO.pure(ctx))(r => hook.execute(r)(ctx)),
+          executeTracked = handle =>
+            maybeResource.fold(IO.unit)(r => ReleaseResourceHookIO.trackedExecute(hook)(r)(handle))
+        ),
         validate = hook.validate
       )
 

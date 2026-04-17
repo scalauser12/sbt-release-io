@@ -2,8 +2,12 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
+import cats.effect.Deferred
 import io.release.core.internal.CoreHookConfiguration
+import io.release.runtime.TrackedContextHandle
 import munit.CatsEffectSuite
+import sbt.AttributeKey
+import scala.concurrent.duration.DurationInt
 
 class ReleaseHookIOSpec extends CatsEffectSuite {
 
@@ -104,6 +108,163 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val hook = ReleaseHookIO.action("action-hook-default-validate")(_ => IO.unit)
       hook.validate(ctx).map(result => assertEquals(result, ()))
+    }
+  }
+
+  test("ReleaseHookIO - preserve the legacy constructor, copy, and extractor shape") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val hook   = ReleaseHookIO(
+        name = "legacy-hook",
+        execute = currentCtx => IO.pure(currentCtx.withVersions("1.0.0", "1.1.0-SNAPSHOT")),
+        validate = _ => IO.unit
+      )
+      val copied = hook.copy(name = "copied-hook")
+
+      copied.execute(ctx).map { result =>
+        val ReleaseHookIO(name, execute, validate) = hook
+        assertEquals(name, "legacy-hook")
+        assertEquals(validate, hook.validate)
+        assertEquals(execute, hook.execute)
+        assertEquals(copied.name, "copied-hook")
+        assertEquals(result.versions, Some(("1.0.0", "1.1.0-SNAPSHOT")))
+      }
+    }
+  }
+
+  test("ReleaseHookIO.ioTracked - checkpoint updates through the tracked handle") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-hook")
+      val hook        = ReleaseHookIO.ioTracked("tracked-hook") { handle =>
+        handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "updated"))).void
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseHookIO.trackedExecute(hook)(handle) *> handle.get.map { result =>
+          assertEquals(result.metadata(metadataKey), Some("updated"))
+        }
+      }
+    }
+  }
+
+  test("ReleaseHookIO.ioTracked - copy preserves tracked execution") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-hook-copy")
+      val hook        = ReleaseHookIO
+        .ioTracked("tracked-hook") { handle =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "copied"))).void
+        }
+        .copy(name = "tracked-hook-copy")
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseHookIO.trackedExecute(hook)(handle) *> handle.get.map { result =>
+          assertEquals(hook.name, "tracked-hook-copy")
+          assertEquals(result.metadata(metadataKey), Some("copied"))
+        }
+      }
+    }
+  }
+
+  test("ReleaseHookIO.ioTracked - serialize concurrent checkpoint updates") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[Vector[String]]("tracked-hook-concurrent")
+      val hook        = ReleaseHookIO.ioTracked("tracked-hook-concurrent") { handle =>
+        def appendEntry(currentCtx: ReleaseContext, entry: String): ReleaseContext =
+          currentCtx.withMetadata(
+            metadataKey,
+            currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+          )
+
+        for {
+          started     <- Deferred[IO, Unit]
+          allowFirst  <- Deferred[IO, Unit]
+          firstFiber  <- handle
+                           .update(currentCtx =>
+                             started.complete(()) *> allowFirst.get.as(
+                               appendEntry(currentCtx, "first")
+                             )
+                           )
+                           .start
+          _           <- started.get
+          secondFiber <- handle
+                           .update(currentCtx => IO.pure(appendEntry(currentCtx, "second")))
+                           .start
+          _           <- allowFirst.complete(())
+          _           <- firstFiber.joinWithNever
+          _           <- secondFiber.joinWithNever
+        } yield ()
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseHookIO.trackedExecute(hook)(handle) *> handle.get.map { result =>
+          assertEquals(result.metadata(metadataKey), Some(Vector("first", "second")))
+        }
+      }
+    }
+  }
+
+  test("ReleaseHookIO.ioTracked - nested handle access fails fast instead of deadlocking") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val hook = ReleaseHookIO.ioTracked("tracked-hook-nested") { handle =>
+        handle
+          .update(currentCtx => handle.get.as(currentCtx))
+          .void
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        for {
+          result <- ReleaseHookIO.trackedExecute(hook)(handle).attempt.timeout(3.seconds)
+          latest <- handle.get.timeout(3.seconds)
+        } yield {
+          result match {
+            case Left(err: IllegalStateException) =>
+              assert(err.getMessage.contains("Nested tracked-handle operations"))
+            case other                            =>
+              fail(s"Expected nested tracked hook access to fail fast, got $other")
+          }
+          assertEquals(latest, ctx)
+        }
+      }
+    }
+  }
+
+  test("ReleaseHookIO.ioTracked - child fiber handle updates succeed after parent update returns") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[Vector[String]]("tracked-hook-child-fiber")
+
+      def appendEntry(currentCtx: ReleaseContext, entry: String): ReleaseContext =
+        currentCtx.withMetadata(
+          metadataKey,
+          currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+        )
+
+      val hook = ReleaseHookIO.ioTracked("tracked-hook-child-fiber") { handle =>
+        for {
+          childCanRun <- Deferred[IO, Unit]
+          childResult <- Deferred[IO, Either[Throwable, Unit]]
+          _           <- handle.update { currentCtx =>
+                           (childCanRun.get *>
+                             handle
+                               .update(innerCtx => IO.pure(appendEntry(innerCtx, "child")))
+                               .void)
+                             .attempt
+                             .flatMap(childResult.complete)
+                             .start
+                             .as(appendEntry(currentCtx, "parent"))
+                         }
+          _           <- childCanRun.complete(())
+          childOutcome <- childResult.get.timeout(3.seconds)
+          _           <- childOutcome match {
+                           case Left(err) => IO.raiseError(err)
+                           case Right(_)  => IO.unit
+                         }
+        } yield ()
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseHookIO.trackedExecute(hook)(handle) *> handle.get.map { result =>
+          assertEquals(result.metadata(metadataKey), Some(Vector("parent", "child")))
+        }
+      }
     }
   }
 
@@ -214,6 +375,63 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       val hook = ReleaseResourceHookIO
         .action[String]("resource-action-hook-default-validate")(_ => _ => IO.unit)
       hook.validate(ctx).map(result => assertEquals(result, ()))
+    }
+  }
+
+  test("ReleaseResourceHookIO - preserve the legacy constructor, copy, and extractor shape") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("legacy-resource")
+      val hook        = ReleaseResourceHookIO[String](
+        name = "legacy-resource-hook",
+        execute = resource =>
+          currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource)),
+        validate = _ => IO.unit
+      )
+      val copied      = hook.copy(name = "copied-resource-hook")
+
+      copied.execute("bound")(ctx).map { result =>
+        val ReleaseResourceHookIO(name, execute, validate) = hook
+        assertEquals(name, "legacy-resource-hook")
+        assertEquals(validate, hook.validate)
+        assertEquals(execute, hook.execute)
+        assertEquals(copied.name, "copied-resource-hook")
+        assertEquals(result.metadata(metadataKey), Some("bound"))
+      }
+    }
+  }
+
+  test("ReleaseResourceHookIO.ioTracked - checkpoint resource-backed updates through the handle") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-resource-hook")
+      val hook        = ReleaseResourceHookIO.ioTracked[String]("tracked-resource-hook") { resource =>
+        handle =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseResourceHookIO.trackedExecute(hook)("resource")(handle) *> handle.get.map { result =>
+          assertEquals(result.metadata(metadataKey), Some("resource"))
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHookIO.ioTracked - copy preserves tracked execution") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-resource-hook-copy")
+      val hook        = ReleaseResourceHookIO
+        .ioTracked[String]("tracked-resource-hook") { resource => handle =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
+        }
+        .copy(name = "tracked-resource-hook-copy")
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseResourceHookIO.trackedExecute(hook)("copied-resource")(handle) *> handle.get.map {
+          result =>
+            assertEquals(hook.name, "tracked-resource-hook-copy")
+            assertEquals(result.metadata(metadataKey), Some("copied-resource"))
+        }
+      }
     }
   }
 
@@ -355,14 +573,36 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val resourceHook = ReleaseResourceHookIO[String](
           name = "hook-with-validate",
-          execute = _ => IO.pure,
-          validate = _ => log.update(_ :+ "validated")
+          execute = (_: String) => (currentCtx: ReleaseContext) => IO.pure(currentCtx),
+          validate = (_: ReleaseContext) => log.update(_ :+ "validated")
         )
         val hooks        = ReleaseResourceHooks[String](beforeTagHooks = Seq(resourceHook))
         val config       = ReleaseResourceHooks.materialize(hooks, Some("res"))
 
         config.beforeTagHooks.head.validate(ctx).flatMap { _ =>
           log.get.map(events => assertEquals(events, List("validated")))
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHooks.materialize - preserve tracked execute when binding the resource") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("materialized-tracked-resource-hook")
+      val hook        = ReleaseResourceHookIO.ioTracked[String]("tracked-before-tag") { resource =>
+        handle =>
+          handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
+      }
+      val config      =
+        ReleaseResourceHooks.materialize(
+          ReleaseResourceHooks[String](beforeTagHooks = Seq(hook)),
+          Some("bound-resource")
+        )
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseHookIO.trackedExecute(config.beforeTagHooks.head)(handle) *> handle.get.map {
+          result =>
+            assertEquals(result.metadata(metadataKey), Some("bound-resource"))
         }
       }
     }
