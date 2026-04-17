@@ -436,13 +436,13 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
         }
     }
 
-  protected def doMonorepoHelp(state: State): State =
+  private[monorepo] def doMonorepoHelp(state: State): State =
     MonorepoCommandExecution.doHelp(state, commandName)
 
-  protected def doMonorepoRelease(state: State, args: Seq[MonorepoCli.Arg]): State =
+  private[monorepo] def doMonorepoRelease(state: State, args: Seq[MonorepoCli.Arg]): State =
     MonorepoCommandExecution.doRelease(state, args, commandRuntime)
 
-  protected def doMonorepoCheck(state: State, args: Seq[MonorepoCli.Arg]): State =
+  private[monorepo] def doMonorepoCheck(state: State, args: Seq[MonorepoCli.Arg]): State =
     MonorepoCommandExecution.doCheck(state, args, commandRuntime)
 }
 

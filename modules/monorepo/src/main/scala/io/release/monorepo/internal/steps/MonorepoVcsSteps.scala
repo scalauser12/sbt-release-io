@@ -115,6 +115,9 @@ private[monorepo] object MonorepoVcsSteps {
       missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
   ): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
+      // Check mode only reaches tag preflight after MonorepoPreflight has ruled out tag-affecting
+      // runtime hook state, so a single tag-settings resolution here is stable enough. Live tagging
+      // still re-resolves below per project to observe late-bound before-tag mutations.
       MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
         ctx.currentProjects.toList.traverse { project =>
           required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {

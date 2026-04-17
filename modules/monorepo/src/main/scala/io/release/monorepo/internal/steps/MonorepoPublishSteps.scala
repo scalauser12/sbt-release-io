@@ -22,6 +22,7 @@ import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.sbt.SnapshotDependencyTasks
 import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.PublishValidation
+import io.release.runtime.workflow.StepHelpers.runTaskChecked
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -29,10 +30,14 @@ import scala.util.control.NonFatal
 
 /** Publish, test, clean, and dependency-check monorepo release steps.
   *
-  * FailureCommand detection is handled centrally by [[MonorepoStepHelpers.runPerProject]].
-  * Step implementations here just run their sbt tasks and return the updated context.
+  * Returned-state FailureCommand detection is handled centrally by
+  * [[MonorepoStepHelpers.runPerProject]]. Task-valued publish checks route through
+  * [[io.release.runtime.workflow.StepHelpers.runTaskChecked]] because they need the updated
+  * `State` and task result immediately.
   */
 private[monorepo] object MonorepoPublishSteps {
+
+  private val PublishArtifactsActionName = "publish-artifacts"
 
   private def fallbackToPublishWarning(project: ProjectReleaseInfo): String =
     s"${project.name}: ${releaseIOPublishAction.key.label} is undefined; " +
@@ -48,25 +53,38 @@ private[monorepo] object MonorepoPublishSteps {
       ctx.withState(newState)
     }
 
-  private def evaluateProjectTask[A](
+  private def isFailureCommandTaskError(cause: Throwable): Boolean =
+    cause match {
+      case err: IllegalStateException =>
+        Option(err.getMessage).exists(_.contains("reported failure via FailureCommand"))
+      case _                          => false
+    }
+
+  private def evaluateProjectTaskChecked[A](
       ctx: MonorepoContext,
       key: TaskKey[A],
+      actionName: String,
       failureMessage: String
-  ): IO[A] =
-    IO.blocking {
-      val extracted = Project.extract(ctx.state)
-      extracted.runTask(key, ctx.state)._2
-    }.recoverWith { case NonFatal(cause) =>
-      IO.raiseError(new IllegalStateException(failureMessage, cause))
-    }
+  ): IO[(MonorepoContext, A)] =
+    runTaskChecked(ctx.state, key, actionName)
+      .map { case (newState, value) =>
+        (ctx.withState(newState), value)
+      }
+      .recoverWith {
+        case NonFatal(cause) if isFailureCommandTaskError(cause) =>
+          IO.raiseError(cause)
+        case NonFatal(cause)                                     =>
+          IO.raiseError(new IllegalStateException(failureMessage, cause))
+      }
 
   private def evaluatePublishSkip(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): IO[Boolean] =
-    evaluateProjectTask(
+  ): IO[(MonorepoContext, Boolean)] =
+    evaluateProjectTaskChecked(
       ctx,
       project.ref / publish / Keys.skip,
+      PublishArtifactsActionName,
       s"Failed to evaluate publish / skip for ${project.name}"
     )
 
@@ -75,15 +93,16 @@ private[monorepo] object MonorepoPublishSteps {
       project: ProjectReleaseInfo
   ): IO[Boolean] =
     if (ctx.skipPublish) IO.pure(false)
-    else evaluatePublishSkip(ctx, project).map(!_)
+    else evaluatePublishSkip(ctx, project).map { case (_, skipped) => !skipped }
 
   private def evaluatePublishTarget(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): IO[Option[Resolver]] =
-    evaluateProjectTask(
+  ): IO[(MonorepoContext, Option[Resolver])] =
+    evaluateProjectTaskChecked(
       ctx,
       project.ref / publishTo,
+      PublishArtifactsActionName,
       s"Failed to evaluate publishTo for ${project.name}"
     )
 
@@ -216,11 +235,12 @@ private[monorepo] object MonorepoPublishSteps {
         if (ctx.skipPublish)
           logInfo(ctx, s"Skipping publish for ${project.name}").as(ctx)
         else
-          evaluatePublishSkip(ctx, project).flatMap { skipped =>
+          evaluatePublishSkip(ctx, project).flatMap { case (skipCtx, skipped) =>
             if (skipped)
-              logInfo(ctx, s"Skipping publish for ${project.name} (publish / skip := true)").as(ctx)
+              logInfo(skipCtx, s"Skipping publish for ${project.name} (publish / skip := true)")
+                .as(skipCtx)
             else
-              withProjectReleaseState(ctx, project).flatMap(publishCtx =>
+              withProjectReleaseState(skipCtx, project).flatMap(publishCtx =>
                 if (
                   LoadCompat
                     .containsScopedKey(publishCtx.state, project.ref / releaseIOPublishAction)
@@ -231,25 +251,30 @@ private[monorepo] object MonorepoPublishSteps {
                     runProjectTask(publishCtx, project.ref / publish)
               )
           },
-      validate = (ctx, project) =>
-        if (ctx.skipPublish) IO.unit
+      validateWithContext = Some((ctx, project) =>
+        if (ctx.skipPublish) IO.pure(ctx)
         else
           IO.blocking(
             Project.extract(ctx.state).get(releaseIOMonorepoPublishChecks)
           ).flatMap {
-            case false => IO.unit
+            case false => IO.pure(ctx)
             case true  =>
               for {
-                publishSkipped <- evaluatePublishSkip(ctx, project)
-                publishTarget  <-
-                  if (publishSkipped) IO.pure(Option.empty[Resolver])
-                  else evaluatePublishTarget(ctx, project)
-                result         <- PublishValidation.requirePublishTarget(project.ref.project)(
-                                    publishSkipped,
-                                    publishTarget.isEmpty
-                                  )
-              } yield result
-          },
+                skipResult                <- evaluatePublishSkip(ctx, project)
+                (skipCtx, publishSkipped)  = skipResult
+                targetCtxAndPublishTarget <-
+                  if (publishSkipped) IO.pure(skipCtx -> Option.empty[Resolver])
+                  else evaluatePublishTarget(skipCtx, project)
+                (targetCtx, publishTarget)  = targetCtxAndPublishTarget
+                _                          <- PublishValidation.requirePublishTarget(
+                                                project.ref.project
+                                              )(
+                                                publishSkipped,
+                                                publishTarget.isEmpty
+                                              )
+              } yield targetCtx
+          }
+      ),
       enableCrossBuild = true
     )
 }

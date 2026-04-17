@@ -65,6 +65,8 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                         }
         (sign, signOff, msgFormatter) = settings
         result                       <- IO.uncancelable { _ =>
+                                          // Keep staging + commit atomic so cancellation cannot
+                                          // strand partially-prepared release-version commits.
                                           (
                                             if (versionFilePaths.isEmpty) IO.unit
                                             else vcs.add(versionFilePaths*)

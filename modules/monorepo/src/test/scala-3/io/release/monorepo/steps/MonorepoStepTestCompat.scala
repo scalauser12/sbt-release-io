@@ -123,3 +123,32 @@ private[monorepo] object MonorepoStepTestCompat:
 
   def throwingPublishSkipSetting: Setting[?] =
     publish / skip := { throw new RuntimeException("publish/skip eval error"); false }
+
+  def failureCommandPublishSkipSetting(
+      marker: File,
+      skipped: Boolean = false
+  ): Setting[?] =
+    publish / skip := Def
+      .task[Boolean] {
+        sbt.IO.write(marker, "ran")
+        skipped
+      }
+      .updateState { (state: State, _: Boolean) =>
+        state.copy(
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
+        )
+      }
+      .value
+
+  def failureCommandPublishTargetSetting(marker: File): Setting[?] =
+    publishTo := Def
+      .task[Option[Resolver]] {
+        sbt.IO.write(marker, "ran")
+        Some(Resolver.file("local-test", marker.getParentFile))
+      }
+      .updateState { (state: State, _: Option[Resolver]) =>
+        state.copy(
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
+        )
+      }
+      .value
