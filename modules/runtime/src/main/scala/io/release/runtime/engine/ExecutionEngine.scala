@@ -142,17 +142,25 @@ private[release] object ExecutionEngine {
       )
     else IO.pure(ctx)
 
+  def recoverWithContext[C <: ReleaseCtx { type Self = C }](
+      logPrefix: String,
+      ctx: C
+  )(program: IO[C]): IO[C] =
+    program.handleErrorWith { err =>
+      IO.blocking(
+        ctx.state.log.error(
+          s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
+        )
+      ).flatMap(_ => IO.pure(ctx.failWith(err)))
+    }
+
   def withErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(
       f: C => IO[C]
   ): C => IO[C] =
-    (ctx: C) =>
-      f(ctx).handleErrorWith { err =>
-        IO.blocking(
-          ctx.state.log.error(
-            s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
-          )
-        ).flatMap(_ => IO.pure(ctx.failWith(err)))
-      }
+    (ctx: C) => recoverWithContext(logPrefix, ctx)(f(ctx))
+
+  private def shouldDetectSbtFailure[C <: ReleaseCtx { type Self = C }](ctx: C): Boolean =
+    !ctx.failed || (ctx.failureCause.isEmpty && SbtRuntime.hasFailureCommand(ctx.state))
 
   def runActionPhase[C <: ReleaseCtx { type Self = C }](
       steps: Seq[PreparedStep[C]]
@@ -163,7 +171,9 @@ private[release] object ExecutionEngine {
     val interleavedSteps = steps.flatMap { step =>
       Seq(
         (ctx: C) => if (ctx.failed) IO.pure(ctx) else step.execute(ctx),
-        (ctx: C) => detectSbtFailure(step.name, ctx)
+        (ctx: C) =>
+          if (shouldDetectSbtFailure(ctx)) detectSbtFailure(step.name, ctx)
+          else IO.pure(ctx)
       )
     }
 

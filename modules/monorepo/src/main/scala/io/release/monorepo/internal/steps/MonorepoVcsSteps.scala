@@ -11,6 +11,7 @@ import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.required
@@ -155,25 +156,27 @@ private[monorepo] object MonorepoVcsSteps {
                     expectedCommitHash,
                     project.name
                   ).flatMap { case (updatedCtx, resolvedTagName) =>
-                    for {
-                      preserved <- MonorepoVersionFiles.preservedSettings(
-                                     updatedCtx.state,
-                                     updatedCtx.currentProjects.map(_.ref)
-                                   )
-                      _         <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
-                      newState  <-
-                        IO.blocking {
-                          SbtRuntime.appendWithSession(
-                            updatedCtx.state,
-                            preserved ++ ReleaseManifestMetadataSupport.releaseManifestTagSettings(
-                              project.ref,
-                              resolvedTagName
+                    ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, updatedCtx)(
+                      for {
+                        preserved <- MonorepoVersionFiles.preservedSettings(
+                                       updatedCtx.state,
+                                       updatedCtx.currentProjects.map(_.ref)
+                                     )
+                        _         <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
+                        newState  <-
+                          IO.blocking {
+                            SbtRuntime.appendWithSession(
+                              updatedCtx.state,
+                              preserved ++ ReleaseManifestMetadataSupport.releaseManifestTagSettings(
+                                project.ref,
+                                resolvedTagName
+                              )
                             )
-                          )
-                        }
-                    } yield updatedCtx
-                      .withState(newState)
-                      .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
+                          }
+                      } yield updatedCtx
+                        .withState(newState)
+                        .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
+                    )
                   }
                 }
               }

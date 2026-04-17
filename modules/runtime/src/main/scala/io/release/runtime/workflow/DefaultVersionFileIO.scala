@@ -7,9 +7,11 @@ import java.io.File
 /** Shared default version-file parsing and rendering used by both release modes. */
 private[release] object DefaultVersionFileIO {
 
-  private val versionPattern = """(?:ThisBuild\s*/\s*)?version\s*:=\s*"([^"]+)"""".r
+  private val versionPattern =
+    """^(?:ThisBuild\s*/\s*)?version\s*:=\s*"([^"]+)"(?:\s*//.*)?$""".r
 
-  /** Default version file reader. Parses `[ThisBuild /] version := "x.y.z"`.
+  /** Default version file reader. Parses `version := "x.y.z"` or
+    * `[ThisBuild /] version := "x.y.z"`, with an optional trailing `// ...` comment.
     * Skips comment lines to avoid matching commented-out versions.
     */
   val defaultReadVersion: File => IO[String] = { file =>
@@ -27,7 +29,7 @@ private[release] object DefaultVersionFileIO {
                   }(
                     new IllegalStateException(
                       s"Could not parse version from ${file.getName}. " +
-                        s"""Expected format: [ThisBuild /] version := "x.y.z"\nContents:\n$contents\n""" +
+                        s"""Expected format: version := "x.y.z" or ThisBuild / version := "x.y.z", optionally followed by // comment\nContents:\n$contents\n""" +
                         "If you use a custom version file format, configure " +
                         "`releaseIOVersioningFile`, `releaseIOVersioningReadVersion`, and " +
                         "`releaseIOVersioningFileContents`. See `releaseIO help` for examples."

@@ -7,6 +7,8 @@ import io.release.core.internal.CoreReleasePlan
 import io.release.core.internal.CoreStepFactory
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
 import io.release.runtime.workflow.StepHelpers
@@ -278,6 +280,102 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
               assertEquals(events, List("execute1"))
               assertEquals(result.state.remainingCommands, Nil)
               assertEquals(result.state.onFailure, None)
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - preserve an existing failure when FailureCommand is still queued") {
+    contextResource.use { ctx =>
+      val rootCause = new RuntimeException("root cause")
+
+      val alreadyFailed = CoreStepFactory.io("already-failed") { currentCtx =>
+        val failedCtx = currentCtx.failWith(rootCause)
+
+        IO.pure(
+          failedCtx.withState(
+            failedCtx.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+          )
+        )
+      }
+      val skipped      = CoreStepFactory.io("skipped")(IO.pure)
+
+      ReleaseComposer.compose(Seq(alreadyFailed, skipped), crossBuild = false)(ctx).map { result =>
+        assert(result.failed)
+        assertEquals(result.failureCause, Some(rootCause))
+      }
+    }
+  }
+
+  test("compose - attribute FailureCommand when a step returns ctx.fail without a cause") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val markFailed = CoreStepFactory.io("mark-failed-with-sentinel") { currentCtx =>
+          observed.update(_ :+ "execute1").as {
+            val failedCtx = currentCtx.fail
+
+            failedCtx.withState(
+              failedCtx.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+            )
+          }
+        }
+        val skipped    = CoreStepFactory.io("skipped") { currentCtx =>
+          observed.update(_ :+ "execute2").as(currentCtx)
+        }
+        val expected   =
+          "mark-failed-with-sentinel: sbt action reported failure via FailureCommand"
+
+        ReleaseComposer.compose(Seq(markFailed, skipped), crossBuild = false)(ctx).flatMap {
+          result =>
+            observed.get.flatMap { events =>
+              assert(result.failed)
+              assertEquals(result.failureCause.map(_.getMessage), Some(expected))
+              assertEquals(result.state.remainingCommands, Nil)
+              assertEquals(events, List("execute1"))
+
+              ExecutionEngine.raiseIfFailed(result).attempt.map {
+                case Left(err: IllegalStateException) =>
+                  assertEquals(err.getMessage, expected)
+                case Left(other)                      =>
+                  fail(
+                    s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+                  )
+                case Right(_)                         =>
+                  fail("Expected raiseIfFailed to propagate the FailureCommand cause")
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - preserve updated context when a later action-phase failure is recovered") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val metadataKey = AttributeKey[String]("recovered-action-metadata")
+        val failingStep = ProcessStep.Single[ReleaseContext](
+          name = "recover-updated-context",
+          execute = currentCtx =>
+            observed.update(_ :+ "execute1") *>
+              {
+                val updatedCtx = currentCtx.withMetadata(metadataKey, "seeded")
+                ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, updatedCtx)(
+                  IO.raiseError(new RuntimeException("later failure"))
+                )
+              }
+        )
+        val skipped     = CoreStepFactory.io("skipped") { currentCtx =>
+          observed.update(_ :+ "execute2").as(currentCtx)
+        }
+
+        ReleaseComposer.compose(Seq(failingStep, skipped), crossBuild = false)(ctx).flatMap {
+          result =>
+            observed.get.map { events =>
+              assert(result.failed)
+              assertEquals(result.metadata(metadataKey), Some("seeded"))
+              assertEquals(result.failureCause.map(_.getMessage), Some("later failure"))
+              assertEquals(events, List("execute1"))
             }
         }
       }
