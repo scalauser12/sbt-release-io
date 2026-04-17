@@ -1,5 +1,7 @@
 package io.release.runtime.engine
 
+import scala.util.control.NonFatal
+
 import _root_.sbt.AttributeKey
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
@@ -165,11 +167,16 @@ private[release] object ExecutionEngine {
       ctx: C
   )(program: IO[C]): IO[C] =
     program.handleErrorWith { err =>
-      IO.blocking(
-        ctx.state.log.error(
-          s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
-        )
-      ).flatMap(_ => IO.pure(ctx.failWith(err)))
+      err match {
+        case NonFatal(nonFatalErr) =>
+          IO.blocking(
+            ctx.state.log.error(
+              s"$logPrefix Error: ${StepHelpers.errorMessage(nonFatalErr)}"
+            )
+          ).as(ctx.failWith(nonFatalErr))
+        case fatal                =>
+          IO.raiseError(fatal)
+      }
     }
 
   def recoverWithContext[C <: ReleaseCtx { type Self = C }](
@@ -177,15 +184,20 @@ private[release] object ExecutionEngine {
       handle: TrackedContextHandle[C]
   )(program: IO[Unit]): IO[Unit] =
     program.handleErrorWith { err =>
-      handle
-        .update { ctx =>
-          IO.blocking(
-            ctx.state.log.error(
-              s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
-            )
-          ).as(ctx.failWith(err))
-        }
-        .void
+      err match {
+        case NonFatal(nonFatalErr) =>
+          handle
+            .update { ctx =>
+              IO.blocking(
+                ctx.state.log.error(
+                  s"$logPrefix Error: ${StepHelpers.errorMessage(nonFatalErr)}"
+                )
+              ).as(ctx.failWith(nonFatalErr))
+            }
+            .void
+        case fatal                =>
+          IO.raiseError(fatal)
+      }
     }
 
   def withErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(

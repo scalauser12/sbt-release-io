@@ -83,22 +83,41 @@ private[release] object ProcessStep {
   ) extends ProcessStep[C, Nothing]
 
   object Single {
-    def apply[C](
+    private def build[C](
         name: String,
         execute: C => IO[C],
-        executeTracked: TrackedContextHandle[C] => IO[Unit] = null,
-        validate: C => IO[Unit] = (_: C) => IO.unit,
-        roles: Set[BuiltInStepRole] = Set.empty,
-        enableCrossBuild: Boolean = false,
-        validateWithContext: Option[C => IO[C]] = None
+        executeTracked: TrackedContextHandle[C] => IO[Unit],
+        validate: C => IO[Unit],
+        roles: Set[BuiltInStepRole],
+        enableCrossBuild: Boolean,
+        validateWithContext: Option[C => IO[C]]
     ): Single[C] =
       new Single(
         name = name,
         roles = roles,
         execute = execute,
-        executeTracked = Option(executeTracked).getOrElse(TrackedContextHandle.lift(execute)),
+        executeTracked = executeTracked,
         validate = mergeValidate(validate, validateWithContext),
         enableCrossBuild = enableCrossBuild
+      )
+
+    def apply[C](
+        name: String,
+        execute: C => IO[C],
+        executeTracked: Option[TrackedContextHandle[C] => IO[Unit]] = None,
+        validate: C => IO[Unit] = (_: C) => IO.unit,
+        roles: Set[BuiltInStepRole] = Set.empty,
+        enableCrossBuild: Boolean = false,
+        validateWithContext: Option[C => IO[C]] = None
+    ): Single[C] =
+      build(
+        name = name,
+        execute = execute,
+        executeTracked = executeTracked.getOrElse(TrackedContextHandle.lift(execute)),
+        validate = validate,
+        roles = roles,
+        enableCrossBuild = enableCrossBuild,
+        validateWithContext = validateWithContext
       )
 
     def tracked[C](
@@ -109,11 +128,12 @@ private[release] object ProcessStep {
         enableCrossBuild: Boolean = false,
         validateWithContext: Option[C => IO[C]] = None
     ): Single[C] =
-      apply(
+      build(
         name = name,
-        execute = ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
-          executeTracked(handle) *> handle.get
-        },
+        execute = (ctx: C) =>
+          TrackedContextHandle.create(ctx).flatMap { handle =>
+            executeTracked(handle) *> handle.get
+          },
         executeTracked = executeTracked,
         validate = validate,
         roles = roles,
@@ -132,22 +152,41 @@ private[release] object ProcessStep {
   ) extends ProcessStep[C, I]
 
   object PerItem {
-    def apply[C, I](
+    private def build[C, I](
         name: String,
         execute: (C, I) => IO[C],
-        executeTracked: (TrackedContextHandle[C], I) => IO[Unit] = null,
-        validate: (C, I) => IO[Unit] = (_: C, _: I) => IO.unit,
-        roles: Set[BuiltInStepRole] = Set.empty,
-        enableCrossBuild: Boolean = false,
-        validateWithContext: Option[(C, I) => IO[C]] = None
+        executeTracked: (TrackedContextHandle[C], I) => IO[Unit],
+        validate: (C, I) => IO[Unit],
+        roles: Set[BuiltInStepRole],
+        enableCrossBuild: Boolean,
+        validateWithContext: Option[(C, I) => IO[C]]
     ): PerItem[C, I] =
       new PerItem(
         name = name,
         roles = roles,
         execute = execute,
-        executeTracked = Option(executeTracked).getOrElse(TrackedContextHandle.liftPerItem(execute)),
+        executeTracked = executeTracked,
         validate = mergeValidatePerItem(validate, validateWithContext),
         enableCrossBuild = enableCrossBuild
+      )
+
+    def apply[C, I](
+        name: String,
+        execute: (C, I) => IO[C],
+        executeTracked: Option[(TrackedContextHandle[C], I) => IO[Unit]] = None,
+        validate: (C, I) => IO[Unit] = (_: C, _: I) => IO.unit,
+        roles: Set[BuiltInStepRole] = Set.empty,
+        enableCrossBuild: Boolean = false,
+        validateWithContext: Option[(C, I) => IO[C]] = None
+    ): PerItem[C, I] =
+      build(
+        name = name,
+        execute = execute,
+        executeTracked = executeTracked.getOrElse(TrackedContextHandle.liftPerItem(execute)),
+        validate = validate,
+        roles = roles,
+        enableCrossBuild = enableCrossBuild,
+        validateWithContext = validateWithContext
       )
 
     def tracked[C, I](
@@ -158,9 +197,9 @@ private[release] object ProcessStep {
         enableCrossBuild: Boolean = false,
         validateWithContext: Option[(C, I) => IO[C]] = None
     ): PerItem[C, I] =
-      apply(
+      build(
         name = name,
-        execute = (ctx, item) =>
+        execute = (ctx: C, item: I) =>
           TrackedContextHandle.create(ctx).flatMap { handle =>
             executeTracked(handle, item) *> handle.get
           },
