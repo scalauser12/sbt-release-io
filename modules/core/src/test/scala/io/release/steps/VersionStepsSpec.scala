@@ -134,8 +134,23 @@ class VersionStepsSpec extends CatsEffectSuite {
 
   private val defaultReadVersionCases = Seq(
     (
-      "defaultReadVersion - parse a standard version line",
+      "defaultReadVersion - parse a plain version line",
+      """version := "1.2.3-SNAPSHOT"""",
+      "1.2.3-SNAPSHOT"
+    ),
+    (
+      "defaultReadVersion - parse a ThisBuild version line",
       """ThisBuild / version := "1.2.3-SNAPSHOT"""",
+      "1.2.3-SNAPSHOT"
+    ),
+    (
+      "defaultReadVersion - parse a plain version line with trailing // comment",
+      """version := "1.2.3-SNAPSHOT" // release baseline""",
+      "1.2.3-SNAPSHOT"
+    ),
+    (
+      "defaultReadVersion - parse a ThisBuild version line with trailing // comment",
+      """ThisBuild / version := "1.2.3-SNAPSHOT" // release baseline""",
       "1.2.3-SNAPSHOT"
     ),
     (
@@ -196,6 +211,45 @@ class VersionStepsSpec extends CatsEffectSuite {
         ) { err =>
           assert(err.getMessage.contains("Could not parse version"))
           assert(err.getMessage.contains(file.getName))
+        }
+      }
+    }
+  }
+
+  private val defaultReadVersionRejectedCases = Seq(
+    (
+      "defaultReadVersion - reject Global-scoped version lines",
+      """Global / version := "1.0.0"""" + "\n"
+    ),
+    (
+      "defaultReadVersion - reject project-scoped version lines",
+      """core / version := "1.0.0"""" + "\n"
+    ),
+    (
+      "defaultReadVersion - reject embedded version expressions inside task bodies",
+      "task := {\n" +
+        "  val rendered = " +
+        "\"\"\"version := \"1.0.0\"\"\"" +
+        "\n" +
+        "  println(rendered)\n" +
+        "}\n"
+    ),
+    (
+      "defaultReadVersion - reject non-comment trailing tokens after the version line",
+      """version := "1.0.0" foo""" + "\n"
+    )
+  )
+
+  defaultReadVersionRejectedCases.foreach { case (name, contents) =>
+    test(name) {
+      TestSupport.tempDirResource(fixturePrefix).use { dir =>
+        writeVersionFile(dir, contents).flatMap { file =>
+          TestAssertions.assertFailure[IllegalStateException, String](
+            VersionSteps.defaultReadVersion(file)
+          ) { err =>
+            assert(err.getMessage.contains("Could not parse version"))
+            assert(err.getMessage.contains(file.getName))
+          }
         }
       }
     }

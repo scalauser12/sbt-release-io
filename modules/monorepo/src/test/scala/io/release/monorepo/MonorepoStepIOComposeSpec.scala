@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.Ref
 import io.release.monorepo.internal.*
 import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
@@ -412,6 +413,50 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
                 assertEquals(result.state.onFailure, None)
               }
             }
+        }
+      }
+    }
+  }
+
+  test("compose - attribute FailureCommand when a global step returns ctx.fail without a cause") {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val markFailed = ProcessStep.Single[MonorepoContext](
+          name = "mark-failed-with-sentinel",
+          execute = currentCtx =>
+            observed.update(_ :+ "execute1").as {
+              val failedCtx = currentCtx.fail
+
+              failedCtx.withState(
+                failedCtx.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+              )
+            }
+        )
+        val skipped    = ProcessStep.Single[MonorepoContext](
+          name = "skipped-after-failure",
+          execute = currentCtx => observed.update(_ :+ "execute2").as(currentCtx)
+        )
+        val expected   =
+          "mark-failed-with-sentinel: sbt action reported failure via FailureCommand"
+
+        MonorepoComposer.compose(Seq(markFailed, skipped))(ctx).flatMap { result =>
+          observed.get.flatMap { events =>
+            assert(result.failed)
+            assertEquals(result.failureCause.map(_.getMessage), Some(expected))
+            assertEquals(result.state.remainingCommands, Nil)
+            assertEquals(events, List("execute1"))
+
+            ExecutionEngine.raiseIfFailed(result).attempt.map {
+              case Left(err: IllegalStateException) =>
+                assertEquals(err.getMessage, expected)
+              case Left(other)                      =>
+                fail(
+                  s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+                )
+              case Right(_)                         =>
+                fail("Expected raiseIfFailed to propagate the FailureCommand cause")
+            }
+          }
         }
       }
     }

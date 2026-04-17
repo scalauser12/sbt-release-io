@@ -12,6 +12,7 @@ import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.workflow.VersionWorkflowSupport
@@ -63,29 +64,36 @@ private[monorepo] object MonorepoVersionWorkflow {
     project.resolvedVersions match {
       case Some((releaseVersion, nextVersion)) =>
         MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
-          logInfo(ctx, s"${project.name}: pre-set -> $releaseVersion (next: $nextVersion)")
-            .as(
-              withResolvedVersions(
-                ctx,
-                project.ref,
-                ResolvedProjectVersions(
-                  versionFile = versionInputs.versionFile,
-                  currentVersion = "",
-                  releaseVersion = releaseVersion,
-                  nextVersion = nextVersion
-                )
+          val resolvedCtx =
+            withResolvedVersions(
+              ctx,
+              project.ref,
+              ResolvedProjectVersions(
+                versionFile = versionInputs.versionFile,
+                currentVersion = "",
+                releaseVersion = releaseVersion,
+                nextVersion = nextVersion
               )
             )
+
+          ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, resolvedCtx)(
+            logInfo(resolvedCtx, s"${project.name}: pre-set -> $releaseVersion (next: $nextVersion)")
+              .as(resolvedCtx)
+          )
         }
       case _                                   =>
         resolveProjectVersions(ctx, project, allowPrompts = true).flatMap {
           case (updatedCtx, resolved) =>
-            logInfo(
-              updatedCtx,
-              s"${project.name}: ${resolved.currentVersion} -> " +
-                s"${resolved.releaseVersion} " +
-                s"(next: ${resolved.nextVersion})"
-            ).as(withResolvedVersions(updatedCtx, project.ref, resolved))
+            val resolvedCtx = withResolvedVersions(updatedCtx, project.ref, resolved)
+
+            ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, resolvedCtx)(
+              logInfo(
+                resolvedCtx,
+                s"${project.name}: ${resolved.currentVersion} -> " +
+                  s"${resolved.releaseVersion} " +
+                  s"(next: ${resolved.nextVersion})"
+              ).as(resolvedCtx)
+            )
         }
     }
 
@@ -417,11 +425,14 @@ private[monorepo] object MonorepoVersionWorkflow {
       updated     = ctx
                       .withState(newState)
                       .updateProject(project.ref)(_.copy(versionFile = versionFile))
-      _          <- logInfo(
-                      updated,
-                      s"Wrote version $versionValue to ${versionFile.getPath} for ${project.name}"
-                    )
-    } yield updated
+      result     <-
+        ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, updated)(
+          logInfo(
+            updated,
+            s"Wrote version $versionValue to ${versionFile.getPath} for ${project.name}"
+          ).as(updated)
+        )
+    } yield result
 
   private def missingVersionFileMessage(
       project: ProjectReleaseInfo,

@@ -10,6 +10,7 @@ import sbt.Keys.*
 import sbt.{internal as _, *}
 
 import scala.concurrent.duration.*
+import scala.util.control.NonFatal
 
 /** Shared VCS operations used by both core and monorepo release steps.
   *
@@ -297,7 +298,10 @@ private[release] object VcsOps {
       vcs: Vcs,
       logPrefix: String
   ): IO[C] =
-    vcs.isBehindRemote.handleError(_ => false).flatMap {
+    vcs.isBehindRemote.handleErrorWith {
+      case NonFatal(_) => IO.pure(false)
+      case fatal       => IO.raiseError(fatal)
+    }.flatMap {
       case false => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))
       case true  =>
         currentUpstreamTip(vcs).flatMap {
@@ -320,7 +324,10 @@ private[release] object VcsOps {
     }
 
   private def currentUpstreamTip(vcs: Vcs): IO[Option[String]] =
-    vcs.upstreamTrackingHash.handleError(_ => None)
+    vcs.upstreamTrackingHash.handleErrorWith {
+      case NonFatal(_) => IO.pure(None)
+      case fatal       => IO.raiseError(fatal)
+    }
 
   private def confirmedUpstreamTip[C <: ReleaseCtx](ctx: C): Option[String] =
     ctx.metadata(confirmedUpstreamTipKey)

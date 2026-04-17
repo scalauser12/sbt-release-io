@@ -7,6 +7,7 @@ import io.release.ReleasePluginIO.autoImport.*
 import io.release.VcsOps
 import io.release.core.internal.VersionPlan
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
 import io.release.runtime.workflow.VersionWorkflowSupport
@@ -73,19 +74,21 @@ private[release] object ReleaseVersionWorkflow {
 
   def inquireVersions(ctx: ReleaseContext): IO[ReleaseContext] =
     resolveVersions(ctx, allowPrompts = true).flatMap { case (updatedCtx, resolved) =>
-      IO.blocking {
-        updatedCtx.state.log.info(
-          s"${ReleaseLogPrefixes.Core} Current version : ${resolved.currentVersion}"
-        )
-        updatedCtx.state.log.info(
-          s"${ReleaseLogPrefixes.Core} Release version : ${resolved.releaseVersion}"
-        )
-        updatedCtx.state.log.info(
-          s"${ReleaseLogPrefixes.Core} Next version    : ${resolved.nextVersion}"
-        )
+      val resolvedCtx = updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion)
 
-        updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion)
-      }
+      ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resolvedCtx)(
+        IO.blocking {
+          resolvedCtx.state.log.info(
+            s"${ReleaseLogPrefixes.Core} Current version : ${resolved.currentVersion}"
+          )
+          resolvedCtx.state.log.info(
+            s"${ReleaseLogPrefixes.Core} Release version : ${resolved.releaseVersion}"
+          )
+          resolvedCtx.state.log.info(
+            s"${ReleaseLogPrefixes.Core} Next version    : ${resolved.nextVersion}"
+          )
+        }.as(resolvedCtx)
+      )
     }
 
   def writeReleaseVersion(ctx: ReleaseContext): IO[ReleaseContext] =
@@ -109,15 +112,18 @@ private[release] object ReleaseVersionWorkflow {
                                      versionPlan.versionFile
                                    )
         (resultCtx, currentHash) = commitResult
-        finalCtx                <- IO.blocking {
-                                     val newState = SbtRuntime.appendWithSession(
-                                       resultCtx.state,
-                                       sessionSettings(versionPlan) ++
-                                         Seq(releaseIOInternalReleaseHash := Some(currentHash)) ++
-                                         versionValueSettings(versionPlan, releaseVersion)
-                                     )
-                                     resultCtx.withState(newState)
-                                   }
+        finalCtx                <-
+          ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resultCtx)(
+            IO.blocking {
+              val newState = SbtRuntime.appendWithSession(
+                resultCtx.state,
+                sessionSettings(versionPlan) ++
+                  Seq(releaseIOInternalReleaseHash := Some(currentHash)) ++
+                  versionValueSettings(versionPlan, releaseVersion)
+              )
+              resultCtx.withState(newState)
+            }
+          )
       } yield finalCtx
     }
 
@@ -133,14 +139,17 @@ private[release] object ReleaseVersionWorkflow {
             versionPlan.versionFile
           )
         (resultCtx, _) = commitResult
-        finalCtx      <- IO.blocking {
-                           val newState = SbtRuntime.appendWithSession(
-                             resultCtx.state,
-                             sessionSettings(versionPlan) ++
-                               versionValueSettings(versionPlan, nextVersion)
-                           )
-                           resultCtx.withState(newState)
-                         }
+        finalCtx      <-
+          ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resultCtx)(
+            IO.blocking {
+              val newState = SbtRuntime.appendWithSession(
+                resultCtx.state,
+                sessionSettings(versionPlan) ++
+                  versionValueSettings(versionPlan, nextVersion)
+              )
+              resultCtx.withState(newState)
+            }
+          )
       } yield finalCtx
     }
 

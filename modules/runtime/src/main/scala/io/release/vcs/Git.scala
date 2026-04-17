@@ -4,12 +4,19 @@ import cats.effect.IO
 
 import java.io.File
 import scala.concurrent.duration.*
+import scala.util.control.NonFatal
 
 /** Git implementation of [[Vcs]] with all operations wrapped in `IO.blocking`. */
 class Git(val baseDir: File) extends Vcs {
 
   private val DetachedHeadMessage =
     "HEAD is detached. release-io branch-based VCS operations require a checked-out branch."
+
+  private def recoverMissingRef(io: IO[String]): IO[Option[String]] =
+    io.map(Some(_)).handleErrorWith {
+      case NonFatal(_) => IO.pure(None)
+      case fatal       => IO.raiseError(fatal)
+    }
 
   val commandName: String = "git"
 
@@ -43,13 +50,13 @@ class Git(val baseDir: File) extends Vcs {
 
   def upstreamTrackingHash: IO[Option[String]] =
     branchInfo.flatMap { case (branch, remote) =>
-      upstreamBranch(branch)
-        .flatMap(upstream =>
+      recoverMissingRef(
+        upstreamBranch(branch).flatMap(upstream =>
           runSingleLine("rev-parse", "--verify", s"$remote/$upstream")(
             s"git rev-parse --verify $remote/$upstream"
-          ).map(Some(_))
+          )
         )
-        .handleError(_ => None)
+      )
     }
 
   def hasUpstream: IO[Boolean] =
@@ -77,9 +84,11 @@ class Git(val baseDir: File) extends Vcs {
     )
 
   override def tagCommitHash(name: String): IO[Option[String]] =
-    runSingleLine("rev-parse", "--verify", s"refs/tags/$name^{commit}")(
-      s"git rev-parse --verify refs/tags/$name^{commit}"
-    ).map(Some(_)).handleError(_ => None)
+    recoverMissingRef(
+      runSingleLine("rev-parse", "--verify", s"refs/tags/$name^{commit}")(
+        s"git rev-parse --verify refs/tags/$name^{commit}"
+      )
+    )
 
   def modifiedFiles: IO[Seq[String]] =
     runLines("ls-files", "--modified", "--exclude-standard")("git ls-files --modified")

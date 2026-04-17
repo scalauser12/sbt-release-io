@@ -483,6 +483,29 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("validatePushReadiness - ignore upstreamTrackingHash errors and continue") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val ctx = VcsOpsSpec.promptContext(
+        TestSupport.dummyState(dir),
+        interactive = false,
+        useDefaults = false,
+        decisionDefaults = ReleaseDecisionDefaults.empty.copy(upstreamBehindAnswer = Some(true))
+      )
+
+      VcsOps
+        .validatePushReadiness(
+          ctx,
+          new StubVcs(
+            dir,
+            isBehindRemote0 = IO.pure(true),
+            upstreamTrackingHash0 = IO.raiseError(new RuntimeException("boom"))
+          ),
+          ReleaseLogPrefixes.Core
+        )
+        .map(result => assertEquals(result, ctx))
+    }
+  }
+
   test("preparePushRelease - detect VCS when missing before checking push readiness") {
     ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { baseCtx =>
       val ctx = VcsOpsSpec.promptContext(

@@ -4,12 +4,22 @@ import cats.effect.IO
 import io.release.TestSupport
 import munit.CatsEffectSuite
 
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.lang.ProcessBuilder.Redirect
+import java.nio.charset.StandardCharsets
+import java.time.Duration as JavaDuration
+import java.time.Instant
+import java.util.Optional
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
 
 class GitSpec extends CatsEffectSuite {
   private val fixturePrefix = "git-spec"
@@ -45,6 +55,125 @@ class GitSpec extends CatsEffectSuite {
               fail(s"Expected git status failure, got output: ${output.mkString(", ")}")
           }
       } yield ()
+    }
+  }
+
+  test("attachedJavaCmd - inherit terminal stdio for runCmd operations") {
+    TestSupport.tempDirResource(s"$fixturePrefix-attached-stdio").use { dir =>
+      IO {
+        val builder = GitProcessSupport.attachedJavaCmd(dir, "status")
+
+        assertEquals(builder.redirectInput(), Redirect.INHERIT)
+        assertEquals(builder.redirectOutput(), Redirect.INHERIT)
+        assertEquals(builder.redirectError(), Redirect.INHERIT)
+      }
+    }
+  }
+
+  test("captureLines - decode git output with the provided charset") {
+    val expected = "cafe\u00e9"
+    val bytes    = s"$expected\n".getBytes(StandardCharsets.ISO_8859_1)
+
+    GitProcessSupport
+      .captureLines(new ByteArrayInputStream(bytes), StandardCharsets.ISO_8859_1)
+      .map(lines => assertEquals(lines, Vector(expected)))
+  }
+
+  test("cleanupManagedProcess - close streams when the root process already exited") {
+    val descendant = new FakeProcessHandle(2L, initialAlive = true)
+    val process    = new FakeProcess(1L, initialAlive = false, descendants = Vector(descendant))
+
+    GitProcessSupport.cleanupManagedProcess(process, 1.second, completed = false).map { _ =>
+      assertEquals(process.destroyCalls, 0)
+      assertEquals(process.destroyForciblyCalls, 0)
+      assertEquals(descendant.destroyCalls, 0)
+      assertEquals(descendant.destroyForciblyCalls, 0)
+      assert(process.inputClosed)
+      assert(process.errorClosed)
+      assert(process.outputClosed)
+      assert(descendant.isAlive)
+    }
+  }
+
+  test("cleanupManagedProcess - destroy root and descendants when completion aborts") {
+    val descendant = new FakeProcessHandle(2L, initialAlive = true)
+    val process    = new FakeProcess(1L, initialAlive = true, descendants = Vector(descendant))
+
+    GitProcessSupport.cleanupManagedProcess(process, 1.second, completed = false).map { _ =>
+      assertEquals(process.destroyCalls, 1)
+      assertEquals(process.destroyForciblyCalls, 0)
+      assertEquals(descendant.destroyCalls, 1)
+      assertEquals(descendant.destroyForciblyCalls, 0)
+      assert(process.inputClosed)
+      assert(process.errorClosed)
+      assert(process.outputClosed)
+      assert(!descendant.isAlive)
+    }
+  }
+
+  test("upstreamTrackingHash - return None when the configured upstream ref is missing") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-upstream-missing").use {
+      case (repo, _) =>
+        for {
+          _      <- IO.blocking(
+                      TestSupport.runGit(repo, "config", "branch.main.merge", "refs/heads/missing")
+                    )
+          result <- new Git(repo).upstreamTrackingHash
+        } yield assertEquals(result, None)
+    }
+  }
+
+  test("tagCommitHash - return None when the tag does not exist") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-missing-tag").use { repo =>
+      new Git(repo).tagCommitHash("v1.0.0").map(result => assertEquals(result, None))
+    }
+  }
+
+  test("runCmd - destroy the spawned git process when the fiber is canceled") {
+    assume(new File("/bin/sh").exists(), "requires /bin/sh")
+
+    TestSupport.gitRepoResource(s"$fixturePrefix-run-cmd-cancel").use { repo =>
+      val pidFile = new File(repo, "run-cmd.pid")
+
+      for {
+        _     <- configureAlias(
+                   repo,
+                   "codexsleepcmd",
+                   """echo $$ > "$0"; exec sleep 5""",
+                   pidFile
+                 )
+        fiber <- GitProcessSupport
+                   .runCmd(repo, Seq("codexsleepcmd"))("git codexsleepcmd")
+                   .start
+        _     <- waitForFile(pidFile, 5.seconds)
+        _     <- fiber.cancel.timeout(1.second)
+        pid   <- readPid(pidFile)
+        alive <- waitForProcessToExit(pid, 2.seconds)
+      } yield assertEquals(alive, false)
+    }
+  }
+
+  test("runLines - destroy the spawned git process when the fiber is canceled") {
+    assume(new File("/bin/sh").exists(), "requires /bin/sh")
+
+    TestSupport.gitRepoResource(s"$fixturePrefix-run-lines-cancel").use { repo =>
+      val pidFile = new File(repo, "run-lines.pid")
+
+      for {
+        _     <- configureAlias(
+                   repo,
+                   "codexsleeplines",
+                   """echo $$ > "$0"; printf "%s\n" hello; printf "%s\n" boom 1>&2; exec sleep 5""",
+                   pidFile
+                 )
+        fiber <- GitProcessSupport
+                   .runLines(repo, Seq("codexsleeplines"))("git codexsleeplines")
+                   .start
+        _     <- waitForFile(pidFile, 5.seconds)
+        _     <- fiber.cancel.timeout(1.second)
+        pid   <- readPid(pidFile)
+        alive <- waitForProcessToExit(pid, 2.seconds)
+      } yield assertEquals(alive, false)
     }
   }
 
@@ -126,6 +255,30 @@ class GitSpec extends CatsEffectSuite {
       case false => IO.raiseError(new RuntimeException("Process did not start in time"))
     }
 
+  private def configureAlias(
+      repo: File,
+      name: String,
+      script: String,
+      args: File*
+  ): IO[Unit] = {
+    val renderedArgs = args.map(file => s"'${file.getAbsolutePath}'").mkString(" ")
+    val aliasValue   = s"""!sh -c '$script' $renderedArgs"""
+
+    IO.blocking(TestSupport.runGit(repo, "config", s"alias.$name", aliasValue)).void
+  }
+
+  private def waitForFile(file: File, remaining: FiniteDuration): IO[Unit] =
+    IO.blocking(file.exists()).flatMap {
+      case true                              => IO.unit
+      case false if remaining <= Duration.Zero =>
+        IO.raiseError(new RuntimeException(s"${file.getName} did not appear in time"))
+      case false                             =>
+        IO.sleep(10.millis) *> waitForFile(file, remaining - 10.millis)
+    }
+
+  private def readPid(file: File): IO[Long] =
+    IO.blocking(sbt.IO.read(file).trim.toLong)
+
   private def waitForProcessToExit(pid: Long, remaining: FiniteDuration): IO[Boolean] =
     processAlive(pid).flatMap {
       case false                              => IO.pure(false)
@@ -140,4 +293,119 @@ class GitSpec extends CatsEffectSuite {
       val handle = java.lang.ProcessHandle.of(pid)
       handle.isPresent && handle.get.isAlive
     }
+
+  private final class FakeProcess(
+      processId: Long,
+      initialAlive: Boolean,
+      descendants: Vector[FakeProcessHandle]
+  ) extends Process {
+    private val input  = new TrackingInputStream
+    private val error  = new TrackingInputStream
+    private val output = new TrackingOutputStream
+    private val handle = new FakeProcessHandle(processId, initialAlive, descendants)
+
+    var destroyCalls: Int          = 0
+    var destroyForciblyCalls: Int  = 0
+    def inputClosed: Boolean       = input.closed
+    def errorClosed: Boolean       = error.closed
+    def outputClosed: Boolean      = output.closed
+
+    override def getOutputStream(): OutputStream = output
+    override def getInputStream(): InputStream   = input
+    override def getErrorStream(): InputStream   = error
+    override def waitFor(): Int                  = 0
+    override def exitValue(): Int                = 0
+    override def destroy(): Unit = {
+      destroyCalls += 1
+      handle.setAlive(false)
+    }
+    override def destroyForcibly(): Process = {
+      destroyForciblyCalls += 1
+      handle.setAlive(false)
+      this
+    }
+    override def isAlive(): Boolean              = handle.isAlive
+    override def pid(): Long                     = processId
+    override def toHandle(): ProcessHandle       = handle
+  }
+
+  private final class FakeProcessHandle(
+      processId: Long,
+      initialAlive: Boolean,
+      descendantHandles: Vector[FakeProcessHandle] = Vector.empty
+  ) extends ProcessHandle {
+    private var alive = initialAlive
+
+    var destroyCalls: Int         = 0
+    var destroyForciblyCalls: Int = 0
+
+    def setAlive(value: Boolean): Unit = alive = value
+
+    override def pid(): Long = processId
+
+    override def parent(): Optional[ProcessHandle] =
+      Optional.empty()
+
+    override def children(): java.util.stream.Stream[ProcessHandle] =
+      Vector.empty[ProcessHandle].asJava.stream()
+
+    override def descendants(): java.util.stream.Stream[ProcessHandle] =
+      descendantHandles.map(handle => handle: ProcessHandle).asJava.stream()
+
+    override def info(): ProcessHandle.Info = new ProcessHandle.Info {
+      override def command(): Optional[String]               = Optional.empty()
+      override def commandLine(): Optional[String]           = Optional.empty()
+      override def arguments(): Optional[Array[String]]      = Optional.empty()
+      override def startInstant(): Optional[Instant]         = Optional.empty()
+      override def totalCpuDuration(): Optional[JavaDuration] = Optional.empty()
+      override def user(): Optional[String]                  = Optional.empty()
+    }
+
+    override def onExit(): CompletableFuture[ProcessHandle] =
+      CompletableFuture.completedFuture(this: ProcessHandle)
+
+    override def supportsNormalTermination(): Boolean = true
+
+    override def destroy(): Boolean = {
+      destroyCalls += 1
+      alive = false
+      true
+    }
+
+    override def destroyForcibly(): Boolean = {
+      destroyForciblyCalls += 1
+      alive = false
+      true
+    }
+
+    override def isAlive(): Boolean = alive
+
+    override def compareTo(other: ProcessHandle): Int =
+      java.lang.Long.compare(processId, other.pid())
+
+    override def hashCode(): Int = java.lang.Long.hashCode(processId)
+
+    override def equals(obj: Any): Boolean = obj match {
+      case other: ProcessHandle => processId == other.pid()
+      case _                    => false
+    }
+  }
+
+  private final class TrackingInputStream extends ByteArrayInputStream(Array.emptyByteArray) {
+    var closed: Boolean = false
+
+    override def close(): Unit = {
+      closed = true
+      super.close()
+    }
+  }
+
+  private final class TrackingOutputStream extends ByteArrayOutputStream {
+    var closed: Boolean = false
+
+    override def close(): Unit = {
+      closed = true
+      super.close()
+    }
+  }
 }
