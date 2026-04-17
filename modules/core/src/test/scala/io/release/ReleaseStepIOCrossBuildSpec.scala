@@ -340,6 +340,63 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
     }
   }
 
+  test("compose - restore the entry Scala version after a tracked cross-build execute fails") {
+    loadedContextResource(
+      "release-step-io-tracked-cross-failure",
+      _.settings(
+        Keys.scalaVersion       := TestSupport.CurrentScalaVersion,
+        Keys.crossScalaVersions := Seq(
+          TestSupport.CurrentScalaVersion,
+          TestSupport.alternateScalaVersion
+        )
+      )
+    ).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val metadataKey = AttributeKey[String]("tracked-cross-build-metadata")
+        val step        = ProcessStep.Single.tracked[ReleaseContext](
+          name = "tracked-cross-step",
+          executeTracked = handle =>
+            handle.get.flatMap { currentCtx =>
+              scalaVersionOf(currentCtx.state).flatMap { version =>
+                observed.update(_ :+ s"execute:$version") *>
+                  (if (version == TestSupport.alternateScalaVersion)
+                     handle.get.flatMap { latestCtx =>
+                       if (latestCtx.metadata(metadataKey).contains("updated"))
+                         IO.raiseError(new RuntimeException("boom"))
+                       else
+                         IO.raiseError(new RuntimeException("missing tracked metadata before failure"))
+                     }
+                   else
+                     handle
+                       .update(nextCtx => IO.pure(nextCtx.withMetadata(metadataKey, "updated")))
+                       .void)
+              }
+            },
+          enableCrossBuild = true
+        )
+
+        ReleaseComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+          for {
+            events       <- observed.get
+            finalVersion <- scalaVersionOf(result.state)
+          } yield {
+            assert(result.failed)
+            assertEquals(
+              events,
+              List(
+                s"execute:${TestSupport.CurrentScalaVersion}",
+                s"execute:${TestSupport.alternateScalaVersion}"
+              )
+            )
+            assertEquals(result.metadata(metadataKey), Some("updated"))
+            assertEquals(result.failureCause.map(_.getMessage), Some("boom"))
+            assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
+          }
+        }
+      }
+    }
+  }
+
   test(
     "compose - cross-build task step short-circuits remaining versions when a version reports FailureCommand"
   ) {

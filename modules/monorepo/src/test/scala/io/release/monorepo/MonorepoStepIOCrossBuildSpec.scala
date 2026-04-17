@@ -761,6 +761,74 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
     }
   }
 
+  test("compose - restore the entry scalaVersion after a tracked cross-build iteration fails") {
+    loadedContextResource("monorepo-step-tracked-cross-failure", Seq("core")) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"))
+          .settings(scalaVersion := TestSupport.CurrentScalaVersion),
+        Project("core", coreBase).settings(
+          scalaVersion       := TestSupport.CurrentScalaVersion,
+          crossScalaVersions := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion
+          )
+        )
+      )
+    }.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        val metadataKey = AttributeKey[String]("tracked-cross-build-metadata-marker")
+        val step        = ProcessStep.PerItem.tracked[MonorepoContext, ProjectReleaseInfo](
+          name = "tracked-cross-step",
+          executeTracked = (handle, project) =>
+            handle.get.flatMap { currentCtx =>
+              scalaVersionOf(currentCtx.state).flatMap { version =>
+                observed.update(_ :+ version) *>
+                  (if (version == TestSupport.alternateScalaVersion)
+                     handle.get.flatMap { latestCtx =>
+                       if (latestCtx.metadata(metadataKey).contains(project.name))
+                         IO.raiseError(new RuntimeException("boom"))
+                       else
+                         IO.raiseError(
+                           new RuntimeException("missing tracked metadata before failure")
+                         )
+                     }
+                   else
+                     handle
+                       .update(nextCtx => IO.pure(nextCtx.withMetadata(metadataKey, project.name)))
+                       .void)
+              }
+            },
+          enableCrossBuild = true
+        )
+
+        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+          val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
+
+          for {
+            restoredVersion <- scalaVersionOf(result.state)
+            aggregate        = requireProjectFailures(result.failureCause)
+            projectFailure   = aggregate.failures.find(_.projectName == "core").flatMap(_.cause)
+            events          <- observed.get
+          } yield {
+            assert(result.failed)
+            assert(project.failed)
+            assertEquals(
+              events,
+              List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+            )
+            assertEquals(result.metadata(metadataKey), Some("core"))
+            assertEquals(projectFailure.map(_.getMessage), Some("boom"))
+            assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+          }
+        }
+      }
+    }
+  }
+
   test(
     "compose - cross-build short-circuits remaining versions when a version fails via context"
   ) {

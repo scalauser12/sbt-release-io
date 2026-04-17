@@ -1,6 +1,7 @@
 package io.release.runtime.engine
 
 import cats.effect.IO
+import io.release.runtime.TrackedContextHandle
 
 /** Shared internal step algebra used by the core and monorepo runtimes.
   *
@@ -76,6 +77,7 @@ private[release] object ProcessStep {
       val name: String,
       val roles: Set[BuiltInStepRole],
       val execute: C => IO[C],
+      val executeTracked: TrackedContextHandle[C] => IO[Unit],
       val validate: C => IO[C],
       val enableCrossBuild: Boolean
   ) extends ProcessStep[C, Nothing]
@@ -84,6 +86,7 @@ private[release] object ProcessStep {
     def apply[C](
         name: String,
         execute: C => IO[C],
+        executeTracked: TrackedContextHandle[C] => IO[Unit] = null,
         validate: C => IO[Unit] = (_: C) => IO.unit,
         roles: Set[BuiltInStepRole] = Set.empty,
         enableCrossBuild: Boolean = false,
@@ -93,8 +96,29 @@ private[release] object ProcessStep {
         name = name,
         roles = roles,
         execute = execute,
+        executeTracked = Option(executeTracked).getOrElse(TrackedContextHandle.lift(execute)),
         validate = mergeValidate(validate, validateWithContext),
         enableCrossBuild = enableCrossBuild
+      )
+
+    def tracked[C](
+        name: String,
+        executeTracked: TrackedContextHandle[C] => IO[Unit],
+        validate: C => IO[Unit] = (_: C) => IO.unit,
+        roles: Set[BuiltInStepRole] = Set.empty,
+        enableCrossBuild: Boolean = false,
+        validateWithContext: Option[C => IO[C]] = None
+    ): Single[C] =
+      apply(
+        name = name,
+        execute = ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
+          executeTracked(handle) *> handle.get
+        },
+        executeTracked = executeTracked,
+        validate = validate,
+        roles = roles,
+        enableCrossBuild = enableCrossBuild,
+        validateWithContext = validateWithContext
       )
   }
 
@@ -102,6 +126,7 @@ private[release] object ProcessStep {
       val name: String,
       val roles: Set[BuiltInStepRole],
       val execute: (C, I) => IO[C],
+      val executeTracked: (TrackedContextHandle[C], I) => IO[Unit],
       val validate: (C, I) => IO[C],
       val enableCrossBuild: Boolean
   ) extends ProcessStep[C, I]
@@ -110,6 +135,7 @@ private[release] object ProcessStep {
     def apply[C, I](
         name: String,
         execute: (C, I) => IO[C],
+        executeTracked: (TrackedContextHandle[C], I) => IO[Unit] = null,
         validate: (C, I) => IO[Unit] = (_: C, _: I) => IO.unit,
         roles: Set[BuiltInStepRole] = Set.empty,
         enableCrossBuild: Boolean = false,
@@ -119,8 +145,30 @@ private[release] object ProcessStep {
         name = name,
         roles = roles,
         execute = execute,
+        executeTracked = Option(executeTracked).getOrElse(TrackedContextHandle.liftPerItem(execute)),
         validate = mergeValidatePerItem(validate, validateWithContext),
         enableCrossBuild = enableCrossBuild
+      )
+
+    def tracked[C, I](
+        name: String,
+        executeTracked: (TrackedContextHandle[C], I) => IO[Unit],
+        validate: (C, I) => IO[Unit] = (_: C, _: I) => IO.unit,
+        roles: Set[BuiltInStepRole] = Set.empty,
+        enableCrossBuild: Boolean = false,
+        validateWithContext: Option[(C, I) => IO[C]] = None
+    ): PerItem[C, I] =
+      apply(
+        name = name,
+        execute = (ctx, item) =>
+          TrackedContextHandle.create(ctx).flatMap { handle =>
+            executeTracked(handle, item) *> handle.get
+          },
+        executeTracked = executeTracked,
+        validate = validate,
+        roles = roles,
+        enableCrossBuild = enableCrossBuild,
+        validateWithContext = validateWithContext
       )
   }
 }

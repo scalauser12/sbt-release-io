@@ -3,6 +3,7 @@ package io.release.runtime.engine
 import cats.effect.IO
 import cats.effect.Ref
 import cats.syntax.traverse.*
+import io.release.runtime.TrackedContextHandle
 
 private[release] object LifecycleCompiler {
 
@@ -49,6 +50,7 @@ private[release] object LifecycleCompiler {
       gate: C => IO[Boolean],
       nameOf: Hook => String,
       executeOf: Hook => C => IO[C],
+      executeTrackedOf: Option[Hook => TrackedContextHandle[C] => IO[Unit]] = None,
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
@@ -56,6 +58,8 @@ private[release] object LifecycleCompiler {
       enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] = {
     requireExplicitGateKey(phase, freezeGate, gateKey.isDefined)
+    val trackedExecuteOf =
+      executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.lift(executeOf(hook)))
     Phase(
       phaseName = Some(phase),
       rawSteps = Seq.empty,
@@ -70,6 +74,7 @@ private[release] object LifecycleCompiler {
           )(
             nameOf = nameOf,
             executeOf = executeOf,
+            executeTrackedOf = trackedExecuteOf,
             validateOf = validateOf,
             crossBuild = crossBuild
           )
@@ -93,6 +98,7 @@ private[release] object LifecycleCompiler {
       gate: (C, I) => IO[Boolean],
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],
+      executeTrackedOf: Option[Hook => (TrackedContextHandle[C], I) => IO[Unit]] = None,
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
@@ -100,6 +106,8 @@ private[release] object LifecycleCompiler {
       enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] = {
     requireExplicitGateKey(phase, freezeGate, gateKey.isDefined)
+    val trackedExecuteOf =
+      executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.liftPerItem(executeOf(hook)))
     Phase(
       phaseName = Some(phase),
       rawSteps = Seq.empty,
@@ -114,6 +122,7 @@ private[release] object LifecycleCompiler {
           )(
             nameOf = nameOf,
             executeOf = executeOf,
+            executeTrackedOf = trackedExecuteOf,
             validateOf = validateOf,
             crossBuild = crossBuild
           )
@@ -164,6 +173,7 @@ private[release] object LifecycleCompiler {
   )(
       nameOf: Hook => String,
       executeOf: Hook => C => IO[C],
+      executeTrackedOf: Hook => TrackedContextHandle[C] => IO[Unit],
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean
   ): IO[Seq[ProcessStep.Single[C]]] =
@@ -177,14 +187,19 @@ private[release] object LifecycleCompiler {
               gate,
               stableGateKey,
               execute = executeOf(hook),
+              executeTracked = (handle, _) => executeTrackedOf(hook)(handle),
               validate = ctx => validateOf(hook)(ctx).as(ctx),
               skip = ctx => IO.pure(ctx)
-            ).map { case (frozenExec, frozenVal) =>
+            ).map { case (frozenExec, frozenExecTracked, frozenVal) =>
               ProcessStep.Single[C](
-                name = stepName,
-                execute = frozenExec,
-                enableCrossBuild = crossBuild,
-                validateWithContext = Some(frozenVal)
+                stepName,
+                frozenExec,
+                (handle: TrackedContextHandle[C]) =>
+                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, ctx)),
+                (_: C) => IO.unit,
+                Set.empty[BuiltInStepRole],
+                crossBuild,
+                Some(frozenVal): Option[C => IO[C]]
               )
             }
           case None                =>
@@ -197,10 +212,14 @@ private[release] object LifecycleCompiler {
       else
         IO.pure(
           ProcessStep.Single[C](
-            name = stepName,
-            execute = ctx => gate(ctx).ifM(executeOf(hook)(ctx), IO.pure(ctx)),
-            validate = ctx => gate(ctx).ifM(validateOf(hook)(ctx), IO.unit),
-            enableCrossBuild = crossBuild
+            stepName,
+            (ctx: C) => gate(ctx).ifM(executeOf(hook)(ctx), IO.pure(ctx)),
+            (handle: TrackedContextHandle[C]) =>
+              handle.get.flatMap((ctx: C) => gate(ctx).ifM(executeTrackedOf(hook)(handle), IO.unit)),
+            (ctx: C) => gate(ctx).ifM(validateOf(hook)(ctx), IO.unit),
+            Set.empty[BuiltInStepRole],
+            crossBuild,
+            None: Option[C => IO[C]]
           )
         )
     }
@@ -216,6 +235,7 @@ private[release] object LifecycleCompiler {
   )(
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],
+      executeTrackedOf: Hook => (TrackedContextHandle[C], I) => IO[Unit],
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean
   ): IO[Seq[ProcessStep.PerItem[C, I]]] =
@@ -229,16 +249,21 @@ private[release] object LifecycleCompiler {
               gate = { case (c, i) => gate(c, i) },
               gateKey = { case (c, i) => stableGateKey(c, i) },
               execute = { case (c, i) => executeOf(hook)(c, i) },
+              executeTracked = (handle, args) => executeTrackedOf(hook)(handle, args._2),
               validate = { case (c, i) =>
                 validateOf(hook)(c, i).as(c)
               },
               skip = { case (c, _) => IO.pure(c) }
-            ).map { case (frozenExec, frozenVal) =>
+            ).map { case (frozenExec, frozenExecTracked, frozenVal) =>
               ProcessStep.PerItem[C, I](
-                name = stepName,
-                execute = (ctx, item) => frozenExec((ctx, item)),
-                enableCrossBuild = crossBuild,
-                validateWithContext = Some((ctx, item) => frozenVal((ctx, item)))
+                stepName,
+                (ctx: C, item: I) => frozenExec((ctx, item)),
+                (handle: TrackedContextHandle[C], item: I) =>
+                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, (ctx, item))),
+                (_: C, _: I) => IO.unit,
+                Set.empty[BuiltInStepRole],
+                crossBuild,
+                Some((ctx: C, item: I) => frozenVal((ctx, item))): Option[(C, I) => IO[C]]
               )
             }
           case None                =>
@@ -251,18 +276,24 @@ private[release] object LifecycleCompiler {
       else
         IO.pure(
           ProcessStep.PerItem[C, I](
-            name = stepName,
-            execute = (ctx, item) =>
+            stepName,
+            (ctx: C, item: I) =>
               gate(ctx, item).ifM(
                 executeOf(hook)(ctx, item),
                 IO.pure(ctx)
               ),
-            validate = (ctx, item) =>
+            (handle: TrackedContextHandle[C], item: I) =>
+              handle.get.flatMap((ctx: C) =>
+                gate(ctx, item).ifM(executeTrackedOf(hook)(handle, item), IO.unit)
+              ),
+            (ctx: C, item: I) =>
               gate(ctx, item).ifM(
                 validateOf(hook)(ctx, item),
                 IO.unit
               ),
-            enableCrossBuild = crossBuild
+            Set.empty[BuiltInStepRole],
+            crossBuild,
+            None: Option[(C, I) => IO[C]]
           )
         )
     }
@@ -281,9 +312,10 @@ private[release] object LifecycleCompiler {
       gate: Args => IO[Boolean],
       gateKey: Args => String,
       execute: Args => IO[C],
+      executeTracked: (TrackedContextHandle[C], Args) => IO[Unit],
       validate: Args => IO[C],
       skip: Args => IO[C]
-  ): IO[(Args => IO[C], Args => IO[C])] =
+  ): IO[(Args => IO[C], (TrackedContextHandle[C], Args) => IO[Unit], Args => IO[C])] =
     Ref.of[IO, Map[String, Boolean]](Map.empty).map { cached =>
       val exec: Args => IO[C]  = args =>
         frozenGateRun(
@@ -291,6 +323,12 @@ private[release] object LifecycleCompiler {
           gateKey(args),
           execute(args),
           skip(args)
+        )
+      val execTracked         = (handle: TrackedContextHandle[C], args: Args) =>
+        frozenGateRunTracked(
+          cached,
+          gateKey(args),
+          executeTracked(handle, args)
         )
       val valFn: Args => IO[C] = args =>
         frozenGateValidate(
@@ -300,7 +338,7 @@ private[release] object LifecycleCompiler {
           validate(args),
           skip(args)
         )
-      (exec, valFn)
+      (exec, execTracked, valFn)
     }
 
   private def frozenGateRun[C](
@@ -333,4 +371,20 @@ private[release] object LifecycleCompiler {
         case true  => validateIfTrue
         case false => skip
       }
+
+  private def frozenGateRunTracked[C](
+      cached: Ref[IO, Map[String, Boolean]],
+      key: String,
+      executeIfTrue: IO[Unit]
+  ): IO[Unit] =
+    cached.get.map(_.get(key)).flatMap {
+      case Some(true)  => executeIfTrue
+      case Some(false) => IO.unit
+      case None        =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGate = true"
+          )
+        )
+    }
 }

@@ -8,14 +8,86 @@ import io.release.core.internal.CoreStepFactory
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
 import io.release.runtime.workflow.StepHelpers
 import munit.CatsEffectSuite
-import sbt.{AttributeKey, Exec}
+import sbt.internal.util.ConsoleOut
+import sbt.internal.util.GlobalLogging
+import sbt.internal.util.MainAppender
+import sbt.{AttributeKey, Exec, InteractionService}
+
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.OutputStream
+import java.io.PrintStream
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import scala.concurrent.duration.DurationInt
+import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.Queue
 
 class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
+
+  private final class BlockingErrorLineOutputStream(
+      delegate: ByteArrayOutputStream,
+      started: CountDownLatch,
+      allow: CountDownLatch
+  ) extends OutputStream {
+    private val lineBuffer = new ByteArrayOutputStream()
+    private var blocked    = false
+
+    override def write(b: Int): Unit =
+      synchronized {
+        lineBuffer.write(b)
+        if (b == '\n') flushLine()
+      }
+
+    override def flush(): Unit =
+      synchronized {
+        if (lineBuffer.size() > 0) flushLine()
+        delegate.flush()
+      }
+
+    private def flushLine(): Unit = {
+      val bytes = lineBuffer.toByteArray
+      lineBuffer.reset()
+      val line = new String(bytes, StandardCharsets.UTF_8)
+      if (!blocked && line.contains(" Error: ")) {
+        blocked = true
+        started.countDown()
+        allow.await()
+      }
+      delegate.write(bytes)
+    }
+  }
+
+  private def blockingErrorLogContext(
+      dir: File,
+      started: CountDownLatch,
+      allow: CountDownLatch
+  ): IO[ReleaseContext] =
+    IO.blocking {
+      val consoleBuffer = new ByteArrayOutputStream()
+      val consoleOut    =
+        ConsoleOut.printStreamOut(
+          new PrintStream(
+            new BlockingErrorLineOutputStream(consoleBuffer, started, allow),
+            true,
+            StandardCharsets.UTF_8.name()
+          )
+        )
+      val globalLogging =
+        GlobalLogging.initial(
+          MainAppender.globalDefault(consoleOut),
+          new File(dir, "sbt-test.log"),
+          consoleOut
+        )
+
+      ReleaseContext(TestSupport.dummyState(dir).copy(globalLogging = globalLogging))
+    }
 
   test("compose - run validations before executes and fail fast on validation error") {
     contextResource.use { ctx =>
@@ -189,10 +261,18 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     }
   }
 
-  test("compose - preserve CRLF prompt state across validation prompts") {
+  test("compose - preserve prompt sequencing across validation prompts") {
     contextResource.use { baseCtx =>
       val answersKey = AttributeKey[List[Boolean]]("validation-answers")
-      val ctx        = promptContext(baseCtx, interactive = true, useDefaults = false)
+      val ui         = StubInteractionService(
+        readAnswers = List(Some("y"), Some("n"))
+      )
+      val ctx        = promptContext(
+        baseCtx,
+        interactive = true,
+        useDefaults = false,
+        interaction = Some(ui)
+      )
       val firstStep  =
         validationOnlyStep(
           "first-validation-prompt",
@@ -215,19 +295,27 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
               }
         )
 
-      TestSupport.withInput("y\r\nn\r\n") {
-        ReleaseComposer.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
-          assertEquals(result.metadata(answersKey), Some(List(true, false)))
-        }
+      ReleaseComposer.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
+        assertEquals(result.metadata(answersKey), Some(List(true, false)))
+        assertEquals(ui.readPrompts.toList, List("First validation prompt (y/n)? [n] ", "Second validation prompt (y/n)? [y] "))
+        assertEquals(ui.confirmPrompts.toList, Nil)
       }
     }
   }
 
-  test("compose - preserve CRLF prompt state from validation into execution") {
+  test("compose - preserve prompt sequencing from validation into execution") {
     contextResource.use { baseCtx =>
       val validationKey = AttributeKey[Boolean]("validation-answer")
       val executionKey  = AttributeKey[Boolean]("execution-answer")
-      val ctx           = promptContext(baseCtx, interactive = true, useDefaults = false)
+      val ui            = StubInteractionService(
+        readAnswers = List(Some("y"), Some("n"))
+      )
+      val ctx           = promptContext(
+        baseCtx,
+        interactive = true,
+        useDefaults = false,
+        interaction = Some(ui)
+      )
       val firstStep     =
         validationOnlyStep(
           "validation-prompt",
@@ -251,11 +339,11 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
             }
       )
 
-      TestSupport.withInput("y\r\nn\r\n") {
-        ReleaseComposer.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
-          assertEquals(result.metadata(validationKey), Some(true))
-          assertEquals(result.metadata(executionKey), Some(false))
-        }
+      ReleaseComposer.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
+        assertEquals(result.metadata(validationKey), Some(true))
+        assertEquals(result.metadata(executionKey), Some(false))
+        assertEquals(ui.readPrompts.toList, List("Validation prompt (y/n)? [n] ", "Execution prompt (y/n)? [y] "))
+        assertEquals(ui.confirmPrompts.toList, Nil)
       }
     }
   }
@@ -382,6 +470,76 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     }
   }
 
+  test("compose - preserve checkpointed context when tracked execute fails after an update") {
+    contextResource.use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-execute-metadata")
+      val failingStep = ProcessStep.Single.tracked[ReleaseContext](
+        name = "tracked-failing-step",
+        executeTracked = handle =>
+          handle
+            .update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, "seeded")))
+            .void *>
+            IO.raiseError(new RuntimeException("tracked failure"))
+      )
+
+      ReleaseComposer.compose(Seq(failingStep), crossBuild = false)(ctx).map { result =>
+        assert(result.failed)
+        assertEquals(result.metadata(metadataKey), Some("seeded"))
+        assertEquals(result.failureCause.map(_.getMessage), Some("tracked failure"))
+      }
+    }
+  }
+
+  test("recoverWithContext - preserve the latest tracked checkpoint during failure recovery") {
+    TestSupport.tempDirResource("tracked-recovery-race").use { dir =>
+      val logStarted = new CountDownLatch(1)
+      val allowLog   = new CountDownLatch(1)
+      val metadataKey = AttributeKey[String]("tracked-recovery-metadata")
+      val failure     = new RuntimeException("tracked failure")
+
+      blockingErrorLogContext(dir, logStarted, allowLog).flatMap { ctx =>
+        for {
+          handle      <- io.release.runtime.TrackedContextHandle.create(ctx)
+          recoverFiber <- ExecutionEngine
+                            .recoverWithContext(ReleaseLogPrefixes.Core, handle)(
+                              IO.raiseError(failure)
+                            )
+                            .start
+          _           <- IO.blocking(logStarted.await())
+          updateFiber <- handle
+                           .update(current =>
+                             IO.pure(current.withMetadata(metadataKey, "seeded"))
+                           )
+                           .void
+                           .start
+          _           <- IO.sleep(50.millis)
+          _           <- IO.blocking(allowLog.countDown())
+          _           <- recoverFiber.joinWithNever
+          _           <- updateFiber.joinWithNever
+          result      <- handle.get
+        } yield {
+          assert(result.failed)
+          assertEquals(result.metadata(metadataKey), Some("seeded"))
+          assertEquals(result.failureCause.map(_.getMessage), Some("tracked failure"))
+        }
+      }
+    }
+  }
+
+  test("stripFailureCommand - preserve a pre-existing FailureCommand onFailure when unarmed") {
+    contextResource.use { ctx =>
+      val armedState = ctx.state.copy(
+        onFailure = Some(SbtCompat.FailureCommand),
+        remainingCommands = SbtCompat.FailureCommand :: Nil
+      )
+
+      ExecutionEngine.stripFailureCommand(ctx.withState(armedState)).map { result =>
+        assertEquals(result.state.remainingCommands, Nil)
+        assertEquals(result.state.onFailure, Some(SbtCompat.FailureCommand))
+      }
+    }
+  }
+
   test("ReleaseContext metadata - store typed values immutably") {
     contextResource.use { ctx =>
       IO {
@@ -432,9 +590,11 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   private def promptContext(
       ctx: ReleaseContext,
       interactive: Boolean,
-      useDefaults: Boolean
+      useDefaults: Boolean,
+      interaction: Option[InteractionService] = None
   ): ReleaseContext =
-    ctx
+    interaction
+      .fold(ctx)(service => ctx.withState(SbtRuntime.withInteractionService(ctx.state, service)))
       .copy(interactive = interactive)
       .withExecutionState(
         CoreExecutionState(
@@ -452,6 +612,28 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           )
         )
       )
+
+  private final case class StubInteractionService(
+      readAnswers: List[Option[String]] = Nil
+  ) extends InteractionService {
+    val readPrompts: ListBuffer[String]    = ListBuffer.empty
+    val confirmPrompts: ListBuffer[String] = ListBuffer.empty
+    private val reads                      = Queue(readAnswers*)
+
+    override def readLine(prompt: String, mask: Boolean): Option[String] = synchronized {
+      readPrompts += prompt
+      if (reads.nonEmpty) reads.dequeue() else None
+    }
+
+    override def confirm(msg: String): Boolean = synchronized {
+      confirmPrompts += msg
+      false
+    }
+
+    override def terminalWidth: Int = 80
+
+    override def terminalHeight: Int = 24
+  }
 
   private def validationOnlyStep(
       name: String,

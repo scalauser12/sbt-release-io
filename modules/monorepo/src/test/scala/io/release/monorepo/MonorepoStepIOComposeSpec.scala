@@ -544,4 +544,32 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       }
     }
   }
+
+  test("compose - preserve checkpointed context when tracked per-project execute fails") {
+    contextResource.use { ctx =>
+      dummyProjects("core").flatMap { projects =>
+        val metadataKey = sbt.AttributeKey[String]("tracked-project-execute-metadata")
+        val pCtx        = ctx.withProjects(projects)
+        val failingStep = ProcessStep.PerItem.tracked[MonorepoContext, ProjectReleaseInfo](
+          name = "tracked-project-fail",
+          executeTracked = (handle, project) =>
+            handle
+              .update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, project.name)))
+              .void *>
+              IO.raiseError(new RuntimeException("tracked project failure"))
+        )
+
+        MonorepoComposer.compose(Seq(failingStep))(pCtx).map { result =>
+          val aggregate = requireProjectFailures(result.failureCause)
+          assert(result.failed)
+          assertEquals(result.metadata(metadataKey), Some("core"))
+          assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+          assertEquals(
+            aggregate.failures.head.cause.map(_.getMessage),
+            Some("tracked project failure")
+          )
+        }
+      }
+    }
+  }
 }

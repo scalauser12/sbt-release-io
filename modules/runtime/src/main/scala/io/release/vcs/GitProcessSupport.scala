@@ -17,6 +17,7 @@ import scala.jdk.CollectionConverters.*
 import scala.sys.process.Process
 import scala.sys.process.ProcessBuilder as ScalaProcessBuilder
 import scala.sys.process.ProcessLogger
+import scala.util.control.NonFatal
 
 private[release] object GitProcessSupport {
   private[release] final case class GitCommandResult(
@@ -71,6 +72,18 @@ private[release] object GitProcessSupport {
       }
     }
 
+  def runExitCode(baseDir: File, args: Seq[String]): IO[Int] =
+    withManagedProcess(
+      javaCmd(baseDir, args*),
+      DefaultDestroyGracePeriod,
+      closeStdin = true
+    ) { (process: java.lang.Process, markCompleted: IO[Unit]) =>
+      waitForExit(process).flatMap(code => markCompleted.as(code))
+    }
+
+  /** Synchronous helper for tests and local blocking callers.
+    * Must be invoked under `IO.blocking` or another explicit blocking boundary.
+    */
   private[release] def runLinesResult(baseDir: File, args: Seq[String]): GitCommandResult = {
     val stdout = new ConcurrentLinkedQueue[String]()
     val stderr = new ConcurrentLinkedQueue[String]()
@@ -309,6 +322,6 @@ private[release] object GitProcessSupport {
   private def closeQuietly(closeable: AutoCloseable): Unit =
     try closeable.close()
     catch {
-      case _: Throwable => ()
+      case NonFatal(_) => ()
     }
 }

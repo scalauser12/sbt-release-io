@@ -2,6 +2,7 @@ package io.release.runtime.sbt
 
 import cats.effect.IO
 import io.release.CrossBuildSupport
+import _root_.sbt.Keys.{interactionService => interactionServiceKey}
 import _root_.sbt.{internal as _, *}
 
 /** Thin wrappers over sbt state/extraction APIs used by built-in release code.
@@ -11,6 +12,8 @@ import _root_.sbt.{internal as _, *}
 private[release] object SbtRuntime {
 
   private val FailureCommand = SbtCompat.FailureCommand
+  private[release] val InteractionServiceStateKey: AttributeKey[InteractionService] =
+    AttributeKey[InteractionService]("releaseIOInternalInteractionService")
 
   def extracted(state: State): Extracted =
     Project.extract(state)
@@ -20,6 +23,18 @@ private[release] object SbtRuntime {
 
   def runTask[A](state: State, key: TaskKey[A]): (State, A) =
     extracted(state).runTask(key, state)
+
+  def currentInteractionService(state: State): (State, InteractionService) =
+    if (Project.isProjectLoaded(state))
+      runTask(state, interactionServiceKey)
+    else
+      (
+        state,
+        state.get(InteractionServiceStateKey).getOrElse(_root_.sbt.CommandLineUIService)
+      )
+
+  def withInteractionService(state: State, service: InteractionService): State =
+    state.put(InteractionServiceStateKey, service)
 
   def runInputTask[A](state: State, key: InputKey[A], args: String): (State, A) =
     extracted(state).runInputTask(key, args, state)

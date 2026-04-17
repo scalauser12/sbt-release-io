@@ -9,18 +9,27 @@ import io.release.core.internal.steps.CoreReleaseStepHelpers
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.sbt.SbtCompat
+import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.AttributeKey
+import sbt.Incomplete
+import sbt.InteractionService
+import sbt.Keys.interactionService
 import sbt.ModuleID
+import sbt.Project
 import sbt.State
 
 import java.io.File
+import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.Queue
 import scala.sys.process.Process
 
 class StepHelpersSpec extends CatsEffectSuite {
   private val fixturePrefix = "step-helpers-spec"
+  private val retryYesNoPromptPrefix =
+    "Please answer 'y' or 'n' (or press Enter for the default)."
 
   test("StepHelpers.required - return the callback result when the value is present") {
     StepHelpers
@@ -159,83 +168,173 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  test("StepHelpers.askYesNo - re-prompt on invalid input until yes is entered") {
+  test("StepHelpers.askYesNo - default no accepts uppercase affirmative input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      TestSupport.withInput("maybe\ny\n") {
-        StepHelpers
-          .askYesNo(
-            promptContext(state, interactive = true, useDefaults = false),
-            prompt = "Continue? [n] ",
-            defaultYes = false
-          )
-          .map { case (_, answer) =>
-            assertEquals(answer, true)
-          }
-      }
+      val ui  = StubInteractionService(readAnswers = List(Some("Y")))
+      StepHelpers
+        .askYesNo(
+          promptContext(
+            state,
+            interactive = true,
+            useDefaults = false,
+            interaction = Some(ui)
+          ),
+          prompt = "Continue? [n] ",
+          defaultYes = false
+        )
+        .map { case (_, answer) =>
+          assertEquals(answer, true)
+          assertEquals(ui.readPrompts.toList, List("Continue? [n] "))
+          assertEquals(ui.confirmPrompts.toList, Nil)
+        }
     }
   }
 
-  test("StepHelpers.askYesNo - re-prompt on invalid input until no is entered") {
+  test("StepHelpers.askYesNo - default no accepts trimmed affirmative input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      TestSupport.withInput("maybe\nn\n") {
-        StepHelpers
-          .askYesNo(
-            promptContext(state, interactive = true, useDefaults = false),
-            prompt = "Continue? [y] ",
-            defaultYes = true
+      val ui  = StubInteractionService(readAnswers = List(Some(" yes ")))
+      StepHelpers
+        .askYesNo(
+          promptContext(
+            state,
+            interactive = true,
+            useDefaults = false,
+            interaction = Some(ui)
+          ),
+          prompt = "Continue? [n] ",
+          defaultYes = false
+        )
+        .map { case (_, answer) =>
+          assertEquals(answer, true)
+          assertEquals(ui.readPrompts.toList, List("Continue? [n] "))
+          assertEquals(ui.confirmPrompts.toList, Nil)
+        }
+    }
+  }
+
+  test("StepHelpers.askYesNo - default no re-prompts after invalid input then uses blank") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      val prompt = "Continue? [n] "
+      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
+      StepHelpers
+        .askYesNo(
+          promptContext(
+            state,
+            interactive = true,
+            useDefaults = false,
+            interaction = Some(ui)
+          ),
+          prompt = prompt,
+          defaultYes = false
+        )
+        .map { case (_, answer) =>
+          assertEquals(answer, false)
+          assertEquals(
+            ui.readPrompts.toList,
+            List(prompt, s"$retryYesNoPromptPrefix\n$prompt")
           )
-          .map { case (_, answer) =>
-            assertEquals(answer, false)
-          }
-      }
+          assertEquals(ui.confirmPrompts.toList, Nil)
+        }
+    }
+  }
+
+  test("StepHelpers.askYesNo - default no maps EOF to false") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      val ui  = StubInteractionService(readAnswers = List(None))
+      StepHelpers
+        .askYesNo(
+          promptContext(
+            state,
+            interactive = true,
+            useDefaults = false,
+            interaction = Some(ui)
+          ),
+          prompt = "Continue? [n] ",
+          defaultYes = false
+        )
+        .map { case (_, answer) =>
+          assertEquals(answer, false)
+          assertEquals(ui.readPrompts.toList, List("Continue? [n] "))
+          assertEquals(ui.confirmPrompts.toList, Nil)
+        }
     }
   }
 
   test("StepHelpers.askYesNo - use the default after invalid input followed by blank") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      TestSupport.withInput("maybe\n\n") {
-        StepHelpers
-          .askYesNo(
-            promptContext(state, interactive = true, useDefaults = false),
-            prompt = "Continue? [y] ",
-            defaultYes = true
+      val prompt = "Continue? [y] "
+      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
+      StepHelpers
+        .askYesNo(
+          promptContext(
+            state,
+            interactive = true,
+            useDefaults = false,
+            interaction = Some(ui)
+          ),
+          prompt = prompt,
+          defaultYes = true
+        )
+        .map { case (_, answer) =>
+          assertEquals(answer, true)
+          assertEquals(
+            ui.readPrompts.toList,
+            List(prompt, s"$retryYesNoPromptPrefix\n$prompt")
           )
-          .map { case (_, answer) =>
-            assertEquals(answer, true)
-          }
-      }
+          assertEquals(ui.confirmPrompts.toList, Nil)
+        }
     }
   }
 
   test("StepHelpers.askYesNoOrEof - preserve EOF after invalid input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      TestSupport.withInput("maybe") {
-        StepHelpers
-          .askYesNoOrEof(
-            promptContext(state, interactive = true, useDefaults = false),
-            prompt = "Continue? [y] ",
-            defaultYes = true
+      val prompt = "Continue? [y] "
+      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), None))
+      StepHelpers
+        .askYesNoOrEof(
+          promptContext(
+            state,
+            interactive = true,
+            useDefaults = false,
+            interaction = Some(ui)
+          ),
+          prompt = prompt,
+          defaultYes = true
+        )
+        .map { case (_, answer) =>
+          assertEquals(answer, None)
+          assertEquals(
+            ui.readPrompts.toList,
+            List(prompt, s"$retryYesNoPromptPrefix\n$prompt")
           )
-          .map { case (_, answer) =>
-            assertEquals(answer, None)
-          }
-      }
+          assertEquals(ui.confirmPrompts.toList, Nil)
+        }
     }
   }
 
-  test("StepHelpers.askYesNo - preserve CRLF prompt state when re-prompting after invalid input") {
+  test("StepHelpers.askYesNo - default yes re-prompts through interactionService.readLine") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      TestSupport.withInput("maybe\r\ny\r\n") {
-        StepHelpers
-          .askYesNo(
-            promptContext(state, interactive = true, useDefaults = false),
-            prompt = "Continue? [n] ",
-            defaultYes = false
+      val prompt = "Continue? [y] "
+      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), Some("y")))
+      StepHelpers
+        .askYesNo(
+          promptContext(
+            state,
+            interactive = true,
+            useDefaults = false,
+            interaction = Some(ui)
+          ),
+          prompt = prompt,
+          defaultYes = true
+        )
+        .map { case (_, answer) =>
+          assertEquals(answer, true)
+          assertEquals(
+            ui.readPrompts.toList,
+            List(prompt, s"$retryYesNoPromptPrefix\n$prompt")
           )
-          .map { case (_, answer) =>
-            assertEquals(answer, true)
-          }
-      }
+          assertEquals(ui.confirmPrompts.toList, Nil)
+        }
     }
   }
 
@@ -326,20 +425,24 @@ class StepHelpersSpec extends CatsEffectSuite {
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
+      val ctx      = promptContext(
+        buffered.state,
+        interactive = true,
+        useDefaults = false,
+        interaction = Some(StubInteractionService(readAnswers = List(None)))
+      )
 
       for {
-        _   <- TestSupport.withInput("") {
-                 assertFailure[IllegalStateException, ReleaseContext](
-                   StepHelpers
-                     .handleSnapshotDependencies(
-                       promptContext(buffered.state, interactive = true, useDefaults = false),
-                       deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
-                       logPrefix = "[test]"
-                     )
-                 ) { err =>
-                   assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
-                   assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
-                 }
+        _   <- assertFailure[IllegalStateException, ReleaseContext](
+                 StepHelpers
+                   .handleSnapshotDependencies(
+                     ctx,
+                     deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                     logPrefix = "[test]"
+                   )
+               ) { err =>
+                 assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                 assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
                }
         log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
       } yield {
@@ -353,20 +456,24 @@ class StepHelpersSpec extends CatsEffectSuite {
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
+      val ctx      = promptContext(
+        buffered.state,
+        interactive = true,
+        useDefaults = false,
+        interaction = Some(StubInteractionService(readAnswers = List(Some("n"))))
+      )
 
       for {
-        _   <- TestSupport.withInput("n\n") {
-                 assertFailure[IllegalStateException, ReleaseContext](
-                   StepHelpers
-                     .handleSnapshotDependencies(
-                       promptContext(buffered.state, interactive = true, useDefaults = false),
-                       deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
-                       logPrefix = "[test]"
-                     )
-                 ) { err =>
-                   assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
-                   assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
-                 }
+        _   <- assertFailure[IllegalStateException, ReleaseContext](
+                 StepHelpers
+                   .handleSnapshotDependencies(
+                     ctx,
+                     deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                     logPrefix = "[test]"
+                   )
+               ) { err =>
+                 assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                 assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
                }
         log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
       } yield {
@@ -380,20 +487,24 @@ class StepHelpersSpec extends CatsEffectSuite {
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
+      val ctx      = promptContext(
+        buffered.state,
+        interactive = true,
+        useDefaults = false,
+        interaction = Some(StubInteractionService(readAnswers = List(Some(""))))
+      )
 
       for {
-        _   <- TestSupport.withInput("\n") {
-                 assertFailure[IllegalStateException, ReleaseContext](
-                   StepHelpers
-                     .handleSnapshotDependencies(
-                       promptContext(buffered.state, interactive = true, useDefaults = false),
-                       deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
-                       logPrefix = "[test]"
-                     )
-                 ) { err =>
-                   assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
-                   assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
-                 }
+        _   <- assertFailure[IllegalStateException, ReleaseContext](
+                 StepHelpers
+                   .handleSnapshotDependencies(
+                     ctx,
+                     deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
+                     logPrefix = "[test]"
+                   )
+               ) { err =>
+                 assert(err.getMessage.contains("Aborting release due to snapshot dependencies."))
+                 assert(err.getMessage.contains("default-snapshot-dependencies-answer y"))
                }
         log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
       } yield {
@@ -455,100 +566,153 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  test("StepHelpers.readLine - return consecutive lines from the same redirected stdin") {
+  test("StepHelpers.readLine - return consecutive answers from interactionService.readLine") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      TestSupport.withInput("first\nsecond\n") {
-        for {
-          first  <- StepHelpers.readLine(ctx)
-          second <- StepHelpers.readLine(first._1)
-        } yield {
-          assertEquals(first._2, Some("first"))
-          assertEquals(second._2, Some("second"))
-        }
-      }
-    }
-  }
+      val ui  = StubInteractionService(readAnswers = List(Some("first"), Some("second")))
+      val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
 
-  test("StepHelpers.readLine - leave later bytes available to direct System.in consumers") {
-    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      TestSupport.withInput("first\nsecond\n") {
-        for {
-          line        <- StepHelpers.readLine(ctx)
-          nextByte    <- IO.blocking(System.in.read())
-          trailingRaw <- IO.blocking(scala.io.Source.fromInputStream(System.in).mkString)
-        } yield {
-          assertEquals(line._2, Some("first"))
-          assertEquals(nextByte, 's'.toInt)
-          assertEquals(trailingRaw, "econd\n")
-        }
-      }
-    }
-  }
-
-  test("StepHelpers.readLine - split CRLF input into logical lines") {
-    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      TestSupport.withInput("first\r\nsecond\r\n") {
-        for {
-          first  <- StepHelpers.readLine(ctx)
-          second <- StepHelpers.readLine(first._1)
-          eof    <- StepHelpers.readLine(second._1)
-        } yield {
-          assertEquals(first._2, Some("first"))
-          assertEquals(second._2, Some("second"))
-          assertEquals(eof._2, None)
-        }
-      }
-    }
-  }
-
-  test("StepHelpers.readLine - return the partial final line before EOF") {
-    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      TestSupport.withInput("partial-without-newline") {
-        for {
-          line <- StepHelpers.readLine(ctx)
-          eof  <- StepHelpers.readLine(line._1)
-        } yield {
-          assertEquals(line._2, Some("partial-without-newline"))
-          assertEquals(eof._2, None)
-        }
-      }
-    }
-  }
-
-  test("StepHelpers.readLine - reset CRLF carry-over when System.in identity changes") {
-    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       for {
-        first  <- TestSupport.withInput("first\r") {
-                    StepHelpers.readLine(ctx)
-                  }
-        second <- TestSupport.withInput("\nsecond\n") {
-                    StepHelpers.readLine(first._1)
-                  }
+        first  <- StepHelpers.readLine(pCtx)
+        second <- StepHelpers.readLine(first._1)
       } yield {
         assertEquals(first._2, Some("first"))
-        assertEquals(second._2, Some(""))
+        assertEquals(second._2, Some("second"))
+        assertEquals(ui.readPrompts.toList, List("", ""))
       }
     }
   }
 
-  test("StepHelpers.readRequiredLine - fail fast when redirected stdin reaches EOF") {
+  test("StepHelpers.readLine - preserve blank lines and EOF from interactionService") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      TestSupport.withInput("") {
-        assertIllegalStateMessage(
-          StepHelpers.readRequiredLine(ctx, "Release version"),
-          "Standard input closed while waiting for Release version."
-        )
+      val ui  = StubInteractionService(readAnswers = List(Some(""), None))
+      val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
+
+      for {
+        line <- StepHelpers.readLine(pCtx)
+        eof  <- StepHelpers.readLine(line._1)
+      } yield {
+        assertEquals(line._2, Some(""))
+        assertEquals(eof._2, None)
       }
     }
+  }
+
+  test("StepHelpers.readRequiredLine - fail fast when interactionService reaches EOF") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val ui  = StubInteractionService(readAnswers = List(None))
+      val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
+
+      assertIllegalStateMessage(
+        StepHelpers.readRequiredLine(pCtx, "Release version"),
+        "Standard input closed while waiting for Release version."
+      )
+    }
+  }
+
+  test("StepHelpers.readLine - loaded builds prefer the interactionService task over state fallback") {
+    val taskUi     = StubInteractionService(readAnswers = List(Some("from-task")))
+    val fallbackUi = StubInteractionService(readAnswers = List(Some("from-fallback")))
+
+    TestSupport
+      .loadedStateResource(
+        s"$fixturePrefix-loaded-interaction",
+        buildSettings = Seq(StepHelpersTestCompat.interactionServiceSetting(taskUi)),
+        currentProjectId = Some("root")
+      )(dir => Seq(Project("root", dir)))
+      .use { state =>
+        val ctx = promptContext(
+          state,
+          interactive = true,
+          useDefaults = false,
+          interaction = Some(fallbackUi)
+        )
+
+        StepHelpers.readLine(ctx).map { case (_, line) =>
+          assertEquals(line, Some("from-task"))
+          assertEquals(taskUi.readPrompts.toList, List(""))
+          assertEquals(fallbackUi.readPrompts.toList, Nil)
+        }
+      }
+  }
+
+  test("StepHelpers.askYesNo - loaded builds use task-backed readLine for default no") {
+    val prompt     = "Continue? [n] "
+    val taskUi     = StubInteractionService(readAnswers = List(Some("maybe"), Some("Y")))
+    val fallbackUi = StubInteractionService(readAnswers = List(Some("n")))
+
+    TestSupport
+      .loadedStateResource(
+        s"$fixturePrefix-loaded-default-no",
+        buildSettings = Seq(StepHelpersTestCompat.interactionServiceSetting(taskUi)),
+        currentProjectId = Some("root")
+      )(dir => Seq(Project("root", dir)))
+      .use { state =>
+        val ctx = promptContext(
+          state,
+          interactive = true,
+          useDefaults = false,
+          interaction = Some(fallbackUi)
+        )
+
+        StepHelpers
+          .askYesNo(ctx, prompt = prompt, defaultYes = false)
+          .map { case (_, answer) =>
+            assertEquals(answer, true)
+            assertEquals(
+              taskUi.readPrompts.toList,
+              List(prompt, s"$retryYesNoPromptPrefix\n$prompt")
+            )
+            assertEquals(taskUi.confirmPrompts.toList, Nil)
+            assertEquals(fallbackUi.readPrompts.toList, Nil)
+            assertEquals(fallbackUi.confirmPrompts.toList, Nil)
+          }
+      }
+  }
+
+  test("StepHelpers.readLine - surface loaded-build interactionService task failures") {
+    val fallbackUi = StubInteractionService(readAnswers = List(Some("from-fallback")))
+
+    TestSupport
+      .loadedStateResource(
+        s"$fixturePrefix-loaded-interaction-failure",
+        buildSettings = Seq(
+          StepHelpersTestCompat.interactionServiceSetting {
+            throw new IllegalStateException("boom")
+          }
+        ),
+        currentProjectId = Some("root")
+      )(dir => Seq(Project("root", dir)))
+      .use { state =>
+        val ctx = promptContext(
+          state,
+          interactive = true,
+          useDefaults = false,
+          interaction = Some(fallbackUi)
+        )
+
+        assertFailure[Incomplete, (ReleaseContext, Option[String])](
+          StepHelpers.readLine(ctx)
+        ) { err =>
+          assertEquals(err.directCause.map(_.getMessage), Some("boom"))
+          assertEquals(fallbackUi.readPrompts.toList, Nil)
+        }
+      }
   }
 
   private def promptContext(
       state: State,
       interactive: Boolean,
       useDefaults: Boolean,
-      decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty
+      decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty,
+      interaction: Option[InteractionService] = None
   ): ReleaseContext =
-    ReleaseContext(state = state, interactive = interactive).withExecutionState(
+    ReleaseContext(
+      state =
+        interaction.fold(state)(service =>
+          SbtRuntime.withInteractionService(state, service)
+        ),
+      interactive = interactive
+    ).withExecutionState(
       CoreExecutionState(
         CoreReleasePlan(
           flags = ExecutionFlags(
@@ -564,6 +728,28 @@ class StepHelpersSpec extends CatsEffectSuite {
         )
       )
     )
+
+  private final case class StubInteractionService(
+      readAnswers: List[Option[String]] = Nil
+  ) extends InteractionService {
+    val readPrompts: ListBuffer[String]    = ListBuffer.empty
+    val confirmPrompts: ListBuffer[String] = ListBuffer.empty
+    private val reads                      = Queue(readAnswers*)
+
+    override def readLine(prompt: String, mask: Boolean): Option[String] = synchronized {
+      readPrompts += prompt
+      if (reads.nonEmpty) reads.dequeue() else None
+    }
+
+    override def confirm(msg: String): Boolean = synchronized {
+      confirmPrompts += msg
+      false
+    }
+
+    override def terminalWidth: Int = 80
+
+    override def terminalHeight: Int = 24
+  }
 
   private def stubVcs(base: File): Vcs =
     new Vcs {

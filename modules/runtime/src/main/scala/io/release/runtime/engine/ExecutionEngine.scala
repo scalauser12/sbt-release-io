@@ -3,6 +3,7 @@ package io.release.runtime.engine
 import _root_.sbt.AttributeKey
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
+import io.release.runtime.TrackedContextHandle
 import io.release.runtime.sbt.SbtCompat
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers
@@ -37,11 +38,29 @@ private[release] object ExecutionEngine {
   private val originalOnFailureKey: AttributeKey[Option[_root_.sbt.Exec]] =
     AttributeKey[Option[_root_.sbt.Exec]]("releaseIOInternalOriginalOnFailure")
 
+  private val armedOnFailureKey: AttributeKey[Unit] =
+    AttributeKey[Unit]("releaseIOInternalArmedOnFailure")
+
   final case class PreparedStep[C](
       name: String,
       validate: C => IO[C],
-      execute: C => IO[C]
+      execute: C => IO[C],
+      executeTracked: TrackedContextHandle[C] => IO[Unit]
   )
+
+  object PreparedStep {
+    def apply[C](
+        name: String,
+        validate: C => IO[C],
+        execute: C => IO[C]
+    ): PreparedStep[C] =
+      new PreparedStep(
+        name = name,
+        validate = validate,
+        execute = execute,
+        executeTracked = TrackedContextHandle.lift(execute)
+      )
+  }
 
   // ── Orchestration ───────────────────────────────────────────────────
 
@@ -103,7 +122,9 @@ private[release] object ExecutionEngine {
       if (ctx.metadata(originalOnFailureKey).isDefined) ctx
       else ctx.withMetadata(originalOnFailureKey, ctx.state.onFailure)
 
-    withSnapshot.withState(withSnapshot.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
+    withSnapshot
+      .withState(withSnapshot.state.copy(onFailure = Some(SbtCompat.FailureCommand)))
+      .withMetadata(armedOnFailureKey, ())
   }
 
   def detectSbtFailure[C <: ReleaseCtx { type Self = C }](stepName: String, ctx: C): IO[C] = IO {
@@ -120,17 +141,14 @@ private[release] object ExecutionEngine {
   def stripFailureCommand[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] = IO {
     val cleaned           = SbtRuntime.stripLeadingFailureCommand(ctx.state)
     val restoredOnFailure =
-      ctx.metadata(originalOnFailureKey) match {
-        case Some(saved)                                                  => saved
-        // Some validation-only paths may call this helper without first arming onFailure.
-        // If the stripped state still points at the sentinel, drop it instead of preserving it.
-        case None if cleaned.onFailure.contains(SbtCompat.FailureCommand) => None
-        case None                                                         => cleaned.onFailure
-      }
+      if (ctx.metadata(armedOnFailureKey).isDefined)
+        ctx.metadata(originalOnFailureKey).getOrElse(cleaned.onFailure)
+      else cleaned.onFailure
 
     ctx
       .withState(cleaned.copy(onFailure = restoredOnFailure))
       .withoutMetadata(originalOnFailureKey)
+      .withoutMetadata(armedOnFailureKey)
   }
 
   def raiseIfFailed[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] =
@@ -154,33 +172,60 @@ private[release] object ExecutionEngine {
       ).flatMap(_ => IO.pure(ctx.failWith(err)))
     }
 
+  def recoverWithContext[C <: ReleaseCtx { type Self = C }](
+      logPrefix: String,
+      handle: TrackedContextHandle[C]
+  )(program: IO[Unit]): IO[Unit] =
+    program.handleErrorWith { err =>
+      handle
+        .update { ctx =>
+          IO.blocking(
+            ctx.state.log.error(
+              s"$logPrefix Error: ${StepHelpers.errorMessage(err)}"
+            )
+          ).as(ctx.failWith(err))
+        }
+        .void
+    }
+
   def withErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(
       f: C => IO[C]
   ): C => IO[C] =
     (ctx: C) => recoverWithContext(logPrefix, ctx)(f(ctx))
 
+  def withTrackedErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(
+      f: TrackedContextHandle[C] => IO[Unit]
+  ): TrackedContextHandle[C] => IO[Unit] =
+    (handle: TrackedContextHandle[C]) => recoverWithContext(logPrefix, handle)(f(handle))
+
+  private def runPreparedStep[C <: ReleaseCtx { type Self = C }](
+      step: PreparedStep[C],
+      startCtx: C
+  ): IO[C] =
+    TrackedContextHandle.create(startCtx).flatMap { handle =>
+      step.executeTracked(handle) *> handle.get
+    }
+
   private def shouldDetectSbtFailure[C <: ReleaseCtx { type Self = C }](ctx: C): Boolean =
+    // Re-check when a step already marked the context failed without recording a cause.
+    // That case can still represent sbt arming FailureCommand after a task-valued action.
     !ctx.failed || (ctx.failureCause.isEmpty && SbtRuntime.hasFailureCommand(ctx.state))
 
   def runActionPhase[C <: ReleaseCtx { type Self = C }](
       steps: Seq[PreparedStep[C]]
-  )(startCtx: C): IO[C] = {
-    // After each action, check whether sbt injected a FailureCommand into
-    // remainingCommands (e.g. from a failed task). If so, mark the context
-    // as failed so subsequent steps are skipped.
-    val interleavedSteps = steps.flatMap { step =>
-      Seq(
-        (ctx: C) => if (ctx.failed) IO.pure(ctx) else step.execute(ctx),
-        (ctx: C) =>
-          if (shouldDetectSbtFailure(ctx)) detectSbtFailure(step.name, ctx)
-          else IO.pure(ctx)
-      )
-    }
-
-    interleavedSteps
-      .foldLeft(IO.pure(startCtx)) { (ioCtx, f) => ioCtx.flatMap(f) }
-      .flatMap(ctx => stripFailureCommand(ctx))
-  }
+  )(startCtx: C): IO[C] =
+    steps
+      .foldLeft(IO.pure(startCtx)) { (ioCtx, step) =>
+        ioCtx.flatMap { currentCtx =>
+          if (currentCtx.failed) IO.pure(currentCtx)
+          else
+            runPreparedStep(step, currentCtx).flatMap { nextCtx =>
+              if (shouldDetectSbtFailure(nextCtx)) detectSbtFailure(step.name, nextCtx)
+              else IO.pure(nextCtx)
+            }
+        }
+      }
+      .flatMap(stripFailureCommand)
 
   private def runValidationStep[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,

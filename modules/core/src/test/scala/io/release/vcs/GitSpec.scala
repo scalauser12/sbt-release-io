@@ -123,9 +123,24 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test("hasUpstream - return true when the branch tracks a remote") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-has-upstream").use { case (repo, _) =>
+      new Git(repo).hasUpstream.map(result => assertEquals(result, true))
+    }
+  }
+
   test("tagCommitHash - return None when the tag does not exist") {
     TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-missing-tag").use { repo =>
       new Git(repo).tagCommitHash("v1.0.0").map(result => assertEquals(result, None))
+    }
+  }
+
+  test("existsTag - return true when the tag exists") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-existing-tag").use { repo =>
+      for {
+        _      <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        exists <- new Git(repo).existsTag("v1.0.0")
+      } yield assertEquals(exists, true)
     }
   }
 
