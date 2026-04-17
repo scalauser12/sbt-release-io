@@ -164,7 +164,10 @@ object MonorepoSpecSupport {
               "version.sbt"
             ),
             io.release.ReleaseSharedKeys.releaseIOVcsSign        := false,
-            io.release.ReleaseSharedKeys.releaseIOVcsSignOff     := false
+            io.release.ReleaseSharedKeys.releaseIOVcsSignOff     := false,
+            io.release.TestInteractionServiceCompat.interactionServiceSetting(
+              io.release.TestSupport.StdinInteractionService
+            )
           ) ++
           settings
       )*

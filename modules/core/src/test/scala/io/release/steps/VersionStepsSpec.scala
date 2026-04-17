@@ -728,7 +728,13 @@ class VersionStepsSpec extends CatsEffectSuite {
     val state    = sbt.TestBuildState(
       baseState = buffered.state,
       baseDir = dir,
-      projects = Seq(Project("root", dir).settings(rootSettings*)),
+      projects = Seq(
+        Project("root", dir).settings(
+          (io.release.TestInteractionServiceCompat.interactionServiceSetting(
+            io.release.TestSupport.StdinInteractionService
+          ) +: rootSettings)*
+        )
+      ),
       currentProjectId = Some("root")
     )
 

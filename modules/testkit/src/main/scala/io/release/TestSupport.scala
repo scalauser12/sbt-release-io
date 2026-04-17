@@ -2,6 +2,7 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
+import sbt.InteractionService
 import sbt.Keys.packageOptions
 import sbt.Project
 import sbt.Setting
@@ -18,6 +19,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.PrintStream
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
@@ -27,6 +29,7 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.Callable
 import java.util.concurrent.Semaphore
+import scala.annotation.tailrec
 import scala.sys.process.Process
 
 /** Shared test fixtures for constructing minimal sbt `State` instances and test repositories. */
@@ -37,6 +40,49 @@ object TestSupport {
     * concurrent tests from reading each other's redirected input.
     */
   val stdinLock = new Semaphore(1)
+
+  /** InteractionService that reads from `System.in`, for tests that redirect stdin via
+    * [[withInput]] / [[withSystemInput]]. sbt's built-in `CommandLineUIService` routes through
+    * sbt's internal Terminal abstraction instead of `System.in`, so it cannot observe the
+    * redirection tests set up.
+    */
+  object StdinInteractionService extends InteractionService {
+    private val stdinCharset = Charset.defaultCharset()
+
+    override def readLine(prompt: String, mask: Boolean): Option[String] = {
+      val currentIn = System.in
+      val buffer    = new ByteArrayOutputStream()
+
+      @tailrec def loop(): Option[String] = {
+        val nextByte = currentIn.read()
+
+        nextByte match {
+          case -1   =>
+            if (buffer.size() == 0) None else Some(decode(buffer))
+          case '\n' => Some(decode(buffer))
+          case '\r' => loop()
+          case byte =>
+            buffer.write(byte)
+            loop()
+        }
+      }
+
+      loop()
+    }
+
+    override def confirm(msg: String): Boolean =
+      readLine(msg, mask = false) match {
+        case Some(in) if in == "y" || in == "yes" => true
+        case _                                    => false
+      }
+
+    override def terminalWidth: Int = 80
+
+    override def terminalHeight: Int = 24
+
+    private def decode(buffer: ByteArrayOutputStream): String =
+      new String(buffer.toByteArray, stdinCharset)
+  }
 
   val CurrentScalaVersion: String = scala.util.Properties.versionNumberString
   val Scala212TestVersion: String = "2.12.21"

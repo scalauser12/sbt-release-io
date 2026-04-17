@@ -1,6 +1,7 @@
 package io.release.vcs
 
 import cats.effect.IO
+import cats.effect.Resource
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import munit.CatsEffectSuite
@@ -48,6 +49,29 @@ class GitPushSupportSpec extends CatsEffectSuite {
           IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
       }
     }
+  }
+
+  test("pushTrackedBranch - create the configured tracking branch on the first push") {
+    Resource
+      .both(
+        TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-first-push"),
+        TestSupport.tempDirResource(s"$fixturePrefix-first-push-remote")
+      )
+      .use { case (repo, remoteRepo) =>
+        for {
+          _ <- IO.blocking {
+                 TestSupport.runGit(repo, "branch", "-M", "main")
+                 TestSupport.runGit(repo, "init", "--bare", remoteRepo.getAbsolutePath)
+                 TestSupport.runGit(repo, "remote", "add", "origin", remoteRepo.getAbsolutePath)
+                 TestSupport.runGit(repo, "config", "branch.main.remote", "origin")
+                 TestSupport.runGit(repo, "config", "branch.main.merge", "refs/heads/main")
+               }
+          _ <- GitPushSupport.pushTrackedBranch(new Git(repo), followTags = false)
+          localHead <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+          remoteHead <-
+            IO.blocking(TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim)
+        } yield assertEquals(remoteHead, localHead)
+      }
   }
 
   private def stubVcs(dir: File): Vcs =
