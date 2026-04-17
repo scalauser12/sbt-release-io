@@ -817,7 +817,13 @@ private object VcsOpsSpec {
       state = sbt.TestBuildState(
         baseState = baseState,
         baseDir = dir,
-        projects = Seq(Project("root", dir).settings(rootSettings*)),
+        projects = Seq(
+          Project("root", dir).settings(
+            (TestInteractionServiceCompat.interactionServiceSetting(
+              TestSupport.StdinInteractionService
+            ) +: rootSettings)*
+          )
+        ),
         currentProjectId = Some("root")
       ),
       consoleBuffer = consoleBuffer

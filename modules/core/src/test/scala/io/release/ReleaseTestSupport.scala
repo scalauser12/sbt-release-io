@@ -41,7 +41,10 @@ object ReleaseTestSupport {
       Seq(
         Project("root", repo).settings(
           (Seq(
-            ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
+            ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false,
+            TestInteractionServiceCompat.interactionServiceSetting(
+              TestSupport.StdinInteractionService
+            )
           ) ++ rootSettings)*
         )
       ),

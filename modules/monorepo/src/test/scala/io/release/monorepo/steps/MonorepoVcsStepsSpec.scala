@@ -903,7 +903,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             ),
             io.release.ReleaseSharedKeys.releaseIOVcsSign                 := false,
             io.release.ReleaseSharedKeys.releaseIOVcsSignOff              := false,
-            io.release.ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles := false
+            io.release.ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles := false,
+            io.release.TestInteractionServiceCompat.interactionServiceSetting(
+              io.release.TestSupport.StdinInteractionService
+            )
           ) ++
           settings
       )*

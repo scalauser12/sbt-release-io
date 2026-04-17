@@ -4,6 +4,8 @@ import cats.effect.IO
 
 private[release] object GitPushSupport {
 
+  private val HeadsRefPrefix = "refs/heads/"
+
   final case class GitPushTarget(
       remote: String,
       localBranch: String,
@@ -14,29 +16,21 @@ private[release] object GitPushSupport {
     for {
       localBranch   <- vcs.currentBranch
       remote        <- vcs.trackingRemote
-      upstreamRef   <- GitProcessSupport.runSingleLine(
+      mergeRef      <- GitProcessSupport.runSingleLine(
                          vcs.baseDir,
-                         Seq(
-                           "rev-parse",
-                           "--abbrev-ref",
-                           "--symbolic-full-name",
-                           "@{upstream}"
+                         Seq("config", s"branch.$localBranch.merge")
+                       )(s"git config branch.$localBranch.merge")
+      upstreamBranch = mergeRef.stripPrefix(HeadsRefPrefix)
+      _             <- IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
+                         new IllegalStateException(
+                           s"Tracking branch ref '$mergeRef' for branch '$localBranch' must use the '$HeadsRefPrefix' format."
                          )
-                       )("git rev-parse --abbrev-ref --symbolic-full-name @{upstream}")
-      remotePrefix   = s"$remote/"
-      _             <-
-        IO.raiseUnless(upstreamRef.startsWith(remotePrefix))(
-          new IllegalStateException(
-            s"Upstream '$upstreamRef' for branch '$localBranch' does not match tracking remote '$remote'."
-          )
-        )
-      upstreamBranch = upstreamRef.stripPrefix(remotePrefix)
-      _             <-
-        IO.raiseWhen(upstreamBranch.isEmpty)(
-          new IllegalStateException(
-            s"Unable to resolve upstream branch from '$upstreamRef' for tracking remote '$remote'."
-          )
-        )
+                       )
+      _             <- IO.raiseWhen(upstreamBranch.isEmpty)(
+                         new IllegalStateException(
+                           s"Unable to resolve tracking branch from '$mergeRef' for remote '$remote' and branch '$localBranch'."
+                         )
+                       )
     } yield GitPushTarget(
       remote = remote,
       localBranch = localBranch,

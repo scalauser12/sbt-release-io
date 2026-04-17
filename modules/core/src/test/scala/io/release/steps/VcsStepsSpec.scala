@@ -844,7 +844,10 @@ class VcsStepsSpec extends CatsEffectSuite {
       projects = Seq(
         Project("root", repo).settings(
           (Seq(
-            ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false
+            ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := false,
+            io.release.TestInteractionServiceCompat.interactionServiceSetting(
+              io.release.TestSupport.StdinInteractionService
+            )
           ) ++ rootSettings)*
         )
       ),
