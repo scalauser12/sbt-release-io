@@ -415,6 +415,8 @@ class StepHelpersSpec extends CatsEffectSuite {
                }
         log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
       } yield {
+        assert(log.contains("Snapshot dependencies found"))
+        assert(log.contains("org.example:demo:1.0.0-SNAPSHOT"))
         assertNoEofWarning(log)
       }
     }
@@ -540,6 +542,8 @@ class StepHelpersSpec extends CatsEffectSuite {
                }
         log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
       } yield {
+        assert(log.contains("Snapshot dependencies found"))
+        assert(log.contains("org.example:demo:1.0.0-SNAPSHOT"))
         assertNoEofWarning(log)
       }
     }

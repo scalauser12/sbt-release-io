@@ -470,6 +470,28 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     }
   }
 
+  test("recoverWithContext - re-raise InterruptedException for the plain path") {
+    contextResource.use { ctx =>
+      val failure = new InterruptedException("interrupted")
+
+      ExecutionEngine
+        .recoverWithContext(ReleaseLogPrefixes.Core, ctx)(
+          IO.raiseError(failure)
+        )
+        .attempt
+        .map {
+          case Left(err: InterruptedException) =>
+            assertEquals(err.getMessage, "interrupted")
+          case Left(other)                     =>
+            fail(
+              s"Expected InterruptedException, got ${other.getClass.getName}: ${other.getMessage}"
+            )
+          case Right(result)                   =>
+            fail(s"Expected recoverWithContext to re-raise, got $result")
+        }
+    }
+  }
+
   test("compose - preserve checkpointed context when tracked execute fails after an update") {
     contextResource.use { ctx =>
       val metadataKey = AttributeKey[String]("tracked-execute-metadata")
@@ -486,6 +508,40 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         assert(result.failed)
         assertEquals(result.metadata(metadataKey), Some("seeded"))
         assertEquals(result.failureCause.map(_.getMessage), Some("tracked failure"))
+      }
+    }
+  }
+
+  test("recoverWithContext - re-raise InterruptedException for the tracked path") {
+    contextResource.use { ctx =>
+      val metadataKey = AttributeKey[String]("tracked-fatal-path")
+      val failure     = new InterruptedException("interrupted")
+      val seededCtx   = ctx.withMetadata(metadataKey, "seeded")
+
+      io.release.runtime.TrackedContextHandle.create(seededCtx).flatMap { handle =>
+        for {
+          result <- ExecutionEngine
+                      .recoverWithContext(ReleaseLogPrefixes.Core, handle)(
+                        IO.raiseError(failure)
+                      )
+                      .attempt
+          latest <- handle.get
+        } yield {
+          result match {
+            case Left(err: InterruptedException) =>
+              assertEquals(err.getMessage, "interrupted")
+            case Left(other)                     =>
+              fail(
+                s"Expected InterruptedException, got ${other.getClass.getName}: ${other.getMessage}"
+              )
+            case Right(_)                        =>
+              fail("Expected tracked recoverWithContext to re-raise InterruptedException")
+          }
+
+          assertEquals(latest.metadata(metadataKey), Some("seeded"))
+          assertEquals(latest.failed, seededCtx.failed)
+          assertEquals(latest.failureCause, seededCtx.failureCause)
+        }
       }
     }
   }

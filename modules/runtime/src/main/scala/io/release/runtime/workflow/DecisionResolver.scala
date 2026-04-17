@@ -90,9 +90,10 @@ private[release] object DecisionResolver {
         case Some(true)  =>
           IO.blocking(ctx.state.log.warn(s"$logPrefix $msg")).as(ctx)
         case Some(false) =>
-          IO.raiseError(
-            new IllegalStateException(snapshotDependenciesAbortMessage(context))
-          )
+          IO.blocking(ctx.state.log.warn(s"$logPrefix $msg")) *>
+            IO.raiseError(
+              new IllegalStateException(snapshotDependenciesAbortMessage(context))
+            )
         case None        =>
           if (!ctx.interactive)
             IO.raiseError(new IllegalStateException(msg))

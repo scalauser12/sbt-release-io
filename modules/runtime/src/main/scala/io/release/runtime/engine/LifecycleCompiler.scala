@@ -194,8 +194,9 @@ private[release] object LifecycleCompiler {
               ProcessStep.Single[C](
                 stepName,
                 frozenExec,
-                (handle: TrackedContextHandle[C]) =>
-                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, ctx)),
+                Some((handle: TrackedContextHandle[C]) =>
+                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, ctx))
+                ),
                 (_: C) => IO.unit,
                 Set.empty[BuiltInStepRole],
                 crossBuild,
@@ -214,8 +215,9 @@ private[release] object LifecycleCompiler {
           ProcessStep.Single[C](
             stepName,
             (ctx: C) => gate(ctx).ifM(executeOf(hook)(ctx), IO.pure(ctx)),
-            (handle: TrackedContextHandle[C]) =>
-              handle.get.flatMap((ctx: C) => gate(ctx).ifM(executeTrackedOf(hook)(handle), IO.unit)),
+            Some((handle: TrackedContextHandle[C]) =>
+              handle.get.flatMap((ctx: C) => gate(ctx).ifM(executeTrackedOf(hook)(handle), IO.unit))
+            ),
             (ctx: C) => gate(ctx).ifM(validateOf(hook)(ctx), IO.unit),
             Set.empty[BuiltInStepRole],
             crossBuild,
@@ -258,8 +260,9 @@ private[release] object LifecycleCompiler {
               ProcessStep.PerItem[C, I](
                 stepName,
                 (ctx: C, item: I) => frozenExec((ctx, item)),
-                (handle: TrackedContextHandle[C], item: I) =>
-                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, (ctx, item))),
+                Some((handle: TrackedContextHandle[C], item: I) =>
+                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, (ctx, item)))
+                ),
                 (_: C, _: I) => IO.unit,
                 Set.empty[BuiltInStepRole],
                 crossBuild,
@@ -282,10 +285,11 @@ private[release] object LifecycleCompiler {
                 executeOf(hook)(ctx, item),
                 IO.pure(ctx)
               ),
-            (handle: TrackedContextHandle[C], item: I) =>
+            Some((handle: TrackedContextHandle[C], item: I) =>
               handle.get.flatMap((ctx: C) =>
                 gate(ctx, item).ifM(executeTrackedOf(hook)(handle, item), IO.unit)
-              ),
+              )
+            ),
             (ctx: C, item: I) =>
               gate(ctx, item).ifM(
                 validateOf(hook)(ctx, item),
@@ -324,7 +328,7 @@ private[release] object LifecycleCompiler {
           execute(args),
           skip(args)
         )
-      val execTracked         = (handle: TrackedContextHandle[C], args: Args) =>
+      val execTracked          = (handle: TrackedContextHandle[C], args: Args) =>
         frozenGateRunTracked(
           cached,
           gateKey(args),
