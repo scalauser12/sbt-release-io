@@ -16,7 +16,6 @@ import munit.CatsEffectSuite
 import sbt.AttributeKey
 import sbt.Incomplete
 import sbt.InteractionService
-import sbt.Keys.interactionService
 import sbt.ModuleID
 import sbt.Project
 import sbt.State
@@ -27,6 +26,8 @@ import scala.collection.mutable.Queue
 import scala.sys.process.Process
 
 class StepHelpersSpec extends CatsEffectSuite {
+  import StepHelpersSpec.*
+
   private val fixturePrefix = "step-helpers-spec"
   private val retryYesNoPromptPrefix =
     "Please answer 'y' or 'n' (or press Enter for the default)."
@@ -733,28 +734,6 @@ class StepHelpersSpec extends CatsEffectSuite {
       )
     )
 
-  private final case class StubInteractionService(
-      readAnswers: List[Option[String]] = Nil
-  ) extends InteractionService {
-    val readPrompts: ListBuffer[String]    = ListBuffer.empty
-    val confirmPrompts: ListBuffer[String] = ListBuffer.empty
-    private val reads                      = Queue(readAnswers*)
-
-    override def readLine(prompt: String, mask: Boolean): Option[String] = synchronized {
-      readPrompts += prompt
-      if (reads.nonEmpty) reads.dequeue() else None
-    }
-
-    override def confirm(msg: String): Boolean = synchronized {
-      confirmPrompts += msg
-      false
-    }
-
-    override def terminalWidth: Int = 80
-
-    override def terminalHeight: Int = 24
-  }
-
   private def stubVcs(base: File): Vcs =
     new Vcs {
       override def baseDir: File                                                               = base
@@ -792,4 +771,28 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   private def assertNoEofWarning(log: String): Unit =
     assert(!log.contains(snapshotDependencyEofWarning), s"Did not expect EOF warning in log: $log")
+}
+
+private object StepHelpersSpec {
+  final case class StubInteractionService(
+      readAnswers: List[Option[String]] = Nil
+  ) extends InteractionService {
+    val readPrompts: ListBuffer[String]    = ListBuffer.empty
+    val confirmPrompts: ListBuffer[String] = ListBuffer.empty
+    private val reads                      = Queue(readAnswers*)
+
+    override def readLine(prompt: String, mask: Boolean): Option[String] = synchronized {
+      readPrompts += prompt
+      if (reads.nonEmpty) reads.dequeue() else None
+    }
+
+    override def confirm(msg: String): Boolean = synchronized {
+      confirmPrompts += msg
+      false
+    }
+
+    override def terminalWidth: Int = 80
+
+    override def terminalHeight: Int = 24
+  }
 }
