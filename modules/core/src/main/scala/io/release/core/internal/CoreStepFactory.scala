@@ -3,22 +3,13 @@ package io.release.core.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.core.internal.CoreStepAliases.Step
+import io.release.core.internal.steps.CoreReleaseStepHelpers.failOnSbtTaskFailure
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import sbt.{internal as _, *}
 
 /** Core-only helpers for building steps backed by sbt tasks or commands. */
 private[release] object CoreStepFactory {
-
-  private def failOnSbtTaskFailure(
-      ctx: ReleaseContext,
-      newState: State,
-      failureMessage: String
-  ): ReleaseContext =
-    if (SbtRuntime.hasFailureCommand(newState)) {
-      val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
-      ctx.withState(cleaned).failWith(new IllegalStateException(failureMessage))
-    } else ctx.withState(newState)
 
   def pure(name: String)(f: ReleaseContext => ReleaseContext): Step =
     ProcessStep.Single(name, ctx => IO(f(ctx)))

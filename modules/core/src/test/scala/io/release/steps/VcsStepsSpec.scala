@@ -200,6 +200,7 @@ class VcsStepsSpec extends CatsEffectSuite {
                   )
                 ) { err =>
                   assert(marker.exists())
+                  assert(err.getMessage.contains("tag-release:resolve-tag-name"))
                   assert(
                     err.getMessage
                       .contains(io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName.key.label)
@@ -234,6 +235,7 @@ class VcsStepsSpec extends CatsEffectSuite {
                   )
                 ) { err =>
                   assert(marker.exists())
+                  assert(err.getMessage.contains("tag-release:resolve-tag-comment"))
                   assert(
                     err.getMessage
                       .contains(io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment.key.label)
