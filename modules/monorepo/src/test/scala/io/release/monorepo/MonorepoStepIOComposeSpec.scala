@@ -417,6 +417,55 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 
+  test(
+    "compose - detect FailureCommand sentinel during per-project validation and skip execute"
+  ) {
+    contextResource.use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { observed =>
+        dummyProjects("core", "api").flatMap { projects =>
+          val pCtx = ctx.withProjects(projects)
+
+          val injectFailure = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
+            name = "inject-validation-failure-command",
+            validateWithContext = Some((c, project) =>
+              observed.update(_ :+ s"validate:${project.name}").as {
+                if (project.name == "core")
+                  c.withState(
+                    c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+                  )
+                else c
+              }
+            ),
+            execute = (c, project) =>
+              observed.update(_ :+ s"execute:${project.name}").as(c)
+          )
+          val skipped       = ProcessStep.Single[MonorepoContext](
+            name = "skipped-after-validation-failure",
+            execute = c => observed.update(_ :+ "after").as(c)
+          )
+
+          MonorepoComposer
+            .compose(Seq(injectFailure, skipped))(pCtx)
+            .flatMap { result =>
+              observed.get.map { obs =>
+                assert(result.failed)
+                val aggregate = requireProjectFailures(result.failureCause)
+                assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
+                assert(
+                  aggregate.failures.head.cause.exists(
+                    _.getMessage.contains("core: sbt task reported failure via FailureCommand")
+                  )
+                )
+                assertEquals(obs, List("validate:core"))
+                assertEquals(result.state.remainingCommands, Nil)
+                assertEquals(result.state.onFailure, None)
+              }
+            }
+        }
+      }
+    }
+  }
+
   test("compose - restore a pre-existing onFailure hook after per-project FailureCommand") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>

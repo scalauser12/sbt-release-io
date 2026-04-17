@@ -53,7 +53,11 @@ private[monorepo] object ChangeDetection {
   private def isExcludedPath(path: String, excludes: Set[String]): Boolean =
     excludes.exists(matchesExcludedPath(path, _))
 
-  private def successfulGitLines(
+  /** Runs a git subprocess, returns stdout lines, and throws [[IllegalStateException]] on a
+    * non-zero exit. Performs blocking subprocess I/O and must only be called from within
+    * `IO.blocking`.
+    */
+  private def successfulGitLinesBlocking(
       vcs: Vcs,
       args: Seq[String]
   )(context: => String): Seq[String] = {
@@ -79,7 +83,7 @@ private[monorepo] object ChangeDetection {
     import TagLookupResult.*
 
     Try(
-      successfulGitLines(
+      successfulGitLinesBlocking(
         vcs,
         Seq("describe", "--tags", "--match", tagPattern, "--abbrev=0")
       )("git describe").mkString("\n").trim
@@ -90,7 +94,7 @@ private[monorepo] object ChangeDetection {
         NoMatchingTag
       case Failure(describeErr)         =>
         Try(
-          successfulGitLines(
+          successfulGitLinesBlocking(
             vcs,
             Seq("tag", "--list", tagPattern, "--merged", "HEAD")
           )("git tag --list --merged HEAD").toList
@@ -288,7 +292,7 @@ private[monorepo] object ChangeDetection {
       excludes: Set[String]
   ): Boolean =
     Try(
-      successfulGitLines(
+      successfulGitLinesBlocking(
         vcs,
         Seq("diff", "--name-only", s"$tag..HEAD", "--") ++ sharedPaths
       )("git diff").toList
@@ -377,7 +381,7 @@ private[monorepo] object ChangeDetection {
       childDirPrefixes: Set[String]
   ): Boolean =
     Try(
-      successfulGitLines(
+      successfulGitLinesBlocking(
         vcs,
         Seq("diff", "--name-only", s"$tag..HEAD", "--", baseRelative)
       )("git diff").toList

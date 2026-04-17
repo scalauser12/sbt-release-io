@@ -48,7 +48,7 @@ case class ProjectReleaseInfo(
 
 /** Immutable context threaded through each monorepo release step during both phases.
   *
-  * Created by [[MonorepoReleasePluginLike.doMonorepoRelease]], then passed through
+  * Created when the monorepo command boots its release context, then passed through
   * the composer. Global steps receive the context directly; per-project
   * steps receive both the context and the current [[ProjectReleaseInfo]].
   * Built-in monorepo actions resolve project order, selection, version settings,

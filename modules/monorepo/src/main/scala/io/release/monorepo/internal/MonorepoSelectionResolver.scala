@@ -21,7 +21,6 @@ private[monorepo] object MonorepoSelectionResolver {
 
   private final case class ResolvedSelectionInputs(
       orderedProjects: Seq[ProjectReleaseInfo],
-      tagSettings: MonorepoTagSettingsSupport.ResolvedMonorepoTagSettings,
       plan: MonorepoReleasePlan
   )
 
@@ -78,14 +77,13 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[ResolvedSelectionInputs] =
     for {
-      tagSettings    <- MonorepoTagSettingsSupport.resolveTagSettings(ctx.state)
       liveOrdered    <- MonorepoProjectResolver.resolveOrdered(ctx.state)
       orderedProjects = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
       validatedPlan  <-
         IO.fromEither(
           validateResolvedProjects(orderedProjects, plan).left.map(new IllegalStateException(_))
         )
-    } yield ResolvedSelectionInputs(orderedProjects, tagSettings, validatedPlan)
+    } yield ResolvedSelectionInputs(orderedProjects, validatedPlan)
 
   private def selectProjects(
       ctx: MonorepoContext,
@@ -112,7 +110,6 @@ private[monorepo] object MonorepoSelectionResolver {
         resolveDetectChanges(
           ctx,
           inputs.orderedProjects,
-          inputs.tagSettings,
           inputs.plan
         ).map { case (projects, selectionMode) =>
           SelectionResult(projects = projects, selectionMode = selectionMode)
@@ -132,11 +129,10 @@ private[monorepo] object MonorepoSelectionResolver {
   private def resolveDetectChanges(
       ctx: MonorepoContext,
       ordered: Seq[ProjectReleaseInfo],
-      tagSettings: MonorepoTagSettingsSupport.ResolvedMonorepoTagSettings,
       validated: MonorepoReleasePlan
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
     resolveDetectionSettings(ctx.state).flatMap { settings =>
-      detectSelectedProjects(ctx, ordered, tagSettings, settings).flatMap { case (detected, mode) =>
+      detectSelectedProjects(ctx, ordered, settings).flatMap { case (detected, mode) =>
         forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
       }
     }
@@ -144,7 +140,6 @@ private[monorepo] object MonorepoSelectionResolver {
   private def detectSelectedProjects(
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
-      tagSettings: MonorepoTagSettingsSupport.ResolvedMonorepoTagSettings,
       settings: DetectionSettings
   ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
     if (!settings.detectChanges)
@@ -154,18 +149,20 @@ private[monorepo] object MonorepoSelectionResolver {
         case Some(detector) =>
           detectWithCustomDetector(ctx, orderedProjects, detector)
         case None           =>
-          IO.fromOption(ctx.vcs)(
-            new IllegalStateException("VCS not initialized")
-          ).flatMap { vcs =>
-            ChangeDetection.detectChangedProjects(
-              vcs,
-              orderedProjects,
-              tagSettings.perProjectTagName,
-              ctx.state,
-              settings.userExcludes,
-              settings.sharedPaths
-            )
-          }
+          for {
+            tagSettings <- MonorepoTagSettingsSupport.resolveTagSettings(ctx.state)
+            vcs         <- IO.fromOption(ctx.vcs)(
+                             new IllegalStateException("VCS not initialized")
+                           )
+            changed     <- ChangeDetection.detectChangedProjects(
+                             vcs,
+                             orderedProjects,
+                             tagSettings.perProjectTagName,
+                             ctx.state,
+                             settings.userExcludes,
+                             settings.sharedPaths
+                           )
+          } yield changed
       }
 
       if (!settings.includeDownstream) detected.map((_, SelectionMode.DetectChanges))
@@ -207,8 +204,7 @@ private[monorepo] object MonorepoSelectionResolver {
     DependencyGraph.dependedOnBy(allOrdered.map(_.ref), ctx.state).flatMap { reverseGraph =>
       val detectedRefs  = detected.map(_.ref).toSet
       val downstream    = DependencyGraph.transitiveDependents(detectedRefs, reverseGraph)
-      val newlyIncluded =
-        allOrdered.filter(p => downstream.contains(p.ref) && !detectedRefs.contains(p.ref))
+      val newlyIncluded = allOrdered.filter(p => downstream.contains(p.ref))
 
       if (newlyIncluded.isEmpty) IO.pure(detected)
       else {

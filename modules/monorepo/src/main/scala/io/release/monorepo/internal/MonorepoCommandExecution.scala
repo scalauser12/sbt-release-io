@@ -22,8 +22,8 @@ import sbt.{internal as _, *}
   * {{{
   * sbt "releaseIOMonorepo [projects] [flags]"
   *   → MonorepoReleasePlugin registers the sbt command
-  *   → MonorepoCommandExecution.buildCommandInputs   (parse CLI into MonorepoReleasePlan)
-  *   → MonorepoCommandExecution.runPreparedCommand    (resolve hooks, compile into steps)
+  *   → MonorepoCommandExecution.prepareCommand        (resolve flags/defaults and build the plan)
+  *   → ReleaseCommandCompilation.runPreparedCommand   (clean state and run the prepared session)
   *   → MonorepoComposer.compose                       (split at selection boundary)
   *       ├─ setup segment  → ExecutionEngine.runSequentialValidateThenExecute
   *       │                    (through `detect-or-select-projects` and any immediate
@@ -204,7 +204,7 @@ private[monorepo] object MonorepoCommandExecution {
       warnOnDuplicates: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
     val cleanStateFn: State => State =
-      state => CommandStateSupport.cleanReleaseState(state, loadedProjectRefs(state))
+      state => CommandStateSupport.cleanReleaseState(state, loadedProjectRefsBlocking(state))
 
     ReleaseCommandCompilation.runPreparedCommand(
       state = state,
@@ -260,7 +260,7 @@ private[monorepo] object MonorepoCommandExecution {
                     cleanState = state =>
                       CommandStateSupport.cleanReleaseState(
                         state,
-                        loadedProjectRefs(state)
+                        loadedProjectRefsBlocking(state)
                       ),
                     prefix = ReleaseLogPrefixes.Monorepo
                   )
@@ -289,7 +289,10 @@ private[monorepo] object MonorepoCommandExecution {
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
 
-  private def loadedProjectRefs(state: State): Seq[ProjectRef] =
+  /** Reads loaded project refs from sbt's extracted structure.
+    * Performs blocking sbt extraction and must only be called from within `IO.blocking`.
+    */
+  private def loadedProjectRefsBlocking(state: State): Seq[ProjectRef] =
     SbtRuntime.extracted(state).structure.allProjectRefs
 
   private[monorepo] def releaseStartLines(
