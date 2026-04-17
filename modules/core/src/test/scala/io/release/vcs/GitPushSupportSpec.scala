@@ -51,6 +51,23 @@ class GitPushSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolvePushTarget - reject branches that track a local branch via '.' as their remote") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-local-dot-remote").use { repo =>
+      IO.blocking {
+        TestSupport.runGit(repo, "branch", "-M", "main")
+        TestSupport.runGit(repo, "checkout", "-b", "feature")
+        TestSupport.runGit(repo, "config", "branch.feature.remote", ".")
+        TestSupport.runGit(repo, "config", "branch.feature.merge", "refs/heads/main")
+      } *>
+        assertFailure[IllegalStateException, GitPushSupport.GitPushTarget](
+          GitPushSupport.resolvePushTarget(new Git(repo))
+        ) { err =>
+          assert(err.getMessage.contains("tracks a local branch"))
+          assert(err.getMessage.contains("branch.feature.remote = '.'"))
+        }
+    }
+  }
+
   test("pushTrackedBranch - create the configured tracking branch on the first push") {
     Resource
       .both(

@@ -16,6 +16,12 @@ private[release] object GitPushSupport {
     for {
       localBranch   <- vcs.currentBranch
       remote        <- vcs.trackingRemote
+      _             <- IO.raiseWhen(remote == ".")(
+                         new IllegalStateException(
+                           s"Branch '$localBranch' tracks a local branch (branch.$localBranch.remote = '.'); " +
+                             "configure a real remote before releasing."
+                         )
+                       )
       mergeRef      <- GitProcessSupport.runSingleLine(
                          vcs.baseDir,
                          Seq("config", s"branch.$localBranch.merge")
