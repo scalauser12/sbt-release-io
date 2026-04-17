@@ -24,6 +24,8 @@ import scala.util.control.NonFatal
 /** Publish, test, and dependency-related release steps. */
 private[release] object PublishSteps {
 
+  import CoreReleaseStepHelpers.failOnSbtTaskFailure
+
   val checkSnapshotDependencies: Step = ProcessStep.Single(
     name = "check-snapshot-dependencies",
     execute = ctx => IO.pure(ctx),
@@ -143,16 +145,6 @@ private[release] object PublishSteps {
           }
         }
       }
-
-  private[steps] def failOnSbtTaskFailure(
-      ctx: ReleaseContext,
-      newState: State,
-      failureMessage: String
-  ): ReleaseContext =
-    if (SbtRuntime.hasFailureCommand(newState)) {
-      val cleaned = SbtRuntime.stripLeadingFailureCommand(newState)
-      ctx.withState(cleaned).failWith(new IllegalStateException(failureMessage))
-    } else ctx.withState(newState)
 
   /** Resolve the projects that `runAggregated` will actually execute for the publish task.
     * Checks `aggregationEnabled` at each level so the expansion matches sbt's

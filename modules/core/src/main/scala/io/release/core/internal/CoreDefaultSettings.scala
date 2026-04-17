@@ -9,13 +9,13 @@ private[release] object CoreDefaultSettings {
 
   lazy val pluginDefaultSettings: Seq[Setting[?]] =
     Seq(
-      behaviorAndDecisionDefaults,
+      behaviorDefaults,
       CoreLifecycle.configDefaultSettings,
       versioningAndRuntimeDefaults,
       vcsAndPublishDefaults
     ).flatten
 
-  private lazy val behaviorAndDecisionDefaults: Seq[Setting[?]] = Seq(
+  private lazy val behaviorDefaults: Seq[Setting[?]] = Seq(
     releaseIOBehaviorCrossBuild  := false,
     releaseIOBehaviorSkipPublish := false,
     releaseIOBehaviorInteractive := false

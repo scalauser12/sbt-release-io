@@ -7,8 +7,9 @@ import io.release.core.internal.CoreExecutionState
 import io.release.core.internal.CoreReleasePlan
 import io.release.core.internal.steps.CoreReleaseStepHelpers
 import io.release.runtime.ExecutionFlags
-import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.sbt.SbtCompat
+import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.AttributeKey
@@ -74,6 +75,24 @@ class StepHelpersSpec extends CatsEffectSuite {
         CoreReleaseStepHelpers.requireVersions(ctx)(_ => IO.pure(ctx)),
         "Versions not set. Ensure inquireVersions runs before this step."
       )
+    }
+  }
+
+  test(
+    "StepHelpers.failOnSbtTaskFailure - strip FailureCommand and retain the clean failure cause"
+  ) {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      IO {
+        val message  =
+          "run-clean: clean action reported failure via FailureCommand"
+        val newState =
+          ctx.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
+        val result   = CoreReleaseStepHelpers.failOnSbtTaskFailure(ctx, newState, message)
+
+        assert(result.failed)
+        assertEquals(result.state.remainingCommands, Nil)
+        assertEquals(result.failureCause.map(_.getMessage), Some(message))
+      }
     }
   }
 

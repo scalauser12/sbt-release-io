@@ -10,7 +10,6 @@ import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.runtime.ReleaseLogPrefixes
-import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
@@ -289,24 +288,6 @@ class PublishStepsSpec extends CatsEffectSuite {
     }.use { case (ctx, _) =>
       PublishSteps.runClean.execute(ctx).map { result =>
         assert(!result.failed)
-      }
-    }
-  }
-
-  // ── failOnSbtTaskFailure ────────────────────────────────────────────
-
-  test("failOnSbtTaskFailure - strip FailureCommand and retain the clean failure cause") {
-    ReleaseTestSupport.dummyContextResource(s"$fixturePrefix-clean").use { ctx =>
-      IO {
-        val message  =
-          "run-clean: clean action reported failure via FailureCommand"
-        val newState =
-          ctx.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)
-        val result   = PublishSteps.failOnSbtTaskFailure(ctx, newState, message)
-
-        assert(result.failed)
-        assertEquals(result.state.remainingCommands, Nil)
-        assertEquals(result.failureCause.map(_.getMessage), Some(message))
       }
     }
   }

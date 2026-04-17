@@ -115,6 +115,7 @@ private[release] object CorePreflight {
       steps: Seq[Step],
       orderedSteps: Seq[Step]
   ): Boolean = {
+    // This matches the canonical built-in singleton step instances, not structurally equal copies.
     val remaining = steps.iterator
     orderedSteps.forall(target => remaining.exists(_ eq target))
   }
