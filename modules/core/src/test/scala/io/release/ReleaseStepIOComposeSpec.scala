@@ -30,6 +30,7 @@ import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Queue
 
 class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSupport {
+  import ReleaseStepIOComposeSpec.*
 
   private final class BlockingErrorLineOutputStream(
       delegate: ByteArrayOutputStream,
@@ -669,7 +670,19 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         )
       )
 
-  private final case class StubInteractionService(
+  private def validationOnlyStep(
+      name: String,
+      validateWithContext: ReleaseContext => IO[ReleaseContext]
+  ): ProcessStep.Single[ReleaseContext] =
+    ProcessStep.Single(
+      name = name,
+      execute = currentCtx => IO.pure(currentCtx),
+      validateWithContext = Some(validateWithContext)
+    )
+}
+
+private object ReleaseStepIOComposeSpec {
+  final case class StubInteractionService(
       readAnswers: List[Option[String]] = Nil
   ) extends InteractionService {
     val readPrompts: ListBuffer[String]    = ListBuffer.empty
@@ -690,14 +703,4 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
 
     override def terminalHeight: Int = 24
   }
-
-  private def validationOnlyStep(
-      name: String,
-      validateWithContext: ReleaseContext => IO[ReleaseContext]
-  ): ProcessStep.Single[ReleaseContext] =
-    ProcessStep.Single(
-      name = name,
-      execute = currentCtx => IO.pure(currentCtx),
-      validateWithContext = Some(validateWithContext)
-    )
 }
