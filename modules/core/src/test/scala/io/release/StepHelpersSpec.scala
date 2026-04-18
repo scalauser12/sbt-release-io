@@ -10,6 +10,7 @@ import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.sbt.SbtCompat
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
@@ -365,10 +366,10 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test(
-    "StepHelpers.handleSnapshotDependencies - do nothing when there are no snapshot dependencies"
+    "DecisionResolver.handleSnapshotDependencies - do nothing when there are no snapshot dependencies"
   ) {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      StepHelpers
+      DecisionResolver
         .handleSnapshotDependencies(
           ctx,
           deps = Nil,
@@ -378,11 +379,11 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test(
-    "StepHelpers.handleSnapshotDependencies - raise with dependency coordinates in non-interactive mode"
+    "DecisionResolver.handleSnapshotDependencies - raise with dependency coordinates in non-interactive mode"
   ) {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       assertFailure[IllegalStateException, ReleaseContext](
-        StepHelpers
+        DecisionResolver
           .handleSnapshotDependencies(
             promptContext(state, interactive = false, useDefaults = false),
             deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
@@ -397,14 +398,14 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test(
-    "StepHelpers.handleSnapshotDependencies - with-defaults abort mentions the snapshot override"
+    "DecisionResolver.handleSnapshotDependencies - with-defaults abort mentions the snapshot override"
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
 
       for {
         _   <- assertFailure[IllegalStateException, ReleaseContext](
-                 StepHelpers
+                 DecisionResolver
                    .handleSnapshotDependencies(
                      promptContext(buffered.state, interactive = true, useDefaults = true),
                      deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
@@ -424,7 +425,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test(
-    "StepHelpers.handleSnapshotDependencies - interactive EOF warns once and reuses the snapshot override hint"
+    "DecisionResolver.handleSnapshotDependencies - interactive EOF warns once and reuses the snapshot override hint"
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
@@ -437,7 +438,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
       for {
         _   <- assertFailure[IllegalStateException, ReleaseContext](
-                 StepHelpers
+                 DecisionResolver
                    .handleSnapshotDependencies(
                      ctx,
                      deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
@@ -455,7 +456,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test(
-    "StepHelpers.handleSnapshotDependencies - interactive decline reuses the snapshot override hint"
+    "DecisionResolver.handleSnapshotDependencies - interactive decline reuses the snapshot override hint"
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
@@ -468,7 +469,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
       for {
         _   <- assertFailure[IllegalStateException, ReleaseContext](
-                 StepHelpers
+                 DecisionResolver
                    .handleSnapshotDependencies(
                      ctx,
                      deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
@@ -486,7 +487,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test(
-    "StepHelpers.handleSnapshotDependencies - interactive blank default aborts without an EOF warning"
+    "DecisionResolver.handleSnapshotDependencies - interactive blank default aborts without an EOF warning"
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
@@ -499,7 +500,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
       for {
         _   <- assertFailure[IllegalStateException, ReleaseContext](
-                 StepHelpers
+                 DecisionResolver
                    .handleSnapshotDependencies(
                      ctx,
                      deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
@@ -517,7 +518,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   }
 
   test(
-    "StepHelpers.handleSnapshotDependencies - configured decline aborts without an EOF warning"
+    "DecisionResolver.handleSnapshotDependencies - configured decline aborts without an EOF warning"
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val buffered = TestSupport.bufferedState(dir)
@@ -532,7 +533,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
       for {
         _   <- assertFailure[IllegalStateException, ReleaseContext](
-                 StepHelpers.handleSnapshotDependencies(
+                 DecisionResolver.handleSnapshotDependencies(
                    ctx,
                    deps = Seq(ModuleID("org.example", "demo", "1.0.0-SNAPSHOT")),
                    logPrefix = "[test]"
