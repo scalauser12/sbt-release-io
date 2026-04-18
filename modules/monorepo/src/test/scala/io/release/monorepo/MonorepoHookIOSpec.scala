@@ -125,6 +125,66 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
   }
 
   // ---------------------------------------------------------------------------
+  // MonorepoGlobalHookIO.sideEffect / .transform / .resumable
+  // ---------------------------------------------------------------------------
+
+  test("MonorepoGlobalHookIO.sideEffect - runs the effect and preserves the context") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      Ref.of[IO, Int](0).flatMap { counter =>
+        val hook = MonorepoGlobalHookIO.sideEffect("side-effect-global")(_ => counter.update(_ + 1))
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          for {
+            _           <- MonorepoGlobalHookIO.trackedExecute(hook)(handle)
+            latest      <- handle.get
+            invocations <- counter.get
+          } yield {
+            assertEquals(latest, ctx)
+            assertEquals(invocations, 1)
+          }
+        }
+      }
+    }
+  }
+
+  test("MonorepoGlobalHookIO.transform - checkpoints the returned context") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[String]("transform-global")
+      val hook        = MonorepoGlobalHookIO.transform("transform-global") { c =>
+        IO.pure(c.withMetadata(metadataKey, "applied"))
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalHookIO.trackedExecute(hook)(handle) *> handle.get.map { latest =>
+          assertEquals(latest.metadata(metadataKey), Some("applied"))
+        }
+      }
+    }
+  }
+
+  test("MonorepoGlobalHookIO.resumable - exposes the tracked handle directly") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[Vector[String]]("resumable-global")
+      val hook        = MonorepoGlobalHookIO.resumable("resumable-global") { handle =>
+        def append(currentCtx: MonorepoContext, entry: String): MonorepoContext =
+          currentCtx.withMetadata(
+            metadataKey,
+            currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+          )
+
+        handle.update(c => IO.pure(append(c, "first"))).void *>
+          handle.update(c => IO.pure(append(c, "second"))).void
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalHookIO.trackedExecute(hook)(handle) *> handle.get.map { latest =>
+          assertEquals(latest.metadata(metadataKey), Some(Vector("first", "second")))
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // MonorepoProjectHookIO
   // ---------------------------------------------------------------------------
 
@@ -237,7 +297,9 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         val hook        = MonorepoProjectHookIO
           .ioTracked("tracked-project") { (handle, currentProject) =>
             handle
-              .update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, currentProject.name)))
+              .update(currentCtx =>
+                IO.pure(currentCtx.withMetadata(metadataKey, currentProject.name))
+              )
               .void
           }
           .copy(name = "tracked-project-copy")
@@ -246,6 +308,74 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
           MonorepoProjectHookIO.trackedExecute(hook)(handle, project) *> handle.get.map { result =>
             assertEquals(hook.name, "tracked-project-copy")
             assertEquals(result.metadata(metadataKey), Some("core"))
+          }
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // MonorepoProjectHookIO.sideEffect / .transform / .resumable
+  // ---------------------------------------------------------------------------
+
+  test("MonorepoProjectHookIO.sideEffect - receives (project, ctx) and preserves the context") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, Option[String]](None).flatMap { captured =>
+          val hook = MonorepoProjectHookIO.sideEffect("side-effect-project") { (p, _) =>
+            captured.set(Some(p.name))
+          }
+
+          TrackedContextHandle.create(ctx).flatMap { handle =>
+            for {
+              _        <- MonorepoProjectHookIO.trackedExecute(hook)(handle, project)
+              latest   <- handle.get
+              observed <- captured.get
+            } yield {
+              assertEquals(latest, ctx)
+              assertEquals(observed, Some("core"))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectHookIO.transform - receives (project, ctx) and checkpoints the result") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[String]("transform-project")
+        val hook        = MonorepoProjectHookIO.transform("transform-project") { (p, c) =>
+          IO.pure(c.withMetadata(metadataKey, p.name))
+        }
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectHookIO.trackedExecute(hook)(handle, project) *> handle.get.map { latest =>
+            assertEquals(latest.metadata(metadataKey), Some("core"))
+          }
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectHookIO.resumable - exposes (project, handle) directly") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[Vector[String]]("resumable-project")
+        val hook        = MonorepoProjectHookIO.resumable("resumable-project") { (p, handle) =>
+          def append(currentCtx: MonorepoContext, entry: String): MonorepoContext =
+            currentCtx.withMetadata(
+              metadataKey,
+              currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+            )
+
+          handle.update(c => IO.pure(append(c, s"${p.name}-first"))).void *>
+            handle.update(c => IO.pure(append(c, s"${p.name}-second"))).void
+        }
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectHookIO.trackedExecute(hook)(handle, project) *> handle.get.map { latest =>
+            assertEquals(latest.metadata(metadataKey), Some(Vector("core-first", "core-second")))
           }
         }
       }
@@ -329,8 +459,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
       val metadataKey = AttributeKey[String]("legacy-global-resource")
       val hook        = MonorepoGlobalResourceHookIO[String](
         name = "legacy-global-resource-hook",
-        execute = resource =>
-          currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource)),
+        execute = resource => currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource)),
         validate = _ => IO.unit
       )
       val copied      = hook.copy(name = "copied-global-resource-hook")
@@ -342,6 +471,76 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         assertEquals(execute, hook.execute)
         assertEquals(copied.name, "copied-global-resource-hook")
         assertEquals(result.metadata(metadataKey), Some("bound"))
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // MonorepoGlobalResourceHookIO.sideEffect / .transform / .resumable
+  // ---------------------------------------------------------------------------
+
+  test("MonorepoGlobalResourceHookIO.sideEffect - runs the effect and preserves the context") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      Ref.of[IO, Option[String]](None).flatMap { captured =>
+        val hook = MonorepoGlobalResourceHookIO.sideEffect[String]("side-effect-global-resource") {
+          (resource, _) => captured.set(Some(resource))
+        }
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          for {
+            _        <- MonorepoGlobalResourceHookIO.trackedExecute(hook)("client")(handle)
+            latest   <- handle.get
+            observed <- captured.get
+          } yield {
+            assertEquals(latest, ctx)
+            assertEquals(observed, Some("client"))
+          }
+        }
+      }
+    }
+  }
+
+  test("MonorepoGlobalResourceHookIO.transform - checkpoints the returned context") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[String]("transform-global-resource")
+      val hook        =
+        MonorepoGlobalResourceHookIO.transform[String]("transform-global-resource") {
+          (resource, c) => IO.pure(c.withMetadata(metadataKey, resource))
+        }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalResourceHookIO.trackedExecute(hook)("applied")(handle) *>
+          handle.get.map { latest =>
+            assertEquals(latest.metadata(metadataKey), Some("applied"))
+          }
+      }
+    }
+  }
+
+  test("MonorepoGlobalResourceHookIO.resumable - exposes (resource, handle) directly") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val metadataKey = AttributeKey[Vector[String]]("resumable-global-resource")
+      val hook        =
+        MonorepoGlobalResourceHookIO.resumable[String]("resumable-global-resource") {
+          (resource, handle) =>
+            def append(currentCtx: MonorepoContext, entry: String): MonorepoContext =
+              currentCtx.withMetadata(
+                metadataKey,
+                currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+              )
+
+            handle.update(c => IO.pure(append(c, s"$resource-first"))).void *>
+              handle.update(c => IO.pure(append(c, s"$resource-second"))).void
+        }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        MonorepoGlobalResourceHookIO.trackedExecute(hook)("client")(handle) *>
+          handle.get.map { latest =>
+            assertEquals(
+              latest.metadata(metadataKey),
+              Some(Vector("client-first", "client-second"))
+            )
+          }
       }
     }
   }
@@ -419,8 +618,9 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
       dummyProject("core").flatMap { project =>
         val hook   = MonorepoProjectResourceHookIO[String](
           name = "legacy-project-resource-hook",
-          execute = resource => (currentCtx, currentProject) =>
-            IO.pure(currentCtx.withProjects(Seq(currentProject.copy(tagName = Some(resource))))),
+          execute = resource =>
+            (currentCtx, currentProject) =>
+              IO.pure(currentCtx.withProjects(Seq(currentProject.copy(tagName = Some(resource))))),
           validate = (_, _) => IO.unit
         )
         val copied = hook.copy(name = "copied-project-resource-hook")
@@ -443,15 +643,99 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         val metadataKey = AttributeKey[String]("tracked-project-resource-hook-copy")
         val hook        = MonorepoProjectResourceHookIO
           .ioTracked[String]("tracked-project-resource") { resource => (handle, _) =>
-            handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
+            handle
+              .update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource)))
+              .void
           }
           .copy(name = "tracked-project-resource-copy")
 
         TrackedContextHandle.create(ctx).flatMap { handle =>
           MonorepoProjectResourceHookIO
             .trackedExecute(hook)("copied-resource")(handle, project) *> handle.get.map { result =>
-              assertEquals(hook.name, "tracked-project-resource-copy")
-              assertEquals(result.metadata(metadataKey), Some("copied-resource"))
+            assertEquals(hook.name, "tracked-project-resource-copy")
+            assertEquals(result.metadata(metadataKey), Some("copied-resource"))
+          }
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // MonorepoProjectResourceHookIO.sideEffect / .transform / .resumable
+  // ---------------------------------------------------------------------------
+
+  test(
+    "MonorepoProjectResourceHookIO.sideEffect - receives (resource, project, ctx) and preserves the context"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, Option[(String, String)]](None).flatMap { captured =>
+          val hook =
+            MonorepoProjectResourceHookIO.sideEffect[String]("side-effect-project-resource") {
+              (resource, p, _) => captured.set(Some((resource, p.name)))
+            }
+
+          TrackedContextHandle.create(ctx).flatMap { handle =>
+            for {
+              _        <- MonorepoProjectResourceHookIO
+                            .trackedExecute(hook)("client")(handle, project)
+              latest   <- handle.get
+              observed <- captured.get
+            } yield {
+              assertEquals(latest, ctx)
+              assertEquals(observed, Some(("client", "core")))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "MonorepoProjectResourceHookIO.transform - receives (resource, project, ctx) and checkpoints the result"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[String]("transform-project-resource")
+        val hook        =
+          MonorepoProjectResourceHookIO.transform[String]("transform-project-resource") {
+            (resource, p, c) => IO.pure(c.withMetadata(metadataKey, s"$resource:${p.name}"))
+          }
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectResourceHookIO.trackedExecute(hook)("client")(handle, project) *>
+            handle.get.map { latest =>
+              assertEquals(latest.metadata(metadataKey), Some("client:core"))
+            }
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectResourceHookIO.resumable - exposes (resource, project, handle) directly") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val metadataKey = AttributeKey[Vector[String]]("resumable-project-resource")
+        val hook        =
+          MonorepoProjectResourceHookIO.resumable[String]("resumable-project-resource") {
+            (resource, p, handle) =>
+              def append(currentCtx: MonorepoContext, entry: String): MonorepoContext =
+                currentCtx.withMetadata(
+                  metadataKey,
+                  currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+                )
+
+              handle.update(c => IO.pure(append(c, s"$resource-${p.name}-first"))).void *>
+                handle.update(c => IO.pure(append(c, s"$resource-${p.name}-second"))).void
+          }
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          MonorepoProjectResourceHookIO.trackedExecute(hook)("client")(handle, project) *>
+            handle.get.map { latest =>
+              assertEquals(
+                latest.metadata(metadataKey),
+                Some(Vector("client-core-first", "client-core-second"))
+              )
             }
         }
       }
@@ -689,7 +973,9 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     }
   }
 
-  test("MonorepoResourceHooks.materialize - preserve tracked global execute when binding resource") {
+  test(
+    "MonorepoResourceHooks.materialize - preserve tracked global execute when binding resource"
+  ) {
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       val metadataKey = AttributeKey[String]("materialized-tracked-global-resource-hook")
       val hook        = MonorepoGlobalResourceHookIO.ioTracked[String]("tracked-global") {
@@ -710,7 +996,9 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     }
   }
 
-  test("MonorepoResourceHooks.materialize - preserve tracked project execute when binding resource") {
+  test(
+    "MonorepoResourceHooks.materialize - preserve tracked project execute when binding resource"
+  ) {
     MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
       dummyProject("core").flatMap { project =>
         val metadataKey = AttributeKey[String]("materialized-tracked-project-resource-hook")

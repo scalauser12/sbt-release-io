@@ -145,12 +145,15 @@ object CustomMonorepoStepExamples {
     }
   )
 
-  val printSummaryHook: MonorepoGlobalHookIO = MonorepoGlobalHookIO.action("print-summary")(ctx =>
-    IO.println(s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}")
-  )
+  val printSummaryHook: MonorepoGlobalHookIO =
+    MonorepoGlobalHookIO.sideEffect("print-summary")(ctx =>
+      IO.println(
+        s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}"
+      )
+    )
 
-  val checkReadmeHook: MonorepoProjectHookIO = MonorepoProjectHookIO.action("check-readme") {
-    (_, project) =>
+  val checkReadmeHook: MonorepoProjectHookIO = MonorepoProjectHookIO.sideEffect("check-readme") {
+    (project, _) =>
       if (!(new java.io.File(project.baseDir, "README.md")).exists())
         IO.raiseError(
           new RuntimeException(
@@ -161,7 +164,7 @@ object CustomMonorepoStepExamples {
   }
 
   val generateChangelogHook: MonorepoProjectHookIO =
-    MonorepoProjectHookIO.action("generate-changelog") { (_, project) =>
+    MonorepoProjectHookIO.sideEffect("generate-changelog") { (project, _) =>
       project.versions match {
         case Some((releaseVer, _)) =>
           IO.blocking {
@@ -177,7 +180,7 @@ object CustomMonorepoStepExamples {
     }
 
   val markReleaseDoneHook: MonorepoGlobalHookIO =
-    MonorepoGlobalHookIO.io("mark-done")(ctx =>
+    MonorepoGlobalHookIO.transform("mark-done")(ctx =>
       IO.pure(ctx.withMetadata(releaseCompletedKey, true))
     )
 
@@ -230,40 +233,37 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
     )(c => IO(c.close()))
 
   private val validateProjects: MonorepoGlobalResourceHookIO[HttpClient] =
-    MonorepoGlobalResourceHookIO.io[HttpClient]("validate-projects")(client =>
-      ctx =>
-        IO.blocking {
-          val allowed = client.get("/allowed-projects").split(",").toSet
-          ctx.currentProjects.map(_.name).filterNot(allowed.contains)
-        }.flatMap(invalid =>
-          if (invalid.nonEmpty)
-            IO.raiseError(
-              new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}")
-            )
-          else IO.pure(ctx)
-        )
-    )
+    MonorepoGlobalResourceHookIO.sideEffect[HttpClient]("validate-projects") { (client, ctx) =>
+      IO.blocking {
+        val allowed = client.get("/allowed-projects").split(",").toSet
+        ctx.currentProjects.map(_.name).filterNot(allowed.contains)
+      }.flatMap(invalid =>
+        if (invalid.nonEmpty)
+          IO.raiseError(
+            new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}")
+          )
+        else IO.unit
+      )
+    }
 
   private val notifySlack: MonorepoGlobalResourceHookIO[HttpClient] =
-    MonorepoGlobalResourceHookIO.action[HttpClient]("notify-slack")(client =>
-      ctx =>
-        IO.blocking {
-          val summary = ctx.currentProjects
-            .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
-            .mkString(", ")
-          client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
-        }
-    )
+    MonorepoGlobalResourceHookIO.sideEffect[HttpClient]("notify-slack") { (client, ctx) =>
+      IO.blocking {
+        val summary = ctx.currentProjects
+          .flatMap(p => p.versions.map { case (v, _) => s"${p.name} $v" })
+          .mkString(", ")
+        client.post("/slack-webhook", s"""{"text": "Tagged: ${summary}"}""")
+      }
+    }
 
   private val verifyPublish: MonorepoProjectResourceHookIO[HttpClient] =
-    MonorepoProjectResourceHookIO.action[HttpClient]("verify-publish")(client =>
-      (_, project) =>
-        project.versions match {
-          case Some((releaseVer, _)) =>
-            IO.blocking(client.get(s"/artifacts/${project.name}/$releaseVer")).void
-          case None                  => IO.unit
-        }
-    )
+    MonorepoProjectResourceHookIO.sideEffect[HttpClient]("verify-publish") { (client, project, _) =>
+      project.versions match {
+        case Some((releaseVer, _)) =>
+          IO.blocking(client.get(s"/artifacts/${project.name}/$releaseVer")).void
+        case None                  => IO.unit
+      }
+    }
 
   override protected def monorepoResourceHooks(
       state: State

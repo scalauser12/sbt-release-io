@@ -90,7 +90,9 @@ private[monorepo] object MonorepoStepHelpers {
             if (currentCtx.failed || latestProj.failed) IO.unit
             else
               action(handle, latestProj)
-                .flatMap(_ => handle.update(ctx => detectProjectFailureCommand(ctx, latestProj)).void)
+                .flatMap(_ =>
+                  handle.update(ctx => detectProjectFailureCommand(ctx, latestProj)).void
+                )
                 .handleErrorWith {
                   case NonFatal(err) =>
                     handle.get.flatMap { latestCtx =>
@@ -99,13 +101,15 @@ private[monorepo] object MonorepoStepHelpers {
                           s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
                         )
                       ) *>
-                        handle.update(ctx =>
-                          IO.pure(
-                            ctx.updateProject(latestProj.ref)(
-                              _.copy(failed = true, failureCause = Some(err))
+                        handle
+                          .update(ctx =>
+                            IO.pure(
+                              ctx.updateProject(latestProj.ref)(
+                                _.copy(failed = true, failureCause = Some(err))
+                              )
                             )
                           )
-                        ).void
+                          .void
                     }
                   case fatal         => IO.raiseError(fatal)
                 }

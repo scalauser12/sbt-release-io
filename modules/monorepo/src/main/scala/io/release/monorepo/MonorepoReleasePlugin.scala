@@ -286,6 +286,16 @@ object MonorepoReleasePluginAutoImport {
       "releaseIOMonorepoPublishChecks",
       "Whether to run publishTo validation checks for the monorepo publish step"
     )
+
+  // ── Hook handle alias ───────────────────────────────────────────────
+
+  /** Short alias for the tracked context handle passed to the `resumable`
+    * factories on the monorepo hook types. Import via
+    * `MonorepoReleasePlugin.autoImport.*` to write
+    * `handle: MonorepoHookHandle` instead of
+    * `handle: TrackedContextHandle[MonorepoContext]`.
+    */
+  type MonorepoHookHandle = _root_.io.release.runtime.TrackedContextHandle[MonorepoContext]
 }
 
 /** Base trait for resource-parameterized monorepo release plugins.

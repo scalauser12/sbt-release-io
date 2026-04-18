@@ -11,7 +11,7 @@ import _root_.sbt.{internal as _, *}
   */
 private[release] object SbtRuntime {
 
-  private val FailureCommand = SbtCompat.FailureCommand
+  private val FailureCommand                                                        = SbtCompat.FailureCommand
   private[release] val InteractionServiceStateKey: AttributeKey[InteractionService] =
     AttributeKey[InteractionService]("releaseIOInternalInteractionService")
 

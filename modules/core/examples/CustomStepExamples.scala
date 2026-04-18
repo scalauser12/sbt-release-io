@@ -92,18 +92,18 @@ object CustomStepExamples {
     releaseIOHooksBeforeTag += printBannerHook
   )
 
-  val printBannerHook: ReleaseHookIO = ReleaseHookIO.action("print-banner")(_ =>
+  val printBannerHook: ReleaseHookIO = ReleaseHookIO.sideEffect("print-banner")(_ =>
     IO.println("=" * 60) *>
       IO.println("  RELEASE IN PROGRESS") *>
       IO.println("=" * 60)
   )
 
-  val validateBranchHook: ReleaseHookIO = ReleaseHookIO.io("validate-branch")(ctx =>
+  val validateBranchHook: ReleaseHookIO = ReleaseHookIO.sideEffect("validate-branch")(ctx =>
     ctx.vcs match {
       case Some(vcs) =>
         vcs.currentBranch.flatMap(branch =>
           if (branch == "main" || branch == "master")
-            IO.pure(ctx)
+            IO.unit
           else
             IO.raiseError(
               new RuntimeException(
@@ -120,7 +120,7 @@ object CustomStepExamples {
     * writing the release version so `ctx.releaseVersion` is already available.
     */
   val generateChangelogHook: ReleaseHookIO =
-    ReleaseHookIO.action("generate-changelog")(ctx =>
+    ReleaseHookIO.sideEffect("generate-changelog")(ctx =>
       ctx.versions match {
         case Some((releaseVer, _)) =>
           IO.blocking {
@@ -139,7 +139,7 @@ object CustomStepExamples {
       }
     )
 
-  val optionalNotifyHook: ReleaseHookIO = ReleaseHookIO.action("optional-notify")(ctx =>
+  val optionalNotifyHook: ReleaseHookIO = ReleaseHookIO.sideEffect("optional-notify")(ctx =>
     IO.blocking {
       val version = ctx.releaseVersion.getOrElse("unknown")
       ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Notifying release of $version...")
@@ -155,7 +155,9 @@ object CustomStepExamples {
   )
 
   val markReleaseDoneHook: ReleaseHookIO =
-    ReleaseHookIO.io("mark-done")(ctx => IO.pure(ctx.withMetadata(releaseCompletedKey, true)))
+    ReleaseHookIO.transform("mark-done")(ctx =>
+      IO.pure(ctx.withMetadata(releaseCompletedKey, true))
+    )
 
 }
 
@@ -220,42 +222,39 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
     )(c => IO(c.close()))
 
   private val validateBranch: ReleaseResourceHookIO[HttpClient] =
-    ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client =>
-      ctx =>
-        IO.blocking(client.get("/allowed-branches").split(",").toSet)
-          .flatMap(allowed =>
-            ctx.vcs match {
-              case Some(vcs) =>
-                vcs.currentBranch.flatMap(branch =>
-                  if (!allowed.contains(branch))
-                    IO.raiseError(
-                      new RuntimeException(s"Branch '$branch' is not allowed for release")
-                    )
-                  else IO.pure(ctx)
-                )
-              case None      =>
-                IO.raiseError(new RuntimeException("VCS not initialized"))
-            }
-          )
-    )
+    ReleaseResourceHookIO.sideEffect[HttpClient]("validate-branch") { (client, ctx) =>
+      IO.blocking(client.get("/allowed-branches").split(",").toSet)
+        .flatMap(allowed =>
+          ctx.vcs match {
+            case Some(vcs) =>
+              vcs.currentBranch.flatMap(branch =>
+                if (!allowed.contains(branch))
+                  IO.raiseError(
+                    new RuntimeException(s"Branch '$branch' is not allowed for release")
+                  )
+                else IO.unit
+              )
+            case None      =>
+              IO.raiseError(new RuntimeException("VCS not initialized"))
+          }
+        )
+    }
 
   private val notifySlack: ReleaseResourceHookIO[HttpClient] =
-    ReleaseResourceHookIO.action[HttpClient]("notify-slack")(client =>
-      ctx =>
-        IO.blocking {
-          val version = ctx.releaseVersion.getOrElse("unknown")
-          client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
-        }
-    )
+    ReleaseResourceHookIO.sideEffect[HttpClient]("notify-slack") { (client, ctx) =>
+      IO.blocking {
+        val version = ctx.releaseVersion.getOrElse("unknown")
+        client.post("/slack-webhook", s"""{"text": "Tagged v${version}"}""")
+      }
+    }
 
   private val verifyPublish: ReleaseResourceHookIO[HttpClient] =
-    ReleaseResourceHookIO.action[HttpClient]("verify-publish")(client =>
-      ctx =>
-        IO.blocking {
-          val version = ctx.releaseVersion.getOrElse("unknown")
-          client.get(s"/artifacts/$version")
-        }.void
-    )
+    ReleaseResourceHookIO.sideEffect[HttpClient]("verify-publish") { (client, ctx) =>
+      IO.blocking {
+        val version = ctx.releaseVersion.getOrElse("unknown")
+        client.get(s"/artifacts/$version")
+      }.void
+    }
 
   override protected def releaseResourceHooks(
       state: State

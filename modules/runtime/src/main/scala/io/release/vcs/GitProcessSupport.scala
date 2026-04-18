@@ -11,6 +11,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.lang.ProcessBuilder.Redirect
 import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
@@ -46,6 +47,12 @@ private[release] object GitProcessSupport {
   ) {
     def treeAlive: Boolean = rootAlive || liveDescendants.nonEmpty
     def busy: Boolean      = treeAlive || recentRootExit
+  }
+
+  private sealed trait WaitForExitOutcome
+  private object WaitForExitOutcome {
+    final case class Exited(code: Int)                  extends WaitForExitOutcome
+    final case class TimedOut(partialCode: Option[Int]) extends WaitForExitOutcome
   }
 
   val DefaultDestroyGracePeriod: FiniteDuration             = 1.second
@@ -165,8 +172,8 @@ private[release] object GitProcessSupport {
             waitForExitUntil(process, startTime + timeout, destroyGracePeriod)
           }
           .flatMap {
-            case result @ Some(_) => markCompleted.as(result)
-            case None             => IO.pure(None)
+            case WaitForExitOutcome.Exited(code)          => markCompleted.as(Some(code))
+            case WaitForExitOutcome.TimedOut(partialCode) => IO.pure(partialCode)
           }
     }
 
@@ -225,7 +232,7 @@ private[release] object GitProcessSupport {
     )
 
   private def captureLines(stream: InputStream): IO[Vector[String]] =
-    captureLines(stream, Charset.defaultCharset())
+    captureLines(stream, StandardCharsets.UTF_8)
 
   private[release] def captureLines(
       stream: InputStream,
@@ -270,7 +277,7 @@ private[release] object GitProcessSupport {
       deadline: FiniteDuration,
       destroyGracePeriod: FiniteDuration,
       exitCode: Option[Int] = None
-  ): IO[Option[Int]] =
+  ): IO[WaitForExitOutcome] =
     currentExitCode(process, exitCode).flatMap { currentCode =>
       IO.blocking(currentProcessState(process)).flatMap { state =>
         val settled = currentCode match {
@@ -280,14 +287,16 @@ private[release] object GitProcessSupport {
 
         if (settled)
           currentCode match {
-            case Some(code) => IO.pure(Some(code))
-            case None       => IO.blocking(process.process.exitValue()).map(Some(_))
+            case Some(code) => IO.pure(WaitForExitOutcome.Exited(code))
+            case None       =>
+              IO.blocking(process.process.exitValue()).map(WaitForExitOutcome.Exited(_))
           }
         else
           Clock[IO].monotonic.flatMap { now =>
             val remaining = deadline - now
             if (remaining <= Duration.Zero)
-              IO.blocking(terminate(process, destroyGracePeriod)).as(currentCode)
+              IO.blocking(terminate(process, destroyGracePeriod))
+                .as(WaitForExitOutcome.TimedOut(currentCode))
             else
               IO.sleep(remaining.min(ProcessPollInterval)) *>
                 waitForExitUntil(process, deadline, destroyGracePeriod, currentCode)

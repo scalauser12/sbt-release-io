@@ -481,8 +481,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
                 else c
               }
             ),
-            execute = (c, project) =>
-              observed.update(_ :+ s"execute:${project.name}").as(c)
+            execute = (c, project) => observed.update(_ :+ s"execute:${project.name}").as(c)
           )
           val skipped       = ProcessStep.Single[MonorepoContext](
             name = "skipped-after-validation-failure",

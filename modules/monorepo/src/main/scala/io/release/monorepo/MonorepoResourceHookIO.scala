@@ -43,7 +43,7 @@ object MonorepoGlobalResourceHookIO {
         tracked
           .asInstanceOf[TrackedExecute[T]]
           .trackedExecute
-      case execute                   => t => TrackedContextHandle.lift(execute(t))
+      case execute                    => t => TrackedContextHandle.lift(execute(t))
     }
 
   /** Create a resource-aware global hook from a context-transforming function. */
@@ -63,9 +63,11 @@ object MonorepoGlobalResourceHookIO {
     MonorepoGlobalResourceHookIO(
       name = name,
       execute = withTrackedExecute(
-        execute = t => ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
-          f(t)(handle) *> handle.get
-        },
+        execute = t =>
+          ctx =>
+            TrackedContextHandle.create(ctx).flatMap { handle =>
+              f(t)(handle) *> handle.get
+            },
         executeTracked = f
       )
     )
@@ -85,6 +87,57 @@ object MonorepoGlobalResourceHookIO {
       f: T => TrackedContextHandle[MonorepoContext] => IO[Unit]
   ): MonorepoGlobalResourceHookIO[T] =
     ioTracked(name)(f)
+
+  // ── Intent-named factories ──────────────────────────────────────────
+  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+  // The `(T, ctx)` / `(T, handle)` shape is flatter than the curried
+  // `T => ctx => ...` form.
+
+  /** Create a resource-aware global hook that performs side effects without
+    * changing the context.
+    *
+    * {{{
+    * MonorepoGlobalResourceHookIO.sideEffect[HttpClient]("validate-projects") { (client, ctx) =>
+    *   IO.blocking(client.validate(ctx.currentProjects.map(_.name)))
+    * }
+    * }}}
+    */
+  def sideEffect[T](name: String)(
+      f: (T, MonorepoContext) => IO[Unit]
+  ): MonorepoGlobalResourceHookIO[T] =
+    ioTracked[T](name)(resource => handle => handle.update(ctx => f(resource, ctx).as(ctx)).void)
+
+  /** Create a resource-aware global hook that transforms the context once
+    * and checkpoints the result.
+    *
+    * {{{
+    * MonorepoGlobalResourceHookIO.transform[HttpClient]("apply-remote-filter") { (client, ctx) =>
+    *   IO.blocking(client.allowedProjects()).map(allowed =>
+    *     ctx.withProjects(ctx.currentProjects.filter(p => allowed(p.name)))
+    *   )
+    * }
+    * }}}
+    */
+  def transform[T](name: String)(
+      f: (T, MonorepoContext) => IO[MonorepoContext]
+  ): MonorepoGlobalResourceHookIO[T] =
+    ioTracked[T](name)(resource => handle => handle.update(ctx => f(resource, ctx)).void)
+
+  /** Create a resource-aware global hook with explicit checkpoint-handle
+    * access for multi-step updates. Prefer [[sideEffect]] or [[transform]]
+    * unless you need intermediate checkpoints visible to recovery logic.
+    *
+    * {{{
+    * MonorepoGlobalResourceHookIO.resumable[HttpClient]("staged-notify") { (client, handle) =>
+    *   handle.update(ctx => IO.blocking(client.notifyStart(ctx)).as(ctx)) *>
+    *     handle.update(ctx => IO.blocking(client.notifyEnd(ctx)).as(ctx))
+    * }
+    * }}}
+    */
+  def resumable[T](name: String)(
+      f: (T, TrackedContextHandle[MonorepoContext]) => IO[Unit]
+  ): MonorepoGlobalResourceHookIO[T] =
+    ioTracked[T](name)(resource => handle => f(resource, handle))
 }
 
 /** A resource-aware per-project hook for custom monorepo plugins with a shared resource `T`.
@@ -129,7 +182,7 @@ object MonorepoProjectResourceHookIO {
         tracked
           .asInstanceOf[TrackedExecute[T]]
           .trackedExecute
-      case execute                   => t => TrackedContextHandle.liftPerItem(execute(t))
+      case execute                    => t => TrackedContextHandle.liftPerItem(execute(t))
     }
 
   /** Create a resource-aware per-project hook from a context-transforming function. */
@@ -149,9 +202,11 @@ object MonorepoProjectResourceHookIO {
     MonorepoProjectResourceHookIO(
       name = name,
       execute = withTrackedExecute(
-        execute = t => (ctx, project) => TrackedContextHandle.create(ctx).flatMap { handle =>
-          f(t)(handle, project) *> handle.get
-        },
+        execute = t =>
+          (ctx, project) =>
+            TrackedContextHandle.create(ctx).flatMap { handle =>
+              f(t)(handle, project) *> handle.get
+            },
         executeTracked = f
       )
     )
@@ -171,6 +226,65 @@ object MonorepoProjectResourceHookIO {
       f: T => (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
   ): MonorepoProjectResourceHookIO[T] =
     ioTracked(name)(f)
+
+  // ── Intent-named factories ──────────────────────────────────────────
+  // New factories take (resource, project, ctx) / (resource, project, handle)
+  // so the code reads as "with resource T, for project X, do Y". Legacy
+  // `.io` / `.action` keep the curried `T => (ctx, project) => ...` form
+  // for backward compat.
+
+  /** Create a resource-aware per-project hook that performs side effects
+    * without changing the context.
+    *
+    * {{{
+    * MonorepoProjectResourceHookIO.sideEffect[HttpClient]("notify-tagged-project") {
+    *   (client, project, _) =>
+    *     IO.blocking(client.notifyTagged(project.name, project.tagName.getOrElse("?")))
+    * }
+    * }}}
+    */
+  def sideEffect[T](name: String)(
+      f: (T, ProjectReleaseInfo, MonorepoContext) => IO[Unit]
+  ): MonorepoProjectResourceHookIO[T] =
+    ioTracked[T](name)(resource =>
+      (handle, project) => handle.update(ctx => f(resource, project, ctx).as(ctx)).void
+    )
+
+  /** Create a resource-aware per-project hook that transforms the context
+    * once and checkpoints the result.
+    *
+    * {{{
+    * MonorepoProjectResourceHookIO.transform[HttpClient]("apply-tag-override") {
+    *   (client, project, ctx) =>
+    *     IO.blocking(client.overrideTagFor(project.name)).map {
+    *       case Some(tag) => ctx.updateProject(project.ref)(_.copy(tagName = Some(tag)))
+    *       case None      => ctx
+    *     }
+    * }
+    * }}}
+    */
+  def transform[T](name: String)(
+      f: (T, ProjectReleaseInfo, MonorepoContext) => IO[MonorepoContext]
+  ): MonorepoProjectResourceHookIO[T] =
+    ioTracked[T](name)(resource =>
+      (handle, project) => handle.update(ctx => f(resource, project, ctx)).void
+    )
+
+  /** Create a resource-aware per-project hook with explicit checkpoint-handle
+    * access for multi-step updates. Prefer [[sideEffect]] or [[transform]]
+    * unless you need intermediate checkpoints visible to recovery logic.
+    *
+    * {{{
+    * MonorepoProjectResourceHookIO.resumable[HttpClient]("per-project-stage") {
+    *   (client, project, handle) =>
+    *     handle.update(stageOne(client, project)) *> handle.update(stageTwo(client, project))
+    * }
+    * }}}
+    */
+  def resumable[T](name: String)(
+      f: (T, ProjectReleaseInfo, TrackedContextHandle[MonorepoContext]) => IO[Unit]
+  ): MonorepoProjectResourceHookIO[T] =
+    ioTracked[T](name)(resource => (handle, project) => f(resource, project, handle))
 }
 
 /** Resource-aware hook buckets for every supported monorepo lifecycle point.
@@ -238,7 +352,9 @@ object MonorepoResourceHooks {
         execute = MonorepoGlobalHookIO.withTrackedExecute(
           execute = ctx => maybeResource.fold(IO.pure(ctx))(r => hook.execute(r)(ctx)),
           executeTracked = handle =>
-            maybeResource.fold(IO.unit)(r => MonorepoGlobalResourceHookIO.trackedExecute(hook)(r)(handle))
+            maybeResource.fold(IO.unit)(r =>
+              MonorepoGlobalResourceHookIO.trackedExecute(hook)(r)(handle)
+            )
         ),
         validate = hook.validate
       )
@@ -251,11 +367,10 @@ object MonorepoResourceHooks {
         execute = MonorepoProjectHookIO.withTrackedExecute(
           execute =
             (ctx, project) => maybeResource.fold(IO.pure(ctx))(r => hook.execute(r)(ctx, project)),
-          executeTracked =
-            (handle, project) =>
-              maybeResource.fold(IO.unit)(r =>
-                MonorepoProjectResourceHookIO.trackedExecute(hook)(r)(handle, project)
-              )
+          executeTracked = (handle, project) =>
+            maybeResource.fold(IO.unit)(r =>
+              MonorepoProjectResourceHookIO.trackedExecute(hook)(r)(handle, project)
+            )
         ),
         validate = hook.validate
       )

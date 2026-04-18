@@ -77,7 +77,10 @@ private[monorepo] object MonorepoVersionWorkflow {
             )
 
           ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, resolvedCtx)(
-            logInfo(resolvedCtx, s"${project.name}: pre-set -> $releaseVersion (next: $nextVersion)")
+            logInfo(
+              resolvedCtx,
+              s"${project.name}: pre-set -> $releaseVersion (next: $nextVersion)"
+            )
               .as(resolvedCtx)
           )
         }

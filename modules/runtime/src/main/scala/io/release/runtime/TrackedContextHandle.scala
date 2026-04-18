@@ -52,13 +52,11 @@ object TrackedContextHandle {
   private[release] def restoreLatest[C](
       handle: TrackedContextHandle[C]
   )(restore: C => IO[C], onRestoreError: (C, Throwable) => IO[Unit]): IO[Unit] =
-    handle
-      .update { current =>
-        restore(current).handleErrorWith { err =>
-          onRestoreError(current, err) *> IO.raiseError(err)
-        }
+    handle.update { current =>
+      restore(current).handleErrorWith { err =>
+        onRestoreError(current, err) *> IO.raiseError(err)
       }
-      .void
+    }.void
 
   private[release] def create[C](initial: C): IO[TrackedContextHandle[C]] =
     for {
@@ -66,44 +64,43 @@ object TrackedContextHandle {
       checkpoint  <- Semaphore[IO](1)
       activeOwner <- Ref.of[IO, Option[Unique.Token]](None)
       localOwner  <- IOLocal(Option.empty[Unique.Token])
-    } yield
-      new TrackedContextHandle[C] {
-        private def failNested[A]: IO[A] =
-          IO.raiseError(new IllegalStateException(NestedOperationErrorMessage))
+    } yield new TrackedContextHandle[C] {
+      private def failNested[A]: IO[A] =
+        IO.raiseError(new IllegalStateException(NestedOperationErrorMessage))
 
-        private def rejectNested[A](fa: IO[A]): IO[A] =
-          localOwner.get.flatMap {
-            case Some(owner) =>
-              activeOwner.get.flatMap {
-                case Some(currentOwner) if currentOwner == owner => failNested
-                case _                                           => fa
-              }
-            case None        => fa
-          }
+      private def rejectNested[A](fa: IO[A]): IO[A] =
+        localOwner.get.flatMap {
+          case Some(owner) =>
+            activeOwner.get.flatMap {
+              case Some(currentOwner) if currentOwner == owner => failNested
+              case _                                           => fa
+            }
+          case None        => fa
+        }
 
-        private def serialized[A](fa: IO[A]): IO[A] =
-          checkpoint.permit.use(_ => fa)
+      private def serialized[A](fa: IO[A]): IO[A] =
+        checkpoint.permit.use(_ => fa)
 
-        private def withActiveOwner[A](owner: Unique.Token)(fa: IO[A]): IO[A] =
-          localOwner.get.flatMap { previousOwner =>
-            (activeOwner.set(Some(owner)) *> localOwner.set(Some(owner)) *> fa)
-              .guarantee(activeOwner.set(None) *> localOwner.set(previousOwner))
-          }
+      private def withActiveOwner[A](owner: Unique.Token)(fa: IO[A]): IO[A] =
+        localOwner.get.flatMap { previousOwner =>
+          (activeOwner.set(Some(owner)) *> localOwner.set(Some(owner)) *> fa)
+            .guarantee(activeOwner.set(None) *> localOwner.set(previousOwner))
+        }
 
-        override def get: IO[C] =
-          rejectNested(serialized(ref.get))
+      override def get: IO[C] =
+        rejectNested(serialized(ref.get))
 
-        override def set(next: C): IO[Unit] =
-          rejectNested(serialized(ref.set(next)))
+      override def set(next: C): IO[Unit] =
+        rejectNested(serialized(ref.set(next)))
 
-        override def update(f: C => IO[C]): IO[C] =
-          rejectNested(
-            serialized(for {
-              owner   <- IO.unique
-              current <- ref.get
-              next    <- withActiveOwner(owner)(f(current))
-              _       <- ref.set(next)
-            } yield next)
-          )
-      }
+      override def update(f: C => IO[C]): IO[C] =
+        rejectNested(
+          serialized(for {
+            owner   <- IO.unique
+            current <- ref.get
+            next    <- withActiveOwner(owner)(f(current))
+            _       <- ref.set(next)
+          } yield next)
+        )
+    }
 }

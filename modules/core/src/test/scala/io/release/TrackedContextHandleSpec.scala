@@ -10,22 +10,21 @@ class TrackedContextHandleSpec extends CatsEffectSuite {
 
   test("TrackedContextHandle.update - serialize concurrent checkpoint updates") {
     for {
-      started    <- Deferred[IO, Unit]
-      allowFirst <- Deferred[IO, Unit]
-      handle     <- TrackedContextHandle.create(Vector.empty[String])
-      firstFiber <- handle
-                      .update(current =>
-                        started.complete(()) *> allowFirst.get.as(current :+ "first")
-                      )
-                      .start
-      _          <- started.get
+      started     <- Deferred[IO, Unit]
+      allowFirst  <- Deferred[IO, Unit]
+      handle      <- TrackedContextHandle.create(Vector.empty[String])
+      firstFiber  <-
+        handle
+          .update(current => started.complete(()) *> allowFirst.get.as(current :+ "first"))
+          .start
+      _           <- started.get
       secondFiber <- handle
                        .update(current => IO.pure(current :+ "second"))
                        .start
-      _          <- allowFirst.complete(())
-      _          <- firstFiber.joinWithNever
-      _          <- secondFiber.joinWithNever
-      result     <- handle.get
+      _           <- allowFirst.complete(())
+      _           <- firstFiber.joinWithNever
+      _           <- secondFiber.joinWithNever
+      result      <- handle.get
     } yield assertEquals(result, Vector("first", "second"))
   }
 
@@ -98,8 +97,7 @@ class TrackedContextHandleSpec extends CatsEffectSuite {
       childResult <- Deferred[IO, Either[Throwable, Vector[String]]]
       handle      <- TrackedContextHandle.create(Vector("seed"))
       _           <- handle.update { current =>
-                       (childCanRun.get *> handle.get)
-                         .attempt
+                       (childCanRun.get *> handle.get).attempt
                          .flatMap(childResult.complete)
                          .start
                          .as(current :+ "parent")
@@ -122,8 +120,7 @@ class TrackedContextHandleSpec extends CatsEffectSuite {
       childResult <- Deferred[IO, Either[Throwable, Vector[String]]]
       handle      <- TrackedContextHandle.create(Vector("seed"))
       _           <- handle.update { current =>
-                       (childCanRun.get *> handle.update(inner => IO.pure(inner :+ "child")))
-                         .attempt
+                       (childCanRun.get *> handle.update(inner => IO.pure(inner :+ "child"))).attempt
                          .flatMap(childResult.complete)
                          .start
                          .as(current :+ "parent")

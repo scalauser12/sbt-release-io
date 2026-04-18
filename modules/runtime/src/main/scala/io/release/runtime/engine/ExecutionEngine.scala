@@ -174,7 +174,7 @@ private[release] object ExecutionEngine {
               s"$logPrefix Error: ${StepHelpers.errorMessage(nonFatalErr)}"
             )
           ).as(ctx.failWith(nonFatalErr))
-        case fatal                =>
+        case fatal                 =>
           IO.raiseError(fatal)
       }
     }
@@ -186,16 +186,14 @@ private[release] object ExecutionEngine {
     program.handleErrorWith { err =>
       err match {
         case NonFatal(nonFatalErr) =>
-          handle
-            .update { ctx =>
-              IO.blocking(
-                ctx.state.log.error(
-                  s"$logPrefix Error: ${StepHelpers.errorMessage(nonFatalErr)}"
-                )
-              ).as(ctx.failWith(nonFatalErr))
-            }
-            .void
-        case fatal                =>
+          handle.update { ctx =>
+            IO.blocking(
+              ctx.state.log.error(
+                s"$logPrefix Error: ${StepHelpers.errorMessage(nonFatalErr)}"
+              )
+            ).as(ctx.failWith(nonFatalErr))
+          }.void
+        case fatal                 =>
           IO.raiseError(fatal)
       }
     }

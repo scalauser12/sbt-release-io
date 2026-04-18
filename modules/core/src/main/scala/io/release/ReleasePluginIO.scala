@@ -299,6 +299,17 @@ object ReleasePluginIOAutoImport {
   lazy val releaseIODiagnosticsSnapshotDependencies: TaskKey[Seq[ModuleID]] =
     ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
 
+  // ── Hook handle alias ───────────────────────────────────────────────
+
+  /** Short alias for the tracked context handle passed to
+    * [[ReleaseHookIO.resumable]] and
+    * [[ReleaseResourceHookIO.resumable]]. Import via
+    * `ReleasePluginIO.autoImport.*` to write
+    * `handle: ReleaseHookHandle` instead of
+    * `handle: TrackedContextHandle[ReleaseContext]`.
+    */
+  type ReleaseHookHandle = _root_.io.release.runtime.TrackedContextHandle[ReleaseContext]
+
 }
 
 /** Base trait for resource-parameterized release plugins.

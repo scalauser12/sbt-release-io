@@ -28,7 +28,7 @@ import scala.sys.process.Process
 class StepHelpersSpec extends CatsEffectSuite {
   import StepHelpersSpec.*
 
-  private val fixturePrefix = "step-helpers-spec"
+  private val fixturePrefix          = "step-helpers-spec"
   private val retryYesNoPromptPrefix =
     "Please answer 'y' or 'n' (or press Enter for the default)."
 
@@ -171,7 +171,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   test("StepHelpers.askYesNo - default no accepts uppercase affirmative input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      val ui  = StubInteractionService(readAnswers = List(Some("Y")))
+      val ui = StubInteractionService(readAnswers = List(Some("Y")))
       StepHelpers
         .askYesNo(
           promptContext(
@@ -193,7 +193,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   test("StepHelpers.askYesNo - default no accepts trimmed affirmative input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      val ui  = StubInteractionService(readAnswers = List(Some(" yes ")))
+      val ui = StubInteractionService(readAnswers = List(Some(" yes ")))
       StepHelpers
         .askYesNo(
           promptContext(
@@ -216,7 +216,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.askYesNo - default no re-prompts after invalid input then uses blank") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [n] "
-      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
+      val ui     = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
       StepHelpers
         .askYesNo(
           promptContext(
@@ -241,7 +241,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   test("StepHelpers.askYesNo - default no maps EOF to false") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      val ui  = StubInteractionService(readAnswers = List(None))
+      val ui = StubInteractionService(readAnswers = List(None))
       StepHelpers
         .askYesNo(
           promptContext(
@@ -264,7 +264,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.askYesNo - use the default after invalid input followed by blank") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [y] "
-      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
+      val ui     = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
       StepHelpers
         .askYesNo(
           promptContext(
@@ -290,7 +290,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.askYesNoOrEof - preserve EOF after invalid input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [y] "
-      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), None))
+      val ui     = StubInteractionService(readAnswers = List(Some("maybe"), None))
       StepHelpers
         .askYesNoOrEof(
           promptContext(
@@ -316,7 +316,7 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.askYesNo - default yes re-prompts through interactionService.readLine") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [y] "
-      val ui  = StubInteractionService(readAnswers = List(Some("maybe"), Some("y")))
+      val ui     = StubInteractionService(readAnswers = List(Some("maybe"), Some("y")))
       StepHelpers
         .askYesNo(
           promptContext(
@@ -573,7 +573,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   test("StepHelpers.readLine - return consecutive answers from interactionService.readLine") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val ui  = StubInteractionService(readAnswers = List(Some("first"), Some("second")))
+      val ui   = StubInteractionService(readAnswers = List(Some("first"), Some("second")))
       val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
 
       for {
@@ -589,7 +589,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   test("StepHelpers.readLine - preserve blank lines and EOF from interactionService") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val ui  = StubInteractionService(readAnswers = List(Some(""), None))
+      val ui   = StubInteractionService(readAnswers = List(Some(""), None))
       val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
 
       for {
@@ -604,7 +604,7 @@ class StepHelpersSpec extends CatsEffectSuite {
 
   test("StepHelpers.readRequiredLine - fail fast when interactionService reaches EOF") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val ui  = StubInteractionService(readAnswers = List(None))
+      val ui   = StubInteractionService(readAnswers = List(None))
       val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
 
       assertIllegalStateMessage(
@@ -614,7 +614,9 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  test("StepHelpers.readLine - loaded builds prefer the interactionService task over state fallback") {
+  test(
+    "StepHelpers.readLine - loaded builds prefer the interactionService task over state fallback"
+  ) {
     val taskUi     = StubInteractionService(readAnswers = List(Some("from-task")))
     val fallbackUi = StubInteractionService(readAnswers = List(Some("from-fallback")))
 
@@ -712,10 +714,7 @@ class StepHelpersSpec extends CatsEffectSuite {
       interaction: Option[InteractionService] = None
   ): ReleaseContext =
     ReleaseContext(
-      state =
-        interaction.fold(state)(service =>
-          SbtRuntime.withInteractionService(state, service)
-        ),
+      state = interaction.fold(state)(service => SbtRuntime.withInteractionService(state, service)),
       interactive = interactive
     ).withExecutionState(
       CoreExecutionState(

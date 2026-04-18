@@ -66,9 +66,10 @@ object MonorepoGlobalHookIO {
     MonorepoGlobalHookIO(
       name = name,
       execute = withTrackedExecute(
-        execute = ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
-          f(handle) *> handle.get
-        },
+        execute = ctx =>
+          TrackedContextHandle.create(ctx).flatMap { handle =>
+            f(handle) *> handle.get
+          },
         executeTracked = f
       )
     )
@@ -83,6 +84,48 @@ object MonorepoGlobalHookIO {
 
   /** Create a tracked hook from an effect that mutates the current context via the handle. */
   def actionTracked(
+      name: String
+  )(f: TrackedContextHandle[MonorepoContext] => IO[Unit]): MonorepoGlobalHookIO =
+    ioTracked(name)(f)
+
+  // ── Intent-named factories ──────────────────────────────────────────
+  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+
+  /** Create a global hook that performs side effects without changing the
+    * context. The input context is preserved as the checkpoint.
+    *
+    * {{{
+    * MonorepoGlobalHookIO.sideEffect("print-selected") { ctx =>
+    *   IO.println(s"selected: \${ctx.currentProjects.map(_.name).mkString(", ")}")
+    * }
+    * }}}
+    */
+  def sideEffect(name: String)(f: MonorepoContext => IO[Unit]): MonorepoGlobalHookIO =
+    ioTracked(name)(handle => handle.update(ctx => f(ctx).as(ctx)).void)
+
+  /** Create a global hook that transforms the context once and checkpoints
+    * the result.
+    *
+    * {{{
+    * MonorepoGlobalHookIO.transform("drop-sandbox") { ctx =>
+    *   IO.pure(ctx.withProjects(ctx.currentProjects.filter(_.name != "sandbox")))
+    * }
+    * }}}
+    */
+  def transform(name: String)(f: MonorepoContext => IO[MonorepoContext]): MonorepoGlobalHookIO =
+    ioTracked(name)(handle => handle.update(f).void)
+
+  /** Create a global hook with explicit checkpoint-handle access for
+    * multi-step updates. Prefer [[sideEffect]] or [[transform]] unless you
+    * need intermediate checkpoints visible to recovery logic.
+    *
+    * {{{
+    * MonorepoGlobalHookIO.resumable("stage") { handle =>
+    *   handle.update(stageOne) *> handle.update(stageTwo)
+    * }
+    * }}}
+    */
+  def resumable(
       name: String
   )(f: TrackedContextHandle[MonorepoContext] => IO[Unit]): MonorepoGlobalHookIO =
     ioTracked(name)(f)
@@ -157,9 +200,10 @@ object MonorepoProjectHookIO {
     MonorepoProjectHookIO(
       name = name,
       execute = withTrackedExecute(
-        execute = (ctx, project) => TrackedContextHandle.create(ctx).flatMap { handle =>
-          f(handle, project) *> handle.get
-        },
+        execute = (ctx, project) =>
+          TrackedContextHandle.create(ctx).flatMap { handle =>
+            f(handle, project) *> handle.get
+          },
         executeTracked = f
       )
     )
@@ -181,4 +225,56 @@ object MonorepoProjectHookIO {
       f: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
   ): MonorepoProjectHookIO =
     ioTracked(name)(f)
+
+  // ── Intent-named factories ──────────────────────────────────────────
+  // New factories take (project, ctx) / (project, handle) so the code reads as
+  // "for project X, do Y". Legacy (ctx, project) order on `.io` / `.action`
+  // stays unchanged for backward compat.
+
+  /** Create a per-project hook that performs side effects without changing the
+    * context. The input context is preserved as the checkpoint.
+    *
+    * {{{
+    * MonorepoProjectHookIO.sideEffect("notify-tagged") { (project, _) =>
+    *   IO.println(s"tagged \${project.name} as \${project.tagName.getOrElse("?")}")
+    * }
+    * }}}
+    */
+  def sideEffect(
+      name: String
+  )(f: (ProjectReleaseInfo, MonorepoContext) => IO[Unit]): MonorepoProjectHookIO =
+    ioTracked(name)((handle, project) => handle.update(ctx => f(project, ctx).as(ctx)).void)
+
+  /** Create a per-project hook that transforms the context once and
+    * checkpoints the result.
+    *
+    * {{{
+    * MonorepoProjectHookIO.transform("stamp-tag") { (project, ctx) =>
+    *   IO.pure(ctx.updateProject(project.ref)(_.copy(tagName = project.releaseVersion.map("v" + _))))
+    * }
+    * }}}
+    */
+  def transform(
+      name: String
+  )(
+      f: (ProjectReleaseInfo, MonorepoContext) => IO[MonorepoContext]
+  ): MonorepoProjectHookIO =
+    ioTracked(name)((handle, project) => handle.update(ctx => f(project, ctx)).void)
+
+  /** Create a per-project hook with explicit checkpoint-handle access for
+    * multi-step updates. Prefer [[sideEffect]] or [[transform]] unless you
+    * need intermediate checkpoints visible to recovery logic.
+    *
+    * {{{
+    * MonorepoProjectHookIO.resumable("per-project-stage") { (project, handle) =>
+    *   handle.update(stageOne(project)) *> handle.update(stageTwo(project))
+    * }
+    * }}}
+    */
+  def resumable(
+      name: String
+  )(
+      f: (ProjectReleaseInfo, TrackedContextHandle[MonorepoContext]) => IO[Unit]
+  ): MonorepoProjectHookIO =
+    ioTracked(name)((handle, project) => f(project, handle))
 }

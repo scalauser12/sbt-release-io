@@ -22,7 +22,7 @@ releaseIOPolicyEnablePush    := false
 releaseIOPolicyEnablePublish := false
 
 // Add a lifecycle hook before tagging
-releaseIOHooksBeforeTag += ReleaseHookIO.action("before-tag-audit")(ctx =>
+releaseIOHooksBeforeTag += ReleaseHookIO.sideEffect("before-tag-audit")(ctx =>
   IO.blocking {
     val version = ctx.releaseVersion.getOrElse("unknown")
     ctx.state.log.info(s"[release-io] Auditing tag inputs for $version")

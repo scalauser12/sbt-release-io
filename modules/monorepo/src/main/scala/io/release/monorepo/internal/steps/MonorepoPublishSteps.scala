@@ -265,13 +265,13 @@ private[monorepo] object MonorepoPublishSteps {
                 targetCtxAndPublishTarget <-
                   if (publishSkipped) IO.pure(skipCtx -> Option.empty[Resolver])
                   else evaluatePublishTarget(skipCtx, project)
-                (targetCtx, publishTarget)  = targetCtxAndPublishTarget
-                _                          <- PublishValidation.requirePublishTarget(
-                                                project.ref.project
-                                              )(
-                                                publishSkipped,
-                                                publishTarget.isEmpty
-                                              )
+                (targetCtx, publishTarget) = targetCtxAndPublishTarget
+                _                         <- PublishValidation.requirePublishTarget(
+                                               project.ref.project
+                                             )(
+                                               publishSkipped,
+                                               publishTarget.isEmpty
+                                             )
               } yield targetCtx
           }
       ),

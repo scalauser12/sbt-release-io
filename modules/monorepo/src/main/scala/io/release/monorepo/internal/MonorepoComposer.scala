@@ -108,11 +108,12 @@ private[monorepo] object MonorepoComposer {
             IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
               typed.execute(currentCtx, project)
 
-        val loggedTracked
-            : (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit] =
+        val loggedTracked: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit] =
           (handle, project) =>
             handle.get.flatMap(currentCtx =>
-              IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
+              IO.blocking(
+                currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")
+              ) *>
                 typed.executeTracked(handle, project)
             )
 

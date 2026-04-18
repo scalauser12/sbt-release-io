@@ -10,6 +10,54 @@ Monorepo customization has one surface, made of four knobs:
 - protected behavior hooks on `MonorepoReleasePluginLike` let custom plugins override
   runtime defaults for cross-build, skip-tests, skip-publish, and interactive mode
 
+## Choosing a hook factory
+
+Every monorepo hook companion (`MonorepoGlobalHookIO`, `MonorepoProjectHookIO`,
+and their resource-aware counterparts) exposes three intent-named factories
+backed by the same engine path. Pick the shortest form that fits:
+
+| If your hook… | Use |
+| ------------- | --- |
+| fires a side effect (log, notify, audit) and leaves the context unchanged | `sideEffect` |
+| computes a new `MonorepoContext` and returns it once | `transform` |
+| mutates the context in multiple steps and needs every checkpoint visible to `afterFailure` | `resumable` |
+
+A global hook written three ways:
+
+```scala
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoGlobalHookIO
+
+MonorepoGlobalHookIO.sideEffect("print-selected") { ctx =>
+  IO.println(s"selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
+}
+
+MonorepoGlobalHookIO.transform("drop-sandbox") { ctx =>
+  IO.pure(ctx.withProjects(ctx.currentProjects.filter(_.name != "sandbox")))
+}
+
+MonorepoGlobalHookIO.resumable("stage") { handle =>
+  handle.update(stageOne) *> handle.update(stageTwo)
+}
+```
+
+Per-project hooks (`MonorepoProjectHookIO`) take `(project, ctx)` /
+`(project, handle)` so the code reads "for project X, do Y":
+
+```scala
+import _root_.io.release.monorepo.MonorepoProjectHookIO
+
+MonorepoProjectHookIO.sideEffect("notify-tagged") { (project, _) =>
+  IO.println(s"tagged ${project.name} as ${project.tagName.getOrElse("?")}")
+}
+```
+
+Resource-aware hooks (`MonorepoGlobalResourceHookIO[T]`,
+`MonorepoProjectResourceHookIO[T]`) add the resource `T` as the first argument.
+
+The legacy `.io` / `.action` / `.ioTracked` / `.actionTracked` constructors
+still compile but are deprecated; prefer the three factories above.
+
 ## Hook-based customization
 
 ```scala
@@ -20,7 +68,7 @@ import _root_.io.release.monorepo.MonorepoGlobalHookIO
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 def markerHook(marker: String): MonorepoProjectHookIO =
-  MonorepoProjectHookIO.action(marker) { (_, project) =>
+  MonorepoProjectHookIO.sideEffect(marker) { (project, _) =>
     IO.blocking {
       sbt.IO.write(project.baseDir / s"$marker.marker", marker + "\n")
     }
@@ -29,7 +77,7 @@ def markerHook(marker: String): MonorepoProjectHookIO =
 releaseIOMonorepoPolicyEnablePush := false
 releaseIOMonorepoPolicyEnablePublish := false
 releaseIOMonorepoHooksAfterCleanCheck +=
-  MonorepoGlobalHookIO.action("announce-clean")(_ =>
+  MonorepoGlobalHookIO.sideEffect("announce-clean")(_ =>
     IO.println("[monorepo] clean working tree confirmed")
   )
 releaseIOMonorepoHooksBeforeTag += markerHook("before-tag")
@@ -87,7 +135,7 @@ import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoGlobalHookIO
 
 releaseIOMonorepoHooksAfterCleanCheck +=
-  MonorepoGlobalHookIO.action("announce-clean")(_ =>
+  MonorepoGlobalHookIO.sideEffect("announce-clean")(_ =>
     IO.println("[monorepo] clean working tree confirmed")
   )
 ```
@@ -99,7 +147,7 @@ import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoGlobalHookIO
 
 releaseIOMonorepoHooksAfterSelection +=
-  MonorepoGlobalHookIO.action("print-selected-projects")(ctx =>
+  MonorepoGlobalHookIO.sideEffect("print-selected-projects")(ctx =>
     IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
   )
 ```
@@ -111,7 +159,7 @@ import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 releaseIOMonorepoHooksAfterTag +=
-  MonorepoProjectHookIO.action("notify-tagged") { (_, project) =>
+  MonorepoProjectHookIO.sideEffect("notify-tagged") { (project, _) =>
     val tagName = project.tagName.getOrElse("unknown-tag")
     IO.println(s"[monorepo] tagged ${project.name} as $tagName")
   }
@@ -177,22 +225,21 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
   override protected def crossBuildEnabled(state: State): Boolean = true
 
   private val validateProjects =
-    MonorepoGlobalResourceHookIO.io[HttpClient]("validate-projects")(client => ctx =>
+    MonorepoGlobalResourceHookIO.sideEffect[HttpClient]("validate-projects") { (client, ctx) =>
       IO.blocking(client.allowedProjects()).flatMap { allowed =>
         val invalid = ctx.currentProjects.map(_.name).filterNot(allowed.contains)
         if (invalid.nonEmpty)
           IO.raiseError(new RuntimeException(s"Projects not allowed: ${invalid.mkString(", ")}"))
-        else IO.pure(ctx)
+        else IO.unit
       }
-    )
+    }
 
   private val notifyTaggedProject =
-    MonorepoProjectResourceHookIO.action[HttpClient]("notify-tagged-project")(
-      client => (_, project) => {
+    MonorepoProjectResourceHookIO.sideEffect[HttpClient]("notify-tagged-project") {
+      (client, project, _) =>
         val tagName = project.tagName.getOrElse("unknown-tag")
         IO.blocking(client.notifyTagged(project.name, tagName))
-      }
-    )
+    }
 
   override protected def monorepoResourceHooks(
       state: State

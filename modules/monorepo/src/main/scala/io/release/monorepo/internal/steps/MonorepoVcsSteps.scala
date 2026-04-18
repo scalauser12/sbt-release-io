@@ -167,10 +167,11 @@ private[monorepo] object MonorepoVcsSteps {
                           IO.blocking {
                             SbtRuntime.appendWithSession(
                               updatedCtx.state,
-                              preserved ++ ReleaseManifestMetadataSupport.releaseManifestTagSettings(
-                                project.ref,
-                                resolvedTagName
-                              )
+                              preserved ++ ReleaseManifestMetadataSupport
+                                .releaseManifestTagSettings(
+                                  project.ref,
+                                  resolvedTagName
+                                )
                             )
                           }
                       } yield updatedCtx
