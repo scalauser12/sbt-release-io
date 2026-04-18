@@ -275,9 +275,13 @@ private[release] object GitProcessSupport {
 
   private def captureCommandResult(process: ManagedProcess): IO[GitCommandResult] = {
     val stdoutRes =
-      Resource.make(captureLines(process.process.getInputStream).start)(_.cancel)
+      Resource.make(captureLines(process.process.getInputStream, StandardCharsets.UTF_8).start)(
+        _.cancel
+      )
     val stderrRes =
-      Resource.make(captureLines(process.process.getErrorStream).start)(_.cancel)
+      Resource.make(captureLines(process.process.getErrorStream, StandardCharsets.UTF_8).start)(
+        _.cancel
+      )
     Resource.both(stdoutRes, stderrRes).use { case (stdoutFiber, stderrFiber) =>
       for {
         exitCode <- waitForExit(process)
@@ -290,9 +294,6 @@ private[release] object GitProcessSupport {
       )
     }
   }
-
-  private def captureLines(stream: InputStream): IO[Vector[String]] =
-    captureLines(stream, StandardCharsets.UTF_8)
 
   private[release] def captureLines(
       stream: InputStream,

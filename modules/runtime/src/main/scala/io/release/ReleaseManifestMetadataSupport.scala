@@ -68,9 +68,6 @@ private[release] object ReleaseManifestMetadataSupport {
     }
   }
 
-  def clearReleaseManifestMetadata(state: State): State =
-    clearReleaseManifestMetadata(state, Nil)
-
   def clearReleaseManifestMetadata(
       state: State,
       projectRefs: Seq[ProjectRef]

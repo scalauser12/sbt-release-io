@@ -203,21 +203,8 @@ class Git(val baseDir: File) extends Vcs {
       branch: String,
       key: String,
       missingMessage: => String
-  ): IO[String] = {
-    val args    = Seq("config", s"branch.$branch.$key")
-    val context = s"git config branch.$branch.$key"
-    GitProcessSupport.runExitCode(baseDir, args).flatMap {
-      case 0 =>
-        GitProcessSupport.runLines(baseDir, args)(context).map {
-          case head +: _ => head.trim
-          case _         => ""
-        }
-      case 1 => IO.raiseError(new InvalidUpstreamConfigException(missingMessage))
-      case _ =>
-        GitProcessSupport.runLines(baseDir, args)(context) *>
-          IO.raiseError[String](new IllegalStateException(s"$context failed unexpectedly"))
-    }
-  }
+  ): IO[String] =
+    GitPushSupport.readBranchConfig(this, branch, key, missingMessage)
 
   def pushChanges: IO[Unit] =
     GitPushSupport.pushTrackedBranch(this, followTags = true).void

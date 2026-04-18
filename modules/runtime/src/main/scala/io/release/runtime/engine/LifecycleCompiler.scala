@@ -165,7 +165,10 @@ private[release] object LifecycleCompiler {
       !freezeGate || gateKey.isDefined,
       s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
     )
-    if (freezeGate) GateMode.Frozen(gateKey.get) else GateMode.Streaming
+    gateKey match {
+      case Some(key) if freezeGate => GateMode.Frozen(key)
+      case _                       => GateMode.Streaming
+    }
   }
 
   // ── Single-context hooks ────────────────────────────────────────────

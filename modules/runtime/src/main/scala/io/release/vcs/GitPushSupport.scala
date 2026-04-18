@@ -64,7 +64,7 @@ private[release] object GitPushSupport {
       upstreamBranch = upstreamBranch
     )
 
-  private def readBranchConfig(
+  private[vcs] def readBranchConfig(
       vcs: Vcs,
       branch: String,
       key: String,

@@ -30,7 +30,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         val cleared =
-          _root_.io.release.ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
+          _root_.io.release.ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded, Nil)
 
         assertEquals(
           TestSupport.manifestAttributes(seeded),
@@ -60,7 +60,8 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         val cleared    =
-          _root_.io.release.ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(firstPass)
+          _root_.io.release.ReleaseManifestMetadataSupport
+            .clearReleaseManifestMetadata(firstPass, Nil)
         val secondPass = TestSupport.appendSessionSettings(
           cleared,
           Seq(

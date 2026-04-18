@@ -34,13 +34,7 @@ private[release] object VcsOps {
 
   /** Detect VCS at the project base and return the context with the VCS adapter. */
   def detectAndInit[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] =
-    IO.blocking(Project.extract(ctx.state).get(thisProject).base).flatMap { baseDir =>
-      Vcs.detect(baseDir).flatMap {
-        case Some(vcs) => IO.pure(ctx.withVcs(vcs))
-        case None      =>
-          IO.raiseError(new IllegalStateException(s"No VCS detected at ${baseDir.getAbsolutePath}"))
-      }
-    }
+    detectVcs(ctx.state).map(ctx.withVcs(_))
 
   private[release] def detectVcsFromBase(base: File): IO[Vcs] =
     Vcs.detect(base).flatMap {
@@ -140,17 +134,6 @@ private[release] object VcsOps {
   /** Status of tracked files only (excludes untracked `?` lines). */
   def trackedStatus(vcs: Vcs): IO[String] =
     vcs.status.map(_.linesIterator.filterNot(_.startsWith("?")).mkString("\n"))
-
-  /** Validate that the tracking remote is reachable. Shared by core and monorepo push steps.
-    * @param log optional callback to log the remote name before checking
-    */
-  def validatePushRemote[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      vcs: Vcs,
-      logPrefix: String,
-      log: Option[String => Unit] = None
-  ): IO[C] =
-    checkPushRemote(ctx, vcs, logPrefix, log).map(_.context)
 
   private def checkPushRemote[C <: ReleaseCtx { type Self = C }](
       ctx: C,
@@ -254,14 +237,7 @@ private[release] object VcsOps {
   private def ensureVcs[C <: ReleaseCtx { type Self = C }](ctx: C): IO[(C, Vcs)] =
     ctx.vcs match {
       case Some(vcs) => IO.pure(ctx -> vcs)
-      case None      =>
-        detectAndInit(ctx).flatMap { detectedCtx =>
-          IO.fromOption(detectedCtx.vcs)(
-            new IllegalStateException(
-              "VCS not initialized. Ensure initializeVcs runs before this step."
-            )
-          ).map(detectedCtx -> _)
-        }
+      case None      => detectVcs(ctx.state).map(vcs => ctx.withVcs(vcs) -> vcs)
     }
 
   private def refreshPushReadiness[C <: ReleaseCtx { type Self = C }](

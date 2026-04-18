@@ -8,6 +8,7 @@ import io.release.core.internal.CoreReleasePlan
 import io.release.core.internal.steps.CoreReleaseStepHelpers
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.sbt.PromptAdapter
 import io.release.runtime.sbt.SbtCompat
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.DecisionResolver
@@ -24,7 +25,6 @@ import sbt.State
 import java.io.File
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Queue
-import scala.sys.process.Process
 
 class StepHelpersSpec extends CatsEffectSuite {
   import StepHelpersSpec.*
@@ -117,64 +117,11 @@ class StepHelpersSpec extends CatsEffectSuite {
     assertEquals(StepHelpers.errorMessage(err), err.toString)
   }
 
-  test("StepHelpers.runProcess - succeed when the process exits with zero") {
-    StepHelpers.runProcess(Process(Seq("sh", "-c", "exit 0")), context = "success-process")
-  }
-
-  test("StepHelpers.runProcess - raise IllegalStateException on non-zero exit") {
-    assertIllegalStateMessage(
-      StepHelpers.runProcess(Process(Seq("sh", "-c", "exit 7")), context = "failing-process"),
-      "failing-process failed with exit code 7"
-    )
-  }
-
-  test("StepHelpers.confirmContinue - abort in non-interactive mode") {
-    TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      assertIllegalStateMessage(
-        StepHelpers.confirmContinue(
-          promptContext(state, interactive = false, useDefaults = false),
-          prompt = "Continue?",
-          defaultYes = true,
-          abortMessage = "aborted"
-        ),
-        "aborted"
-      )
-    }
-  }
-
-  test(
-    "StepHelpers.confirmContinue - succeed in interactive use-defaults mode when default is yes"
-  ) {
-    TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      StepHelpers
-        .confirmContinue(
-          promptContext(state, interactive = true, useDefaults = true),
-          prompt = "Continue?",
-          defaultYes = true,
-          abortMessage = "aborted"
-        )
-    }
-  }
-
-  test("StepHelpers.confirmContinue - abort in interactive use-defaults mode when default is no") {
-    TestSupport.dummyStateResource(fixturePrefix).use { state =>
-      assertIllegalStateMessage(
-        StepHelpers.confirmContinue(
-          promptContext(state, interactive = true, useDefaults = true),
-          prompt = "Continue?",
-          defaultYes = false,
-          abortMessage = "aborted"
-        ),
-        "aborted"
-      )
-    }
-  }
-
-  test("StepHelpers.askYesNo - default no accepts uppercase affirmative input") {
+  test("PromptAdapter.promptYesNo - default no accepts uppercase affirmative input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val ui = StubInteractionService(readAnswers = List(Some("Y")))
-      StepHelpers
-        .askYesNo(
+      PromptAdapter
+        .promptYesNo(
           promptContext(
             state,
             interactive = true,
@@ -195,8 +142,8 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.askYesNo - default no accepts trimmed affirmative input") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val ui = StubInteractionService(readAnswers = List(Some(" yes ")))
-      StepHelpers
-        .askYesNo(
+      PromptAdapter
+        .promptYesNo(
           promptContext(
             state,
             interactive = true,
@@ -218,8 +165,8 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [n] "
       val ui     = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
-      StepHelpers
-        .askYesNo(
+      PromptAdapter
+        .promptYesNo(
           promptContext(
             state,
             interactive = true,
@@ -243,8 +190,8 @@ class StepHelpersSpec extends CatsEffectSuite {
   test("StepHelpers.askYesNo - default no maps EOF to false") {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val ui = StubInteractionService(readAnswers = List(None))
-      StepHelpers
-        .askYesNo(
+      PromptAdapter
+        .promptYesNo(
           promptContext(
             state,
             interactive = true,
@@ -266,8 +213,8 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [y] "
       val ui     = StubInteractionService(readAnswers = List(Some("maybe"), Some("")))
-      StepHelpers
-        .askYesNo(
+      PromptAdapter
+        .promptYesNo(
           promptContext(
             state,
             interactive = true,
@@ -292,8 +239,8 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [y] "
       val ui     = StubInteractionService(readAnswers = List(Some("maybe"), None))
-      StepHelpers
-        .askYesNoOrEof(
+      PromptAdapter
+        .promptYesNoOrEof(
           promptContext(
             state,
             interactive = true,
@@ -318,8 +265,8 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport.dummyStateResource(fixturePrefix).use { state =>
       val prompt = "Continue? [y] "
       val ui     = StubInteractionService(readAnswers = List(Some("maybe"), Some("y")))
-      StepHelpers
-        .askYesNo(
+      PromptAdapter
+        .promptYesNo(
           promptContext(
             state,
             interactive = true,
@@ -578,8 +525,8 @@ class StepHelpersSpec extends CatsEffectSuite {
       val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
 
       for {
-        first  <- StepHelpers.readLine(pCtx)
-        second <- StepHelpers.readLine(first._1)
+        first  <- PromptAdapter.readLine(pCtx)
+        second <- PromptAdapter.readLine(first._1)
       } yield {
         assertEquals(first._2, Some("first"))
         assertEquals(second._2, Some("second"))
@@ -594,8 +541,8 @@ class StepHelpersSpec extends CatsEffectSuite {
       val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
 
       for {
-        line <- StepHelpers.readLine(pCtx)
-        eof  <- StepHelpers.readLine(line._1)
+        line <- PromptAdapter.readLine(pCtx)
+        eof  <- PromptAdapter.readLine(line._1)
       } yield {
         assertEquals(line._2, Some(""))
         assertEquals(eof._2, None)
@@ -609,7 +556,7 @@ class StepHelpersSpec extends CatsEffectSuite {
       val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
 
       assertIllegalStateMessage(
-        StepHelpers.readRequiredLine(pCtx, "Release version"),
+        PromptAdapter.readRequiredLine(pCtx, "Release version"),
         "Standard input closed while waiting for Release version."
       )
     }
@@ -635,7 +582,7 @@ class StepHelpersSpec extends CatsEffectSuite {
           interaction = Some(fallbackUi)
         )
 
-        StepHelpers.readLine(ctx).map { case (_, line) =>
+        PromptAdapter.readLine(ctx).map { case (_, line) =>
           assertEquals(line, Some("from-task"))
           assertEquals(taskUi.readPrompts.toList, List(""))
           assertEquals(fallbackUi.readPrompts.toList, Nil)
@@ -662,8 +609,8 @@ class StepHelpersSpec extends CatsEffectSuite {
           interaction = Some(fallbackUi)
         )
 
-        StepHelpers
-          .askYesNo(ctx, prompt = prompt, defaultYes = false)
+        PromptAdapter
+          .promptYesNo(ctx, prompt = prompt, defaultYes = false)
           .map { case (_, answer) =>
             assertEquals(answer, true)
             assertEquals(
@@ -699,7 +646,7 @@ class StepHelpersSpec extends CatsEffectSuite {
         )
 
         assertFailure[Incomplete, (ReleaseContext, Option[String])](
-          StepHelpers.readLine(ctx)
+          PromptAdapter.readLine(ctx)
         ) { err =>
           assertEquals(err.directCause.map(_.getMessage), Some("boom"))
           assertEquals(fallbackUi.readPrompts.toList, Nil)
