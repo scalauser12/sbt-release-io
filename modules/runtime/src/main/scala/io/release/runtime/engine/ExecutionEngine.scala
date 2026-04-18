@@ -29,8 +29,9 @@ import io.release.runtime.workflow.StepHelpers
   *     This ensures the release is fully validated before any mutations begin.
   *
   *   - '''`runSequentialValidateThenExecute`''' — validate and execute each step before
-  *     moving to the next. Used by monorepo for the setup segment (VCS init, working-dir
-  *     check, project selection) where later steps depend on earlier execution results.
+  *     moving to the next. Used by monorepo when later steps depend on earlier execution
+  *     results (e.g. the setup segment — VCS init, working-dir check, project selection —
+  *     and as the full-sequence fallback when there is no selection boundary).
   *
   * Both modes interleave sbt `FailureCommand` detection between actions and short-circuit
   * on the first failure.
@@ -76,23 +77,21 @@ private[release] object ExecutionEngine {
       validatedCtx <- runValidations(logPrefix, steps, startCtx)
       resultCtx    <-
         if (validatedCtx.failed) IO.pure(validatedCtx)
-        else runActions(steps, armOnFailure(validatedCtx))
+        else runActionPhase(steps)(armOnFailure(validatedCtx))
     } yield resultCtx
 
   def runSequentialValidateThenExecute[C <: ReleaseCtx { type Self = C }](
       steps: Seq[PreparedStep[C]],
-      startCtx: C,
-      armOnFailure: C => C,
-      hasFailed: C => Boolean
+      startCtx: C
   ): IO[C] =
     steps.foldLeft(IO.pure(startCtx)) { (ioCtx, step) =>
       ioCtx.flatMap { currentCtx =>
-        if (hasFailed(currentCtx)) IO.pure(currentCtx)
+        if (currentCtx.failed) IO.pure(currentCtx)
         else {
           for {
             validatedCtx <- step.validate(currentCtx)
             nextCtx      <-
-              if (hasFailed(validatedCtx)) IO.pure(validatedCtx)
+              if (validatedCtx.failed) IO.pure(validatedCtx)
               else runActionPhase(Seq(step))(armOnFailure(validatedCtx))
           } yield nextCtx
         }
@@ -112,12 +111,6 @@ private[release] object ExecutionEngine {
         else runValidationStep(logPrefix, step, currentCtx)
       }
     }
-
-  def runActions[C <: ReleaseCtx { type Self = C }](
-      steps: Seq[PreparedStep[C]],
-      startCtx: C
-  ): IO[C] =
-    runActionPhase(steps)(startCtx)
 
   def armOnFailure[C <: ReleaseCtx { type Self = C }](ctx: C): C = {
     val withSnapshot =

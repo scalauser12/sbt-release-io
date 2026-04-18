@@ -43,7 +43,10 @@ private[release] object ReleaseCommandRunner {
     lines.toList.traverse_(line => IO.blocking(state.log.info(s"$prefix $line")))
 
   /** Map a finished release context to the appropriate sbt `State`. */
-  def handleReleaseResult[C <: ReleaseCtx { type Self = C }](ctx: C, prefix: String): IO[State] =
+  private def handleReleaseResult[C <: ReleaseCtx { type Self = C }](
+      ctx: C,
+      prefix: String
+  ): IO[State] =
     if (ctx.failed) {
       val cause =
         ctx.failureCause.map(e => StepHelpers.errorMessage(e)).getOrElse("unknown error")

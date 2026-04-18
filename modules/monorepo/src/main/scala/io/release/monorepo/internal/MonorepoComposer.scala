@@ -71,9 +71,7 @@ private[monorepo] object MonorepoComposer {
   ): IO[MonorepoContext] =
     ExecutionEngine.runSequentialValidateThenExecute(
       steps = preparedSteps(steps, crossBuild),
-      startCtx = startCtx,
-      armOnFailure = ExecutionEngine.armOnFailure[MonorepoContext],
-      hasFailed = (ctx: MonorepoContext) => ctx.failed
+      startCtx = startCtx
     )
 
   private[monorepo] def preparedSteps(

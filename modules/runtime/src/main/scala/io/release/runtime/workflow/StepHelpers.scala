@@ -7,12 +7,8 @@ import _root_.sbt.State
 import _root_.sbt.TaskKey
 import _root_.sbt.internal.Aggregation.KeyValue
 import cats.effect.IO
-import io.release.runtime.ReleaseCtx
-import io.release.runtime.sbt.PromptAdapter
 import io.release.runtime.sbt.SbtRuntime
 import io.release.version.Version
-
-import scala.sys.process.*
 
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
@@ -20,65 +16,8 @@ private[release] object StepHelpers {
   def errorMessage(err: Throwable): String =
     Option(err.getMessage).getOrElse(err.toString)
 
-  /** Read a line through sbt's interaction service. Returns `None` on EOF. */
-  private[release] def readLine[C <: ReleaseCtx { type Self = C }](
-      ctx: C
-  ): IO[(C, Option[String])] =
-    PromptAdapter.readLine(ctx)
-
-  /** Read a line from standard input and fail fast if stdin closes before input arrives. */
-  private[release] def readRequiredLine[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      context: String
-  ): IO[(C, String)] =
-    PromptAdapter.readRequiredLine(ctx, context)
-
-  private[release] def askYesNo[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      prompt: String,
-      defaultYes: Boolean
-  ): IO[(C, Boolean)] =
-    PromptAdapter.promptYesNo(ctx, prompt, defaultYes)
-
-  private[release] def askYesNoOrEof[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      prompt: String,
-      defaultYes: Boolean
-  ): IO[(C, Option[Boolean])] =
-    PromptAdapter.promptYesNoOrEof(ctx, prompt, defaultYes)
-
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
     opt.fold(IO.raiseError[B](new IllegalStateException(error)))(f)
-
-  /** Runs a process inside IO.blocking and raises on non-zero exit. */
-  def runProcess(process: ProcessBuilder, context: => String): IO[Unit] =
-    IO.blocking(process.!).flatMap { code =>
-      if (code != 0)
-        IO.raiseError(new IllegalStateException(s"$context failed with exit code $code"))
-      else
-        IO.unit
-    }
-
-  /** Confirmation prompt shared by core and monorepo steps. */
-  def confirmContinue[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      prompt: String,
-      defaultYes: Boolean,
-      abortMessage: String
-  ): IO[C] = {
-    if (!ctx.interactive)
-      IO.raiseError(new IllegalStateException(abortMessage))
-    else {
-      val decisionIO =
-        if (ctx.useDefaults) IO.pure((ctx, defaultYes))
-        else askYesNo(ctx, prompt, defaultYes = defaultYes)
-
-      decisionIO.flatMap { case (nextCtx, continue) =>
-        if (continue) IO.pure(nextCtx)
-        else IO.raiseError(new IllegalStateException(abortMessage))
-      }
-    }
-  }
 
   /** Parse raw version input: trim whitespace, return default if empty, validate otherwise. */
   def parseVersionInput(raw: String, default: String): IO[String] = {

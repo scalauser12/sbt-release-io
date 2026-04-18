@@ -8,11 +8,11 @@ import io.release.core.internal.CoreStepFactory
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.PromptAdapter
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
-import io.release.runtime.workflow.StepHelpers
 import munit.CatsEffectSuite
 import sbt.internal.util.ConsoleOut
 import sbt.internal.util.GlobalLogging
@@ -278,8 +278,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         validationOnlyStep(
           "first-validation-prompt",
           currentCtx =>
-            StepHelpers
-              .askYesNo(currentCtx, "First validation prompt (y/n)? [n] ", defaultYes = false)
+            PromptAdapter
+              .promptYesNo(currentCtx, "First validation prompt (y/n)? [n] ", defaultYes = false)
               .map { case (nextCtx, answer) =>
                 nextCtx.withMetadata(answersKey, List(answer))
               }
@@ -288,8 +288,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         validationOnlyStep(
           "second-validation-prompt",
           currentCtx =>
-            StepHelpers
-              .askYesNo(currentCtx, "Second validation prompt (y/n)? [y] ", defaultYes = true)
+            PromptAdapter
+              .promptYesNo(currentCtx, "Second validation prompt (y/n)? [y] ", defaultYes = true)
               .map { case (nextCtx, answer) =>
                 val answers = nextCtx.metadata(answersKey).getOrElse(Nil) :+ answer
                 nextCtx.withMetadata(answersKey, answers)
@@ -324,8 +324,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
         validationOnlyStep(
           "validation-prompt",
           currentCtx =>
-            StepHelpers
-              .askYesNo(currentCtx, "Validation prompt (y/n)? [n] ", defaultYes = false)
+            PromptAdapter
+              .promptYesNo(currentCtx, "Validation prompt (y/n)? [n] ", defaultYes = false)
               .map { case (nextCtx, answer) =>
                 nextCtx.withMetadata(validationKey, answer)
               }
@@ -336,8 +336,8 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           if (currentCtx.metadata(validationKey).contains(true)) IO.unit
           else IO.raiseError(new RuntimeException("execute validation did not see prior answer")),
         execute = currentCtx =>
-          StepHelpers
-            .askYesNo(currentCtx, "Execution prompt (y/n)? [y] ", defaultYes = true)
+          PromptAdapter
+            .promptYesNo(currentCtx, "Execution prompt (y/n)? [y] ", defaultYes = true)
             .map { case (nextCtx, answer) =>
               nextCtx.withMetadata(executionKey, answer)
             }
