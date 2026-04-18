@@ -13,6 +13,7 @@ import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.StepOrderingSupport
+import io.release.runtime.preflight.PreflightRendering
 import io.release.runtime.workflow.VersionWorkflowSupport
 import io.release.vcs.TagConflictResolver
 
@@ -200,11 +201,11 @@ private[release] object CorePreflight {
         pad("steps") + summary.stepNames.mkString(" -> ")
       )
 
-  // Width fits the longest summary label ("current version") so columns align.
+  // Width fits the longest core summary label ("current version"). Monorepo uses 14 in
+  // MonorepoPreflight.SummaryLabelWidth — the constants are intentionally module-local.
   private val SummaryLabelWidth = 15
 
-  private def pad(label: String): String =
-    s"  ${label.padTo(SummaryLabelWidth, ' ')}: "
+  private def pad(label: String): String = PreflightRendering.pad(label, SummaryLabelWidth)
 
   def check(
       initialCtx: ReleaseContext,
