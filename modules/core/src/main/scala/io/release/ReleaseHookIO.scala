@@ -66,9 +66,10 @@ object ReleaseHookIO {
     ReleaseHookIO(
       name,
       withTrackedExecute(
-        execute = ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
-          f(handle) *> handle.get
-        },
+        execute = ctx =>
+          TrackedContextHandle.create(ctx).flatMap { handle =>
+            f(handle) *> handle.get
+          },
         executeTracked = f
       )
     )
@@ -85,5 +86,57 @@ object ReleaseHookIO {
   def actionTracked(
       name: String
   )(f: TrackedContextHandle[ReleaseContext] => IO[Unit]): ReleaseHookIO =
+    ioTracked(name)(f)
+
+  // ── Intent-named factories ──────────────────────────────────────────
+  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+
+  /** Create a hook that performs side effects without changing the context.
+    *
+    * Use for logging, notifications, webhooks, audit trails — anything where the
+    * release context stays unchanged after the hook runs. The input context is
+    * preserved as the checkpoint.
+    *
+    * {{{
+    * ReleaseHookIO.sideEffect("notify-tagged") { ctx =>
+    *   IO.blocking(ctx.state.log.info(s"tagged \${ctx.releaseVersion.getOrElse("?")}"))
+    * }
+    * }}}
+    */
+  def sideEffect(name: String)(f: ReleaseContext => IO[Unit]): ReleaseHookIO =
+    ioTracked(name)(handle => handle.update(ctx => f(ctx).as(ctx)).void)
+
+  /** Create a hook that transforms the context once and checkpoints the result.
+    *
+    * Use for "read some context, derive an updated context, return it" hooks that
+    * publish exactly one checkpoint. Shorter than [[resumable]] when a single
+    * `ctx => IO[ReleaseContext]` transform is all the hook does.
+    *
+    * {{{
+    * ReleaseHookIO.transform("skip-publish-for-snapshot") { ctx =>
+    *   IO.pure(
+    *     if (ctx.releaseVersion.exists(_.endsWith("SNAPSHOT"))) ctx.copy(skipPublish = true)
+    *     else ctx
+    *   )
+    * }
+    * }}}
+    */
+  def transform(name: String)(f: ReleaseContext => IO[ReleaseContext]): ReleaseHookIO =
+    ioTracked(name)(handle => handle.update(f).void)
+
+  /** Create a hook with explicit checkpoint-handle access for multi-step updates.
+    *
+    * Use when a single hook performs several context mutations that should each
+    * be visible to recovery logic on failure. Most hooks don't need this — prefer
+    * [[sideEffect]] or [[transform]] unless you specifically want intermediate
+    * checkpoints.
+    *
+    * {{{
+    * ReleaseHookIO.resumable("stage-release") { handle =>
+    *   handle.update(stageOne) *> handle.update(stageTwo)
+    * }
+    * }}}
+    */
+  def resumable(name: String)(f: TrackedContextHandle[ReleaseContext] => IO[Unit]): ReleaseHookIO =
     ioTracked(name)(f)
 }

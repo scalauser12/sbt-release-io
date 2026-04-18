@@ -58,7 +58,7 @@ def uploadArchive(ctx: ReleaseContext): IO[Unit] =
       IO.raiseError(new RuntimeException("releaseVersion is not set"))
   }
 
-releaseIOHooksAfterPublish += ReleaseHookIO.action("upload-archive")(uploadArchive)
+releaseIOHooksAfterPublish += ReleaseHookIO.sideEffect("upload-archive")(uploadArchive)
 ```
 
 **Cross-build gotcha:** `releaseIOHooksBeforePublish` and `releaseIOHooksAfterPublish` are the

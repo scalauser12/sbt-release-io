@@ -125,8 +125,8 @@ trait MonorepoReleasePluginSpecSupport {
           afterSelectionHooks = Seq(
             MonorepoGlobalResourceHookIO[Unit](
               name = "resource-after-selection",
-              execute = (_: Unit) => (ctx: MonorepoContext) =>
-                observed.update(_ :+ "resource-global-execute").as(ctx),
+              execute = (_: Unit) =>
+                (ctx: MonorepoContext) => observed.update(_ :+ "resource-global-execute").as(ctx),
               validate = (_: MonorepoContext) => observed.update(_ :+ "resource-global-validate")
             )
           ),
@@ -136,9 +136,8 @@ trait MonorepoReleasePluginSpecSupport {
               execute = (_: Unit) =>
                 (ctx: MonorepoContext, project: ProjectReleaseInfo) =>
                   observed.update(_ :+ s"resource-project-execute:${project.name}").as(ctx),
-              validate =
-                (_: MonorepoContext, project: ProjectReleaseInfo) =>
-                  observed.update(_ :+ s"resource-project-validate:${project.name}")
+              validate = (_: MonorepoContext, project: ProjectReleaseInfo) =>
+                observed.update(_ :+ s"resource-project-validate:${project.name}")
             )
           )
         )

@@ -239,30 +239,88 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
 
       val hook = ReleaseHookIO.ioTracked("tracked-hook-child-fiber") { handle =>
         for {
-          childCanRun <- Deferred[IO, Unit]
-          childResult <- Deferred[IO, Either[Throwable, Unit]]
-          _           <- handle.update { currentCtx =>
-                           (childCanRun.get *>
-                             handle
-                               .update(innerCtx => IO.pure(appendEntry(innerCtx, "child")))
-                               .void)
-                             .attempt
-                             .flatMap(childResult.complete)
-                             .start
-                             .as(appendEntry(currentCtx, "parent"))
-                         }
-          _           <- childCanRun.complete(())
+          childCanRun  <- Deferred[IO, Unit]
+          childResult  <- Deferred[IO, Either[Throwable, Unit]]
+          _            <- handle.update { currentCtx =>
+                            (childCanRun.get *>
+                              handle
+                                .update(innerCtx => IO.pure(appendEntry(innerCtx, "child")))
+                                .void).attempt
+                              .flatMap(childResult.complete)
+                              .start
+                              .as(appendEntry(currentCtx, "parent"))
+                          }
+          _            <- childCanRun.complete(())
           childOutcome <- childResult.get.timeout(3.seconds)
-          _           <- childOutcome match {
-                           case Left(err) => IO.raiseError(err)
-                           case Right(_)  => IO.unit
-                         }
+          _            <- childOutcome match {
+                            case Left(err) => IO.raiseError(err)
+                            case Right(_)  => IO.unit
+                          }
         } yield ()
       }
 
       TrackedContextHandle.create(ctx).flatMap { handle =>
         ReleaseHookIO.trackedExecute(hook)(handle) *> handle.get.map { result =>
           assertEquals(result.metadata(metadataKey), Some(Vector("parent", "child")))
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ReleaseHookIO.sideEffect / .transform / .resumable
+  // ---------------------------------------------------------------------------
+
+  test("ReleaseHookIO.sideEffect - runs the effect and preserves the input context") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Int](0).flatMap { counter =>
+        val hook = ReleaseHookIO.sideEffect("side-effect-hook")(_ => counter.update(_ + 1))
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          for {
+            _           <- ReleaseHookIO.trackedExecute(hook)(handle)
+            latest      <- handle.get
+            invocations <- counter.get
+          } yield {
+            assertEquals(latest, ctx)
+            assertEquals(invocations, 1)
+          }
+        }
+      }
+    }
+  }
+
+  test("ReleaseHookIO.transform - replaces the checkpoint with the returned context") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("transform-hook")
+      val hook        = ReleaseHookIO
+        .transform("transform-hook")(c => IO.pure(c.withMetadata(metadataKey, "applied")))
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseHookIO.trackedExecute(hook)(handle) *> handle.get.map { latest =>
+          assertEquals(latest.metadata(metadataKey), Some("applied"))
+        }
+      }
+    }
+  }
+
+  test("ReleaseHookIO.resumable - exposes the tracked handle directly") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[Vector[String]]("resumable-hook")
+      val hook        = ReleaseHookIO.resumable("resumable-hook") { handle =>
+        def append(currentCtx: ReleaseContext, entry: String): ReleaseContext =
+          currentCtx.withMetadata(
+            metadataKey,
+            currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+          )
+
+        handle.update(c => IO.pure(append(c, "first"))).void *>
+          handle.update(c => IO.pure(append(c, "second"))).void
+      }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseHookIO.trackedExecute(hook)(handle) *> handle.get.map { latest =>
+          assertEquals(latest.metadata(metadataKey), Some(Vector("first", "second")))
         }
       }
     }
@@ -383,8 +441,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       val metadataKey = AttributeKey[String]("legacy-resource")
       val hook        = ReleaseResourceHookIO[String](
         name = "legacy-resource-hook",
-        execute = resource =>
-          currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource)),
+        execute = resource => currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource)),
         validate = _ => IO.unit
       )
       val copied      = hook.copy(name = "copied-resource-hook")
@@ -403,8 +460,8 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   test("ReleaseResourceHookIO.ioTracked - checkpoint resource-backed updates through the handle") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val metadataKey = AttributeKey[String]("tracked-resource-hook")
-      val hook        = ReleaseResourceHookIO.ioTracked[String]("tracked-resource-hook") { resource =>
-        handle =>
+      val hook        = ReleaseResourceHookIO.ioTracked[String]("tracked-resource-hook") {
+        resource => handle =>
           handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
       }
 
@@ -430,6 +487,73 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
           result =>
             assertEquals(hook.name, "tracked-resource-hook-copy")
             assertEquals(result.metadata(metadataKey), Some("copied-resource"))
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ReleaseResourceHookIO.sideEffect / .transform / .resumable
+  // ---------------------------------------------------------------------------
+
+  test("ReleaseResourceHookIO.sideEffect - runs the effect and preserves the input context") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Option[String]](None).flatMap { captured =>
+        val hook = ReleaseResourceHookIO.sideEffect[String]("side-effect-resource-hook") {
+          (resource, _) => captured.set(Some(resource))
+        }
+
+        TrackedContextHandle.create(ctx).flatMap { handle =>
+          for {
+            _        <- ReleaseResourceHookIO.trackedExecute(hook)("my-resource")(handle)
+            latest   <- handle.get
+            observed <- captured.get
+          } yield {
+            assertEquals(latest, ctx)
+            assertEquals(observed, Some("my-resource"))
+          }
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHookIO.transform - replaces the checkpoint with the returned context") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[String]("transform-resource-hook")
+      val hook        =
+        ReleaseResourceHookIO.transform[String]("transform-resource-hook") { (resource, c) =>
+          IO.pure(c.withMetadata(metadataKey, resource))
+        }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseResourceHookIO.trackedExecute(hook)("applied")(handle) *> handle.get.map { latest =>
+          assertEquals(latest.metadata(metadataKey), Some("applied"))
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHookIO.resumable - exposes the tracked handle with the resource") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val metadataKey = AttributeKey[Vector[String]]("resumable-resource-hook")
+      val hook        =
+        ReleaseResourceHookIO.resumable[String]("resumable-resource-hook") { (resource, handle) =>
+          def append(currentCtx: ReleaseContext, entry: String): ReleaseContext =
+            currentCtx.withMetadata(
+              metadataKey,
+              currentCtx.metadata(metadataKey).getOrElse(Vector.empty) :+ entry
+            )
+
+          handle.update(c => IO.pure(append(c, s"$resource-first"))).void *>
+            handle.update(c => IO.pure(append(c, s"$resource-second"))).void
+        }
+
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        ReleaseResourceHookIO.trackedExecute(hook)("res")(handle) *> handle.get.map { latest =>
+          assertEquals(
+            latest.metadata(metadataKey),
+            Some(Vector("res-first", "res-second"))
+          )
         }
       }
     }
@@ -589,8 +713,8 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
   test("ReleaseResourceHooks.materialize - preserve tracked execute when binding the resource") {
     ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
       val metadataKey = AttributeKey[String]("materialized-tracked-resource-hook")
-      val hook        = ReleaseResourceHookIO.ioTracked[String]("tracked-before-tag") { resource =>
-        handle =>
+      val hook        = ReleaseResourceHookIO.ioTracked[String]("tracked-before-tag") {
+        resource => handle =>
           handle.update(currentCtx => IO.pure(currentCtx.withMetadata(metadataKey, resource))).void
       }
       val config      =

@@ -364,7 +364,9 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
                        if (latestCtx.metadata(metadataKey).contains("updated"))
                          IO.raiseError(new RuntimeException("boom"))
                        else
-                         IO.raiseError(new RuntimeException("missing tracked metadata before failure"))
+                         IO.raiseError(
+                           new RuntimeException("missing tracked metadata before failure")
+                         )
                      }
                    else
                      handle

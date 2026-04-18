@@ -236,16 +236,19 @@ private[monorepo] object MonorepoCrossBuild {
                                       s"$LogPrefix Cross-building ${project.name} with Scala $version"
                                     )
                                   )
-                      switched <- SbtRuntime.switchScalaVersion(currentCtx.state, version, LogPrefix)
+                      switched <-
+                        SbtRuntime.switchScalaVersion(currentCtx.state, version, LogPrefix)
                       _        <- handle.set(currentCtx.withState(switched))
                       latest   <- handle.get
                       _        <- action(handle, refreshedProject(latest))
-                      _        <- handle.update(ctx =>
-                                    MonorepoStepHelpers.detectProjectFailureCommand(
-                                      ctx,
-                                      refreshedProject(ctx)
+                      _        <- handle
+                                    .update(ctx =>
+                                      MonorepoStepHelpers.detectProjectFailureCommand(
+                                        ctx,
+                                        refreshedProject(ctx)
+                                      )
                                     )
-                                  ).void
+                                    .void
                     } yield ()
                 }
               }

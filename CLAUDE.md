@@ -109,10 +109,11 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 
 | File | Purpose |
 |------|---------|
-| `runtime/engine/ExecutionEngine.scala` | Runs compiled step sequence with context threading |
-| `runtime/engine/StepKernel.scala` | Step validate/execute kernel; cancellation-safe execution |
+| `runtime/engine/ExecutionEngine.scala` | Runs compiled step sequence with context threading and tracked error recovery |
 | `runtime/engine/LifecycleCompiler.scala` | Compiles policy settings + hooks into ordered step sequence |
 | `runtime/engine/ProcessStep.scala` | `sealed trait ProcessStep[C, +I]` ADT (internal) |
+| `runtime/engine/BuiltInStepRole.scala` | Typed role markers for built-in steps used in orchestration decisions |
+| `runtime/TrackedContextHandle.scala` | Serialized, reentry-checked mutable checkpoint handle for tracked execution |
 | `runtime/command/ReleaseCommandCompilation.scala` | Shared blocking hook merge/compile and command preparation helpers |
 | `runtime/command/ReleaseCommandRunner.scala` | Shared command-boundary execution, logging, and final state handling |
 | `ReleaseSharedKeys.scala` | Runtime-owned shared sbt setting/task keys reused by `core` and `monorepo` without duplicating key identity |

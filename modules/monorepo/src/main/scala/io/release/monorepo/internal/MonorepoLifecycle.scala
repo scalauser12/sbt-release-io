@@ -74,7 +74,8 @@ private[release] object MonorepoLifecycle {
       gate = config.gate,
       nameOf = (hook: MonorepoGlobalHookIO) => hook.name,
       executeOf = (hook: MonorepoGlobalHookIO) => hook.execute,
-      executeTrackedOf = Some((hook: MonorepoGlobalHookIO) => MonorepoGlobalHookIO.trackedExecute(hook)),
+      executeTrackedOf =
+        Some((hook: MonorepoGlobalHookIO) => MonorepoGlobalHookIO.trackedExecute(hook)),
       validateOf = (hook: MonorepoGlobalHookIO) => hook.validate,
       enabled = config.enabled
     )
@@ -88,7 +89,8 @@ private[release] object MonorepoLifecycle {
       gate = config.gate,
       nameOf = (hook: MonorepoProjectHookIO) => hook.name,
       executeOf = (hook: MonorepoProjectHookIO) => hook.execute,
-      executeTrackedOf = Some((hook: MonorepoProjectHookIO) => MonorepoProjectHookIO.trackedExecute(hook)),
+      executeTrackedOf =
+        Some((hook: MonorepoProjectHookIO) => MonorepoProjectHookIO.trackedExecute(hook)),
       validateOf = (hook: MonorepoProjectHookIO) => hook.validate,
       crossBuild = config.crossBuild,
       freezeGate = config.freezeGate,

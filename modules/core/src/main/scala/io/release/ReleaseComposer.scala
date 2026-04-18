@@ -90,8 +90,9 @@ private[release] object ReleaseComposer {
   private def wrapWithCrossBuildTracked(
       step: Step,
       crossBuild: Boolean
-  )(action: TrackedContextHandle[ReleaseContext] => IO[Unit])
-      : TrackedContextHandle[ReleaseContext] => IO[Unit] =
+  )(
+      action: TrackedContextHandle[ReleaseContext] => IO[Unit]
+  ): TrackedContextHandle[ReleaseContext] => IO[Unit] =
     if (step.enableCrossBuild && crossBuild)
       handle => runCrossBuildTracked(step.name, action)(handle)
     else action
@@ -242,7 +243,8 @@ private[release] object ReleaseComposer {
                                       s"$LogPrefix Cross-building with Scala $version"
                                     )
                                   )
-                      switched <- SbtRuntime.switchScalaVersion(currentCtx.state, version, LogPrefix)
+                      switched <-
+                        SbtRuntime.switchScalaVersion(currentCtx.state, version, LogPrefix)
                       _        <- handle.set(currentCtx.withState(switched))
                       _        <- action(handle)
                       _        <- handle.update(detectIterationFailure).void

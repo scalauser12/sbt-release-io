@@ -55,7 +55,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     private def flushLine(): Unit = {
       val bytes = lineBuffer.toByteArray
       lineBuffer.reset()
-      val line = new String(bytes, StandardCharsets.UTF_8)
+      val line  = new String(bytes, StandardCharsets.UTF_8)
       if (!blocked && line.contains(" Error: ")) {
         blocked = true
         started.countDown()
@@ -298,7 +298,10 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
 
       ReleaseComposer.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
         assertEquals(result.metadata(answersKey), Some(List(true, false)))
-        assertEquals(ui.readPrompts.toList, List("First validation prompt (y/n)? [n] ", "Second validation prompt (y/n)? [y] "))
+        assertEquals(
+          ui.readPrompts.toList,
+          List("First validation prompt (y/n)? [n] ", "Second validation prompt (y/n)? [y] ")
+        )
         assertEquals(ui.confirmPrompts.toList, Nil)
       }
     }
@@ -343,7 +346,10 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       ReleaseComposer.compose(Seq(firstStep, secondStep), crossBuild = false)(ctx).map { result =>
         assertEquals(result.metadata(validationKey), Some(true))
         assertEquals(result.metadata(executionKey), Some(false))
-        assertEquals(ui.readPrompts.toList, List("Validation prompt (y/n)? [n] ", "Execution prompt (y/n)? [y] "))
+        assertEquals(
+          ui.readPrompts.toList,
+          List("Validation prompt (y/n)? [n] ", "Execution prompt (y/n)? [y] ")
+        )
         assertEquals(ui.confirmPrompts.toList, Nil)
       }
     }
@@ -388,7 +394,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           )
         )
       }
-      val skipped      = CoreStepFactory.io("skipped")(IO.pure)
+      val skipped       = CoreStepFactory.io("skipped")(IO.pure)
 
       ReleaseComposer.compose(Seq(alreadyFailed, skipped), crossBuild = false)(ctx).map { result =>
         assert(result.failed)
@@ -549,31 +555,29 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
 
   test("recoverWithContext - preserve the latest tracked checkpoint during failure recovery") {
     TestSupport.tempDirResource("tracked-recovery-race").use { dir =>
-      val logStarted = new CountDownLatch(1)
-      val allowLog   = new CountDownLatch(1)
+      val logStarted  = new CountDownLatch(1)
+      val allowLog    = new CountDownLatch(1)
       val metadataKey = AttributeKey[String]("tracked-recovery-metadata")
       val failure     = new RuntimeException("tracked failure")
 
       blockingErrorLogContext(dir, logStarted, allowLog).flatMap { ctx =>
         for {
-          handle      <- io.release.runtime.TrackedContextHandle.create(ctx)
+          handle       <- io.release.runtime.TrackedContextHandle.create(ctx)
           recoverFiber <- ExecutionEngine
                             .recoverWithContext(ReleaseLogPrefixes.Core, handle)(
                               IO.raiseError(failure)
                             )
                             .start
-          _           <- IO.blocking(logStarted.await())
-          updateFiber <- handle
-                           .update(current =>
-                             IO.pure(current.withMetadata(metadataKey, "seeded"))
-                           )
-                           .void
-                           .start
-          _           <- IO.sleep(50.millis)
-          _           <- IO.blocking(allowLog.countDown())
-          _           <- recoverFiber.joinWithNever
-          _           <- updateFiber.joinWithNever
-          result      <- handle.get
+          _            <- IO.blocking(logStarted.await())
+          updateFiber  <- handle
+                            .update(current => IO.pure(current.withMetadata(metadataKey, "seeded")))
+                            .void
+                            .start
+          _            <- IO.sleep(50.millis)
+          _            <- IO.blocking(allowLog.countDown())
+          _            <- recoverFiber.joinWithNever
+          _            <- updateFiber.joinWithNever
+          result       <- handle.get
         } yield {
           assert(result.failed)
           assertEquals(result.metadata(metadataKey), Some("seeded"))

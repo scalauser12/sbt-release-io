@@ -106,8 +106,8 @@ trait ReleasePluginIOSpecSupport {
           beforeTagHooks = Seq(
             ReleaseResourceHookIO[Unit](
               name = "resource-before-tag",
-              execute = (_: Unit) => (ctx: ReleaseContext) =>
-                observed.update(_ :+ "resource-execute").as(ctx),
+              execute = (_: Unit) =>
+                (ctx: ReleaseContext) => observed.update(_ :+ "resource-execute").as(ctx),
               validate = (_: ReleaseContext) => observed.update(_ :+ "resource-validate")
             )
           )

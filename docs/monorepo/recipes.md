@@ -46,7 +46,7 @@ same phase-level rule as plain hooks:
 
 ```scala
 releaseIOMonorepoHooksBeforePublish +=
-  MonorepoProjectHookIO.action("verify-publish-env") { (_, project) =>
+  MonorepoProjectHookIO.sideEffect("verify-publish-env") { (project, _) =>
     IO.println(s"[monorepo] verifying publish environment for ${project.name}")
   }
 ```

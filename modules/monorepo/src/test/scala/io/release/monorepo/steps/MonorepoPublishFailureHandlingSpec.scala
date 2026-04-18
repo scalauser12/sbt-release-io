@@ -146,7 +146,8 @@ class MonorepoPublishFailureHandlingSpec
           assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
           assert(
             aggregate.failures.head.cause.exists(
-              _.getMessage.contains("publish-artifacts: sbt task 'skip' reported failure via FailureCommand")
+              _.getMessage
+                .contains("publish-artifacts: sbt task 'skip' reported failure via FailureCommand")
             )
           )
         }
@@ -156,7 +157,7 @@ class MonorepoPublishFailureHandlingSpec
   test("publishArtifacts via compose - fail when publishTo reports FailureCommand") {
     singleProjectFixtureResource("monorepo-publish-target-failure-command") { projectBase =>
       Seq(
-        publish / skip := false,
+        publish / skip                                      := false,
         MonorepoStepTestCompat.failureCommandPublishTargetSetting(
           new File(projectBase, "publish-target-ran.txt")
         ),

@@ -8,6 +8,55 @@ Core release customization has one surface, made of three knobs:
 - `releaseIOHooks*` adds behavior around supported lifecycle points
 - `ReleasePluginIOLike.releaseResourceHooks` lets custom plugins use one shared resource
 
+## Choosing a hook factory
+
+Every hook companion (`ReleaseHookIO`, `ReleaseResourceHookIO`) exposes three
+intent-named factories backed by the same engine path. Pick the shortest form
+that fits the hook you are writing:
+
+| If your hook… | Use |
+| ------------- | --- |
+| fires a side effect (log, notify, audit) and leaves the context unchanged | `sideEffect` |
+| computes a new `ReleaseContext` and returns it once | `transform` |
+| mutates the context in multiple steps and needs every checkpoint visible to `afterFailure` | `resumable` |
+
+The same hook written three ways:
+
+```scala
+import _root_.cats.effect.IO
+import _root_.io.release.ReleaseHookIO
+
+// 1. Fire and forget — context unchanged.
+ReleaseHookIO.sideEffect("notify-tagged") { ctx =>
+  IO.blocking(ctx.state.log.info(s"tagged ${ctx.releaseVersion.getOrElse("?")}"))
+}
+
+// 2. Replace the context once.
+ReleaseHookIO.transform("skip-publish-for-snapshot") { ctx =>
+  IO.pure(
+    if (ctx.releaseVersion.exists(_.endsWith("SNAPSHOT"))) ctx.copy(skipPublish = true)
+    else ctx
+  )
+}
+
+// 3. Multiple checkpoints, each visible to afterFailure recovery.
+ReleaseHookIO.resumable("stage-release") { handle =>
+  handle.update(stageOne) *> handle.update(stageTwo)
+}
+```
+
+Resource-aware hooks (`ReleaseResourceHookIO[T]`) add the resource `T` as the
+first argument:
+
+```scala
+ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
+  IO.blocking(client.notifyRelease(ctx.releaseVersion.getOrElse("unknown")))
+}
+```
+
+The legacy `.io` / `.action` / `.ioTracked` / `.actionTracked` constructors
+still compile but are deprecated; prefer the three factories above.
+
 ## Hook-based customization
 
 ```scala
@@ -17,7 +66,7 @@ import _root_.cats.effect.IO
 import _root_.io.release.ReleaseHookIO
 
 def markerHook(marker: String): ReleaseHookIO =
-  ReleaseHookIO.action(marker) { ctx =>
+  ReleaseHookIO.sideEffect(marker) { ctx =>
     IO.blocking {
       val base = Project.extract(ctx.state).get(baseDirectory)
       sbt.IO.write(base / s"$marker.marker", marker + "\n")
@@ -67,7 +116,7 @@ Run code before tagging:
 import _root_.cats.effect.IO
 import _root_.io.release.ReleaseHookIO
 
-releaseIOHooksBeforeTag += ReleaseHookIO.action("write-release-marker") { ctx =>
+releaseIOHooksBeforeTag += ReleaseHookIO.sideEffect("write-release-marker") { ctx =>
   IO.blocking {
     val base = Project.extract(ctx.state).get(baseDirectory)
     sbt.IO.write(base / "release.marker", "before-tag\n")
@@ -81,7 +130,7 @@ Add a notification after tagging:
 import _root_.cats.effect.IO
 import _root_.io.release.ReleaseHookIO
 
-releaseIOHooksAfterTag += ReleaseHookIO.action("notify-tagged") { ctx =>
+releaseIOHooksAfterTag += ReleaseHookIO.sideEffect("notify-tagged") { ctx =>
   IO.blocking {
     val version = ctx.releaseVersion.getOrElse("unknown")
     ctx.state.log.info(s"[release-io] Tagged $version")
@@ -132,24 +181,24 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
     })(client => IO.blocking(client.close()))
 
   private val validateBranch =
-    ReleaseResourceHookIO.io[HttpClient]("validate-branch")(client => ctx =>
+    ReleaseResourceHookIO.sideEffect[HttpClient]("validate-branch") { (client, ctx) =>
       IO.blocking(client.allowedBranches()).flatMap { allowed =>
         ctx.vcs match {
           case Some(vcs) =>
             vcs.currentBranch.flatMap { branch =>
-              if (allowed(branch)) IO.pure(ctx)
+              if (allowed(branch)) IO.unit
               else IO.raiseError(new RuntimeException(s"Branch '$branch' not allowed"))
             }
           case None =>
             IO.raiseError(new RuntimeException("VCS not initialized"))
         }
       }
-    )
+    }
 
   private val notifyApi =
-    ReleaseResourceHookIO.action[HttpClient]("notify-api")(client => ctx =>
+    ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
       IO.blocking(client.notifyRelease(ctx.releaseVersion.getOrElse("unknown")))
-    )
+    }
 
   override protected def releaseResourceHooks(state: State): ReleaseResourceHooks[HttpClient] =
     ReleaseResourceHooks(

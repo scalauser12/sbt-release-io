@@ -52,7 +52,7 @@ object ReleaseResourceHookIO {
         tracked
           .asInstanceOf[TrackedExecute[T]]
           .trackedExecute
-      case execute                   => t => TrackedContextHandle.lift(execute(t))
+      case execute                    => t => TrackedContextHandle.lift(execute(t))
     }
 
   /** Create a resource-aware hook from a context-transforming function. */
@@ -72,9 +72,11 @@ object ReleaseResourceHookIO {
     ReleaseResourceHookIO(
       name = name,
       execute = withTrackedExecute(
-        execute = t => ctx => TrackedContextHandle.create(ctx).flatMap { handle =>
-          f(t)(handle) *> handle.get
-        },
+        execute = t =>
+          ctx =>
+            TrackedContextHandle.create(ctx).flatMap { handle =>
+              f(t)(handle) *> handle.get
+            },
         executeTracked = f
       )
     )
@@ -92,6 +94,56 @@ object ReleaseResourceHookIO {
       f: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
   ): ReleaseResourceHookIO[T] =
     ioTracked(name)(f)
+
+  // ── Intent-named factories ──────────────────────────────────────────
+  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+  // The `(T, ctx)` / `(T, handle)` shape is flatter than the curried
+  // `T => ctx => ...` form, which fits the common "use the resource to do
+  // work with the current context" pattern.
+
+  /** Create a resource-aware hook that performs side effects without changing
+    * the context. The input context is preserved as the checkpoint.
+    *
+    * {{{
+    * ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
+    *   IO.blocking(client.notifyRelease(ctx.releaseVersion.getOrElse("unknown")))
+    * }
+    * }}}
+    */
+  def sideEffect[T](name: String)(
+      f: (T, ReleaseContext) => IO[Unit]
+  ): ReleaseResourceHookIO[T] =
+    ioTracked[T](name)(resource => handle => handle.update(ctx => f(resource, ctx).as(ctx)).void)
+
+  /** Create a resource-aware hook that transforms the context once and
+    * checkpoints the result.
+    *
+    * {{{
+    * ReleaseResourceHookIO.transform[HttpClient]("apply-publish-policy") { (client, ctx) =>
+    *   IO.blocking(client.canPublish).map(ok => ctx.copy(skipPublish = !ok))
+    * }
+    * }}}
+    */
+  def transform[T](name: String)(
+      f: (T, ReleaseContext) => IO[ReleaseContext]
+  ): ReleaseResourceHookIO[T] =
+    ioTracked[T](name)(resource => handle => handle.update(ctx => f(resource, ctx)).void)
+
+  /** Create a resource-aware hook with explicit checkpoint-handle access for
+    * multi-step updates. Prefer [[sideEffect]] or [[transform]] unless you
+    * need intermediate checkpoints visible to recovery logic.
+    *
+    * {{{
+    * ReleaseResourceHookIO.resumable[HttpClient]("staged-notify") { (client, handle) =>
+    *   handle.update(ctx => IO.blocking(client.notifyStart(ctx)).as(ctx)) *>
+    *     handle.update(ctx => IO.blocking(client.notifyEnd(ctx)).as(ctx))
+    * }
+    * }}}
+    */
+  def resumable[T](name: String)(
+      f: (T, TrackedContextHandle[ReleaseContext]) => IO[Unit]
+  ): ReleaseResourceHookIO[T] =
+    ioTracked[T](name)(resource => handle => f(resource, handle))
 }
 
 /** Resource-aware hook buckets for every supported core lifecycle point.

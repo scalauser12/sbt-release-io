@@ -298,30 +298,32 @@ private[release] object VcsOps {
       vcs: Vcs,
       logPrefix: String
   ): IO[C] =
-    vcs.isBehindRemote.handleErrorWith {
-      case NonFatal(_) => IO.pure(false)
-      case fatal       => IO.raiseError(fatal)
-    }.flatMap {
-      case false => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))
-      case true  =>
-        currentUpstreamTip(vcs).flatMap {
-          case Some(currentTip) if confirmedUpstreamTip(ctx).contains(currentTip) =>
-            IO.pure(ctx)
-          case maybeTip                                                           =>
-            DecisionResolver
-              .confirmOrAbort(
-                ctx,
-                configuredAnswer = ctx.decisionDefaults.upstreamBehindAnswer,
-                logPrefix = logPrefix,
-                eofContext = "upstream confirmation",
-                defaultYes = false,
-                prompt = "The upstream branch has unmerged commits. " +
-                  "A subsequent push may fail! Continue (y/n)? [n] ",
-                abortMessage = "Merge the upstream commits and run release again."
-              )
-              .map(confirmUpstreamTip(_, maybeTip))
-        }
-    }
+    vcs.isBehindRemote
+      .handleErrorWith {
+        case NonFatal(_) => IO.pure(false)
+        case fatal       => IO.raiseError(fatal)
+      }
+      .flatMap {
+        case false => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))
+        case true  =>
+          currentUpstreamTip(vcs).flatMap {
+            case Some(currentTip) if confirmedUpstreamTip(ctx).contains(currentTip) =>
+              IO.pure(ctx)
+            case maybeTip                                                           =>
+              DecisionResolver
+                .confirmOrAbort(
+                  ctx,
+                  configuredAnswer = ctx.decisionDefaults.upstreamBehindAnswer,
+                  logPrefix = logPrefix,
+                  eofContext = "upstream confirmation",
+                  defaultYes = false,
+                  prompt = "The upstream branch has unmerged commits. " +
+                    "A subsequent push may fail! Continue (y/n)? [n] ",
+                  abortMessage = "Merge the upstream commits and run release again."
+                )
+                .map(confirmUpstreamTip(_, maybeTip))
+          }
+      }
 
   private def currentUpstreamTip(vcs: Vcs): IO[Option[String]] =
     vcs.upstreamTrackingHash.handleErrorWith {

@@ -120,17 +120,19 @@ class GitPushSupportSpec extends CatsEffectSuite {
       )
       .use { case (repo, remoteRepo) =>
         for {
-          _ <- IO.blocking {
-                 TestSupport.runGit(repo, "branch", "-M", "main")
-                 TestSupport.runGit(repo, "init", "--bare", remoteRepo.getAbsolutePath)
-                 TestSupport.runGit(repo, "remote", "add", "origin", remoteRepo.getAbsolutePath)
-                 TestSupport.runGit(repo, "config", "branch.main.remote", "origin")
-                 TestSupport.runGit(repo, "config", "branch.main.merge", "refs/heads/main")
-               }
-          _ <- GitPushSupport.pushTrackedBranch(new Git(repo), followTags = false)
-          localHead <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+          _          <- IO.blocking {
+                          TestSupport.runGit(repo, "branch", "-M", "main")
+                          TestSupport.runGit(repo, "init", "--bare", remoteRepo.getAbsolutePath)
+                          TestSupport.runGit(repo, "remote", "add", "origin", remoteRepo.getAbsolutePath)
+                          TestSupport.runGit(repo, "config", "branch.main.remote", "origin")
+                          TestSupport.runGit(repo, "config", "branch.main.merge", "refs/heads/main")
+                        }
+          _          <- GitPushSupport.pushTrackedBranch(new Git(repo), followTags = false)
+          localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
           remoteHead <-
-            IO.blocking(TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim)
+            IO.blocking(
+              TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+            )
         } yield assertEquals(remoteHead, localHead)
       }
   }

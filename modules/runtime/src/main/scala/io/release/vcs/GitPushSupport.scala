@@ -34,17 +34,19 @@ private[release] object GitPushSupport {
                          Seq("config", s"branch.$localBranch.merge")
                        )(s"git config branch.$localBranch.merge")
       mergeRef       = rawMergeRef.trim
-      _             <- IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
-                         new IllegalStateException(
-                           s"Tracking branch ref '$mergeRef' for branch '$localBranch' must use the '$HeadsRefPrefix' format."
-                         )
-                       )
+      _             <-
+        IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
+          new IllegalStateException(
+            s"Tracking branch ref '$mergeRef' for branch '$localBranch' must use the '$HeadsRefPrefix' format."
+          )
+        )
       upstreamBranch = mergeRef.stripPrefix(HeadsRefPrefix)
-      _             <- IO.raiseWhen(upstreamBranch.isEmpty)(
-                         new IllegalStateException(
-                           s"Unable to resolve tracking branch from '$mergeRef' for remote '$remote' and branch '$localBranch'."
-                         )
-                       )
+      _             <-
+        IO.raiseWhen(upstreamBranch.isEmpty)(
+          new IllegalStateException(
+            s"Unable to resolve tracking branch from '$mergeRef' for remote '$remote' and branch '$localBranch'."
+          )
+        )
     } yield GitPushTarget(
       remote = remote,
       localBranch = localBranch,

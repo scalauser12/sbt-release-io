@@ -43,7 +43,7 @@ phases still run once per release. `ReleaseResourceHookIO` follows the same phas
 rule as plain hooks:
 
 ```scala
-releaseIOHooksBeforePublish += ReleaseHookIO.action("verify-publish-env") { ctx =>
+releaseIOHooksBeforePublish += ReleaseHookIO.sideEffect("verify-publish-env") { ctx =>
   IO.blocking(ctx.state.log.info("[release-io] verifying publish environment"))
 }
 ```
