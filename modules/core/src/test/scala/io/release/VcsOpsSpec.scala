@@ -9,6 +9,7 @@ import io.release.core.internal.CoreReleasePlan
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.vcs.InvalidUpstreamConfigException
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Project
@@ -480,6 +481,29 @@ class VcsOpsSpec extends CatsEffectSuite {
           ReleaseLogPrefixes.Core
         )
         .map(result => assertEquals(result, ctx))
+    }
+  }
+
+  test("validatePushReadiness - propagate InvalidUpstreamConfigException from isBehindRemote") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val ctx = VcsOpsSpec.promptContext(
+        TestSupport.dummyState(dir),
+        interactive = false,
+        useDefaults = false
+      )
+
+      val invalid = new InvalidUpstreamConfigException(
+        "Tracking branch ref 'refs/tags/v1.0.0' for branch 'main' " +
+          "must use the 'refs/heads/' format."
+      )
+
+      assertFailure[InvalidUpstreamConfigException, ReleaseContext](
+        VcsOps.validatePushReadiness(
+          ctx,
+          new StubVcs(dir, isBehindRemote0 = IO.raiseError(invalid)),
+          ReleaseLogPrefixes.Core
+        )
+      )(err => assert(err.getMessage.contains("must use the 'refs/heads/' format")))
     }
   }
 

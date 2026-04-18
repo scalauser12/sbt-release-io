@@ -3,6 +3,7 @@ package io.release.vcs
 import cats.effect.Clock
 import cats.effect.IO
 import cats.effect.Ref
+import cats.effect.Resource
 import cats.syntax.all.*
 
 import java.io.BufferedReader
@@ -12,17 +13,26 @@ import java.io.InputStreamReader
 import java.lang.ProcessBuilder.Redirect
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import java.util.Locale
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
-import scala.sys.process.Process
-import scala.sys.process.ProcessBuilder as ScalaProcessBuilder
-import scala.sys.process.ProcessLogger
 import scala.util.control.NonFatal
 
+/** Subprocess orchestration for git: builds `ProcessBuilder`s for each invocation style,
+  * runs them through a managed pipeline with descendant tracking, cancellation propagation,
+  * and optional deadlines.
+  */
 private[release] object GitProcessSupport {
+
+  /** Result of a captured git invocation.
+    *
+    * @param exitCode the process exit code.
+    * @param stdout   UTF-8 decoded stdout lines, empty lines filtered out.
+    * @param stderr   UTF-8 decoded stderr joined with `\n` and trimmed.
+    */
   private[release] final case class GitCommandResult(
       exitCode: Int,
       stdout: Vector[String],
@@ -35,9 +45,9 @@ private[release] object GitProcessSupport {
   )
 
   private final case class ManagedProcess(
-      process: java.lang.Process,
+      process: Process,
       trackedDescendants: ConcurrentHashMap[Long, TrackedDescendant],
-      lastRootAliveNanos: AtomicLong
+      rootExitedAtNanos: AtomicLong
   )
 
   private final case class ProcessState(
@@ -55,90 +65,112 @@ private[release] object GitProcessSupport {
     final case class TimedOut(partialCode: Option[Int]) extends WaitForExitOutcome
   }
 
+  /** Time granted between a graceful `destroy()` and a forcible `destroyForcibly()`
+    * escalation when tearing down a process tree.
+    */
   val DefaultDestroyGracePeriod: FiniteDuration             = 1.second
   private val ProcessPollInterval: FiniteDuration           = 50.millis
   private val RetainedDescendantGracePeriod: FiniteDuration = 250.millis
-  private val NoObservedRootAliveNanos: Long                = Long.MinValue
+  private val RootNotYetExitedNanos: Long                   = Long.MinValue
 
+  /** Returns `"git.exe"` on Windows-like OS names, `"git"` otherwise. */
   private[release] def executableNameFor(osName: String): String =
-    if (osName.toLowerCase.contains("windows")) "git.exe" else "git"
+    if (osName.toLowerCase(Locale.ROOT).contains("windows")) "git.exe" else "git"
 
   private lazy val exec: String = executableNameFor(sys.props.getOrElse("os.name", ""))
 
-  val discardLogger: ProcessLogger = new ProcessLogger {
-    override def out(s: => String): Unit = {}
-    override def err(s: => String): Unit = {}
-    override def buffer[T](f: => T): T   = f
-  }
-
-  def cmd(baseDir: File, args: String*): ScalaProcessBuilder =
-    Process(exec +: args, baseDir)
-
-  def javaCmd(baseDir: File, args: String*): java.lang.ProcessBuilder =
-    new java.lang.ProcessBuilder((exec +: args)*)
+  /** Build a git `ProcessBuilder` that discards both stdout and stderr.
+    * Use when only the exit code matters.
+    */
+  def javaCmd(baseDir: File, args: String*): ProcessBuilder =
+    new ProcessBuilder((exec +: args)*)
       .directory(baseDir)
       .redirectOutput(Redirect.DISCARD)
       .redirectError(Redirect.DISCARD)
 
-  private[release] def attachedJavaCmd(baseDir: File, args: String*): java.lang.ProcessBuilder =
-    new java.lang.ProcessBuilder((exec +: args)*)
+  /** Build a git `ProcessBuilder` that inherits the parent stdio.
+    * Use for interactive commands that may prompt the user (credentials, merges).
+    */
+  private[release] def attachedJavaCmd(baseDir: File, args: String*): ProcessBuilder =
+    new ProcessBuilder((exec +: args)*)
       .directory(baseDir)
       .redirectInput(Redirect.INHERIT)
       .redirectOutput(Redirect.INHERIT)
       .redirectError(Redirect.INHERIT)
 
-  private def captureJavaCmd(baseDir: File, args: String*): java.lang.ProcessBuilder =
-    new java.lang.ProcessBuilder((exec +: args)*).directory(baseDir)
+  /** Build a git `ProcessBuilder` that pipes stdout/stderr for capture.
+    * Use when the caller needs to read output lines.
+    */
+  private def captureJavaCmd(baseDir: File, args: String*): ProcessBuilder =
+    new ProcessBuilder((exec +: args)*).directory(baseDir)
 
+  /** Run git inheriting the parent stdio; raise on non-zero exit.
+    *
+    * @param context by-name label inserted into the error message on failure.
+    */
   def runCmd(baseDir: File, args: Seq[String])(context: => String): IO[Unit] =
     withManagedProcess(
       attachedJavaCmd(baseDir, args*),
       DefaultDestroyGracePeriod,
       closeStdin = false
     ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
-      waitForExit(process).flatMap(code => markCompleted.as(code)).flatMap { code =>
-        if (code != 0)
-          IO.raiseError(new IllegalStateException(s"$context failed with exit code $code"))
-        else IO.unit
+      waitForExit(process).flatTap(_ => markCompleted).flatMap { code =>
+        IO.raiseWhen(code != 0)(
+          new IllegalStateException(s"$context failed with exit code $code")
+        )
       }
     }
 
+  /** Run git discarding output and return the raw exit code.
+    * Does not raise on non-zero.
+    */
   def runExitCode(baseDir: File, args: Seq[String]): IO[Int] =
     withManagedProcess(
       javaCmd(baseDir, args*),
       DefaultDestroyGracePeriod,
       closeStdin = true
     ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
-      waitForExit(process).flatMap(code => markCompleted.as(code))
+      waitForExit(process).flatTap(_ => markCompleted)
     }
 
   /** Synchronous helper for tests and local blocking callers.
+    * Decodes stdout/stderr as UTF-8 and drains both streams concurrently on dedicated daemon
+    * threads to avoid pipe-buffer deadlocks regardless of `ForkJoinPool.commonPool()` state.
     * Must be invoked under `IO.blocking` or another explicit blocking boundary.
     */
   private[release] def runLinesResult(baseDir: File, args: Seq[String]): GitCommandResult = {
-    val stdout = new ConcurrentLinkedQueue[String]()
-    val stderr = new ConcurrentLinkedQueue[String]()
-    val code   = cmd(baseDir, args*).!(
-      ProcessLogger(
-        line => { stdout.add(line); () },
-        err => { stderr.add(err); () }
+    val process = captureJavaCmd(baseDir, args*).start()
+    try {
+      closeQuietly(process.getOutputStream)
+      val stdoutFuture = drainAsync(process.getInputStream, StandardCharsets.UTF_8, "git-stdout")
+      val stderrFuture = drainAsync(process.getErrorStream, StandardCharsets.UTF_8, "git-stderr")
+      val exitCode     = process.waitFor()
+      GitCommandResult(
+        exitCode = exitCode,
+        stdout = stdoutFuture.join().filter(_.nonEmpty),
+        stderr = stderrFuture.join().filter(_.nonEmpty).mkString("\n").trim
       )
-    )
-
-    GitCommandResult(
-      exitCode = code,
-      stdout = stdout.asScala.iterator.filter(_.nonEmpty).toVector,
-      stderr = stderr.asScala.iterator.filter(_.nonEmpty).mkString("\n").trim
-    )
+    } finally {
+      if (process.isAlive) {
+        process.destroy()
+        process.waitFor()
+        ()
+      }
+    }
   }
 
+  /** Run git capturing stdout; raise on non-zero exit with stderr appended to the message.
+    * Empty stdout lines are filtered out.
+    *
+    * @param context by-name label inserted into the error message on failure.
+    */
   def runLines(baseDir: File, args: Seq[String])(context: => String): IO[Seq[String]] =
     withManagedProcess(
       captureJavaCmd(baseDir, args*),
       DefaultDestroyGracePeriod,
       closeStdin = true
     ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
-      captureCommandResult(process).flatMap(result => markCompleted.as(result)).flatMap { result =>
+      captureCommandResult(process).flatTap(_ => markCompleted).flatMap { result =>
         if (result.exitCode != 0)
           IO.raiseError(
             new IllegalStateException(
@@ -150,20 +182,34 @@ private[release] object GitProcessSupport {
       }
     }
 
+  /** Run git capturing stdout and return the first non-empty line.
+    * Raises if the command succeeds with no output, or fails per [[runLines]].
+    */
   def runSingleLine(baseDir: File, args: Seq[String])(context: => String): IO[String] =
     runLines(baseDir, args)(context).flatMap {
       case head +: _ => IO.pure(head)
       case _         =>
         IO.raiseError(
-          new IllegalStateException(s"$context succeeded but returned no output")
+          new IllegalStateException(
+            s"$context produced no output on stdout; expected a single line"
+          )
         )
     }
 
+  /** Run a generic `ProcessBuilder` with a deadline, terminating the process tree on timeout.
+    *
+    * Returns `Some(exitCode)` when the root process exits before the deadline.
+    * Returns `None` when the deadline elapses while the root is still alive.
+    *
+    * @note If the root exits before the deadline but descendants remain alive past it,
+    *       this returns `Some(rootExitCode)` (root-level success) and still terminates
+    *       lingering descendants.
+    */
   def runCommandWithTimeout(
-      processBuilder: => java.lang.ProcessBuilder,
+      processBuilder: => ProcessBuilder,
       timeout: FiniteDuration,
       destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod,
-      onStart: java.lang.Process => Unit = _ => ()
+      onStart: Process => Unit = _ => ()
   ): IO[Option[Int]] =
     withManagedProcess(processBuilder, destroyGracePeriod, closeStdin = true, onStart) {
       (process: ManagedProcess, markCompleted: IO[Unit]) =>
@@ -178,10 +224,10 @@ private[release] object GitProcessSupport {
     }
 
   private def withManagedProcess[A](
-      processBuilder: => java.lang.ProcessBuilder,
+      processBuilder: => ProcessBuilder,
       destroyGracePeriod: FiniteDuration,
       closeStdin: Boolean,
-      onStart: java.lang.Process => Unit = _ => ()
+      onStart: Process => Unit = _ => ()
   )(use: (ManagedProcess, IO[Unit]) => IO[A]): IO[A] =
     Ref.of[IO, Boolean](false).flatMap { completed =>
       IO.uncancelable { poll =>
@@ -190,46 +236,60 @@ private[release] object GitProcessSupport {
             IO.uncancelable(_ => completed.set(true))
 
           poll(use(process, markCompleted))
-            .guarantee(cleanupManagedProcess(process, destroyGracePeriod, completed))
+            .guarantee(
+              completed.get.flatMap(cleanupManagedProcess(process, destroyGracePeriod, _))
+            )
         }
       }
     }
 
   private def startProcess(
-      processBuilder: => java.lang.ProcessBuilder,
+      processBuilder: => ProcessBuilder,
       destroyGracePeriod: FiniteDuration,
       closeStdin: Boolean,
-      onStart: java.lang.Process => Unit
+      onStart: Process => Unit
   ): IO[ManagedProcess] =
-    IO.blocking(processBuilder.start()).flatMap { process =>
+    IO.blocking {
+      val process = processBuilder.start()
       val managed = ManagedProcess(
         process,
         new ConcurrentHashMap[Long, TrackedDescendant](),
-        new AtomicLong(System.nanoTime())
+        new AtomicLong(RootNotYetExitedNanos)
       )
 
-      IO.blocking {
+      try {
         if (closeStdin) closeQuietly(process.getOutputStream)
         onStart(process)
         refreshTrackedDescendants(managed)
-      }.as(managed)
-        .handleErrorWith { err =>
-          terminateIfAlive(managed, destroyGracePeriod) *> IO.raiseError(err)
+        process.onExit().whenComplete { (_, _) =>
+          managed.rootExitedAtNanos.compareAndSet(RootNotYetExitedNanos, System.nanoTime())
+          ()
         }
+        managed
+      } catch {
+        case NonFatal(err) =>
+          terminate(managed, destroyGracePeriod)
+          throw err
+      }
     }
 
-  private def captureCommandResult(process: ManagedProcess): IO[GitCommandResult] =
-    for {
-      stdoutFiber <- captureLines(process.process.getInputStream).start
-      stderrFiber <- captureLines(process.process.getErrorStream).start
-      exitCode    <- waitForExit(process).onCancel(stdoutFiber.cancel *> stderrFiber.cancel)
-      stdout      <- stdoutFiber.joinWithNever
-      stderr      <- stderrFiber.joinWithNever
-    } yield GitCommandResult(
-      exitCode = exitCode,
-      stdout = stdout.filter(_.nonEmpty),
-      stderr = stderr.filter(_.nonEmpty).mkString("\n").trim
-    )
+  private def captureCommandResult(process: ManagedProcess): IO[GitCommandResult] = {
+    val stdoutRes =
+      Resource.make(captureLines(process.process.getInputStream).start)(_.cancel)
+    val stderrRes =
+      Resource.make(captureLines(process.process.getErrorStream).start)(_.cancel)
+    Resource.both(stdoutRes, stderrRes).use { case (stdoutFiber, stderrFiber) =>
+      for {
+        exitCode <- waitForExit(process)
+        stdout   <- stdoutFiber.joinWithNever
+        stderr   <- stderrFiber.joinWithNever
+      } yield GitCommandResult(
+        exitCode = exitCode,
+        stdout = stdout.filter(_.nonEmpty),
+        stderr = stderr.filter(_.nonEmpty).mkString("\n").trim
+      )
+    }
+  }
 
   private def captureLines(stream: InputStream): IO[Vector[String]] =
     captureLines(stream, StandardCharsets.UTF_8)
@@ -238,30 +298,65 @@ private[release] object GitProcessSupport {
       stream: InputStream,
       charset: Charset
   ): IO[Vector[String]] =
-    IO.blocking {
-      val reader  = new BufferedReader(new InputStreamReader(stream, charset))
-      val builder = Vector.newBuilder[String]
+    IO.blocking(readLinesSync(stream, charset))
 
-      try {
-        var line = reader.readLine()
-
-        while (line != null) {
-          builder += line
-          line = reader.readLine()
+  private def drainAsync(
+      stream: InputStream,
+      charset: Charset,
+      threadName: String
+  ): CompletableFuture[Vector[String]] = {
+    val future = new CompletableFuture[Vector[String]]()
+    val thread = new Thread(
+      { () =>
+        try {
+          future.complete(readLinesSync(stream, charset))
+          ()
+        } catch {
+          case NonFatal(err)    =>
+            future.completeExceptionally(err)
+            ()
+          case fatal: Throwable =>
+            future.completeExceptionally(fatal)
+            throw fatal
         }
+      },
+      threadName
+    )
+    thread.setDaemon(true)
+    thread.start()
+    future
+  }
 
-        builder.result()
-      } finally reader.close()
-    }
+  private def readLinesSync(stream: InputStream, charset: Charset): Vector[String] = {
+    val reader             = new BufferedReader(new InputStreamReader(stream, charset))
+    val builder            = Vector.newBuilder[String]
+    var primary: Throwable = null
+    try {
+      var line = reader.readLine()
+      while (line != null) {
+        builder += line
+        line = reader.readLine()
+      }
+      builder.result()
+    } catch {
+      case NonFatal(err) =>
+        primary = err
+        throw err
+    } finally
+      try reader.close()
+      catch {
+        case NonFatal(closeErr) =>
+          if (primary != null) primary.addSuppressed(closeErr)
+          else throw closeErr
+      }
+  }
 
   private def waitForExit(process: ManagedProcess): IO[Int] =
     waitForRootExit(process).flatMap(waitForTreeExitAfterRoot(process, _))
 
   private def waitForRootExit(process: ManagedProcess): IO[Int] =
-    IO.blocking(rootAlive(process)).flatMap {
-      case false => IO.blocking(process.process.exitValue())
-      case true  => IO.sleep(ProcessPollInterval) *> waitForRootExit(process)
-    }
+    IO.fromCompletableFuture(IO.delay(process.process.onExit()))
+      .flatMap(p => IO.blocking(p.exitValue()))
 
   private def waitForTreeExitAfterRoot(
       process: ManagedProcess,
@@ -311,7 +406,7 @@ private[release] object GitProcessSupport {
     cachedExitCode match {
       case Some(code) => IO.pure(Some(code))
       case None       =>
-        IO.blocking(rootAlive(process)).flatMap {
+        IO.blocking(process.process.isAlive).flatMap {
           case false => IO.blocking(process.process.exitValue()).map(Some(_))
           case true  => IO.pure(None)
         }
@@ -343,8 +438,11 @@ private[release] object GitProcessSupport {
     loop()
   }
 
+  // Test-only entry point: reconstructs a `ManagedProcess` around a raw `Process`
+  // (typically a FakeProcess) so GitSpec can exercise the cleanup path without going through
+  // `withManagedProcess`. Not called from production code.
   private[release] def cleanupManagedProcess(
-      process: java.lang.Process,
+      process: Process,
       destroyGracePeriod: FiniteDuration,
       completed: Boolean
   ): IO[Unit] =
@@ -352,7 +450,7 @@ private[release] object GitProcessSupport {
       ManagedProcess(
         process,
         new ConcurrentHashMap[Long, TrackedDescendant](),
-        new AtomicLong(NoObservedRootAliveNanos)
+        new AtomicLong(RootNotYetExitedNanos)
       ),
       destroyGracePeriod,
       completed
@@ -369,13 +467,6 @@ private[release] object GitProcessSupport {
         case state if !state.busy => IO.blocking(closeStreams(process))
         case _                    => terminateIfAlive(process, destroyGracePeriod)
       }
-
-  private def cleanupManagedProcess(
-      process: ManagedProcess,
-      destroyGracePeriod: FiniteDuration,
-      completed: Ref[IO, Boolean]
-  ): IO[Unit] =
-    completed.get.flatMap(cleanupManagedProcess(process, destroyGracePeriod, _))
 
   private def terminateIfAlive(
       process: ManagedProcess,
@@ -399,23 +490,15 @@ private[release] object GitProcessSupport {
   }
 
   private def destroyTree(process: ManagedProcess, forcibly: Boolean): Unit = {
-    val liveDescendants = trackedDescendants(process)
-    val destroyedPids   = scala.collection.mutable.HashSet.empty[Long]
-
-    liveDescendants.foreach { handle =>
+    trackedDescendants(process).foreach { handle =>
       if (handle.isAlive) {
-        val pid = handle.pid()
-
-        if (!destroyedPids.contains(pid)) {
-          if (forcibly) handle.destroyForcibly() else handle.destroy()
-          destroyedPids += pid
-          ()
-        }
+        if (forcibly) handle.destroyForcibly() else handle.destroy()
         ()
       }
     }
 
     if (forcibly) process.process.destroyForcibly() else process.process.destroy()
+    ()
   }
 
   private def trackedDescendants(process: ManagedProcess): Vector[ProcessHandle] = {
@@ -468,7 +551,7 @@ private[release] object GitProcessSupport {
   }
 
   private def currentProcessState(process: ManagedProcess): ProcessState = {
-    val rootCurrentlyAlive = rootAlive(process)
+    val rootCurrentlyAlive = process.process.isAlive
     val descendants        = trackedDescendants(process)
 
     ProcessState(
@@ -478,18 +561,11 @@ private[release] object GitProcessSupport {
     )
   }
 
-  private def rootAlive(process: ManagedProcess): Boolean = {
-    val alive = process.process.isAlive
-
-    if (alive) process.lastRootAliveNanos.set(System.nanoTime())
-    alive
-  }
-
   private def hasRecentRootExit(process: ManagedProcess): Boolean = {
-    val lastObservedAlive = process.lastRootAliveNanos.get()
+    val exitedAt = process.rootExitedAtNanos.get()
 
-    lastObservedAlive != NoObservedRootAliveNanos &&
-    System.nanoTime() - lastObservedAlive < RetainedDescendantGracePeriod.toNanos
+    exitedAt != RootNotYetExitedNanos &&
+    System.nanoTime() - exitedAt < RetainedDescendantGracePeriod.toNanos
   }
 
   private def closeStreams(process: ManagedProcess): Unit = {
@@ -498,6 +574,8 @@ private[release] object GitProcessSupport {
     closeQuietly(process.process.getOutputStream)
   }
 
+  // Stream close failures during cleanup are expected (pipe already torn down, process
+  // destroyed). Surfacing them would mask the real error that triggered the cleanup path.
   private def closeQuietly(closeable: AutoCloseable): Unit =
     try closeable.close()
     catch {

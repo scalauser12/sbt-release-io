@@ -14,6 +14,7 @@ import io.release.monorepo.internal.SelectionMode
 import io.release.monorepo.internal.steps.*
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.ReleaseLogPrefixes
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
@@ -339,7 +340,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
           }
         ) { err =>
-          assertEquals(err.getMessage, "Tag [core-v1.0.0] already exists. Aborting release!")
+          assertEquals(
+            err.getMessage,
+            s"${ReleaseLogPrefixes.Monorepo} Tag [core-v1.0.0] already exists for core. Aborting release!"
+          )
         }
     }
   }

@@ -2,49 +2,60 @@ package io.release.vcs
 
 import cats.effect.IO
 
+/** Raised when tracking-branch configuration is present but shape-invalid (blank, `.`, or
+  * a merge ref outside `refs/heads/`). Distinct from generic VCS failures so preflight
+  * can propagate it while still recovering from missing-upstream-ref errors.
+  */
+private[release] final class InvalidUpstreamConfigException(message: String)
+    extends IllegalStateException(message)
+
+/** Git-specific push orchestration: resolves tracking-branch config into a validated
+  * push target and performs branch/tag pushes.
+  */
 private[release] object GitPushSupport {
 
   private val HeadsRefPrefix = "refs/heads/"
 
+  /** Resolved push target for a branch.
+    *
+    * @param remote         the tracking remote name.
+    * @param localBranch    the local branch being pushed.
+    * @param upstreamBranch the upstream branch name with `refs/heads/` stripped.
+    */
   final case class GitPushTarget(
       remote: String,
       localBranch: String,
       upstreamBranch: String
   )
 
+  /** Resolve the validated tracking-branch configuration for the current branch.
+    * Raises [[InvalidUpstreamConfigException]] when the merge ref is unset, not under
+    * `refs/heads/`, or empty after stripping the prefix.
+    */
   def resolvePushTarget(vcs: Vcs): IO[GitPushTarget] =
     for {
       localBranch   <- vcs.currentBranch
-      rawRemote     <- vcs.trackingRemote
-      remote         = rawRemote.trim
-      _             <- IO.raiseWhen(remote.isEmpty)(
-                         new IllegalStateException(
-                           s"Tracking remote for branch '$localBranch' is empty; " +
-                             s"configure branch.$localBranch.remote before releasing."
-                         )
+      remote        <- vcs.trackingRemote
+      mergeRef      <- readBranchConfig(
+                         vcs,
+                         localBranch,
+                         "merge",
+                         s"Branch '$localBranch' has no configured upstream branch; " +
+                           s"configure branch.$localBranch.merge before releasing."
                        )
-      _             <- IO.raiseWhen(remote == ".")(
-                         new IllegalStateException(
-                           s"Branch '$localBranch' tracks a local branch (branch.$localBranch.remote = '.'); " +
-                             "configure a real remote before releasing."
-                         )
-                       )
-      rawMergeRef   <- GitProcessSupport.runSingleLine(
-                         vcs.baseDir,
-                         Seq("config", s"branch.$localBranch.merge")
-                       )(s"git config branch.$localBranch.merge")
-      mergeRef       = rawMergeRef.trim
       _             <-
         IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
-          new IllegalStateException(
-            s"Tracking branch ref '$mergeRef' for branch '$localBranch' must use the '$HeadsRefPrefix' format."
+          new InvalidUpstreamConfigException(
+            s"Tracking branch ref '$mergeRef' for branch '$localBranch' " +
+              s"must use the '$HeadsRefPrefix' format."
           )
         )
       upstreamBranch = mergeRef.stripPrefix(HeadsRefPrefix)
       _             <-
         IO.raiseWhen(upstreamBranch.isEmpty)(
-          new IllegalStateException(
-            s"Unable to resolve tracking branch from '$mergeRef' for remote '$remote' and branch '$localBranch'."
+          new InvalidUpstreamConfigException(
+            s"Unable to resolve tracking branch from '$mergeRef' " +
+              s"for remote '$remote' and branch '$localBranch'."
           )
         )
     } yield GitPushTarget(
@@ -53,34 +64,72 @@ private[release] object GitPushSupport {
       upstreamBranch = upstreamBranch
     )
 
+  private def readBranchConfig(
+      vcs: Vcs,
+      branch: String,
+      key: String,
+      missingMessage: => String
+  ): IO[String] = {
+    val args    = Seq("config", s"branch.$branch.$key")
+    val context = s"git config branch.$branch.$key"
+    GitProcessSupport.runExitCode(vcs.baseDir, args).flatMap {
+      case 0 =>
+        GitProcessSupport.runLines(vcs.baseDir, args)(context).map {
+          case head +: _ => head.trim
+          case _         => ""
+        }
+      case 1 => IO.raiseError(new InvalidUpstreamConfigException(missingMessage))
+      case _ =>
+        GitProcessSupport.runLines(vcs.baseDir, args)(context) *>
+          IO.raiseError[String](new IllegalStateException(s"$context failed unexpectedly"))
+    }
+  }
+
+  /** Resolve the push target and push the current branch in one step.
+    * Returns the resolved target so callers can log or reuse it.
+    *
+    * @param followTags when `true`, also push annotated tags reachable from the pushed commits.
+    */
   def pushTrackedBranch(vcs: Vcs, followTags: Boolean): IO[GitPushTarget] =
     resolvePushTarget(vcs).flatTap(pushTrackedBranch(vcs, _, followTags))
 
+  /** Push the current branch to a previously resolved target.
+    *
+    * @param followTags when `true`, also push annotated tags reachable from the pushed commits.
+    */
   def pushTrackedBranch(
       vcs: Vcs,
       target: GitPushTarget,
       followTags: Boolean
   ): IO[Unit] = {
-    val followTagArgs = if (followTags) Seq("--follow-tags") else Seq.empty
+    val refspec        = s"${target.localBranch}:${target.upstreamBranch}"
+    val followTagArgs  = if (followTags) Seq("--follow-tags") else Seq.empty
+    val followTagLabel = if (followTags) " --follow-tags" else ""
     GitProcessSupport.runCmd(
       vcs.baseDir,
-      Seq("push") ++ followTagArgs ++ Seq(
-        target.remote,
-        s"${target.localBranch}:${target.upstreamBranch}"
-      )
-    )(
-      if (followTags) "git push --follow-tags"
-      else s"git push ${target.remote} ${target.localBranch}:${target.upstreamBranch}"
-    )
+      Seq("push") ++ followTagArgs ++ Seq(target.remote, refspec)
+    )(s"git push$followTagLabel ${target.remote} $refspec")
   }
 
-  def pushTag(vcs: Vcs, remote: String, tag: String): IO[Unit] =
-    IO.raiseWhen(tag.trim.isEmpty)(
-      new IllegalStateException("Tag name cannot be empty when pushing to the remote.")
-    ) *> {
-      val tagRef = s"refs/tags/$tag"
-      GitProcessSupport.runCmd(vcs.baseDir, Seq("push", remote, s"$tagRef:$tagRef"))(
-        s"git push tag '$tag'"
-      )
-    }
+  /** Push a single tag to the given remote.
+    *
+    * @param tag the tag name (without `refs/tags/` — the ref is built internally).
+    */
+  def pushTag(vcs: Vcs, remote: String, tag: String): IO[Unit] = {
+    val trimmedRemote = remote.trim
+    val trimmedTag    = tag.trim
+    for {
+      _     <- IO.raiseWhen(trimmedRemote.isEmpty)(
+                 new IllegalStateException("Remote name cannot be empty when pushing a tag.")
+               )
+      _     <- IO.raiseWhen(trimmedTag.isEmpty)(
+                 new IllegalStateException("Tag name cannot be empty when pushing to the remote.")
+               )
+      tagRef = s"refs/tags/$trimmedTag"
+      _     <- GitProcessSupport.runCmd(
+                 vcs.baseDir,
+                 Seq("push", trimmedRemote, s"$tagRef:$tagRef")
+               )(s"git push tag '$trimmedTag'")
+    } yield ()
+  }
 }

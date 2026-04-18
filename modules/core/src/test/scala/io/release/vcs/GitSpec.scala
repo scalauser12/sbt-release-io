@@ -2,6 +2,7 @@ package io.release.vcs
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import munit.CatsEffectSuite
 
@@ -10,6 +11,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
 import java.lang.ProcessBuilder.Redirect
 import java.nio.charset.StandardCharsets
 import java.time.Duration as JavaDuration
@@ -17,6 +19,7 @@ import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
@@ -31,6 +34,47 @@ class GitSpec extends CatsEffectSuite {
 
   test("executableNameFor - return git for non-Windows OS names") {
     IO(assertEquals(GitProcessSupport.executableNameFor("Linux"), "git"))
+  }
+
+  test("runLinesResult - drain both pipes concurrently even when the common pool is saturated") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-common-pool-saturation").use { repo =>
+      IO.blocking {
+        // Seed many commits so `git log` produces enough stdout to fill a 64KB pipe buffer
+        // if left undrained.
+        (1 to 400).foreach { i =>
+          sbt.IO.write(new File(repo, s"file-$i.txt"), s"contents $i")
+          TestSupport.runGit(repo, "add", s"file-$i.txt")
+          TestSupport.runGit(repo, "commit", "-m", s"commit $i with a reasonably long message")
+        }
+
+        val parallelism  = ForkJoinPool.commonPool().getParallelism.max(1)
+        val busyWorkers  = parallelism
+        val releaseLatch = new CountDownLatch(1)
+        val started      = new CountDownLatch(busyWorkers)
+
+        val busyFutures = (0 until busyWorkers).toList.map { _ =>
+          CompletableFuture.runAsync { () =>
+            started.countDown()
+            releaseLatch.await()
+          }
+        }
+
+        try {
+          assert(
+            started.await(5, TimeUnit.SECONDS),
+            s"Seeding tasks did not all start within 5s"
+          )
+
+          val result = GitProcessSupport.runLinesResult(repo, Seq("log", "--oneline"))
+
+          assertEquals(result.exitCode, 0)
+          assert(result.stdout.length >= 400)
+        } finally {
+          releaseLatch.countDown()
+          busyFutures.foreach(_.join())
+        }
+      }
+    }
   }
 
   test("runLines - preserve stderr on git failure in a non-repository directory") {
@@ -124,10 +168,190 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "upstreamTrackingHash - propagate InvalidUpstreamConfigException when branch.X.merge is malformed"
+  ) {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-upstream-tracking-malformed").use {
+      case (repo, _) =>
+        IO.blocking(
+          TestSupport.runGit(repo, "config", "branch.main.merge", "refs/tags/v1.0.0")
+        ) *>
+          assertFailure[InvalidUpstreamConfigException, Option[String]](
+            new Git(repo).upstreamTrackingHash
+          ) { err =>
+            assert(err.getMessage.contains("refs/tags/v1.0.0"))
+            assert(err.getMessage.contains("must use the 'refs/heads/' format"))
+          }
+    }
+  }
+
   test("hasUpstream - return true when the branch tracks a remote") {
     TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-has-upstream").use {
       case (repo, _) =>
         new Git(repo).hasUpstream.map(result => assertEquals(result, true))
+    }
+  }
+
+  test("hasUpstream - surface the real git error when .git/config is corrupted") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-has-upstream-corrupt").use { repo =>
+      IO.blocking {
+        val configFile = new File(repo, ".git/config")
+        Files.write(
+          configFile.toPath,
+          "\n[broken section\nremote = origin\n".getBytes(StandardCharsets.UTF_8)
+        )
+        ()
+      } *>
+        new Git(repo).hasUpstream.attempt.map {
+          case Left(err: IllegalStateException) =>
+            assert(err.getMessage.contains("exit code"))
+            assert(
+              err.getMessage.toLowerCase.contains("fatal") ||
+                err.getMessage.toLowerCase.contains("bad")
+            )
+          case Left(other)                      =>
+            fail(
+              s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+            )
+          case Right(value)                     =>
+            fail(s"Expected failure, got value: $value")
+        }
+    }
+  }
+
+  test("existsTag - surface the real git error when .git/config is corrupted") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-exists-tag-corrupt").use { repo =>
+      IO.blocking {
+        val configFile = new File(repo, ".git/config")
+        Files.write(
+          configFile.toPath,
+          "\n[broken section\nremote = origin\n".getBytes(StandardCharsets.UTF_8)
+        )
+        ()
+      } *>
+        new Git(repo).existsTag("v1.0.0").attempt.map {
+          case Left(err: IllegalStateException) =>
+            assert(err.getMessage.contains("exit code"))
+            assert(
+              err.getMessage.toLowerCase.contains("fatal") ||
+                err.getMessage.toLowerCase.contains("bad")
+            )
+          case Left(other)                      =>
+            fail(
+              s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+            )
+          case Right(value)                     =>
+            fail(s"Expected failure, got value: $value")
+        }
+    }
+  }
+
+  test("trackingRemote - raise a structured error when branch.X.remote is unset") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tracking-remote-missing").use { repo =>
+      IO.blocking(TestSupport.runGit(repo, "branch", "-M", "main")) *>
+        assertFailure[IllegalStateException, String](new Git(repo).trackingRemote) { err =>
+          assert(err.getMessage.contains("no configured tracking remote"))
+          assert(err.getMessage.contains("branch.main.remote"))
+        }
+    }
+  }
+
+  test("trackingRemote - reject a blank remote value with a structured error") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tracking-remote-blank").use { repo =>
+      IO.blocking {
+        TestSupport.runGit(repo, "branch", "-M", "main")
+        TestSupport.runGit(repo, "config", "branch.main.remote", "   ")
+      } *>
+        assertFailure[IllegalStateException, String](new Git(repo).trackingRemote) { err =>
+          assert(err.getMessage.contains("Tracking remote for branch 'main' is empty"))
+          assert(err.getMessage.contains("branch.main.remote"))
+        }
+    }
+  }
+
+  test("trackingRemote - surface the real git error when .git/config is corrupted") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tracking-remote-corrupt").use { repo =>
+      IO.blocking {
+        val configFile = new File(repo, ".git/config")
+        Files.write(
+          configFile.toPath,
+          "\n[broken section\nremote = origin\n".getBytes(StandardCharsets.UTF_8)
+        )
+        ()
+      } *>
+        new Git(repo).trackingRemote.attempt.map {
+          case Left(err: InvalidUpstreamConfigException) =>
+            fail(
+              s"Expected a real git error, got InvalidUpstreamConfigException: ${err.getMessage}"
+            )
+          case Left(err: IllegalStateException)          =>
+            assert(err.getMessage.contains("exit code"))
+            assert(
+              err.getMessage.toLowerCase.contains("fatal") ||
+                err.getMessage.toLowerCase.contains("bad")
+            )
+          case Left(other)                               =>
+            fail(
+              s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+            )
+          case Right(value)                              =>
+            fail(s"Expected failure, got value: $value")
+        }
+    }
+  }
+
+  test("trackingRemote - reject a literal-empty remote value with a structured error") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tracking-remote-empty").use { repo =>
+      IO.blocking {
+        TestSupport.runGit(repo, "branch", "-M", "main")
+        TestSupport.runGit(repo, "config", "branch.main.remote", "")
+      } *>
+        assertFailure[InvalidUpstreamConfigException, String](
+          new Git(repo).trackingRemote
+        ) { err =>
+          assert(err.getMessage.contains("Tracking remote for branch 'main' is empty"))
+          assert(err.getMessage.contains("branch.main.remote"))
+        }
+    }
+  }
+
+  test("trackingRemote - reject '.' remotes with a structured error") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tracking-remote-dot").use { repo =>
+      IO.blocking {
+        TestSupport.runGit(repo, "branch", "-M", "main")
+        TestSupport.runGit(repo, "config", "branch.main.remote", ".")
+      } *>
+        assertFailure[IllegalStateException, String](new Git(repo).trackingRemote) { err =>
+          assert(err.getMessage.contains("tracks a local branch"))
+          assert(err.getMessage.contains("branch.main.remote = '.'"))
+        }
+    }
+  }
+
+  test("trackingRemote - trim surrounding whitespace from the configured remote") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tracking-remote-padded").use { repo =>
+      IO.blocking {
+        TestSupport.runGit(repo, "branch", "-M", "main")
+        TestSupport.runGit(repo, "config", "branch.main.remote", "  origin  ")
+      } *>
+        new Git(repo).trackingRemote.map(result => assertEquals(result, "origin"))
+    }
+  }
+
+  test(
+    "isBehindRemote - propagate InvalidUpstreamConfigException when branch.X.merge is not a refs/heads/ ref"
+  ) {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-upstream-non-heads").use {
+      case (repo, _) =>
+        IO.blocking(
+          TestSupport.runGit(repo, "config", "branch.main.merge", "refs/tags/v1.0.0")
+        ) *>
+          assertFailure[InvalidUpstreamConfigException, Boolean](
+            new Git(repo).isBehindRemote
+          ) { err =>
+            assert(err.getMessage.contains("refs/tags/v1.0.0"))
+            assert(err.getMessage.contains("must use the 'refs/heads/' format"))
+          }
     }
   }
 
