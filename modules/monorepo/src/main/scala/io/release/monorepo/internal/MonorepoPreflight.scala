@@ -12,8 +12,8 @@ import io.release.runtime.HookPhases
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
-import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.preflight.PreflightRendering
 import io.release.runtime.workflow.VersionWorkflowSupport
 import io.release.vcs.TagConflictResolver
 
@@ -21,16 +21,17 @@ import io.release.vcs.TagConflictResolver
 private[monorepo] object MonorepoPreflight {
 
   private object Messages {
-    val SelectionRuntimeHookState: String     = "selection depends on runtime hook state"
-    val ProjectsRuntimeHookState: String      = "projects depend on runtime hook state"
-    val VersionsRuntimeHookState: String      = "versions depend on runtime hook state"
-    val TagsRuntimeHookState: String          = "tags depend on runtime hook state"
-    val TagsRuntimeSetup: String              = "tags depend on runtime/custom version setup"
-    val VersionsNotResolvedForProject: String =
-      "versions were not resolved for this project"
+    val SelectionRuntimeHookState: String = "selection depends on runtime hook state"
+    val ProjectsRuntimeHookState: String  = "projects depend on runtime hook state"
+    val VersionsRuntimeHookState: String  = "versions depend on runtime hook state"
+    val TagsRuntimeHookState: String      = "tags depend on runtime hook state"
+    val TagsRuntimeSetup: String          = "tags depend on runtime/custom version setup"
 
     def stepNotInCheckProcess(stepName: String): String =
       s"$stepName not in check process"
+
+    def versionsNotResolvedForProject(projectName: String): String =
+      s"versions were not resolved for $projectName"
   }
 
   private val DetectOrSelectProjectsStep      = MonorepoReleaseSteps.detectOrSelectProjects.name
@@ -71,11 +72,11 @@ private[monorepo] object MonorepoPreflight {
     HookPhases.BeforeTag
   )
 
-  sealed trait Evaluation[+A]
-  object Evaluation {
-    final case class Resolved[A](value: A)        extends Evaluation[A]
-    final case class NotEvaluated(reason: String) extends Evaluation[Nothing]
-  }
+  // Re-export the shared runtime ADT under the existing namespace so external callers
+  // (tests, MonorepoPreparedSession, etc.) keep referencing `MonorepoPreflight.Evaluation`.
+  type Evaluation[+A] = io.release.runtime.preflight.Evaluation[A]
+  val Evaluation: io.release.runtime.preflight.Evaluation.type =
+    io.release.runtime.preflight.Evaluation
 
   final case class ProjectVersions(releaseVersion: String, nextVersion: String)
   final case class ProjectTag(tagName: String, tagStatus: String)
@@ -116,20 +117,22 @@ private[monorepo] object MonorepoPreflight {
       projectsDependOnRuntimeHookState: Boolean,
       versionsRequireRuntimeHookResolution: Boolean,
       versionsDependOnPostResolutionRuntimeHookState: Boolean,
-      tagDependsOnRuntimeHookState: Boolean
+      tagDependsOnRuntimeHookState: Boolean,
+      tagFollowsVersionResolution: Boolean,
+      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
   )
 
   private object CheckSteps {
     private def hasHookPhase(stepNames: Seq[String], phase: String): Boolean =
       stepNames.exists(_.startsWith(s"$phase:"))
 
-    def apply(steps: Seq[AnyStep]): CheckSteps = {
-      val stepNames = steps.map(_.name)
+    def apply(processPlan: MonorepoProcessPlan): CheckSteps = {
+      val stepNames = processPlan.stepNames
 
       CheckSteps(
-        shouldResolveSelection = steps.exists(_.hasRole(BuiltInStepRole.ProjectSelection)),
-        shouldResolveVersions = steps.exists(_.hasRole(BuiltInStepRole.ResolveVersions)),
-        shouldPreflightTags = steps.exists(_.hasRole(BuiltInStepRole.TagRelease)),
+        shouldResolveSelection = processPlan.shouldResolveSelection,
+        shouldResolveVersions = processPlan.shouldResolveVersions,
+        shouldPreflightTags = processPlan.shouldPreflightTags,
         selectionDependsOnRuntimeHookState =
           SelectionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
         projectsDependOnRuntimeHookState =
@@ -139,7 +142,10 @@ private[monorepo] object MonorepoPreflight {
         versionsDependOnPostResolutionRuntimeHookState =
           VersionSummaryMutationPhases.exists(phase => hasHookPhase(stepNames, phase)),
         tagDependsOnRuntimeHookState =
-          TagAffectingPhases.exists(phase => hasHookPhase(stepNames, phase))
+          TagAffectingPhases.exists(phase => hasHookPhase(stepNames, phase)),
+        tagFollowsVersionResolution = processPlan.builtInTagPreflightFollowsVersionResolution,
+        builtInTagPreflightIncludesReleaseWriteAndCommit =
+          processPlan.builtInTagPreflightIncludesReleaseWriteAndCommit
       )
     }
   }
@@ -207,18 +213,20 @@ private[monorepo] object MonorepoPreflight {
       pad("steps") + summary.stepNames.mkString(" -> ")
     ) ++ renderProjectSection(summary.projects)
 
-  // Width fits the longest summary label ("selection mode") so columns align.
+  // Width fits the longest monorepo summary label ("selection mode"). Core uses 15 in
+  // CorePreflight.SummaryLabelWidth — the constants are intentionally module-local.
   private val SummaryLabelWidth = 14
 
-  private def pad(label: String): String =
-    s"  ${label.padTo(SummaryLabelWidth, ' ')}: "
+  private def pad(label: String): String          = PreflightRendering.pad(label, SummaryLabelWidth)
+  private def padLabelOnly(label: String): String =
+    PreflightRendering.padLabelOnly(label, SummaryLabelWidth)
 
   def check(
       session: MonorepoPreparedSession,
       steps: Seq[AnyStep]
   ): IO[Summary] = {
     val processPlan = MonorepoProcessPlan.analyze(steps)
-    val checkSteps  = CheckSteps(steps)
+    val checkSteps  = CheckSteps(processPlan)
 
     for {
       baseCtx <- resolveBaseContext(session.context, processPlan)
@@ -334,14 +342,7 @@ private[monorepo] object MonorepoPreflight {
         else
           IO.pure(checkedVersions)
       checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
-      tagOutcomes     <-
-        resolveTagSnapshot(
-          checkedCtx,
-          versionSnapshot,
-          checkSteps,
-          processPlan.builtInTagPreflightFollowsVersionResolution,
-          processPlan.builtInTagPreflightIncludesReleaseWriteAndCommit
-        )
+      tagOutcomes     <- resolveTagSnapshot(checkedCtx, versionSnapshot, checkSteps)
       summary         <- buildSummary(
                            selectionMode = selectionMode,
                            projects = projects,
@@ -451,13 +452,11 @@ private[monorepo] object MonorepoPreflight {
   private def resolveTagSnapshot(
       ctx: MonorepoContext,
       versionSnapshot: VersionSnapshot,
-      checkSteps: CheckSteps,
-      builtInTagPreflightFollowsVersionResolution: Boolean,
-      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
+      checkSteps: CheckSteps
   ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
     if (!checkSteps.shouldPreflightTags)
       IO.pure(Evaluation.NotEvaluated(Messages.stepNotInCheckProcess(TagReleasesStep)))
-    else if (!builtInTagPreflightFollowsVersionResolution)
+    else if (!checkSteps.tagFollowsVersionResolution)
       IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeSetup))
     else if (!versionSnapshot.versionsResolved && versionSnapshot.blockedByRuntimeHookState)
       IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeHookState))
@@ -466,7 +465,7 @@ private[monorepo] object MonorepoPreflight {
     else if (checkSteps.tagDependsOnRuntimeHookState)
       IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeHookState))
     else
-      preflightTags(ctx, builtInTagPreflightIncludesReleaseWriteAndCommit).map(
+      preflightTags(ctx, checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit).map(
         Evaluation.Resolved(_)
       )
 
@@ -544,8 +543,8 @@ private[monorepo] object MonorepoPreflight {
       else
         MonorepoStepHelpers.logInfo(
           ctx,
-          s"check mode: skipping validation of $skipped after-selection hook(s) beyond the " +
-            "first; later hooks may depend on earlier hook executes"
+          s"check mode: skipping validation of $skipped ${HookPhases.AfterSelection} hook(s) " +
+            "beyond the first; later hooks may depend on earlier hook executes"
         )
 
     notify *> validateSegment(safePrefix, crossBuild)(ctx)
@@ -603,12 +602,12 @@ private[monorepo] object MonorepoPreflight {
         IO.pure(projects.map(_ => Evaluation.NotEvaluated(reason)))
       case Evaluation.Resolved(outcomes)   =>
         val byProjectName  = outcomes.groupBy(_.projectName)
-        val projectNameSet = projects.map(_.name).toSet
         val duplicates     = byProjectName.collect { case (name, ds) if ds.size > 1 => name }.toSeq
         val orphanProjects = projects.collect {
           case p if !byProjectName.contains(p.name) => p.name
         }
-        val extraOutcomes  = outcomes.map(_.projectName).filterNot(projectNameSet).distinct
+        val extraOutcomes  =
+          outcomes.map(_.projectName).filterNot(projects.map(_.name).toSet).distinct
 
         if (duplicates.nonEmpty || orphanProjects.nonEmpty || extraOutcomes.nonEmpty)
           IO.raiseError(
@@ -649,7 +648,7 @@ private[monorepo] object MonorepoPreflight {
           case Some((releaseVersion, nextVersion)) =>
             Evaluation.Resolved(ProjectVersions(releaseVersion, nextVersion))
           case None                                =>
-            Evaluation.NotEvaluated(Messages.VersionsNotResolvedForProject)
+            Evaluation.NotEvaluated(Messages.versionsNotResolvedForProject(project.name))
         }
     }
 
@@ -676,7 +675,7 @@ private[monorepo] object MonorepoPreflight {
   ): List[String] =
     projects match {
       case Evaluation.Resolved(resolvedProjects) =>
-        pad("projects").stripSuffix(" ") :: resolvedProjects.map(renderProject).toList
+        padLabelOnly("projects") :: resolvedProjects.map(renderProject).toList
       case Evaluation.NotEvaluated(reason)       =>
         List(pad("projects") + s"not evaluated ($reason)")
     }
@@ -684,7 +683,7 @@ private[monorepo] object MonorepoPreflight {
   private def renderProject(project: ProjectSummary): String = {
     val versionText = renderEvaluation(project.versions)(
       v => s"release ${v.releaseVersion}, next ${v.nextVersion}",
-      reason => s"release not evaluated ($reason), next not evaluated ($reason)"
+      reason => s"release/next not evaluated ($reason)"
     )
     val tagText     = renderEvaluation(project.tag)(
       t => s"tag ${t.tagName} (${t.tagStatus})",
