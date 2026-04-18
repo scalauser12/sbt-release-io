@@ -26,6 +26,7 @@ private[monorepo] object MonorepoVcsSteps {
   private val MissingVcsMessage  = "VCS not initialized. Ensure initializeVcs runs before this step."
 
   private[monorepo] final case class PreflightTagOutcome(
+      projectName: String,
       rendered: String,
       status: String
   )
@@ -84,7 +85,7 @@ private[monorepo] object MonorepoVcsSteps {
       vcs: Vcs,
       rendered: String,
       target: TagConflictResolver.PreflightCommitTarget,
-      label: String
+      projectName: String
   ): IO[PreflightTagOutcome] = {
     val commandName = ctx.releasePlan.map(_.commandName).getOrElse(DefaultCommandName)
 
@@ -98,10 +99,10 @@ private[monorepo] object MonorepoVcsSteps {
           useDefaults = ctx.useDefaults,
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
           commandName = commandName,
-          label = label
+          label = projectName
         )
       )
-      .map(o => PreflightTagOutcome(o.tagName, o.status))
+      .map(o => PreflightTagOutcome(projectName, o.tagName, o.status))
   }
 
   private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =

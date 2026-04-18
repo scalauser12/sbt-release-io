@@ -7,6 +7,7 @@ import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
+import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
 import io.release.runtime.sbt.SbtRuntime
 import sbt.*
@@ -120,57 +121,57 @@ private[release] object MonorepoLifecycle {
 
   // @formatter:off
   private val afterCleanCheck = GlobalHookPhaseConfig(
-    phase = "after-clean-check",
+    phase = HookPhases.AfterCleanCheck,
     resolveHooks = _.afterCleanCheckHooks
   )
   private val beforeSelection = GlobalHookPhaseConfig(
-    phase = "before-selection",
+    phase = HookPhases.BeforeSelection,
     resolveHooks = _.beforeSelectionHooks
   )
   private val afterSelection = GlobalHookPhaseConfig(
-    phase = "after-selection",
+    phase = HookPhases.AfterSelection,
     resolveHooks = _.afterSelectionHooks
   )
   private val beforeVersionResolution = ProjectHookPhaseConfig(
-    phase = "before-version-resolution",
+    phase = HookPhases.BeforeVersionResolution,
     resolveHooks = _.beforeVersionResolutionHooks,
     crossBuild = MonorepoReleaseSteps.inquireVersions.enableCrossBuild
   )
   private val afterVersionResolution = ProjectHookPhaseConfig(
-    phase = "after-version-resolution",
+    phase = HookPhases.AfterVersionResolution,
     resolveHooks = _.afterVersionResolutionHooks,
     crossBuild = MonorepoReleaseSteps.inquireVersions.enableCrossBuild
   )
   private val beforeReleaseVersionWrite = ProjectHookPhaseConfig(
-    phase = "before-release-version-write",
+    phase = HookPhases.BeforeReleaseVersionWrite,
     resolveHooks = _.beforeReleaseVersionWriteHooks,
     crossBuild = MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
   )
   private val afterReleaseVersionWrite = ProjectHookPhaseConfig(
-    phase = "after-release-version-write",
+    phase = HookPhases.AfterReleaseVersionWrite,
     resolveHooks = _.afterReleaseVersionWriteHooks,
     crossBuild = MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
   )
   private val beforeReleaseCommit = GlobalHookPhaseConfig(
-    phase = "before-release-commit",
+    phase = HookPhases.BeforeReleaseCommit,
     resolveHooks = _.beforeReleaseCommitHooks
   )
   private val afterReleaseCommit = GlobalHookPhaseConfig(
-    phase = "after-release-commit",
+    phase = HookPhases.AfterReleaseCommit,
     resolveHooks = _.afterReleaseCommitHooks
   )
   private val beforeTag = ProjectHookPhaseConfig(
-    phase = "before-tag",
+    phase = HookPhases.BeforeTag,
     resolveHooks = _.beforeTagHooks,
     enabled = _.enableTagging
   )
   private val afterTag = ProjectHookPhaseConfig(
-    phase = "after-tag",
+    phase = HookPhases.AfterTag,
     resolveHooks = _.afterTagHooks,
     enabled = _.enableTagging
   )
   private val beforePublish = ProjectHookPhaseConfig(
-    phase = "before-publish",
+    phase = HookPhases.BeforePublish,
     resolveHooks = _.beforePublishHooks,
     gate = publishGate,
     crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
@@ -179,7 +180,7 @@ private[release] object MonorepoLifecycle {
     enabled = _.enablePublish
   )
   private val afterPublish = ProjectHookPhaseConfig(
-    phase = "after-publish",
+    phase = HookPhases.AfterPublish,
     resolveHooks = _.afterPublishHooks,
     gate = publishGate,
     crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
@@ -188,30 +189,30 @@ private[release] object MonorepoLifecycle {
     enabled = _.enablePublish
   )
   private val beforeNextVersionWrite = ProjectHookPhaseConfig(
-    phase = "before-next-version-write",
+    phase = HookPhases.BeforeNextVersionWrite,
     resolveHooks = _.beforeNextVersionWriteHooks,
     crossBuild = MonorepoReleaseSteps.setNextVersions.enableCrossBuild
   )
   private val afterNextVersionWrite = ProjectHookPhaseConfig(
-    phase = "after-next-version-write",
+    phase = HookPhases.AfterNextVersionWrite,
     resolveHooks = _.afterNextVersionWriteHooks,
     crossBuild = MonorepoReleaseSteps.setNextVersions.enableCrossBuild
   )
   private val beforeNextCommit = GlobalHookPhaseConfig(
-    phase = "before-next-commit",
+    phase = HookPhases.BeforeNextCommit,
     resolveHooks = _.beforeNextCommitHooks
   )
   private val afterNextCommit = GlobalHookPhaseConfig(
-    phase = "after-next-commit",
+    phase = HookPhases.AfterNextCommit,
     resolveHooks = _.afterNextCommitHooks
   )
   private val beforePush = GlobalHookPhaseConfig(
-    phase = "before-push",
+    phase = HookPhases.BeforePush,
     resolveHooks = _.beforePushHooks,
     enabled = _.enablePush
   )
   private val afterPush = GlobalHookPhaseConfig(
-    phase = "after-push",
+    phase = HookPhases.AfterPush,
     resolveHooks = _.afterPushHooks,
     enabled = _.enablePush
   )

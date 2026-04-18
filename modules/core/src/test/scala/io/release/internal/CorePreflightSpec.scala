@@ -304,7 +304,7 @@ class CorePreflightSpec extends CatsEffectSuite {
             assertEquals(
               summary.tag,
               CorePreflight.TagSummary.NotEvaluated(
-                "tag depends on runtime/custom version setup"
+                "tag depends on runtime hook state"
               )
             )
             assert(
@@ -355,7 +355,7 @@ class CorePreflightSpec extends CatsEffectSuite {
             assertEquals(
               summary.tag,
               CorePreflight.TagSummary.NotEvaluated(
-                "tag depends on runtime/custom version setup"
+                "tag depends on runtime hook state"
               )
             )
             assert(
@@ -1016,7 +1016,7 @@ class CorePreflightSpec extends CatsEffectSuite {
             assertEquals(
               summary.tag,
               CorePreflight.TagSummary.NotEvaluated(
-                "tag depends on runtime/custom version setup"
+                "tag depends on runtime hook state"
               )
             )
             assert(

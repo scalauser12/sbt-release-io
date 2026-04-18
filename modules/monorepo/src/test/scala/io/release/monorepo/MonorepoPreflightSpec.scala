@@ -1633,7 +1633,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
-  test("renderProjects - fail on inconsistent project and tag outcome counts") {
+  test("renderProjects - fail when tag outcomes do not align with projects") {
     dummyProjects("core", "api").flatMap { rawProjects =>
       val projects = Seq(
         rawProjects.head.copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")),
@@ -1641,9 +1641,9 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       )
       val tags     = MonorepoPreflight.Evaluation.Resolved(
         Seq(
-          MonorepoVcsSteps.PreflightTagOutcome("core/v1.0.0", "available"),
-          MonorepoVcsSteps.PreflightTagOutcome("api/v2.0.0", "available"),
-          MonorepoVcsSteps.PreflightTagOutcome("extra/v3.0.0", "available")
+          MonorepoVcsSteps.PreflightTagOutcome("core", "core/v1.0.0", "available"),
+          MonorepoVcsSteps.PreflightTagOutcome("api", "api/v2.0.0", "available"),
+          MonorepoVcsSteps.PreflightTagOutcome("extra", "extra/v3.0.0", "available")
         )
       )
 
@@ -1653,7 +1653,10 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
           versions = MonorepoPreflight.Evaluation.Resolved(()),
           tagOutcomes = tags
         )
-      )(err => assert(err.getMessage.contains("inconsistent project/tag counts")))
+      ) { err =>
+        assert(err.getMessage.contains("inconsistent project/tag outcomes"))
+        assert(err.getMessage.contains("outcomes without projects=[extra]"))
+      }
     }
   }
 

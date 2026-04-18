@@ -2,7 +2,9 @@ package io.release.monorepo.internal
 
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
+import io.release.runtime.HookPhases
 import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.StepOrderingSupport
 
 private[monorepo] final case class MonorepoProcessPlan(
     stepNames: Seq[String],
@@ -55,7 +57,7 @@ private[monorepo] final case class MonorepoProcessPlan(
   }
 
   def builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean =
-    containsOrderedSubsequence(
+    StepOrderingSupport.containsOrderedSubsequence(
       mainSteps,
       Seq(
         MonorepoReleaseSteps.setReleaseVersions,
@@ -63,14 +65,6 @@ private[monorepo] final case class MonorepoProcessPlan(
         MonorepoReleaseSteps.tagReleasesPerProject
       )
     )
-
-  private def containsOrderedSubsequence(
-      steps: Seq[AnyStep],
-      orderedSteps: Seq[AnyStep]
-  ): Boolean = {
-    val remaining = steps.iterator
-    orderedSteps.forall(target => remaining.exists(_ eq target))
-  }
 
   private def allSteps: Seq[AnyStep] =
     if (hasSelectionBoundary) setupSteps ++ mainSteps else mainSteps
@@ -84,7 +78,7 @@ private[monorepo] final case class MonorepoProcessPlan(
 
 private[monorepo] object MonorepoProcessPlan {
 
-  private val AfterSelectionHookStepPrefix = "after-selection:"
+  private val AfterSelectionHookStepPrefix = s"${HookPhases.AfterSelection}:"
 
   private def isAfterSelectionHookStep(step: AnyStep): Boolean =
     step.name.startsWith(AfterSelectionHookStepPrefix)
