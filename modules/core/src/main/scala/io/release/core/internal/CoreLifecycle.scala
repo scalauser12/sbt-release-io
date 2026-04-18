@@ -5,6 +5,7 @@ import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.core.internal.steps.PublishSteps
 import io.release.core.internal.steps.ReleaseSteps
+import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
@@ -67,45 +68,45 @@ private[release] object CoreLifecycle {
 
   // @formatter:off
   private val afterCleanCheck = HookPhaseConfig(
-    phase = "after-clean-check",
+    phase = HookPhases.AfterCleanCheck,
     resolveHooks = _.afterCleanCheckHooks
   )
   private val beforeVersionResolution = HookPhaseConfig(
-    phase = "before-version-resolution",
+    phase = HookPhases.BeforeVersionResolution,
     resolveHooks = _.beforeVersionResolutionHooks
   )
   private val afterVersionResolution = HookPhaseConfig(
-    phase = "after-version-resolution",
+    phase = HookPhases.AfterVersionResolution,
     resolveHooks = _.afterVersionResolutionHooks
   )
   private val beforeReleaseVersionWrite = HookPhaseConfig(
-    phase = "before-release-version-write",
+    phase = HookPhases.BeforeReleaseVersionWrite,
     resolveHooks = _.beforeReleaseVersionWriteHooks
   )
   private val afterReleaseVersionWrite = HookPhaseConfig(
-    phase = "after-release-version-write",
+    phase = HookPhases.AfterReleaseVersionWrite,
     resolveHooks = _.afterReleaseVersionWriteHooks
   )
   private val beforeReleaseCommit = HookPhaseConfig(
-    phase = "before-release-commit",
+    phase = HookPhases.BeforeReleaseCommit,
     resolveHooks = _.beforeReleaseCommitHooks
   )
   private val afterReleaseCommit = HookPhaseConfig(
-    phase = "after-release-commit",
+    phase = HookPhases.AfterReleaseCommit,
     resolveHooks = _.afterReleaseCommitHooks
   )
   private val beforeTag = HookPhaseConfig(
-    phase = "before-tag",
+    phase = HookPhases.BeforeTag,
     resolveHooks = _.beforeTagHooks,
     enabled = _.enableTagging
   )
   private val afterTag = HookPhaseConfig(
-    phase = "after-tag",
+    phase = HookPhases.AfterTag,
     resolveHooks = _.afterTagHooks,
     enabled = _.enableTagging
   )
   private val beforePublish = HookPhaseConfig(
-    phase = "before-publish",
+    phase = HookPhases.BeforePublish,
     resolveHooks = _.beforePublishHooks,
     gate = publishGate,
     crossBuild =
@@ -115,7 +116,7 @@ private[release] object CoreLifecycle {
     enabled = _.enablePublish
   )
   private val afterPublish = HookPhaseConfig(
-    phase = "after-publish",
+    phase = HookPhases.AfterPublish,
     resolveHooks = _.afterPublishHooks,
     gate = publishGate,
     crossBuild =
@@ -125,28 +126,28 @@ private[release] object CoreLifecycle {
     enabled = _.enablePublish
   )
   private val beforeNextVersionWrite = HookPhaseConfig(
-    phase = "before-next-version-write",
+    phase = HookPhases.BeforeNextVersionWrite,
     resolveHooks = _.beforeNextVersionWriteHooks
   )
   private val afterNextVersionWrite = HookPhaseConfig(
-    phase = "after-next-version-write",
+    phase = HookPhases.AfterNextVersionWrite,
     resolveHooks = _.afterNextVersionWriteHooks
   )
   private val beforeNextCommit = HookPhaseConfig(
-    phase = "before-next-commit",
+    phase = HookPhases.BeforeNextCommit,
     resolveHooks = _.beforeNextCommitHooks
   )
   private val afterNextCommit = HookPhaseConfig(
-    phase = "after-next-commit",
+    phase = HookPhases.AfterNextCommit,
     resolveHooks = _.afterNextCommitHooks
   )
   private val beforePush = HookPhaseConfig(
-    phase = "before-push",
+    phase = HookPhases.BeforePush,
     resolveHooks = _.beforePushHooks,
     enabled = _.enablePush
   )
   private val afterPush = HookPhaseConfig(
-    phase = "after-push",
+    phase = HookPhases.AfterPush,
     resolveHooks = _.afterPushHooks,
     enabled = _.enablePush
   )
