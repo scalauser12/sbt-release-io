@@ -116,33 +116,6 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
     }
   }
 
-  test("hasCustomizations - detect every policy and hook bucket") {
-    IO {
-      assert(!MonorepoHookConfiguration.hasCustomizations(MonorepoHookConfiguration.empty))
-      policyFields.foreach { field =>
-        val customized = field.withValue(MonorepoHookConfiguration.empty, false)
-        if (!MonorepoHookConfiguration.hasCustomizations(customized))
-          fail(s"Expected hasCustomizations to detect policy '${field.name}'")
-      }
-      globalHookFields.foreach { field =>
-        val customized = field.withHooks(
-          MonorepoHookConfiguration.empty,
-          Seq(MonorepoGlobalHookIO.action(s"${field.name}-hook")(_ => IO.unit))
-        )
-        if (!MonorepoHookConfiguration.hasCustomizations(customized))
-          fail(s"Expected hasCustomizations to detect global hook bucket '${field.name}'")
-      }
-      projectHookFields.foreach { field =>
-        val customized = field.withHooks(
-          MonorepoHookConfiguration.empty,
-          Seq(MonorepoProjectHookIO.action(s"${field.name}-hook")((_, _) => IO.unit))
-        )
-        if (!MonorepoHookConfiguration.hasCustomizations(customized))
-          fail(s"Expected hasCustomizations to detect project hook bucket '${field.name}'")
-      }
-    }
-  }
-
   private val policyFields = Seq(
     PolicyField(
       "enableSnapshotDependenciesCheck",

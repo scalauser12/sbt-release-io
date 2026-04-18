@@ -37,13 +37,17 @@ private[release] object CorePreflight {
     HookPhases.AfterCleanCheck,
     HookPhases.BeforeVersionResolution
   )
-  private val VersionSummaryMutationPhases    = Set(
+  // Phases from AfterVersionResolution through BeforeTag that can reshape the release
+  // commit inspected by the built-in tag preflight.
+  private val TagPreflightRelevantPhases      = Set(
     HookPhases.AfterVersionResolution,
     HookPhases.BeforeReleaseVersionWrite,
     HookPhases.AfterReleaseVersionWrite,
     HookPhases.BeforeReleaseCommit,
     HookPhases.AfterReleaseCommit,
-    HookPhases.BeforeTag,
+    HookPhases.BeforeTag
+  )
+  private val VersionSummaryMutationPhases    = TagPreflightRelevantPhases ++ Set(
     HookPhases.AfterTag,
     HookPhases.BeforePublish,
     HookPhases.AfterPublish,
@@ -55,14 +59,8 @@ private[release] object CorePreflight {
   // mutate version inputs, write the version file, or reshape the release commit (through and
   // including before-tag) invalidates a stable preflight. after-tag and later phases cannot
   // retroactively change the tag preflight result and are intentionally excluded.
-  private val TagAffectingPhases              = VersionResolutionBlockingPhases ++ Set(
-    HookPhases.AfterVersionResolution,
-    HookPhases.BeforeReleaseVersionWrite,
-    HookPhases.AfterReleaseVersionWrite,
-    HookPhases.BeforeReleaseCommit,
-    HookPhases.AfterReleaseCommit,
-    HookPhases.BeforeTag
-  )
+  private val TagAffectingPhases              =
+    VersionResolutionBlockingPhases ++ TagPreflightRelevantPhases
 
   private final case class CheckSteps(
       stepNames: Seq[String],
@@ -295,10 +293,8 @@ private[release] object CorePreflight {
       IO.pure(TagSummary.NotEvaluated(Messages.stepNotInCheckProcess(TagReleaseStep)))
     else if (!checkSteps.tagFollowsVersionResolution)
       IO.pure(TagSummary.NotEvaluated(Messages.TagRuntimeSetup))
-    else if (!snapshot.versionsResolved && snapshot.blockedByRuntimeHookState)
-      IO.pure(TagSummary.NotEvaluated(Messages.TagRuntimeHookState))
     else if (!snapshot.versionsResolved)
-      IO.pure(TagSummary.NotEvaluated(Messages.TagRuntimeSetup))
+      IO.pure(TagSummary.NotEvaluated(Messages.TagRuntimeHookState))
     else if (checkSteps.tagDependsOnRuntimeHookState)
       IO.pure(TagSummary.NotEvaluated(Messages.TagRuntimeHookState))
     else

@@ -155,7 +155,6 @@ private[release] object CoreCommandExecution {
     val crossFromArgs = args.contains(CrossBuild)
     val crossEnabled  = runtime.resolveCrossBuildEnabled(cleanState) || crossFromArgs
     val skipPublish   = runtime.resolveSkipPublishEnabled(cleanState)
-    val interactive   = interactiveEnabled
 
     val releaseVersionArg = DecisionDefaultsSupport.resolveLast(
       cleanState,
@@ -178,13 +177,13 @@ private[release] object CoreCommandExecution {
       cleanState = cleanState,
       skipTests = skipTests,
       skipPublish = skipPublish,
-      interactive = interactive,
+      interactive = interactiveEnabled,
       crossEnabled = crossEnabled,
       plan = CoreReleasePlan.fromFlags(
         useDefaults = useDefaults,
         skipTests = skipTests,
         skipPublish = skipPublish,
-        interactive = interactive,
+        interactive = interactiveEnabled,
         crossBuild = crossEnabled,
         releaseVersionOverride = releaseVersionArg,
         nextVersionOverride = nextVersionArg,

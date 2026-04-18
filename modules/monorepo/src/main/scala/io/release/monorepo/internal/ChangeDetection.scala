@@ -214,7 +214,7 @@ private[monorepo] object ChangeDetection {
     val (updatedCache, sharedChanged)           =
       sharedPathsChanged(inputs, sharedPathCache, tagLookup, excludes)
     val diffScope                               =
-      inputs.diffScopeByProject.getOrElse(project.name, resolveDiffScope(inputs.vcs, project))
+      inputs.diffScopeByProject(project.name)
     val excludedChildDirs                       = childDirPrefixes(inputs, project, diffScope)
     val changed                                 = sharedChanged || hasChangedSinceLastTag(
       inputs.vcs,

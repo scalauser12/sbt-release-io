@@ -47,8 +47,8 @@ private[monorepo] object MonorepoVersionWorkflow {
       project: ProjectReleaseInfo
   ): IO[Unit] =
     MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
-      ensureVersionFileExists(
-        versionInputs,
+      VersionWorkflowSupport.ensureVersionFileExists(
+        versionInputs.versionFile,
         missingVersionFileMessage(
           project,
           versionInputs.versionFile,
@@ -193,8 +193,8 @@ private[monorepo] object MonorepoVersionWorkflow {
   ): IO[(MonorepoContext, ResolvedProjectVersions)] =
     for {
       versionInputs          <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
-      _                      <- ensureVersionFileExists(
-                                  versionInputs,
+      _                      <- VersionWorkflowSupport.ensureVersionFileExists(
+                                  versionInputs.versionFile,
                                   missingVersionFileMessage(
                                     project,
                                     versionInputs.versionFile,
@@ -295,12 +295,6 @@ private[monorepo] object MonorepoVersionWorkflow {
           s"${Version.Bump.default}"
         )
       ).as((ctx, Version.Bump.default))
-
-  private def ensureVersionFileExists(
-      versionInputs: MonorepoVersionFiles.VersionInputs,
-      notFoundMessage: String
-  ): IO[Unit] =
-    VersionWorkflowSupport.ensureVersionFileExists(versionInputs.versionFile, notFoundMessage)
 
   private def resolveCurrentVcs(ctx: MonorepoContext): IO[Vcs] =
     ctx.vcs match {

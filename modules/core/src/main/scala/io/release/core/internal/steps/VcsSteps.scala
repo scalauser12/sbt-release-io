@@ -11,6 +11,7 @@ import io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal
 import io.release.ReleaseSharedKeys.releaseIOVcsSign
 import io.release.ReleaseSharedKeys.releaseIOVersioningFile
 import io.release.VcsOps
+import io.release.core.internal.CoreReleasePlan
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.CoreStepFactory
 import io.release.core.internal.TagPlan
@@ -29,8 +30,6 @@ import sbt.{internal as _, *}
 private[release] object VcsSteps {
 
   import CoreReleaseStepHelpers.requireVcs
-
-  private val DefaultCommandName = "releaseIO"
 
   private[release] final case class PreflightTagOutcome(
       tagName: String,
@@ -207,7 +206,8 @@ private[release] object VcsSteps {
       missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
   ): IO[PreflightTagOutcome] =
     missingHashTarget(vcs).flatMap { target =>
-      val commandName = ctx.executionState.map(_.plan.commandName).getOrElse(DefaultCommandName)
+      val commandName =
+        ctx.executionState.map(_.plan.commandName).getOrElse(CoreReleasePlan.DefaultCommandName)
 
       TagConflictResolver
         .preflightConflict(

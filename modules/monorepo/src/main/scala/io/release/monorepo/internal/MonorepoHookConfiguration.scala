@@ -37,9 +37,6 @@ private[monorepo] final case class MonorepoHookConfiguration(
       other: MonorepoHookConfiguration
   ): MonorepoHookConfiguration =
     MonorepoHookConfiguration.merge(this, other)
-
-  def hasCustomizations: Boolean =
-    MonorepoHookConfiguration.hasCustomizations(this)
 }
 
 private[monorepo] object MonorepoHookConfiguration {
@@ -177,9 +174,4 @@ private[monorepo] object MonorepoHookConfiguration {
       beforePushHooks = left.beforePushHooks ++ right.beforePushHooks,
       afterPushHooks = left.afterPushHooks ++ right.afterPushHooks
     )
-
-  def hasCustomizations(
-      config: MonorepoHookConfiguration
-  ): Boolean =
-    config != empty
 }

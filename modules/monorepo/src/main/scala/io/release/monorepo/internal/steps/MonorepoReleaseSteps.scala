@@ -2,10 +2,8 @@ package io.release.monorepo.internal.steps
 
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoComposer
-import io.release.monorepo.internal.MonorepoLifecycle
 import io.release.monorepo.internal.MonorepoPreparation
 import io.release.monorepo.internal.MonorepoProjectResolver
-import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
@@ -70,7 +68,4 @@ private[monorepo] object MonorepoReleaseSteps {
   /** Per-project tagging step aligned with the `tag-releases` lifecycle phase. */
   val tagReleasesPerProject: ProjectStep =
     MonorepoVcsSteps.tagReleasesPerProject
-
-  lazy val defaults: Seq[AnyStep] =
-    MonorepoLifecycle.defaults
 }

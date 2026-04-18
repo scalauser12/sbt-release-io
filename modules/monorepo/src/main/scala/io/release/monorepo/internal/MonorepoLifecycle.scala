@@ -15,15 +15,11 @@ import sbt.*
 /** Canonical monorepo lifecycle order and hook compilation. */
 private[release] object MonorepoLifecycle {
 
-  private val DefaultProjectHookGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
-    (_, _) => ""
-
   private case class GlobalHookPhaseConfig(
       phase: String,
       resolveHooks: MonorepoHookConfiguration => Seq[
         MonorepoGlobalHookIO
       ],
-      gate: MonorepoContext => IO[Boolean] = _ => IO.pure(true),
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   )
 
@@ -72,7 +68,7 @@ private[release] object MonorepoLifecycle {
     LifecycleCompiler.singleHookPhase(
       phase = config.phase,
       resolveHooks = config.resolveHooks,
-      gate = config.gate,
+      gate = _ => IO.pure(true),
       nameOf = (hook: MonorepoGlobalHookIO) => hook.name,
       executeOf = (hook: MonorepoGlobalHookIO) => hook.execute,
       executeTrackedOf =

@@ -89,25 +89,6 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
     }
   }
 
-  test("hasCustomizations - detect every policy and hook bucket") {
-    IO {
-      assert(!CoreHookConfiguration.hasCustomizations(CoreHookConfiguration.empty))
-      policyFields.foreach { field =>
-        val customized = field.withValue(CoreHookConfiguration.empty, false)
-        if (!CoreHookConfiguration.hasCustomizations(customized))
-          fail(s"Expected hasCustomizations to detect policy '${field.name}'")
-      }
-      hookFields.foreach { field =>
-        val customized = field.withHooks(
-          CoreHookConfiguration.empty,
-          Seq(ReleaseHookIO.action(s"${field.name}-hook")(_ => IO.unit))
-        )
-        if (!CoreHookConfiguration.hasCustomizations(customized))
-          fail(s"Expected hasCustomizations to detect hook bucket '${field.name}'")
-      }
-    }
-  }
-
   private val policyFields = Seq(
     PolicyField(
       "enableSnapshotDependenciesCheck",
