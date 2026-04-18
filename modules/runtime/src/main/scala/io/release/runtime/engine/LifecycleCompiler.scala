@@ -57,7 +57,7 @@ private[release] object LifecycleCompiler {
       gateKey: Option[C => String] = None,
       enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] = {
-    requireExplicitGateKey(phase, freezeGate, gateKey.isDefined)
+    val gateMode         = gateModeFrom(phase, freezeGate, gateKey)
     val trackedExecuteOf =
       executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.lift(executeOf(hook)))
     Phase(
@@ -69,8 +69,7 @@ private[release] object LifecycleCompiler {
             phase = phase,
             hooks = resolveHooks(config),
             gate = gate,
-            freezeGate = freezeGate,
-            gateKey = gateKey
+            gateMode = gateMode
           )(
             nameOf = nameOf,
             executeOf = executeOf,
@@ -105,7 +104,7 @@ private[release] object LifecycleCompiler {
       gateKey: Option[(C, I) => String] = None,
       enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] = {
-    requireExplicitGateKey(phase, freezeGate, gateKey.isDefined)
+    val gateMode         = gateModeFrom(phase, freezeGate, gateKey)
     val trackedExecuteOf =
       executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.liftPerItem(executeOf(hook)))
     Phase(
@@ -117,8 +116,7 @@ private[release] object LifecycleCompiler {
             phase = phase,
             hooks = resolveHooks(config),
             gate = gate,
-            freezeGate = freezeGate,
-            gateKey = gateKey
+            gateMode = gateMode
           )(
             nameOf = nameOf,
             executeOf = executeOf,
@@ -152,15 +150,23 @@ private[release] object LifecycleCompiler {
   ): IO[Seq[ProcessStep.Single[C]]] =
     compile(config, phases).map(_.flatMap(step => ProcessStep.toSingleOption(step)))
 
-  private def requireExplicitGateKey(
+  private sealed trait GateMode[+K]
+  private object GateMode {
+    case object Streaming                  extends GateMode[Nothing]
+    final case class Frozen[K](gateKey: K) extends GateMode[K]
+  }
+
+  private def gateModeFrom[K](
       phase: String,
       freezeGate: Boolean,
-      hasGateKey: Boolean
-  ): Unit =
+      gateKey: Option[K]
+  ): GateMode[K] = {
     require(
-      !freezeGate || hasGateKey,
+      !freezeGate || gateKey.isDefined,
       s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
     )
+    if (freezeGate) GateMode.Frozen(gateKey.get) else GateMode.Streaming
+  }
 
   // ── Single-context hooks ────────────────────────────────────────────
 
@@ -168,8 +174,7 @@ private[release] object LifecycleCompiler {
       phase: String,
       hooks: Seq[Hook],
       gate: C => IO[Boolean],
-      freezeGate: Boolean,
-      gateKey: Option[C => String]
+      gateMode: GateMode[C => String]
   )(
       nameOf: Hook => String,
       executeOf: Hook => C => IO[C],
@@ -180,50 +185,45 @@ private[release] object LifecycleCompiler {
     hooks.toList.traverse { hook =>
       val stepName = s"$phase:${nameOf(hook)}"
 
-      if (freezeGate)
-        gateKey match {
-          case Some(stableGateKey) =>
-            frozenGateFunctions[C, C](
-              gate,
-              stableGateKey,
-              execute = executeOf(hook),
-              executeTracked = (handle, _) => executeTrackedOf(hook)(handle),
-              validate = ctx => validateOf(hook)(ctx).as(ctx),
-              skip = ctx => IO.pure(ctx)
-            ).map { case (frozenExec, frozenExecTracked, frozenVal) =>
-              ProcessStep.Single[C](
-                stepName,
-                frozenExec,
-                Some((handle: TrackedContextHandle[C]) =>
-                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, ctx))
-                ),
-                (_: C) => IO.unit,
-                Set.empty[BuiltInStepRole],
-                crossBuild,
-                Some(frozenVal): Option[C => IO[C]]
-              )
-            }
-          case None                =>
-            IO.raiseError(
-              new IllegalStateException(
-                s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
-              )
+      gateMode match {
+        case GateMode.Frozen(stableGateKey) =>
+          frozenGateFunctions[C, C](
+            gate,
+            stableGateKey,
+            execute = executeOf(hook),
+            executeTracked = (handle, _) => executeTrackedOf(hook)(handle),
+            validate = ctx => validateOf(hook)(ctx).as(ctx),
+            skip = ctx => IO.pure(ctx)
+          ).map { case (frozenExec, frozenExecTracked, frozenVal) =>
+            ProcessStep.Single[C](
+              stepName,
+              frozenExec,
+              Some((handle: TrackedContextHandle[C]) =>
+                handle.get.flatMap((ctx: C) => frozenExecTracked(handle, ctx))
+              ),
+              (_: C) => IO.unit,
+              Set.empty[BuiltInStepRole],
+              crossBuild,
+              Some(frozenVal): Option[C => IO[C]]
             )
-        }
-      else
-        IO.pure(
-          ProcessStep.Single[C](
-            stepName,
-            (ctx: C) => gate(ctx).ifM(executeOf(hook)(ctx), IO.pure(ctx)),
-            Some((handle: TrackedContextHandle[C]) =>
-              handle.get.flatMap((ctx: C) => gate(ctx).ifM(executeTrackedOf(hook)(handle), IO.unit))
-            ),
-            (ctx: C) => gate(ctx).ifM(validateOf(hook)(ctx), IO.unit),
-            Set.empty[BuiltInStepRole],
-            crossBuild,
-            None: Option[C => IO[C]]
+          }
+        case GateMode.Streaming             =>
+          IO.pure(
+            ProcessStep.Single[C](
+              stepName,
+              (ctx: C) => gate(ctx).ifM(executeOf(hook)(ctx), IO.pure(ctx)),
+              Some((handle: TrackedContextHandle[C]) =>
+                handle.get.flatMap((ctx: C) =>
+                  gate(ctx).ifM(executeTrackedOf(hook)(handle), IO.unit)
+                )
+              ),
+              (ctx: C) => gate(ctx).ifM(validateOf(hook)(ctx), IO.unit),
+              Set.empty[BuiltInStepRole],
+              crossBuild,
+              None: Option[C => IO[C]]
+            )
           )
-        )
+      }
     }
 
   // ── Per-item hooks ──────────────────────────────────────────────────
@@ -232,8 +232,7 @@ private[release] object LifecycleCompiler {
       phase: String,
       hooks: Seq[Hook],
       gate: (C, I) => IO[Boolean],
-      freezeGate: Boolean,
-      gateKey: Option[(C, I) => String]
+      gateMode: GateMode[(C, I) => String]
   )(
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],
@@ -244,62 +243,55 @@ private[release] object LifecycleCompiler {
     hooks.toList.traverse { hook =>
       val stepName = s"$phase:${nameOf(hook)}"
 
-      if (freezeGate)
-        gateKey match {
-          case Some(stableGateKey) =>
-            frozenGateFunctions[(C, I), C](
-              gate = { case (c, i) => gate(c, i) },
-              gateKey = { case (c, i) => stableGateKey(c, i) },
-              execute = { case (c, i) => executeOf(hook)(c, i) },
-              executeTracked = (handle, args) => executeTrackedOf(hook)(handle, args._2),
-              validate = { case (c, i) =>
-                validateOf(hook)(c, i).as(c)
-              },
-              skip = { case (c, _) => IO.pure(c) }
-            ).map { case (frozenExec, frozenExecTracked, frozenVal) =>
-              ProcessStep.PerItem[C, I](
-                stepName,
-                (ctx: C, item: I) => frozenExec((ctx, item)),
-                Some((handle: TrackedContextHandle[C], item: I) =>
-                  handle.get.flatMap((ctx: C) => frozenExecTracked(handle, (ctx, item)))
-                ),
-                (_: C, _: I) => IO.unit,
-                Set.empty[BuiltInStepRole],
-                crossBuild,
-                Some((ctx: C, item: I) => frozenVal((ctx, item))): Option[(C, I) => IO[C]]
-              )
-            }
-          case None                =>
-            IO.raiseError(
-              new IllegalStateException(
-                s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
-              )
+      gateMode match {
+        case GateMode.Frozen(stableGateKey) =>
+          frozenGateFunctions[(C, I), C](
+            gate = { case (c, i) => gate(c, i) },
+            gateKey = { case (c, i) => stableGateKey(c, i) },
+            execute = { case (c, i) => executeOf(hook)(c, i) },
+            executeTracked = (handle, args) => executeTrackedOf(hook)(handle, args._2),
+            validate = { case (c, i) =>
+              validateOf(hook)(c, i).as(c)
+            },
+            skip = { case (c, _) => IO.pure(c) }
+          ).map { case (frozenExec, frozenExecTracked, frozenVal) =>
+            ProcessStep.PerItem[C, I](
+              stepName,
+              (ctx: C, item: I) => frozenExec((ctx, item)),
+              Some((handle: TrackedContextHandle[C], item: I) =>
+                handle.get.flatMap((ctx: C) => frozenExecTracked(handle, (ctx, item)))
+              ),
+              (_: C, _: I) => IO.unit,
+              Set.empty[BuiltInStepRole],
+              crossBuild,
+              Some((ctx: C, item: I) => frozenVal((ctx, item))): Option[(C, I) => IO[C]]
             )
-        }
-      else
-        IO.pure(
-          ProcessStep.PerItem[C, I](
-            stepName,
-            (ctx: C, item: I) =>
-              gate(ctx, item).ifM(
-                executeOf(hook)(ctx, item),
-                IO.pure(ctx)
+          }
+        case GateMode.Streaming             =>
+          IO.pure(
+            ProcessStep.PerItem[C, I](
+              stepName,
+              (ctx: C, item: I) =>
+                gate(ctx, item).ifM(
+                  executeOf(hook)(ctx, item),
+                  IO.pure(ctx)
+                ),
+              Some((handle: TrackedContextHandle[C], item: I) =>
+                handle.get.flatMap((ctx: C) =>
+                  gate(ctx, item).ifM(executeTrackedOf(hook)(handle, item), IO.unit)
+                )
               ),
-            Some((handle: TrackedContextHandle[C], item: I) =>
-              handle.get.flatMap((ctx: C) =>
-                gate(ctx, item).ifM(executeTrackedOf(hook)(handle, item), IO.unit)
-              )
-            ),
-            (ctx: C, item: I) =>
-              gate(ctx, item).ifM(
-                validateOf(hook)(ctx, item),
-                IO.unit
-              ),
-            Set.empty[BuiltInStepRole],
-            crossBuild,
-            None: Option[(C, I) => IO[C]]
+              (ctx: C, item: I) =>
+                gate(ctx, item).ifM(
+                  validateOf(hook)(ctx, item),
+                  IO.unit
+                ),
+              Set.empty[BuiltInStepRole],
+              crossBuild,
+              None: Option[(C, I) => IO[C]]
+            )
           )
-        )
+      }
     }
 
   // ── Shared gate helpers ─────────────────────────────────────────────
