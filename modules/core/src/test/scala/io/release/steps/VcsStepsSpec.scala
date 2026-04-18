@@ -383,7 +383,7 @@ class VcsStepsSpec extends CatsEffectSuite {
                    VcsSteps.tagRelease.execute(
                      ReleaseContext(state = buffered.state, vcs = Some(vcs), interactive = true)
                    ),
-                   "Tag [v1.0.0] already exists. Aborting release!"
+                   s"${ReleaseLogPrefixes.Core} Tag [v1.0.0] already exists. Aborting release!"
                  )
                }
         log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))

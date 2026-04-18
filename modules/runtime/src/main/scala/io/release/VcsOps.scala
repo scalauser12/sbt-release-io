@@ -5,6 +5,7 @@ import io.release.runtime.ReleaseCtx
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.workflow.DecisionResolver
+import io.release.vcs.InvalidUpstreamConfigException
 import io.release.vcs.Vcs
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -300,8 +301,9 @@ private[release] object VcsOps {
   ): IO[C] =
     vcs.isBehindRemote
       .handleErrorWith {
-        case NonFatal(_) => IO.pure(false)
-        case fatal       => IO.raiseError(fatal)
+        case e: InvalidUpstreamConfigException => IO.raiseError(e)
+        case NonFatal(_)                       => IO.pure(false)
+        case fatal                             => IO.raiseError(fatal)
       }
       .flatMap {
         case false => IO.pure(ctx.withoutMetadata(confirmedUpstreamTipKey))

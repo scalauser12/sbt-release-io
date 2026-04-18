@@ -15,13 +15,26 @@ private[release] object TagConflictResolver {
   /** Result of a tag-conflict resolution. */
   final case class TagResult(tagName: String, overwritten: Boolean)
 
-  /** Outcome of a preflight tag check. */
+  /** Outcome of a preflight tag check.
+    *
+    * @param tagName the tag name that would be used at execute time (may differ from the
+    *                requested name when the resolver retries with a new tag).
+    * @param status  human-readable description of the expected execute-time behavior
+    *                (e.g. `"available"`, `"exists; release will overwrite the tag"`).
+    */
   final case class PreflightOutcome(tagName: String, status: String)
 
+  /** Describes what the tag is expected to point at when the release executes. */
   sealed trait PreflightCommitTarget
   object PreflightCommitTarget {
+
+    /** The tag must resolve to this exact commit now (no new commit will be created). */
     final case class ExactCommit(hash: String) extends PreflightCommitTarget
-    case object FutureReleaseCommit            extends PreflightCommitTarget
+
+    /** The release will create a new commit before tagging, so the expected commit
+      * does not yet exist. "Keep existing tag" is never valid in this mode.
+      */
+    case object FutureReleaseCommit extends PreflightCommitTarget
   }
 
   /** Parameters for execute-time tag resolution. */
@@ -78,9 +91,12 @@ private[release] object TagConflictResolver {
                 params,
                 allowKeep = matchesExpectedCommit
               ).flatMap {
-                case (nextCtx, ConflictAction.Abort)                         =>
+                case (_, ConflictAction.Abort)                               =>
                   IO.raiseError(
-                    new IllegalStateException(s"Tag [$tagName] already exists. Aborting release!")
+                    new IllegalStateException(
+                      s"${params.logPrefix} Tag [$tagName] already exists${forLabel(params.label)}. " +
+                        "Aborting release!"
+                    )
                   )
                 case (nextCtx, ConflictAction.Keep) if matchesExpectedCommit =>
                   IO.blocking(
@@ -121,7 +137,12 @@ private[release] object TagConflictResolver {
     loop(ctx, params.tagName, params.defaultAnswer)
   }
 
-  /** Evaluate a tag conflict at preflight time without creating or modifying tags. */
+  /** Evaluate a tag conflict at preflight time without creating or modifying tags.
+    *
+    * Raises `IllegalStateException` when the configured `defaultAnswer` / `useDefaults` /
+    * `interactive` combination would abort the release at execute time, or when "keep"
+    * is requested for a mismatched tag / future-commit target.
+    */
   def preflightConflict(vcs: Vcs, params: PreflightParams): IO[PreflightOutcome] = {
     def loop(tagName: String, defaultAnswer: Option[String]): IO[PreflightOutcome] =
       vcs.existsTag(tagName).flatMap {
@@ -328,7 +349,7 @@ private[release] object TagConflictResolver {
       tagName: String,
       params: PreflightParams,
       reason: String
-  ): IO[PreflightOutcome] =
+  ): IO[Nothing] =
     IO.raiseError(
       new IllegalStateException(
         s"Tag [$tagName] already exists${forLabel(params.label)}. " +
