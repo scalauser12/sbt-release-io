@@ -15,7 +15,6 @@ import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.required
-import io.release.runtime.workflow.StepHelpers.useDefaults
 import io.release.vcs.GitPushSupport
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
@@ -70,7 +69,7 @@ private[monorepo] object MonorepoVcsSteps {
           sign = sign,
           expectedCommitHash = expectedCommitHash,
           interactive = ctx.interactive,
-          useDefaults = useDefaults(ctx),
+          useDefaults = ctx.useDefaults,
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
           logPrefix = ReleaseLogPrefixes.Monorepo,
           label = label
@@ -96,7 +95,7 @@ private[monorepo] object MonorepoVcsSteps {
           tagName = rendered,
           target = target,
           interactive = ctx.interactive,
-          useDefaults = useDefaults(ctx),
+          useDefaults = ctx.useDefaults,
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
           commandName = commandName,
           label = label

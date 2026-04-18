@@ -32,30 +32,32 @@ private[release] object VersionWorkflowSupport {
     val suggestedRelease = releaseVersionFn(currentVersion)
 
     for {
-      releaseData  <- DecisionResolver.resolveVersionInput(
-                        ctx,
-                        override_ = releaseVersionOverride,
-                        suggested = suggestedRelease,
-                        logPrefix = logPrefix,
-                        prompt = s"$releaseLabel [$suggestedRelease] : ",
-                        promptContext = releaseLabel,
-                        allowPrompts = allowPrompts,
-                        beforePrompt = beforeReleasePrompt
-                      )
-      suggestedNext = nextVersionFn(releaseData._2)
-      nextData     <- DecisionResolver.resolveVersionInput(
-                        releaseData._1,
-                        override_ = nextVersionOverride,
-                        suggested = suggestedNext,
-                        logPrefix = logPrefix,
-                        prompt = s"$nextLabel [$suggestedNext] : ",
-                        promptContext = nextLabel,
-                        allowPrompts = allowPrompts
-                      )
+      releaseData                      <- DecisionResolver.resolveVersionInput(
+                                            ctx,
+                                            override_ = releaseVersionOverride,
+                                            suggested = suggestedRelease,
+                                            logPrefix = logPrefix,
+                                            prompt = s"$releaseLabel [$suggestedRelease] : ",
+                                            promptContext = releaseLabel,
+                                            allowPrompts = allowPrompts,
+                                            beforePrompt = beforeReleasePrompt
+                                          )
+      (releaseCtx, releaseVersionValue) = releaseData
+      suggestedNext                     = nextVersionFn(releaseVersionValue)
+      nextData                         <- DecisionResolver.resolveVersionInput(
+                                            releaseCtx,
+                                            override_ = nextVersionOverride,
+                                            suggested = suggestedNext,
+                                            logPrefix = logPrefix,
+                                            prompt = s"$nextLabel [$suggestedNext] : ",
+                                            promptContext = nextLabel,
+                                            allowPrompts = allowPrompts
+                                          )
+      (nextCtx, nextVersionValue)       = nextData
     } yield ResolvedVersionInputs(
-      context = nextData._1,
-      releaseVersion = releaseData._2,
-      nextVersion = nextData._2
+      context = nextCtx,
+      releaseVersion = releaseVersionValue,
+      nextVersion = nextVersionValue
     )
   }
 
@@ -112,13 +114,11 @@ private[release] object VersionWorkflowSupport {
   ): IO[Unit] =
     for {
       contents <- versionFileContents(versionFile, versionValue)
-      _        <- IO.blocking {
-                    Files.write(
-                      versionFile.toPath,
-                      contents.getBytes(StandardCharsets.UTF_8)
+      _        <- IO
+                    .blocking(
+                      Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
                     )
-                    ()
-                  }
+                    .void
     } yield ()
 
   def wouldChangeVersionFile(

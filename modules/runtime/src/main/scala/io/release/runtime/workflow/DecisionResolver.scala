@@ -1,5 +1,6 @@
 package io.release.runtime.workflow
 
+import _root_.sbt.ModuleID
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.sbt.PromptAdapter
@@ -74,7 +75,7 @@ private[release] object DecisionResolver {
 
   def handleSnapshotDependencies[C <: ReleaseCtx { type Self = C }](
       ctx: C,
-      deps: Seq[_root_.sbt.ModuleID],
+      deps: Seq[ModuleID],
       logPrefix: String,
       context: String = ""
   ): IO[C] =
@@ -85,6 +86,8 @@ private[release] object DecisionResolver {
         .mkString("\n")
       val msg     = s"Snapshot dependencies found$context:\n$depList"
 
+      // Under use-defaults, abort by default: snapshot deps are treated as a blocker unless
+      // the operator explicitly opts in via `default-snapshot-dependencies-answer y`.
       ctx.decisionDefaults.snapshotDependenciesAnswer
         .orElse(if (ctx.useDefaults) Some(false) else None) match {
         case Some(true)  =>
@@ -154,13 +157,13 @@ private[release] object DecisionResolver {
         if (ctx.useDefaults)
           IO.blocking(
             ctx.state.log.warn(
-              s"$logPrefix Tag [$tagName] already exists${forLabel(label)}. Aborting (use-defaults mode)."
+              s"$logPrefix ${tagExistsAbortMessage(tagName, label, "use-defaults mode")}"
             )
           ).as(ctx -> "a")
         else if (!ctx.interactive)
           IO.raiseError(
             new IllegalStateException(
-              s"Tag [$tagName] already exists${forLabel(label)}. Aborting release in non-interactive mode."
+              tagExistsAbortMessage(tagName, label, "non-interactive mode")
             )
           )
         else
@@ -188,6 +191,9 @@ private[release] object DecisionResolver {
 
   private def stdinClosedWhileWaitingWarning(context: String): String =
     s"${stdinClosedWhileWaitingMessage(context)} Aborting."
+
+  private def tagExistsAbortMessage(tagName: String, label: String, mode: String): String =
+    s"Tag [$tagName] already exists${forLabel(label)}. Aborting release in $mode."
 
   private def snapshotDependenciesAbortMessage(context: String): String =
     "Aborting release due to snapshot dependencies" +

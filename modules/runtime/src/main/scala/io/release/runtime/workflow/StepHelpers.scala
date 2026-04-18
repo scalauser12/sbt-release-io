@@ -13,7 +13,6 @@ import io.release.runtime.sbt.SbtRuntime
 import io.release.version.Version
 
 import scala.sys.process.*
-import scala.util.control.Exception.catching
 
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
@@ -48,9 +47,6 @@ private[release] object StepHelpers {
   ): IO[(C, Option[Boolean])] =
     PromptAdapter.promptYesNoOrEof(ctx, prompt, defaultYes)
 
-  def useDefaults[C <: ReleaseCtx](ctx: C): Boolean =
-    ctx.useDefaults
-
   def required[A, B](opt: Option[A], error: String)(f: A => IO[B]): IO[B] =
     opt.fold(IO.raiseError[B](new IllegalStateException(error)))(f)
 
@@ -74,7 +70,7 @@ private[release] object StepHelpers {
       IO.raiseError(new IllegalStateException(abortMessage))
     else {
       val decisionIO =
-        if (useDefaults(ctx)) IO.pure((ctx, defaultYes))
+        if (ctx.useDefaults) IO.pure((ctx, defaultYes))
         else askYesNo(ctx, prompt, defaultYes = defaultYes)
 
       decisionIO.flatMap { case (nextCtx, continue) =>
@@ -86,7 +82,7 @@ private[release] object StepHelpers {
 
   /** Parse raw version input: trim whitespace, return default if empty, validate otherwise. */
   def parseVersionInput(raw: String, default: String): IO[String] = {
-    val input = Option(raw).map(_.trim).getOrElse("")
+    val input = raw.trim
     if (input.isEmpty) IO.pure(default)
     else
       IO.fromOption(Version(input).map(_.render))(
@@ -97,26 +93,11 @@ private[release] object StepHelpers {
       )
   }
 
-  /** Handle snapshot dependencies found during validation. Shared by core and monorepo.
-    * The caller's runtime metadata determines interactive defaulting behavior.
-    */
-  def handleSnapshotDependencies[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      deps: Seq[_root_.sbt.ModuleID],
-      logPrefix: String,
-      context: String = ""
-  ): IO[C] =
-    DecisionResolver.handleSnapshotDependencies(ctx, deps, logPrefix, context)
-
   def aggregatedTaskValues[T](
       result: Result[Seq[KeyValue[Seq[T]]]]
   ): Either[Incomplete, Seq[T]] =
-    catching(classOf[Incomplete])
-      .either(EvaluateTask.onResult(result)(_.flatMap(_.value)))
-      .fold(
-        err => Left(err.asInstanceOf[Incomplete]),
-        values => Right(values)
-      )
+    try Right(EvaluateTask.onResult(result)(_.flatMap(_.value)))
+    catch { case inc: Incomplete => Left(inc) }
 
   /** Run an sbt task and fail fast if it reports failure via `FailureCommand`.
     *
