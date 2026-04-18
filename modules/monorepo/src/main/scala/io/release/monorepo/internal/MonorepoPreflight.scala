@@ -45,13 +45,17 @@ private[monorepo] object MonorepoPreflight {
     SelectionBlockingPhases ++ Set(HookPhases.AfterSelection)
   private val VersionResolutionBlockingPhases =
     ProjectSummaryMutationPhases ++ Set(HookPhases.BeforeVersionResolution)
-  private val VersionSummaryMutationPhases    = Set(
+  // Phases from AfterVersionResolution through BeforeTag that can reshape the release
+  // commit inspected by the built-in tag preflight.
+  private val TagPreflightRelevantPhases      = Set(
     HookPhases.AfterVersionResolution,
     HookPhases.BeforeReleaseVersionWrite,
     HookPhases.AfterReleaseVersionWrite,
     HookPhases.BeforeReleaseCommit,
     HookPhases.AfterReleaseCommit,
-    HookPhases.BeforeTag,
+    HookPhases.BeforeTag
+  )
+  private val VersionSummaryMutationPhases    = TagPreflightRelevantPhases ++ Set(
     HookPhases.AfterTag,
     HookPhases.BeforePublish,
     HookPhases.AfterPublish,
@@ -63,14 +67,8 @@ private[monorepo] object MonorepoPreflight {
   // mutate version inputs, write a project version file, or reshape the release commit
   // (through and including before-tag) invalidates a stable preflight. after-tag and later
   // phases cannot retroactively change the tag preflight result and are intentionally excluded.
-  private val TagAffectingPhases              = VersionResolutionBlockingPhases ++ Set(
-    HookPhases.AfterVersionResolution,
-    HookPhases.BeforeReleaseVersionWrite,
-    HookPhases.AfterReleaseVersionWrite,
-    HookPhases.BeforeReleaseCommit,
-    HookPhases.AfterReleaseCommit,
-    HookPhases.BeforeTag
-  )
+  private val TagAffectingPhases              =
+    VersionResolutionBlockingPhases ++ TagPreflightRelevantPhases
 
   // Re-export the shared runtime ADT under the existing namespace so external callers
   // (tests, MonorepoPreparedSession, etc.) keep referencing `MonorepoPreflight.Evaluation`.
@@ -558,39 +556,33 @@ private[monorepo] object MonorepoPreflight {
       tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]],
       processPlan: MonorepoProcessPlan,
       crossBuildEnabled: Boolean
-  ): IO[Summary] =
+  ): IO[Summary] = {
+    val publishSummary = CheckModeOutput.publishStatus(
+      publishConfigured = processPlan.publishConfigured,
+      skipPublish = ctx.skipPublish,
+      skippedMessage = "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
+    )
+    val pushSummary    = CheckModeOutput.pushStatus(processPlan.pushConfigured)
+
+    def summaryOf(resolvedProjects: Evaluation[Seq[ProjectSummary]]): Summary =
+      Summary(
+        selectionMode = selectionMode,
+        projects = resolvedProjects,
+        crossBuildEnabled = crossBuildEnabled,
+        publishSummary = publishSummary,
+        pushSummary = pushSummary,
+        stepNames = processPlan.stepNames
+      )
+
     projects match {
       case Evaluation.NotEvaluated(reason) =>
-        IO.pure(
-          Summary(
-            selectionMode = selectionMode,
-            projects = Evaluation.NotEvaluated(reason),
-            crossBuildEnabled = crossBuildEnabled,
-            publishSummary = CheckModeOutput.publishStatus(
-              publishConfigured = processPlan.publishConfigured,
-              skipPublish = ctx.skipPublish,
-              skippedMessage = "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
-            ),
-            pushSummary = CheckModeOutput.pushStatus(processPlan.pushConfigured),
-            stepNames = processPlan.stepNames
-          )
-        )
+        IO.pure(summaryOf(Evaluation.NotEvaluated(reason)))
       case Evaluation.Resolved(_)          =>
         renderProjects(ctx.currentProjects, versions, tagOutcomes).map { resolvedProjects =>
-          Summary(
-            selectionMode = selectionMode,
-            projects = Evaluation.Resolved(resolvedProjects),
-            crossBuildEnabled = crossBuildEnabled,
-            publishSummary = CheckModeOutput.publishStatus(
-              publishConfigured = processPlan.publishConfigured,
-              skipPublish = ctx.skipPublish,
-              skippedMessage = "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
-            ),
-            pushSummary = CheckModeOutput.pushStatus(processPlan.pushConfigured),
-            stepNames = processPlan.stepNames
-          )
+          summaryOf(Evaluation.Resolved(resolvedProjects))
         }
     }
+  }
 
   private[monorepo] def renderProjects(
       projects: Seq[ProjectReleaseInfo],

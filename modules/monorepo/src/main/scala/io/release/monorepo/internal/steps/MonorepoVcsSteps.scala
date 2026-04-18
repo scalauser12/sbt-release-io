@@ -22,8 +22,7 @@ import io.release.vcs.Vcs
 /** VCS-related monorepo release steps. */
 private[monorepo] object MonorepoVcsSteps {
 
-  private val DefaultCommandName = "releaseIOMonorepo"
-  private val MissingVcsMessage  = "VCS not initialized. Ensure initializeVcs runs before this step."
+  private val MissingVcsMessage = "VCS not initialized. Ensure initializeVcs runs before this step."
 
   private[monorepo] final case class PreflightTagOutcome(
       projectName: String,
@@ -87,7 +86,8 @@ private[monorepo] object MonorepoVcsSteps {
       target: TagConflictResolver.PreflightCommitTarget,
       projectName: String
   ): IO[PreflightTagOutcome] = {
-    val commandName = ctx.releasePlan.map(_.commandName).getOrElse(DefaultCommandName)
+    val commandName =
+      ctx.releasePlan.map(_.commandName).getOrElse(MonorepoReleasePlan.DefaultCommandName)
 
     TagConflictResolver
       .preflightConflict(

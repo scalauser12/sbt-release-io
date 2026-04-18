@@ -32,9 +32,6 @@ private[release] final case class CoreHookConfiguration(
     afterPushHooks: Seq[ReleaseHookIO] = Seq.empty
 ) {
 
-  def hasCustomizations: Boolean =
-    CoreHookConfiguration.hasCustomizations(this)
-
   def mergeWith(other: CoreHookConfiguration): CoreHookConfiguration =
     CoreHookConfiguration.merge(this, other)
 }
@@ -138,7 +135,4 @@ private[release] object CoreHookConfiguration {
       beforePushHooks = left.beforePushHooks ++ right.beforePushHooks,
       afterPushHooks = left.afterPushHooks ++ right.afterPushHooks
     )
-
-  def hasCustomizations(config: CoreHookConfiguration): Boolean =
-    config != empty
 }

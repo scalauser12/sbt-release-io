@@ -23,10 +23,12 @@ private[monorepo] final case class MonorepoReleasePlan(
     releaseVersionOverrides: Map[String, String],
     nextVersionOverrides: Map[String, String],
     decisionDefaults: ReleaseDecisionDefaults,
-    commandName: String = "releaseIOMonorepo"
+    commandName: String = MonorepoReleasePlan.DefaultCommandName
 )
 
 private[monorepo] object MonorepoReleasePlan {
+
+  val DefaultCommandName: String = "releaseIOMonorepo"
 
   val metadataKey: sbt.AttributeKey[MonorepoReleasePlan] =
     sbt.AttributeKey[MonorepoReleasePlan](
@@ -42,7 +44,7 @@ private[monorepo] object MonorepoReleasePlan {
       releaseVersionPairs: Seq[(String, String)],
       nextVersionPairs: Seq[(String, String)],
       decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty,
-      commandName: String = "releaseIOMonorepo"
+      commandName: String = DefaultCommandName
   )
 
   // ── Build & validate ──────────────────────────────────────────────

@@ -88,5 +88,3 @@ case class ReleaseContext(
   override def failWith(cause: Throwable): ReleaseContext =
     copy(failed = true, failureCause = Some(cause))
 }
-
-object ReleaseContext

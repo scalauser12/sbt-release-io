@@ -31,10 +31,12 @@ private[release] final case class CoreReleasePlan(
     releaseVersionOverride: Option[String],
     nextVersionOverride: Option[String],
     decisionDefaults: ReleaseDecisionDefaults,
-    commandName: String = "releaseIO"
+    commandName: String = CoreReleasePlan.DefaultCommandName
 )
 
 private[release] object CoreReleasePlan {
+
+  val DefaultCommandName: String = "releaseIO"
 
   def fromFlags(
       useDefaults: Boolean,
@@ -45,7 +47,7 @@ private[release] object CoreReleasePlan {
       releaseVersionOverride: Option[String],
       nextVersionOverride: Option[String],
       decisionDefaults: ReleaseDecisionDefaults = ReleaseDecisionDefaults.empty,
-      commandName: String = "releaseIO"
+      commandName: String = DefaultCommandName
   ): CoreReleasePlan =
     CoreReleasePlan(
       flags = ExecutionFlags(

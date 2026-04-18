@@ -1,7 +1,6 @@
 package io.release.monorepo
 
 import io.release.monorepo.internal.*
-import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.engine.LifecycleCompiler
 import munit.FunSuite
 
@@ -14,7 +13,7 @@ class MonorepoLifecycleSlotsSpec extends FunSuite {
     )
     assertEquals(
       builtInStepNames(MonorepoLifecycle.phases),
-      MonorepoReleaseSteps.defaults.map(_.name)
+      MonorepoLifecycle.defaults.map(_.name)
     )
   }
 

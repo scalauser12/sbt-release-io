@@ -423,11 +423,11 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     MonorepoCommandExecution.CommandRuntime(
       commandName = commandName,
       resource = resource,
-      resolveResourceHooks = state => monorepoResourceHooks(state),
-      resolveCrossBuildEnabled = state => crossBuildEnabled(state),
-      resolveSkipTestsEnabled = state => skipTestsEnabled(state),
-      resolveSkipPublishEnabled = state => skipPublishEnabled(state),
-      resolveInteractiveEnabled = state => interactiveEnabled(state)
+      resolveResourceHooks = monorepoResourceHooks,
+      resolveCrossBuildEnabled = crossBuildEnabled,
+      resolveSkipTestsEnabled = skipTestsEnabled,
+      resolveSkipPublishEnabled = skipPublishEnabled,
+      resolveInteractiveEnabled = interactiveEnabled
     )
 
   private[monorepo] final def handleMonorepoCommandTokens(

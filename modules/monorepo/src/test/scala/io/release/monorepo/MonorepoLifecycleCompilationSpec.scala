@@ -24,7 +24,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
   ) {
     hookFixtureResource("monorepo-hook-compiler-defaults").use { fixture =>
       compileLifecycle(fixture.state).map { steps =>
-        assertEquals(steps, MonorepoReleaseSteps.defaults)
+        assertEquals(steps, MonorepoLifecycle.defaults)
       }
     }
   }
@@ -54,7 +54,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         ).map { commandExecution =>
           assertEquals(
             steps.map(_.name),
-            MonorepoReleaseSteps.defaults.map(_.name)
+            MonorepoLifecycle.defaults.map(_.name)
           )
           assert(
             !Files.exists(

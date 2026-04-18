@@ -11,9 +11,6 @@ import sbt.{internal as _, *}
 /** Core-only helpers for building steps backed by sbt tasks or commands. */
 private[release] object CoreStepFactory {
 
-  def pure(name: String)(f: ReleaseContext => ReleaseContext): Step =
-    ProcessStep.Single(name, ctx => IO(f(ctx)))
-
   def io(name: String)(
       f: ReleaseContext => IO[ReleaseContext]
   ): Step =

@@ -20,12 +20,6 @@ private[release] object VersionSteps {
   private[release] type ResolvedVersions = ReleaseVersionWorkflow.ResolvedVersions
   private[release] val ResolvedVersions = ReleaseVersionWorkflow.ResolvedVersions
 
-  private[steps] def resolveCurrentSettings(state: State): ResolvedSettings =
-    ReleaseVersionWorkflow.resolveCurrentSettings(state)
-
-  private[steps] def sessionSettings(state: State): Seq[Setting[?]] =
-    ReleaseVersionWorkflow.sessionSettings(state)
-
   private[steps] def sessionSettings(versionPlan: VersionPlan): Seq[Setting[?]] =
     ReleaseVersionWorkflow.sessionSettings(versionPlan)
 
@@ -68,7 +62,7 @@ private[release] object VersionSteps {
 
   private[release] def resolveVersionPlan(
       ctx: ReleaseContext,
-      resolveSettings: State => ResolvedSettings = resolveCurrentSettings
+      resolveSettings: State => ResolvedSettings = ReleaseVersionWorkflow.resolveCurrentSettings
   ): VersionPlan =
     ReleaseVersionWorkflow.resolveVersionPlan(ctx, resolveSettings)
 }
