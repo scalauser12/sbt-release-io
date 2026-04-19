@@ -72,6 +72,7 @@ private[release] object GitProcessSupport {
   private val ProcessPollInterval: FiniteDuration           = 50.millis
   private val RetainedDescendantGracePeriod: FiniteDuration = 250.millis
   private val RootNotYetExitedNanos: Long                   = Long.MinValue
+  private val drainThreadCounter: AtomicLong                = new AtomicLong(0L)
 
   /** Returns `"git.exe"` on Windows-like OS names, `"git"` otherwise. */
   private[release] def executableNameFor(osName: String): String =
@@ -79,12 +80,14 @@ private[release] object GitProcessSupport {
 
   private lazy val exec: String = executableNameFor(sys.props.getOrElse("os.name", ""))
 
+  private def baseCmd(baseDir: File, args: String*): ProcessBuilder =
+    new ProcessBuilder((exec +: args)*).directory(baseDir)
+
   /** Build a git `ProcessBuilder` that discards both stdout and stderr.
     * Use when only the exit code matters.
     */
   def javaCmd(baseDir: File, args: String*): ProcessBuilder =
-    new ProcessBuilder((exec +: args)*)
-      .directory(baseDir)
+    baseCmd(baseDir, args*)
       .redirectOutput(Redirect.DISCARD)
       .redirectError(Redirect.DISCARD)
 
@@ -92,8 +95,7 @@ private[release] object GitProcessSupport {
     * Use for interactive commands that may prompt the user (credentials, merges).
     */
   private[release] def attachedJavaCmd(baseDir: File, args: String*): ProcessBuilder =
-    new ProcessBuilder((exec +: args)*)
-      .directory(baseDir)
+    baseCmd(baseDir, args*)
       .redirectInput(Redirect.INHERIT)
       .redirectOutput(Redirect.INHERIT)
       .redirectError(Redirect.INHERIT)
@@ -102,7 +104,7 @@ private[release] object GitProcessSupport {
     * Use when the caller needs to read output lines.
     */
   private def captureJavaCmd(baseDir: File, args: String*): ProcessBuilder =
-    new ProcessBuilder((exec +: args)*).directory(baseDir)
+    baseCmd(baseDir, args*)
 
   /** Run git inheriting the parent stdio; raise on non-zero exit.
     *
@@ -268,7 +270,9 @@ private[release] object GitProcessSupport {
         managed
       } catch {
         case NonFatal(err) =>
-          terminate(managed, destroyGracePeriod)
+          try terminate(managed, destroyGracePeriod)
+          catch { case NonFatal(termErr) => err.addSuppressed(termErr) }
+          closeStreams(managed)
           throw err
       }
     }
@@ -313,15 +317,12 @@ private[release] object GitProcessSupport {
           future.complete(readLinesSync(stream, charset))
           ()
         } catch {
-          case NonFatal(err)    =>
-            future.completeExceptionally(err)
-            ()
-          case fatal: Throwable =>
-            future.completeExceptionally(fatal)
-            throw fatal
+          case t: Throwable =>
+            future.completeExceptionally(t)
+            if (NonFatal(t)) () else throw t
         }
       },
-      threadName
+      s"$threadName-${drainThreadCounter.incrementAndGet()}"
     )
     thread.setDaemon(true)
     thread.start()
@@ -340,9 +341,9 @@ private[release] object GitProcessSupport {
       }
       builder.result()
     } catch {
-      case NonFatal(err) =>
-        primary = err
-        throw err
+      case t: Throwable =>
+        primary = t
+        throw t
     } finally
       try reader.close()
       catch {
@@ -382,11 +383,9 @@ private[release] object GitProcessSupport {
         }
 
         if (settled)
-          currentCode match {
-            case Some(code) => IO.pure(WaitForExitOutcome.Exited(code))
-            case None       =>
-              IO.blocking(process.process.exitValue()).map(WaitForExitOutcome.Exited(_))
-          }
+          currentCode.fold(
+            IO.blocking(process.process.exitValue()).map(WaitForExitOutcome.Exited(_))
+          )(code => IO.pure(WaitForExitOutcome.Exited(code)))
         else
           Clock[IO].monotonic.flatMap { now =>
             val remaining = deadline - now
@@ -503,20 +502,13 @@ private[release] object GitProcessSupport {
   }
 
   private def trackedDescendants(process: ManagedProcess): Vector[ProcessHandle] = {
-    val currentDescendants    = refreshTrackedDescendants(process)
-    val currentDescendantPids = currentDescendants.iterator.map(_.pid()).toSet
-    val orderedDescendants    = currentDescendants.reverse ++
-      process.trackedDescendants
-        .values()
-        .asScala
-        .toVector
-        .map(_.handle)
-        .filterNot(handle => currentDescendantPids.contains(handle.pid()))
-
-    orderedDescendants.filter(_.isAlive)
+    val (current, stale) = refreshTrackedDescendants(process)
+    (current.reverse ++ stale).filter(_.isAlive)
   }
 
-  private def refreshTrackedDescendants(process: ManagedProcess): Vector[ProcessHandle] = {
+  private def refreshTrackedDescendants(
+      process: ManagedProcess
+  ): (Vector[ProcessHandle], Vector[ProcessHandle]) = {
     val now                = System.nanoTime()
     val retentionNanos     = RetainedDescendantGracePeriod.toNanos
     val currentDescendants = process.process.toHandle.descendants().iterator().asScala.toVector
@@ -530,7 +522,8 @@ private[release] object GitProcessSupport {
       ()
     }
 
-    val iterator = process.trackedDescendants.entrySet().iterator()
+    val staleBuilder = Vector.newBuilder[ProcessHandle]
+    val iterator     = process.trackedDescendants.entrySet().iterator()
 
     while (iterator.hasNext) {
       val entry   = iterator.next()
@@ -542,13 +535,14 @@ private[release] object GitProcessSupport {
           case Some(missingSince) if now - missingSince >= retentionNanos =>
             iterator.remove()
           case Some(_)                                                    =>
-            ()
+            staleBuilder += tracked.handle
           case None                                                       =>
             entry.setValue(tracked.copy(missingSinceNanos = Some(now)))
+            staleBuilder += tracked.handle
         }
     }
 
-    currentDescendants
+    (currentDescendants, staleBuilder.result())
   }
 
   private def currentProcessState(process: ManagedProcess): ProcessState = {
