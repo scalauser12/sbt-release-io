@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
@@ -47,7 +48,8 @@ private[release] object GitProcessSupport {
   private final case class ManagedProcess(
       process: Process,
       trackedDescendants: ConcurrentHashMap[Long, TrackedDescendant],
-      rootExitedAtNanos: AtomicLong
+      rootExitedAtNanos: AtomicLong,
+      observerStopFlag: AtomicBoolean
   )
 
   private final case class ProcessState(
@@ -70,9 +72,13 @@ private[release] object GitProcessSupport {
     */
   val DefaultDestroyGracePeriod: FiniteDuration             = 1.second
   private val ProcessPollInterval: FiniteDuration           = 50.millis
+  private val ObserverTightIntervalMillis: Long             = 1L
+  private val ObserverSteadyIntervalMillis: Long            = ProcessPollInterval.toMillis
+  private val ObserverTightWindowNanos: Long                = 100.millis.toNanos
   private val RetainedDescendantGracePeriod: FiniteDuration = 250.millis
   private val RootNotYetExitedNanos: Long                   = Long.MinValue
   private val drainThreadCounter: AtomicLong                = new AtomicLong(0L)
+  private val observerThreadCounter: AtomicLong             = new AtomicLong(0L)
 
   /** Returns `"git.exe"` on Windows-like OS names, `"git"` otherwise. */
   private[release] def executableNameFor(osName: String): String =
@@ -252,14 +258,7 @@ private[release] object GitProcessSupport {
           val markCompleted: IO[Unit] =
             IO.uncancelable(_ => completed.set(true))
 
-          // Capture transient grand-children re-parented to init before the root exits.
-          val descendantPoller: IO[Nothing] =
-            (IO.blocking(refreshTrackedDescendants(process)).void *> IO.sleep(
-              ProcessPollInterval
-            )).foreverM
-
-          descendantPoller.background
-            .surround(poll(use(process, markCompleted)))
+          poll(use(process, markCompleted))
             .guarantee(
               completed.get.flatMap(cleanupManagedProcess(process, destroyGracePeriod, _))
             )
@@ -278,7 +277,8 @@ private[release] object GitProcessSupport {
       val managed = ManagedProcess(
         process,
         new ConcurrentHashMap[Long, TrackedDescendant](),
-        new AtomicLong(RootNotYetExitedNanos)
+        new AtomicLong(RootNotYetExitedNanos),
+        new AtomicBoolean(false)
       )
 
       try {
@@ -289,15 +289,53 @@ private[release] object GitProcessSupport {
           managed.rootExitedAtNanos.compareAndSet(RootNotYetExitedNanos, System.nanoTime())
           ()
         }
+        startDescendantObserver(managed)
         managed
       } catch {
         case NonFatal(err) =>
+          managed.observerStopFlag.set(true)
           try terminate(managed, destroyGracePeriod)
           catch { case NonFatal(termErr) => err.addSuppressed(termErr) }
           closeStreams(managed)
           throw err
       }
     }
+
+  // OS-thread polling: cats-effect fiber scheduling latency (~5 ms on a loaded CI runner)
+  // can exceed the window where a forked grand-child is visible under the root. The observer
+  // polls at 1 ms for the first 100 ms (when transient descendants can race) then relaxes to
+  // 50 ms so long-running commands (fetch/push/pack) don't pay the tight-polling cost.
+  private def startDescendantObserver(managed: ManagedProcess): Unit = {
+    val runnable = new Runnable {
+      override def run(): Unit = {
+        val retentionNanos = RetainedDescendantGracePeriod.toNanos
+        val startNanos     = System.nanoTime()
+        var running        = true
+        while (running && !managed.observerStopFlag.get()) {
+          try refreshTrackedDescendants(managed)
+          catch { case NonFatal(_) => () }
+
+          val exitedAt = managed.rootExitedAtNanos.get()
+          if (exitedAt != RootNotYetExitedNanos && System.nanoTime() - exitedAt >= retentionNanos)
+            running = false
+          else {
+            val intervalMillis =
+              if (System.nanoTime() - startNanos < ObserverTightWindowNanos)
+                ObserverTightIntervalMillis
+              else ObserverSteadyIntervalMillis
+            try Thread.sleep(intervalMillis)
+            catch { case _: InterruptedException => running = false }
+          }
+        }
+      }
+    }
+    val thread   = new Thread(
+      runnable,
+      s"git-descendant-observer-${observerThreadCounter.incrementAndGet()}"
+    )
+    thread.setDaemon(true)
+    thread.start()
+  }
 
   private def captureCommandResult(process: ManagedProcess): IO[GitCommandResult] = {
     val stdoutRes =
@@ -472,7 +510,8 @@ private[release] object GitProcessSupport {
       ManagedProcess(
         process,
         new ConcurrentHashMap[Long, TrackedDescendant](),
-        new AtomicLong(RootNotYetExitedNanos)
+        new AtomicLong(RootNotYetExitedNanos),
+        new AtomicBoolean(true)
       ),
       destroyGracePeriod,
       completed
@@ -483,12 +522,14 @@ private[release] object GitProcessSupport {
       destroyGracePeriod: FiniteDuration,
       completed: Boolean
   ): IO[Unit] =
-    if (completed) IO.blocking(closeStreams(process))
-    else
-      IO.blocking(currentProcessState(process)).flatMap {
-        case state if !state.busy => IO.blocking(closeStreams(process))
-        case _                    => terminateIfAlive(process, destroyGracePeriod)
-      }
+    IO.blocking(process.observerStopFlag.set(true)) *> {
+      if (completed) IO.blocking(closeStreams(process))
+      else
+        IO.blocking(currentProcessState(process)).flatMap {
+          case state if !state.busy => IO.blocking(closeStreams(process))
+          case _                    => terminateIfAlive(process, destroyGracePeriod)
+        }
+    }
 
   private def terminateIfAlive(
       process: ManagedProcess,
@@ -528,44 +569,47 @@ private[release] object GitProcessSupport {
     (current.reverse ++ stale).filter(_.isAlive)
   }
 
+  // Observer thread and main fiber both refresh the tracked map; serialize so the
+  // missing-since bookkeeping and iterator.remove() calls stay consistent.
   private def refreshTrackedDescendants(
       process: ManagedProcess
-  ): (Vector[ProcessHandle], Vector[ProcessHandle]) = {
-    val now                = System.nanoTime()
-    val retentionNanos     = RetainedDescendantGracePeriod.toNanos
-    val currentDescendants = process.process.toHandle.descendants().iterator().asScala.toVector
-    val currentPids        = currentDescendants.iterator.map(_.pid()).toSet
+  ): (Vector[ProcessHandle], Vector[ProcessHandle]) =
+    process.trackedDescendants.synchronized {
+      val now                = System.nanoTime()
+      val retentionNanos     = RetainedDescendantGracePeriod.toNanos
+      val currentDescendants = process.process.toHandle.descendants().iterator().asScala.toVector
+      val currentPids        = currentDescendants.iterator.map(_.pid()).toSet
 
-    currentDescendants.foreach { handle =>
-      process.trackedDescendants.put(
-        handle.pid(),
-        TrackedDescendant(handle, None)
-      )
-      ()
+      currentDescendants.foreach { handle =>
+        process.trackedDescendants.put(
+          handle.pid(),
+          TrackedDescendant(handle, None)
+        )
+        ()
+      }
+
+      val staleBuilder = Vector.newBuilder[ProcessHandle]
+      val iterator     = process.trackedDescendants.entrySet().iterator()
+
+      while (iterator.hasNext) {
+        val entry   = iterator.next()
+        val tracked = entry.getValue
+
+        if (!tracked.handle.isAlive) iterator.remove()
+        else if (!currentPids.contains(entry.getKey))
+          tracked.missingSinceNanos match {
+            case Some(missingSince) if now - missingSince >= retentionNanos =>
+              iterator.remove()
+            case Some(_)                                                    =>
+              staleBuilder += tracked.handle
+            case None                                                       =>
+              entry.setValue(tracked.copy(missingSinceNanos = Some(now)))
+              staleBuilder += tracked.handle
+          }
+      }
+
+      (currentDescendants, staleBuilder.result())
     }
-
-    val staleBuilder = Vector.newBuilder[ProcessHandle]
-    val iterator     = process.trackedDescendants.entrySet().iterator()
-
-    while (iterator.hasNext) {
-      val entry   = iterator.next()
-      val tracked = entry.getValue
-
-      if (!tracked.handle.isAlive) iterator.remove()
-      else if (!currentPids.contains(entry.getKey))
-        tracked.missingSinceNanos match {
-          case Some(missingSince) if now - missingSince >= retentionNanos =>
-            iterator.remove()
-          case Some(_)                                                    =>
-            staleBuilder += tracked.handle
-          case None                                                       =>
-            entry.setValue(tracked.copy(missingSinceNanos = Some(now)))
-            staleBuilder += tracked.handle
-        }
-    }
-
-    (currentDescendants, staleBuilder.result())
-  }
 
   private def currentProcessState(process: ManagedProcess): ProcessState = {
     val rootCurrentlyAlive = process.process.isAlive
