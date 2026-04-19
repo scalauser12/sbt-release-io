@@ -56,7 +56,7 @@ private[monorepo] object MonorepoPublishSteps {
   private def isFailureCommandTaskError(cause: Throwable): Boolean =
     cause match {
       case err: IllegalStateException =>
-        Option(err.getMessage).exists(_.contains("reported failure via FailureCommand"))
+        Option(err.getMessage).exists(_.contains(MonorepoStepHelpers.FailureCommandMarker))
       case _                          => false
     }
 

@@ -378,7 +378,7 @@ private[monorepo] object MonorepoVersionWorkflow {
       versionFile: File,
       includeSelectedMarker: Boolean
   ): IO[Unit] =
-    VcsOps.relativizeToBase(vcs, versionFile).void.handleErrorWith { _ =>
+    VcsOps.relativizeToBase(vcs, versionFile).void.recoverWith { case _: IllegalStateException =>
       IO.blocking {
         val selectedMarker =
           if (includeSelectedMarker) "selected " else ""
