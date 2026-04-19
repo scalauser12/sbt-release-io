@@ -252,7 +252,14 @@ private[release] object GitProcessSupport {
           val markCompleted: IO[Unit] =
             IO.uncancelable(_ => completed.set(true))
 
-          poll(use(process, markCompleted))
+          // Capture transient grand-children re-parented to init before the root exits.
+          val descendantPoller: IO[Nothing] =
+            (IO.blocking(refreshTrackedDescendants(process)).void *> IO.sleep(
+              ProcessPollInterval
+            )).foreverM
+
+          descendantPoller.background
+            .surround(poll(use(process, markCompleted)))
             .guarantee(
               completed.get.flatMap(cleanupManagedProcess(process, destroyGracePeriod, _))
             )
