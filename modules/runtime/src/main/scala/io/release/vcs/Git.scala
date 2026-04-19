@@ -12,8 +12,10 @@ class Git(val baseDir: File) extends Vcs {
   private val DetachedHeadMessage =
     "HEAD is detached. release-io branch-based VCS operations require a checked-out branch."
 
-  private val HeadsRefPrefix = "refs/heads/"
-
+  // NOTE: This helper currently swallows any NonFatal as `None`. Git uses exit 128 for
+  // "not a valid ref" AND for other error conditions (corrupt repo, permission denied,
+  // ambiguous arg). A stricter implementation would inspect exit code + stderr — deferred
+  // pending a concrete bug report.
   private def recoverMissingRef(io: IO[String]): IO[Option[String]] =
     io.map(Some(_)).handleErrorWith {
       case e: InvalidUpstreamConfigException => IO.raiseError(e)
@@ -45,27 +47,28 @@ class Git(val baseDir: File) extends Vcs {
       }
 
   def trackingRemote: IO[String] =
-    currentBranch.flatMap { branch =>
-      readValidatedBranchConfig(
-        branch,
-        "remote",
-        s"Branch '$branch' has no configured tracking remote; " +
-          s"configure branch.$branch.remote before releasing."
-      ).flatMap { remote =>
-        IO.raiseWhen(remote.isEmpty)(
+    currentBranch.flatMap(validatedRemoteForBranch)
+
+  private def validatedRemoteForBranch(branch: String): IO[String] =
+    readValidatedBranchConfig(
+      branch,
+      "remote",
+      s"Branch '$branch' has no configured tracking remote; " +
+        s"configure branch.$branch.remote before releasing."
+    ).flatMap { remote =>
+      IO.raiseWhen(remote.isEmpty)(
+        new InvalidUpstreamConfigException(
+          s"Tracking remote for branch '$branch' is empty; " +
+            s"configure branch.$branch.remote before releasing."
+        )
+      ) *>
+        IO.raiseWhen(remote == ".")(
           new InvalidUpstreamConfigException(
-            s"Tracking remote for branch '$branch' is empty; " +
-              s"configure branch.$branch.remote before releasing."
+            s"Branch '$branch' tracks a local branch " +
+              s"(branch.$branch.remote = '.'); " +
+              "configure a real remote before releasing."
           )
-        ) *>
-          IO.raiseWhen(remote == ".")(
-            new InvalidUpstreamConfigException(
-              s"Branch '$branch' tracks a local branch " +
-                s"(branch.$branch.remote = '.'); " +
-                "configure a real remote before releasing."
-            )
-          ).as(remote)
-      }
+        ).as(remote)
     }
 
   def upstreamTrackingHash: IO[Option[String]] =
@@ -90,12 +93,16 @@ class Git(val baseDir: File) extends Vcs {
   private def probeBranchKey(branch: String, key: String): IO[Boolean] = {
     val args    = Seq("config", s"branch.$branch.$key")
     val context = s"git config branch.$branch.$key"
-    GitProcessSupport.runExitCode(baseDir, args).flatMap {
-      case 0 => IO.pure(true)
-      case 1 => IO.pure(false)
-      case _ =>
-        GitProcessSupport.runLines(baseDir, args)(context) *>
-          IO.raiseError[Boolean](new IllegalStateException(s"$context failed unexpectedly"))
+    GitProcessSupport.runCommandResult(baseDir, args).flatMap { result =>
+      result.exitCode match {
+        case 0 => IO.pure(true)
+        case 1 => IO.pure(false)
+        case n =>
+          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
+          IO.raiseError(
+            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
+          )
+      }
     }
   }
 
@@ -110,15 +117,18 @@ class Git(val baseDir: File) extends Vcs {
     } yield behind
 
   def existsTag(name: String): IO[Boolean] = {
-    val probeArgs = Seq("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name")
-    val errorArgs = Seq("show-ref", "--tags", "--verify", s"refs/tags/$name")
-    val context   = s"git show-ref refs/tags/$name"
-    GitProcessSupport.runExitCode(baseDir, probeArgs).flatMap {
-      case 0 => IO.pure(true)
-      case 1 => IO.pure(false)
-      case _ =>
-        GitProcessSupport.runLines(baseDir, errorArgs)(context) *>
-          IO.raiseError[Boolean](new IllegalStateException(s"$context failed unexpectedly"))
+    val args    = Seq("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name")
+    val context = s"git show-ref refs/tags/$name"
+    GitProcessSupport.runCommandResult(baseDir, args).flatMap { result =>
+      result.exitCode match {
+        case 0 => IO.pure(true)
+        case 1 => IO.pure(false)
+        case n =>
+          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
+          IO.raiseError(
+            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
+          )
+      }
     }
   }
 
@@ -174,7 +184,7 @@ class Git(val baseDir: File) extends Vcs {
 
   private def branchInfo: IO[(String, String)] =
     currentBranch.flatMap { branch =>
-      trackingRemote.map(remote => (branch, remote))
+      validatedRemoteForBranch(branch).map(remote => (branch, remote))
     }
 
   private def upstreamBranch(branch: String): IO[String] =
@@ -183,21 +193,7 @@ class Git(val baseDir: File) extends Vcs {
       "merge",
       s"Branch '$branch' has no configured upstream branch; " +
         s"configure branch.$branch.merge before releasing."
-    ).flatMap { mergeRef =>
-      IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
-        new InvalidUpstreamConfigException(
-          s"Tracking branch ref '$mergeRef' for branch '$branch' " +
-            s"must use the '$HeadsRefPrefix' format."
-        )
-      ) *> {
-        val upstream = mergeRef.stripPrefix(HeadsRefPrefix)
-        IO.raiseWhen(upstream.isEmpty)(
-          new InvalidUpstreamConfigException(
-            s"Unable to resolve tracking branch from '$mergeRef' for branch '$branch'."
-          )
-        ).as(upstream)
-      }
-    }
+    ).flatMap(mergeRef => GitPushSupport.validateMergeRef(branch, mergeRef))
 
   private def readValidatedBranchConfig(
       branch: String,
