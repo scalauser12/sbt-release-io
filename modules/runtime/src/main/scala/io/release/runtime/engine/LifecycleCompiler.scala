@@ -20,15 +20,17 @@ private[release] object LifecycleCompiler {
       step: ProcessStep.Single[C],
       enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] =
-    Phase(
-      phaseName = None,
-      rawSteps = Seq(step),
-      compileSteps = config => IO.pure(if (enabled(config)) Seq(step) else Seq.empty)
-    )
+    builtIn(step, enabled)
 
   def perItemBuiltIn[Config, C, I](
       step: ProcessStep.PerItem[C, I],
       enabled: Config => Boolean = (_: Config) => true
+  ): Phase[Config, C, I] =
+    builtIn(step, enabled)
+
+  private def builtIn[Config, C, I](
+      step: ProcessStep[C, I],
+      enabled: Config => Boolean
   ): Phase[Config, C, I] =
     Phase(
       phaseName = None,
@@ -36,13 +38,12 @@ private[release] object LifecycleCompiler {
       compileSteps = config => IO.pure(if (enabled(config)) Seq(step) else Seq.empty)
     )
 
-  /** @param freezeGate when true, gate decisions are captured during
-    *   validation and reused during execution so that state mutations
-    *   between phases cannot flip the decision.
-    * @param gateKey extracts a cache key from the context so that
-    *   cross-build iterations (which change `scalaVersion` in state)
-    *   each get their own frozen decision.  Required when
-    *   `freezeGate` is true.
+  /** Compile a single-context hook phase. See the *freeze-gate contract* note
+    * near `gateModeFrom` for the `freezeGate` / `gateKey` semantics.
+    *
+    * @param gateKey extracts a cache key from the context; for cross-build
+    *   iterations this should fold `scalaVersion` in so each iteration
+    *   gets its own frozen decision.
     */
   def singleHookPhase[Config, C, I, Hook](
       phase: String,
@@ -81,15 +82,12 @@ private[release] object LifecycleCompiler {
     )
   }
 
-  /** @param freezeGate when true, gate decisions are captured during
-    *   validation and reused during execution so that state mutations
-    *   between phases cannot flip the decision.
-    * @param gateKey extracts a stable cache key from context and item so
-    *   that per-project and per-Scala-version iterations each preserve
-    *   their own frozen decision.  Must use a stable project identifier
-    *   (e.g. `ProjectRef`) rather than the full item, since item fields
-    *   like `versions` and `tagName` change between phases.  Required
-    *   when `freezeGate` is true.
+  /** Compile a per-item hook phase. See the *freeze-gate contract* note near
+    * `gateModeFrom` for the `freezeGate` / `gateKey` semantics.
+    *
+    * @param gateKey extracts a stable cache key from `(context, item)`. Must use
+    *   a stable project identifier (e.g. `ProjectRef`) rather than the full item,
+    *   since item fields like `versions` and `tagName` change between phases.
     */
   def perItemHookPhase[Config, C, I, Hook](
       phase: String,
@@ -150,6 +148,15 @@ private[release] object LifecycleCompiler {
   ): IO[Seq[ProcessStep.Single[C]]] =
     compile(config, phases).map(_.flatMap(step => ProcessStep.toSingleOption(step)))
 
+  // ── Freeze-gate contract ────────────────────────────────────────────
+  //
+  // When `freezeGate = true`, gate decisions are captured during validation
+  // and replayed during execution so that state mutations between phases
+  // cannot flip the decision. `gateKey` is required in that case: it names
+  // the cache slot each iteration (cross-build, per-project, …) reads from
+  // and writes to. When `freezeGate = false`, the gate is streaming — every
+  // call re-evaluates the current `gate` function.
+
   private sealed trait GateMode[+K]
   private object GateMode {
     case object Streaming                  extends GateMode[Nothing]
@@ -160,16 +167,15 @@ private[release] object LifecycleCompiler {
       phase: String,
       freezeGate: Boolean,
       gateKey: Option[K]
-  ): GateMode[K] = {
-    require(
-      !freezeGate || gateKey.isDefined,
-      s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
-    )
-    gateKey match {
-      case Some(key) if freezeGate => GateMode.Frozen(key)
-      case _                       => GateMode.Streaming
+  ): GateMode[K] =
+    if (!freezeGate) GateMode.Streaming
+    else {
+      require(
+        gateKey.isDefined,
+        s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
+      )
+      GateMode.Frozen(gateKey.get)
     }
-  }
 
   // ── Single-context hooks ────────────────────────────────────────────
 
@@ -340,22 +346,27 @@ private[release] object LifecycleCompiler {
       (exec, execTracked, valFn)
     }
 
-  private def frozenGateRun[C](
+  private def requireFrozenDecision(
       cached: Ref[IO, Map[String, Boolean]],
-      key: String,
-      executeIfTrue: IO[C],
-      skip: IO[C]
-  ): IO[C] =
+      key: String
+  ): IO[Boolean] =
     cached.get.map(_.get(key)).flatMap {
-      case Some(true)  => executeIfTrue
-      case Some(false) => skip
-      case None        =>
+      case Some(decision) => IO.pure(decision)
+      case None           =>
         IO.raiseError(
           new IllegalStateException(
             s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGate = true"
           )
         )
     }
+
+  private def frozenGateRun[C](
+      cached: Ref[IO, Map[String, Boolean]],
+      key: String,
+      executeIfTrue: IO[C],
+      skip: IO[C]
+  ): IO[C] =
+    requireFrozenDecision(cached, key).flatMap(if (_) executeIfTrue else skip)
 
   private def frozenGateValidate[C](
       cached: Ref[IO, Map[String, Boolean]],
@@ -371,19 +382,10 @@ private[release] object LifecycleCompiler {
         case false => skip
       }
 
-  private def frozenGateRunTracked[C](
+  private def frozenGateRunTracked(
       cached: Ref[IO, Map[String, Boolean]],
       key: String,
       executeIfTrue: IO[Unit]
   ): IO[Unit] =
-    cached.get.map(_.get(key)).flatMap {
-      case Some(true)  => executeIfTrue
-      case Some(false) => IO.unit
-      case None        =>
-        IO.raiseError(
-          new IllegalStateException(
-            s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGate = true"
-          )
-        )
-    }
+    requireFrozenDecision(cached, key).flatMap(if (_) executeIfTrue else IO.unit)
 }
