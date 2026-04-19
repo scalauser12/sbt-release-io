@@ -42,7 +42,7 @@ private[release] object SbtRuntime {
     else
       (
         state,
-        state.get(InteractionServiceStateKey).getOrElse(_root_.sbt.CommandLineUIService)
+        state.get(InteractionServiceStateKey).getOrElse(CommandLineUIService)
       )
 
   def withInteractionService(state: State, service: InteractionService): State =

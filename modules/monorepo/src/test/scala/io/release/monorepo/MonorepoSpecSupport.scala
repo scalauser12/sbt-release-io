@@ -157,7 +157,7 @@ object MonorepoSpecSupport {
 
     aggregated.settings(
       (
-        _root_.io.release.monorepo.internal.MonorepoDefaultSettings.pluginDefaultSettings ++
+        MonorepoDefaultSettings.pluginDefaultSettings ++
           Seq(
             io.release.ReleaseSharedKeys.releaseIOVersioningFile := new File(
               repo,

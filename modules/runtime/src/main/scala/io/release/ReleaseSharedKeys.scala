@@ -1,5 +1,6 @@
 package io.release
 
+import _root_.io.release.version.Version
 import sbt.{internal as _, *}
 
 import scala.concurrent.duration.FiniteDuration
@@ -48,8 +49,8 @@ private[release] object ReleaseSharedKeys {
     )
 
   @transient
-  lazy val releaseIOVersioningBump: TaskKey[_root_.io.release.version.Version.Bump] =
-    TaskKey[_root_.io.release.version.Version.Bump](
+  lazy val releaseIOVersioningBump: TaskKey[Version.Bump] =
+    TaskKey[Version.Bump](
       "releaseIOVersioningBump",
       "Version bump strategy"
     )

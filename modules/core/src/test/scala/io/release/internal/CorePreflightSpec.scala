@@ -4,6 +4,7 @@ import cats.effect.IO
 import io.release.ReleaseComposer
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import io.release.ReleasePluginIO
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
@@ -514,7 +515,7 @@ class CorePreflightSpec extends CatsEffectSuite {
                 val seededState = TestSupport.appendSessionSettings(
                   currentCtx.state,
                   Seq(
-                    _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash :=
+                    releaseIOInternalReleaseHash :=
                       Some(headRev)
                   )
                 )
@@ -713,7 +714,7 @@ class CorePreflightSpec extends CatsEffectSuite {
           TestSupport.appendSessionSettings(
             initialCtx.state,
             Seq(
-              _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash :=
+              releaseIOInternalReleaseHash :=
                 Some(releaseCommitHash)
             )
           )
