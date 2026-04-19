@@ -113,7 +113,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   private[monorepo] def preflightTags(
       ctx: MonorepoContext,
-      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+      preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
   ): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       // Check mode only reaches tag preflight after MonorepoPreflight has ruled out tag-affecting
@@ -124,7 +124,7 @@ private[monorepo] object MonorepoVcsSteps {
           required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
             case (releaseVer, _) =>
               val rendered = settings.perProjectTagName(project.name, releaseVer)
-              missingHashTarget(vcs)
+              preflightTagTarget(vcs)
                 .flatMap(target => preflightCreateTag(ctx, vcs, rendered, target, project.name))
           }
         }

@@ -126,13 +126,13 @@ private[release] object VcsSteps {
 
   private[release] def preflightTag(
       ctx: ReleaseContext,
-      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+      preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
   ): IO[PreflightTagOutcome] =
     preparePreflightContext(ctx).flatMap { preflightCtx =>
       resolveTagPlan(preflightCtx).flatMap { params =>
         val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
         detectedVcs.flatMap(vcs =>
-          resolveTagPreflight(vcs, params, preflightCtx, missingHashTarget)
+          resolveTagPreflight(vcs, params, preflightCtx, preflightTagTarget)
         )
       }
     }
@@ -203,9 +203,9 @@ private[release] object VcsSteps {
       vcs: Vcs,
       params: TagPlan,
       ctx: ReleaseContext,
-      missingHashTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+      preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
   ): IO[PreflightTagOutcome] =
-    missingHashTarget(vcs).flatMap { target =>
+    preflightTagTarget(vcs).flatMap { target =>
       val commandName =
         ctx.executionState.map(_.plan.commandName).getOrElse(CoreReleasePlan.DefaultCommandName)
 

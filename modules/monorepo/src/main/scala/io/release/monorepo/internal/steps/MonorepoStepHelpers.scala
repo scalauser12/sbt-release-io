@@ -28,6 +28,12 @@ import scala.util.control.NonFatal
  */
 private[monorepo] object MonorepoStepHelpers {
 
+  /** Substring present in any `IllegalStateException` emitted after an sbt task triggered
+    * `FailureCommand`. Detection paths (e.g. `MonorepoPublishSteps.isFailureCommandTaskError`)
+    * match on this. If you change the emitted wording, update both sides.
+    */
+  private[monorepo] val FailureCommandMarker: String = "reported failure via FailureCommand"
+
   // ── Per-project execution ─────────────────────────────────────────────
 
   /** Run a per-project action across all non-failed projects, with error isolation
@@ -141,7 +147,7 @@ private[monorepo] object MonorepoStepHelpers {
   ): IO[MonorepoContext] =
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val failure = new IllegalStateException(
-        s"${project.name}: sbt task reported failure via FailureCommand"
+        s"${project.name}: sbt task $FailureCommandMarker"
       )
       for {
         stripped <- ExecutionEngine.stripFailureCommand(ctx)
