@@ -15,6 +15,9 @@ private[release] object PromptAdapter {
   private val RetryYesNoPromptPrefix =
     "Please answer 'y' or 'n' (or press Enter for the default)."
 
+  // Each caller re-fetches InteractionService because sbt State may have mutated
+  // between separate prompt call sites. Within a single prompt (e.g. promptYesNoOrEof's
+  // retry loop) the service is fetched once and reused.
   private def interaction[C <: ReleaseCtx { type Self = C }](
       ctx: C
   ): IO[(C, InteractionService)] =
@@ -30,9 +33,15 @@ private[release] object PromptAdapter {
       IO.blocking(service.readLine(prompt, mask = false)).map(line => (nextCtx, line))
     }
 
+  /** Reads a line from the active `InteractionService` with no visible prompt.
+    * Returns `None` on EOF.
+    */
   def readLine[C <: ReleaseCtx { type Self = C }](ctx: C): IO[(C, Option[String])] =
     readLineWithPrompt(ctx, "")
 
+  /** Reads a line with no visible prompt and raises `IllegalStateException` on EOF,
+    * embedding `context` in the error message.
+    */
   def readRequiredLine[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       context: String
@@ -45,21 +54,38 @@ private[release] object PromptAdapter {
       case (nextCtx, Some(input)) => IO.pure((nextCtx, input))
     }
 
+  /** Displays the given prompt and reads a line. Returns `None` on EOF. */
   def promptLine[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String
   ): IO[(C, Option[String])] =
     readLineWithPrompt(ctx, prompt)
 
+  /** Prompts for a yes/no answer, retrying on invalid input. Returns `Some(answer)`
+    * on a valid response, `None` on EOF.
+    */
   def promptYesNoOrEof[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String,
       defaultYes: Boolean
   ): IO[(C, Option[Boolean])] =
     interaction(ctx).flatMap { case (nextCtx, service) =>
-      promptYesNoLoop(nextCtx, service, prompt, prompt, defaultYes)
+      def loop(currentPrompt: String): IO[(C, Option[Boolean])] =
+        IO.blocking(service.readLine(currentPrompt, mask = false)).flatMap {
+          case None           => IO.pure((nextCtx, None))
+          case Some(rawInput) =>
+            parseYesNoInput(rawInput, defaultYes) match {
+              case Some(answer) => IO.pure((nextCtx, Some(answer)))
+              case None         => loop(retryPrompt(prompt))
+            }
+        }
+
+      loop(prompt)
     }
 
+  /** Prompts for a yes/no answer, retrying on invalid input. On EOF falls back to
+    * `defaultYes`.
+    */
   def promptYesNo[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       prompt: String,
@@ -67,29 +93,6 @@ private[release] object PromptAdapter {
   ): IO[(C, Boolean)] =
     promptYesNoOrEof(ctx, prompt, defaultYes).map { case (nextCtx, decision) =>
       (nextCtx, decision.getOrElse(defaultYes))
-    }
-
-  private def promptYesNoLoop[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      service: InteractionService,
-      currentPrompt: String,
-      basePrompt: String,
-      defaultYes: Boolean
-  ): IO[(C, Option[Boolean])] =
-    IO.blocking(service.readLine(currentPrompt, mask = false)).flatMap {
-      case None           => IO.pure((ctx, None))
-      case Some(rawInput) =>
-        parseYesNoInput(rawInput, defaultYes) match {
-          case Some(answer) => IO.pure((ctx, Some(answer)))
-          case None         =>
-            promptYesNoLoop(
-              ctx,
-              service,
-              retryPrompt(basePrompt),
-              basePrompt,
-              defaultYes
-            )
-        }
     }
 
   private def retryPrompt(prompt: String): String =
