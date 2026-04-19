@@ -161,6 +161,21 @@ private[release] object GitProcessSupport {
     }
   }
 
+  /** Run git capturing stdout/stderr and return the raw result without raising on non-zero exit.
+    * Use when the caller needs to branch on the exit code in a single invocation.
+    */
+  private[release] def runCommandResult(
+      baseDir: File,
+      args: Seq[String]
+  ): IO[GitCommandResult] =
+    withManagedProcess(
+      captureJavaCmd(baseDir, args*),
+      DefaultDestroyGracePeriod,
+      closeStdin = true
+    ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
+      captureCommandResult(process).flatTap(_ => markCompleted)
+    }
+
   /** Run git capturing stdout; raise on non-zero exit with stderr appended to the message.
     * Empty stdout lines are filtered out.
     *

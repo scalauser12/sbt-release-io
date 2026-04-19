@@ -72,16 +72,16 @@ private[release] object GitPushSupport {
   ): IO[String] = {
     val args    = Seq("config", s"branch.$branch.$key")
     val context = s"git config branch.$branch.$key"
-    GitProcessSupport.runExitCode(vcs.baseDir, args).flatMap {
-      case 0 =>
-        GitProcessSupport.runLines(vcs.baseDir, args)(context).map {
-          case head +: _ => head.trim
-          case _         => ""
-        }
-      case 1 => IO.raiseError(new InvalidUpstreamConfigException(missingMessage))
-      case _ =>
-        GitProcessSupport.runLines(vcs.baseDir, args)(context) *>
-          IO.raiseError[String](new IllegalStateException(s"$context failed unexpectedly"))
+    GitProcessSupport.runCommandResult(vcs.baseDir, args).flatMap { result =>
+      result.exitCode match {
+        case 0 => IO.pure(result.stdout.headOption.fold("")(_.trim))
+        case 1 => IO.raiseError(new InvalidUpstreamConfigException(missingMessage))
+        case n =>
+          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
+          IO.raiseError(
+            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
+          )
+      }
     }
   }
 
