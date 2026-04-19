@@ -1,6 +1,9 @@
 package io.release.internal
 
 import cats.effect.IO
+import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.TestSupport
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
@@ -21,16 +24,16 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
         val seeded  = TestSupport.appendSessionSettings(
           baseState,
           Seq(
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := Some(
+            releaseIOInternalReleaseHash := Some(
               "abc123"
             ),
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := Some(
+            releaseIOInternalReleaseTag  := Some(
               "v1.0.0"
             )
           )
         )
         val cleared =
-          _root_.io.release.ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded, Nil)
+          ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded, Nil)
 
         assertEquals(
           TestSupport.manifestAttributes(seeded),
@@ -51,24 +54,24 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
         val firstPass  = TestSupport.appendSessionSettings(
           baseState,
           Seq(
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := Some(
+            releaseIOInternalReleaseHash := Some(
               "first-hash"
             ),
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := Some(
+            releaseIOInternalReleaseTag  := Some(
               "v1.0.0"
             )
           )
         )
         val cleared    =
-          _root_.io.release.ReleaseManifestMetadataSupport
+          ReleaseManifestMetadataSupport
             .clearReleaseManifestMetadata(firstPass, Nil)
         val secondPass = TestSupport.appendSessionSettings(
           cleared,
           Seq(
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := Some(
+            releaseIOInternalReleaseHash := Some(
               "second-hash"
             ),
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := Some(
+            releaseIOInternalReleaseTag  := Some(
               "v2.0.0"
             )
           )
@@ -107,18 +110,18 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
       nonce: String
   ): Seq[sbt.Setting[?]] =
     Seq(
-      fixtureNonce                                                                  := nonce,
-      packageOptions                                                                := {
+      fixtureNonce                 := nonce,
+      packageOptions               := {
         val _ = fixtureNonce.value
         basePackageOptions
       },
-      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
-      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
+      releaseIOInternalReleaseHash := None,
+      releaseIOInternalReleaseTag  := None,
       packageOptions ++= {
         val _ = fixtureNonce.value
-        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
-          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
-          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
+        ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+          releaseIOInternalReleaseHash.value,
+          releaseIOInternalReleaseTag.value
         )
       }
     )

@@ -3,6 +3,9 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
+import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.TestSupport
 import io.release.monorepo.internal.steps.MonorepoVcsCommitHelpers
 import io.release.monorepo.internal.steps.MonorepoVersionSteps
@@ -288,14 +291,14 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         val apiRef  = fixture.refsById("api")
         val seeded  = TestSupport.appendSessionSettings(
           fixture.state,
-          _root_.io.release.ReleaseManifestMetadataSupport
+          ReleaseManifestMetadataSupport
             .releaseManifestHashSettings(Seq(coreRef, apiRef), "abc123") ++
-            _root_.io.release.ReleaseManifestMetadataSupport
+            ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(coreRef, "core/v1.0.0") ++
-            _root_.io.release.ReleaseManifestMetadataSupport
+            ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(apiRef, "api/v2.0.0")
         )
-        val cleared = _root_.io.release.ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
+        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
           seeded,
           fixture.refsById.values.toSeq
         )
@@ -329,24 +332,24 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         val apiRef     = fixture.refsById("api")
         val firstPass  = TestSupport.appendSessionSettings(
           fixture.state,
-          _root_.io.release.ReleaseManifestMetadataSupport
+          ReleaseManifestMetadataSupport
             .releaseManifestHashSettings(Seq(coreRef, apiRef), "first-hash") ++
-            _root_.io.release.ReleaseManifestMetadataSupport
+            ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(coreRef, "core/v1.0.0") ++
-            _root_.io.release.ReleaseManifestMetadataSupport
+            ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(apiRef, "api/v1.0.0")
         )
-        val cleared    = _root_.io.release.ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
+        val cleared    = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
           firstPass,
           fixture.refsById.values.toSeq
         )
         val secondPass = TestSupport.appendSessionSettings(
           cleared,
-          _root_.io.release.ReleaseManifestMetadataSupport
+          ReleaseManifestMetadataSupport
             .releaseManifestHashSettings(Seq(coreRef, apiRef), "second-hash") ++
-            _root_.io.release.ReleaseManifestMetadataSupport
+            ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(coreRef, "core/v2.0.0") ++
-            _root_.io.release.ReleaseManifestMetadataSupport
+            ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(apiRef, "api/v2.0.0")
         )
 
@@ -430,18 +433,18 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       nonce: String
   ): Seq[sbt.Setting[?]] =
     Seq(
-      fixtureNonce                                                                  := nonce,
-      packageOptions                                                                := {
+      fixtureNonce                 := nonce,
+      packageOptions               := {
         val _ = fixtureNonce.value
         basePackageOptions
       },
-      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
-      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
+      releaseIOInternalReleaseHash := None,
+      releaseIOInternalReleaseTag  := None,
       packageOptions ++= {
         val _ = fixtureNonce.value
-        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
-          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
-          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
+        ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+          releaseIOInternalReleaseHash.value,
+          releaseIOInternalReleaseTag.value
         )
       }
     )

@@ -5,6 +5,7 @@ import cats.effect.Resource
 import io.release.ReleasePluginIO
 import io.release.monorepo.internal.*
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.TrackedContextHandle
 import io.release.runtime.command.PluginEntrypointSupport
 import sbt.complete.Parser
 import sbt.{internal as _, *}
@@ -295,7 +296,7 @@ object MonorepoReleasePluginAutoImport {
     * `handle: MonorepoHookHandle` instead of
     * `handle: TrackedContextHandle[MonorepoContext]`.
     */
-  type MonorepoHookHandle = _root_.io.release.runtime.TrackedContextHandle[MonorepoContext]
+  type MonorepoHookHandle = TrackedContextHandle[MonorepoContext]
 }
 
 /** Base trait for resource-parameterized monorepo release plugins.

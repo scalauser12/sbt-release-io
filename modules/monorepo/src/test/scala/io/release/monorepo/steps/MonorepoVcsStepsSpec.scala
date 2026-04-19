@@ -2,6 +2,9 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
@@ -9,6 +12,7 @@ import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.*
+import io.release.monorepo.internal.MonorepoDefaultSettings
 import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.internal.SelectionMode
 import io.release.monorepo.internal.steps.*
@@ -82,7 +86,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         seededState        =
           TestSupport.appendSessionSettings(
             baseCtx.state,
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+            ReleaseManifestMetadataSupport.releaseManifestHashSettings(
               Seq(project.ref),
               releaseCommitHash
             )
@@ -137,7 +141,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     twoProjectTagContextResource.use { case (_, coreProject, apiProject, ctx) =>
       val seededState = TestSupport.appendSessionSettings(
         ctx.state,
-        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+        ReleaseManifestMetadataSupport.releaseManifestHashSettings(
           Seq(coreProject.ref, apiProject.ref),
           "release-hash"
         )
@@ -371,7 +375,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         seededState        =
           TestSupport.appendSessionSettings(
             baseCtx.state,
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+            ReleaseManifestMetadataSupport.releaseManifestHashSettings(
               Seq(project.ref),
               releaseCommitHash
             )
@@ -454,7 +458,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         seededState =
           TestSupport.appendSessionSettings(
             baseCtx.state,
-            _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+            ReleaseManifestMetadataSupport.releaseManifestHashSettings(
               Seq(project.ref),
               headRev
             )
@@ -901,7 +905,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
     aggregated.settings(
       (
-        _root_.io.release.monorepo.internal.MonorepoDefaultSettings.pluginDefaultSettings ++
+        MonorepoDefaultSettings.pluginDefaultSettings ++
           Seq(
             io.release.ReleaseSharedKeys.releaseIOVersioningFile          := new File(
               repo,
@@ -988,18 +992,18 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       nonce: String
   ): Seq[sbt.Setting[?]] =
     Seq(
-      fixtureNonce                                                                  := nonce,
-      packageOptions                                                                := {
+      fixtureNonce                 := nonce,
+      packageOptions               := {
         val _ = fixtureNonce.value
         basePackageOptions
       },
-      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
-      _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
+      releaseIOInternalReleaseHash := None,
+      releaseIOInternalReleaseTag  := None,
       packageOptions ++= {
         val _ = fixtureNonce.value
-        _root_.io.release.ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
-          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
-          _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
+        ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+          releaseIOInternalReleaseHash.value,
+          releaseIOInternalReleaseTag.value
         )
       }
     )

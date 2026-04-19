@@ -7,9 +7,11 @@ import io.release.core.internal.CoreDefaultSettings
 import io.release.core.internal.ReleaseCli
 import io.release.core.internal.ReleaseCommandParsers
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.TrackedContextHandle
 import io.release.runtime.command.PluginEntrypointSupport
 import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
+import io.release.version.Version
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
@@ -219,7 +221,7 @@ object ReleasePluginIOAutoImport {
     )
 
   @transient
-  lazy val releaseIOVersioningBump: TaskKey[_root_.io.release.version.Version.Bump] =
+  lazy val releaseIOVersioningBump: TaskKey[Version.Bump] =
     ReleaseSharedKeys.releaseIOVersioningBump
 
   @transient
@@ -308,7 +310,7 @@ object ReleasePluginIOAutoImport {
     * `handle: ReleaseHookHandle` instead of
     * `handle: TrackedContextHandle[ReleaseContext]`.
     */
-  type ReleaseHookHandle = _root_.io.release.runtime.TrackedContextHandle[ReleaseContext]
+  type ReleaseHookHandle = TrackedContextHandle[ReleaseContext]
 
 }
 

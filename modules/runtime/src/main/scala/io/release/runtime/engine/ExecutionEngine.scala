@@ -3,6 +3,7 @@ package io.release.runtime.engine
 import scala.util.control.NonFatal
 
 import _root_.sbt.AttributeKey
+import _root_.sbt.Exec
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.TrackedContextHandle
@@ -38,8 +39,8 @@ import io.release.runtime.workflow.StepHelpers
   */
 private[release] object ExecutionEngine {
 
-  private val originalOnFailureKey: AttributeKey[Option[_root_.sbt.Exec]] =
-    AttributeKey[Option[_root_.sbt.Exec]]("releaseIOInternalOriginalOnFailure")
+  private val originalOnFailureKey: AttributeKey[Option[Exec]] =
+    AttributeKey[Option[Exec]]("releaseIOInternalOriginalOnFailure")
 
   private val armedOnFailureKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalArmedOnFailure")
