@@ -57,7 +57,9 @@ private[release] object VcsOps {
     IO.blocking {
       val extracted       = Project.extract(state)
       val ignoreUntracked =
-        extracted.get(ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles)
+        extracted
+          .getOpt(ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles)
+          .getOrElse(false)
       val base            = extracted.get(thisProject).base
       (ignoreUntracked, base)
     }.flatMap { case (ignoreUntracked, base) =>
@@ -84,7 +86,6 @@ private[release] object VcsOps {
       modified    <- vcs.modifiedFiles
       staged      <- vcs.stagedFiles
       untracked   <- vcs.untrackedFiles
-      currentHash <- vcs.currentHash
       _           <- IO.raiseWhen(modified.nonEmpty)(
                        new IllegalStateException(
                          s"""Aborting release: unstaged modified files
@@ -115,6 +116,7 @@ private[release] object VcsOps {
                             |""".stripMargin
                        )
                      )
+      currentHash <- vcs.currentHash
     } yield CleanCheckResult(vcs, currentHash)
 
   /** Resolve file path relative to VCS base directory. */
@@ -154,7 +156,12 @@ private[release] object VcsOps {
       remoteCheck <- vcs.checkRemoteWithTimeout(remote, timeout)
       resultCtx   <- remoteCheck match {
                        case Some(0) => IO.pure(RemoteCheckResult(ctx, refreshed = true))
-                       case Some(_) => continueAfterRemoteCheckFailure(ctx, logPrefix)
+                       case Some(n) =>
+                         IO.blocking {
+                           ctx.state.log.warn(
+                             s"$logPrefix Remote check of '$remote' exited with code $n."
+                           )
+                         } *> continueAfterRemoteCheckFailure(ctx, logPrefix)
                        case None    =>
                          IO.blocking {
                            ctx.state.log.warn(
@@ -305,8 +312,9 @@ private[release] object VcsOps {
 
   private def currentUpstreamTip(vcs: Vcs): IO[Option[String]] =
     vcs.upstreamTrackingHash.handleErrorWith {
-      case NonFatal(_) => IO.pure(None)
-      case fatal       => IO.raiseError(fatal)
+      case e: InvalidUpstreamConfigException => IO.raiseError(e)
+      case NonFatal(_)                       => IO.pure(None)
+      case fatal                             => IO.raiseError(fatal)
     }
 
   private def confirmedUpstreamTip[C <: ReleaseCtx](ctx: C): Option[String] =
