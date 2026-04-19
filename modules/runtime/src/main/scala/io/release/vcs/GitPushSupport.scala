@@ -34,35 +34,41 @@ private[release] object GitPushSupport {
     */
   def resolvePushTarget(vcs: Vcs): IO[GitPushTarget] =
     for {
-      localBranch   <- vcs.currentBranch
-      remote        <- vcs.trackingRemote
-      mergeRef      <- readBranchConfig(
-                         vcs,
-                         localBranch,
-                         "merge",
-                         s"Branch '$localBranch' has no configured upstream branch; " +
-                           s"configure branch.$localBranch.merge before releasing."
-                       )
-      _             <-
-        IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
-          new InvalidUpstreamConfigException(
-            s"Tracking branch ref '$mergeRef' for branch '$localBranch' " +
-              s"must use the '$HeadsRefPrefix' format."
-          )
-        )
-      upstreamBranch = mergeRef.stripPrefix(HeadsRefPrefix)
-      _             <-
-        IO.raiseWhen(upstreamBranch.isEmpty)(
-          new InvalidUpstreamConfigException(
-            s"Unable to resolve tracking branch from '$mergeRef' " +
-              s"for remote '$remote' and branch '$localBranch'."
-          )
-        )
+      localBranch    <- vcs.currentBranch
+      remote         <- vcs.trackingRemote
+      mergeRef       <- readBranchConfig(
+                          vcs,
+                          localBranch,
+                          "merge",
+                          s"Branch '$localBranch' has no configured upstream branch; " +
+                            s"configure branch.$localBranch.merge before releasing."
+                        )
+      upstreamBranch <- validateMergeRef(localBranch, mergeRef)
     } yield GitPushTarget(
       remote = remote,
       localBranch = localBranch,
       upstreamBranch = upstreamBranch
     )
+
+  /** Validate a `branch.<name>.merge` value: must start with `refs/heads/` and have a
+    * non-empty stripped form. Returns the stripped upstream branch name on success.
+    */
+  private[vcs] def validateMergeRef(branch: String, mergeRef: String): IO[String] = {
+    val stripped = mergeRef.stripPrefix(HeadsRefPrefix)
+    for {
+      _ <- IO.raiseUnless(mergeRef.startsWith(HeadsRefPrefix))(
+             new InvalidUpstreamConfigException(
+               s"Tracking branch ref '$mergeRef' for branch '$branch' " +
+                 s"must use the '$HeadsRefPrefix' format."
+             )
+           )
+      _ <- IO.raiseWhen(stripped.isEmpty)(
+             new InvalidUpstreamConfigException(
+               s"Unable to resolve tracking branch from '$mergeRef' for branch '$branch'."
+             )
+           )
+    } yield stripped
+  }
 
   private[vcs] def readBranchConfig(
       vcs: Vcs,
