@@ -155,26 +155,21 @@ private[release] object LifecycleCompiler {
   // cannot flip the decision. `gateKey` is required in that case: it names
   // the cache slot each iteration (cross-build, per-project, …) reads from
   // and writes to. When `freezeGate = false`, the gate is streaming — every
-  // call re-evaluates the current `gate` function.
-
-  private sealed trait GateMode[+K]
-  private object GateMode {
-    case object Streaming                  extends GateMode[Nothing]
-    final case class Frozen[K](gateKey: K) extends GateMode[K]
-  }
+  // call re-evaluates the current `gate` function. Represented here as
+  // `Option[K]`: `Some(key)` means frozen, `None` means streaming.
 
   private def gateModeFrom[K](
       phase: String,
       freezeGate: Boolean,
       gateKey: Option[K]
-  ): GateMode[K] =
-    if (!freezeGate) GateMode.Streaming
+  ): Option[K] =
+    if (!freezeGate) None
     else {
       require(
         gateKey.isDefined,
         s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
       )
-      GateMode.Frozen(gateKey.get)
+      gateKey
     }
 
   // ── Single-context hooks ────────────────────────────────────────────
@@ -183,7 +178,7 @@ private[release] object LifecycleCompiler {
       phase: String,
       hooks: Seq[Hook],
       gate: C => IO[Boolean],
-      gateMode: GateMode[C => String]
+      gateMode: Option[C => String]
   )(
       nameOf: Hook => String,
       executeOf: Hook => C => IO[C],
@@ -195,7 +190,7 @@ private[release] object LifecycleCompiler {
       val stepName = s"$phase:${nameOf(hook)}"
 
       gateMode match {
-        case GateMode.Frozen(stableGateKey) =>
+        case Some(stableGateKey) =>
           frozenGateFunctions[C, C](
             gate,
             stableGateKey,
@@ -216,7 +211,7 @@ private[release] object LifecycleCompiler {
               Some(frozenVal): Option[C => IO[C]]
             )
           }
-        case GateMode.Streaming             =>
+        case None                =>
           IO.pure(
             ProcessStep.Single[C](
               stepName,
@@ -241,7 +236,7 @@ private[release] object LifecycleCompiler {
       phase: String,
       hooks: Seq[Hook],
       gate: (C, I) => IO[Boolean],
-      gateMode: GateMode[(C, I) => String]
+      gateMode: Option[(C, I) => String]
   )(
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],
@@ -253,7 +248,7 @@ private[release] object LifecycleCompiler {
       val stepName = s"$phase:${nameOf(hook)}"
 
       gateMode match {
-        case GateMode.Frozen(stableGateKey) =>
+        case Some(stableGateKey) =>
           frozenGateFunctions[(C, I), C](
             gate = { case (c, i) => gate(c, i) },
             gateKey = { case (c, i) => stableGateKey(c, i) },
@@ -276,7 +271,7 @@ private[release] object LifecycleCompiler {
               Some((ctx: C, item: I) => frozenVal((ctx, item))): Option[(C, I) => IO[C]]
             )
           }
-        case GateMode.Streaming             =>
+        case None                =>
           IO.pure(
             ProcessStep.PerItem[C, I](
               stepName,

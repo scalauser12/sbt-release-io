@@ -38,6 +38,26 @@ private[release] object ReleaseCommandRunner {
   def runSync(failureState: State, logPrefix: String)(program: IO[State]): State =
     recoverNonFatal(failureState, logPrefix)(program).unsafeRunSync()
 
+  /** Clean state, optionally short-circuit on Left, then run the command IO under [[runSync]]. */
+  def runPreparedCommand[Inputs](
+      state: State,
+      cleanState: State => State,
+      logPrefix: String
+  )(
+      prepare: State => IO[Either[State, Inputs]],
+      run: Inputs => IO[State]
+  ): State =
+    runSync(state, logPrefix) {
+      IO.blocking(cleanState(state)).flatMap { cleanedState =>
+        recoverNonFatal(cleanedState, logPrefix) {
+          IO.defer(prepare(cleanedState)).flatMap {
+            case Left(failedState) => IO.pure(failedState)
+            case Right(inputs)     => run(inputs)
+          }
+        }
+      }
+    }
+
   /** Log a sequence of lines with a shared prefix. Used by help and check output. */
   def logLines(state: State, prefix: String, lines: Seq[String]): IO[Unit] =
     lines.toList.traverse_(line => IO.blocking(state.log.info(s"$prefix $line")))
