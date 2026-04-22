@@ -16,7 +16,6 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
@@ -40,26 +39,13 @@ private[release] object GitProcessSupport {
       stderr: String
   )
 
-  private final case class TrackedDescendant(
-      handle: ProcessHandle,
-      missingSinceNanos: Option[Long]
-  )
-
+  // Descendants observed while root is alive are accumulated here so termination can still find
+  // them after root exits (at which point `root.toHandle.descendants()` returns empty because
+  // children have been reparented to init).
   private final case class ManagedProcess(
       process: Process,
-      trackedDescendants: ConcurrentHashMap[Long, TrackedDescendant],
-      rootExitedAtNanos: AtomicLong,
-      observerStopFlag: AtomicBoolean
+      tracked: ConcurrentHashMap[Long, ProcessHandle]
   )
-
-  private final case class ProcessState(
-      rootAlive: Boolean,
-      liveDescendants: Vector[ProcessHandle],
-      recentRootExit: Boolean
-  ) {
-    def treeAlive: Boolean = rootAlive || liveDescendants.nonEmpty
-    def busy: Boolean      = treeAlive || recentRootExit
-  }
 
   private sealed trait WaitForExitOutcome
   private object WaitForExitOutcome {
@@ -70,15 +56,9 @@ private[release] object GitProcessSupport {
   /** Time granted between a graceful `destroy()` and a forcible `destroyForcibly()`
     * escalation when tearing down a process tree.
     */
-  val DefaultDestroyGracePeriod: FiniteDuration             = 1.second
-  private val ProcessPollInterval: FiniteDuration           = 50.millis
-  private val ObserverTightIntervalMillis: Long             = 1L
-  private val ObserverSteadyIntervalMillis: Long            = ProcessPollInterval.toMillis
-  private val ObserverTightWindowNanos: Long                = 100.millis.toNanos
-  private val RetainedDescendantGracePeriod: FiniteDuration = 250.millis
-  private val RootNotYetExitedNanos: Long                   = Long.MinValue
-  private val drainThreadCounter: AtomicLong                = new AtomicLong(0L)
-  private val observerThreadCounter: AtomicLong             = new AtomicLong(0L)
+  val DefaultDestroyGracePeriod: FiniteDuration   = 1.second
+  private val ProcessPollInterval: FiniteDuration = 50.millis
+  private val drainThreadCounter: AtomicLong      = new AtomicLong(0L)
 
   /** Returns `"git.exe"` on Windows-like OS names, `"git"` otherwise. */
   private[release] def executableNameFor(osName: String): String =
@@ -117,12 +97,8 @@ private[release] object GitProcessSupport {
     * @param context by-name label inserted into the error message on failure.
     */
   def runCmd(baseDir: File, args: Seq[String])(context: => String): IO[Unit] =
-    withManagedProcess(
-      attachedJavaCmd(baseDir, args*),
-      DefaultDestroyGracePeriod,
-      closeStdin = false
-    ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
-      waitForExit(process).flatTap(_ => markCompleted).flatMap { code =>
+    run(attachedJavaCmd(baseDir, args*), closeStdin = false) { managed =>
+      waitForExit(managed).flatMap { code =>
         IO.raiseWhen(code != 0)(
           new IllegalStateException(s"$context failed with exit code $code")
         )
@@ -133,13 +109,7 @@ private[release] object GitProcessSupport {
     * Does not raise on non-zero.
     */
   def runExitCode(baseDir: File, args: Seq[String]): IO[Int] =
-    withManagedProcess(
-      javaCmd(baseDir, args*),
-      DefaultDestroyGracePeriod,
-      closeStdin = true
-    ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
-      waitForExit(process).flatTap(_ => markCompleted)
-    }
+    run(javaCmd(baseDir, args*), closeStdin = true)(waitForExit)
 
   /** Synchronous helper for tests and local blocking callers.
     * Decodes stdout/stderr as UTF-8 and drains both streams concurrently on dedicated daemon
@@ -174,13 +144,7 @@ private[release] object GitProcessSupport {
       baseDir: File,
       args: Seq[String]
   ): IO[GitCommandResult] =
-    withManagedProcess(
-      captureJavaCmd(baseDir, args*),
-      DefaultDestroyGracePeriod,
-      closeStdin = true
-    ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
-      captureCommandResult(process).flatTap(_ => markCompleted)
-    }
+    run(captureJavaCmd(baseDir, args*), closeStdin = true)(captureCommandResult)
 
   /** Run git capturing stdout; raise on non-zero exit with stderr appended to the message.
     * Empty stdout lines are filtered out.
@@ -188,12 +152,8 @@ private[release] object GitProcessSupport {
     * @param context by-name label inserted into the error message on failure.
     */
   def runLines(baseDir: File, args: Seq[String])(context: => String): IO[Seq[String]] =
-    withManagedProcess(
-      captureJavaCmd(baseDir, args*),
-      DefaultDestroyGracePeriod,
-      closeStdin = true
-    ) { (process: ManagedProcess, markCompleted: IO[Unit]) =>
-      captureCommandResult(process).flatTap(_ => markCompleted).flatMap { result =>
+    run(captureJavaCmd(baseDir, args*), closeStdin = true) { managed =>
+      captureCommandResult(managed).flatMap { result =>
         if (result.exitCode != 0)
           IO.raiseError(
             new IllegalStateException(
@@ -235,15 +195,26 @@ private[release] object GitProcessSupport {
       onStart: Process => Unit = _ => ()
   ): IO[Option[Int]] =
     withManagedProcess(processBuilder, destroyGracePeriod, closeStdin = true, onStart) {
-      (process: ManagedProcess, markCompleted: IO[Unit]) =>
+      (managed, markCompleted) =>
         Clock[IO].monotonic
           .flatMap { startTime =>
-            waitForExitUntil(process, startTime + timeout, destroyGracePeriod)
+            waitForExitUntil(managed, startTime + timeout, destroyGracePeriod)
           }
           .flatMap {
             case WaitForExitOutcome.Exited(code)          => markCompleted.as(Some(code))
-            case WaitForExitOutcome.TimedOut(partialCode) => IO.pure(partialCode)
+            case WaitForExitOutcome.TimedOut(partialCode) => markCompleted.as(partialCode)
           }
+    }
+
+  // Sugar around `withManagedProcess` for runners that always use the default grace period
+  // and always mark completion after their body succeeds; keeps the four public runners free
+  // of repeated `flatTap(_ => markCompleted)` wiring.
+  private def run[A](
+      builder: => ProcessBuilder,
+      closeStdin: Boolean
+  )(body: ManagedProcess => IO[A]): IO[A] =
+    withManagedProcess(builder, DefaultDestroyGracePeriod, closeStdin) { (managed, markCompleted) =>
+      body(managed).flatTap(_ => markCompleted)
     }
 
   private def withManagedProcess[A](
@@ -254,13 +225,13 @@ private[release] object GitProcessSupport {
   )(use: (ManagedProcess, IO[Unit]) => IO[A]): IO[A] =
     Ref.of[IO, Boolean](false).flatMap { completed =>
       IO.uncancelable { poll =>
-        startProcess(processBuilder, destroyGracePeriod, closeStdin, onStart).flatMap { process =>
+        startProcess(processBuilder, destroyGracePeriod, closeStdin, onStart).flatMap { managed =>
           val markCompleted: IO[Unit] =
             IO.uncancelable(_ => completed.set(true))
 
-          poll(use(process, markCompleted))
+          poll(use(managed, markCompleted))
             .guarantee(
-              completed.get.flatMap(cleanupManagedProcess(process, destroyGracePeriod, _))
+              completed.get.flatMap(cleanupManagedProcess(managed, destroyGracePeriod, _))
             )
         }
       }
@@ -274,26 +245,13 @@ private[release] object GitProcessSupport {
   ): IO[ManagedProcess] =
     IO.blocking {
       val process = processBuilder.start()
-      val managed = ManagedProcess(
-        process,
-        new ConcurrentHashMap[Long, TrackedDescendant](),
-        new AtomicLong(RootNotYetExitedNanos),
-        new AtomicBoolean(false)
-      )
-
+      val managed = ManagedProcess(process, new ConcurrentHashMap[Long, ProcessHandle]())
       try {
         if (closeStdin) closeQuietly(process.getOutputStream)
         onStart(process)
-        refreshTrackedDescendants(managed)
-        process.onExit().whenComplete { (_, _) =>
-          managed.rootExitedAtNanos.compareAndSet(RootNotYetExitedNanos, System.nanoTime())
-          ()
-        }
-        startDescendantObserver(managed)
         managed
       } catch {
-        case NonFatal(err) =>
-          managed.observerStopFlag.set(true)
+        case err: Throwable =>
           try terminate(managed, destroyGracePeriod)
           catch { case NonFatal(termErr) => err.addSuppressed(termErr) }
           closeStreams(managed)
@@ -301,54 +259,20 @@ private[release] object GitProcessSupport {
       }
     }
 
-  // OS-thread polling: cats-effect fiber scheduling latency (~5 ms on a loaded CI runner)
-  // can exceed the window where a forked grand-child is visible under the root. The observer
-  // polls at 1 ms for the first 100 ms (when transient descendants can race) then relaxes to
-  // 50 ms so long-running commands (fetch/push/pack) don't pay the tight-polling cost.
-  private def startDescendantObserver(managed: ManagedProcess): Unit = {
-    val runnable = new Runnable {
-      override def run(): Unit = {
-        val retentionNanos = RetainedDescendantGracePeriod.toNanos
-        val startNanos     = System.nanoTime()
-        var running        = true
-        while (running && !managed.observerStopFlag.get()) {
-          try refreshTrackedDescendants(managed)
-          catch { case NonFatal(_) => () }
-
-          val exitedAt = managed.rootExitedAtNanos.get()
-          if (exitedAt != RootNotYetExitedNanos && System.nanoTime() - exitedAt >= retentionNanos)
-            running = false
-          else {
-            val intervalMillis =
-              if (System.nanoTime() - startNanos < ObserverTightWindowNanos)
-                ObserverTightIntervalMillis
-              else ObserverSteadyIntervalMillis
-            try Thread.sleep(intervalMillis)
-            catch { case _: InterruptedException => running = false }
-          }
-        }
-      }
-    }
-    val thread   = new Thread(
-      runnable,
-      s"git-descendant-observer-${observerThreadCounter.incrementAndGet()}"
-    )
-    thread.setDaemon(true)
-    thread.start()
-  }
-
-  private def captureCommandResult(process: ManagedProcess): IO[GitCommandResult] = {
+  private def captureCommandResult(managed: ManagedProcess): IO[GitCommandResult] = {
+    val stdoutIn  = managed.process.getInputStream
+    val stderrIn  = managed.process.getErrorStream
     val stdoutRes =
-      Resource.make(captureLines(process.process.getInputStream, StandardCharsets.UTF_8).start)(
-        _.cancel
-      )
+      Resource.make(captureLines(stdoutIn, StandardCharsets.UTF_8).start) { fiber =>
+        IO.blocking(closeQuietly(stdoutIn)) *> fiber.cancel
+      }
     val stderrRes =
-      Resource.make(captureLines(process.process.getErrorStream, StandardCharsets.UTF_8).start)(
-        _.cancel
-      )
+      Resource.make(captureLines(stderrIn, StandardCharsets.UTF_8).start) { fiber =>
+        IO.blocking(closeQuietly(stderrIn)) *> fiber.cancel
+      }
     Resource.both(stdoutRes, stderrRes).use { case (stdoutFiber, stderrFiber) =>
       for {
-        exitCode <- waitForExit(process)
+        exitCode <- waitForExit(managed)
         stdout   <- stdoutFiber.joinWithNever
         stderr   <- stderrFiber.joinWithNever
       } yield GitCommandResult(
@@ -413,80 +337,63 @@ private[release] object GitProcessSupport {
       }
   }
 
-  private def waitForExit(process: ManagedProcess): IO[Int] =
-    waitForRootExit(process).flatMap(waitForTreeExitAfterRoot(process, _))
-
-  private def waitForRootExit(process: ManagedProcess): IO[Int] =
-    IO.fromCompletableFuture(IO.delay(process.process.onExit()))
+  private def waitForExit(managed: ManagedProcess): IO[Int] =
+    IO.fromCompletableFuture(IO.delay(managed.process.onExit()))
       .flatMap(p => IO.blocking(p.exitValue()))
+      .flatMap(waitForDescendantsExit(managed, _))
 
-  private def waitForTreeExitAfterRoot(
-      process: ManagedProcess,
-      exitCode: Int
-  ): IO[Int] =
-    IO.blocking(treeAlive(process)).flatMap {
+  private def waitForDescendantsExit(managed: ManagedProcess, exitCode: Int): IO[Int] =
+    IO.blocking(liveDescendants(managed).nonEmpty).flatMap {
       case false => IO.pure(exitCode)
-      case true  => IO.sleep(ProcessPollInterval) *> waitForTreeExitAfterRoot(process, exitCode)
+      case true  => IO.sleep(ProcessPollInterval) *> waitForDescendantsExit(managed, exitCode)
     }
 
   private def waitForExitUntil(
-      process: ManagedProcess,
+      managed: ManagedProcess,
       deadline: FiniteDuration,
       destroyGracePeriod: FiniteDuration,
       exitCode: Option[Int] = None
   ): IO[WaitForExitOutcome] =
-    currentExitCode(process, exitCode).flatMap { currentCode =>
-      IO.blocking(currentProcessState(process)).flatMap { state =>
-        val settled = currentCode match {
-          case Some(_) => state.liveDescendants.isEmpty
-          case None    => !state.busy
-        }
+    currentExitCode(managed, exitCode).flatMap { currentCode =>
+      IO.blocking(liveDescendants(managed)).flatMap { descendants =>
+        val settled = currentCode.isDefined && descendants.isEmpty
 
         if (settled)
-          currentCode.fold(
-            IO.blocking(process.process.exitValue()).map(WaitForExitOutcome.Exited(_))
-          )(code => IO.pure(WaitForExitOutcome.Exited(code)))
+          IO.pure(WaitForExitOutcome.Exited(currentCode.get))
         else
           Clock[IO].monotonic.flatMap { now =>
             val remaining = deadline - now
             if (remaining <= Duration.Zero)
-              IO.blocking(terminate(process, destroyGracePeriod))
+              IO.blocking(terminate(managed, destroyGracePeriod))
                 .as(WaitForExitOutcome.TimedOut(currentCode))
             else
               IO.sleep(remaining.min(ProcessPollInterval)) *>
-                waitForExitUntil(process, deadline, destroyGracePeriod, currentCode)
+                waitForExitUntil(managed, deadline, destroyGracePeriod, currentCode)
           }
       }
     }
 
   private def currentExitCode(
-      process: ManagedProcess,
+      managed: ManagedProcess,
       cachedExitCode: Option[Int]
   ): IO[Option[Int]] =
     cachedExitCode match {
       case Some(code) => IO.pure(Some(code))
       case None       =>
-        IO.blocking(process.process.isAlive).flatMap {
-          case false => IO.blocking(process.process.exitValue()).map(Some(_))
+        IO.blocking(managed.process.isAlive).flatMap {
+          case false => IO.blocking(managed.process.exitValue()).map(Some(_))
           case true  => IO.pure(None)
         }
     }
 
-  private def treeAlive(process: ManagedProcess): Boolean =
-    currentProcessState(process).treeAlive
-
-  private def waitForTreeExit(
-      process: ManagedProcess,
-      timeout: FiniteDuration
-  ): Boolean = {
+  private def waitForTreeExit(managed: ManagedProcess, timeout: FiniteDuration): Boolean = {
     val deadlineNanos = System.nanoTime() + timeout.toNanos
 
     @scala.annotation.tailrec
     def loop(): Boolean =
-      if (!treeAlive(process)) true
+      if (!managed.process.isAlive && liveDescendants(managed).isEmpty) true
       else {
         val remainingNanos = deadlineNanos - System.nanoTime()
-
         if (remainingNanos <= 0L) false
         else {
           val remainingMillis = remainingNanos.nanos.toMillis.max(1L)
@@ -498,141 +405,70 @@ private[release] object GitProcessSupport {
     loop()
   }
 
-  // Test-only entry point: reconstructs a `ManagedProcess` around a raw `Process`
-  // (typically a FakeProcess) so GitSpec can exercise the cleanup path without going through
-  // `withManagedProcess`. Not called from production code.
+  // Test-only entry point: wraps a raw `Process` (typically a FakeProcess) so tests can
+  // exercise the cleanup path without going through `withManagedProcess`.
   private[release] def cleanupManagedProcess(
       process: Process,
       destroyGracePeriod: FiniteDuration,
       completed: Boolean
   ): IO[Unit] =
     cleanupManagedProcess(
-      ManagedProcess(
-        process,
-        new ConcurrentHashMap[Long, TrackedDescendant](),
-        new AtomicLong(RootNotYetExitedNanos),
-        new AtomicBoolean(true)
-      ),
+      ManagedProcess(process, new ConcurrentHashMap[Long, ProcessHandle]()),
       destroyGracePeriod,
       completed
     )
 
   private def cleanupManagedProcess(
-      process: ManagedProcess,
+      managed: ManagedProcess,
       destroyGracePeriod: FiniteDuration,
       completed: Boolean
-  ): IO[Unit] =
-    IO.blocking(process.observerStopFlag.set(true)) *> {
-      if (completed) IO.blocking(closeStreams(process))
-      else
-        IO.blocking(currentProcessState(process)).flatMap {
-          case state if !state.busy => IO.blocking(closeStreams(process))
-          case _                    => terminateIfAlive(process, destroyGracePeriod)
-        }
-    }
+  ): IO[Unit] = {
+    val closeStreamsIO = IO.blocking(closeStreams(managed))
+    if (completed) closeStreamsIO
+    else
+      IO.blocking(managed.process.isAlive || liveDescendants(managed).nonEmpty).flatMap {
+        case false => closeStreamsIO
+        case true  => IO.blocking(terminate(managed, destroyGracePeriod)).guarantee(closeStreamsIO)
+      }
+  }
 
-  private def terminateIfAlive(
-      process: ManagedProcess,
-      destroyGracePeriod: FiniteDuration
-  ): IO[Unit] =
-    IO.blocking {
-      try {
-        if (currentProcessState(process).busy) terminate(process, destroyGracePeriod)
-        else ()
-      } finally closeStreams(process)
-    }
+  private def terminate(managed: ManagedProcess, destroyGracePeriod: FiniteDuration): Unit = {
+    destroyTree(managed, forcibly = false)
 
-  private def terminate(process: ManagedProcess, destroyGracePeriod: FiniteDuration): Unit = {
-    destroyTree(process, forcibly = false)
-
-    if (!waitForTreeExit(process, destroyGracePeriod)) {
-      destroyTree(process, forcibly = true)
-      waitForTreeExit(process, destroyGracePeriod)
+    if (!waitForTreeExit(managed, destroyGracePeriod)) {
+      destroyTree(managed, forcibly = true)
+      waitForTreeExit(managed, destroyGracePeriod)
       ()
     }
   }
 
-  private def destroyTree(process: ManagedProcess, forcibly: Boolean): Unit = {
-    trackedDescendants(process).foreach { handle =>
-      if (handle.isAlive) {
-        if (forcibly) handle.destroyForcibly() else handle.destroy()
-        ()
-      }
+  private def destroyTree(managed: ManagedProcess, forcibly: Boolean): Unit = {
+    liveDescendants(managed).foreach { handle =>
+      if (forcibly) handle.destroyForcibly() else handle.destroy()
+      ()
     }
 
-    if (forcibly) process.process.destroyForcibly() else process.process.destroy()
+    if (forcibly) managed.process.destroyForcibly() else managed.process.destroy()
     ()
   }
 
-  private def trackedDescendants(process: ManagedProcess): Vector[ProcessHandle] = {
-    val (current, stale) = refreshTrackedDescendants(process)
-    (current.reverse ++ stale).filter(_.isAlive)
-  }
-
-  // Observer thread and main fiber both refresh the tracked map; serialize so the
-  // missing-since bookkeeping and iterator.remove() calls stay consistent.
-  private def refreshTrackedDescendants(
-      process: ManagedProcess
-  ): (Vector[ProcessHandle], Vector[ProcessHandle]) =
-    process.trackedDescendants.synchronized {
-      val now                = System.nanoTime()
-      val retentionNanos     = RetainedDescendantGracePeriod.toNanos
-      val currentDescendants = process.process.toHandle.descendants().iterator().asScala.toVector
-      val currentPids        = currentDescendants.iterator.map(_.pid()).toSet
-
-      currentDescendants.foreach { handle =>
-        process.trackedDescendants.put(
-          handle.pid(),
-          TrackedDescendant(handle, None)
-        )
-        ()
-      }
-
-      val staleBuilder = Vector.newBuilder[ProcessHandle]
-      val iterator     = process.trackedDescendants.entrySet().iterator()
-
-      while (iterator.hasNext) {
-        val entry   = iterator.next()
-        val tracked = entry.getValue
-
-        if (!tracked.handle.isAlive) iterator.remove()
-        else if (!currentPids.contains(entry.getKey))
-          tracked.missingSinceNanos match {
-            case Some(missingSince) if now - missingSince >= retentionNanos =>
-              iterator.remove()
-            case Some(_)                                                    =>
-              staleBuilder += tracked.handle
-            case None                                                       =>
-              entry.setValue(tracked.copy(missingSinceNanos = Some(now)))
-              staleBuilder += tracked.handle
-          }
-      }
-
-      (currentDescendants, staleBuilder.result())
+  // Accumulates descendants seen so far into `managed.tracked`, then returns the alive entries.
+  // Accumulation is needed because once the root exits, `root.toHandle.descendants()` returns
+  // empty — children have been reparented to init — so we'd otherwise lose the handle we need
+  // to destroy them.
+  private def liveDescendants(managed: ManagedProcess): Vector[ProcessHandle] = {
+    managed.process.toHandle.descendants().iterator().asScala.foreach { handle =>
+      managed.tracked.put(handle.pid(), handle)
+      ()
     }
-
-  private def currentProcessState(process: ManagedProcess): ProcessState = {
-    val rootCurrentlyAlive = process.process.isAlive
-    val descendants        = trackedDescendants(process)
-
-    ProcessState(
-      rootAlive = rootCurrentlyAlive,
-      liveDescendants = descendants,
-      recentRootExit = !rootCurrentlyAlive && hasRecentRootExit(process)
-    )
+    managed.tracked.values().removeIf(handle => !handle.isAlive)
+    managed.tracked.values().iterator().asScala.toVector
   }
 
-  private def hasRecentRootExit(process: ManagedProcess): Boolean = {
-    val exitedAt = process.rootExitedAtNanos.get()
-
-    exitedAt != RootNotYetExitedNanos &&
-    System.nanoTime() - exitedAt < RetainedDescendantGracePeriod.toNanos
-  }
-
-  private def closeStreams(process: ManagedProcess): Unit = {
-    closeQuietly(process.process.getInputStream)
-    closeQuietly(process.process.getErrorStream)
-    closeQuietly(process.process.getOutputStream)
+  private def closeStreams(managed: ManagedProcess): Unit = {
+    closeQuietly(managed.process.getInputStream)
+    closeQuietly(managed.process.getErrorStream)
+    closeQuietly(managed.process.getOutputStream)
   }
 
   // Stream close failures during cleanup are expected (pipe already torn down, process

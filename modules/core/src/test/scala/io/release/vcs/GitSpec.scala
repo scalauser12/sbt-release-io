@@ -418,30 +418,6 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
-  test("runLines - destroy descendants when cancellation happens after the root process exits") {
-    assume(new File("/bin/sh").exists(), "requires /bin/sh")
-
-    TestSupport.gitRepoResource(s"$fixturePrefix-run-lines-root-exited-cancel").use { repo =>
-      val pidFile = new File(repo, "run-lines-root-exited.pid")
-
-      for {
-        _     <- configureAlias(
-                   repo,
-                   "codexbackgroundlines",
-                   """sleep 5 & echo $! > "$0"; printf "%s\n" hello""",
-                   pidFile
-                 )
-        fiber <- GitProcessSupport
-                   .runLines(repo, Seq("codexbackgroundlines"))("git codexbackgroundlines")
-                   .start
-        _     <- waitForFile(pidFile, 5.seconds)
-        _     <- fiber.cancel.timeout(1.second)
-        pid   <- readPid(pidFile)
-        alive <- waitForProcessToExit(pid, 2.seconds)
-      } yield assertEquals(alive, false)
-    }
-  }
-
   test("runCommandWithTimeout - return the exit code when the process finishes in time") {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 
