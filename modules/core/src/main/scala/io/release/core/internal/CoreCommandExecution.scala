@@ -10,7 +10,6 @@ import io.release.core.internal.CoreStepAliases.Step
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
-import io.release.runtime.command.ReleaseCommandCompilation
 import io.release.runtime.command.ReleaseCommandRunner
 import io.release.runtime.workflow.DecisionDefaultsSupport
 import sbt.{internal as _, *}
@@ -64,7 +63,7 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    ReleaseCommandCompilation.runPreparedCommand(
+    ReleaseCommandRunner.runPreparedCommand(
       state = state,
       cleanState = state => CommandStateSupport.cleanReleaseState(state),
       logPrefix = ReleaseLogPrefixes.Core
@@ -89,7 +88,7 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    ReleaseCommandCompilation.runPreparedCommand(
+    ReleaseCommandRunner.runPreparedCommand(
       state = state,
       cleanState = state => CommandStateSupport.cleanReleaseState(state),
       logPrefix = ReleaseLogPrefixes.Core

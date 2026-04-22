@@ -10,7 +10,6 @@ import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
-import io.release.runtime.command.ReleaseCommandCompilation
 import io.release.runtime.command.ReleaseCommandRunner
 import io.release.runtime.sbt.SbtRuntime
 import sbt.{internal as _, *}
@@ -23,7 +22,7 @@ import sbt.{internal as _, *}
   * sbt "releaseIOMonorepo [projects] [flags]"
   *   → MonorepoReleasePlugin registers the sbt command
   *   → MonorepoCommandExecution.prepareCommand        (resolve flags/defaults and build the plan)
-  *   → ReleaseCommandCompilation.runPreparedCommand   (clean state and run the prepared session)
+  *   → ReleaseCommandRunner.runPreparedCommand        (clean state and run the prepared session)
   *   → MonorepoComposer.compose                       (split at selection boundary)
   *       ├─ setup segment  → ExecutionEngine.runSequentialValidateThenExecute
   *       │                    (through `detect-or-select-projects` and any immediate
@@ -206,7 +205,7 @@ private[monorepo] object MonorepoCommandExecution {
     val cleanStateFn: State => State =
       state => CommandStateSupport.cleanReleaseState(state, loadedProjectRefsBlocking(state))
 
-    ReleaseCommandCompilation.runPreparedCommand(
+    ReleaseCommandRunner.runPreparedCommand(
       state = state,
       cleanState = cleanStateFn,
       logPrefix = ReleaseLogPrefixes.Monorepo
