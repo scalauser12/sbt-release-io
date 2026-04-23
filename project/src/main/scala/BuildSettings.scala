@@ -29,9 +29,9 @@ object BuildVersions {
   val scala212                = "2.12.21"
   val scala3                  = "3.8.1"
   val catsEffectVersion       = "3.7.0"
-  val munitVersion            = "1.2.4"
+  val munitVersion            = "1.3.0"
   val munitCatsEffectVersion  = "2.2.0"
-  val scalametaParsersVersion = "4.13.8"
+  val scalametaParsersVersion = "4.16.1"
 }
 
 object BuildSettings {
