@@ -39,12 +39,23 @@ class GitSpec extends CatsEffectSuite {
   test("runLinesResult - drain both pipes concurrently even when the common pool is saturated") {
     TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-common-pool-saturation").use { repo =>
       IO.blocking {
-        // Seed many commits so `git log` produces enough stdout to fill a 64KB pipe buffer
-        // if left undrained.
-        (1 to 400).foreach { i =>
+        // Disable auto-maintenance and use fewer commits with long single-line subjects so
+        // `git log --oneline` still exceeds a 64KB pipe buffer without churning the temp repo.
+        TestSupport.runGit(repo, "config", "gc.auto", "0")
+        TestSupport.runGit(repo, "config", "maintenance.auto", "false")
+
+        val commitCount    = 96
+        val subjectPadding = "x" * 1024
+
+        (1 to commitCount).foreach { i =>
           sbt.IO.write(new File(repo, s"file-$i.txt"), s"contents $i")
           TestSupport.runGit(repo, "add", s"file-$i.txt")
-          TestSupport.runGit(repo, "commit", "-m", s"commit $i with a reasonably long message")
+          TestSupport.runGit(
+            repo,
+            "commit",
+            "-m",
+            s"commit-$i-$subjectPadding"
+          )
         }
 
         val parallelism  = ForkJoinPool.commonPool().getParallelism.max(1)
@@ -68,7 +79,7 @@ class GitSpec extends CatsEffectSuite {
           val result = GitProcessSupport.runLinesResult(repo, Seq("log", "--oneline"))
 
           assertEquals(result.exitCode, 0)
-          assert(result.stdout.length >= 400)
+          assert(result.stdout.length >= commitCount)
         } finally {
           releaseLatch.countDown()
           busyFutures.foreach(_.join())

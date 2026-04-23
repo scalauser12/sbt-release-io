@@ -4,6 +4,59 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.12.0
+
+Published: 2026-04-23
+GitHub release:
+[v0.12.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.0)
+
+`v0.12.0` is a minor release for both plugins that adds clearer tracked hook factories for core
+and monorepo customization, improves recovery/preflight behavior around hook-driven state, and
+hardens Git branch/tag/process handling in release execution.
+
+### Compatibility notes
+
+- `MonorepoReleasePluginLike` narrows `doMonorepoHelp`, `doMonorepoRelease`, and
+  `doMonorepoCheck` from `protected` to `private[monorepo]`; external subclasses that overrode
+  or called those methods must move to the remaining supported extension points.
+
+### Fixes
+
+- Harden tracked-branch push target resolution by validating trimmed tracking remotes and merge
+  refs, and propagate malformed upstream configuration errors with clearer diagnostics.
+- Improve Git process cleanup by tracking transient descendant processes more reliably and keeping
+  branch/tag pushes aligned with tracked upstream behavior.
+- Stabilize tracked reentry and sbt prompt handling, and keep hook-aware preflight version/tag
+  summaries aligned with runtime hook state.
+- Tighten monorepo selection, version-file, and publish regression handling so preflight and run
+  mode stay closer to the resolved release flow.
+
+### Improvements
+
+- Add tracked, intent-named hook factories across the core and monorepo hook types:
+  `sideEffect`, `transform`, and `resumable`.
+- Add `ReleaseHookHandle` and `MonorepoHookHandle` auto-import aliases so custom Scala build code
+  can refer to tracked hook handles more concisely.
+- Deprecate the legacy `.io` and `.action` hook constructors in favor of the tracked hook
+  factories, while keeping the release engine on the tracked execution path.
+- Refactor command execution, lifecycle compilation, preflight rendering, and shared workflow
+  helpers for clearer runtime boundaries across the core, monorepo, and runtime modules.
+
+### Documentation
+
+- Refresh the root README, module READMEs, and published walkthrough/getting-started docs to
+  reference `0.12.0`.
+- Update the core and monorepo customization guidance and examples to describe the tracked hook
+  factories and the current hook/policy customization model more clearly.
+
+### Verification
+
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.11.1
 
 Published: 2026-04-16
