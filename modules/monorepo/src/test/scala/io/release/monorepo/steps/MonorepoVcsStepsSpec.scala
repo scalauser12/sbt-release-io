@@ -605,6 +605,65 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "pushChanges.execute - leave the remote branch and other tags unchanged when one project tag conflicts"
+  ) {
+    Resource
+      .both(
+        twoProjectPushContextResource,
+        TestSupport.tempDirResource("monorepo-vcs-steps-push-spec-atomic-rollback-clone")
+      )
+      .use { case ((repo, remoteRepo, core, api, ctx), cloneDir) =>
+        val coreTag = core.tagName.getOrElse(fail("Expected core tag name"))
+        val apiTag  = api.tagName.getOrElse(fail("Expected api tag name"))
+
+        for {
+          _                <- IO.blocking {
+                                // Sidecar pushes refs/tags/<coreTag> at a different commit. The
+                                // remote branch stays unchanged because the sidecar only pushes
+                                // the tag.
+                                TestSupport.runGit(cloneDir, "clone", remoteRepo.getAbsolutePath, ".")
+                                TestSupport.runGit(cloneDir, "config", "user.email", "test@example.com")
+                                TestSupport.runGit(cloneDir, "config", "user.name", "Test User")
+                                TestSupport.runGit(cloneDir, "commit", "--allow-empty", "-m", "sidecar B")
+                                TestSupport.runGit(cloneDir, "tag", "-a", coreTag, "-m", "release at B")
+                                TestSupport.runGit(cloneDir, "push", "origin", coreTag)
+                                // Main repo advances and tags BOTH projects at C. apiTag has no
+                                // remote conflict; coreTag does. Atomic push must reject all.
+                                sbt.IO.write(new File(repo, "file.txt"), "updated")
+                                TestSupport.commitAll(repo, "main C")
+                                TestSupport.runGit(repo, "tag", "-a", coreTag, "-m", "release core at C")
+                                TestSupport.runGit(repo, "tag", "-a", apiTag, "-m", "release api at C")
+                              }
+          remoteBranchPre  <-
+            IO.blocking(
+              TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+            )
+          _                <- TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
+                                MonorepoVcsSteps.pushChanges.execute(ctx)
+                              )(_ => ())
+          remoteBranchPost <-
+            IO.blocking(
+              TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+            )
+          remoteApi        <- IO.blocking(
+                                TestSupport.runGit(remoteRepo, "tag", "--list", apiTag).trim
+                              )
+        } yield {
+          assertEquals(
+            remoteBranchPost,
+            remoteBranchPre,
+            "atomic push must roll back the branch update when any project tag conflicts"
+          )
+          assertEquals(
+            remoteApi,
+            "",
+            "atomic push must not land the unrelated apiTag when coreTag conflicts (all-or-nothing)"
+          )
+        }
+      }
+  }
+
   test("pushChanges.validate - fail when VCS was not initialized by initializeVcs") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
       TestAssertions.assertFailure[IllegalStateException, Unit](

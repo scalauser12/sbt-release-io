@@ -196,6 +196,36 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test("isBehindRemote - return true even when a local tag shares the branch name") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-behind-tag-collision").use {
+      case (repo, _) =>
+        // Layout: local branch main = A, tag main = B, origin/main = B. With unqualified refs,
+        // git's dwim resolution prefers refs/tags/main over refs/heads/main, so `main..origin/main`
+        // resolves to `B..B` (empty) and silently reports NOT behind. The qualified form correctly
+        // resolves to `A..B` (one commit) and reports behind.
+        for {
+          _      <- IO.blocking {
+                      val baseHash = TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                      TestSupport.runGit(repo, "commit", "--allow-empty", "-m", "advance main")
+                      TestSupport.runGit(repo, "push", "origin", "main")
+                      TestSupport.runGit(repo, "tag", "main")
+                      TestSupport.runGit(repo, "reset", "--hard", baseHash)
+                    }
+          behind <- new Git(repo).isBehindRemote
+        } yield assert(behind, "expected isBehindRemote to be true under tag collision")
+    }
+  }
+
+  test("isBehindRemote - return false when local matches remote even under tag collision") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-behind-tag-collision-noop").use {
+      case (repo, _) =>
+        for {
+          _      <- IO.blocking(TestSupport.runGit(repo, "tag", "main"))
+          behind <- new Git(repo).isBehindRemote
+        } yield assert(!behind, "expected isBehindRemote to be false when local matches remote")
+    }
+  }
+
   test("hasUpstream - return true when the branch tracks a remote") {
     TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-has-upstream").use {
       case (repo, _) =>
@@ -253,6 +283,30 @@ class GitSpec extends CatsEffectSuite {
             )
           case Right(value)                     =>
             fail(s"Expected failure, got value: $value")
+        }
+    }
+  }
+
+  test("currentBranch - return the branch name even when a local tag shares it") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-current-branch-tag-collision").use {
+      repo =>
+        IO.blocking {
+          TestSupport.runGit(repo, "branch", "-M", "main")
+          TestSupport.runGit(repo, "tag", "main")
+        } *>
+          new Git(repo).currentBranch.map(branch => assertEquals(branch, "main"))
+    }
+  }
+
+  test("currentBranch - raise a detached-HEAD error when HEAD is not on a branch") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-current-branch-detached").use { repo =>
+      IO.blocking {
+        val head = TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+        TestSupport.runGit(repo, "checkout", "--detach", head)
+        ()
+      } *>
+        assertFailure[IllegalStateException, String](new Git(repo).currentBranch) { err =>
+          assert(err.getMessage.contains("HEAD is detached"))
         }
     }
   }

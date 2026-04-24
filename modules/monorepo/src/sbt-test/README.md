@@ -21,9 +21,9 @@ Legacy process-editing fixtures are no longer part of the scripted suite.
 
 ## Coverage areas
 
-- Core flow and CLI: `simple-monorepo`, `help`, `check`, `interactive-monorepo`, `release-version-only`, `next-version-only`, `cli-*`, `invalid-override`, `empty-override-value`, `keyword-project-selector`
+- Core flow and CLI: `simple-monorepo`, `help`, `check`, `interactive-monorepo`, `release-version-only`, `next-version-only`, `cli-all-changed-with-selection`, `cli-override-forces-detection`, `cli-parse-errors`, `cli-unused-overrides`, `invalid-override`, `empty-override-value`, `keyword-project-selector`
 - Hook and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`, `custom-projects-setting`, `grouped-keys`, `project-scala-shared-import`
-- Project selection and change detection: `change-detection`, `all-changed`, `change-detection-downstream`, `cli-all-changed-with-selection`, `cli-unused-overrides`, `detect-changes-disabled`, `detect-changes-excludes`, `first-release-detection`, `shared-paths-*`, `root-project-*`, `zero-changed-projects`
+- Project selection and change detection: `change-detection`, `all-changed`, `change-detection-downstream`, `detect-changes-disabled`, `detect-changes-excludes`, `first-release-detection`, `shared-paths-custom`, `shared-paths-detection`, `shared-paths-disabled`, `root-project-change-detection`, `root-project-sibling-exclusion`, `zero-changed-projects`
 - Change-detection extensions: `custom-change-detector`, `custom-detector-error`, `custom-detector-uses-basedir`
 - Version files and tags: `custom-version-format`, `per-project-releaseversionfile`, `version-file-change-detection`, `shared-version-file`, `custom-tag-name`, `tag-exists-error`
 - Dependency ordering and cross-build: `diamond-dependency`, `topological-order`, `transitive-aggregates`, `nested-parent-exclusion`, `cross-build-setting`, `cross-build-heterogeneous`, `cross-build-empty-cross`, `cross-build-restore`

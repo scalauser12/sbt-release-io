@@ -12,6 +12,7 @@ import io.release.ReleaseSharedKeys.releaseIOVcsSign
 import io.release.ReleaseSharedKeys.releaseIOVersioningFile
 import io.release.VcsOps
 import io.release.core.internal.CoreReleasePlan
+import io.release.core.internal.CoreReleaseTag
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.CoreStepFactory
 import io.release.core.internal.TagPlan
@@ -21,6 +22,7 @@ import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
+import io.release.vcs.GitPushSupport
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
@@ -163,13 +165,15 @@ private[release] object VcsSteps {
       params: TagPlan,
       tagName: String
   ): ReleaseContext =
-    ctx.withState(
-      SbtRuntime.appendWithSession(
-        ctx.state,
-        params.versionSessionSettings ++
-          Seq(releaseIOInternalReleaseTag := Some(tagName))
+    ctx
+      .withMetadata(CoreReleaseTag.key, tagName)
+      .withState(
+        SbtRuntime.appendWithSession(
+          ctx.state,
+          params.versionSessionSettings ++
+            Seq(releaseIOInternalReleaseTag := Some(tagName))
+        )
       )
-    )
 
   private def resolveTag(
       vcs: Vcs,
@@ -228,6 +232,28 @@ private[release] object VcsSteps {
         .map(o => PreflightTagOutcome(o.tagName, o.status))
     }
 
+  private def logInfo(ctx: ReleaseContext, msg: String): IO[Unit] =
+    IO.blocking(ctx.state.log.info(s"${ReleaseLogPrefixes.Core} $msg"))
+
+  // Push the branch and the recorded release tag in one atomic ref update so a partial
+  // release (branch advanced, tag rejected at the remote) cannot occur. `--follow-tags`
+  // is unsafe here because it ships every annotated tag reachable from the pushed commits
+  // with a non-forced update; we push only the tag recorded by tag-release via
+  // `CoreReleaseTag`.
+  private def gitPush(ctx: ReleaseContext, vcs: Vcs): IO[ReleaseContext] = {
+    val releaseTag = ctx.metadata(CoreReleaseTag.key)
+    for {
+      pushTarget <- GitPushSupport.resolvePushTarget(vcs)
+      _          <- logInfo(
+                      ctx,
+                      s"Pushing branch ${pushTarget.localBranch} " +
+                        s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}" +
+                        releaseTag.fold("")(t => s" with tag $t")
+                    )
+      _          <- GitPushSupport.pushTrackedBranchWithTags(vcs, pushTarget, releaseTag.toList)
+    } yield ctx
+  }
+
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call.
   val pushChanges: Step = ProcessStep.Single(
@@ -247,7 +273,11 @@ private[release] object VcsSteps {
           remoteCheckLog =
             Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))
         )(
-          doPush = currentCtx => vcs.pushChanges.as(currentCtx),
+          doPush = currentCtx =>
+            vcs.commandName match {
+              case "git" => gitPush(currentCtx, vcs)
+              case _     => vcs.pushChanges.as(currentCtx)
+            },
           onDeclinePush = currentCtx =>
             IO
               .blocking(

@@ -72,3 +72,14 @@ private[release] object CoreExecutionState {
   val key: AttributeKey[CoreExecutionState] =
     AttributeKey[CoreExecutionState]("releaseIOInternalCoreExecutionState")
 }
+
+/** Resolved release tag name, set by `tag-release` and consumed by `push-changes`.
+  * Threaded through the context's metadata bag so the value survives intervening
+  * `appendWithSession` calls in later steps (sbt's session-override ordering does not
+  * reliably preserve setting-key assignments across subsequent append calls).
+  */
+private[release] object CoreReleaseTag {
+
+  val key: AttributeKey[String] =
+    AttributeKey[String]("releaseIOInternalCoreReleaseTag")
+}

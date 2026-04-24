@@ -4,6 +4,7 @@ import _root_.io.release.ReleaseManifestMetadataSupport
 import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import cats.effect.IO
+import cats.effect.Resource
 import io.release.ReleaseContext
 import io.release.ReleasePluginIO
 import io.release.ReleaseTestSupport
@@ -11,6 +12,7 @@ import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.core.internal.CoreExecutionState
 import io.release.core.internal.CoreReleasePlan
+import io.release.core.internal.CoreReleaseTag
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
@@ -81,7 +83,7 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
-  test("pushChanges.execute - push the tracked branch and follow tags to the remote") {
+  test("pushChanges.execute - push the tracked branch and the recorded release tag") {
     TestSupport.gitRepoWithBareRemoteResource(fixturePrefix).use { case (repo, remoteRepo) =>
       for {
         vcs        <- ReleaseTestSupport.detectVcs(repo)
@@ -110,7 +112,7 @@ class VcsStepsSpec extends CatsEffectSuite {
                               decisionDefaults = ReleaseDecisionDefaults.empty
                             )
                           )
-                        )
+                        ).withMetadata(CoreReleaseTag.key, "v1.0.1")
                       )
         localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
         remoteHead <-
@@ -124,6 +126,157 @@ class VcsStepsSpec extends CatsEffectSuite {
         assertEquals(remoteTag, "v1.0.1")
       }
     }
+  }
+
+  test("pushChanges.execute - do not push unrelated reachable annotated tags") {
+    TestSupport.gitRepoWithBareRemoteResource(fixturePrefix).use { case (repo, remoteRepo) =>
+      for {
+        vcs        <- ReleaseTestSupport.detectVcs(repo)
+        _          <- IO.blocking {
+                        sbt.IO.write(new File(repo, "file.txt"), "updated")
+                        TestSupport.commitAll(repo, "Second commit")
+                      }
+        _          <- vcs.tag("legacy-v0.9", "Unrelated legacy tag", sign = false)
+        _          <- vcs.tag("v1.0.1", "Release 1.0.1", sign = false)
+        result     <- VcsSteps.pushChanges.execute(
+                        ReleaseContext(
+                          state = ReleaseTestSupport.gitRootState(repo),
+                          vcs = Some(vcs),
+                          interactive = false
+                        ).withExecutionState(
+                          CoreExecutionState(
+                            CoreReleasePlan(
+                              flags = ExecutionFlags(
+                                useDefaults = true,
+                                skipTests = false,
+                                skipPublish = false,
+                                interactive = false,
+                                crossBuild = false
+                              ),
+                              releaseVersionOverride = None,
+                              nextVersionOverride = None,
+                              decisionDefaults = ReleaseDecisionDefaults.empty
+                            )
+                          )
+                        ).withMetadata(CoreReleaseTag.key, "v1.0.1")
+                      )
+        remoteTags <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list").trim)
+      } yield {
+        assert(!result.failed)
+        assertEquals(remoteTags, "v1.0.1")
+      }
+    }
+  }
+
+  test("pushChanges.execute - push only the branch when no release tag is recorded") {
+    TestSupport.gitRepoWithBareRemoteResource(fixturePrefix).use { case (repo, remoteRepo) =>
+      for {
+        vcs        <- ReleaseTestSupport.detectVcs(repo)
+        _          <- IO.blocking {
+                        sbt.IO.write(new File(repo, "file.txt"), "updated")
+                        TestSupport.commitAll(repo, "Second commit")
+                      }
+        _          <- vcs.tag("dangling-v0.1", "Local-only tag", sign = false)
+        result     <- VcsSteps.pushChanges.execute(
+                        ReleaseContext(
+                          state = ReleaseTestSupport.gitRootState(repo),
+                          vcs = Some(vcs),
+                          interactive = false
+                        ).withExecutionState(
+                          CoreExecutionState(
+                            CoreReleasePlan(
+                              flags = ExecutionFlags(
+                                useDefaults = true,
+                                skipTests = false,
+                                skipPublish = false,
+                                interactive = false,
+                                crossBuild = false
+                              ),
+                              releaseVersionOverride = None,
+                              nextVersionOverride = None,
+                              decisionDefaults = ReleaseDecisionDefaults.empty
+                            )
+                          )
+                        )
+                      )
+        localHead  <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        remoteHead <-
+          IO.blocking(
+            TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+          )
+        remoteTags <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list").trim)
+      } yield {
+        assert(!result.failed)
+        assertEquals(remoteHead, localHead)
+        assertEquals(remoteTags, "")
+      }
+    }
+  }
+
+  test(
+    "pushChanges.execute - leave the remote branch unchanged when a recorded tag conflicts on the remote"
+  ) {
+    Resource
+      .both(
+        TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-atomic-rollback"),
+        TestSupport.tempDirResource(s"$fixturePrefix-atomic-rollback-clone")
+      )
+      .use { case ((repo, remoteRepo), cloneDir) =>
+        for {
+          vcs              <- ReleaseTestSupport.detectVcs(repo)
+          _                <- IO.blocking {
+                                // Sidecar pushes refs/tags/v1.0.1 to the remote at a different
+                                // commit than the local main repo will tag. Remote branch stays
+                                // at A (sidecar only pushes the tag).
+                                TestSupport.runGit(cloneDir, "clone", remoteRepo.getAbsolutePath, ".")
+                                TestSupport.runGit(cloneDir, "config", "user.email", "test@example.com")
+                                TestSupport.runGit(cloneDir, "config", "user.name", "Test User")
+                                TestSupport.runGit(cloneDir, "commit", "--allow-empty", "-m", "sidecar B")
+                                TestSupport.runGit(cloneDir, "tag", "-a", "v1.0.1", "-m", "release at B")
+                                TestSupport.runGit(cloneDir, "push", "origin", "v1.0.1")
+                                // Main repo advances to commit C and tags v1.0.1 at C.
+                                sbt.IO.write(new File(repo, "file.txt"), "updated")
+                                TestSupport.commitAll(repo, "main C")
+                              }
+          _                <- vcs.tag("v1.0.1", "Release 1.0.1", sign = false)
+          remoteBranchPre  <-
+            IO.blocking(
+              TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+            )
+          _                <- TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+                                VcsSteps.pushChanges.execute(
+                                  ReleaseContext(
+                                    state = ReleaseTestSupport.gitRootState(repo),
+                                    vcs = Some(vcs),
+                                    interactive = false
+                                  ).withExecutionState(
+                                    CoreExecutionState(
+                                      CoreReleasePlan(
+                                        flags = ExecutionFlags(
+                                          useDefaults = true,
+                                          skipTests = false,
+                                          skipPublish = false,
+                                          interactive = false,
+                                          crossBuild = false
+                                        ),
+                                        releaseVersionOverride = None,
+                                        nextVersionOverride = None,
+                                        decisionDefaults = ReleaseDecisionDefaults.empty
+                                      )
+                                    )
+                                  ).withMetadata(CoreReleaseTag.key, "v1.0.1")
+                                )
+                              )(_ => ())
+          remoteBranchPost <-
+            IO.blocking(
+              TestSupport.runGit(remoteRepo, "rev-parse", "--verify", "refs/heads/main").trim
+            )
+        } yield assertEquals(
+          remoteBranchPost,
+          remoteBranchPre,
+          "atomic push must roll back the branch update when the recorded tag conflicts"
+        )
+      }
   }
 
   test("tagRelease.execute - abort in non-interactive mode when the tag already exists") {

@@ -190,6 +190,8 @@ private[monorepo] object MonorepoVcsSteps {
         }
     )
 
+  // Push the branch and all recorded project tags in one atomic ref update.
+  // See VcsSteps.gitPush for the rationale (no `--follow-tags`, atomic-or-nothing).
   private def gitPush(ctx: MonorepoContext, vcs: Vcs): IO[MonorepoContext] = {
     val tags = ctx.currentProjects.flatMap(_.tagName).distinct
     for {
@@ -197,13 +199,10 @@ private[monorepo] object MonorepoVcsSteps {
       _          <- logInfo(
                       ctx,
                       s"Pushing branch ${pushTarget.localBranch} " +
-                        s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}"
+                        s"to ${pushTarget.remote}/${pushTarget.upstreamBranch}" +
+                        (if (tags.nonEmpty) s" with tags ${tags.mkString(", ")}" else "")
                     )
-      _          <- GitPushSupport.pushTrackedBranch(vcs, pushTarget, followTags = false)
-      _          <- tags.toList.traverse_ { tag =>
-                      logInfo(ctx, s"Pushing tag $tag") *>
-                        GitPushSupport.pushTag(vcs, pushTarget.remote, tag)
-                    }
+      _          <- GitPushSupport.pushTrackedBranchWithTags(vcs, pushTarget, tags)
     } yield ctx
   }
 

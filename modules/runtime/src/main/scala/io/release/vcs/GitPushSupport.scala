@@ -108,13 +108,45 @@ private[release] object GitPushSupport {
       target: GitPushTarget,
       followTags: Boolean
   ): IO[Unit] = {
-    val refspec        = s"${target.localBranch}:${target.upstreamBranch}"
+    val refspec        = s"refs/heads/${target.localBranch}:refs/heads/${target.upstreamBranch}"
     val followTagArgs  = if (followTags) Seq("--follow-tags") else Seq.empty
     val followTagLabel = if (followTags) " --follow-tags" else ""
     GitProcessSupport.runCmd(
       vcs.baseDir,
       Seq("push") ++ followTagArgs ++ Seq(target.remote, refspec)
     )(s"git push$followTagLabel ${target.remote} $refspec")
+  }
+
+  /** Push the tracked branch and the given annotated tags in one atomic ref update.
+    * Either every ref update lands on the remote or none does, so a partial release
+    * (branch advanced, tag rejected) is impossible. Requires server-side `atomic`
+    * capability, which all major hosts have advertised since git 2.4 (May 2015).
+    *
+    * @param tags annotated tags to push alongside the branch. Empty falls back to a
+    *             plain branch-only push (no `--atomic`, since the guarantee is moot
+    *             for a single ref).
+    */
+  def pushTrackedBranchWithTags(
+      vcs: Vcs,
+      target: GitPushTarget,
+      tags: Seq[String]
+  ): IO[Unit] = {
+    val trimmedTags = tags.map(_.trim)
+    val branchRef   = s"refs/heads/${target.localBranch}:refs/heads/${target.upstreamBranch}"
+    for {
+      _      <- IO.raiseWhen(trimmedTags.exists(_.isEmpty))(
+                  new IllegalStateException("Tag name cannot be empty when pushing to the remote.")
+                )
+      tagRefs = trimmedTags.map(t => s"refs/tags/$t:refs/tags/$t")
+      atomic  = if (trimmedTags.nonEmpty) Seq("--atomic") else Seq.empty
+      refs    = branchRef +: tagRefs
+      label   = s"git push${if (atomic.nonEmpty) " --atomic" else ""} " +
+                  s"${target.remote} ${refs.mkString(" ")}"
+      _      <- GitProcessSupport.runCmd(
+                  vcs.baseDir,
+                  Seq("push") ++ atomic ++ Seq(target.remote) ++ refs
+                )(label)
+    } yield ()
   }
 
   /** Push a single tag to the given remote.

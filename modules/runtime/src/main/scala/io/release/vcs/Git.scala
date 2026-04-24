@@ -39,12 +39,37 @@ class Git(val baseDir: File) extends Vcs {
   def currentHash: IO[String] =
     runSingleLine("rev-parse", "HEAD")("git rev-parse HEAD")
 
-  def currentBranch: IO[String] =
-    runSingleLine("rev-parse", "--abbrev-ref", "HEAD")("git rev-parse --abbrev-ref HEAD")
-      .flatMap {
-        case "HEAD" => IO.raiseError(new IllegalStateException(DetachedHeadMessage))
-        case branch => IO.pure(branch)
+  def currentBranch: IO[String] = {
+    val args        = Seq("symbolic-ref", "--quiet", "HEAD")
+    val context     = "git symbolic-ref --quiet HEAD"
+    val HeadsPrefix = "refs/heads/"
+    GitProcessSupport.runCommandResult(baseDir, args).flatMap { result =>
+      result.exitCode match {
+        case 0 =>
+          result.stdout.headOption.map(_.trim).filter(_.nonEmpty) match {
+            case Some(ref) if ref.startsWith(HeadsPrefix) =>
+              IO.pure(ref.stripPrefix(HeadsPrefix))
+            case Some(ref)                                =>
+              IO.raiseError(
+                new IllegalStateException(
+                  s"$context returned an unexpected ref '$ref'; expected '$HeadsPrefix<branch>'"
+                )
+              )
+            case None                                     =>
+              IO.raiseError(
+                new IllegalStateException(s"$context produced no ref on stdout")
+              )
+          }
+        case 1 =>
+          IO.raiseError(new IllegalStateException(DetachedHeadMessage))
+        case n =>
+          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
+          IO.raiseError(
+            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
+          )
       }
+    }
+  }
 
   def trackingRemote: IO[String] =
     currentBranch.flatMap(validatedRemoteForBranch)
@@ -74,11 +99,10 @@ class Git(val baseDir: File) extends Vcs {
   def upstreamTrackingHash: IO[Option[String]] =
     branchInfo.flatMap { case (branch, remote) =>
       recoverMissingRef(
-        upstreamBranch(branch).flatMap(upstream =>
-          runSingleLine("rev-parse", "--verify", s"$remote/$upstream")(
-            s"git rev-parse --verify $remote/$upstream"
-          )
-        )
+        upstreamBranch(branch).flatMap { upstream =>
+          val ref = s"refs/remotes/$remote/$upstream"
+          runSingleLine("rev-parse", "--verify", ref)(s"git rev-parse --verify $ref")
+        }
       )
     }
 
@@ -111,8 +135,9 @@ class Git(val baseDir: File) extends Vcs {
       info            <- branchInfo
       (branch, remote) = info
       upstream        <- upstreamBranch(branch)
+      range            = s"refs/heads/$branch..refs/remotes/$remote/$upstream"
       behind          <-
-        runLines("rev-list", "--max-count=1", s"$branch..$remote/$upstream")("git rev-list")
+        runLines("rev-list", "--max-count=1", range)(s"git rev-list --max-count=1 $range")
           .map(_.nonEmpty)
     } yield behind
 
