@@ -18,26 +18,42 @@ object TestBuildState {
   ): State = {
     require(projects.nonEmpty, "Synthetic test states require at least one project.")
 
-    val canonicalBase  = baseDir.getCanonicalFile
-    val uri            = canonicalBase.toURI
-    val rootProjectIds = {
+    val canonicalBase   = baseDir.getCanonicalFile
+    val uri             = canonicalBase.toURI
+    val rootProjectIds  = {
       val atBase = projects.filter(_.base.getCanonicalFile == canonicalBase).map(_.id)
       if (atBase.nonEmpty) atBase else Seq(projects.head.id)
     }
-    val rootProjectId  = rootProjectIds.head
+    val rootProjectId   = rootProjectIds.head
+    val knownProjectIds = projects.iterator.map(_.id).toSet
+    def knownIdsMessage = knownProjectIds.toSeq.sorted.mkString(", ")
 
     def validateRef(ref: ProjectReference): Unit =
       ref match {
-        case _: ProjectRef      => ()
-        case LocalProject(_)    => ()
-        case LocalRootProject   => ()
-        case RootProject(`uri`) =>
+        case pr: ProjectRef if pr.build == uri && !knownProjectIds.contains(pr.project) =>
+          throw new IllegalArgumentException(
+            s"Unknown project id '${pr.project}' in synthetic test state. " +
+              s"Known: $knownIdsMessage"
+          )
+        case pr: ProjectRef if pr.build != uri                                          =>
+          throw new IllegalArgumentException(
+            s"Unsupported non-local ProjectRef in synthetic test state: $pr"
+          )
+        case _: ProjectRef                                                              => ()
+        case LocalProject(id) if !knownProjectIds.contains(id)                          =>
+          throw new IllegalArgumentException(
+            s"Unknown LocalProject id '$id' in synthetic test state. " +
+              s"Known: $knownIdsMessage"
+          )
+        case LocalProject(_)                                                            => ()
+        case LocalRootProject                                                           => ()
+        case RootProject(`uri`)                                                         =>
           ()
-        case RootProject(other) =>
+        case RootProject(other)                                                         =>
           throw new IllegalArgumentException(
             s"Unsupported non-local RootProject reference in synthetic test state: $other"
           )
-        case other              =>
+        case other                                                                      =>
           throw new IllegalArgumentException(
             s"Unsupported project reference in synthetic test state: $other"
           )
@@ -47,6 +63,14 @@ object TestBuildState {
       val definition: ProjectDefinition[ProjectReference] = project
       definition.aggregate.foreach(validateRef)
       definition.dependencies.foreach(dep => validateRef(dep.project))
+    }
+
+    currentProjectId.foreach { id =>
+      if (!knownProjectIds.contains(id))
+        throw new IllegalArgumentException(
+          s"Unknown currentProjectId '$id' in synthetic test state. " +
+            s"Known: $knownIdsMessage"
+        )
     }
 
     def resolveRef(ref: ProjectReference): ProjectRef =

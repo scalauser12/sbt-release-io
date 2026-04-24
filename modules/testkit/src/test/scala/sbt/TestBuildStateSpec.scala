@@ -199,6 +199,83 @@ class TestBuildStateSpec extends CatsEffectSuite {
     }
   }
 
+  test("synthetic loaded state - reject unknown LocalProject id in aggregate") {
+    TestSupport.tempDirResource("test-build-state-unknown-local-aggregate").use { dir =>
+      CEIO.blocking {
+        val error = intercept[IllegalArgumentException] {
+          TestSupport.loadedState(
+            dir,
+            Seq(Project("root", dir).aggregate(LocalProject("ghost"))),
+            currentProjectId = Some("root")
+          )
+        }
+        assert(
+          error.getMessage.startsWith("Unknown LocalProject id 'ghost'"),
+          s"unexpected message: ${error.getMessage}"
+        )
+      }
+    }
+  }
+
+  test("synthetic loaded state - reject unknown LocalProject id in dependsOn") {
+    TestSupport.tempDirResource("test-build-state-unknown-local-dependency").use { dir =>
+      CEIO.blocking {
+        val error = intercept[IllegalArgumentException] {
+          TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).dependsOn(
+                ClasspathDependency(LocalProject("ghost"), None)
+              )
+            ),
+            currentProjectId = Some("root")
+          )
+        }
+        assert(
+          error.getMessage.startsWith("Unknown LocalProject id 'ghost'"),
+          s"unexpected message: ${error.getMessage}"
+        )
+      }
+    }
+  }
+
+  test("synthetic loaded state - reject unknown ProjectRef id in aggregate") {
+    TestSupport.tempDirResource("test-build-state-unknown-project-ref").use { dir =>
+      CEIO.blocking {
+        val localUri = dir.getCanonicalFile.toURI
+        val error    = intercept[IllegalArgumentException] {
+          TestSupport.loadedState(
+            dir,
+            Seq(Project("root", dir).aggregate(ProjectRef(localUri, "ghost"))),
+            currentProjectId = Some("root")
+          )
+        }
+        assert(
+          error.getMessage.startsWith("Unknown project id 'ghost'"),
+          s"unexpected message: ${error.getMessage}"
+        )
+      }
+    }
+  }
+
+  test("synthetic loaded state - reject unknown currentProjectId") {
+    TestSupport.tempDirResource("test-build-state-unknown-current-project").use { dir =>
+      CEIO.blocking {
+        val error = intercept[IllegalArgumentException] {
+          TestSupport.loadedState(
+            dir,
+            Seq(Project("root", dir)),
+            currentProjectId = Some("ghost")
+          )
+        }
+        assert(
+          error.getMessage.startsWith("Unknown currentProjectId 'ghost'"),
+          s"unexpected message: ${error.getMessage}"
+        )
+      }
+    }
+  }
+
   private val singleProjectStateResource: Resource[CEIO, State] =
     TestSupport.tempDirResource("test-build-state-single").evalMap { dir =>
       CEIO.blocking(

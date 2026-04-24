@@ -31,6 +31,21 @@ class TestSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("TestRepoFiles.resolve - skip a fixture-style ancestor lacking repo-root markers") {
+    TestSupport.tempDirResource("test-repo-files-fixture").use { fakeRoot =>
+      IO.blocking {
+        val fakeBuild = fakeRoot.toPath.resolve("build.sbt")
+        Files.write(fakeBuild, "// fake fixture build.sbt".getBytes(StandardCharsets.UTF_8))
+
+        val originalWd = sys.props("user.dir")
+        try {
+          sys.props("user.dir") = fakeRoot.getAbsolutePath
+          intercept[IllegalArgumentException](TestRepoFiles.resolve("build.sbt"))
+        } finally sys.props("user.dir") = originalWd
+      }
+    }
+  }
+
   test("dummyAppConfiguration - expose the current runtime Scala version") {
     TestSupport.tempDirResource("test-support-app-config").use { dir =>
       IO.blocking {

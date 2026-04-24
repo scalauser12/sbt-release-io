@@ -15,12 +15,15 @@ object TestRepoFiles {
   def resolve(relativePath: String): Path = {
     val start = Paths.get(sys.props("user.dir")).toAbsolutePath.normalize()
 
+    def isRepoRoot(path: Path): Boolean =
+      Files.exists(path.resolve(".git")) ||
+        Files.isRegularFile(path.resolve(".scalafmt.conf"))
+
     def loop(current: Path): Option[Path] =
       Option(current).flatMap { path =>
-        val buildFile = path.resolve("build.sbt")
         val candidate = path.resolve(relativePath).normalize()
 
-        if (Files.isRegularFile(buildFile) && Files.exists(candidate)) Some(candidate)
+        if (isRepoRoot(path) && Files.exists(candidate)) Some(candidate)
         else loop(path.getParent)
       }
 
