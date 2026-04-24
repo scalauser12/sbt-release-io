@@ -47,6 +47,7 @@ private[release] object CoreCommandExecution {
       skipTests: Boolean,
       skipPublish: Boolean,
       interactive: Boolean,
+      configuredInteractive: Boolean,
       crossEnabled: Boolean,
       plan: CoreReleasePlan
   )
@@ -177,6 +178,7 @@ private[release] object CoreCommandExecution {
       skipTests = skipTests,
       skipPublish = skipPublish,
       interactive = interactiveEnabled,
+      configuredInteractive = runtime.resolveInteractiveEnabled(cleanState),
       crossEnabled = crossEnabled,
       plan = CoreReleasePlan.fromFlags(
         useDefaults = useDefaults,
@@ -261,7 +263,8 @@ private[release] object CoreCommandExecution {
                      CorePreflight.check(
                        initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
                        steps,
-                       inputs.crossEnabled
+                       inputs.crossEnabled,
+                       tagPreflightInteractive = inputs.configuredInteractive
                      )
                    }
       _       <- logLines(inputs.cleanState, CorePreflight.renderSummary(summary))

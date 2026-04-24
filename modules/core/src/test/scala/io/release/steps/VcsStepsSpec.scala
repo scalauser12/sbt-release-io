@@ -440,7 +440,8 @@ class VcsStepsSpec extends CatsEffectSuite {
         TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
           VcsSteps.preflightTag(
             ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
-              .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT"),
+            interactive = false
           )
         ) { err =>
           assert(err.getMessage.contains("Current settings would abort in non-interactive mode"))
@@ -479,7 +480,7 @@ class VcsStepsSpec extends CatsEffectSuite {
         )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
-        VcsSteps.preflightTag(ctx).map { outcome =>
+        VcsSteps.preflightTag(ctx, interactive = false).map { outcome =>
           assertEquals(outcome.tagName, "v1.0.0")
           assertEquals(outcome.status, "exists; release will keep the existing tag")
         }
@@ -527,7 +528,7 @@ class VcsStepsSpec extends CatsEffectSuite {
                                    )
                                  )
                                )
-        outcome           <- VcsSteps.preflightTag(ctx)
+        outcome           <- VcsSteps.preflightTag(ctx, interactive = false)
       } yield {
         assertEquals(outcome.tagName, "v1.0.0")
         assertEquals(outcome.status, "exists; release will keep the existing tag")
@@ -576,7 +577,7 @@ class VcsStepsSpec extends CatsEffectSuite {
         headRev        <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
         _              <-
           TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
-            VcsSteps.preflightTag(ctx)
+            VcsSteps.preflightTag(ctx, interactive = false)
           ) { err =>
             assert(err.getMessage.contains(s"Tag [v1.0.0] already exists"))
             assert(err.getMessage.contains(originalTagRev))
@@ -622,6 +623,7 @@ class VcsStepsSpec extends CatsEffectSuite {
         TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
           VcsSteps.preflightTag(
             ctx,
+            interactive = false,
             _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
           )
         ) { err =>
@@ -665,7 +667,7 @@ class VcsStepsSpec extends CatsEffectSuite {
         )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
-        VcsSteps.preflightTag(ctx).map { outcome =>
+        VcsSteps.preflightTag(ctx, interactive = false).map { outcome =>
           assertEquals(outcome.tagName, "v1.0.0")
           assertEquals(outcome.status, "exists; release will keep the existing tag")
         }
@@ -687,7 +689,8 @@ class VcsStepsSpec extends CatsEffectSuite {
         VcsSteps
           .preflightTag(
             ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
-              .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT"),
+            interactive = true
           )
           .map { outcome =>
             assertEquals(outcome.tagName, "v1.0.0")
@@ -715,6 +718,7 @@ class VcsStepsSpec extends CatsEffectSuite {
           .preflightTag(
             ReleaseContext(state = state, vcs = Some(vcs), interactive = true)
               .withVersions("1.0.0", "1.1.0-SNAPSHOT"),
+            interactive = true,
             _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
           )
           .map { outcome =>
@@ -766,6 +770,7 @@ class VcsStepsSpec extends CatsEffectSuite {
         _       <- TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
                      VcsSteps.preflightTag(
                        ctx,
+                       interactive = false,
                        _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
                      )
                    ) { err =>
@@ -812,7 +817,7 @@ class VcsStepsSpec extends CatsEffectSuite {
 
       IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
         TestAssertions.assertFailure[IllegalStateException, VcsSteps.PreflightTagOutcome](
-          VcsSteps.preflightTag(ctx)
+          VcsSteps.preflightTag(ctx, interactive = false)
         ) { err =>
           assert(err.getMessage.contains("releaseCustom help"))
           assert(!err.getMessage.contains("releaseIO help"))

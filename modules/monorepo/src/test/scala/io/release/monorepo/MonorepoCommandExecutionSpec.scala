@@ -192,7 +192,7 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
       lines,
       List(
         s"${ReleaseLogPrefixes.Monorepo} Starting monorepo release...",
-        s"${ReleaseLogPrefixes.Monorepo} 12 steps, 3 project(s)",
+        s"${ReleaseLogPrefixes.Monorepo} 12 steps, 3 configured project(s)",
         s"${ReleaseLogPrefixes.Monorepo} Cross-build enabled",
         s"${ReleaseLogPrefixes.Monorepo} Tests will be skipped",
         s"${ReleaseLogPrefixes.Monorepo} Publish will be skipped"
@@ -218,7 +218,7 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
       lines,
       List(
         s"${ReleaseLogPrefixes.Monorepo} Starting monorepo release...",
-        s"${ReleaseLogPrefixes.Monorepo} 4 steps, 1 project(s)"
+        s"${ReleaseLogPrefixes.Monorepo} 4 steps, 1 configured project(s)"
       )
     )
   }

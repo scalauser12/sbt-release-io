@@ -488,7 +488,8 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.commitReleaseVersion,
               VcsSteps.tagRelease
             ),
-            crossBuild = false
+            crossBuild = false,
+            tagPreflightInteractive = true
           )
           .map { summary =>
             assertEquals(
@@ -625,7 +626,8 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.commitReleaseVersion,
               VcsSteps.tagRelease
             ),
-            crossBuild = false
+            crossBuild = false,
+            tagPreflightInteractive = true
           )
           .map { summary =>
             assertEquals(
@@ -657,7 +659,8 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.commitReleaseVersion,
               VcsSteps.tagRelease
             ),
-            crossBuild = false
+            crossBuild = false,
+            tagPreflightInteractive = true
           )
           .map { summary =>
             assertEquals(
@@ -762,7 +765,8 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.commitReleaseVersion,
               VcsSteps.tagRelease
             ),
-            crossBuild = false
+            crossBuild = false,
+            tagPreflightInteractive = true
           )
           .map { summary =>
             assertEquals(
@@ -833,7 +837,8 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.commitReleaseVersion,
               VcsSteps.tagRelease
             ),
-            crossBuild = false
+            crossBuild = false,
+            tagPreflightInteractive = true
           )
           .map { summary =>
             assertEquals(

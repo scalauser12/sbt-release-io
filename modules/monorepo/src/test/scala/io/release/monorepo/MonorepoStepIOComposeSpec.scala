@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.monorepo.internal.*
+import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
@@ -540,6 +541,32 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
             }
           }
         }
+      }
+    }
+  }
+
+  test("selectedProjectsLine includes the selected project names after the selection boundary") {
+    contextResource.use { ctx =>
+      dummyProjects("core", "api", "util").map { projects =>
+        val selected = Seq(projects.head, projects(1)) // drop "util"
+        val narrowed = ctx.withProjects(selected)
+
+        assertEquals(
+          MonorepoComposer.selectedProjectsLine(narrowed),
+          s"${ReleaseLogPrefixes.Monorepo} Selected 2 project(s): core, api"
+        )
+      }
+    }
+  }
+
+  test("selectedProjectsLine omits the project list when none are selected") {
+    contextResource.use { ctx =>
+      val empty = ctx.withProjects(Seq.empty)
+      IO {
+        assertEquals(
+          MonorepoComposer.selectedProjectsLine(empty),
+          s"${ReleaseLogPrefixes.Monorepo} Selected 0 project(s)"
+        )
       }
     }
   }

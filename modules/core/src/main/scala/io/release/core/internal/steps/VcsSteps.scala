@@ -118,21 +118,23 @@ private[release] object VcsSteps {
       versionSessionSettings = versionSettings
     )
 
-  private[release] def preflightTag(ctx: ReleaseContext): IO[PreflightTagOutcome] =
-    preflightTag(
-      ctx,
-      vcs => vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
-    )
-
+  /** Preflight tag categorization.
+    *
+    * `interactive` decides how the "would-prompt" summary is worded: pass the configured
+    * `releaseIOBehaviorInteractive` setting so the summary reflects what the real release would
+    * do, while check-mode validations still run with `ctx.interactive = false`.
+    */
   private[release] def preflightTag(
       ctx: ReleaseContext,
-      preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+      interactive: Boolean,
+      preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget] = vcs =>
+        vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
   ): IO[PreflightTagOutcome] =
     preparePreflightContext(ctx).flatMap { preflightCtx =>
       resolveTagPlan(preflightCtx).flatMap { params =>
         val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
         detectedVcs.flatMap(vcs =>
-          resolveTagPreflight(vcs, params, preflightCtx, preflightTagTarget)
+          resolveTagPreflight(vcs, params, preflightCtx, interactive, preflightTagTarget)
         )
       }
     }
@@ -203,6 +205,7 @@ private[release] object VcsSteps {
       vcs: Vcs,
       params: TagPlan,
       ctx: ReleaseContext,
+      interactive: Boolean,
       preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
   ): IO[PreflightTagOutcome] =
     preflightTagTarget(vcs).flatMap { target =>
@@ -215,7 +218,7 @@ private[release] object VcsSteps {
           TagConflictResolver.PreflightParams(
             tagName = params.tagName,
             target = target,
-            interactive = ctx.interactive,
+            interactive = interactive,
             useDefaults = ctx.useDefaults,
             defaultAnswer = params.defaultAnswer,
             commandName = commandName,

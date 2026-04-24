@@ -939,7 +939,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         MonorepoPreparedSession(
           interactiveCtx.state,
           interactiveCtx.releasePlan.get,
-          interactiveCtx
+          interactiveCtx,
+          configuredInteractive = true
         )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
@@ -1095,7 +1096,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         MonorepoPreparedSession(
           interactiveCtx.state,
           interactiveCtx.releasePlan.get,
-          interactiveCtx
+          interactiveCtx,
+          configuredInteractive = true
         )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
@@ -1133,7 +1135,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         MonorepoPreparedSession(
           interactiveCtx.state,
           interactiveCtx.releasePlan.get,
-          interactiveCtx
+          interactiveCtx,
+          configuredInteractive = true
         )
       val customSetReleaseVersionsNameStep =
         validationOnlyStep(MonorepoReleaseSteps.setReleaseVersions.name)
@@ -1260,7 +1263,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         MonorepoPreparedSession(
           interactiveCtx.state,
           interactiveCtx.releasePlan.get,
-          interactiveCtx
+          interactiveCtx,
+          configuredInteractive = true
         )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
@@ -1328,7 +1332,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         MonorepoPreparedSession(
           interactiveCtx.state,
           interactiveCtx.releasePlan.get,
-          interactiveCtx
+          interactiveCtx,
+          configuredInteractive = true
         )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>
@@ -1368,7 +1373,8 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         MonorepoPreparedSession(
           interactiveCtx.state,
           interactiveCtx.releasePlan.get,
-          interactiveCtx
+          interactiveCtx,
+          configuredInteractive = true
         )
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core/v0.1.0")) *>

@@ -235,14 +235,16 @@ private[monorepo] object MonorepoPreflight {
                      session.plan,
                      processPlan,
                      checkSteps,
-                     session.flags.crossBuild
+                     session.flags.crossBuild,
+                     session.configuredInteractive
                    )
                  else
                    checkWithoutSelectionBoundary(
                      checked,
                      processPlan,
                      checkSteps,
-                     session.flags.crossBuild
+                     session.flags.crossBuild,
+                     session.configuredInteractive
                    )
     } yield summary
   }
@@ -252,7 +254,8 @@ private[monorepo] object MonorepoPreflight {
       plan: MonorepoReleasePlan,
       processPlan: MonorepoProcessPlan,
       checkSteps: CheckSteps,
-      crossBuildEnabled: Boolean
+      crossBuildEnabled: Boolean,
+      tagPreflightInteractive: Boolean
   ): IO[Summary] =
     for {
       preSelectionValidated  <- validateSegment(
@@ -293,7 +296,8 @@ private[monorepo] object MonorepoPreflight {
               projects = selected.projects,
               processPlan = processPlan,
               checkSteps = checkSteps,
-              crossBuildEnabled = crossBuildEnabled
+              crossBuildEnabled = crossBuildEnabled,
+              tagPreflightInteractive = tagPreflightInteractive
             )
         }
     } yield summary
@@ -302,7 +306,8 @@ private[monorepo] object MonorepoPreflight {
       baseCtx: MonorepoContext,
       processPlan: MonorepoProcessPlan,
       checkSteps: CheckSteps,
-      crossBuildEnabled: Boolean
+      crossBuildEnabled: Boolean,
+      tagPreflightInteractive: Boolean
   ): IO[Summary] = {
     checkVersionAwareSegment(
       baseCtx = baseCtx,
@@ -311,7 +316,8 @@ private[monorepo] object MonorepoPreflight {
       projects = Evaluation.Resolved(()),
       processPlan = processPlan,
       checkSteps = checkSteps,
-      crossBuildEnabled = crossBuildEnabled
+      crossBuildEnabled = crossBuildEnabled,
+      tagPreflightInteractive = tagPreflightInteractive
     )
   }
 
@@ -321,7 +327,8 @@ private[monorepo] object MonorepoPreflight {
       projects: Evaluation[Unit],
       processPlan: MonorepoProcessPlan,
       checkSteps: CheckSteps,
-      crossBuildEnabled: Boolean
+      crossBuildEnabled: Boolean,
+      tagPreflightInteractive: Boolean
   ): IO[Summary] =
     for {
       prefixValidated <- validateSegment(
@@ -340,7 +347,12 @@ private[monorepo] object MonorepoPreflight {
         else
           IO.pure(checkedVersions)
       checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
-      tagOutcomes     <- resolveTagSnapshot(checkedCtx, versionSnapshot, checkSteps)
+      tagOutcomes     <- resolveTagSnapshot(
+                           checkedCtx,
+                           versionSnapshot,
+                           checkSteps,
+                           tagPreflightInteractive
+                         )
       summary         <- buildSummary(
                            selectionMode = selectionMode,
                            projects = projects,
@@ -450,7 +462,8 @@ private[monorepo] object MonorepoPreflight {
   private def resolveTagSnapshot(
       ctx: MonorepoContext,
       versionSnapshot: VersionSnapshot,
-      checkSteps: CheckSteps
+      checkSteps: CheckSteps,
+      tagPreflightInteractive: Boolean
   ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
     if (!checkSteps.shouldPreflightTags)
       IO.pure(Evaluation.NotEvaluated(Messages.stepNotInCheckProcess(TagReleasesStep)))
@@ -463,25 +476,29 @@ private[monorepo] object MonorepoPreflight {
     else if (checkSteps.tagDependsOnRuntimeHookState)
       IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeHookState))
     else
-      preflightTags(ctx, checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit).map(
-        Evaluation.Resolved(_)
-      )
+      preflightTags(
+        ctx,
+        checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit,
+        tagPreflightInteractive
+      ).map(Evaluation.Resolved(_))
 
   private def preflightTags(
       ctx: MonorepoContext,
-      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
+      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean,
+      tagPreflightInteractive: Boolean
   ): IO[Seq[MonorepoVcsSteps.PreflightTagOutcome]] =
     if (!builtInTagPreflightIncludesReleaseWriteAndCommit)
-      MonorepoVcsSteps.preflightTags(ctx)
+      MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive)
     else
       builtInReleaseWritesWouldChange(ctx).flatMap { wouldChange =>
         if (wouldChange)
           MonorepoVcsSteps.preflightTags(
             ctx,
+            tagPreflightInteractive,
             _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
           )
         else
-          MonorepoVcsSteps.preflightTags(ctx)
+          MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive)
       }
 
   private def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =

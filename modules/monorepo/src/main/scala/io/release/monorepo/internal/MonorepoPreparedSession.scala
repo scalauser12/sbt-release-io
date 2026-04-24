@@ -10,11 +10,17 @@ import sbt.State
   * Only stable startup data is captured here. Settings that are expected to be
   * customized late during the release continue to be re-read from the current
   * `State` at their execution boundary.
+  *
+  * @param configuredInteractive the raw `releaseIOMonorepoBehaviorInteractive` setting value,
+  *                              preserved independently of `context.interactive` so check-mode
+  *                              tag preflight can report would-prompt categorizations while
+  *                              keeping its own validations non-interactive.
   */
 private[monorepo] final case class MonorepoPreparedSession(
     cleanState: State,
     plan: MonorepoReleasePlan,
-    context: MonorepoContext
+    context: MonorepoContext,
+    configuredInteractive: Boolean = false
 ) {
 
   def flags: ExecutionFlags = plan.flags
@@ -24,7 +30,8 @@ private[monorepo] object MonorepoPreparedSession {
 
   def prepare(
       cleanState: State,
-      plan: MonorepoReleasePlan
+      plan: MonorepoReleasePlan,
+      configuredInteractive: Boolean = false
   ): IO[MonorepoPreparedSession] =
     MonorepoProjectResolver.resolveAll(cleanState).map { projects =>
       val context = MonorepoContext(
@@ -38,7 +45,8 @@ private[monorepo] object MonorepoPreparedSession {
       MonorepoPreparedSession(
         cleanState = cleanState,
         plan = plan,
-        context = context
+        context = context,
+        configuredInteractive = configuredInteractive
       )
     }
 }

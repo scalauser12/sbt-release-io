@@ -16,6 +16,10 @@ val expectCheckMissingPublishToFailure   =
   taskKey[Unit]("Run releaseIO check without publishTo and assert the failure output")
 val expectCheckTagCollisionFailure       =
   taskKey[Unit]("Run releaseIO check with an existing tag and assert the failure output")
+val expectCheckInteractiveTagConflict    =
+  taskKey[Unit](
+    "Run releaseIO check with interactive mode enabled and assert the preflight reports a would-prompt tag"
+  )
 
 val NestedSbtTimeout = 5.minutes
 
@@ -231,3 +235,23 @@ expectCheckTagCollisionFailure := {
     workingDir = baseDirectory.value
   )
 }
+
+expectCheckInteractiveTagConflict := {
+  assertNestedRun(
+    commands = Seq(
+      "set releaseIOBehaviorInteractive := true",
+      "releaseIO check release-version 0.1.0 next-version 0.2.0-SNAPSHOT"
+    ),
+    outputFile = target.value / "check-interactive-tag-conflict.log",
+    shouldSucceed = true,
+    expectedSubstrings = Seq(
+      "Preflight summary:",
+      "tag            : v0.1.0 (",
+      "interactive release will prompt",
+      "Preflight checks passed."
+    ),
+    sbtVersion0 = sbtVersion.value,
+    workingDir = baseDirectory.value
+  )
+}
+

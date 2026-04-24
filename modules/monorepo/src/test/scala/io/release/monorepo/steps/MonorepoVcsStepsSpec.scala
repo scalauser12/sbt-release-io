@@ -354,7 +354,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   test("preflightTags - report available status for a clean per-project tag path") {
     perProjectTagContextResource.use { case (_, _, ctx) =>
-      MonorepoVcsSteps.preflightTags(ctx).map { outcomes =>
+      MonorepoVcsSteps.preflightTags(ctx, interactive = false).map { outcomes =>
         assertEquals(
           outcomes,
           Seq(MonorepoVcsSteps.PreflightTagOutcome("core", "core-v1.0.0", "available"))
@@ -385,7 +385,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                                useDefaults = false,
                                tagExistsAnswer = Some("k")
                              )
-        outcomes          <- MonorepoVcsSteps.preflightTags(ctx)
+        outcomes          <- MonorepoVcsSteps.preflightTags(ctx, interactive = false)
       } yield {
         assertEquals(
           outcomes,
@@ -412,6 +412,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
             MonorepoVcsSteps.preflightTags(
               ctx,
+              interactive = false,
               _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
             )
           ) { err =>
@@ -427,12 +428,13 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   test("preflightTags - omit keep from the interactive status for a future release commit") {
     perProjectTagContextResource.use { case (repo, _, baseCtx) =>
-      val ctx = withFlags(baseCtx.copy(interactive = true), useDefaults = false)
+      val ctx = withFlags(baseCtx, useDefaults = false)
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         MonorepoVcsSteps
           .preflightTags(
             ctx,
+            interactive = true,
             _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
           )
           .map { outcomes =>
@@ -475,6 +477,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                         ](
                           MonorepoVcsSteps.preflightTags(
                             ctx,
+                            interactive = false,
                             _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
                           )
                         ) { err =>
@@ -502,7 +505,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         TestAssertions
           .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
-            MonorepoVcsSteps.preflightTags(ctx)
+            MonorepoVcsSteps.preflightTags(ctx, interactive = false)
           ) { err =>
             assert(err.getMessage.contains("releaseMonorepoCustom help"))
             assert(!err.getMessage.contains("releaseIOMonorepo help"))

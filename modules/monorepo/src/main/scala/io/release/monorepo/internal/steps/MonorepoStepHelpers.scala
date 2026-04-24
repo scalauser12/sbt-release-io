@@ -63,24 +63,27 @@ private[monorepo] object MonorepoStepHelpers {
     ctx.currentProjects
       .foldLeft(IO.pure(ctx)) { (ioCtx, proj) =>
         ioCtx.flatMap { currentCtx =>
-          val latestProj = currentCtx.projects.find(_.ref == proj.ref).getOrElse(proj)
-          if (currentCtx.failed || latestProj.failed) IO.pure(currentCtx)
-          else
-            action(currentCtx, latestProj)
-              .flatMap(detectProjectFailureCommand(_, latestProj))
-              .handleErrorWith {
-                case NonFatal(err) =>
-                  IO.blocking(
-                    currentCtx.state.log.error(
-                      s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
-                    )
-                  ) *> IO.pure(
-                    currentCtx.updateProject(latestProj.ref)(
-                      _.copy(failed = true, failureCause = Some(err))
-                    )
-                  )
-                case fatal         => IO.raiseError(fatal)
-              }
+          currentCtx.projects.find(_.ref == proj.ref) match {
+            case None             => IO.pure(currentCtx)
+            case Some(latestProj) =>
+              if (currentCtx.failed || latestProj.failed) IO.pure(currentCtx)
+              else
+                action(currentCtx, latestProj)
+                  .flatMap(detectProjectFailureCommand(_, latestProj))
+                  .handleErrorWith {
+                    case NonFatal(err) =>
+                      IO.blocking(
+                        currentCtx.state.log.error(
+                          s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
+                        )
+                      ) *> IO.pure(
+                        currentCtx.updateProject(latestProj.ref)(
+                          _.copy(failed = true, failureCause = Some(err))
+                        )
+                      )
+                    case fatal         => IO.raiseError(fatal)
+                  }
+          }
         }
       }
 
@@ -92,33 +95,36 @@ private[monorepo] object MonorepoStepHelpers {
       initialCtx.currentProjects.foldLeft(IO.unit) { (ioUnit, proj) =>
         ioUnit.flatMap { _ =>
           handle.get.flatMap { currentCtx =>
-            val latestProj = currentCtx.projects.find(_.ref == proj.ref).getOrElse(proj)
-            if (currentCtx.failed || latestProj.failed) IO.unit
-            else
-              action(handle, latestProj)
-                .flatMap(_ =>
-                  handle.update(ctx => detectProjectFailureCommand(ctx, latestProj)).void
-                )
-                .handleErrorWith {
-                  case NonFatal(err) =>
-                    handle.get.flatMap { latestCtx =>
-                      IO.blocking(
-                        latestCtx.state.log.error(
-                          s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
-                        )
-                      ) *>
-                        handle
-                          .update(ctx =>
-                            IO.pure(
-                              ctx.updateProject(latestProj.ref)(
-                                _.copy(failed = true, failureCause = Some(err))
-                              )
+            currentCtx.projects.find(_.ref == proj.ref) match {
+              case None             => IO.unit
+              case Some(latestProj) =>
+                if (currentCtx.failed || latestProj.failed) IO.unit
+                else
+                  action(handle, latestProj)
+                    .flatMap(_ =>
+                      handle.update(ctx => detectProjectFailureCommand(ctx, latestProj)).void
+                    )
+                    .handleErrorWith {
+                      case NonFatal(err) =>
+                        handle.get.flatMap { latestCtx =>
+                          IO.blocking(
+                            latestCtx.state.log.error(
+                              s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
                             )
-                          )
-                          .void
+                          ) *>
+                            handle
+                              .update(ctx =>
+                                IO.pure(
+                                  ctx.updateProject(latestProj.ref)(
+                                    _.copy(failed = true, failureCause = Some(err))
+                                  )
+                                )
+                              )
+                              .void
+                        }
+                      case fatal         => IO.raiseError(fatal)
                     }
-                  case fatal         => IO.raiseError(fatal)
-                }
+            }
           }
         }
       }

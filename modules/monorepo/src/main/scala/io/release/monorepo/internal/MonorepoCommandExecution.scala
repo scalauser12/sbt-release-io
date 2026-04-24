@@ -219,8 +219,11 @@ private[monorepo] object MonorepoCommandExecution {
           warnOnDuplicates
         ),
       (command: PlannedCommand) =>
-        MonorepoPreparedSession.prepare(command.cleanState, command.plan).flatMap { session =>
-          run(command, session)
+        IO.blocking(runtime.resolveInteractiveEnabled(command.cleanState)).flatMap {
+          configuredInteractive =>
+            MonorepoPreparedSession
+              .prepare(command.cleanState, command.plan, configuredInteractive)
+              .flatMap(session => run(command, session))
         }
     )
   }
@@ -303,7 +306,7 @@ private[monorepo] object MonorepoCommandExecution {
 
     List(
       s"$prefix Starting monorepo release...",
-      s"$prefix $stepCount steps, $projectCount project(s)"
+      s"$prefix $stepCount steps, $projectCount configured project(s)"
     ) ++
       (if (flags.crossBuild) List(s"$prefix Cross-build enabled") else Nil) ++
       (if (flags.skipTests) List(s"$prefix Tests will be skipped") else Nil) ++

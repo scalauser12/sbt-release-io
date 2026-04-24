@@ -42,7 +42,9 @@ private[monorepo] object MonorepoComposer {
                       crossBuild
                     )
         finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
-                    else runMainSegment(plan.mainSteps, setupCtx, crossBuild)
+                    else
+                      logSelectedProjects(setupCtx) *>
+                        runMainSegment(plan.mainSteps, setupCtx, crossBuild)
       } yield finalCtx
     else
       runSequentialValidateThenExecute(
@@ -51,6 +53,16 @@ private[monorepo] object MonorepoComposer {
         crossBuild
       )
   }
+
+  private[monorepo] def selectedProjectsLine(ctx: MonorepoContext): String = {
+    val selected = ctx.currentProjects
+    val suffix   =
+      if (selected.isEmpty) "" else s": ${selected.map(_.name).mkString(", ")}"
+    s"$LogPrefix Selected ${selected.size} project(s)$suffix"
+  }
+
+  private def logSelectedProjects(ctx: MonorepoContext): IO[Unit] =
+    IO.blocking(ctx.state.log.info(selectedProjectsLine(ctx)))
 
   private def runMainSegment(
       steps: Seq[AnyStep],

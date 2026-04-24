@@ -84,7 +84,8 @@ private[monorepo] object MonorepoVcsSteps {
       vcs: Vcs,
       rendered: String,
       target: TagConflictResolver.PreflightCommitTarget,
-      projectName: String
+      projectName: String,
+      interactive: Boolean
   ): IO[PreflightTagOutcome] = {
     val commandName =
       ctx.releasePlan.map(_.commandName).getOrElse(MonorepoReleasePlan.DefaultCommandName)
@@ -95,7 +96,7 @@ private[monorepo] object MonorepoVcsSteps {
         TagConflictResolver.PreflightParams(
           tagName = rendered,
           target = target,
-          interactive = ctx.interactive,
+          interactive = interactive,
           useDefaults = ctx.useDefaults,
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
           commandName = commandName,
@@ -105,15 +106,17 @@ private[monorepo] object MonorepoVcsSteps {
       .map(o => PreflightTagOutcome(projectName, o.tagName, o.status))
   }
 
-  private[monorepo] def preflightTags(ctx: MonorepoContext): IO[Seq[PreflightTagOutcome]] =
-    preflightTags(
-      ctx,
-      vcs => vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
-    )
-
+  /** Preflight tag categorization.
+    *
+    * `interactive` decides how the "would-prompt" summary is worded: pass the configured
+    * `releaseIOBehaviorInteractive` setting so the summary reflects what the real release would
+    * do, while check-mode validations still run with `ctx.interactive = false`.
+    */
   private[monorepo] def preflightTags(
       ctx: MonorepoContext,
-      preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget]
+      interactive: Boolean,
+      preflightTagTarget: Vcs => IO[TagConflictResolver.PreflightCommitTarget] = vcs =>
+        vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
   ): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
       // Check mode only reaches tag preflight after MonorepoPreflight has ruled out tag-affecting
@@ -125,7 +128,9 @@ private[monorepo] object MonorepoVcsSteps {
             case (releaseVer, _) =>
               val rendered = settings.perProjectTagName(project.name, releaseVer)
               preflightTagTarget(vcs)
-                .flatMap(target => preflightCreateTag(ctx, vcs, rendered, target, project.name))
+                .flatMap(target =>
+                  preflightCreateTag(ctx, vcs, rendered, target, project.name, interactive)
+                )
           }
         }
       }

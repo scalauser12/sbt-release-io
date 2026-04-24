@@ -208,7 +208,8 @@ private[release] object CorePreflight {
   def check(
       initialCtx: ReleaseContext,
       steps: Seq[Step],
-      crossBuild: Boolean
+      crossBuild: Boolean,
+      tagPreflightInteractive: Boolean = false
   ): IO[Summary] = {
     val checkSteps = CheckSteps(steps)
 
@@ -217,7 +218,11 @@ private[release] object CorePreflight {
       checkedCtx      <- ExecutionEngine.raiseIfFailed(validatedCtx)
       versionSnapshot <- resolveVersionSnapshot(checkedCtx, checkSteps)
       snapshotCtx     <- ExecutionEngine.raiseIfFailed(versionSnapshot.context)
-      tagSummary      <- resolveTagSummary(versionSnapshot.copy(context = snapshotCtx), checkSteps)
+      tagSummary      <- resolveTagSummary(
+                           versionSnapshot.copy(context = snapshotCtx),
+                           checkSteps,
+                           tagPreflightInteractive
+                         )
     } yield buildSummary(versionSnapshot.summary, tagSummary, crossBuild, snapshotCtx, checkSteps)
   }
 
@@ -287,7 +292,8 @@ private[release] object CorePreflight {
 
   private def resolveTagSummary(
       snapshot: VersionSnapshot,
-      checkSteps: CheckSteps
+      checkSteps: CheckSteps,
+      tagPreflightInteractive: Boolean
   ): IO[TagSummary] =
     if (!checkSteps.shouldPreflightTag)
       IO.pure(TagSummary.NotEvaluated(Messages.stepNotInCheckProcess(TagReleaseStep)))
@@ -298,24 +304,26 @@ private[release] object CorePreflight {
     else if (checkSteps.tagDependsOnRuntimeHookState)
       IO.pure(TagSummary.NotEvaluated(Messages.TagRuntimeHookState))
     else
-      preflightTag(snapshot.context, checkSteps)
+      preflightTag(snapshot.context, checkSteps, tagPreflightInteractive)
         .map(outcome => TagSummary.Resolved(outcome.tagName, outcome.status))
 
   private def preflightTag(
       ctx: ReleaseContext,
-      checkSteps: CheckSteps
+      checkSteps: CheckSteps,
+      tagPreflightInteractive: Boolean
   ): IO[VcsSteps.PreflightTagOutcome] =
     if (!checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit)
-      VcsSteps.preflightTag(ctx)
+      VcsSteps.preflightTag(ctx, tagPreflightInteractive)
     else
       builtInReleaseWriteWouldChange(ctx).flatMap { wouldChange =>
         if (wouldChange)
           VcsSteps.preflightTag(
             ctx,
+            tagPreflightInteractive,
             _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
           )
         else
-          VcsSteps.preflightTag(ctx)
+          VcsSteps.preflightTag(ctx, tagPreflightInteractive)
       }
 
   private[release] def builtInReleaseWriteWouldChange(ctx: ReleaseContext): IO[Boolean] =

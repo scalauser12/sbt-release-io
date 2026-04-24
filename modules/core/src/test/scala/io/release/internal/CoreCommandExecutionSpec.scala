@@ -52,6 +52,35 @@ class CoreCommandExecutionSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     }
   }
 
+  test("doCheck keeps initialContext non-interactive even when the setting is enabled") {
+    stateResource("core-command-check-interactive", HookFriendlyPlugin).use { loaded =>
+      Ref.of[IO, Option[Boolean]](None).flatMap { observedInteractive =>
+        IO {
+          val runtime = CoreCommandExecution.CommandRuntime(
+            commandName = "releaseIO",
+            resource = Resource.unit,
+            resolveResourceHooks = _ => ReleaseResourceHooks.empty[Unit],
+            resolveCrossBuildEnabled = _ => false,
+            resolveSkipPublishEnabled = _ => false,
+            resolveInteractiveEnabled = _ => true,
+            initialContext = (_state, _skipTests, _skipPublish, interactive) =>
+              observedInteractive
+                .set(Some(interactive))
+                .flatMap(_ =>
+                  IO.raiseError[ReleaseContext](
+                    new RuntimeException("sentinel-initial-context")
+                  )
+                )
+          )
+          val _       = CoreCommandExecution.doCheck(loaded.state, Seq.empty, runtime)
+          ()
+        }.flatMap { _ =>
+          observedInteractive.get.map(interactive => assertEquals(interactive, Some(false)))
+        }
+      }
+    }
+  }
+
   test("doCheck logs failure and skips the success line when initial context is already failed") {
     stateResource("core-command-check-failed-context", HookFriendlyPlugin).use { loaded =>
       IO {
