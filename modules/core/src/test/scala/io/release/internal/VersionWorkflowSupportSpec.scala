@@ -81,6 +81,32 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolveVersionInputs skips suggestion functions when both overrides are supplied") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val ctx           = promptingContext(loadedState(dir, Seq.empty))
+      val throwIfCalled =
+        (_: String) => throw new IllegalArgumentException("suggestion function must not be invoked")
+
+      VersionWorkflowSupport
+        .resolveVersionInputs(
+          ctx = ctx,
+          currentVersion = "0.1.0",
+          releaseVersionFn = throwIfCalled,
+          nextVersionFn = throwIfCalled,
+          releaseVersionOverride = Some("1.2.3"),
+          nextVersionOverride = Some("1.2.4-SNAPSHOT"),
+          logPrefix = ReleaseLogPrefixes.Core,
+          releaseLabel = "Release version",
+          nextLabel = "Next version",
+          allowPrompts = true
+        )
+        .map { resolved =>
+          assertEquals(resolved.releaseVersion, "1.2.3")
+          assertEquals(resolved.nextVersion, "1.2.4-SNAPSHOT")
+        }
+    }
+  }
+
   test("resolveVersionInputsFromTasks suppresses prompting when prompts are disabled") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val ctx = promptingContext(

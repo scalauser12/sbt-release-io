@@ -33,6 +33,12 @@ class VersionSpec extends FunSuite {
     assertEquals(Version("not-a-version"), None)
   }
 
+  test("Version.apply - reject malformed numeric/qualifier inputs") {
+    Seq("1..2", "1abc", "1-", "1.0.0.", "1.2.3SNAPSHOT").foreach { malformed =>
+      assertEquals(Version(malformed), None, s"expected None for '$malformed'")
+    }
+  }
+
   test("Version.apply - round-trip rendered representative versions") {
     val versions = Seq(
       version("1"),

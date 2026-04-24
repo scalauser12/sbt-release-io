@@ -28,28 +28,25 @@ private[release] object VersionWorkflowSupport {
       nextLabel: String,
       allowPrompts: Boolean,
       beforeReleasePrompt: IO[Unit] = IO.unit
-  ): IO[ResolvedVersionInputs[C]] = {
-    val suggestedRelease = releaseVersionFn(currentVersion)
-
+  ): IO[ResolvedVersionInputs[C]] =
     for {
       releaseData                      <- DecisionResolver.resolveVersionInput(
                                             ctx,
                                             override_ = releaseVersionOverride,
-                                            suggested = suggestedRelease,
+                                            suggested = releaseVersionFn(currentVersion),
                                             logPrefix = logPrefix,
-                                            prompt = s"$releaseLabel [$suggestedRelease] : ",
+                                            promptFor = s => s"$releaseLabel [$s] : ",
                                             promptContext = releaseLabel,
                                             allowPrompts = allowPrompts,
                                             beforePrompt = beforeReleasePrompt
                                           )
       (releaseCtx, releaseVersionValue) = releaseData
-      suggestedNext                     = nextVersionFn(releaseVersionValue)
       nextData                         <- DecisionResolver.resolveVersionInput(
                                             releaseCtx,
                                             override_ = nextVersionOverride,
-                                            suggested = suggestedNext,
+                                            suggested = nextVersionFn(releaseVersionValue),
                                             logPrefix = logPrefix,
-                                            prompt = s"$nextLabel [$suggestedNext] : ",
+                                            promptFor = s => s"$nextLabel [$s] : ",
                                             promptContext = nextLabel,
                                             allowPrompts = allowPrompts
                                           )
@@ -59,7 +56,6 @@ private[release] object VersionWorkflowSupport {
       releaseVersion = releaseVersionValue,
       nextVersion = nextVersionValue
     )
-  }
 
   def ensureVersionFileExists(
       versionFile: File,

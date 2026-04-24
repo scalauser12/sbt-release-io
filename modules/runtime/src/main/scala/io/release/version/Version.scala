@@ -36,7 +36,8 @@ object Version {
     val default: Bump = Next
   }
 
-  val VersionR: Regex             = """([0-9]+)((?:\.[0-9]+)+)?([\.\-0-9a-zA-Z]*)?""".r
+  val VersionR: Regex             =
+    """([0-9]+)((?:\.[0-9]+)+)?((?:\.[a-zA-Z]|-[0-9a-zA-Z])(?:[.\-0-9a-zA-Z]*[0-9a-zA-Z])?)?""".r
   val PreReleaseQualifierR: Regex =
     """[\.-](?i:rc|m|alpha|beta)[\.-]?[0-9]*""".r
 

@@ -16,9 +16,9 @@ private[release] object DecisionResolver {
   def resolveVersionInput[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       override_ : Option[String],
-      suggested: String,
+      suggested: => String,
       logPrefix: String,
-      prompt: String,
+      promptFor: String => String,
       promptContext: String,
       allowPrompts: Boolean,
       beforePrompt: IO[Unit] = IO.unit
@@ -27,14 +27,15 @@ private[release] object DecisionResolver {
       case Some(versionValue) =>
         StepHelpers.parseVersionInput(versionValue, versionValue).map(ctx -> _)
       case None               =>
-        if (!allowPrompts || ctx.useDefaults || !ctx.interactive) IO.pure(ctx -> suggested)
+        val suggestedValue = suggested
+        if (!allowPrompts || ctx.useDefaults || !ctx.interactive) IO.pure(ctx -> suggestedValue)
         else
           beforePrompt *>
             PromptAdapter
-              .promptLine(ctx, prompt)
+              .promptLine(ctx, promptFor(suggestedValue))
               .flatMap {
                 case (nextCtx, Some(raw)) =>
-                  StepHelpers.parseVersionInput(raw, suggested).map(nextCtx -> _)
+                  StepHelpers.parseVersionInput(raw, suggestedValue).map(nextCtx -> _)
                 case (nextCtx, None)      =>
                   IO.blocking(
                     nextCtx.state.log.warn(
