@@ -268,10 +268,24 @@ private[release] object GitProcessSupport {
       }
     }
 
-    def waitForExit(managed: ManagedProcess): IO[Int] =
-      IO.fromCompletableFuture(IO.delay(managed.process.onExit()))
-        .flatMap(p => IO.blocking(p.exitValue()))
-        .flatMap(waitForDescendantsExit(managed, _))
+    // Poll `liveDescendants` concurrently with the root-exit wait so `managed.tracked` is
+    // populated before any reparenting, which would otherwise leave cleanup with no handle to
+    // terminate orphaned children. The leading synchronous snapshot guards against the case
+    // where the background fiber has not been scheduled before the root exits on a fast command.
+    def waitForExit(managed: ManagedProcess): IO[Int] = {
+      val pollDescendants: IO[Nothing] =
+        (IO.blocking(ProcessTree.liveDescendants(managed)).void *> IO.sleep(
+          ProcessPollInterval
+        )).foreverM
+
+      IO.blocking(ProcessTree.liveDescendants(managed)) *>
+        pollDescendants.background
+          .surround(
+            IO.fromCompletableFuture(IO.delay(managed.process.onExit()))
+              .flatMap(p => IO.blocking(p.exitValue()))
+          )
+          .flatMap(waitForDescendantsExit(managed, _))
+    }
 
     private def withManagedProcess[A](
         processBuilder: => ProcessBuilder,
