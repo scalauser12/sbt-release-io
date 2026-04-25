@@ -107,6 +107,30 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolveVersionInputs treats whitespace-only overrides as absent") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val ctx = promptingContext(loadedState(dir, Seq.empty))
+
+      VersionWorkflowSupport
+        .resolveVersionInputs(
+          ctx = ctx,
+          currentVersion = "0.1.0-SNAPSHOT",
+          releaseVersionFn = _.stripSuffix("-SNAPSHOT"),
+          nextVersionFn = _ => "0.2.0-SNAPSHOT",
+          releaseVersionOverride = Some("   "),
+          nextVersionOverride = Some("\t \n"),
+          logPrefix = ReleaseLogPrefixes.Core,
+          releaseLabel = "Release version",
+          nextLabel = "Next version",
+          allowPrompts = false
+        )
+        .map { resolved =>
+          assertEquals(resolved.releaseVersion, "0.1.0")
+          assertEquals(resolved.nextVersion, "0.2.0-SNAPSHOT")
+        }
+    }
+  }
+
   test("resolveVersionInputsFromTasks suppresses prompting when prompts are disabled") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val ctx = promptingContext(

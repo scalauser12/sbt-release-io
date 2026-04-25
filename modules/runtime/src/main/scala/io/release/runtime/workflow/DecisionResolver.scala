@@ -23,7 +23,7 @@ private[release] object DecisionResolver {
       allowPrompts: Boolean,
       beforePrompt: IO[Unit] = IO.unit
   ): IO[(C, String)] =
-    override_.filter(_.nonEmpty) match {
+    override_.map(_.trim).filter(_.nonEmpty) match {
       case Some(versionValue) =>
         StepHelpers.parseVersionInput(versionValue, versionValue).map(ctx -> _)
       case None               =>
