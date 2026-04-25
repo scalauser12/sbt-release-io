@@ -18,10 +18,6 @@ import java.time.Duration as JavaDuration
 import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.ForkJoinPool
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
@@ -36,62 +32,10 @@ class GitSpec extends CatsEffectSuite {
     IO(assertEquals(GitProcessSupport.executableNameFor("Linux"), "git"))
   }
 
-  test("runLinesResult - drain both pipes concurrently even when the common pool is saturated") {
-    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-common-pool-saturation").use { repo =>
-      IO.blocking {
-        // Disable auto-maintenance and use fewer commits with long single-line subjects so
-        // `git log --oneline` still exceeds a 64KB pipe buffer without churning the temp repo.
-        TestSupport.runGit(repo, "config", "gc.auto", "0")
-        TestSupport.runGit(repo, "config", "maintenance.auto", "false")
-
-        val commitCount    = 96
-        val subjectPadding = "x" * 1024
-
-        (1 to commitCount).foreach { i =>
-          sbt.IO.write(new File(repo, s"file-$i.txt"), s"contents $i")
-          TestSupport.runGit(repo, "add", s"file-$i.txt")
-          TestSupport.runGit(
-            repo,
-            "commit",
-            "-m",
-            s"commit-$i-$subjectPadding"
-          )
-        }
-
-        val parallelism  = ForkJoinPool.commonPool().getParallelism.max(1)
-        val busyWorkers  = parallelism
-        val releaseLatch = new CountDownLatch(1)
-        val started      = new CountDownLatch(busyWorkers)
-
-        val busyFutures = (0 until busyWorkers).toList.map { _ =>
-          CompletableFuture.runAsync { () =>
-            started.countDown()
-            releaseLatch.await()
-          }
-        }
-
-        try {
-          assert(
-            started.await(5, TimeUnit.SECONDS),
-            s"Seeding tasks did not all start within 5s"
-          )
-
-          val result = GitProcessSupport.runLinesResult(repo, Seq("log", "--oneline"))
-
-          assertEquals(result.exitCode, 0)
-          assert(result.stdout.length >= commitCount)
-        } finally {
-          releaseLatch.countDown()
-          busyFutures.foreach(_.join())
-        }
-      }
-    }
-  }
-
   test("runLines - preserve stderr on git failure in a non-repository directory") {
     TestSupport.tempDirResource(s"$fixturePrefix-stderr").use { dir =>
       for {
-        result <- IO.blocking(GitProcessSupport.runLinesResult(dir, Seq("status", "--porcelain")))
+        result <- GitProcessSupport.runCommandResult(dir, Seq("status", "--porcelain"))
         _       = assert(result.exitCode != 0)
         _       = assert(result.stderr.nonEmpty)
         _      <-
@@ -138,32 +82,36 @@ class GitSpec extends CatsEffectSuite {
   test("cleanupManagedProcess - destroy descendants when the root process already exited") {
     val descendant = new FakeProcessHandle(2L, initialAlive = true)
     val process    = new FakeProcess(1L, initialAlive = false, descendants = Vector(descendant))
+    val managed    = GitProcessSupport.ProcessTree.ManagedProcess.create(process)
 
-    GitProcessSupport.cleanupManagedProcess(process, 1.second, completed = false).map { _ =>
-      assertEquals(process.destroyCalls, 1)
-      assertEquals(process.destroyForciblyCalls, 0)
-      assertEquals(descendant.destroyCalls, 1)
-      assertEquals(descendant.destroyForciblyCalls, 0)
-      assert(process.inputClosed)
-      assert(process.errorClosed)
-      assert(process.outputClosed)
-      assert(!descendant.isAlive)
+    GitProcessSupport.ProcessTree.cleanupManagedProcess(managed, 1.second, completed = false).map {
+      _ =>
+        assertEquals(process.destroyCalls, 1)
+        assertEquals(process.destroyForciblyCalls, 0)
+        assertEquals(descendant.destroyCalls, 1)
+        assertEquals(descendant.destroyForciblyCalls, 0)
+        assert(process.inputClosed)
+        assert(process.errorClosed)
+        assert(process.outputClosed)
+        assert(!descendant.isAlive)
     }
   }
 
   test("cleanupManagedProcess - destroy root and descendants when completion aborts") {
     val descendant = new FakeProcessHandle(2L, initialAlive = true)
     val process    = new FakeProcess(1L, initialAlive = true, descendants = Vector(descendant))
+    val managed    = GitProcessSupport.ProcessTree.ManagedProcess.create(process)
 
-    GitProcessSupport.cleanupManagedProcess(process, 1.second, completed = false).map { _ =>
-      assertEquals(process.destroyCalls, 1)
-      assertEquals(process.destroyForciblyCalls, 0)
-      assertEquals(descendant.destroyCalls, 1)
-      assertEquals(descendant.destroyForciblyCalls, 0)
-      assert(process.inputClosed)
-      assert(process.errorClosed)
-      assert(process.outputClosed)
-      assert(!descendant.isAlive)
+    GitProcessSupport.ProcessTree.cleanupManagedProcess(managed, 1.second, completed = false).map {
+      _ =>
+        assertEquals(process.destroyCalls, 1)
+        assertEquals(process.destroyForciblyCalls, 0)
+        assertEquals(descendant.destroyCalls, 1)
+        assertEquals(descendant.destroyForciblyCalls, 0)
+        assert(process.inputClosed)
+        assert(process.errorClosed)
+        assert(process.outputClosed)
+        assert(!descendant.isAlive)
     }
   }
 
@@ -522,24 +470,29 @@ class GitSpec extends CatsEffectSuite {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 
     TestSupport.tempDirResource(s"$fixturePrefix-timeout").use { dir =>
-      val pid = new AtomicLong(-1L)
+      val pidFile = new File(dir, "timeout.pid")
 
-      GitProcessSupport
-        .runCommandWithTimeout(
-          new java.lang.ProcessBuilder("/bin/sh", "-c", "exec sleep 5")
-            .directory(dir)
-            .redirectOutput(Redirect.DISCARD)
-            .redirectError(Redirect.DISCARD),
-          50.millis,
-          onStart = process => pid.set(process.pid())
-        )
-        .flatMap { result =>
-          waitForProcessToExit(pid.get(), 1.second).map { alive =>
-            assertEquals(result, None)
-            assert(pid.get() > 0L)
-            assertEquals(alive, false)
-          }
-        }
+      for {
+        result <- GitProcessSupport.runCommandWithTimeout(
+                    new java.lang.ProcessBuilder(
+                      "/bin/sh",
+                      "-c",
+                      """echo $$ > "$0"; exec sleep 5""",
+                      pidFile.getAbsolutePath
+                    )
+                      .directory(dir)
+                      .redirectOutput(Redirect.DISCARD)
+                      .redirectError(Redirect.DISCARD),
+                    250.millis
+                  )
+        _      <- waitForFile(pidFile, 5.seconds)
+        pid    <- readPid(pidFile)
+        alive  <- waitForProcessToExit(pid, 1.second)
+      } yield {
+        assertEquals(result, None)
+        assert(pid > 0L)
+        assertEquals(alive, false)
+      }
     }
   }
 
@@ -662,38 +615,33 @@ class GitSpec extends CatsEffectSuite {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 
     TestSupport.tempDirResource(s"$fixturePrefix-cancel").use { dir =>
-      val pid     = new AtomicLong(-1L)
-      val started = new CountDownLatch(1)
+      val pidFile = new File(dir, "cancel.pid")
 
       for {
         fiber <- GitProcessSupport
                    .runCommandWithTimeout(
-                     new java.lang.ProcessBuilder("/bin/sh", "-c", "exec sleep 5")
+                     new java.lang.ProcessBuilder(
+                       "/bin/sh",
+                       "-c",
+                       """echo $$ > "$0"; exec sleep 5""",
+                       pidFile.getAbsolutePath
+                     )
                        .directory(dir)
                        .redirectOutput(Redirect.DISCARD)
                        .redirectError(Redirect.DISCARD),
-                     5.seconds,
-                     onStart = process => {
-                       pid.set(process.pid())
-                       started.countDown()
-                     }
+                     5.seconds
                    )
                    .start
-        _     <- waitForStart(started)
+        _     <- waitForFile(pidFile, 5.seconds)
+        pid   <- readPid(pidFile)
         _     <- fiber.cancel.timeout(1.second)
-        alive <- waitForProcessToExit(pid.get(), 1.second)
+        alive <- waitForProcessToExit(pid, 1.second)
       } yield {
-        assert(pid.get() > 0L)
+        assert(pid > 0L)
         assertEquals(alive, false)
       }
     }
   }
-
-  private def waitForStart(started: CountDownLatch): IO[Unit] =
-    IO.blocking(started.await(5L, TimeUnit.SECONDS)).flatMap {
-      case true  => IO.unit
-      case false => IO.raiseError(new RuntimeException("Process did not start in time"))
-    }
 
   private def configureAlias(
       repo: File,

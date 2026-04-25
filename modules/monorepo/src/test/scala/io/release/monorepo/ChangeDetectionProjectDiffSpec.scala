@@ -295,11 +295,9 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
         )
 
         for {
-          result  <- IO.blocking(
-                       GitProcessSupport.runLinesResult(
-                         repo,
-                         Seq("diff", "--name-only", "magic-v0.1.0..HEAD", "--", ":(badmagic)")
-                       )
+          result  <- GitProcessSupport.runCommandResult(
+                       repo,
+                       Seq("diff", "--name-only", "magic-v0.1.0..HEAD", "--", ":(badmagic)")
                      )
           _        = assert(result.exitCode != 0)
           _        = assert(result.stderr.nonEmpty)

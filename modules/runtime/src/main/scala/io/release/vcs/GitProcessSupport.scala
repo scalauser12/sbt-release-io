@@ -2,7 +2,6 @@ package io.release.vcs
 
 import cats.effect.Clock
 import cats.effect.IO
-import cats.effect.Ref
 import cats.effect.Resource
 import cats.syntax.all.*
 
@@ -14,9 +13,7 @@ import java.lang.ProcessBuilder.Redirect
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.util.Locale
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.util.control.NonFatal
@@ -83,14 +80,6 @@ private[release] object GitProcessSupport {
       ManagedProcessRunner.waitForExit
     )
 
-  /** Synchronous helper for tests and local blocking callers.
-    * Decodes stdout/stderr as UTF-8 and drains both streams concurrently on dedicated daemon
-    * threads to avoid pipe-buffer deadlocks regardless of `ForkJoinPool.commonPool()` state.
-    * Must be invoked under `IO.blocking` or another explicit blocking boundary.
-    */
-  private[release] def runLinesResult(baseDir: File, args: Seq[String]): GitCommandResult =
-    ProcessStreams.runLinesResult(GitCommands.captured(baseDir, args*))
-
   /** Run git capturing stdout/stderr and return the raw result without raising on non-zero exit.
     * Use when the caller needs to branch on the exit code in a single invocation.
     */
@@ -147,34 +136,15 @@ private[release] object GitProcessSupport {
   def runCommandWithTimeout(
       processBuilder: => ProcessBuilder,
       timeout: FiniteDuration,
-      destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod,
-      onStart: Process => Unit = _ => ()
+      destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod
   ): IO[Option[Int]] =
-    ManagedProcessRunner.runWithTimeout(
-      processBuilder,
-      timeout,
-      destroyGracePeriod,
-      onStart
-    )
+    ManagedProcessRunner.runWithTimeout(processBuilder, timeout, destroyGracePeriod)
 
   private[release] def captureLines(
       stream: InputStream,
       charset: Charset
   ): IO[Vector[String]] =
     ProcessStreams.captureLines(stream, charset)
-
-  // Test-only entry point: wraps a raw `Process` (typically a FakeProcess) so tests can
-  // exercise the cleanup path without going through `withManagedProcess`.
-  private[release] def cleanupManagedProcess(
-      process: Process,
-      destroyGracePeriod: FiniteDuration,
-      completed: Boolean
-  ): IO[Unit] =
-    ProcessTree.cleanupManagedProcess(
-      ProcessTree.ManagedProcess.create(process),
-      destroyGracePeriod,
-      completed
-    )
 
   private object GitCommands {
     private lazy val exec: String =
@@ -202,58 +172,11 @@ private[release] object GitProcessSupport {
   }
 
   private object ProcessStreams {
-    private val drainThreadCounter: AtomicLong = new AtomicLong(0L)
-
-    def runLinesResult(processBuilder: => ProcessBuilder): GitCommandResult = {
-      val process = processBuilder.start()
-      try {
-        closeQuietly(process.getOutputStream)
-        val stdoutFuture = drainAsync(process.getInputStream, StandardCharsets.UTF_8, "git-stdout")
-        val stderrFuture = drainAsync(process.getErrorStream, StandardCharsets.UTF_8, "git-stderr")
-        val exitCode     = process.waitFor()
-        GitCommandResult(
-          exitCode = exitCode,
-          stdout = stdoutFuture.join().filter(_.nonEmpty),
-          stderr = stderrFuture.join().filter(_.nonEmpty).mkString("\n").trim
-        )
-      } finally {
-        if (process.isAlive) {
-          process.destroy()
-          process.waitFor()
-          ()
-        }
-      }
-    }
-
     def captureLines(
         stream: InputStream,
         charset: Charset
     ): IO[Vector[String]] =
       IO.blocking(readLinesSync(stream, charset))
-
-    private def drainAsync(
-        stream: InputStream,
-        charset: Charset,
-        threadName: String
-    ): CompletableFuture[Vector[String]] = {
-      val future = new CompletableFuture[Vector[String]]()
-      val thread = new Thread(
-        { () =>
-          try {
-            future.complete(readLinesSync(stream, charset))
-            ()
-          } catch {
-            case t: Throwable =>
-              future.completeExceptionally(t)
-              if (NonFatal(t)) () else throw t
-          }
-        },
-        s"$threadName-${drainThreadCounter.incrementAndGet()}"
-      )
-      thread.setDaemon(true)
-      thread.start()
-      future
-    }
 
     private def readLinesSync(stream: InputStream, charset: Charset): Vector[String] = {
       val reader             = new BufferedReader(new InputStreamReader(stream, charset))
@@ -297,34 +220,26 @@ private[release] object GitProcessSupport {
       final case class TimedOut(partialCode: Option[Int]) extends WaitForExitOutcome
     }
 
-    // Sugar around `withManagedProcess` for runners that always use the default grace period
-    // and always mark completion after their body succeeds; keeps the public runners free
-    // of repeated `flatTap(_ => markCompleted)` wiring.
     def run[A](
         builder: => ProcessBuilder,
         closeStdin: Boolean
     )(body: ManagedProcess => IO[A]): IO[A] =
-      withManagedProcess(builder, DefaultDestroyGracePeriod, closeStdin) {
-        (managed, markCompleted) =>
-          body(managed).flatTap(_ => markCompleted)
-      }
+      withManagedProcess(builder, DefaultDestroyGracePeriod, closeStdin)(body)
 
     def runWithTimeout(
         processBuilder: => ProcessBuilder,
         timeout: FiniteDuration,
-        destroyGracePeriod: FiniteDuration,
-        onStart: Process => Unit
+        destroyGracePeriod: FiniteDuration
     ): IO[Option[Int]] =
-      withManagedProcess(processBuilder, destroyGracePeriod, closeStdin = true, onStart) {
-        (managed, markCompleted) =>
-          Clock[IO].monotonic
-            .flatMap { startTime =>
-              waitForExitUntil(managed, startTime + timeout, destroyGracePeriod)
-            }
-            .flatMap {
-              case WaitForExitOutcome.Exited(code)          => markCompleted.as(Some(code))
-              case WaitForExitOutcome.TimedOut(partialCode) => markCompleted.as(partialCode)
-            }
+      withManagedProcess(processBuilder, destroyGracePeriod, closeStdin = true) { managed =>
+        Clock[IO].monotonic
+          .flatMap { startTime =>
+            waitForExitUntil(managed, startTime + timeout, destroyGracePeriod)
+          }
+          .map {
+            case WaitForExitOutcome.Exited(code)          => Some(code)
+            case WaitForExitOutcome.TimedOut(partialCode) => partialCode
+          }
       }
 
     def captureCommandResult(managed: ManagedProcess): IO[GitCommandResult] = {
@@ -361,38 +276,29 @@ private[release] object GitProcessSupport {
     private def withManagedProcess[A](
         processBuilder: => ProcessBuilder,
         destroyGracePeriod: FiniteDuration,
-        closeStdin: Boolean,
-        onStart: Process => Unit = _ => ()
-    )(use: (ManagedProcess, IO[Unit]) => IO[A]): IO[A] =
-      Ref.of[IO, Boolean](false).flatMap { completed =>
-        IO.uncancelable { poll =>
-          startProcess(processBuilder, destroyGracePeriod, closeStdin, onStart).flatMap {
-            managed =>
-              val markCompleted: IO[Unit] =
-                IO.uncancelable(_ => completed.set(true))
-
-              poll(use(managed, markCompleted))
-                .guarantee(
-                  completed.get.flatMap(
-                    ProcessTree.cleanupManagedProcess(managed, destroyGracePeriod, _)
-                  )
-                )
-          }
+        closeStdin: Boolean
+    )(use: ManagedProcess => IO[A]): IO[A] =
+      Resource
+        .makeCase(startProcess(processBuilder, destroyGracePeriod, closeStdin)) {
+          case (managed, exitCase) =>
+            val completed = exitCase match {
+              case Resource.ExitCase.Succeeded => true
+              case _                           => false
+            }
+            ProcessTree.cleanupManagedProcess(managed, destroyGracePeriod, completed)
         }
-      }
+        .use(use)
 
     private def startProcess(
         processBuilder: => ProcessBuilder,
         destroyGracePeriod: FiniteDuration,
-        closeStdin: Boolean,
-        onStart: Process => Unit
+        closeStdin: Boolean
     ): IO[ManagedProcess] =
       IO.blocking {
         val process = processBuilder.start()
         val managed = ManagedProcess.create(process)
         try {
           if (closeStdin) ProcessStreams.closeQuietly(process.getOutputStream)
-          onStart(process)
           managed
         } catch {
           case err: Throwable =>
@@ -448,7 +354,7 @@ private[release] object GitProcessSupport {
       }
   }
 
-  private object ProcessTree {
+  private[release] object ProcessTree {
     final case class ManagedProcess(
         process: Process,
         tracked: ConcurrentHashMap[Long, ProcessHandle]

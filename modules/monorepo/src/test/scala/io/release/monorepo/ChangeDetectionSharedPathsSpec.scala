@@ -34,11 +34,9 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
         val project = nestedProject(repo, "core")
 
         for {
-          result  <- IO.blocking(
-                       GitProcessSupport.runLinesResult(
-                         repo,
-                         Seq("describe", "--tags", "--match", "core-v*", "--abbrev=0")
-                       )
+          result  <- GitProcessSupport.runCommandResult(
+                       repo,
+                       Seq("describe", "--tags", "--match", "core-v*", "--abbrev=0")
                      )
           _        = assert(result.exitCode != 0)
           _        = assert(result.stderr.nonEmpty)
