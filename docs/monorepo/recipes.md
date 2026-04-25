@@ -116,9 +116,13 @@ sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-
 push. With cross-build validation enabled, sbt may temporarily switch Scala versions during
 validation and then restore the entry version.
 
-`releaseIOMonorepoBehaviorSkipPublish := true` keeps the publish phase available but skips it at
-execution time. If you want to remove publish from the compiled lifecycle entirely,
-use `releaseIOMonorepoPolicyEnablePublish := false` instead.
+`releaseIOMonorepoBehaviorSkipPublish := true` keeps the publish step in the compiled
+lifecycle but skips its body at execution time; **`releaseIOMonorepoHooksBeforePublish`
+and `releaseIOMonorepoHooksAfterPublish` are also gated off** in this mode (the gate is
+decided at validate time and stays frozen). Attach rehearsal logic to a non-publish phase
+such as `releaseIOMonorepoHooksAfterTag` if it must run when skip-publish is on. If you
+want to remove publish from the compiled lifecycle entirely, use
+`releaseIOMonorepoPolicyEnablePublish := false` instead.
 
 Then run the real release with explicit project and versions so the tag names and commit
 count are predictable:

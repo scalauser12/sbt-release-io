@@ -10,7 +10,7 @@ Core release customization has one surface, made of three knobs:
 
 ## Choosing a hook factory
 
-Every hook companion (`ReleaseHookIO`, `ReleaseResourceHookIO`) exposes three
+Every hook companion (`ReleaseHookIO`, `ReleaseResourceHookIO`) exposes four
 intent-named factories backed by the same engine path. Pick the shortest form
 that fits the hook you are writing:
 
@@ -18,9 +18,10 @@ that fits the hook you are writing:
 | ------------- | --- |
 | fires a side effect (log, notify, audit) and leaves the context unchanged | `sideEffect` |
 | computes a new `ReleaseContext` and returns it once | `transform` |
-| mutates the context in multiple steps and needs every checkpoint visible to `afterFailure` | `resumable` |
+| mutates the context in multiple steps and needs each checkpoint preserved if a later step fails | `resumable` |
+| guards the release (branch check, environment requirement) and must be rehearsed by `releaseIO check` | `precondition` |
 
-The same hook written three ways:
+The same hook written four ways:
 
 ```scala
 import _root_.cats.effect.IO
@@ -39,11 +40,29 @@ ReleaseHookIO.transform("skip-publish-for-snapshot") { ctx =>
   )
 }
 
-// 3. Multiple checkpoints, each visible to afterFailure recovery.
+// 3. Multiple checkpoints, each preserved if a later step fails (engine-level resumption).
 ReleaseHookIO.resumable("stage-release") { handle =>
   handle.update(stageOne) *> handle.update(stageTwo)
 }
+
+// 4. Guard hook — runs as `validate`, so `releaseIO check` rehearses it.
+ReleaseHookIO.precondition("validate-main-branch") { ctx =>
+  ctx.vcs match {
+    case Some(vcs) =>
+      vcs.currentBranch.flatMap { branch =>
+        if (branch == "main" || branch == "master") IO.unit
+        else IO.raiseError(new RuntimeException(s"Release from main/master only, not $branch"))
+      }
+    case None => IO.raiseError(new RuntimeException("VCS not initialized"))
+  }
+}
 ```
+
+> **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
+> `execute` only; their `validate` is a no-op, so `releaseIO check` does not
+> rehearse them. Use `precondition` for guard hooks that must fail upfront, or
+> set `validate` directly via the case-class constructor when a hook needs both
+> a non-trivial `validate` and `execute`.
 
 Resource-aware hooks (`ReleaseResourceHookIO[T]`) add the resource `T` as the
 first argument:
@@ -54,8 +73,10 @@ ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
 }
 ```
 
-The legacy `.io` / `.action` / `.ioTracked` / `.actionTracked` constructors
-still compile but are deprecated; prefer the three factories above.
+The legacy `.io` / `.action` constructors still compile but are deprecated;
+prefer the four intent-named factories above. `.ioTracked` and `.actionTracked`
+remain supported as a lower-level escape hatch when you need direct
+`TrackedContextHandle` access.
 
 ## Hook-based customization
 
@@ -214,7 +235,11 @@ Notes:
   acquires the plugin resource. This is safe because `validate` on
   `ReleaseResourceHookIO` is always resource-free — it receives only the context, not
   the resource value. Hook authors should place any logic that depends on the resource
-  (HTTP calls, temp-dir setup, etc.) in `execute`, not `validate`.
+  (HTTP calls, temp-dir setup, etc.) in `execute`, not `validate`. For pure context
+  guards (branch checks, required-file presence) use
+  `ReleaseResourceHookIO.precondition` so `check` rehearses them upfront; for guards
+  that genuinely need the resource, use `sideEffect` and accept that `check` cannot
+  rehearse them.
 - `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
   resource value, then releases it.
 - `ReleasePluginIOLike` declares `autoImport` as `final`, so a custom plugin inherits the

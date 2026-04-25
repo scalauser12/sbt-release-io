@@ -98,7 +98,7 @@ object CustomStepExamples {
       IO.println("=" * 60)
   )
 
-  val validateBranchHook: ReleaseHookIO = ReleaseHookIO.sideEffect("validate-branch")(ctx =>
+  val validateBranchHook: ReleaseHookIO = ReleaseHookIO.precondition("validate-branch")(ctx =>
     ctx.vcs match {
       case Some(vcs) =>
         vcs.currentBranch.flatMap(branch =>

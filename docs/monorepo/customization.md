@@ -13,16 +13,17 @@ Monorepo customization has one surface, made of four knobs:
 ## Choosing a hook factory
 
 Every monorepo hook companion (`MonorepoGlobalHookIO`, `MonorepoProjectHookIO`,
-and their resource-aware counterparts) exposes three intent-named factories
+and their resource-aware counterparts) exposes four intent-named factories
 backed by the same engine path. Pick the shortest form that fits:
 
 | If your hook… | Use |
 | ------------- | --- |
 | fires a side effect (log, notify, audit) and leaves the context unchanged | `sideEffect` |
 | computes a new `MonorepoContext` and returns it once | `transform` |
-| mutates the context in multiple steps and needs every checkpoint visible to `afterFailure` | `resumable` |
+| mutates the context in multiple steps and needs each checkpoint preserved if a later step fails | `resumable` |
+| guards the release (branch check, environment requirement, required files) and must be rehearsed by `releaseIOMonorepo check` | `precondition` |
 
-A global hook written three ways:
+A global hook written four ways:
 
 ```scala
 import _root_.cats.effect.IO
@@ -39,6 +40,15 @@ MonorepoGlobalHookIO.transform("drop-sandbox") { ctx =>
 MonorepoGlobalHookIO.resumable("stage") { handle =>
   handle.update(stageOne) *> handle.update(stageTwo)
 }
+
+// Guard hook — runs as `validate`, so `releaseIOMonorepo check` rehearses it.
+MonorepoGlobalHookIO.precondition("require-readme") { ctx =>
+  val base = Project.extract(ctx.state).get(baseDirectory)
+  IO.blocking((base / "README.md").exists()).flatMap {
+    case true  => IO.unit
+    case false => IO.raiseError(new RuntimeException("README.md missing"))
+  }
+}
 ```
 
 Per-project hooks (`MonorepoProjectHookIO`) take `(project, ctx)` /
@@ -50,13 +60,28 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 MonorepoProjectHookIO.sideEffect("notify-tagged") { (project, _) =>
   IO.println(s"tagged ${project.name} as ${project.tagName.getOrElse("?")}")
 }
+
+MonorepoProjectHookIO.precondition("require-project-readme") { (project, _) =>
+  IO.blocking((project.baseDir / "README.md").exists()).flatMap {
+    case true  => IO.unit
+    case false => IO.raiseError(new RuntimeException(s"${project.name}/README.md missing"))
+  }
+}
 ```
 
 Resource-aware hooks (`MonorepoGlobalResourceHookIO[T]`,
 `MonorepoProjectResourceHookIO[T]`) add the resource `T` as the first argument.
 
-The legacy `.io` / `.action` / `.ioTracked` / `.actionTracked` constructors
-still compile but are deprecated; prefer the three factories above.
+The legacy `.io` / `.action` constructors still compile but are deprecated;
+prefer the four intent-named factories above. `.ioTracked` and `.actionTracked`
+remain supported as a lower-level escape hatch when you need direct
+`TrackedContextHandle` access.
+
+> **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
+> `execute` only; their `validate` is a no-op, so `releaseIOMonorepo check` does
+> not rehearse them. Use `precondition` for guard hooks that must fail upfront,
+> or set `validate` directly via the case-class constructor when a hook needs
+> both a non-trivial `validate` and `execute`.
 
 ## Hook-based customization
 
@@ -254,7 +279,10 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
 Notes:
 
 - `check` never acquires the resource and validates only resource-aware hook phases whose
-  validation context is stable without replaying earlier hook executes
+  validation context is stable without replaying earlier hook executes. For pure context
+  guards (branch checks, required-file presence) use `precondition` so `check` rehearses
+  them upfront; for guards that genuinely need the resource value, use `sideEffect` and
+  accept that `check` cannot rehearse them
 - `run` acquires the resource once, executes compiled hooks, then releases it
 - protected behavior hooks default to the corresponding `releaseIOMonorepoBehavior*`
   settings and are intended for custom plugin authors, not ordinary `build.sbt`

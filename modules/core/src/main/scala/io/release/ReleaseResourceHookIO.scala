@@ -144,6 +144,38 @@ object ReleaseResourceHookIO {
       f: (T, TrackedContextHandle[ReleaseContext]) => IO[Unit]
   ): ReleaseResourceHookIO[T] =
     ioTracked[T](name)(resource => handle => f(resource, handle))
+
+  /** Create a resource-aware guard hook that runs as `validate` and is a no-op
+    * at execute time. The predicate is resource-free (matching the existing
+    * validate signature), so it participates in `releaseIO check` without
+    * acquiring the plugin resource.
+    *
+    * Use for preconditions that should fail fast in rehearsal — branch checks,
+    * environment requirements, required-file presence. For preconditions that
+    * genuinely need the resource value, perform the check inside `execute` via
+    * [[sideEffect]] and accept that `check` cannot rehearse it.
+    *
+    * {{{
+    * ReleaseResourceHookIO.precondition[HttpClient]("validate-main-branch") { ctx =>
+    *   ctx.vcs match {
+    *     case Some(vcs) =>
+    *       vcs.currentBranch.flatMap { branch =>
+    *         if (branch == "main") IO.unit
+    *         else IO.raiseError(new RuntimeException(s"Release from main only, not \$branch"))
+    *       }
+    *     case None => IO.raiseError(new RuntimeException("VCS not initialized"))
+    *   }
+    * }
+    * }}}
+    */
+  def precondition[T](name: String)(
+      f: ReleaseContext => IO[Unit]
+  ): ReleaseResourceHookIO[T] =
+    ReleaseResourceHookIO[T](
+      name = name,
+      execute = (_: T) => (ctx: ReleaseContext) => IO.pure(ctx),
+      validate = f
+    )
 }
 
 /** Resource-aware hook buckets for every supported core lifecycle point.

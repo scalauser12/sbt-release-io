@@ -129,6 +129,31 @@ object MonorepoGlobalHookIO {
       name: String
   )(f: TrackedContextHandle[MonorepoContext] => IO[Unit]): MonorepoGlobalHookIO =
     ioTracked(name)(f)
+
+  /** Create a guard hook that runs as `validate` and is a no-op at execute time.
+    *
+    * Use for global preconditions that must be rehearsed by
+    * `releaseIOMonorepo check` — branch checks, environment requirements,
+    * presence of required files. Unlike [[sideEffect]], the predicate runs
+    * during validate, so `check` catches failures upfront instead of letting
+    * them surface only during a real release.
+    *
+    * {{{
+    * MonorepoGlobalHookIO.precondition("require-readme") { ctx =>
+    *   val base = Project.extract(ctx.state).get(baseDirectory)
+    *   IO.blocking(java.nio.file.Files.exists((base / "README.md").toPath)).flatMap {
+    *     case true  => IO.unit
+    *     case false => IO.raiseError(new RuntimeException("README.md missing"))
+    *   }
+    * }
+    * }}}
+    */
+  def precondition(name: String)(f: MonorepoContext => IO[Unit]): MonorepoGlobalHookIO =
+    MonorepoGlobalHookIO(
+      name = name,
+      execute = ctx => IO.pure(ctx),
+      validate = f
+    )
 }
 
 /** A semantic per-project hook that runs at a supported lifecycle point in the monorepo flow.
@@ -277,4 +302,36 @@ object MonorepoProjectHookIO {
       f: (ProjectReleaseInfo, TrackedContextHandle[MonorepoContext]) => IO[Unit]
   ): MonorepoProjectHookIO =
     ioTracked(name)((handle, project) => f(project, handle))
+
+  /** Create a per-project guard hook that runs as `validate` and is a no-op at
+    * execute time.
+    *
+    * Use for per-project preconditions that must be rehearsed by
+    * `releaseIOMonorepo check` — required files in the project directory,
+    * project-specific environment requirements. Unlike [[sideEffect]], the
+    * predicate runs during validate, so `check` catches failures upfront
+    * instead of letting them surface only during a real release.
+    *
+    * The user-facing argument order mirrors the intent-named factories
+    * (`(project, ctx)`) even though the underlying case-class validate is
+    * `(ctx, project)`.
+    *
+    * {{{
+    * MonorepoProjectHookIO.precondition("require-project-readme") { (project, ctx) =>
+    *   val base = Project.extract(ctx.state).get(project.ref / baseDirectory)
+    *   IO.blocking(java.nio.file.Files.exists((base / "README.md").toPath)).flatMap {
+    *     case true  => IO.unit
+    *     case false => IO.raiseError(new RuntimeException(s"\${project.name}/README.md missing"))
+    *   }
+    * }
+    * }}}
+    */
+  def precondition(
+      name: String
+  )(f: (ProjectReleaseInfo, MonorepoContext) => IO[Unit]): MonorepoProjectHookIO =
+    MonorepoProjectHookIO(
+      name = name,
+      execute = (ctx, _) => IO.pure(ctx),
+      validate = (ctx, project) => f(project, ctx)
+    )
 }

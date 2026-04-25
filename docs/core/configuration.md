@@ -32,7 +32,8 @@ releaseIOHooksBeforeTag += ReleaseHookIO.sideEffect("before-tag-audit")(ctx =>
 // Enable cross-building by default
 releaseIOBehaviorCrossBuild := true
 
-// Runtime flag: keep the publish step available, but skip it when the release runs
+// Runtime flag: keep the publish step in the lifecycle, but skip its body and its
+// before/after publish hooks at execution time
 releaseIOBehaviorSkipPublish := true
 
 // Interactive prompts are disabled by default (unlike sbt-release, which prompts by
@@ -51,7 +52,11 @@ file will cause the version bump step to fail.
 
 `releaseIOPolicyEnablePublish := false` removes publish from the compiled lifecycle entirely,
 including `beforePublish` / `afterPublish` hooks. `releaseIOBehaviorSkipPublish := true`
-keeps the phase in the process shape but skips the publish action at execution time.
+keeps the publish step in the compiled lifecycle but skips its body at execution time, and
+**`releaseIOHooksBeforePublish` and `releaseIOHooksAfterPublish` are also gated off** (the
+gate is decided at validate time and stays frozen). Rehearsal logic that should run in
+skip-publish mode must live in a non-publish phase — `releaseIOHooksAfterTag` is the usual
+fit.
 
 ## Example: Persistent decision defaults
 

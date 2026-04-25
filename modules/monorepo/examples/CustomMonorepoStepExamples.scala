@@ -152,16 +152,18 @@ object CustomMonorepoStepExamples {
       )
     )
 
-  val checkReadmeHook: MonorepoProjectHookIO = MonorepoProjectHookIO.sideEffect("check-readme") {
-    (project, _) =>
-      if (!(new java.io.File(project.baseDir, "README.md")).exists())
-        IO.raiseError(
-          new RuntimeException(
-            s"Project '${project.name}' is missing README.md at ${project.baseDir}"
+  val checkReadmeHook: MonorepoProjectHookIO =
+    MonorepoProjectHookIO.precondition("check-readme") { (project, _) =>
+      IO.blocking(new java.io.File(project.baseDir, "README.md").exists()).flatMap {
+        case true  => IO.unit
+        case false =>
+          IO.raiseError(
+            new RuntimeException(
+              s"Project '${project.name}' is missing README.md at ${project.baseDir}"
+            )
           )
-        )
-      else IO.unit
-  }
+      }
+    }
 
   val generateChangelogHook: MonorepoProjectHookIO =
     MonorepoProjectHookIO.sideEffect("generate-changelog") { (project, _) =>

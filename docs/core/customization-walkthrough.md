@@ -45,7 +45,7 @@ lazy val root = (project in file("."))
     releaseIOPolicyEnablePush := false,
     releaseIOPolicyEnablePublish := false,
     releaseIOPolicyEnableRunClean := false,
-    releaseIOHooksAfterCleanCheck += ReleaseHookIO.sideEffect("validate-main-branch") { ctx =>
+    releaseIOHooksAfterCleanCheck += ReleaseHookIO.precondition("validate-main-branch") { ctx =>
       ctx.vcs match {
         case Some(vcs) =>
           vcs.currentBranch.flatMap { branch =>

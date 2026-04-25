@@ -139,4 +139,32 @@ object ReleaseHookIO {
     */
   def resumable(name: String)(f: TrackedContextHandle[ReleaseContext] => IO[Unit]): ReleaseHookIO =
     ioTracked(name)(f)
+
+  /** Create a guard hook that runs as `validate` and is a no-op at execute time.
+    *
+    * Use for preconditions that must be rehearsed by `releaseIO check` — branch
+    * checks, environment requirements, presence of required files. Unlike
+    * [[sideEffect]], the predicate runs during validate, so `check` catches
+    * failures upfront instead of letting them surface only during a real
+    * release.
+    *
+    * {{{
+    * ReleaseHookIO.precondition("validate-main-branch") { ctx =>
+    *   ctx.vcs match {
+    *     case Some(vcs) =>
+    *       vcs.currentBranch.flatMap { branch =>
+    *         if (branch == "main" || branch == "master") IO.unit
+    *         else IO.raiseError(new RuntimeException(s"Release from main/master only, not \$branch"))
+    *       }
+    *     case None => IO.raiseError(new RuntimeException("VCS not initialized"))
+    *   }
+    * }
+    * }}}
+    */
+  def precondition(name: String)(f: ReleaseContext => IO[Unit]): ReleaseHookIO =
+    ReleaseHookIO(
+      name = name,
+      execute = ctx => IO.pure(ctx),
+      validate = f
+    )
 }

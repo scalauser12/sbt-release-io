@@ -96,6 +96,12 @@ releaseIOPolicyEnablePush := false
 releaseIOBehaviorSkipPublish := true
 ```
 
+`releaseIOBehaviorSkipPublish := true` keeps the publish step in the compiled lifecycle but
+skips its body at runtime; **`releaseIOHooksBeforePublish` and `releaseIOHooksAfterPublish`
+are also gated off** in this mode (the gate is decided at validate time and stays frozen).
+Attach rehearsal logic to a non-publish phase such as `releaseIOHooksAfterTag` if it must
+run when skip-publish is on.
+
 First run the preflight with no release side effects:
 
 ```bash

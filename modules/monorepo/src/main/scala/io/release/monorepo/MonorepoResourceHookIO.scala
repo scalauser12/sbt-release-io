@@ -138,6 +138,34 @@ object MonorepoGlobalResourceHookIO {
       f: (T, TrackedContextHandle[MonorepoContext]) => IO[Unit]
   ): MonorepoGlobalResourceHookIO[T] =
     ioTracked[T](name)(resource => handle => f(resource, handle))
+
+  /** Create a resource-aware global guard hook that runs as `validate` and is a
+    * no-op at execute time. The predicate is resource-free (matching the
+    * existing validate signature), so it participates in
+    * `releaseIOMonorepo check` without acquiring the plugin resource.
+    *
+    * For preconditions that genuinely need the resource value, perform the
+    * check inside `execute` via [[sideEffect]] and accept that `check` cannot
+    * rehearse it.
+    *
+    * {{{
+    * MonorepoGlobalResourceHookIO.precondition[HttpClient]("require-readme") { ctx =>
+    *   val base = Project.extract(ctx.state).get(baseDirectory)
+    *   IO.blocking(java.nio.file.Files.exists((base / "README.md").toPath)).flatMap {
+    *     case true  => IO.unit
+    *     case false => IO.raiseError(new RuntimeException("README.md missing"))
+    *   }
+    * }
+    * }}}
+    */
+  def precondition[T](name: String)(
+      f: MonorepoContext => IO[Unit]
+  ): MonorepoGlobalResourceHookIO[T] =
+    MonorepoGlobalResourceHookIO[T](
+      name = name,
+      execute = (_: T) => (ctx: MonorepoContext) => IO.pure(ctx),
+      validate = f
+    )
 }
 
 /** A resource-aware per-project hook for custom monorepo plugins with a shared resource `T`.
@@ -285,6 +313,37 @@ object MonorepoProjectResourceHookIO {
       f: (T, ProjectReleaseInfo, TrackedContextHandle[MonorepoContext]) => IO[Unit]
   ): MonorepoProjectResourceHookIO[T] =
     ioTracked[T](name)(resource => (handle, project) => f(resource, project, handle))
+
+  /** Create a resource-aware per-project guard hook that runs as `validate` and
+    * is a no-op at execute time. The predicate is resource-free (matching the
+    * existing validate signature), so it participates in
+    * `releaseIOMonorepo check` without acquiring the plugin resource.
+    *
+    * The user-facing argument order mirrors the intent-named factories
+    * (`(project, ctx)`) even though the underlying case-class validate is
+    * `(ctx, project)`. For preconditions that genuinely need the resource
+    * value, perform the check inside `execute` via [[sideEffect]] and accept
+    * that `check` cannot rehearse it.
+    *
+    * {{{
+    * MonorepoProjectResourceHookIO.precondition[HttpClient]("require-project-readme") {
+    *   (project, ctx) =>
+    *     val base = Project.extract(ctx.state).get(project.ref / baseDirectory)
+    *     IO.blocking(java.nio.file.Files.exists((base / "README.md").toPath)).flatMap {
+    *       case true  => IO.unit
+    *       case false => IO.raiseError(new RuntimeException(s"\${project.name}/README.md missing"))
+    *     }
+    * }
+    * }}}
+    */
+  def precondition[T](name: String)(
+      f: (ProjectReleaseInfo, MonorepoContext) => IO[Unit]
+  ): MonorepoProjectResourceHookIO[T] =
+    MonorepoProjectResourceHookIO[T](
+      name = name,
+      execute = (_: T) => (ctx: MonorepoContext, _: ProjectReleaseInfo) => IO.pure(ctx),
+      validate = (ctx, project) => f(project, ctx)
+    )
 }
 
 /** Resource-aware hook buckets for every supported monorepo lifecycle point.

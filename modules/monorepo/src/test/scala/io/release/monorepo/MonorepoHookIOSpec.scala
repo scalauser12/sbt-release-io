@@ -184,6 +184,48 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     }
   }
 
+  test("MonorepoGlobalHookIO.precondition - assigns the given name to the hook") {
+    val hook = MonorepoGlobalHookIO.precondition("global-guard")(_ => IO.unit)
+    assertEquals(hook.name, "global-guard")
+  }
+
+  test("MonorepoGlobalHookIO.precondition - validate runs the supplied predicate") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook = MonorepoGlobalHookIO.precondition("global-guard")(_ => invocations.update(_ + 1))
+        hook.validate(ctx) *> invocations.get.map(assertEquals(_, 1))
+      }
+    }
+  }
+
+  test("MonorepoGlobalHookIO.precondition - validate propagates predicate failures") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val hook = MonorepoGlobalHookIO.precondition("global-guard-fail")(_ =>
+        IO.raiseError(new RuntimeException("global-guard-boom"))
+      )
+      hook.validate(ctx).attempt.map {
+        case Left(e: RuntimeException) => assert(e.getMessage.contains("global-guard-boom"))
+        case other                     => fail(s"Expected RuntimeException but got $other")
+      }
+    }
+  }
+
+  test(
+    "MonorepoGlobalHookIO.precondition - execute is a no-op that returns ctx unchanged without invoking the predicate"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook = MonorepoGlobalHookIO.precondition("global-guard")(_ => invocations.update(_ + 1))
+        hook.execute(ctx).flatMap { result =>
+          invocations.get.map { ran =>
+            assertEquals(result, ctx)
+            assertEquals(ran, 0)
+          }
+        }
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // MonorepoProjectHookIO
   // ---------------------------------------------------------------------------
@@ -382,6 +424,62 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
     }
   }
 
+  test("MonorepoProjectHookIO.precondition - assigns the given name to the hook") {
+    val hook = MonorepoProjectHookIO.precondition("project-guard")((_, _) => IO.unit)
+    assertEquals(hook.name, "project-guard")
+  }
+
+  test(
+    "MonorepoProjectHookIO.precondition - validate receives (project, ctx) and runs the predicate"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, Option[String]](None).flatMap { captured =>
+          val hook = MonorepoProjectHookIO.precondition("project-guard") { (p, _) =>
+            captured.set(Some(p.name))
+          }
+          hook.validate(ctx, project) *>
+            captured.get.map(observed => assertEquals(observed, Some("core")))
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectHookIO.precondition - validate propagates predicate failures") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val hook = MonorepoProjectHookIO.precondition("project-guard-fail") { (p, _) =>
+          IO.raiseError(new RuntimeException(s"project-guard-boom-${p.name}"))
+        }
+        hook.validate(ctx, project).attempt.map {
+          case Left(e: RuntimeException) =>
+            assert(e.getMessage.contains("project-guard-boom-core"))
+          case other                     => fail(s"Expected RuntimeException but got $other")
+        }
+      }
+    }
+  }
+
+  test(
+    "MonorepoProjectHookIO.precondition - execute is a no-op that returns ctx unchanged without invoking the predicate"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, Int](0).flatMap { invocations =>
+          val hook = MonorepoProjectHookIO.precondition("project-guard") { (_, _) =>
+            invocations.update(_ + 1)
+          }
+          hook.execute(ctx, project).flatMap { result =>
+            invocations.get.map { ran =>
+              assertEquals(result, ctx)
+              assertEquals(ran, 0)
+            }
+          }
+        }
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // MonorepoGlobalResourceHookIO
   // ---------------------------------------------------------------------------
@@ -541,6 +639,59 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
               Some(Vector("client-first", "client-second"))
             )
           }
+      }
+    }
+  }
+
+  test("MonorepoGlobalResourceHookIO.precondition - assigns the given name to the hook") {
+    val hook =
+      MonorepoGlobalResourceHookIO.precondition[String]("global-resource-guard")(_ => IO.unit)
+    assertEquals(hook.name, "global-resource-guard")
+  }
+
+  test(
+    "MonorepoGlobalResourceHookIO.precondition - validate runs the predicate without the resource"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook =
+          MonorepoGlobalResourceHookIO.precondition[String]("global-resource-guard") { _ =>
+            invocations.update(_ + 1)
+          }
+        hook.validate(ctx) *> invocations.get.map(assertEquals(_, 1))
+      }
+    }
+  }
+
+  test("MonorepoGlobalResourceHookIO.precondition - validate propagates predicate failures") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      val hook =
+        MonorepoGlobalResourceHookIO.precondition[String]("global-resource-guard-fail") { _ =>
+          IO.raiseError(new RuntimeException("global-resource-guard-boom"))
+        }
+      hook.validate(ctx).attempt.map {
+        case Left(e: RuntimeException) =>
+          assert(e.getMessage.contains("global-resource-guard-boom"))
+        case other                     => fail(s"Expected RuntimeException but got $other")
+      }
+    }
+  }
+
+  test(
+    "MonorepoGlobalResourceHookIO.precondition - execute is a no-op that returns ctx unchanged without invoking the predicate"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook =
+          MonorepoGlobalResourceHookIO.precondition[String]("global-resource-guard") { _ =>
+            invocations.update(_ + 1)
+          }
+        hook.execute("any-resource")(ctx).flatMap { result =>
+          invocations.get.map { ran =>
+            assertEquals(result, ctx)
+            assertEquals(ran, 0)
+          }
+        }
       }
     }
   }
@@ -737,6 +888,69 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
                 Some(Vector("client-core-first", "client-core-second"))
               )
             }
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectResourceHookIO.precondition - assigns the given name to the hook") {
+    val hook =
+      MonorepoProjectResourceHookIO.precondition[String]("project-resource-guard")((_, _) =>
+        IO.unit
+      )
+    assertEquals(hook.name, "project-resource-guard")
+  }
+
+  test(
+    "MonorepoProjectResourceHookIO.precondition - validate receives (project, ctx) and runs the predicate without the resource"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, Option[String]](None).flatMap { captured =>
+          val hook =
+            MonorepoProjectResourceHookIO.precondition[String]("project-resource-guard") { (p, _) =>
+              captured.set(Some(p.name))
+            }
+          hook.validate(ctx, project) *>
+            captured.get.map(observed => assertEquals(observed, Some("core")))
+        }
+      }
+    }
+  }
+
+  test("MonorepoProjectResourceHookIO.precondition - validate propagates predicate failures") {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        val hook =
+          MonorepoProjectResourceHookIO.precondition[String]("project-resource-guard-fail") {
+            (p, _) =>
+              IO.raiseError(new RuntimeException(s"project-resource-guard-boom-${p.name}"))
+          }
+        hook.validate(ctx, project).attempt.map {
+          case Left(e: RuntimeException) =>
+            assert(e.getMessage.contains("project-resource-guard-boom-core"))
+          case other                     => fail(s"Expected RuntimeException but got $other")
+        }
+      }
+    }
+  }
+
+  test(
+    "MonorepoProjectResourceHookIO.precondition - execute is a no-op that returns ctx unchanged without invoking the predicate"
+  ) {
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { ctx =>
+      dummyProject("core").flatMap { project =>
+        Ref.of[IO, Int](0).flatMap { invocations =>
+          val hook =
+            MonorepoProjectResourceHookIO.precondition[String]("project-resource-guard") { (_, _) =>
+              invocations.update(_ + 1)
+            }
+          hook.execute("any-resource")(ctx, project).flatMap { result =>
+            invocations.get.map { ran =>
+              assertEquals(result, ctx)
+              assertEquals(ran, 0)
+            }
+          }
         }
       }
     }

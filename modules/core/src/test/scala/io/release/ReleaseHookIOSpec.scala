@@ -326,6 +326,45 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
     }
   }
 
+  test("ReleaseHookIO.precondition - assigns the given name to the hook") {
+    val hook = ReleaseHookIO.precondition("guard")(_ => IO.unit)
+    assertEquals(hook.name, "guard")
+  }
+
+  test("ReleaseHookIO.precondition - validate runs the supplied predicate") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook = ReleaseHookIO.precondition("guard")(_ => invocations.update(_ + 1))
+        hook.validate(ctx) *> invocations.get.map(assertEquals(_, 1))
+      }
+    }
+  }
+
+  test("ReleaseHookIO.precondition - validate propagates predicate failures") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val hook = ReleaseHookIO
+        .precondition("guard-fail")(_ => IO.raiseError(new RuntimeException("guard-boom")))
+      hook.validate(ctx).attempt.map {
+        case Left(e: RuntimeException) => assert(e.getMessage.contains("guard-boom"))
+        case other                     => fail(s"Expected RuntimeException but got $other")
+      }
+    }
+  }
+
+  test("ReleaseHookIO.precondition - execute is a no-op that returns ctx unchanged") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook = ReleaseHookIO.precondition("guard")(_ => invocations.update(_ + 1))
+        hook.execute(ctx).flatMap { result =>
+          invocations.get.map { ran =>
+            assertEquals(result, ctx)
+            assertEquals(ran, 0)
+          }
+        }
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // ReleaseResourceHookIO.io
   // ---------------------------------------------------------------------------
@@ -528,6 +567,52 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       TrackedContextHandle.create(ctx).flatMap { handle =>
         ReleaseResourceHookIO.trackedExecute(hook)("applied")(handle) *> handle.get.map { latest =>
           assertEquals(latest.metadata(metadataKey), Some("applied"))
+        }
+      }
+    }
+  }
+
+  test("ReleaseResourceHookIO.precondition - assigns the given name to the hook") {
+    val hook = ReleaseResourceHookIO.precondition[String]("resource-guard")(_ => IO.unit)
+    assertEquals(hook.name, "resource-guard")
+  }
+
+  test("ReleaseResourceHookIO.precondition - validate runs the predicate without the resource") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook =
+          ReleaseResourceHookIO
+            .precondition[String]("resource-guard")(_ => invocations.update(_ + 1))
+        hook.validate(ctx) *> invocations.get.map(assertEquals(_, 1))
+      }
+    }
+  }
+
+  test("ReleaseResourceHookIO.precondition - validate propagates predicate failures") {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      val hook = ReleaseResourceHookIO.precondition[String]("resource-guard-fail")(_ =>
+        IO.raiseError(new RuntimeException("resource-guard-boom"))
+      )
+      hook.validate(ctx).attempt.map {
+        case Left(e: RuntimeException) => assert(e.getMessage.contains("resource-guard-boom"))
+        case other                     => fail(s"Expected RuntimeException but got $other")
+      }
+    }
+  }
+
+  test(
+    "ReleaseResourceHookIO.precondition - execute is a no-op that returns ctx unchanged without invoking the predicate"
+  ) {
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
+      Ref.of[IO, Int](0).flatMap { invocations =>
+        val hook =
+          ReleaseResourceHookIO
+            .precondition[String]("resource-guard")(_ => invocations.update(_ + 1))
+        hook.execute("any-resource")(ctx).flatMap { result =>
+          invocations.get.map { ran =>
+            assertEquals(result, ctx)
+            assertEquals(ran, 0)
+          }
         }
       }
     }

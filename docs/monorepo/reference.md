@@ -22,7 +22,7 @@ catalog, see the [core settings reference](../core/reference.md).
 | ------- | ---- | ------- | ----------- |
 | `releaseIOMonorepoBehaviorCrossBuild` | `Boolean` | `false` | Enable cross-building by default |
 | `releaseIOMonorepoBehaviorSkipTests` | `Boolean` | `false` | Skip tests |
-| `releaseIOMonorepoBehaviorSkipPublish` | `Boolean` | `false` | Skip publish |
+| `releaseIOMonorepoBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step body and its `beforePublish` / `afterPublish` hooks at runtime |
 | `releaseIOMonorepoBehaviorInteractive` | `Boolean` | `false` | Enable prompting in `run` mode |
 
 ## Shared release settings
@@ -48,10 +48,14 @@ These shared release settings also apply to `releaseIOMonorepo`.
 These settings compile into the built-in monorepo lifecycle for both `releaseIOMonorepo`
 and `releaseIOMonorepo check`.
 
-`releaseIOMonorepoBehaviorSkipPublish` skips publish at runtime even if the phase still exists.
+`releaseIOMonorepoBehaviorSkipPublish` keeps the publish step in the compiled lifecycle but
+skips its body at runtime, and `releaseIOMonorepoHooksBeforePublish` /
+`releaseIOMonorepoHooksAfterPublish` are also gated off (the gate is decided at validate time
+and stays frozen). Attach rehearsal logic to a non-publish phase such as
+`releaseIOMonorepoHooksAfterTag` if it must run in skip-publish mode.
 `releaseIOMonorepoPolicyEnablePublish` removes the publish phase from the compiled lifecycle
-entirely, so `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` do not
-exist when it is `false`.
+entirely, so `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` have
+no effect when it is `false`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |

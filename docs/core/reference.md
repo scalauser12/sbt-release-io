@@ -26,7 +26,7 @@ In `.scala` build sources under `project/`, import grouped keys from
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
 | `releaseIOBehaviorCrossBuild` | `Boolean` | `false` | Cross-build steps per `crossScalaVersions` |
-| `releaseIOBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step entirely at runtime |
+| `releaseIOBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step body and its `beforePublish` / `afterPublish` hooks at runtime |
 | `releaseIOBehaviorInteractive` | `Boolean` | `false` | Enable interactive prompting in `run` mode |
 
 When interactive mode is enabled and no decision default is configured, five prompts may appear:
@@ -95,9 +95,12 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 These settings compile into the built-in lifecycle for both `releaseIO` and
 `releaseIO check`.
 
-`releaseIOBehaviorSkipPublish` skips publish at runtime even if the phase still exists.
+`releaseIOBehaviorSkipPublish` keeps the publish step in the compiled lifecycle but skips its
+body at runtime, and `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` are also
+gated off (the gate is decided at validate time and stays frozen). Attach rehearsal logic to a
+non-publish phase such as `releaseIOHooksAfterTag` if it must run in skip-publish mode.
 `releaseIOPolicyEnablePublish` removes the publish phase from the compiled lifecycle entirely,
-so `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` do not exist when it is `false`.
+so `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` have no effect when it is `false`.
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
