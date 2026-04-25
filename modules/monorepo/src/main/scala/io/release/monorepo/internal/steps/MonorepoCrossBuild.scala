@@ -134,8 +134,16 @@ private[monorepo] object MonorepoCrossBuild {
           .getOpt(project.ref / crossScalaVersions)
           .getOrElse(Seq.empty)
           .distinct
-      (crossVersions, ctx.state)
-    }.flatMap { case (crossVersions, entryState) =>
+      // Capture the per-iteration compatibility filter once: `affectedRefsByVersion`
+      // returns, for each iteration scalaVersion, every project ref whose own
+      // `crossScalaVersions` contains it. Switching that whole compatible set per
+      // iteration is sbt's stock `Cross.switchVersion` behavior — it aligns
+      // inter-project deps so the iterating project's transitive compile/test/publish
+      // sees a coherent Scala version across the build, without us having to walk the
+      // dep graph by hand.
+      val affectedFor   = CrossBuildSupport.affectedRefsByVersion(ctx.state)
+      (crossVersions, ctx.state, affectedFor)
+    }.flatMap { case (crossVersions, entryState, affectedFor) =>
       if (crossVersions.isEmpty)
         IO.raiseError(
           new IllegalStateException(
@@ -158,7 +166,12 @@ private[monorepo] object MonorepoCrossBuild {
                                 )
                               )
                   switched <- SbtRuntime
-                                .switchScalaVersion(currentCtx.state, version, LogPrefix)
+                                .switchScalaVersion(
+                                  currentCtx.state,
+                                  version,
+                                  affectedFor(version),
+                                  LogPrefix
+                                )
                                 .map(currentCtx.withState)
                   result   <- action(switched, refreshedProject(switched)).flatMap(nextCtx =>
                                 MonorepoStepHelpers.detectProjectFailureCommand(
@@ -197,8 +210,13 @@ private[monorepo] object MonorepoCrossBuild {
             .getOpt(project.ref / crossScalaVersions)
             .getOrElse(Seq.empty)
             .distinct
-        (crossVersions, ctx.state)
-      }.flatMap { case (crossVersions, entryState) =>
+        // See `runCrossBuildForProject` above for why we capture the compatibility
+        // filter once: sbt-stock `Cross.switchVersion` switches every project whose
+        // `crossScalaVersions` contains the iteration version, aligning inter-project
+        // deps automatically.
+        val affectedFor   = CrossBuildSupport.affectedRefsByVersion(ctx.state)
+        (crossVersions, ctx.state, affectedFor)
+      }.flatMap { case (crossVersions, entryState, affectedFor) =>
         if (crossVersions.isEmpty)
           IO.raiseError(
             new IllegalStateException(
@@ -237,7 +255,12 @@ private[monorepo] object MonorepoCrossBuild {
                                     )
                                   )
                       switched <-
-                        SbtRuntime.switchScalaVersion(currentCtx.state, version, LogPrefix)
+                        SbtRuntime.switchScalaVersion(
+                          currentCtx.state,
+                          version,
+                          affectedFor(version),
+                          LogPrefix
+                        )
                       _        <- handle.set(currentCtx.withState(switched))
                       latest   <- handle.get
                       _        <- action(handle, refreshedProject(latest))

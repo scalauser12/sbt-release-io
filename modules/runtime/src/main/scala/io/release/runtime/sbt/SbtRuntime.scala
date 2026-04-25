@@ -64,8 +64,13 @@ private[release] object SbtRuntime {
       case _                                      => state
     }
 
-  def switchScalaVersion(state: State, version: String, logPrefix: String): IO[State] =
-    CrossBuildSupport.switchScalaVersion(state, version, logPrefix)
+  def switchScalaVersion(
+      state: State,
+      version: String,
+      affectedRefs: Seq[ProjectRef],
+      logPrefix: String
+  ): IO[State] =
+    CrossBuildSupport.switchScalaVersion(state, version, affectedRefs, logPrefix)
 
   /** Processes an sbt command synchronously. Performs blocking I/O;
     * callers must wrap in `IO.blocking`.

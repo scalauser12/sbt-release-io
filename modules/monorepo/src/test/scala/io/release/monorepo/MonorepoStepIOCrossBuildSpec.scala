@@ -40,9 +40,14 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         validate = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "validate.txt"), c.state),
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "validate.txt"),
+            c.state,
+            project.ref
+          ),
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "execute.txt"), c.state).as(c),
+          appendCurrentScalaVersion(new File(project.baseDir, "execute.txt"), c.state, project.ref)
+            .as(c),
         enableCrossBuild = true
       )
 
@@ -140,14 +145,22 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val crossStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "cross-invocations.txt"), c.state)
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "cross-invocations.txt"),
+            c.state,
+            project.ref
+          )
             .as(c),
         enableCrossBuild = true
       )
       val plainStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "plain-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "plain-invocations.txt"), c.state)
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "plain-invocations.txt"),
+            c.state,
+            project.ref
+          )
             .as(c)
       )
 
@@ -204,7 +217,11 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val crossStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "cross-invocations.txt"), c.state)
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "cross-invocations.txt"),
+            c.state,
+            project.ref
+          )
             .as(c),
         enableCrossBuild = true
       )
@@ -271,7 +288,11 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "thisbuild-cross.txt"), c.state)
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "thisbuild-cross.txt"),
+            c.state,
+            project.ref
+          )
             .as(c),
         enableCrossBuild = true
       )
@@ -323,7 +344,11 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val crossStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "cross-invocations.txt"), c.state)
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "cross-invocations.txt"),
+            c.state,
+            project.ref
+          )
             .as(c),
         enableCrossBuild = true
       )
@@ -391,7 +416,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "no-entry.txt"), c.state)
+          appendCurrentScalaVersion(new File(project.baseDir, "no-entry.txt"), c.state, project.ref)
             .as(c.withMetadata(metadataKey, "kept")),
         enableCrossBuild = true
       )
@@ -440,7 +465,11 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val step   = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "should-not-run.txt"), c.state).as(c),
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "should-not-run.txt"),
+            c.state,
+            project.ref
+          ).as(c),
         enableCrossBuild = true
       )
 
@@ -475,7 +504,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
           name = "cross-step",
           execute = (c, project) =>
-            scalaVersionOf(c.state).flatMap { version =>
+            scalaVersionOf(c.state, project.ref).flatMap { version =>
               observed.update(_ :+ s"$version:${project.tagName.getOrElse("missing")}") *>
                 (if (version == TestSupport.CurrentScalaVersion)
                    IO.pure(c.updateProject(project.ref)(_.copy(tagName = Some("updated"))))
@@ -525,7 +554,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           name = "cross-step",
           execute = (c, _) => IO.pure(c),
           validateWithContext = Some((c, project) =>
-            scalaVersionOf(c.state).flatMap { version =>
+            scalaVersionOf(c.state, project.ref).flatMap { version =>
               observed.update(_ :+ s"$version:${project.tagName.getOrElse("missing")}") *>
                 (if (version == TestSupport.CurrentScalaVersion)
                    IO.pure(c.updateProject(project.ref)(_.copy(tagName = Some("validated"))))
@@ -723,8 +752,12 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          scalaVersionOf(c.state).flatMap { version =>
-            appendCurrentScalaVersion(new File(project.baseDir, "cross-failure.txt"), c.state) *>
+          scalaVersionOf(c.state, project.ref).flatMap { version =>
+            appendCurrentScalaVersion(
+              new File(project.baseDir, "cross-failure.txt"),
+              c.state,
+              project.ref
+            ) *>
               (if (version == TestSupport.alternateScalaVersion)
                  if (c.metadata(metadataKey).contains("updated"))
                    IO.raiseError(new RuntimeException("boom"))
@@ -785,7 +818,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           name = "tracked-cross-step",
           executeTracked = (handle, project) =>
             handle.get.flatMap { currentCtx =>
-              scalaVersionOf(currentCtx.state).flatMap { version =>
+              scalaVersionOf(currentCtx.state, project.ref).flatMap { version =>
                 observed.update(_ :+ version) *>
                   (if (version == TestSupport.alternateScalaVersion)
                      handle.get.flatMap { latestCtx =>
@@ -852,7 +885,11 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val step = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "short-circuit.txt"), c.state)
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "short-circuit.txt"),
+            c.state,
+            project.ref
+          )
             .as(c.failWith(new IllegalStateException("simulated task failure"))),
         enableCrossBuild = true
       )
@@ -961,14 +998,22 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val crossStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step",
         validate = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "cross-validate.txt"), c.state),
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "cross-validate.txt"),
+            c.state,
+            project.ref
+          ),
         execute = (c, _) => IO.pure(c),
         enableCrossBuild = true
       )
       val plainStep = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "plain-step",
         validate = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "plain-validate.txt"), c.state),
+          appendCurrentScalaVersion(
+            new File(project.baseDir, "plain-validate.txt"),
+            c.state,
+            project.ref
+          ),
         execute = (c, _) => IO.pure(c)
       )
 
@@ -1013,13 +1058,15 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       val step1 = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step-1",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "step1.txt"), c.state).as(c),
+          appendCurrentScalaVersion(new File(project.baseDir, "step1.txt"), c.state, project.ref)
+            .as(c),
         enableCrossBuild = true
       )
       val step2 = ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo](
         name = "cross-step-2",
         execute = (c, project) =>
-          appendCurrentScalaVersion(new File(project.baseDir, "step2.txt"), c.state).as(c),
+          appendCurrentScalaVersion(new File(project.baseDir, "step2.txt"), c.state, project.ref)
+            .as(c),
         enableCrossBuild = true
       )
 

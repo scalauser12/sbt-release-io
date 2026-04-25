@@ -25,6 +25,9 @@ trait MonorepoStepIOSpecSupport extends MonorepoDummyProjectSupport {
   protected def scalaVersionOf(state: State): IO[String] =
     IO.blocking(SbtRuntime.extracted(state).get(scalaVersion))
 
+  protected def scalaVersionOf(state: State, ref: ProjectRef): IO[String] =
+    IO.blocking(SbtRuntime.extracted(state).get(ref / scalaVersion))
+
   protected def scopedScalaVersionOf(state: State): IO[Option[String]] =
     IO.blocking {
       val extracted = SbtRuntime.extracted(state)
@@ -43,6 +46,9 @@ trait MonorepoStepIOSpecSupport extends MonorepoDummyProjectSupport {
 
   protected def appendCurrentScalaVersion(file: File, state: State): IO[Unit] =
     scalaVersionOf(state).flatMap(version => IO.blocking(sbt.IO.append(file, s"$version\n")))
+
+  protected def appendCurrentScalaVersion(file: File, state: State, ref: ProjectRef): IO[Unit] =
+    scalaVersionOf(state, ref).flatMap(version => IO.blocking(sbt.IO.append(file, s"$version\n")))
 
   protected def requireProjectFailures(
       cause: Option[Throwable]

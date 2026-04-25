@@ -221,10 +221,11 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
             versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"),
             tagName = Some("core/v1.0.0")
           )
+        val coreRef        = fixture.refsById("core")
 
         for {
-          scala212State <- stateWithScalaVersion(fixture.state, "2.12.21")
-          scala3State   <- stateWithScalaVersion(fixture.state, "3.8.1")
+          scala212State <- stateWithProjectScalaVersion(fixture.state, coreRef, "2.12.21")
+          scala3State   <- stateWithProjectScalaVersion(fixture.state, coreRef, "3.8.1")
           steps         <- compileLifecycle(fixture.state)
           publishHooks   = publishProjectHooksOnly(steps)
           validate212Ctx = fixture
@@ -342,6 +343,18 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       TestSupport.appendSessionSettings(
         state,
         Seq(scalaVersion := value)
+      )
+    )
+
+  private def stateWithProjectScalaVersion(
+      state: sbt.State,
+      ref: sbt.ProjectRef,
+      value: String
+  ): IO[sbt.State] =
+    IO.blocking(
+      TestSupport.appendSessionSettings(
+        state,
+        Seq(ref / scalaVersion := value)
       )
     )
 

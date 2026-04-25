@@ -100,12 +100,18 @@ private[release] object MonorepoLifecycle {
     * `tagName` while still distinguishing cross-build iterations.
     * Stable project identity plus the current Scala version gives each
     * project/version pair its own frozen decision.
+    *
+    * The Scala version is read at `project.ref` scope, not unscoped: cross-build
+    * scopes the switch to the affected project ref(s) only, so the unscoped
+    * `Keys.scalaVersion` (which resolves at sbt's `currentRef`, typically the aggregate
+    * root) doesn't change between iterations and would collapse every iteration's
+    * cache key onto a single shared decision.
     */
-  private val publishGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
+  private[monorepo] val publishGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
     (ctx, project) => {
       val sv = SbtRuntime
         .extracted(ctx.state)
-        .getOpt(Keys.scalaVersion)
+        .getOpt(project.ref / Keys.scalaVersion)
         .getOrElse("")
       s"${project.ref.project}:$sv"
     }

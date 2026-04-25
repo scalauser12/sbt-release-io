@@ -1,0 +1,14 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Run monorepo cross-build release. api.dependsOn(core) means each iteration's
+# affectedRefs must include both projects so api's compile against core uses a
+# matching Scala version.
+> releaseIOMonorepo core api with-defaults cross release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify per-iteration alignment + per-Scala publish artifacts
+> checkAll

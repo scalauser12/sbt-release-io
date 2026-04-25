@@ -107,11 +107,16 @@ private[release] object ReleaseComposer {
       val extracted     = SbtRuntime.extracted(entryState)
       val crossVersions =
         extracted.get(crossScalaVersions).distinct
-      (crossVersions, entryState)
-    }.flatMap { case (crossVersions, entryState) =>
+      // sbt-stock `Cross.switchVersion` semantics: each iteration switches every project
+      // whose `crossScalaVersions` contains the iteration version. For a single-project
+      // core release this is usually one project plus an aggregator root; for builds
+      // with multiple projects it aligns inter-project deps automatically.
+      val affectedFor   = CrossBuildSupport.affectedRefsByVersion(entryState)
+      (crossVersions, entryState, affectedFor)
+    }.flatMap { case (crossVersions, entryState, affectedFor) =>
       def switchToVersion(currentCtx: ReleaseContext, version: String): IO[ReleaseContext] =
         SbtRuntime
-          .switchScalaVersion(currentCtx.state, version, LogPrefix)
+          .switchScalaVersion(currentCtx.state, version, affectedFor(version), LogPrefix)
           .map(currentCtx.withState)
 
       def restoreEntry(currentCtx: ReleaseContext): IO[ReleaseContext] =
@@ -184,8 +189,12 @@ private[release] object ReleaseComposer {
         val extracted     = SbtRuntime.extracted(entryState)
         val crossVersions =
           extracted.get(crossScalaVersions).distinct
-        (crossVersions, entryState)
-      }.flatMap { case (crossVersions, entryState) =>
+        // See `runCrossBuild` above for why we capture the per-iteration affected-refs
+        // filter once: sbt-stock `Cross.switchVersion` switches every project whose
+        // `crossScalaVersions` contains the iteration version.
+        val affectedFor   = CrossBuildSupport.affectedRefsByVersion(entryState)
+        (crossVersions, entryState, affectedFor)
+      }.flatMap { case (crossVersions, entryState, affectedFor) =>
         def restoreEntry(currentCtx: ReleaseContext): IO[ReleaseContext] =
           CrossBuildSupport
             .restoreEntryScalaSession(entryState, currentCtx.state)
@@ -244,7 +253,12 @@ private[release] object ReleaseComposer {
                                     )
                                   )
                       switched <-
-                        SbtRuntime.switchScalaVersion(currentCtx.state, version, LogPrefix)
+                        SbtRuntime.switchScalaVersion(
+                          currentCtx.state,
+                          version,
+                          affectedFor(version),
+                          LogPrefix
+                        )
                       _        <- handle.set(currentCtx.withState(switched))
                       _        <- action(handle)
                       _        <- handle.update(detectIterationFailure).void

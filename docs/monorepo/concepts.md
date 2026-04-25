@@ -72,3 +72,7 @@ Projects are sorted by inter-project dependencies using Kahn's algorithm. Depend
 ### Cross-build scope
 
 Cross-build runs per project, not as one global build-wide loop. For a cross-built per-project step, the runtime iterates that selected project across its own `crossScalaVersions` before moving on to the next project in release order.
+
+On every iteration, the Scala-version switch is scoped using sbt's stock `Cross.switchVersion` rule: every project in the loaded build whose `crossScalaVersions` contains the iteration version is aligned to that version. The iterating project's transitive `dependsOn(...)` deps therefore land at the same Scala version automatically — `api`'s 2.13 iteration sees `core` at 2.13 if `core` declares 2.13 in its `crossScalaVersions`, so compile, test, and publish traverse the dep graph at a coherent Scala version without `core` needing to be in the release selection.
+
+Projects without a matching `crossScalaVersions` are deliberately left at their entry version (this is sbt's documented behavior for `+task` against incompatible projects). For monorepos with intentionally misaligned cross sets — e.g. `core` only on 2.12, `api` on both 2.12 and 2.13 — `api`'s 2.13 iteration will compile against whatever Scala version `core` happens to be at, and may fail or silently produce binary-incompatible output. If you hit this, either align `crossScalaVersions` across the dependency chain or split releases to keep each cross-build tree internally consistent.
