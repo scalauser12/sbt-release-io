@@ -110,16 +110,22 @@ private[release] object GitProcessSupport {
       }
     }
 
-  /** Run git capturing stdout and return the first non-empty line.
-    * Raises if the command succeeds with no output, or fails per [[runLines]].
+  /** Run git capturing stdout and return the single line of output.
+    * Raises if the command succeeds with zero or more than one line, or fails per [[runLines]].
     */
   def runSingleLine(baseDir: File, args: Seq[String])(context: => String): IO[String] =
     runLines(baseDir, args)(context).flatMap {
-      case head +: _ => IO.pure(head)
-      case _         =>
+      case Seq(only) => IO.pure(only)
+      case Nil       =>
         IO.raiseError(
           new IllegalStateException(
             s"$context produced no output on stdout; expected a single line"
+          )
+        )
+      case lines     =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"$context produced ${lines.length} lines on stdout; expected a single line"
           )
         )
     }
@@ -221,17 +227,27 @@ private[release] object GitProcessSupport {
     }
 
     def run[A](
-        builder: => ProcessBuilder,
-        closeStdin: Boolean
-    )(body: ManagedProcess => IO[A]): IO[A] =
-      withManagedProcess(builder, DefaultDestroyGracePeriod, closeStdin)(body)
+        processBuilder: => ProcessBuilder,
+        closeStdin: Boolean,
+        destroyGracePeriod: FiniteDuration = DefaultDestroyGracePeriod
+    )(use: ManagedProcess => IO[A]): IO[A] =
+      Resource
+        .makeCase(startProcess(processBuilder, destroyGracePeriod, closeStdin)) {
+          case (managed, exitCase) =>
+            val completed = exitCase match {
+              case Resource.ExitCase.Succeeded => true
+              case _                           => false
+            }
+            ProcessTree.cleanupManagedProcess(managed, destroyGracePeriod, completed)
+        }
+        .use(use)
 
     def runWithTimeout(
         processBuilder: => ProcessBuilder,
         timeout: FiniteDuration,
         destroyGracePeriod: FiniteDuration
     ): IO[Option[Int]] =
-      withManagedProcess(processBuilder, destroyGracePeriod, closeStdin = true) { managed =>
+      run(processBuilder, closeStdin = true, destroyGracePeriod) { managed =>
         Clock[IO].monotonic
           .flatMap { startTime =>
             waitForExitUntil(managed, startTime + timeout, destroyGracePeriod)
@@ -242,6 +258,12 @@ private[release] object GitProcessSupport {
           }
       }
 
+    // Assumes the spawned command (and any descendants) does not inherit stdout/stderr after exit.
+    // If a descendant outlives the root and holds these FDs, the pipe never EOFs, the read fibers
+    // stay blocked on `BufferedReader.readLine`, and `joinWithNever` hangs indefinitely
+    // (cancellation of the surrounding Resource scope cannot unblock the synchronous read). The
+    // git commands routed through this path (rev-parse, ls-files, status, diff, describe,
+    // tag --list) are all read-only inspections that do not spawn output-inheriting children.
     def captureCommandResult(managed: ManagedProcess): IO[GitCommandResult] = {
       val stdoutIn  = managed.process.getInputStream
       val stderrIn  = managed.process.getErrorStream
@@ -282,26 +304,10 @@ private[release] object GitProcessSupport {
         pollDescendants.background
           .surround(
             IO.fromCompletableFuture(IO.delay(managed.process.onExit()))
-              .flatMap(p => IO.blocking(p.exitValue()))
+              .flatMap(p => IO.delay(p.exitValue()))
           )
           .flatMap(waitForDescendantsExit(managed, _))
     }
-
-    private def withManagedProcess[A](
-        processBuilder: => ProcessBuilder,
-        destroyGracePeriod: FiniteDuration,
-        closeStdin: Boolean
-    )(use: ManagedProcess => IO[A]): IO[A] =
-      Resource
-        .makeCase(startProcess(processBuilder, destroyGracePeriod, closeStdin)) {
-          case (managed, exitCase) =>
-            val completed = exitCase match {
-              case Resource.ExitCase.Succeeded => true
-              case _                           => false
-            }
-            ProcessTree.cleanupManagedProcess(managed, destroyGracePeriod, completed)
-        }
-        .use(use)
 
     private def startProcess(
         processBuilder: => ProcessBuilder,
