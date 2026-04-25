@@ -11,36 +11,61 @@ import _root_.sbt.{internal as _, *}
   */
 private[release] object CrossBuildSupport {
 
-  /** Switch Scala version by fully reloading the project structure.
-    * Based on `_root_.sbt.Cross.switchVersion` logic.
+  /** Switch Scala version by reapplying the project structure with new Scala settings
+    * and recording them in `session.rawAppend`. Modeled on
+    * `_root_.sbt.Cross.switchVersion`: per-project scoped overrides
+    * (`projectRef / scalaVersion := newVersion`) are added to `rawAppend` for every
+    * project in the build, plus a `Global` pair, so a same-scope `scalaVersion :=` from
+    * `build.sbt` (which lives in `session.original`) is overridden via mergeSettings
+    * ordering rather than by mutating the build slice.
+    *
+    * Only `session.rawAppend` is mutated. `session.original` (the loaded build
+    * definition) and `session.append` (user `set` commands and similar) are preserved
+    * intact, so an interactive `session clear` after a release returns the build to a
+    * coherent state without forcing a `reload`. The session update also ensures any
+    * subsequent `Extracted.appendWithSession` rebuild — which reads `session.mergeSettings`
+    * — preserves the switch instead of silently undoing it (this was the publish-path
+    * bug that motivated the original fix).
+    *
+    * Config-scoped overrides (`projectRef / Test / scalaVersion := X`) are temporarily
+    * cleared at the structure level for the duration of the cross-build so the switched
+    * version takes effect during the iteration; they are restored from
+    * `entryState.structure.settings` by [[restoreEntryScalaSession]].
+    *
     * Wraps the entire operation in `IO.blocking` since it calls sbt internals
     * (`LoadCompat.reapply`, `Project.setProject`) that perform blocking I/O.
-    *
-    * Only global-scope `scalaVersion` / `scalaHome` settings are replaced. Project-scope
-    * overrides (e.g. `projectRef / scalaVersion := "2.13.x"`) are preserved intact and
-    * will continue to shadow the new global within those projects, matching
-    * `_root_.sbt.Cross.switchVersion` semantics.
     */
   def switchScalaVersion(state: State, version: String, logPrefix: String): IO[State] =
     IO.blocking {
       state.log.info(s"$logPrefix Setting scala version to $version")
-      reapplyWithScalaSettings(
-        state,
+      val extracted   = Project.extract(state)
+      // Use explicit Zero axes (matching sbt's `Cross.setScalaVersionsForProjects`) so the
+      // resulting `Setting.key.scope` has `Scope(Select(ref), Zero, Zero, Zero)` rather than
+      // `Scope(Select(ref), This, This, This)`. Without explicit Zero axes the stored scope
+      // still carries `This`, which would defeat `isScalaSetting` and cause `rawAppend` to
+      // grow unbounded across cross-build iterations.
+      val perProject  = extracted.structure.allProjectRefs.flatMap { ref =>
+        val scope = Scope(Select(ref), Zero, Zero, Zero)
         Seq(
-          GlobalScope / Keys.scalaVersion := version,
-          GlobalScope / Keys.scalaHome    := None
+          scope / Keys.scalaVersion := version,
+          scope / Keys.scalaHome    := None
         )
-      )
+      }
+      val newSettings = Seq(
+        GlobalScope / Keys.scalaVersion := version,
+        GlobalScope / Keys.scalaHome    := None
+      ) ++ perProject
+      reapplyWithScalaSettings(state, newSettings)
     }
 
-  /** Restore only the Scala-related session settings from the captured entry state.
-    * Keeps the current session's non-Scala settings intact while reapplying the entry
-    * `scalaVersion` / `scalaHome` slice.
-    *
-    * @param entryState   session captured before the cross-build modified Scala settings;
-    *                     source of the Scala slice to restore.
-    * @param currentState session in its post-cross-build form; target on which the
-    *                     structure is reapplied.
+  /** Restore the captured entry Scala slice. Entry settings are read from
+    * `entryState.structure.settings` (which covers build.sbt-loaded scala, settings
+    * added via `set` or `appendWithSession`, and any other source that ends up in the
+    * structure) and re-applied via `session.rawAppend`. Because [[switchScalaVersion]]
+    * never mutates `session.original` or `session.append`, restoring is purely additive
+    * on the rawAppend slice — the build's original definition is still intact in
+    * `session.original` and is implicitly re-asserted by stripping the switch's
+    * rawAppend additions.
     */
   def restoreEntryScalaSession(entryState: State, currentState: State): IO[State] =
     IO.blocking {
@@ -60,13 +85,28 @@ private[release] object CrossBuildSupport {
     // LoadCompat.reapply's implicit Show[ScopedKey[?]] resolvable on both lanes.
     implicit val showKey: Show[ScopedKey[?]] = extracted.showKey
 
-    val cleared      = structure.settings.filterNot(isScalaSetting)
-    val newStructure = LoadCompat.reapply(scalaSettings ++ cleared, structure)
-    Project.setProject(session, newStructure, currentState)
+    // Mutate ONLY `session.rawAppend`. `session.original` (the loaded build slice) and
+    // `session.append` (user `set` commands) are preserved so the switch is fully
+    // transient: an interactive `session clear` drops the rawAppend additions and the
+    // build's loaded Scala settings take effect again without needing a `reload`.
+    //
+    // The structure rebuild reads from `structure.settings`, not `session.mergeSettings`,
+    // because `Extracted.appendWithSession` rebuilds the structure with appended settings
+    // but never persists them into the session. Rebuilding from the structure preserves
+    // those prior `appendWithSession` additions; rebuilding from the session would drop
+    // them.
+    val filteredRawAppend = session.rawAppend.filterNot(isScalaSetting)
+    val newSession        = session.copy(rawAppend = filteredRawAppend ++ scalaSettings)
+    val cleared           = structure.settings.filterNot(isScalaSetting)
+    val newStructure      = LoadCompat.reapply(scalaSettings ++ cleared, structure)
+    Project.setProject(newSession, newStructure, currentState)
   }
 
-  /** Matches only global-scope (`Zero` task axis) `scalaVersion` / `scalaHome` settings —
-    * per-project overrides are deliberately excluded so they survive a version switch.
+  /** Matches a `scalaVersion` or `scalaHome` setting at any scope (Global, ThisBuild,
+    * project, config). The structure rebuild filters all of them so the switched
+    * version is the only Scala value the structure resolves; per-project and Global
+    * scopes are also recorded in `session.rawAppend` so subsequent `appendWithSession`
+    * calls (which rebuild from `mergeSettings`) preserve the switch.
     */
   private def isScalaSetting(s: Setting[?]): Boolean =
     s.key match {

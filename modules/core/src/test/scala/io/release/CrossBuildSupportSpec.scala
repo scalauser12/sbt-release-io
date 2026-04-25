@@ -113,26 +113,34 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       )
 
       for {
-        switchedState   <-
+        switchedState       <-
           CrossBuildSupport.switchScalaVersion(
             entryState,
             switchedScala,
             ReleaseLogPrefixes.Core
           )
-        switchedVersion <- projectScalaVersionOf(switchedState, coreRef)
-        switchedHome    <- projectScalaHomeOf(switchedState, coreRef)
-        currentState     = TestSupport.appendSessionSettings(
-                             switchedState,
-                             Seq(coreRef / name := retainedName)
-                           )
-        currentName     <- projectNameOf(currentState, coreRef)
-        restoredState   <- CrossBuildSupport.restoreEntryScalaSession(
-                             entryState,
-                             currentState
-                           )
-        restoredVersion <- projectScalaVersionOf(restoredState, coreRef)
-        restoredHome    <- projectScalaHomeOf(restoredState, coreRef)
-        restoredName    <- projectNameOf(restoredState, coreRef)
+        switchedVersion     <- projectScalaVersionOf(switchedState, coreRef)
+        switchedHome        <- projectScalaHomeOf(switchedState, coreRef)
+        currentState         = TestSupport.appendSessionSettings(
+                                 switchedState,
+                                 Seq(coreRef / name := retainedName)
+                               )
+        currentName         <- projectNameOf(currentState, coreRef)
+        currentScalaVersion <- projectScalaVersionOf(currentState, coreRef)
+        currentScalaHome    <- projectScalaHomeOf(currentState, coreRef)
+        restoredState       <- CrossBuildSupport.restoreEntryScalaSession(
+                                 entryState,
+                                 currentState
+                               )
+        restoredVersion     <- projectScalaVersionOf(restoredState, coreRef)
+        restoredHome        <- projectScalaHomeOf(restoredState, coreRef)
+        restoredName        <- projectNameOf(restoredState, coreRef)
+        afterRestoreState    = TestSupport.appendSessionSettings(
+                                 restoredState,
+                                 Seq(coreRef / name := retainedName)
+                               )
+        afterRestoreVersion <- projectScalaVersionOf(afterRestoreState, coreRef)
+        afterRestoreHome    <- projectScalaHomeOf(afterRestoreState, coreRef)
       } yield {
         assertEquals(
           switchedVersion,
@@ -145,9 +153,29 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
           "switchScalaVersion should clear the project-scoped scalaHome session override"
         )
         assertEquals(currentName, retainedName)
+        assertEquals(
+          currentScalaVersion,
+          Some(switchedScala),
+          "appendWithSession after switchScalaVersion must not revert the switched scalaVersion"
+        )
+        assertEquals(
+          currentScalaHome,
+          None,
+          "appendWithSession after switchScalaVersion must not revert the switched scalaHome"
+        )
         assertEquals(restoredVersion, Some(overrideScala))
         assertEquals(restoredHome, Some(entryScalaHome))
         assertEquals(restoredName, retainedName)
+        assertEquals(
+          afterRestoreVersion,
+          Some(overrideScala),
+          "appendWithSession after restoreEntryScalaSession must not lose the restored scalaVersion"
+        )
+        assertEquals(
+          afterRestoreHome,
+          Some(entryScalaHome),
+          "appendWithSession after restoreEntryScalaSession must not lose the restored scalaHome"
+        )
       }
     }
   }
@@ -162,22 +190,28 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       val coreRef = SbtRuntime.extracted(baseState).currentRef
 
       for {
-        switchedState   <-
+        switchedState       <-
           CrossBuildSupport.switchScalaVersion(
             baseState,
             switchedScala,
             ReleaseLogPrefixes.Core
           )
-        switchedVersion <- projectScalaVersionOf(switchedState, coreRef)
-        currentState     = TestSupport.appendSessionSettings(
-                             switchedState,
-                             Seq(coreRef / name := retainedName)
-                           )
-        restoredState   <- CrossBuildSupport.restoreEntryScalaSession(baseState, currentState)
-        restoredVersion <- projectScalaVersionOf(restoredState, coreRef)
-        restoredName    <- projectNameOf(restoredState, coreRef)
+        switchedVersion     <- projectScalaVersionOf(switchedState, coreRef)
+        currentState         = TestSupport.appendSessionSettings(
+                                 switchedState,
+                                 Seq(coreRef / name := retainedName)
+                               )
+        currentScalaVersion <- projectScalaVersionOf(currentState, coreRef)
+        restoredState       <- CrossBuildSupport.restoreEntryScalaSession(baseState, currentState)
+        restoredVersion     <- projectScalaVersionOf(restoredState, coreRef)
+        restoredName        <- projectNameOf(restoredState, coreRef)
       } yield {
         assertEquals(switchedVersion, Some(switchedScala))
+        assertEquals(
+          currentScalaVersion,
+          Some(switchedScala),
+          "appendWithSession after switchScalaVersion must not revert the switched scalaVersion"
+        )
         assertEquals(restoredVersion, None)
         assertEquals(restoredName, retainedName)
       }
@@ -204,26 +238,28 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
       )
 
       for {
-        switchedState   <-
+        switchedState       <-
           CrossBuildSupport.switchScalaVersion(
             entryState,
             switchedScala,
             ReleaseLogPrefixes.Core
           )
-        switchedVersion <- projectTestScalaVersionOf(switchedState, coreRef)
-        switchedHome    <- projectTestScalaHomeOf(switchedState, coreRef)
-        currentState     = TestSupport.appendSessionSettings(
-                             switchedState,
-                             Seq(coreRef / name := retainedName)
-                           )
-        currentName     <- projectNameOf(currentState, coreRef)
-        restoredState   <- CrossBuildSupport.restoreEntryScalaSession(
-                             entryState,
-                             currentState
-                           )
-        restoredVersion <- projectTestScalaVersionOf(restoredState, coreRef)
-        restoredHome    <- projectTestScalaHomeOf(restoredState, coreRef)
-        restoredName    <- projectNameOf(restoredState, coreRef)
+        switchedVersion     <- projectTestScalaVersionOf(switchedState, coreRef)
+        switchedHome        <- projectTestScalaHomeOf(switchedState, coreRef)
+        currentState         = TestSupport.appendSessionSettings(
+                                 switchedState,
+                                 Seq(coreRef / name := retainedName)
+                               )
+        currentName         <- projectNameOf(currentState, coreRef)
+        currentScalaVersion <- projectTestScalaVersionOf(currentState, coreRef)
+        currentScalaHome    <- projectTestScalaHomeOf(currentState, coreRef)
+        restoredState       <- CrossBuildSupport.restoreEntryScalaSession(
+                                 entryState,
+                                 currentState
+                               )
+        restoredVersion     <- projectTestScalaVersionOf(restoredState, coreRef)
+        restoredHome        <- projectTestScalaHomeOf(restoredState, coreRef)
+        restoredName        <- projectNameOf(restoredState, coreRef)
       } yield {
         assertEquals(
           switchedVersion,
@@ -236,10 +272,66 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
           "switchScalaVersion should clear the config-scoped scalaHome session override"
         )
         assertEquals(currentName, retainedName)
+        assertEquals(
+          currentScalaVersion,
+          Some(switchedScala),
+          "appendWithSession after switchScalaVersion must not revert the switched scalaVersion " +
+            "in a config-scoped lookup"
+        )
+        assertEquals(
+          currentScalaHome,
+          None,
+          "appendWithSession after switchScalaVersion must not revert the switched scalaHome " +
+            "in a config-scoped lookup"
+        )
         assertEquals(restoredVersion, Some(overrideScala))
         assertEquals(restoredHome, Some(entryScalaHome))
         assertEquals(restoredName, retainedName)
       }
     }
+  }
+
+  test(
+    "switchScalaVersion does not mutate session.original — a session clear after switch must restore the build's loaded Scala settings"
+  ) {
+    val switchedScala = TestSupport.alternateScalaVersion
+    stateResource("cross-build-support-session-clear-preserves-original").use { baseState =>
+      val coreRef   = SbtRuntime.extracted(baseState).currentRef
+      val baseScala = TestSupport.CurrentScalaVersion
+      for {
+        switchedState   <- CrossBuildSupport.switchScalaVersion(
+                             baseState,
+                             switchedScala,
+                             ReleaseLogPrefixes.Core
+                           )
+        switchedVersion <- projectScalaVersionOf(switchedState, coreRef)
+        clearedState     = simulateSessionClear(switchedState)
+        clearedVersion  <- projectScalaVersionOf(clearedState, coreRef)
+      } yield {
+        assertEquals(
+          switchedVersion,
+          Some(switchedScala),
+          "switchScalaVersion should make the new version visible"
+        )
+        assertEquals(
+          clearedVersion,
+          Some(baseScala),
+          "after a `session clear` (rawAppend dropped) the build's loaded scalaVersion " +
+            "must be visible again — switchScalaVersion must not have mutated session.original"
+        )
+      }
+    }
+  }
+
+  /** Simulate sbt's `session clear`: drop session.rawAppend (and append) but keep
+    * session.original, then rebuild the structure from the cleared session.
+    */
+  private def simulateSessionClear(state: State): State = {
+    val extracted                                             = SbtRuntime.extracted(state)
+    import extracted.*
+    implicit val showKey: sbt.util.Show[sbt.Def.ScopedKey[?]] = extracted.showKey
+    val cleared                                               = session.copy(rawAppend = Nil, append = Map.empty)
+    val newStructure                                          = LoadCompat.reapply(cleared.mergeSettings, structure)
+    Project.setProject(cleared, newStructure, state)
   }
 }

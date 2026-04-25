@@ -89,5 +89,21 @@ lazy val root = (project in file("."))
         apiRestored == List(Scala212),
         s"api should restore to $Scala212 after cross-build but was: $apiRestored"
       )
+
+      // Each cross-build iteration must publish under its iteration's Scala suffix.
+      // Without the session-aware reapply, publish runs under the entry scalaVersion
+      // and the alternate-version JAR (e.g. core_2.12-0.1.0.jar) is silently missing
+      // from the local repo while a duplicate of the entry-version JAR is the only
+      // artifact present.
+      def jar(name: String, scalaSuffix: String) =
+        file(s"repo/$name/${name}_$scalaSuffix/0.1.0/${name}_$scalaSuffix-0.1.0.jar")
+      val coreJar213 = jar("core", "2.13")
+      val coreJar212 = jar("core", "2.12")
+      val apiJar212  = jar("api", "2.12")
+      val apiJar213  = jar("api", "2.13")
+      assert(coreJar213.isFile, s"missing $coreJar213 — entry-version core artifact not published")
+      assert(coreJar212.isFile, s"missing $coreJar212 — cross-build of core for $Scala212 did not publish under 2.12")
+      assert(apiJar212.isFile, s"missing $apiJar212 — api artifact not published")
+      assert(!apiJar213.exists(), s"unexpected $apiJar213 — api should never publish under 2.13")
     }
   )
