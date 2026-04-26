@@ -18,7 +18,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.12.0")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.12.1")
 ```
 
 The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom version formats](configuration.md#custom-version-formats).

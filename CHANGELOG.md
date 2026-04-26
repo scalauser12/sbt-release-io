@@ -4,6 +4,48 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.12.1
+
+Published: 2026-04-26
+GitHub release:
+[v0.12.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.1)
+
+`v0.12.1` is a patch release for both plugins that adds precondition hook factories,
+hardens version and tag validation, improves cross-build behavior, and makes release
+Git operations more robust.
+
+### Fixes
+
+- Treat whitespace-only version overrides as absent and reject malformed versions without
+  surfacing unused suggestions.
+- Keep interactive tag preflight handling aligned with the real release flow.
+- Align cross-build Scala switching with sbt's project-scoped rules and preserve cross-build
+  Scala settings in session `rawAppend`.
+- Push recorded release tags atomically so branch and tag publication stays consistent.
+
+### Improvements
+
+- Add `precondition` hook factories for core hooks, monorepo hooks, and resource-aware hooks so
+  guard checks can run during `releaseIO check` / `releaseIOMonorepo check`.
+- Refine Git process handling and cleanup around single-line command output, descendant process
+  tracking, and command-result based error handling.
+- Strengthen test support around build-state handling and repository file helpers.
+- Refresh `munit` to `1.3.0` and `scalametaParsers` to `4.16.1`.
+
+### Documentation
+
+- Clarify skip-publish behavior and document the new precondition hook factories.
+- Refresh the root README, module READMEs, and published walkthrough/getting-started docs to
+  reference `0.12.1`.
+
+### Verification
+
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.12.0
 
 Published: 2026-04-23
