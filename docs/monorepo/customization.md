@@ -14,7 +14,9 @@ Monorepo customization has one surface, made of four knobs:
 
 Every monorepo hook companion (`MonorepoGlobalHookIO`, `MonorepoProjectHookIO`,
 and their resource-aware counterparts) exposes four intent-named factories
-backed by the same engine path. Pick the shortest form that fits:
+for these use cases. `sideEffect`, `transform`, and `resumable` use the tracked
+execute path; `precondition` is validate-only and leaves `execute` as a no-op.
+Pick the shortest form that fits:
 
 | If your hook… | Use |
 | ------------- | --- |
@@ -22,6 +24,9 @@ backed by the same engine path. Pick the shortest form that fits:
 | computes a new `MonorepoContext` and returns it once | `transform` |
 | mutates the context in multiple steps and needs each checkpoint preserved if a later step fails | `resumable` |
 | guards the release (branch check, environment requirement, required files) and must be rehearsed by `releaseIOMonorepo check` | `precondition` |
+
+`resumable` refers to recoverable context checkpoints; it does not make arbitrary
+external side effects idempotent.
 
 A global hook written four ways:
 
@@ -73,15 +78,17 @@ Resource-aware hooks (`MonorepoGlobalResourceHookIO[T]`,
 `MonorepoProjectResourceHookIO[T]`) add the resource `T` as the first argument.
 
 The legacy `.io` / `.action` constructors still compile but are deprecated;
-prefer the four intent-named factories above. `.ioTracked` and `.actionTracked`
-remain supported as a lower-level escape hatch when you need direct
-`TrackedContextHandle` access.
+prefer the four intent-named factories above. `.ioTracked` remains supported as
+a lower-level escape hatch when you need direct `TrackedContextHandle` access.
+`.actionTracked` is deprecated; use `resumable` instead.
 
 > **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
 > `execute` only; their `validate` is a no-op, so `releaseIOMonorepo check` does
 > not rehearse them. Use `precondition` for guard hooks that must fail upfront,
 > or set `validate` directly via the case-class constructor when a hook needs
-> both a non-trivial `validate` and `execute`.
+> both a non-trivial `validate` and `execute`. A `precondition` is registered
+> through a lifecycle hook slot, but its predicate runs during validation/check
+> rather than during release execution.
 
 ## Hook-based customization
 

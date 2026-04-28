@@ -11,8 +11,9 @@ Core release customization has one surface, made of three knobs:
 ## Choosing a hook factory
 
 Every hook companion (`ReleaseHookIO`, `ReleaseResourceHookIO`) exposes four
-intent-named factories backed by the same engine path. Pick the shortest form
-that fits the hook you are writing:
+intent-named factories. `sideEffect`, `transform`, and `resumable` use the
+tracked execute path; `precondition` is validate-only and leaves `execute` as a
+no-op. Pick the shortest form that fits the hook you are writing:
 
 | If your hook… | Use |
 | ------------- | --- |
@@ -20,6 +21,9 @@ that fits the hook you are writing:
 | computes a new `ReleaseContext` and returns it once | `transform` |
 | mutates the context in multiple steps and needs each checkpoint preserved if a later step fails | `resumable` |
 | guards the release (branch check, environment requirement) and must be rehearsed by `releaseIO check` | `precondition` |
+
+`resumable` refers to recoverable context checkpoints; it does not make arbitrary
+external side effects idempotent.
 
 The same hook written four ways:
 
@@ -62,7 +66,9 @@ ReleaseHookIO.precondition("validate-main-branch") { ctx =>
 > `execute` only; their `validate` is a no-op, so `releaseIO check` does not
 > rehearse them. Use `precondition` for guard hooks that must fail upfront, or
 > set `validate` directly via the case-class constructor when a hook needs both
-> a non-trivial `validate` and `execute`.
+> a non-trivial `validate` and `execute`. A `precondition` is registered through
+> a lifecycle hook slot, but its predicate runs during validation/check rather
+> than during release execution.
 
 Resource-aware hooks (`ReleaseResourceHookIO[T]`) add the resource `T` as the
 first argument:
@@ -74,9 +80,9 @@ ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
 ```
 
 The legacy `.io` / `.action` constructors still compile but are deprecated;
-prefer the four intent-named factories above. `.ioTracked` and `.actionTracked`
-remain supported as a lower-level escape hatch when you need direct
-`TrackedContextHandle` access.
+prefer the four intent-named factories above. `.ioTracked` remains supported as
+a lower-level escape hatch when you need direct `TrackedContextHandle` access.
+`.actionTracked` is deprecated; use `resumable` instead.
 
 ## Hook-based customization
 

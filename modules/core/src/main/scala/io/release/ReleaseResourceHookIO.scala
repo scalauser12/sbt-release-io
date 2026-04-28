@@ -57,8 +57,10 @@ object ReleaseResourceHookIO {
 
   /** Create a resource-aware hook from a context-transforming function. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def io[T](name: String)(
       f: T => ReleaseContext => IO[ReleaseContext]
@@ -83,20 +85,28 @@ object ReleaseResourceHookIO {
 
   /** Create a resource-aware hook from an effect that leaves the context unchanged. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def action[T](name: String)(f: T => ReleaseContext => IO[Unit]): ReleaseResourceHookIO[T] =
     ReleaseResourceHookIO(name, t => ctx => f(t)(ctx).as(ctx))
 
   /** Create a tracked resource-aware hook from an effectful handle mutation. */
+  @deprecated(
+    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
+    "0.12.2"
+  )
   def actionTracked[T](name: String)(
       f: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
   ): ReleaseResourceHookIO[T] =
     ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
-  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+  // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
+  // path stays tracked-only. `precondition` is the exception: it populates `validate` and
+  // leaves `execute` as a no-op.
   // The `(T, ctx)` / `(T, handle)` shape is flatter than the curried
   // `T => ctx => ...` form, which fits the common "use the resource to do
   // work with the current context" pattern.
@@ -131,7 +141,9 @@ object ReleaseResourceHookIO {
 
   /** Create a resource-aware hook with explicit checkpoint-handle access for
     * multi-step updates. Prefer [[sideEffect]] or [[transform]] unless you
-    * need intermediate checkpoints visible to recovery logic.
+    * need intermediate checkpoints visible to recovery logic. `resumable` refers
+    * to recoverable context checkpoints; external side effects inside the hook
+    * still need their own idempotency or retry safety.
     *
     * {{{
     * ReleaseResourceHookIO.resumable[HttpClient]("staged-notify") { (client, handle) =>
@@ -151,9 +163,11 @@ object ReleaseResourceHookIO {
     * acquiring the plugin resource.
     *
     * Use for preconditions that should fail fast in rehearsal — branch checks,
-    * environment requirements, required-file presence. For preconditions that
-    * genuinely need the resource value, perform the check inside `execute` via
-    * [[sideEffect]] and accept that `check` cannot rehearse it.
+    * environment requirements, required-file presence. Register this at the
+    * lifecycle slot whose inputs should be validated; the predicate runs during
+    * validation/check rather than during release execution. For preconditions
+    * that genuinely need the resource value, perform the check inside `execute`
+    * via [[sideEffect]] and accept that `check` cannot rehearse it.
     *
     * {{{
     * ReleaseResourceHookIO.precondition[HttpClient]("validate-main-branch") { ctx =>

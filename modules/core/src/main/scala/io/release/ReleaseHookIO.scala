@@ -53,8 +53,10 @@ object ReleaseHookIO {
 
   /** Create a hook from a context-transforming function. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def io(name: String)(f: ReleaseContext => IO[ReleaseContext]): ReleaseHookIO =
     ReleaseHookIO(name, f)
@@ -76,20 +78,28 @@ object ReleaseHookIO {
 
   /** Create a hook from an effect that leaves the context unchanged. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def action(name: String)(f: ReleaseContext => IO[Unit]): ReleaseHookIO =
     ReleaseHookIO(name, ctx => f(ctx).as(ctx))
 
   /** Create a tracked hook from an effect that mutates the current context via the handle. */
+  @deprecated(
+    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
+    "0.12.2"
+  )
   def actionTracked(
       name: String
   )(f: TrackedContextHandle[ReleaseContext] => IO[Unit]): ReleaseHookIO =
     ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
-  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+  // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
+  // path stays tracked-only. `precondition` is the exception: it populates `validate` and
+  // leaves `execute` as a no-op.
 
   /** Create a hook that performs side effects without changing the context.
     *
@@ -129,7 +139,8 @@ object ReleaseHookIO {
     * Use when a single hook performs several context mutations that should each
     * be visible to recovery logic on failure. Most hooks don't need this — prefer
     * [[sideEffect]] or [[transform]] unless you specifically want intermediate
-    * checkpoints.
+    * checkpoints. `resumable` refers to recoverable context checkpoints; external
+    * side effects inside the hook still need their own idempotency or retry safety.
     *
     * {{{
     * ReleaseHookIO.resumable("stage-release") { handle =>
@@ -146,7 +157,9 @@ object ReleaseHookIO {
     * checks, environment requirements, presence of required files. Unlike
     * [[sideEffect]], the predicate runs during validate, so `check` catches
     * failures upfront instead of letting them surface only during a real
-    * release.
+    * release. Register this at the lifecycle slot whose inputs should be
+    * validated; the predicate runs during validation/check rather than during
+    * release execution.
     *
     * {{{
     * ReleaseHookIO.precondition("validate-main-branch") { ctx =>

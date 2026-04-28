@@ -53,8 +53,10 @@ object MonorepoGlobalHookIO {
 
   /** Create a hook from a context-transforming function. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def io(name: String)(f: MonorepoContext => IO[MonorepoContext]): MonorepoGlobalHookIO =
     MonorepoGlobalHookIO(name, f)
@@ -76,20 +78,28 @@ object MonorepoGlobalHookIO {
 
   /** Create a hook from an effect that leaves the context unchanged. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def action(name: String)(f: MonorepoContext => IO[Unit]): MonorepoGlobalHookIO =
     MonorepoGlobalHookIO(name, ctx => f(ctx).as(ctx))
 
   /** Create a tracked hook from an effect that mutates the current context via the handle. */
+  @deprecated(
+    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
+    "0.12.2"
+  )
   def actionTracked(
       name: String
   )(f: TrackedContextHandle[MonorepoContext] => IO[Unit]): MonorepoGlobalHookIO =
     ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
-  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+  // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
+  // path stays tracked-only. `precondition` is the exception: it populates `validate` and
+  // leaves `execute` as a no-op.
 
   /** Create a global hook that performs side effects without changing the
     * context. The input context is preserved as the checkpoint.
@@ -117,7 +127,9 @@ object MonorepoGlobalHookIO {
 
   /** Create a global hook with explicit checkpoint-handle access for
     * multi-step updates. Prefer [[sideEffect]] or [[transform]] unless you
-    * need intermediate checkpoints visible to recovery logic.
+    * need intermediate checkpoints visible to recovery logic. `resumable` refers
+    * to recoverable context checkpoints; external side effects inside the hook
+    * still need their own idempotency or retry safety.
     *
     * {{{
     * MonorepoGlobalHookIO.resumable("stage") { handle =>
@@ -136,7 +148,9 @@ object MonorepoGlobalHookIO {
     * `releaseIOMonorepo check` — branch checks, environment requirements,
     * presence of required files. Unlike [[sideEffect]], the predicate runs
     * during validate, so `check` catches failures upfront instead of letting
-    * them surface only during a real release.
+    * them surface only during a real release. Register this at the lifecycle
+    * slot whose inputs should be validated; the predicate runs during
+    * validation/check rather than during release execution.
     *
     * {{{
     * MonorepoGlobalHookIO.precondition("require-readme") { ctx =>
@@ -208,8 +222,10 @@ object MonorepoProjectHookIO {
 
   /** Create a hook from a context-transforming function. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def io(
       name: String
@@ -235,8 +251,10 @@ object MonorepoProjectHookIO {
 
   /** Create a hook from an effect that leaves the context unchanged. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def action(name: String)(
       f: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
@@ -244,6 +262,10 @@ object MonorepoProjectHookIO {
     MonorepoProjectHookIO(name, (ctx, project) => f(ctx, project).as(ctx))
 
   /** Create a tracked hook from an effectful handle mutation. */
+  @deprecated(
+    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
+    "0.12.2"
+  )
   def actionTracked(
       name: String
   )(
@@ -252,6 +274,9 @@ object MonorepoProjectHookIO {
     ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
+  // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
+  // path stays tracked-only. `precondition` is the exception: it populates `validate` and
+  // leaves `execute` as a no-op.
   // New factories take (project, ctx) / (project, handle) so the code reads as
   // "for project X, do Y". Legacy (ctx, project) order on `.io` / `.action`
   // stays unchanged for backward compat.
@@ -288,7 +313,9 @@ object MonorepoProjectHookIO {
 
   /** Create a per-project hook with explicit checkpoint-handle access for
     * multi-step updates. Prefer [[sideEffect]] or [[transform]] unless you
-    * need intermediate checkpoints visible to recovery logic.
+    * need intermediate checkpoints visible to recovery logic. `resumable` refers
+    * to recoverable context checkpoints; external side effects inside the hook
+    * still need their own idempotency or retry safety.
     *
     * {{{
     * MonorepoProjectHookIO.resumable("per-project-stage") { (project, handle) =>
@@ -310,7 +337,9 @@ object MonorepoProjectHookIO {
     * `releaseIOMonorepo check` — required files in the project directory,
     * project-specific environment requirements. Unlike [[sideEffect]], the
     * predicate runs during validate, so `check` catches failures upfront
-    * instead of letting them surface only during a real release.
+    * instead of letting them surface only during a real release. Register this
+    * at the lifecycle slot whose inputs should be validated; the predicate runs
+    * during validation/check rather than during release execution.
     *
     * The user-facing argument order mirrors the intent-named factories
     * (`(project, ctx)`) even though the underlying case-class validate is

@@ -48,8 +48,10 @@ object MonorepoGlobalResourceHookIO {
 
   /** Create a resource-aware global hook from a context-transforming function. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def io[T](name: String)(
       f: T => MonorepoContext => IO[MonorepoContext]
@@ -74,8 +76,10 @@ object MonorepoGlobalResourceHookIO {
 
   /** Create a resource-aware global hook from an effect that leaves the context unchanged. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def action[T](name: String)(
       f: T => MonorepoContext => IO[Unit]
@@ -83,13 +87,19 @@ object MonorepoGlobalResourceHookIO {
     MonorepoGlobalResourceHookIO(name, t => ctx => f(t)(ctx).as(ctx))
 
   /** Create a tracked resource-aware global hook from effectful handle mutations. */
+  @deprecated(
+    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
+    "0.12.2"
+  )
   def actionTracked[T](name: String)(
       f: T => TrackedContextHandle[MonorepoContext] => IO[Unit]
   ): MonorepoGlobalResourceHookIO[T] =
     ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
-  // All three delegate to `ioTracked` so the engine path stays tracked-only.
+  // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
+  // path stays tracked-only. `precondition` is the exception: it populates `validate` and
+  // leaves `execute` as a no-op.
   // The `(T, ctx)` / `(T, handle)` shape is flatter than the curried
   // `T => ctx => ...` form.
 
@@ -126,6 +136,8 @@ object MonorepoGlobalResourceHookIO {
   /** Create a resource-aware global hook with explicit checkpoint-handle
     * access for multi-step updates. Prefer [[sideEffect]] or [[transform]]
     * unless you need intermediate checkpoints visible to recovery logic.
+    * `resumable` refers to recoverable context checkpoints; external side
+    * effects inside the hook still need their own idempotency or retry safety.
     *
     * {{{
     * MonorepoGlobalResourceHookIO.resumable[HttpClient]("staged-notify") { (client, handle) =>
@@ -144,6 +156,8 @@ object MonorepoGlobalResourceHookIO {
     * existing validate signature), so it participates in
     * `releaseIOMonorepo check` without acquiring the plugin resource.
     *
+    * Register this at the lifecycle slot whose inputs should be validated; the
+    * predicate runs during validation/check rather than during release execution.
     * For preconditions that genuinely need the resource value, perform the
     * check inside `execute` via [[sideEffect]] and accept that `check` cannot
     * rehearse it.
@@ -215,8 +229,10 @@ object MonorepoProjectResourceHookIO {
 
   /** Create a resource-aware per-project hook from a context-transforming function. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use ioTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def io[T](name: String)(
       f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
@@ -241,8 +257,10 @@ object MonorepoProjectResourceHookIO {
 
   /** Create a resource-aware per-project hook from an effect that leaves the context unchanged. */
   @deprecated(
-    "Legacy hooks only recover the last returned context; use actionTracked for intermediate checkpoints.",
-    "next"
+    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
+      "recover only the last returned context; the intent-named factories provide tracked " +
+      "checkpointing.",
+    "0.12.2"
   )
   def action[T](name: String)(
       f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
@@ -250,12 +268,19 @@ object MonorepoProjectResourceHookIO {
     MonorepoProjectResourceHookIO(name, t => (ctx, project) => f(t)(ctx, project).as(ctx))
 
   /** Create a tracked resource-aware per-project hook from effectful handle mutations. */
+  @deprecated(
+    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
+    "0.12.2"
+  )
   def actionTracked[T](name: String)(
       f: T => (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
   ): MonorepoProjectResourceHookIO[T] =
     ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
+  // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
+  // path stays tracked-only. `precondition` is the exception: it populates `validate` and
+  // leaves `execute` as a no-op.
   // New factories take (resource, project, ctx) / (resource, project, handle)
   // so the code reads as "with resource T, for project X, do Y". Legacy
   // `.io` / `.action` keep the curried `T => (ctx, project) => ...` form
@@ -301,6 +326,8 @@ object MonorepoProjectResourceHookIO {
   /** Create a resource-aware per-project hook with explicit checkpoint-handle
     * access for multi-step updates. Prefer [[sideEffect]] or [[transform]]
     * unless you need intermediate checkpoints visible to recovery logic.
+    * `resumable` refers to recoverable context checkpoints; external side
+    * effects inside the hook still need their own idempotency or retry safety.
     *
     * {{{
     * MonorepoProjectResourceHookIO.resumable[HttpClient]("per-project-stage") {
@@ -321,9 +348,11 @@ object MonorepoProjectResourceHookIO {
     *
     * The user-facing argument order mirrors the intent-named factories
     * (`(project, ctx)`) even though the underlying case-class validate is
-    * `(ctx, project)`. For preconditions that genuinely need the resource
-    * value, perform the check inside `execute` via [[sideEffect]] and accept
-    * that `check` cannot rehearse it.
+    * `(ctx, project)`. Register this at the lifecycle slot whose inputs should
+    * be validated; the predicate runs during validation/check rather than during
+    * release execution. For preconditions that genuinely need the resource value,
+    * perform the check inside `execute` via [[sideEffect]] and accept that `check`
+    * cannot rehearse it.
     *
     * {{{
     * MonorepoProjectResourceHookIO.precondition[HttpClient]("require-project-readme") {
