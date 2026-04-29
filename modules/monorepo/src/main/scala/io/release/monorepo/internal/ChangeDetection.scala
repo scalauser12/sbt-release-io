@@ -131,7 +131,7 @@ private[monorepo] object ChangeDetection {
   ): IO[Seq[ProjectReleaseInfo]] =
     for {
       projectScopes     <- IO.blocking(resolveProjectScopes(vcs, projects))
-      _                 <- IO.delay(logUnresolvedProjectScopes(state, projectScopes.unresolved))
+      _                 <- IO.blocking(logUnresolvedProjectScopes(state, projectScopes.unresolved))
       globalExcludes    <- IO.blocking(
                              additionalExcludeFiles.flatMap(gitRelativize(vcs.baseDir, _)).toSet
                            )
@@ -290,7 +290,7 @@ private[monorepo] object ChangeDetection {
       case Right(rawFiles) =>
         val files = rawFiles.filterNot(isExcludedPath(_, excludes))
         if (files.nonEmpty)
-          IO.delay {
+          IO.blocking {
             state.log.info(
               s"${ReleaseLogPrefixes.Monorepo} Shared path change(s) detected since $tag: " +
                 s"${files.mkString(", ")}. Marking affected projects as changed"
@@ -298,7 +298,7 @@ private[monorepo] object ChangeDetection {
           }.as(true)
         else IO.pure(false)
       case Left(err)       =>
-        IO.delay {
+        IO.blocking {
           state.log.warn(
             s"${ReleaseLogPrefixes.Monorepo} Failed to check shared paths: ${errorMessage(err)}. " +
               "Conservatively treating as changed"
@@ -321,7 +321,7 @@ private[monorepo] object ChangeDetection {
 
     tagLookup match {
       case NoMatchingTag =>
-        IO.delay {
+        IO.blocking {
           state.log.info(
             s"${ReleaseLogPrefixes.Monorepo} No previous tag matching '$tagPattern' " +
               s"for ${project.name}, marking as changed"
@@ -329,7 +329,7 @@ private[monorepo] object ChangeDetection {
         }.as(true)
 
       case LookupFailed(details) =>
-        IO.delay {
+        IO.blocking {
           state.log.warn(
             s"${ReleaseLogPrefixes.Monorepo} git describe failed for ${project.name} " +
               s"(pattern '$tagPattern'): $details. Conservatively treating as changed"
@@ -339,7 +339,7 @@ private[monorepo] object ChangeDetection {
       case TagFound(tag) =>
         diffScope match {
           case Left(details)       =>
-            IO.delay {
+            IO.blocking {
               state.log.warn(
                 s"${ReleaseLogPrefixes.Monorepo} Cannot diff ${project.name}: $details. " +
                   "Conservatively treating as changed"
@@ -376,7 +376,7 @@ private[monorepo] object ChangeDetection {
       Seq("diff", "--name-only", s"$tag..HEAD", "--", baseRelative)
     )("git diff").attempt.flatMap {
       case Left(err)           =>
-        IO.delay {
+        IO.blocking {
           state.log.warn(
             s"${ReleaseLogPrefixes.Monorepo} git diff failed for ${project.name}: " +
               s"${errorMessage(err)}. Conservatively treating as changed"
@@ -393,7 +393,7 @@ private[monorepo] object ChangeDetection {
           val note =
             if (excludedCount > 0) s" ($excludedCount version/excluded file(s) filtered)"
             else ""
-          IO.delay {
+          IO.blocking {
             state.log.info(
               s"${ReleaseLogPrefixes.Monorepo} ${project.name} has " +
                 s"${significantFiles.length} changed file(s) since $tag$note"
@@ -402,14 +402,14 @@ private[monorepo] object ChangeDetection {
         } else {
           val logIO =
             if (changedFiles.nonEmpty)
-              IO.delay {
+              IO.blocking {
                 state.log.info(
                   s"${ReleaseLogPrefixes.Monorepo} ${project.name} has only " +
                     s"version/excluded file changes since $tag, treating as unchanged"
                 )
               }
             else
-              IO.delay {
+              IO.blocking {
                 state.log.info(
                   s"${ReleaseLogPrefixes.Monorepo} ${project.name} unchanged since $tag"
                 )

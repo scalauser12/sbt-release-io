@@ -612,11 +612,12 @@ private[monorepo] object MonorepoPreflight {
       case Evaluation.Resolved(outcomes)   =>
         val byProjectName  = outcomes.groupBy(_.projectName)
         val duplicates     = byProjectName.collect { case (name, ds) if ds.size > 1 => name }.toSeq
+        val projectNames   = projects.map(_.name).toSet
         val orphanProjects = projects.collect {
           case p if !byProjectName.contains(p.name) => p.name
         }
         val extraOutcomes  =
-          outcomes.map(_.projectName).filterNot(projects.map(_.name).toSet).distinct
+          outcomes.map(_.projectName).filterNot(projectNames.contains).distinct
 
         if (duplicates.nonEmpty || orphanProjects.nonEmpty || extraOutcomes.nonEmpty)
           IO.raiseError(
