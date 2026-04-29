@@ -4,6 +4,45 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.12.2
+
+Published: 2026-04-29
+GitHub release:
+[v0.12.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.2)
+
+`v0.12.2` is a patch release for both plugins that clarifies the HookAPI
+deprecation path and migration guidance without removing any deprecated methods.
+
+### Compatibility notes
+
+- No deprecated hook constructors are removed in this release.
+- `.ioTracked` remains supported as the lower-level `TrackedContextHandle` escape hatch.
+- `.actionTracked` is now deprecated in favor of `resumable`.
+- The new deprecation warnings may affect builds that compile with fatal warnings.
+
+### Improvements
+
+- Clarify that `sideEffect`, `transform`, and `resumable` use the tracked execute path,
+  while `precondition` is validate-only and leaves `execute` as a no-op.
+- Clarify that `resumable` preserves recoverable context checkpoints but does not make
+  arbitrary external side effects idempotent.
+- Tighten the HookAPI ScalaDoc and customization docs across core, monorepo, and
+  resource-aware hook types.
+
+### Documentation
+
+- Refresh the root README, module READMEs, and published walkthrough/getting-started docs to
+  reference `0.12.2`.
+
+### Verification
+
+- `git diff --check`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.12.1
 
 Published: 2026-04-26

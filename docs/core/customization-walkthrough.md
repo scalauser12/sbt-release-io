@@ -21,7 +21,7 @@ outstanding changes before running the rehearsal. If you are starting from scrat
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.12.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.12.2")
 ```
 
 ## 2. Add a version file

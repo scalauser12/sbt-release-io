@@ -45,7 +45,7 @@ change detection, topological ordering, and failure isolation.
 
 Core plugin docs (shared settings and single-project behavior): [../core/README.md](../core/README.md).
 
-> **Note:** This page describes the current published monorepo contract in `v0.12.1`; see
+> **Note:** This page describes the current published monorepo contract in `v0.12.2`; see
 > [CHANGELOG.md](../../CHANGELOG.md) for the full release history.
 
 Monorepo installs inherit the shared/core `releaseIO*` settings surface transitively, while
