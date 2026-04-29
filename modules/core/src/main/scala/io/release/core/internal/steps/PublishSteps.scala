@@ -54,11 +54,15 @@ private[release] object PublishSteps {
       if (ctx.skipPublish) {
         IO.blocking(ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Skipping publish")).as(ctx)
       } else {
+        // Persistent overlays installed by set-release-version, commit-release-version,
+        // and tag-release live in `session.rawAppend` (via SbtRuntime.appendSessionSettings),
+        // so the publish task observes the post-release-version state without any local
+        // re-application here. The frozen-gate decision captured at validate time stays
+        // consistent with what publish actually runs.
         IO.blocking {
           val extracted = SbtRuntime.extracted(ctx.state)
           val newState  =
-            extracted
-              .runAggregated(extracted.currentRef / releaseIOPublishAction, ctx.state)
+            extracted.runAggregated(extracted.currentRef / releaseIOPublishAction, ctx.state)
           failOnSbtTaskFailure(
             ctx,
             newState,
@@ -73,27 +77,34 @@ private[release] object PublishSteps {
         IO.blocking(SbtRuntime.getSetting(ctx.state, releaseIOPublishChecks)).flatMap {
           case false => IO.unit
           case true  =>
-            for {
-              allRefs <- publishTargetRefs(ctx.state)
-              missing <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
-                           ioAcc.flatMap { acc =>
-                             checkPublishSkip(ref, ctx.state).flatMap { skipped =>
-                               if (skipped) IO.pure(acc)
-                               else
-                                 checkPublishToMissing(ref, ctx.state).map { missing =>
-                                   if (missing) acc :+ ref else acc
-                                 }
+            // Evaluate publish/skip and publishTo against a transient state with the
+            // resolved release version overlaid, so version-dependent skip patterns
+            // (`publish / skip := isSnapshot.value`) are checked against the same
+            // version state that publish-artifacts.execute will see. The transient
+            // state is discarded — see ReleaseVersionWorkflow.withReleaseVersionOverlay.
+            ReleaseVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
+              for {
+                allRefs <- publishTargetRefs(tempState)
+                missing <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
+                             ioAcc.flatMap { acc =>
+                               checkPublishSkip(ref, tempState).flatMap { skipped =>
+                                 if (skipped) IO.pure(acc)
+                                 else
+                                   checkPublishToMissing(ref, tempState).map { missing =>
+                                     if (missing) acc :+ ref else acc
+                                   }
+                               }
                              }
                            }
-                         }
-              result  <- {
-                val names = missing.map(_.project)
-                PublishValidation.requirePublishTarget(names.mkString(", "))(
-                  publishSkipped = false,
-                  publishToEmpty = missing.nonEmpty
-                )
-              }
-            } yield result
+                result  <- {
+                  val names = missing.map(_.project)
+                  PublishValidation.requirePublishTarget(names.mkString(", "))(
+                    publishSkipped = false,
+                    publishToEmpty = missing.nonEmpty
+                  )
+                }
+              } yield result
+            }
         },
     enableCrossBuild = true
   )
@@ -137,11 +148,17 @@ private[release] object PublishSteps {
   private[release] def shouldRunPublishHooks(ctx: ReleaseContext): IO[Boolean] =
     if (ctx.skipPublish) IO.pure(false)
     else
-      publishTargetRefs(ctx.state).flatMap { refs =>
-        refs.foldLeft(IO.pure(false)) { (ioShouldRun, ref) =>
-          ioShouldRun.flatMap {
-            case true  => IO.pure(true)
-            case false => checkPublishSkip(ref, ctx.state).map(skipped => !skipped)
+      // Evaluate the gate against the post-`set-release-version` state so
+      // version-dependent skip patterns (`publish / skip := isSnapshot.value`)
+      // produce the right decision when the frozen-gate cache is populated at
+      // validate time. State is transient — see withReleaseVersionOverlay.
+      ReleaseVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
+        publishTargetRefs(tempState).flatMap { refs =>
+          refs.foldLeft(IO.pure(false)) { (ioShouldRun, ref) =>
+            ioShouldRun.flatMap {
+              case true  => IO.pure(true)
+              case false => checkPublishSkip(ref, tempState).map(skipped => !skipped)
+            }
           }
         }
       }

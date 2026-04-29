@@ -2,6 +2,7 @@ import scala.sys.process.*
 import sbt.*
 import sbt.Keys.*
 import _root_.io.release.ReleaseHookIO
+import _root_.io.release.ReleaseSessionOps
 
 name := "hook-late-bound-settings"
 
@@ -26,12 +27,14 @@ def lateBoundVersionSettings(runtimeVersion: File): Seq[Setting[?]] =
 releaseIOHooksBeforeVersionResolution := Seq(
   ReleaseHookIO.io("late-bound-version-settings") { ctx =>
     _root_.cats.effect.IO.blocking {
-      val extracted      = Project.extract(ctx.state)
-      val base           = extracted.get(baseDirectory)
+      val base           = Project.extract(ctx.state).get(baseDirectory)
       val runtimeVersion = base / "version.properties"
-      val updatedState   = extracted.appendWithSession(
-        lateBoundVersionSettings(runtimeVersion),
-        ctx.state
+      // ReleaseSessionOps.appendSessionSettings installs the late-bound
+      // version-file mapping into `session.rawAppend` so it survives every
+      // subsequent `appendWithSession` call (set/commit/tag steps).
+      val updatedState   = ReleaseSessionOps.appendSessionSettings(
+        ctx.state,
+        lateBoundVersionSettings(runtimeVersion)
       )
       sbt.IO.touch(base / "late-bound-version-settings-ran")
       ctx.withState(updatedState)
@@ -42,14 +45,13 @@ releaseIOHooksBeforeVersionResolution := Seq(
 releaseIOHooksBeforeTag := Seq(
   ReleaseHookIO.io("late-bound-tag-settings") { ctx =>
     _root_.cats.effect.IO.blocking {
-      val extracted      = Project.extract(ctx.state)
-      val base           = extracted.get(baseDirectory)
+      val base           = Project.extract(ctx.state).get(baseDirectory)
       val runtimeVersion = base / "version.properties"
-      val updatedState   = extracted.appendWithSession(
+      val updatedState   = ReleaseSessionOps.appendSessionSettings(
+        ctx.state,
         lateBoundVersionSettings(runtimeVersion) ++ Seq(
           releaseIOVcsTagName := "late-bound-runtime-tag"
-        ),
-        ctx.state
+        )
       )
       sbt.IO.touch(base / "late-bound-tag-settings-ran")
       ctx.withState(updatedState)

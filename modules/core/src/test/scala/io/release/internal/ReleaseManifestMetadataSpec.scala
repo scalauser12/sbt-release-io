@@ -33,7 +33,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         val cleared =
-          ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded, Nil)
+          ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
 
         assertEquals(
           TestSupport.manifestAttributes(seeded),
@@ -44,6 +44,30 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         assertEquals(TestSupport.manifestAttributes(cleared), Set("Existing" -> "kept"))
+      }
+    }
+  }
+
+  test(
+    "clearReleaseManifestMetadata - cleared values stay cleared after a later structure rebuild"
+  ) {
+    releaseStateResource.use { baseState =>
+      IO {
+        val seeded  = TestSupport.appendSessionSettings(
+          baseState,
+          Seq(
+            releaseIOInternalReleaseHash := Some("stale-hash"),
+            releaseIOInternalReleaseTag  := Some("v0.0.0-stale")
+          )
+        )
+        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
+        // Trigger a session-level structure rebuild that does NOT touch the
+        // manifest keys. Pre-fix, this rebuilt mergeSettings = original ++
+        // append ++ rawAppend(stale) and reintroduced the stale Some(...).
+        val rebuilt =
+          TestSupport.appendSessionSettings(cleared, Seq(fixtureNonce := "rebuilt"))
+
+        assertEquals(TestSupport.manifestAttributes(rebuilt), Set("Existing" -> "kept"))
       }
     }
   }
@@ -64,7 +88,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
         )
         val cleared    =
           ReleaseManifestMetadataSupport
-            .clearReleaseManifestMetadata(firstPass, Nil)
+            .clearReleaseManifestMetadata(firstPass)
         val secondPass = TestSupport.appendSessionSettings(
           cleared,
           Seq(

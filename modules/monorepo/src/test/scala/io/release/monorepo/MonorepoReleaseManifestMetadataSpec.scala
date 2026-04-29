@@ -298,10 +298,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
             ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(apiRef, "api/v2.0.0")
         )
-        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
-          seeded,
-          fixture.refsById.values.toSeq
-        )
+        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
 
         assertEquals(
           TestSupport.manifestAttributes(seeded, coreRef),
@@ -325,6 +322,37 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "clearReleaseManifestMetadata - cleared values stay cleared after a later structure rebuild"
+  ) {
+    fixtureResource.use { fixture =>
+      IO {
+        val coreRef = fixture.refsById("core")
+        val apiRef  = fixture.refsById("api")
+        val seeded  = TestSupport.appendSessionSettings(
+          fixture.state,
+          ReleaseManifestMetadataSupport
+            .releaseManifestHashSettings(Seq(coreRef, apiRef), "stale-hash") ++
+            ReleaseManifestMetadataSupport
+              .releaseManifestTagSettings(coreRef, "core/v0.0.0-stale") ++
+            ReleaseManifestMetadataSupport
+              .releaseManifestTagSettings(apiRef, "api/v0.0.0-stale")
+        )
+        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
+        // Trigger a session-level structure rebuild that does NOT touch the
+        // manifest keys. Pre-fix, this rebuilt mergeSettings = original ++
+        // append ++ rawAppend(stale) and reintroduced the stale Some(...).
+        val rebuilt = TestSupport.appendSessionSettings(
+          cleared,
+          Seq(coreRef / sbt.Keys.version := "1.0.0-rebuild")
+        )
+
+        assertEquals(TestSupport.manifestAttributes(rebuilt, coreRef), Set("Existing" -> "kept"))
+        assertEquals(TestSupport.manifestAttributes(rebuilt, apiRef), Set("Existing" -> "kept"))
+      }
+    }
+  }
+
   test("clearReleaseManifestMetadata - allow later releases to replace cleared metadata") {
     fixtureResource.use { fixture =>
       IO {
@@ -339,10 +367,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
             ReleaseManifestMetadataSupport
               .releaseManifestTagSettings(apiRef, "api/v1.0.0")
         )
-        val cleared    = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
-          firstPass,
-          fixture.refsById.values.toSeq
-        )
+        val cleared    = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(firstPass)
         val secondPass = TestSupport.appendSessionSettings(
           cleared,
           ReleaseManifestMetadataSupport

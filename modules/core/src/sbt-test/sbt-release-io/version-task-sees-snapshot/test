@@ -1,0 +1,15 @@
+# Regression: with a CLI release-version override, the validate-time overlay
+# must NOT leak into execute. The next-version task at execute time should see
+# the original snapshot `version.value`, not the release override.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Release with CLI release-version override; next-version is computed by the task.
+> releaseIO with-defaults release-version 0.1.0
+
+# The next-version task ran during execute. Assert it saw the snapshot value,
+# not the release override.
+> checkCapturedVersionIsSnapshot

@@ -1,7 +1,6 @@
 package io.release.monorepo.internal
 
 import cats.effect.IO
-import io.release.ReleaseManifestMetadataSupport
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 import io.release.runtime.sbt.SbtRuntime
 import sbt.{internal as _, *}
@@ -37,35 +36,35 @@ private[monorepo] object MonorepoVersionFiles {
       resolveInputs(runtime, ref)
     }
 
-  // ── Session settings preservation ────────────────────────────────────
+  // ── Late-bound versioning settings lift ─────────────────────────────
 
-  /** Session settings that must survive later appendWithSession calls after late-bound
-    * monorepo version customization has already run.
+  /** Promote any currently-resolvable late-bound monorepo version-file
+    * resolver triple from `structure.settings` into `session.rawAppend` so
+    * it survives later structure rebuilds.
+    *
+    * Hooks that install the resolver triple via `Extracted.appendWithSession`
+    * place the settings only in `structure.settings`. Subsequent
+    * `SbtRuntime.appendSessionSettings` calls (in version-write, commit,
+    * and tag steps) rebuild the structure from `session.mergeSettings`,
+    * which excludes those overlays. Lifting the triple before each such
+    * call promotes it into `session.rawAppend`, where it contributes to
+    * every future `mergeSettings` and survives every later rebuild.
+    *
+    * No-op when any leg of the triple is undefined or when the resolver
+    * already lives in `rawAppend` at the same value (idempotent: identical
+    * entries appended to `rawAppend` resolve identically via last-wins).
     */
-  def preservedSettings(
-      state: State,
-      projectRefs: Seq[ProjectRef]
-  ): IO[Seq[sbt.Setting[?]]] =
-    IO.blocking(
-      sessionSettingsIfDefined(state) ++
-        ReleaseManifestMetadataSupport.existingReleaseManifestSettings(state, projectRefs)
-    )
-
-  private def sessionSettingsIfDefined(state: State): Seq[sbt.Setting[?]] = {
+  def liftLateBoundVersioningSettings(state: State): State = {
     val extracted = SbtRuntime.extracted(state)
-
-    (
-      extracted.getOpt(releaseIOMonorepoVersioningFile),
-      extracted.getOpt(releaseIOMonorepoVersioningReadVersion),
-      extracted.getOpt(releaseIOMonorepoVersioningFileContents)
-    ) match {
-      case (Some(versionFile), Some(readVersion), Some(versionFileContents)) =>
-        Seq(
-          releaseIOMonorepoVersioningFile         := versionFile,
-          releaseIOMonorepoVersioningReadVersion  := readVersion,
-          releaseIOMonorepoVersioningFileContents := versionFileContents
-        )
-      case _                                                                 => Seq.empty
-    }
+    val triple    = for {
+      versionFile         <- extracted.getOpt(releaseIOMonorepoVersioningFile)
+      readVersion         <- extracted.getOpt(releaseIOMonorepoVersioningReadVersion)
+      versionFileContents <- extracted.getOpt(releaseIOMonorepoVersioningFileContents)
+    } yield Seq[Setting[?]](
+      releaseIOMonorepoVersioningFile         := versionFile,
+      releaseIOMonorepoVersioningReadVersion  := readVersion,
+      releaseIOMonorepoVersioningFileContents := versionFileContents
+    )
+    triple.fold(state)(SbtRuntime.appendSessionSettings(state, _))
   }
 }

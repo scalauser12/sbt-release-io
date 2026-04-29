@@ -1,0 +1,15 @@
+# Regression: the publish task must actually run when `publish / skip` is
+# version-dependent (`isSnapshot.value`). Intermediate appendWithSession calls
+# in commit/tag steps used to drop the release-version overlay, causing
+# publish/skip to evaluate `true` at execute time and silently no-op.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Release; the publish action should fire and write the marker.
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Assert the publish task observed the release version (not the snapshot).
+> checkPublishRan

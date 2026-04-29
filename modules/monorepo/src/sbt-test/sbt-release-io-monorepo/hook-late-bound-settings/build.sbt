@@ -2,6 +2,7 @@ import scala.sys.process.*
 import sbt.*
 import sbt.Keys.*
 import _root_.cats.effect.IO
+import _root_.io.release.ReleaseSessionOps
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 lazy val core = (project in file("core"))
@@ -38,12 +39,15 @@ lazy val root = (project in file("."))
     releaseIOMonorepoHooksBeforeVersionResolution := Seq(
       MonorepoProjectHookIO.io("late-bound-version-settings") { (ctx, _) =>
         IO.blocking {
-          val extracted    = Project.extract(ctx.state)
-          val updatedState = extracted.appendWithSession(
-            lateBoundVersionSettings,
-            ctx.state
+          // ReleaseSessionOps.appendSessionSettings installs the late-bound
+          // version-file mapping into `session.rawAppend` so it survives every
+          // subsequent `appendWithSession` call (set/commit/tag steps).
+          val updatedState = ReleaseSessionOps.appendSessionSettings(
+            ctx.state,
+            lateBoundVersionSettings
           )
-          sbt.IO.touch(extracted.get(baseDirectory) / "late-bound-version-settings-ran")
+          val baseDir      = Project.extract(updatedState).get(baseDirectory)
+          sbt.IO.touch(baseDir / "late-bound-version-settings-ran")
           ctx.withState(updatedState)
         }
       }
@@ -51,14 +55,14 @@ lazy val root = (project in file("."))
     releaseIOMonorepoHooksBeforeTag               := Seq(
       MonorepoProjectHookIO.io("late-bound-tag-settings") { (ctx, _) =>
         IO.blocking {
-          val extracted    = Project.extract(ctx.state)
-          val updatedState = extracted.appendWithSession(
+          val updatedState = ReleaseSessionOps.appendSessionSettings(
+            ctx.state,
             lateBoundVersionSettings ++ Seq(
               releaseIOMonorepoVcsTagName := ((_: String, _: String) => "late-bound-runtime-tag")
-            ),
-            ctx.state
+            )
           )
-          sbt.IO.touch(extracted.get(baseDirectory) / "late-bound-tag-settings-ran")
+          val baseDir      = Project.extract(updatedState).get(baseDirectory)
+          sbt.IO.touch(baseDir / "late-bound-tag-settings-ran")
           ctx.withState(updatedState)
         }
       }

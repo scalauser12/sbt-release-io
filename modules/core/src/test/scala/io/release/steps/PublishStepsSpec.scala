@@ -246,6 +246,98 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "publishArtifacts.validate - fail with publishTo error when CLI release-version override " +
+      "is present and publish/skip := isSnapshot.value (overlay engages, catches the bypass)"
+  ) {
+    loadedContextResource(s"$fixturePrefix-val-isSnapshot-override") { dir =>
+      () -> (overlayBuildSettings(dir) ++ Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        sbt.Keys.version                                  := "0.1.0-SNAPSHOT",
+        // Use the version-dependent skip pattern explicitly (`isSnapshot` setting
+        // isn't always wired by the minimal test loader; expressing the same logic
+        // directly mirrors what `publish / skip := isSnapshot.value` evaluates to).
+        publish / skip                                    := version.value.endsWith("-SNAPSHOT")
+        // publishTo intentionally NOT set
+      ))
+    }.use { case (rawCtx, _) =>
+      val ctx = withCliReleaseOverride(rawCtx, "1.0.0", "1.0.1-SNAPSHOT")
+
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.publishArtifacts.validate(ctx).void
+      )(err => assert(err.getMessage.contains("publishTo not configured")))
+    }
+  }
+
+  test(
+    "publishArtifacts.validate - leave ctx.state unchanged after the local overlay " +
+      "(regression: the validate-time overlay must not leak into execute)"
+  ) {
+    loadedContextResource(s"$fixturePrefix-val-no-leak") { dir =>
+      () -> (overlayBuildSettings(dir) ++ Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        sbt.Keys.version                                  := "0.1.0-SNAPSHOT",
+        publishTo                                         := Some(
+          Resolver.file("local", new File(dir, "repo"))
+        )
+      ))
+    }.use { case (rawCtx, _) =>
+      val ctx = withCliReleaseOverride(rawCtx, "1.0.0", "1.0.1-SNAPSHOT")
+
+      val before =
+        _root_.io.release.runtime.sbt.SbtRuntime.extracted(ctx.state).get(sbt.Keys.version)
+      assertEquals(before, "0.1.0-SNAPSHOT")
+
+      PublishSteps.publishArtifacts.validate(ctx).map { _ =>
+        val after =
+          _root_.io.release.runtime.sbt.SbtRuntime.extracted(ctx.state).get(sbt.Keys.version)
+        assertEquals(after, "0.1.0-SNAPSHOT")
+      }
+    }
+  }
+
+  /** Settings required by `withReleaseVersionOverlay`: it calls `resolveVersionPlan`
+    * which reads the versioning file/contents/readVersion settings.
+    */
+  private def overlayBuildSettings(dir: File): Seq[Setting[?]] = {
+    val versionFile         = new File(dir, "version.sbt")
+    Seq(
+      ReleasePluginIO.autoImport.releaseIOVersioningFile         := versionFile,
+      ReleasePluginIO.autoImport.releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+      ReleasePluginIO.autoImport.releaseIOVersioningFileContents :=
+        VersionSteps.defaultWriteVersion(useGlobalVersion = true),
+      ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal    := true
+    )
+  }
+
+  private def withCliReleaseOverride(
+      ctx: ReleaseContext,
+      release: String,
+      next: String
+  ): ReleaseContext = {
+    import _root_.io.release.core.internal.CoreExecutionState
+    import _root_.io.release.core.internal.CoreReleasePlan
+    import _root_.io.release.runtime.ExecutionFlags
+    import _root_.io.release.runtime.ReleaseDecisionDefaults
+
+    ctx.withExecutionState(
+      CoreExecutionState(
+        CoreReleasePlan(
+          flags = ExecutionFlags(
+            useDefaults = false,
+            skipTests = false,
+            skipPublish = false,
+            interactive = false,
+            crossBuild = false
+          ),
+          releaseVersionOverride = Some(release),
+          nextVersionOverride = Some(next),
+          decisionDefaults = ReleaseDecisionDefaults.empty
+        )
+      )
+    )
+  }
+
   // ── runTests.execute ────────────────────────────────────────────────
 
   test(

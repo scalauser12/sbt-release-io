@@ -1,0 +1,14 @@
+# Regression: a per-project `beforePublish` hook that installs a custom
+# releaseIOPublishAction via appendWithSession must be observed by the
+# publish step. Strategy B moved persistent release overlays into
+# `session.rawAppend`; any structure-rebuilding step downstream of the hook
+# must not drop hook-installed settings.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+> releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+> checkHookActionRan

@@ -250,8 +250,17 @@ object TestSupport {
       currentProjectId = currentProjectId
     )
 
+  /** Install settings into `session.rawAppend` so they survive subsequent
+    * `appendWithSession` calls. Mirrors the production helper
+    * `SbtRuntime.appendSessionSettings` so test fixtures match what the
+    * release pipeline actually does when installing persistent overlays
+    * (release version, manifest metadata, hook-installed overrides).
+    *
+    * For transient evaluation that should not propagate across calls, use
+    * `Extracted.appendWithSession` directly.
+    */
   def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
-    TestkitSbtCompat.extract(state).appendWithSession(settings, state)
+    sbt.ReleaseIOTestkitSbtBridge.appendSessionSettings(state, settings)
 
   def warningCount(log: String, warning: String): Int =
     log.sliding(warning.length).count(_ == warning)

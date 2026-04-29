@@ -8,7 +8,7 @@ import io.release.ReleaseSharedKeys.releaseIOVcsSignOff
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.ProjectReleaseInfo
-import io.release.monorepo.internal.*
+import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.logInfo
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.versionSummary
 import io.release.runtime.sbt.SbtRuntime
@@ -83,10 +83,6 @@ private[monorepo] object MonorepoVcsCommitHelpers {
                                             }
                                         }
         projectRefs                   = result.currentProjects.map(_.ref)
-        preserved                    <- MonorepoVersionFiles.preservedSettings(
-                                          result.state,
-                                          projectRefs
-                                        )
         hashSettings                 <-
           if (persistReleaseHash)
             vcs.currentHash.map(hash =>
@@ -94,10 +90,26 @@ private[monorepo] object MonorepoVcsCommitHelpers {
             )
           else IO.pure(Seq.empty[Setting[?]])
         finalResult                  <- IO.blocking {
-                                          val newState = SbtRuntime.appendWithSession(
-                                            result.state,
-                                            preserved ++ hashSettings
-                                          )
+                                          // Lift any hook-installed late-bound monorepo
+                                          // version-file resolver triple into `session.rawAppend`
+                                          // BEFORE the trailing `appendSessionSettings` rebuilds
+                                          // the structure. A hook running between
+                                          // `set-release-versions` and `commit-release-versions`
+                                          // (e.g., `before-release-commit`) that installs the
+                                          // resolver via `Extracted.appendWithSession` would
+                                          // otherwise be dropped here, breaking the next-version
+                                          // write later in the release.
+                                          val lifted   =
+                                            MonorepoVersionFiles.liftLateBoundVersioningSettings(
+                                              result.state
+                                            )
+                                          val newState =
+                                            if (hashSettings.isEmpty) lifted
+                                            else
+                                              SbtRuntime.appendSessionSettings(
+                                                lifted,
+                                                hashSettings
+                                              )
                                           result.withState(newState)
                                         }
       } yield finalResult

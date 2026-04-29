@@ -163,22 +163,27 @@ private[monorepo] object MonorepoVcsSteps {
                   ).flatMap { case (updatedCtx, resolvedTagName) =>
                     ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, updatedCtx)(
                       for {
-                        preserved <- MonorepoVersionFiles.preservedSettings(
-                                       updatedCtx.state,
-                                       updatedCtx.currentProjects.map(_.ref)
-                                     )
-                        _         <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
-                        newState  <-
-                          IO.blocking {
-                            SbtRuntime.appendWithSession(
-                              updatedCtx.state,
-                              preserved ++ ReleaseManifestMetadataSupport
-                                .releaseManifestTagSettings(
-                                  project.ref,
-                                  resolvedTagName
-                                )
-                            )
-                          }
+                        _        <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
+                        // Install the per-project tag setting into `session.rawAppend`
+                        // via appendSessionSettings so it survives every subsequent
+                        // `appendWithSession` call (publish overlays, hook installs).
+                        // Lift any hook-installed late-bound version-file resolver
+                        // triple BEFORE the rebuild — a `before-tag` hook installing
+                        // the triple via `Extracted.appendWithSession` would otherwise
+                        // be dropped here, breaking the next-version write later in
+                        // the release.
+                        newState <- IO.blocking {
+                                      val lifted = MonorepoVersionFiles
+                                        .liftLateBoundVersioningSettings(updatedCtx.state)
+                                      SbtRuntime.appendSessionSettings(
+                                        lifted,
+                                        ReleaseManifestMetadataSupport
+                                          .releaseManifestTagSettings(
+                                            project.ref,
+                                            resolvedTagName
+                                          )
+                                      )
+                                    }
                       } yield updatedCtx
                         .withState(newState)
                         .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))

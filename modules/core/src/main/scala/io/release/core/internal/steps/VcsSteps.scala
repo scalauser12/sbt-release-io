@@ -168,7 +168,7 @@ private[release] object VcsSteps {
     ctx
       .withMetadata(CoreReleaseTag.key, tagName)
       .withState(
-        SbtRuntime.appendWithSession(
+        SbtRuntime.appendSessionSettings(
           ctx.state,
           params.versionSessionSettings ++
             Seq(releaseIOInternalReleaseTag := Some(tagName))

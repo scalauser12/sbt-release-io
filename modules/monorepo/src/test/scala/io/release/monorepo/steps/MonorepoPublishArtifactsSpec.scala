@@ -45,6 +45,81 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     }
   }
 
+  test(
+    "publishArtifacts.validate - fail with publishTo error when CLI release-version override " +
+      "is present and publish/skip := isSnapshot.value (overlay engages, catches the bypass)"
+  ) {
+    singleProjectFixtureResource(
+      "monorepo-publish-validate-isSnapshot-override",
+      rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+      )
+    ) { _ =>
+      Seq(
+        version        := "0.1.0-SNAPSHOT",
+        // Use the version-dependent skip pattern explicitly (the `isSnapshot`
+        // setting isn't always wired by the minimal test loader; expressing the
+        // logic directly mirrors what `publish / skip := isSnapshot.value` evaluates
+        // to in a real build).
+        publish / skip := version.value.endsWith("-SNAPSHOT"),
+        // Mirror real "publishTo not configured" with an explicit None so the
+        // publishTo task evaluates cleanly to empty (rather than failing to load).
+        publishTo      := None
+      )
+    }.use { fixture =>
+      // Mirror the production CLI-override flow: `applyVersionOverrides` populates
+      // `project.versions` with the override before main-segment validate runs.
+      val ctx     = fixture.context(
+        Seq("core"),
+        versionsById = Map("core" -> ("1.0.0" -> ""))
+      )
+      val project = fixture.projectInfo("core")
+
+      assertIllegalStateMessage(
+        MonorepoPublishSteps.publishArtifacts.validate(ctx, project),
+        PublishValidation.message("core")
+      )
+    }
+  }
+
+  test(
+    "publishArtifacts.validate - leave ctx.state unchanged after the local overlay " +
+      "(regression: the validate-time overlay must not leak into execute)"
+  ) {
+    singleProjectFixtureResource(
+      "monorepo-publish-validate-no-leak",
+      rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+      )
+    ) { projectBase =>
+      Seq(
+        version        := "0.1.0-SNAPSHOT",
+        publish / skip := false,
+        publishTo      := Some(
+          sbt.Resolver.file("local", new File(projectBase.getParentFile, "repo"))
+        )
+      )
+    }.use { fixture =>
+      val ctx     = fixture.context(
+        Seq("core"),
+        versionsById = Map("core" -> ("1.0.0" -> ""))
+      )
+      val project = fixture.projectInfo("core")
+      val ref     = fixture.refsById("core")
+
+      // Before validate: project.ref/version reflects the build setting (snapshot).
+      val before = _root_.io.release.runtime.sbt.SbtRuntime.extracted(ctx.state).get(ref / version)
+      assertEquals(before, "0.1.0-SNAPSHOT")
+
+      MonorepoPublishSteps.publishArtifacts.validate(ctx, project).map { updated =>
+        // The transient overlay was discarded; ctx.state is the original snapshot.
+        val after =
+          _root_.io.release.runtime.sbt.SbtRuntime.extracted(updated.state).get(ref / version)
+        assertEquals(after, "0.1.0-SNAPSHOT")
+      }
+    }
+  }
+
   test("publishArtifacts.validate - bypass checks when disabled or publish is globally skipped") {
     val checksDisabled = singleProjectFixtureResource(
       "monorepo-publish-validate-disabled",
@@ -287,10 +362,16 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       )
     }.use { fixture =>
       val coreRef     = fixture.refsById("core")
+      // Mirror what the real release pipeline installs by the time
+      // publishArtifacts.execute runs: per-project release version (from
+      // set-release-version), release hash (from commit-release-versions),
+      // and release tag (from tag-releases-per-project) — all installed via
+      // appendSessionSettings so they live in session.rawAppend.
       val seededState = TestSupport.appendSessionSettings(
         fixture.state,
-        ReleaseManifestMetadataSupport
-          .releaseManifestHashSettings(Seq(coreRef), "abc123") ++
+        Seq(coreRef / version := "1.0.0") ++
+          ReleaseManifestMetadataSupport
+            .releaseManifestHashSettings(Seq(coreRef), "abc123") ++
           ReleaseManifestMetadataSupport
             .releaseManifestTagSettings(coreRef, "core/v1.0.0")
       )

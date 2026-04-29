@@ -1,0 +1,6 @@
+target/
+project/target/
+project/project/
+global/
+publish-target/
+*-published.marker

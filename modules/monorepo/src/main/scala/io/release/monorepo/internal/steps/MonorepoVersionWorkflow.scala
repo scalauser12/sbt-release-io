@@ -121,6 +121,40 @@ private[monorepo] object MonorepoVersionWorkflow {
       _.markReleaseVersionFilesPrevalidated
     )
 
+  private def releaseVersionOverlaySettings(ctx: MonorepoContext): Seq[Setting[?]] =
+    ctx.currentProjects.flatMap { p =>
+      p.releaseVersion.toSeq.map(rv => p.ref / version := rv)
+    }
+
+  /** Run `body` against a transient sbt `State` that has every selected
+    * project's resolved release version applied via `appendWithSession`.
+    * Used by validators (notably
+    * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.shouldRunPublishHooks]]
+    * and
+    * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.publishArtifacts]])
+    * that need to evaluate `publish / skip` and `publishTo` against the
+    * post-`set-release-version` state — without leaking that state into the
+    * rest of the validate / execute pipeline.
+    *
+    * Why local-only: `ExecutionEngine.runMainSegment` uses the validated
+    * context as the seed for execute. If we mutated `ctx.state` at validate
+    * time, `inquireVersions.execute` would later evaluate
+    * `releaseIOMonorepoVersioningNextVersion` (and friends) with the wrong
+    * `version.value` / `isSnapshot.value`, producing an incorrect next
+    * version for tasks that read the session.
+    *
+    * Pass-through when no project has a resolved release version
+    * (auto-resolve / with-defaults / prompt flows). Tracked separately.
+    */
+  def withReleaseVersionOverlay[A](
+      ctx: MonorepoContext
+  )(body: State => IO[A]): IO[A] = {
+    val versionSettings = releaseVersionOverlaySettings(ctx)
+    if (versionSettings.isEmpty) body(ctx.state)
+    else
+      IO.blocking(SbtRuntime.appendWithSession(ctx.state, versionSettings)).flatMap(body)
+  }
+
   def writeNextVersion(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
@@ -401,28 +435,45 @@ private[monorepo] object MonorepoVersionWorkflow {
       versionInputs: MonorepoVersionFiles.VersionInputs
   ): IO[MonorepoContext] =
     for {
-      preserved  <- MonorepoVersionFiles.preservedSettings(
-                      ctx.state,
-                      ctx.currentProjects.map(_.ref)
-                    )
-      versionFile = versionInputs.versionFile
-      _          <- VersionWorkflowSupport.writeVersionFile(
-                      versionInputs.versionFile,
-                      versionValue,
-                      versionInputs.versionFileContents
-                    )
-      newState   <- IO.blocking {
-                      SbtRuntime.appendWithSession(
-                        ctx.state,
-                        preserved ++ Seq(
-                          project.ref / version := versionValue
-                        )
-                      )
-                    }
-      updated     = ctx
-                      .withState(newState)
-                      .updateProject(project.ref)(_.copy(versionFile = versionFile))
-      result     <-
+      versionFile <- IO.pure(versionInputs.versionFile)
+      _           <- VersionWorkflowSupport.writeVersionFile(
+                       versionInputs.versionFile,
+                       versionValue,
+                       versionInputs.versionFileContents
+                     )
+      // Install the per-project version into `session.rawAppend` via
+      // `appendSessionSettings` so it survives every subsequent
+      // `appendWithSession` call (commit/tag steps, hook overlays). Earlier
+      // projects' writes also live in `rawAppend`, so we don't need to
+      // re-supply them here — `mergeSettings` accumulates them across calls.
+      //
+      // For next-version writes, `versionValue` is the next snapshot. Because
+      // the release-version write for the same project added an earlier
+      // `project.ref / version := releaseVer`, and the next-version write
+      // appends after it in `rawAppend`, sbt's last-write-wins semantics keep
+      // `next_v` as the resolved value.
+      //
+      // Before installing the version, lift any late-bound monorepo
+      // version-file resolver triple (`releaseIOMonorepoVersioningFile`,
+      // `…ReadVersion`, `…FileContents`) into `session.rawAppend`. Hooks
+      // that install these via `Extracted.appendWithSession` would otherwise
+      // be dropped when the trailing `appendSessionSettings` rebuilds the
+      // structure from `session.mergeSettings` — leaving subsequent project
+      // writes (and the next-version phase) reading the build-default
+      // resolver and writing to the wrong file. Hooks that already use
+      // `ReleaseSessionOps.appendSessionSettings` see the lift as a no-op
+      // (the same value re-installed in `rawAppend` resolves identically).
+      newState    <- IO.blocking {
+                       val lifted = MonorepoVersionFiles.liftLateBoundVersioningSettings(ctx.state)
+                       SbtRuntime.appendSessionSettings(
+                         lifted,
+                         Seq(project.ref / version := versionValue)
+                       )
+                     }
+      updated      = ctx
+                       .withState(newState)
+                       .updateProject(project.ref)(_.copy(versionFile = versionFile))
+      result      <-
         ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, updated)(
           logInfo(
             updated,

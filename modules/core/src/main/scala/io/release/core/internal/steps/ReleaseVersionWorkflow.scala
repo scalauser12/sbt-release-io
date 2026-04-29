@@ -96,6 +96,47 @@ private[release] object ReleaseVersionWorkflow {
       writeVersion(ctx, releaseVersion)
     }
 
+  /** Run `body` against a transient sbt `State` that has the resolved release
+    * version applied via `appendWithSession`. Used by validators
+    * ([[PublishSteps.shouldRunPublishHooks]],
+    * [[PublishSteps.publishArtifacts]]) that need to evaluate
+    * `publish / skip` and `publishTo` against the post-`set-release-version`
+    * state — without leaking that state into the rest of the validate /
+    * execute pipeline.
+    *
+    * Why local-only: `ExecutionEngine.runMainSegment` uses the validated
+    * context as the seed for execute. If we mutated `ctx.state` at validate
+    * time, `inquireVersions.execute` would later evaluate
+    * `releaseIOVersioningNextVersion` (and friends) with the wrong
+    * `version.value` / `isSnapshot.value`, producing an incorrect next
+    * version for tasks that read the session.
+    *
+    * Source of truth: the CLI release-version override on
+    * `executionState.plan`, falling back to `ctx.releaseVersion` (which
+    * future hooks may pre-populate). When neither is set (auto-resolve /
+    * with-defaults / prompt flow), this is a pass-through — `body` runs
+    * against the original state. That gap is intentional and tracked
+    * separately.
+    */
+  def withReleaseVersionOverlay[A](
+      ctx: ReleaseContext
+  )(body: State => IO[A]): IO[A] = {
+    val maybeReleaseVersion =
+      ctx.releaseVersion.orElse(ctx.executionState.flatMap(_.plan.releaseVersionOverride))
+
+    maybeReleaseVersion match {
+      case None                 => body(ctx.state)
+      case Some(releaseVersion) =>
+        IO.blocking {
+          val versionPlan = resolveVersionPlan(ctx)
+          SbtRuntime.appendWithSession(
+            ctx.state,
+            sessionSettings(versionPlan) ++ versionValueSettings(versionPlan, releaseVersion)
+          )
+        }.flatMap(body)
+    }
+  }
+
   def writeNextVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (_, nextVersion) =>
       writeVersion(ctx, nextVersion)
@@ -115,7 +156,7 @@ private[release] object ReleaseVersionWorkflow {
         finalCtx                <-
           ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resultCtx)(
             IO.blocking {
-              val newState = SbtRuntime.appendWithSession(
+              val newState = SbtRuntime.appendSessionSettings(
                 resultCtx.state,
                 sessionSettings(versionPlan) ++
                   Seq(releaseIOInternalReleaseHash := Some(currentHash)) ++
@@ -142,7 +183,7 @@ private[release] object ReleaseVersionWorkflow {
         finalCtx      <-
           ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resultCtx)(
             IO.blocking {
-              val newState = SbtRuntime.appendWithSession(
+              val newState = SbtRuntime.appendSessionSettings(
                 resultCtx.state,
                 sessionSettings(versionPlan) ++
                   versionValueSettings(versionPlan, nextVersion)
@@ -267,7 +308,7 @@ private[release] object ReleaseVersionWorkflow {
           )
         )
       result      <- IO.blocking {
-                       val newState = SbtRuntime.appendWithSession(
+                       val newState = SbtRuntime.appendSessionSettings(
                          ctx.state,
                          sessionSettings(versionPlan) ++
                            versionValueSettings(versionPlan, versionValue)

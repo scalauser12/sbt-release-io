@@ -80,25 +80,18 @@ private[release] object ReleaseManifestMetadataSupport {
     }
   }
 
-  /** Clears both global-scope defaults and any per-project overrides. Global-scope
-    * assignments cover states where `ReleaseSharedDefaultSettingsSupport` defaults
-    * haven't been applied yet; on states that already have defaults, the global half
-    * is a no-op and only the per-project clears do work.
+  /** Strip every prior `releaseIOInternalReleaseHash` / `releaseIOInternalReleaseTag`
+    * setting out of `session.rawAppend`. After this, the structure resolves
+    * the keys via the build/original layer (which carries the `:= None`
+    * defaults from `ReleaseSharedDefaultSettingsSupport`), with no stale
+    * `Some(...)` from a previous release lingering in `rawAppend`.
+    *
+    * Does not need a `projectRefs` argument: filtering by `AttributeKey`
+    * sweeps both global-scope and per-project overlays in a single pass.
     */
-  def clearReleaseManifestMetadata(
-      state: State,
-      projectRefs: Seq[ProjectRef]
-  ): State =
-    SbtRuntime.appendWithSession(
+  def clearReleaseManifestMetadata(state: State): State =
+    SbtRuntime.clearRawAppendByKey(
       state,
-      Seq(
-        releaseIOInternalReleaseHash := None,
-        releaseIOInternalReleaseTag  := None
-      ) ++ projectRefs.distinct.flatMap(ref =>
-        Seq(
-          ref / releaseIOInternalReleaseHash := None,
-          ref / releaseIOInternalReleaseTag  := None
-        )
-      )
+      Seq(releaseIOInternalReleaseHash.key, releaseIOInternalReleaseTag.key)
     )
 }

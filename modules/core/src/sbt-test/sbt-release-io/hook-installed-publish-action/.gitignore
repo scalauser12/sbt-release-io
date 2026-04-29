@@ -1,0 +1,9 @@
+target/
+project/target/
+project/project/
+*.class
+*.log
+global/
+publish-target/
+default-published.marker
+hook-published.marker

@@ -1,0 +1,16 @@
+# Regression: a monorepo `beforePublish` hook that installs
+# `<project>.ref / publish / skip := true` via appendWithSession must be
+# observed by the publish task. Strategy B moved persistent release overlays
+# into `session.rawAppend`; any structure-rebuilding step downstream of the
+# hook must not drop hook-installed settings.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with CLI override; the before-publish hook sets publish/skip := true.
+> releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+# Assert the publish task observed the hook-installed skip = true.
+> checkPublishSkipped

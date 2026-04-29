@@ -1,0 +1,18 @@
+# Regression: publish/skip := isSnapshot.value should NOT bypass the validate-time
+# publishTo check. Validate must apply the resolved release version to the session
+# so publish/skip evaluates against the post-set-release-version state (false), not
+# the pre-set snapshot state (true).
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Release should fail at validate because publish/skip flips to false after
+# set-release-version applies version := "0.1.0", and publishTo is missing.
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify no commits/tags/version writes — the failure must happen at validate time.
+> checkGitCommitCount 1
+> checkNoGitTags
+> checkVersionUnchanged

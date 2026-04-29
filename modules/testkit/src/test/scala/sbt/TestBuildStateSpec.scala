@@ -24,6 +24,34 @@ class TestBuildStateSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "synthetic loaded state - appendSessionSettings overlays survive a subsequent appendWithSession"
+  ) {
+    val pinnedKey = settingKey[String](s"pinnedKey${System.nanoTime()}")
+    val unrelated = settingKey[String](s"unrelatedKey${System.nanoTime()}")
+
+    singleProjectStateResource.use { state =>
+      CEIO.blocking {
+        val seeded  = TestSupport.appendSessionSettings(
+          state,
+          Seq(pinnedKey := "from-rawAppend")
+        )
+        // appendWithSession installs `unrelated` only into structure.settings
+        // (without touching session). With Strategy B, settings installed via
+        // appendSessionSettings live in session.rawAppend and contribute to
+        // mergeSettings on every subsequent reapply, so the pinned value
+        // should still be visible after this call.
+        val churned = TestkitSbtCompat
+          .extract(seeded)
+          .appendWithSession(Seq(unrelated := "transient"), seeded)
+
+        val extracted = TestkitSbtCompat.extract(churned)
+        assertEquals(extracted.getOpt(pinnedKey), Some("from-rawAppend"))
+        assertEquals(extracted.getOpt(unrelated), Some("transient"))
+      }
+    }
+  }
+
   test("synthetic loaded state - appendWithSession makes appended task settings runnable") {
     val appendedTask = taskKey[String](s"appendedStateTask${System.nanoTime()}")
 

@@ -16,6 +16,7 @@ import io.release.core.internal.CoreReleasePlan
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.SbtRuntime
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
@@ -478,6 +479,172 @@ class VersionStepsSpec extends CatsEffectSuite {
               assert(marker.exists())
               assert(err.getMessage.contains(releaseIOVersioningNextVersion.key.label))
               assert(err.getMessage.contains("FailureCommand"))
+            }
+      }
+    }
+  }
+
+  test(
+    "withReleaseVersionOverlay - run body against post-CLI-override state without " +
+      "mutating ctx.state (regression: validate-time overlay must not leak into execute)"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                sbt.Keys.version                := "0.1.0-SNAPSHOT",
+                releaseIOVersioningFile         := versionFile,
+                releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents := VersionSteps.defaultWriteVersion(
+                  useGlobalVersion = true
+                ),
+                releaseIOVersioningUseGlobal    := true
+              )
+            )
+          )
+          val ctx   = withStartupPlan(ReleaseContext(state = state), "1.0.0", "1.0.1-SNAPSHOT")
+
+          ReleaseVersionWorkflow
+            .withReleaseVersionOverlay(ctx) { tempState =>
+              IO.pure(SbtRuntime.extracted(tempState).get(sbt.Keys.version))
+            }
+            .map { observed =>
+              // Body sees the overlaid release version.
+              assertEquals(observed, "1.0.0")
+              // ctx.state remains untouched — execute will start from the snapshot state,
+              // so version-task evaluation in inquireVersions.execute reads version.value
+              // as "0.1.0-SNAPSHOT", not "1.0.0".
+              assertEquals(SbtRuntime.extracted(ctx.state).get(sbt.Keys.version), "0.1.0-SNAPSHOT")
+            }
+      }
+    }
+  }
+
+  test(
+    "withReleaseVersionOverlay - pass through original state when no CLI override is " +
+      "present and ctx.versions is unset"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                sbt.Keys.version                := "0.1.0-SNAPSHOT",
+                releaseIOVersioningFile         := versionFile,
+                releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents := VersionSteps.defaultWriteVersion(
+                  useGlobalVersion = true
+                ),
+                releaseIOVersioningUseGlobal    := true
+              )
+            )
+          )
+          val ctx   = ReleaseContext(state = state)
+
+          ReleaseVersionWorkflow
+            .withReleaseVersionOverlay(ctx) { tempState =>
+              IO.pure(SbtRuntime.extracted(tempState).get(sbt.Keys.version))
+            }
+            .map(observed => assertEquals(observed, "0.1.0-SNAPSHOT"))
+      }
+    }
+  }
+
+  test(
+    "withReleaseVersionOverlay - prefer ctx.releaseVersion over CLI override when both set " +
+      "(defensive: hook may have already resolved versions)"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                sbt.Keys.version                := "0.1.0-SNAPSHOT",
+                releaseIOVersioningFile         := versionFile,
+                releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents := VersionSteps.defaultWriteVersion(
+                  useGlobalVersion = true
+                ),
+                releaseIOVersioningUseGlobal    := true
+              )
+            )
+          )
+          val ctx   = withStartupPlan(ReleaseContext(state = state), "1.0.0", "1.0.1-SNAPSHOT")
+            .withVersions("2.0.0", "2.0.1-SNAPSHOT")
+
+          ReleaseVersionWorkflow
+            .withReleaseVersionOverlay(ctx) { tempState =>
+              IO.pure(SbtRuntime.extracted(tempState).get(sbt.Keys.version))
+            }
+            .map(observed => assertEquals(observed, "2.0.0"))
+      }
+    }
+  }
+
+  test(
+    "withReleaseVersionOverlay - release-manifest metadata installed via " +
+      "appendSessionSettings (production install path) survives the transient " +
+      "appendWithSession overlay"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state        = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                sbt.Keys.version                := "0.1.0-SNAPSHOT",
+                releaseIOVersioningFile         := versionFile,
+                releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents := VersionSteps.defaultWriteVersion(
+                  useGlobalVersion = true
+                ),
+                releaseIOVersioningUseGlobal    := true,
+                // Defaults so getOpt resolves at the project ref via delegation.
+                releaseIOInternalReleaseHash    := None,
+                releaseIOInternalReleaseTag     := None
+              )
+            )
+          )
+          // Mimic what commit-release-version + tag-release install during a real
+          // release before publish-artifacts.execute runs. Production uses
+          // SbtRuntime.appendSessionSettings (Strategy B) so the settings live in
+          // session.rawAppend and are preserved across subsequent appendWithSession
+          // calls.
+          val withMetadata = SbtRuntime.appendSessionSettings(
+            state,
+            Seq(
+              releaseIOInternalReleaseHash := Some("commit-hash-abc"),
+              releaseIOInternalReleaseTag  := Some("v1.0.0")
+            )
+          )
+          val ctx          =
+            withStartupPlan(ReleaseContext(state = withMetadata), "1.0.0", "1.0.1-SNAPSHOT")
+
+          ReleaseVersionWorkflow
+            .withReleaseVersionOverlay(ctx) { tempState =>
+              val extracted = SbtRuntime.extracted(tempState)
+              IO.pure(
+                (
+                  extracted.get(sbt.Keys.version),
+                  extracted.getOpt(releaseIOInternalReleaseHash).flatten,
+                  extracted.getOpt(releaseIOInternalReleaseTag).flatten
+                )
+              )
+            }
+            .map { case (overlaidVersion, hash, tag) =>
+              assertEquals(overlaidVersion, "1.0.0")
+              // session.rawAppend keeps the metadata visible even though the
+              // overlay added an appendWithSession-based version.
+              assertEquals(hash, Some("commit-hash-abc"))
+              assertEquals(tag, Some("v1.0.0"))
             }
       }
     }

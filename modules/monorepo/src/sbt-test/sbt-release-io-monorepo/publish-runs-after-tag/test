@@ -1,0 +1,16 @@
+# Regression: monorepo per-project publish task must run when
+# `publish / skip := isSnapshot.value`. Intermediate appendWithSession calls
+# in commit/tag steps used to drop the per-project release-version overlay,
+# causing the skip check at publish-artifacts.execute to evaluate `true` and
+# silently skip the publish action.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with CLI override.
+> releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+# Assert the publish task observed the release version.
+> checkPublishRan

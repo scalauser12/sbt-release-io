@@ -1,0 +1,16 @@
+# Regression: a `before-release-commit` global hook that installs late-bound
+# monorepo version-file resolvers via `Extracted.appendWithSession` must keep
+# the resolvers visible to the next-version write phase. Pre-fix,
+# `commitVersions`'s `appendSessionSettings` rebuilt the structure from
+# `mergeSettings` and dropped the hook overlay, so `set-next-versions` fell
+# back to the default and silently overwrote `version.sbt`.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+> releaseIOMonorepo core api with-defaults release-version core=1.0.0 release-version api=2.0.0 next-version core=1.1.0-SNAPSHOT next-version api=2.1.0-SNAPSHOT
+
+$ exists late-bound-settings-ran
+> checkLateBoundVersionFiles

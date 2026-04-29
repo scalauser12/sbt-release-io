@@ -303,6 +303,130 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "withReleaseVersionOverlay - body sees post-CLI-override state for every selected project " +
+      "but ctx.state stays untouched (regression: validate-time overlay must not leak into execute)"
+  ) {
+    MonorepoVersionStepsSpec
+      .multiProjectFixtureResource("monorepo-overlay-no-leak")
+      .use { fixture =>
+        val ctx     = fixture.context(
+          Seq("core", "api"),
+          versionsById = Map(
+            "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+            "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
+          )
+        )
+        val coreRef = fixture.loaded.refsById("core")
+        val apiRef  = fixture.loaded.refsById("api")
+
+        MonorepoVersionWorkflow
+          .withReleaseVersionOverlay(ctx) { tempState =>
+            IO.pure(
+              (
+                SbtRuntime.extracted(tempState).get(coreRef / sbt.Keys.version),
+                SbtRuntime.extracted(tempState).get(apiRef / sbt.Keys.version)
+              )
+            )
+          }
+          .map { case (coreInBody, apiInBody) =>
+            // Body sees both projects' release-version overlays applied.
+            assertEquals(coreInBody, "1.0.0")
+            assertEquals(apiInBody, "2.0.0")
+            // ctx.state remains untouched; execute starts from the snapshot state.
+            assertEquals(
+              SbtRuntime.extracted(ctx.state).get(coreRef / sbt.Keys.version),
+              "0.1.0-SNAPSHOT"
+            )
+            assertEquals(
+              SbtRuntime.extracted(ctx.state).get(apiRef / sbt.Keys.version),
+              "0.1.0-SNAPSHOT"
+            )
+          }
+      }
+  }
+
+  test(
+    "withReleaseVersionOverlay - pass through original state when no project has a resolved " +
+      "release version (auto-resolve / with-defaults flow)"
+  ) {
+    MonorepoVersionStepsSpec
+      .multiProjectFixtureResource("monorepo-overlay-passthrough")
+      .use { fixture =>
+        val ctx     = fixture.context(Seq("core", "api"))
+        val coreRef = fixture.loaded.refsById("core")
+
+        MonorepoVersionWorkflow
+          .withReleaseVersionOverlay(ctx) { tempState =>
+            IO.pure(SbtRuntime.extracted(tempState).get(coreRef / sbt.Keys.version))
+          }
+          .map(observed => assertEquals(observed, "0.1.0-SNAPSHOT"))
+      }
+  }
+
+  test(
+    "withReleaseVersionOverlay - overlay only the projects whose releaseVersion is resolved " +
+      "(unresolved projects keep their build-time version)"
+  ) {
+    MonorepoVersionStepsSpec
+      .multiProjectFixtureResource("monorepo-overlay-partial")
+      .use { fixture =>
+        // Only `core` has a CLI override; `api` will be resolved later.
+        val ctx     = fixture.context(
+          Seq("core", "api"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+        )
+        val coreRef = fixture.loaded.refsById("core")
+        val apiRef  = fixture.loaded.refsById("api")
+
+        MonorepoVersionWorkflow
+          .withReleaseVersionOverlay(ctx) { tempState =>
+            IO.pure(
+              (
+                SbtRuntime.extracted(tempState).get(coreRef / sbt.Keys.version),
+                SbtRuntime.extracted(tempState).get(apiRef / sbt.Keys.version)
+              )
+            )
+          }
+          .map { case (coreInBody, apiInBody) =>
+            assertEquals(coreInBody, "1.0.0")
+            // api has no releaseVersion → overlay leaves its build-time setting alone.
+            assertEquals(apiInBody, "0.1.0-SNAPSHOT")
+          }
+      }
+  }
+
+  test(
+    "setReleaseVersions.execute - sequential per-project writes preserve every project's " +
+      "release version in session (regression: same drop-pattern in writeProjectVersion)"
+  ) {
+    MonorepoVersionStepsSpec
+      .multiProjectFixtureResource("monorepo-version-execute-multi-preserve")
+      .use { fixture =>
+        val ctx         = fixture.context(
+          Seq("core", "api"),
+          versionsById = Map(
+            "core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"),
+            "api"  -> ("2.0.0" -> "2.1.0-SNAPSHOT")
+          )
+        )
+        val coreRef     = fixture.loaded.refsById("core")
+        val apiRef      = fixture.loaded.refsById("api")
+        val coreProject = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+        val apiProject  = MonorepoSpecSupport.projectNamed(ctx.projects, "api")
+
+        for {
+          afterCore <- MonorepoVersionSteps.setReleaseVersions.execute(ctx, coreProject)
+          afterApi  <- MonorepoVersionSteps.setReleaseVersions.execute(afterCore, apiProject)
+        } yield {
+          val coreFinal = SbtRuntime.extracted(afterApi.state).get(coreRef / sbt.Keys.version)
+          val apiFinal  = SbtRuntime.extracted(afterApi.state).get(apiRef / sbt.Keys.version)
+          assertEquals(coreFinal, "1.0.0")
+          assertEquals(apiFinal, "2.0.0")
+        }
+      }
+  }
+
   test("setReleaseVersions.execute - write the resolved per-project version file") {
     fixtureResource.use { fixture =>
       val ctx     = fixture.context(
@@ -502,7 +626,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
         val apiVersionFile     = new File(new File(fixture.dir, "api"), "version.sbt")
         val outsideVersionFile = new File(outsideDir, "api-version.sbt")
         val initialContents    = """version := "9.9.9-SNAPSHOT"""" + "\n"
-        val mutatedState       = SbtRuntime.appendWithSession(
+        val mutatedState       = TestSupport.appendSessionSettings(
           fixture.state,
           Seq(
             MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
@@ -575,7 +699,7 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
       .use { fixture =>
         val coreVersionFile = new File(new File(fixture.dir, "core"), "version.sbt")
         val apiVersionFile  = new File(new File(fixture.dir, "api"), "version.sbt")
-        val mutatedState    = SbtRuntime.appendWithSession(
+        val mutatedState    = TestSupport.appendSessionSettings(
           fixture.state,
           Seq(
             MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
@@ -874,6 +998,37 @@ private object MonorepoVersionStepsSpec {
             coreBase,
             settings = projectSettings
           )
+        )
+      }
+      .map { fixture =>
+        VersionFixture(
+          loaded = fixture,
+          versionFile = new File(new File(fixture.dir, "core"), "version.sbt")
+        )
+      }
+
+  def multiProjectFixtureResource(
+      prefix: String
+  ): Resource[IO, VersionFixture] =
+    MonorepoSpecSupport
+      .loadedFixtureResource(prefix) { dir =>
+        val coreBase = new File(dir, "core")
+        val apiBase  = new File(dir, "api")
+        coreBase.mkdirs()
+        apiBase.mkdirs()
+        sbt.IO.write(new File(coreBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(apiBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("core", "api")),
+          MonorepoSpecSupport
+            .versionedProject(
+              "core",
+              coreBase,
+              settings = Seq(sbt.Keys.version := "0.1.0-SNAPSHOT")
+            ),
+          MonorepoSpecSupport
+            .versionedProject("api", apiBase, settings = Seq(sbt.Keys.version := "0.1.0-SNAPSHOT"))
         )
       }
       .map { fixture =>

@@ -1,0 +1,15 @@
+# Regression: a before-version-resolution hook that installs late-bound
+# monorepo version-file resolvers via Extracted.appendWithSession (legacy
+# path) must keep the resolvers visible across every selected project's
+# write. Pre-fix, only `core`'s write used the resolver; `api` silently
+# fell back to the default `api/version.sbt`.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+> releaseIOMonorepo core api with-defaults release-version core=1.0.0 release-version api=2.0.0 next-version core=1.1.0-SNAPSHOT next-version api=2.1.0-SNAPSHOT
+
+$ exists late-bound-version-settings-ran
+> checkLateBoundVersionFiles

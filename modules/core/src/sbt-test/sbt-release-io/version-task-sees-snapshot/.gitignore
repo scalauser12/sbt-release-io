@@ -1,0 +1,8 @@
+target/
+project/target/
+project/project/
+*.class
+*.log
+global/
+publish-target/
+captured-*.txt

@@ -11,7 +11,6 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
 import io.release.runtime.command.ReleaseCommandRunner
-import io.release.runtime.sbt.SbtRuntime
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for monorepo command planning and execution.
@@ -203,7 +202,7 @@ private[monorepo] object MonorepoCommandExecution {
       warnOnDuplicates: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
     val cleanStateFn: State => State =
-      state => CommandStateSupport.cleanReleaseState(state, loadedProjectRefsBlocking(state))
+      state => CommandStateSupport.cleanReleaseState(state)
 
     ReleaseCommandRunner.runPreparedCommand(
       state = state,
@@ -259,11 +258,7 @@ private[monorepo] object MonorepoCommandExecution {
                   }
       result   <- ReleaseCommandRunner.finalizeWithCleanState(
                     finalCtx,
-                    cleanState = state =>
-                      CommandStateSupport.cleanReleaseState(
-                        state,
-                        loadedProjectRefsBlocking(state)
-                      ),
+                    cleanState = state => CommandStateSupport.cleanReleaseState(state),
                     prefix = ReleaseLogPrefixes.Monorepo
                   )
     } yield result
@@ -290,12 +285,6 @@ private[monorepo] object MonorepoCommandExecution {
 
   private def logLines(state: State, lines: Seq[String]): IO[Unit] =
     ReleaseCommandRunner.logLines(state, ReleaseLogPrefixes.Monorepo, lines)
-
-  /** Reads loaded project refs from sbt's extracted structure.
-    * Performs blocking sbt extraction and must only be called from within `IO.blocking`.
-    */
-  private def loadedProjectRefsBlocking(state: State): Seq[ProjectRef] =
-    SbtRuntime.extracted(state).structure.allProjectRefs
 
   private[monorepo] def releaseStartLines(
       stepCount: Int,

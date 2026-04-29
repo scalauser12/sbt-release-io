@@ -6,13 +6,11 @@ import io.release.LoadCompat
 import io.release.ReleaseIOCompat
 import io.release.ReleaseManifestMetadataSupport
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
 import io.release.ReleaseSharedKeys.releaseIOPublishAction
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks
 import io.release.monorepo.ProjectReleaseInfo
-import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
 import io.release.runtime.ReleaseLogPrefixes
@@ -60,16 +58,24 @@ private[monorepo] object MonorepoPublishSteps {
       case _                          => false
     }
 
-  private def evaluateProjectTaskChecked[A](
-      ctx: MonorepoContext,
+  /** Evaluate `key` against the given `state` and return both the next state
+    * and the result. The next state preserves any session mutations the task
+    * produced (e.g., resolver setup) so that the next evaluation in the chain
+    * (typically `publishTo` after `publish / skip`) sees them, matching the
+    * pre-refactor behavior where `evaluatePublishTarget` received the ctx
+    * threaded out of `evaluatePublishSkip`.
+    *
+    * Used from validators that compute against a transient overlay state via
+    * [[MonorepoVersionWorkflow.withReleaseVersionOverlay]] — the overlay
+    * state plus any task-induced mutations stay local to the body and are
+    * discarded once the body returns.
+    */
+  private def evaluateTaskAtState[A](
+      state: State,
       key: TaskKey[A],
-      actionName: String,
       failureMessage: String
-  ): IO[(MonorepoContext, A)] =
-    runTaskChecked(ctx.state, key, actionName)
-      .map { case (newState, value) =>
-        (ctx.withState(newState), value)
-      }
+  ): IO[(State, A)] =
+    runTaskChecked(state, key, PublishArtifactsActionName)
       .recoverWith {
         case NonFatal(cause) if isFailureCommandTaskError(cause) =>
           IO.raiseError(cause)
@@ -77,15 +83,24 @@ private[monorepo] object MonorepoPublishSteps {
           IO.raiseError(new IllegalStateException(failureMessage, cause))
       }
 
-  private def evaluatePublishSkip(
-      ctx: MonorepoContext,
+  private def evaluatePublishSkipAt(
+      state: State,
       project: ProjectReleaseInfo
-  ): IO[(MonorepoContext, Boolean)] =
-    evaluateProjectTaskChecked(
-      ctx,
+  ): IO[(State, Boolean)] =
+    evaluateTaskAtState(
+      state,
       project.ref / publish / Keys.skip,
-      PublishArtifactsActionName,
       s"Failed to evaluate publish / skip for ${project.name}"
+    )
+
+  private def evaluatePublishTargetAt(
+      state: State,
+      project: ProjectReleaseInfo
+  ): IO[(State, Option[Resolver])] =
+    evaluateTaskAtState(
+      state,
+      project.ref / publishTo,
+      s"Failed to evaluate publishTo for ${project.name}"
     )
 
   private[monorepo] def shouldRunPublishHooks(
@@ -93,74 +108,79 @@ private[monorepo] object MonorepoPublishSteps {
       project: ProjectReleaseInfo
   ): IO[Boolean] =
     if (ctx.skipPublish) IO.pure(false)
-    else evaluatePublishSkip(ctx, project).map { case (_, skipped) => !skipped }
+    else
+      // Evaluate the gate against the post-`set-release-version` state so
+      // version-dependent skip patterns (`publish / skip := isSnapshot.value`)
+      // produce the right decision when the frozen-gate cache is populated at
+      // validate time. State is transient — see withReleaseVersionOverlay.
+      MonorepoVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
+        evaluatePublishSkipAt(tempState, project).map { case (_, skipped) => !skipped }
+      }
 
-  private def evaluatePublishTarget(
+  /** Execute-path skip evaluation that threads the task's state mutations
+    * back through `ctx`. Used by `publishArtifacts.execute` because side
+    * effects from the skip evaluation (e.g., resolver setup) should persist
+    * for the subsequent publish task.
+    */
+  private def evaluatePublishSkipPropagating(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): IO[(MonorepoContext, Option[Resolver])] =
-    evaluateProjectTaskChecked(
-      ctx,
-      project.ref / publishTo,
-      PublishArtifactsActionName,
-      s"Failed to evaluate publishTo for ${project.name}"
-    )
+  ): IO[(MonorepoContext, Boolean)] =
+    runTaskChecked(ctx.state, project.ref / publish / Keys.skip, PublishArtifactsActionName)
+      .map { case (newState, value) => (ctx.withState(newState), value) }
+      .recoverWith {
+        case NonFatal(cause) if isFailureCommandTaskError(cause) =>
+          IO.raiseError(cause)
+        case NonFatal(cause)                                     =>
+          IO.raiseError(
+            new IllegalStateException(
+              s"Failed to evaluate publish / skip for ${project.name}",
+              cause
+            )
+          )
+      }
 
+  /** Install release-manifest metadata fallbacks for a project before its publish task runs.
+    *
+    * Hash and tag are normally installed into `session.rawAppend` by
+    * [[MonorepoVcsCommitHelpers.commitVersions]] (when the release commit happens) and
+    * [[MonorepoVcsSteps.tagReleasesPerProject]] (when the tag is created). This helper
+    * fills the gap when the release commit was a no-op (no changes to commit) by using
+    * `vcs.currentHash`, then installs it via `appendSessionSettings` so the publish task
+    * sees it.
+    */
   private def withProjectReleaseState(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] =
     project.releaseVersion match {
-      case None                 => IO.pure(ctx)
-      case Some(releaseVersion) =>
-        for {
-          resolvedMetadata         <- IO.blocking {
-                                        val extracted = SbtRuntime.extracted(ctx.state)
-                                        (
-                                          extracted
-                                            .getOpt(project.ref / releaseIOInternalReleaseHash)
-                                            .flatten,
-                                          extracted
-                                            .getOpt(project.ref / releaseIOInternalReleaseTag)
-                                            .flatten
-                                            .orElse(project.tagName)
-                                        )
-                                      }
-          (releaseHash, releaseTag) = resolvedMetadata
-          fallbackHash             <-
-            releaseHash match {
-              case some @ Some(_) => IO.pure(some)
-              case None           =>
-                ctx.vcs match {
-                  case Some(vcs) => vcs.currentHash.map(Some(_))
-                  case None      => IO.pure(None)
+      case None    => IO.pure(ctx)
+      case Some(_) =>
+        IO.blocking {
+          SbtRuntime
+            .extracted(ctx.state)
+            .getOpt(project.ref / releaseIOInternalReleaseHash)
+            .flatten
+        }.flatMap {
+          case Some(_) => IO.pure(ctx)
+          case None    =>
+            ctx.vcs match {
+              case None      => IO.pure(ctx)
+              case Some(vcs) =>
+                vcs.currentHash.flatMap { hash =>
+                  IO.blocking {
+                    val newState = SbtRuntime.appendSessionSettings(
+                      ctx.state,
+                      ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+                        Seq(project.ref),
+                        hash
+                      )
+                    )
+                    ctx.withState(newState)
+                  }
                 }
             }
-          preservedSettings        <- MonorepoVersionFiles.preservedSettings(
-                                        ctx.state,
-                                        ctx.currentProjects.map(_.ref)
-                                      )
-          updatedCtx               <- IO.blocking {
-                                        val newState = SbtRuntime.appendWithSession(
-                                          ctx.state,
-                                          preservedSettings ++
-                                            Seq(project.ref / version := releaseVersion) ++
-                                            fallbackHash.toSeq.flatMap(hash =>
-                                              ReleaseManifestMetadataSupport.releaseManifestHashSettings(
-                                                Seq(project.ref),
-                                                hash
-                                              )
-                                            ) ++
-                                            releaseTag.toSeq.flatMap(tag =>
-                                              ReleaseManifestMetadataSupport.releaseManifestTagSettings(
-                                                project.ref,
-                                                tag
-                                              )
-                                            )
-                                        )
-                                        ctx.withState(newState)
-                                      }
-        } yield updatedCtx
+        }
     }
 
   /** Check for SNAPSHOT dependencies in each project.
@@ -235,21 +255,29 @@ private[monorepo] object MonorepoPublishSteps {
         if (ctx.skipPublish)
           logInfo(ctx, s"Skipping publish for ${project.name}").as(ctx)
         else
-          evaluatePublishSkip(ctx, project).flatMap { case (skipCtx, skipped) =>
+          // Persistent overlays (release version, hash, tag) live in
+          // `session.rawAppend` from earlier steps via
+          // [[SbtRuntime.appendSessionSettings]], so version-dependent skip
+          // patterns (`publish / skip := isSnapshot.value`) evaluate against
+          // the post-release-version state here without any local overlay.
+          // `withProjectReleaseState` only fills the hash gap if the release
+          // commit was a no-op; it runs after the skip eval so a `true` skip
+          // short-circuits before any optional VCS work.
+          evaluatePublishSkipPropagating(ctx, project).flatMap { case (skipCtx, skipped) =>
             if (skipped)
               logInfo(skipCtx, s"Skipping publish for ${project.name} (publish / skip := true)")
                 .as(skipCtx)
             else
-              withProjectReleaseState(skipCtx, project).flatMap(publishCtx =>
+              withProjectReleaseState(skipCtx, project).flatMap { releaseCtx =>
                 if (
                   LoadCompat
-                    .containsScopedKey(publishCtx.state, project.ref / releaseIOPublishAction)
+                    .containsScopedKey(releaseCtx.state, project.ref / releaseIOPublishAction)
                 )
-                  runProjectTask(publishCtx, project.ref / releaseIOPublishAction)
+                  runProjectTask(releaseCtx, project.ref / releaseIOPublishAction)
                 else
-                  logWarn(publishCtx, fallbackToPublishWarning(project)) *>
-                    runProjectTask(publishCtx, project.ref / publish)
-              )
+                  logWarn(releaseCtx, fallbackToPublishWarning(project)) *>
+                    runProjectTask(releaseCtx, project.ref / publish)
+              }
           },
       validateWithContext = Some((ctx, project) =>
         if (ctx.skipPublish) IO.pure(ctx)
@@ -259,20 +287,33 @@ private[monorepo] object MonorepoPublishSteps {
           ).flatMap {
             case false => IO.pure(ctx)
             case true  =>
-              for {
-                skipResult                <- evaluatePublishSkip(ctx, project)
-                (skipCtx, publishSkipped)  = skipResult
-                targetCtxAndPublishTarget <-
-                  if (publishSkipped) IO.pure(skipCtx -> Option.empty[Resolver])
-                  else evaluatePublishTarget(skipCtx, project)
-                (targetCtx, publishTarget) = targetCtxAndPublishTarget
-                _                         <- PublishValidation.requirePublishTarget(
-                                               project.ref.project
-                                             )(
-                                               publishSkipped,
-                                               publishTarget.isEmpty
-                                             )
-              } yield targetCtx
+              // Evaluate skip + publishTo against a transient overlay state so
+              // version-dependent `publish / skip := isSnapshot.value` resolves
+              // against the post-`set-release-version` value. State mutations
+              // from the skip task are threaded into the publishTo evaluation
+              // (matches the pre-refactor behavior where evaluatePublishTarget
+              // received the ctx threaded out of evaluatePublishSkip — important
+              // for builds whose `publish / skip` is a task that installs
+              // resolver settings via session updates). The overlay state and
+              // any task-induced mutations are discarded once the body returns,
+              // so `inquireVersions.execute` later sees the original snapshot
+              // state for its version-task evaluation.
+              MonorepoVersionWorkflow
+                .withReleaseVersionOverlay(ctx) { tempState =>
+                  for {
+                    skipResult                      <- evaluatePublishSkipAt(tempState, project)
+                    (afterSkipState, publishSkipped) = skipResult
+                    publishTarget                   <-
+                      if (publishSkipped) IO.pure(Option.empty[Resolver])
+                      else
+                        evaluatePublishTargetAt(afterSkipState, project)
+                          .map { case (_, target) => target }
+                    _                               <- PublishValidation.requirePublishTarget(
+                                                         project.ref.project
+                                                       )(publishSkipped, publishTarget.isEmpty)
+                  } yield ()
+                }
+                .as(ctx)
           }
       ),
       enableCrossBuild = true

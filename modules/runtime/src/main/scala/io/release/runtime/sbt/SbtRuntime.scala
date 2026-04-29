@@ -54,6 +54,54 @@ private[release] object SbtRuntime {
   def appendWithSession(state: State, settings: Seq[Setting[?]]): State =
     extracted(state).appendWithSession(settings, state)
 
+  /** Install settings into `session.rawAppend` so they survive subsequent
+    * `appendWithSession` calls.
+    *
+    * `Extracted.appendWithSession` reapplies `session.mergeSettings ++ newSettings`
+    * to the structure but stores the unchanged session back into state. Settings it
+    * installs live in `structure.settings` only; the next `appendWithSession` call
+    * rederives `structure` from `session.mergeSettings` (which excludes the prior
+    * call's settings) and discards them. Settings installed here, by contrast, are
+    * appended to `session.rawAppend` and contribute to every future
+    * `mergeSettings = original ++ merge(append) ++ rawAppend`, so they persist
+    * across all subsequent calls.
+    *
+    * Use this for overlays that must persist across multiple release steps:
+    *   - the post-`set-release-version` `version` value, which the publish task
+    *     evaluates against;
+    *   - release-manifest metadata installed by commit/tag steps;
+    *   - hook-installed settings (e.g. a `before-publish` hook setting
+    *     `publish/skip := true`) that the subsequent step must observe.
+    *
+    * For transient evaluation that should not propagate (e.g. validating
+    * version-dependent skip patterns without polluting the execute pipeline),
+    * use [[appendWithSession]] instead.
+    */
+  def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
+    sbt.ReleaseIOLoadCompatBridge.appendSessionSettings(state, settings)
+
+  /** Strip every entry whose `AttributeKey` is in `keys` from
+    * `session.rawAppend`, then reapply the resulting structure.
+    *
+    * Counterpart to [[appendSessionSettings]] for cleanup. Settings installed
+    * via `appendSessionSettings` live in `session.rawAppend` and contribute
+    * to every future `mergeSettings` rebuild. Overriding them with
+    * `appendWithSession(state, key := default)` only writes into
+    * `structure.settings`; the next `appendSessionSettings` re-derives the
+    * structure from `mergeSettings` and the overrides vanish, leaving the
+    * stale `rawAppend` entries visible again.
+    *
+    * Filtering by `AttributeKey` removes the stale entries from `rawAppend`
+    * itself, so subsequent `mergeSettings` calls no longer see them. The
+    * resolved value falls back to whatever the build/original layer
+    * provides — typically the default installed by build settings.
+    *
+    * Returns `state` unchanged when no entries match, avoiding a redundant
+    * `Project.setProject` call.
+    */
+  def clearRawAppendByKey(state: State, keys: Seq[AttributeKey[?]]): State =
+    sbt.ReleaseIOLoadCompatBridge.clearRawAppendByKey(state, keys)
+
   def hasFailureCommand(state: State): Boolean =
     state.remainingCommands.headOption.contains(FailureCommand)
 
