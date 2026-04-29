@@ -525,11 +525,15 @@ class VersionStepsSpec extends CatsEffectSuite {
 
   test(
     "withReleaseVersionOverlay - pass through original state when no CLI override is " +
-      "present and ctx.versions is unset"
+      "present and tentative resolution fails (regression: must not fail validate when " +
+      "the version task is missing or throws — that diagnosis belongs to inquireVersions)"
   ) {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
         versionFile =>
+          // releaseIOVersioningReleaseVersion / NextVersion intentionally NOT installed,
+          // so the non-prompting tentative resolution raises and the helper degrades to
+          // a pass-through against the original snapshot state.
           val state = TestSupport.loadedState(
             dir,
             Seq(
@@ -551,6 +555,49 @@ class VersionStepsSpec extends CatsEffectSuite {
               IO.pure(SbtRuntime.extracted(tempState).get(sbt.Keys.version))
             }
             .map(observed => assertEquals(observed, "0.1.0-SNAPSHOT"))
+      }
+    }
+  }
+
+  test(
+    "withReleaseVersionOverlay - run body against tentative non-prompting overlay when " +
+      "no CLI override is present (closes publish-validation gap for default flows)"
+  ) {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                sbt.Keys.version                  := "0.1.0-SNAPSHOT",
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
+                  useGlobalVersion = true
+                ),
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+              )
+            )
+          )
+          val ctx   = ReleaseContext(state = state)
+
+          ReleaseVersionWorkflow
+            .withReleaseVersionOverlay(ctx) { tempState =>
+              IO.pure(SbtRuntime.extracted(tempState).get(sbt.Keys.version))
+            }
+            .map { overlaidVersion =>
+              // Body sees the tentative release version (the non-prompting default
+              // strips -SNAPSHOT). Versions without `-SNAPSHOT` make
+              // `publish / skip := isSnapshot.value` evaluate to `false` — that
+              // is the signal the publish gate needs at validate time.
+              assertEquals(overlaidVersion, "0.1.0")
+              // ctx.state is untouched.
+              assertEquals(SbtRuntime.extracted(ctx.state).get(sbt.Keys.version), "0.1.0-SNAPSHOT")
+              assertEquals(ctx.releaseVersion, None)
+            }
       }
     }
   }

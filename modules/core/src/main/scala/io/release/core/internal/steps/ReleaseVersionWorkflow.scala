@@ -96,46 +96,65 @@ private[release] object ReleaseVersionWorkflow {
       writeVersion(ctx, releaseVersion)
     }
 
-  /** Run `body` against a transient sbt `State` that has the resolved release
-    * version applied via `appendWithSession`. Used by validators
-    * ([[PublishSteps.shouldRunPublishHooks]],
-    * [[PublishSteps.publishArtifacts]]) that need to evaluate
-    * `publish / skip` and `publishTo` against the post-`set-release-version`
-    * state — without leaking that state into the rest of the validate /
-    * execute pipeline.
+  /** Run `body` against a transient sbt `State` that has a release version applied via
+    * `appendWithSession`. Used by validators ([[PublishSteps.shouldRunPublishHooks]],
+    * [[PublishSteps.publishArtifacts]]) that need to evaluate `publish / skip` and
+    * `publishTo` against the post-`set-release-version` state — without leaking that
+    * state into the rest of the validate / execute pipeline.
     *
-    * Why local-only: `ExecutionEngine.runMainSegment` uses the validated
-    * context as the seed for execute. If we mutated `ctx.state` at validate
-    * time, `inquireVersions.execute` would later evaluate
-    * `releaseIOVersioningNextVersion` (and friends) with the wrong
-    * `version.value` / `isSnapshot.value`, producing an incorrect next
-    * version for tasks that read the session.
+    * Why local-only: `ExecutionEngine.runMainSegment` uses the validated context as the
+    * seed for execute. If we mutated `ctx.state` at validate time,
+    * `inquireVersions.execute` would later evaluate `releaseIOVersioningNextVersion`
+    * (and friends) with the wrong `version.value` / `isSnapshot.value`, producing an
+    * incorrect next version for tasks that read the session.
     *
-    * Source of truth: the CLI release-version override on
-    * `executionState.plan`, falling back to `ctx.releaseVersion` (which
-    * future hooks may pre-populate). When neither is set (auto-resolve /
-    * with-defaults / prompt flow), this is a pass-through — `body` runs
-    * against the original state. That gap is intentional and tracked
-    * separately.
+    * Resolution order:
+    *   1. `ctx.releaseVersion` (set after `inquireVersions.execute`, or pre-populated
+    *      by hooks).
+    *   2. The CLI release-version override on `executionState.plan`.
+    *   3. A non-prompting tentative resolution via `resolveVersions(ctx, allowPrompts =
+    *      false)` — covers default flows (`with-defaults`, interactive, auto-resolve)
+    *      where neither (1) nor (2) is set. The tentative version is whatever
+    *      `releaseIOVersioningReleaseVersion` would suggest as a default; it is always
+    *      non-snapshot, which is all the gate evaluators need.
+    *   4. If the tentative resolution itself fails (missing version task, unreadable
+    *      version file, etc.), pass through to `body(ctx.state)` so we don't break
+    *      builds that work today — `inquireVersions.validate` / `execute` still own
+    *      reporting that failure.
     */
   def withReleaseVersionOverlay[A](
       ctx: ReleaseContext
   )(body: State => IO[A]): IO[A] = {
-    val maybeReleaseVersion =
+    val explicit =
       ctx.releaseVersion.orElse(ctx.executionState.flatMap(_.plan.releaseVersionOverride))
 
-    maybeReleaseVersion match {
-      case None                 => body(ctx.state)
-      case Some(releaseVersion) =>
-        IO.blocking {
-          val versionPlan = resolveVersionPlan(ctx)
-          SbtRuntime.appendWithSession(
-            ctx.state,
-            sessionSettings(versionPlan) ++ versionValueSettings(versionPlan, releaseVersion)
-          )
-        }.flatMap(body)
+    explicit match {
+      case Some(releaseVersion) => applyReleaseVersionOverlay(ctx, releaseVersion, body)
+      case None                 =>
+        resolveTentativeReleaseVersion(ctx).flatMap {
+          case Some(releaseVersion) => applyReleaseVersionOverlay(ctx, releaseVersion, body)
+          case None                 => body(ctx.state)
+        }
     }
   }
+
+  private def applyReleaseVersionOverlay[A](
+      ctx: ReleaseContext,
+      releaseVersion: String,
+      body: State => IO[A]
+  ): IO[A] =
+    IO.blocking {
+      val versionPlan = resolveVersionPlan(ctx)
+      SbtRuntime.appendWithSession(
+        ctx.state,
+        sessionSettings(versionPlan) ++ versionValueSettings(versionPlan, releaseVersion)
+      )
+    }.flatMap(body)
+
+  private def resolveTentativeReleaseVersion(ctx: ReleaseContext): IO[Option[String]] =
+    resolveVersions(ctx, allowPrompts = false)
+      .map { case (_, resolved) => Option(resolved.releaseVersion).filter(_.nonEmpty) }
+      .handleError(_ => None)
 
   def writeNextVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (_, nextVersion) =>

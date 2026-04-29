@@ -347,13 +347,55 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
   }
 
   test(
-    "withReleaseVersionOverlay - pass through original state when no project has a resolved " +
-      "release version (auto-resolve / with-defaults flow)"
+    "withReleaseVersionOverlay - tentative non-prompting resolution overlays every selected " +
+      "project when no explicit releaseVersion is set (closes publish-validation gap for " +
+      "auto-resolve / with-defaults / prompt flows)"
   ) {
     MonorepoVersionStepsSpec
-      .multiProjectFixtureResource("monorepo-overlay-passthrough")
+      .multiProjectFixtureResource("monorepo-overlay-tentative")
       .use { fixture =>
         val ctx     = fixture.context(Seq("core", "api"))
+        val coreRef = fixture.loaded.refsById("core")
+        val apiRef  = fixture.loaded.refsById("api")
+
+        MonorepoVersionWorkflow
+          .withReleaseVersionOverlay(ctx) { tempState =>
+            val extracted = SbtRuntime.extracted(tempState)
+            IO.pure(
+              (
+                extracted.get(coreRef / sbt.Keys.version),
+                extracted.get(apiRef / sbt.Keys.version)
+              )
+            )
+          }
+          .map { case (coreInBody, apiInBody) =>
+            // The fallback bump strips -SNAPSHOT, so each project's overlaid
+            // version is non-snapshot — versions without `-SNAPSHOT` make
+            // `publish / skip := isSnapshot.value` evaluate to `false`, which
+            // is the signal the publish gate needs at validate time.
+            assertEquals(coreInBody, "0.1.0")
+            assertEquals(apiInBody, "0.1.0")
+          }
+      }
+  }
+
+  test(
+    "withReleaseVersionOverlay - tentative resolution failure for a project leaves that " +
+      "project at its build-time version (regression: per-project failure must not break " +
+      "the overlay or fail validate; inquireVersions still owns reporting the failure)"
+  ) {
+    MonorepoVersionStepsSpec
+      .fixtureResource(
+        "monorepo-overlay-tentative-failure",
+        projectSettings = Seq(
+          sbt.Keys.version                  := "0.1.0-SNAPSHOT",
+          releaseIOVersioningReleaseVersion := ((_: String) =>
+            throw new RuntimeException("boom in release-version task")
+          )
+        )
+      )
+      .use { fixture =>
+        val ctx     = fixture.context(Seq("core"))
         val coreRef = fixture.loaded.refsById("core")
 
         MonorepoVersionWorkflow
@@ -365,13 +407,12 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
   }
 
   test(
-    "withReleaseVersionOverlay - overlay only the projects whose releaseVersion is resolved " +
-      "(unresolved projects keep their build-time version)"
+    "withReleaseVersionOverlay - mixed explicit + tentative: explicit releaseVersion wins for " +
+      "its project; other projects fall back to the tentative non-prompting resolution"
   ) {
     MonorepoVersionStepsSpec
       .multiProjectFixtureResource("monorepo-overlay-partial")
       .use { fixture =>
-        // Only `core` has a CLI override; `api` will be resolved later.
         val ctx     = fixture.context(
           Seq("core", "api"),
           versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
@@ -389,9 +430,10 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
             )
           }
           .map { case (coreInBody, apiInBody) =>
+            // core: explicit override wins (1.0.0). api: no override, tentative
+            // bump strips -SNAPSHOT (0.1.0).
             assertEquals(coreInBody, "1.0.0")
-            // api has no releaseVersion → overlay leaves its build-time setting alone.
-            assertEquals(apiInBody, "0.1.0-SNAPSHOT")
+            assertEquals(apiInBody, "0.1.0")
           }
       }
   }

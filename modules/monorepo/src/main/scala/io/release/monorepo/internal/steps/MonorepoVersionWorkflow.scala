@@ -121,39 +121,64 @@ private[monorepo] object MonorepoVersionWorkflow {
       _.markReleaseVersionFilesPrevalidated
     )
 
-  private def releaseVersionOverlaySettings(ctx: MonorepoContext): Seq[Setting[?]] =
-    ctx.currentProjects.flatMap { p =>
-      p.releaseVersion.toSeq.map(rv => p.ref / version := rv)
+  private def releaseVersionOverlaySettings(ctx: MonorepoContext): IO[Seq[Setting[?]]] =
+    ctx.currentProjects.foldLeft(IO.pure(Vector.empty[Setting[?]])) { (acc, p) =>
+      acc.flatMap { settings =>
+        p.releaseVersion match {
+          case Some(rv) => IO.pure(settings :+ (p.ref / version := rv))
+          case None     =>
+            resolveTentativeReleaseVersion(ctx, p).map {
+              case Some(rv) => settings :+ (p.ref / version := rv)
+              case None     => settings
+            }
+        }
+      }
     }
 
-  /** Run `body` against a transient sbt `State` that has every selected
-    * project's resolved release version applied via `appendWithSession`.
-    * Used by validators (notably
-    * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.shouldRunPublishHooks]]
-    * and
-    * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.publishArtifacts]])
-    * that need to evaluate `publish / skip` and `publishTo` against the
-    * post-`set-release-version` state — without leaking that state into the
-    * rest of the validate / execute pipeline.
+  /** Run `body` against a transient sbt `State` that has a release version applied via
+    * `appendWithSession` for every selected project. Used by validators (notably
+    * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.shouldRunPublishHooks]] and
+    * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.publishArtifacts]]) that
+    * need to evaluate `publish / skip` and `publishTo` against the post-`set-release-
+    * version` state — without leaking that state into the rest of the validate / execute
+    * pipeline.
     *
-    * Why local-only: `ExecutionEngine.runMainSegment` uses the validated
-    * context as the seed for execute. If we mutated `ctx.state` at validate
-    * time, `inquireVersions.execute` would later evaluate
-    * `releaseIOMonorepoVersioningNextVersion` (and friends) with the wrong
-    * `version.value` / `isSnapshot.value`, producing an incorrect next
-    * version for tasks that read the session.
+    * Why local-only: `ExecutionEngine.runMainSegment` uses the validated context as the
+    * seed for execute. If we mutated `ctx.state` at validate time,
+    * `inquireVersions.execute` would later evaluate `releaseIOMonorepoVersioningNextVersion`
+    * (and friends) with the wrong `version.value` / `isSnapshot.value`, producing an
+    * incorrect next version for tasks that read the session.
     *
-    * Pass-through when no project has a resolved release version
-    * (auto-resolve / with-defaults / prompt flows). Tracked separately.
+    * Per-project resolution order:
+    *   1. `project.releaseVersion` (set after `inquireVersions.execute` for that project,
+    *      or pre-populated by hooks / CLI `release-version project=…` overrides).
+    *   2. A non-prompting tentative resolution via
+    *      `resolveProjectVersions(ctx, project, allowPrompts = false)` — covers default
+    *      flows (`with-defaults`, interactive, auto-resolve) where (1) is not yet set.
+    *      The tentative version is whatever `releaseIOMonorepoVersioningReleaseVersion`
+    *      would suggest as a default; it is always non-snapshot, which is all the gate
+    *      evaluators need.
+    *   3. If the tentative resolution fails for a project (missing version task,
+    *      unreadable version file, etc.), that project is omitted from the overlay so we
+    *      don't break builds that work today. `inquireVersions.validate` / `execute`
+    *      still own reporting that failure.
     */
   def withReleaseVersionOverlay[A](
       ctx: MonorepoContext
-  )(body: State => IO[A]): IO[A] = {
-    val versionSettings = releaseVersionOverlaySettings(ctx)
-    if (versionSettings.isEmpty) body(ctx.state)
-    else
-      IO.blocking(SbtRuntime.appendWithSession(ctx.state, versionSettings)).flatMap(body)
-  }
+  )(body: State => IO[A]): IO[A] =
+    releaseVersionOverlaySettings(ctx).flatMap { versionSettings =>
+      if (versionSettings.isEmpty) body(ctx.state)
+      else
+        IO.blocking(SbtRuntime.appendWithSession(ctx.state, versionSettings)).flatMap(body)
+    }
+
+  private def resolveTentativeReleaseVersion(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Option[String]] =
+    resolveProjectVersions(ctx, project, allowPrompts = false)
+      .map { case (_, resolved) => Option(resolved.releaseVersion).filter(_.nonEmpty) }
+      .handleError(_ => None)
 
   def writeNextVersion(
       ctx: MonorepoContext,

@@ -1,0 +1,19 @@
+# Regression: publish/skip := isSnapshot.value should NOT bypass the validate-time
+# publishTo check, even when the user supplies no release-version CLI argument
+# (default with-defaults / auto-resolve flow). Validate must overlay a tentative
+# (non-prompting) release version per project so publish/skip evaluates against the
+# post-set-release-version state (false), not the pre-set snapshot state (true).
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release should fail at validate without any release-version argument: tentative
+# resolution strips -SNAPSHOT, publish/skip flips to false, and publishTo is missing.
+-> releaseIOMonorepo core with-defaults
+
+# Verify no commits or tags were created — the failure must happen at validate time,
+# before any release commit is made or any local tag is created.
+> checkNoCommits
+> checkNoTags

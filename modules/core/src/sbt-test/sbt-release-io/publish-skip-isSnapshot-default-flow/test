@@ -1,0 +1,19 @@
+# Regression: publish/skip := isSnapshot.value should NOT bypass the validate-time
+# publishTo check, even when the user supplies no release-version CLI argument
+# (default with-defaults / auto-resolve flow). Validate must overlay a tentative
+# (non-prompting) release version so publish/skip evaluates against the
+# post-set-release-version state (false), not the pre-set snapshot state (true).
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Release should fail at validate without any release-version argument: tentative
+# resolution strips -SNAPSHOT, publish/skip flips to false, and publishTo is missing.
+-> releaseIO with-defaults
+
+# Verify no commits/tags/version writes — the failure must happen at validate time.
+> checkGitCommitCount 1
+> checkNoGitTags
+> checkVersionUnchanged
