@@ -17,10 +17,10 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.12.2")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.12.3")
 ```
 
-> **Note:** This page describes the current published monorepo contract in `v0.12.2`; see
+> **Note:** This page describes the current published monorepo contract in `v0.12.3`; see
 > [CHANGELOG.md](../../CHANGELOG.md) for the full release history and upgrade notes.
 
 This installs the monorepo plugin plus the transitive core settings surface, so

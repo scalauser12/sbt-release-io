@@ -4,6 +4,43 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.12.3
+
+Published: 2026-04-29
+GitHub release:
+[v0.12.3](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.3)
+
+`v0.12.3` is a patch release for both plugins that tightens publish validation around
+version-dependent publish gates and keeps the sbt 2 release lane aligned with the tag-driven
+publishing workflow.
+
+### Fixes
+
+- Apply tentative, non-prompting release-version overlays during validate-time publish checks so
+  default flows catch `publish / skip := isSnapshot.value` builds before any release mutations.
+- Preserve late-bound/session settings across publish validation and execution so hook-installed
+  publish settings, manifest metadata, and version overlays remain visible to the intended steps.
+
+### Improvements
+
+- Refine the sbt 2 clean lane and tag-driven release workflow so local IDE-generated build files
+  do not interfere with sbt 2 verification.
+- Clarify monorepo logging wrappers around shared release diagnostics.
+
+### Documentation
+
+- Refresh the root README, module READMEs, and published walkthrough/getting-started docs to
+  reference `0.12.3`.
+
+### Verification
+
+- `git diff --check`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.12.2
 
 Published: 2026-04-29
