@@ -387,17 +387,6 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       )
     )
 
-  private def stateWithScalaVersion(
-      state: sbt.State,
-      value: String
-  ): IO[sbt.State] =
-    IO.blocking(
-      TestSupport.appendSessionSettings(
-        state,
-        Seq(scalaVersion := value)
-      )
-    )
-
   private def stateWithProjectScalaVersion(
       state: sbt.State,
       ref: sbt.ProjectRef,

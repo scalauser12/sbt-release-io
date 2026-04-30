@@ -10,15 +10,8 @@ import munit.CatsEffectSuite
 import sbt.Keys.*
 import sbt.LocalProject
 import sbt.Project
-import sbt.State
-import sbt.internal.util.AttributeMap
-import sbt.internal.util.ConsoleOut
-import sbt.internal.util.GlobalLogging
-import sbt.internal.util.MainAppender
 
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.PrintStream
 
 class MonorepoCrossBuildSpec extends CatsEffectSuite {
 
@@ -89,29 +82,5 @@ class MonorepoCrossBuildSpec extends CatsEffectSuite {
             }
         }
       }
-  }
-
-  private def bufferedState(dir: File, consoleBuffer: ByteArrayOutputStream): State = {
-    val logFile       = new File(dir, "sbt-test.log")
-    val consoleOut    = ConsoleOut.printStreamOut(new PrintStream(consoleBuffer))
-    val globalLogging =
-      GlobalLogging.initial(
-        MainAppender.globalDefault(consoleOut),
-        logFile,
-        consoleOut
-      )
-
-    State(
-      configuration = TestSupport.dummyAppConfiguration(dir),
-      definedCommands = Nil,
-      exitHooks = Set.empty,
-      onFailure = None,
-      remainingCommands = Nil,
-      history = State.newHistory,
-      attributes = AttributeMap.empty,
-      globalLogging = globalLogging,
-      currentCommand = None,
-      next = State.Continue
-    )
   }
 }

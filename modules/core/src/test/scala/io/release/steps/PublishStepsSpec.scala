@@ -5,7 +5,6 @@ import cats.effect.Resource
 import io.release.ReleaseContext
 import io.release.ReleaseIOCompat
 import io.release.ReleasePluginIO
-import io.release.ReleasePluginIO
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport

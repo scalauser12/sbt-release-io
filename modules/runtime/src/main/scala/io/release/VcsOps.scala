@@ -141,7 +141,7 @@ private[release] object VcsOps {
       ctx: C,
       vcs: Vcs,
       logPrefix: String,
-      log: Option[String => Unit] = None
+      log: Option[String => Unit]
   ): IO[RemoteCheckResult[C]] =
     for {
       remote      <- vcs.trackingRemote

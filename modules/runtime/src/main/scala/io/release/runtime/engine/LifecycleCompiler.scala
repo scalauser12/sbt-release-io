@@ -245,7 +245,7 @@ private[release] object LifecycleCompiler {
       hooks: Seq[Hook],
       gate: (C, I) => IO[Boolean],
       gateMode: Option[(C, I) => String],
-      narrowExecute: Option[(C, I) => IO[Boolean]] = None
+      narrowExecute: Option[(C, I) => IO[Boolean]]
   )(
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],

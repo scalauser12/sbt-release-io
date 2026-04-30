@@ -315,7 +315,7 @@ private[monorepo] object ChangeDetection {
       state: State,
       excludePaths: Set[String],
       diffScope: Either[String, String],
-      childDirPrefixes: Set[String] = Set.empty
+      childDirPrefixes: Set[String]
   ): IO[Boolean] = {
     import TagLookupResult.*
 

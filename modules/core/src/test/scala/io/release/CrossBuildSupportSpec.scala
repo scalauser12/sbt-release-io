@@ -492,7 +492,6 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
   test(
     "switchScalaVersion preserves rawAppend Scala overrides for projects outside affectedRefs (e.g. user's pre-release `++ X` on a sibling project)"
   ) {
-    val baseScala     = TestSupport.CurrentScalaVersion
     val plusPlusScala = TestSupport.alternateScalaVersion
     val switchedScala = TestSupport.CurrentScalaVersion
 

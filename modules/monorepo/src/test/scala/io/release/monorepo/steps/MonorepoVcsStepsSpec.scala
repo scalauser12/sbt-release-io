@@ -11,7 +11,6 @@ import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.ProjectReleaseInfo
-import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoDefaultSettings
 import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.internal.SelectionMode
