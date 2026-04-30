@@ -8,8 +8,11 @@ import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
+import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Exec
+
+import java.io.File
 
 class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecSupport {
 
@@ -571,6 +574,84 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
     }
   }
 
+  test("compose - skip push readiness when setup segment fails") {
+    contextResource.use { ctx =>
+      Ref.of[IO, Int](0).flatMap { hasUpstreamCalls =>
+        val pCtx     = ctx.withVcs(new ComposePushPrepStubVcs(hasUpstreamCalls))
+        val boundary = ProcessStep.Single[MonorepoContext](
+          name = "detect-or-select-projects",
+          execute = _ =>
+            IO.raiseError(
+              new IllegalStateException(
+                "No projects have changed since their last release tag."
+              )
+            ),
+          roles = Set(BuiltInStepRole.ProjectSelection, BuiltInStepRole.SelectionBoundary)
+        )
+        val pushStep = ProcessStep.Single[MonorepoContext](
+          name = "push-changes",
+          execute = c => IO.pure(c),
+          roles = Set(BuiltInStepRole.PushChanges)
+        )
+
+        MonorepoComposer.compose(Seq(boundary, pushStep))(pCtx).flatMap { result =>
+          hasUpstreamCalls.get.map { calls =>
+            assert(result.failed)
+            assertEquals(calls, 0)
+            assert(
+              result.failureCause.exists(_.getMessage.contains("No projects have changed"))
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("compose - skip after-selection hooks when push prep fails") {
+    contextResource.use { ctx =>
+      dummyProjects("api").flatMap { projects =>
+        Ref.of[IO, List[String]](Nil).flatMap { observed =>
+          Ref.of[IO, Int](0).flatMap { hasUpstreamCalls =>
+            val pCtx     = ctx.withVcs(
+              new ComposePushPrepStubVcs(hasUpstreamCalls, hasUpstream0 = IO.pure(false))
+            )
+            val boundary = ProcessStep.Single[MonorepoContext](
+              name = "detect-or-select-projects",
+              execute = c => observed.update(_ :+ "select").as(c.withProjects(projects)),
+              roles = Set(BuiltInStepRole.ProjectSelection, BuiltInStepRole.SelectionBoundary)
+            )
+            val hook     = ProcessStep.Single[MonorepoContext](
+              name = "after-selection:observe",
+              execute = c => observed.update(_ :+ "hook").as(c)
+            )
+            val pushStep = ProcessStep.Single[MonorepoContext](
+              name = "push-changes",
+              execute = c => observed.update(_ :+ "push").as(c),
+              roles = Set(BuiltInStepRole.PushChanges)
+            )
+
+            MonorepoComposer.compose(Seq(boundary, hook, pushStep))(pCtx).attempt.flatMap {
+              result =>
+                observed.get.flatMap { events =>
+                  hasUpstreamCalls.get.map { calls =>
+                    assert(result.isLeft)
+                    assertEquals(events, List("select"))
+                    assertEquals(calls, 1)
+                    result.left.foreach {
+                      case e: IllegalStateException =>
+                        assert(e.getMessage.contains("No tracking branch configured"))
+                      case other                    =>
+                        fail(s"Expected IllegalStateException but got $other")
+                    }
+                  }
+                }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("compose - preserve checkpointed context when tracked per-project execute fails") {
     contextResource.use { ctx =>
       dummyProjects("core").flatMap { projects =>
@@ -598,4 +679,30 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       }
     }
   }
+}
+
+private final class ComposePushPrepStubVcs(
+    hasUpstreamCalls: Ref[IO, Int],
+    hasUpstream0: IO[Boolean] = IO.pure(true)
+) extends Vcs {
+  override val baseDir: File                                                               = new File(".")
+  override def commandName: String                                                         = "git"
+  override def currentHash: IO[String]                                                     = IO.pure("abc123")
+  override def currentBranch: IO[String]                                                   = IO.pure("main")
+  override def trackingRemote: IO[String]                                                  = IO.pure("origin")
+  override def upstreamTrackingHash: IO[Option[String]]                                    = IO.pure(None)
+  override def hasUpstream: IO[Boolean]                                                    =
+    hasUpstreamCalls.update(_ + 1) *> hasUpstream0
+  override def isBehindRemote: IO[Boolean]                                                 = IO.pure(false)
+  override def existsTag(name: String): IO[Boolean]                                        = IO.pure(false)
+  override def modifiedFiles: IO[Seq[String]]                                              = IO.pure(Nil)
+  override def stagedFiles: IO[Seq[String]]                                                = IO.pure(Nil)
+  override def untrackedFiles: IO[Seq[String]]                                             = IO.pure(Nil)
+  override def status: IO[String]                                                          = IO.pure("")
+  override def checkRemote(remote: String): IO[Int]                                        = IO.pure(0)
+  override def add(files: String*): IO[Unit]                                               = IO.unit
+  override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit]          = IO.unit
+  override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
+    IO.unit
+  override def pushChanges: IO[Unit]                                                       = IO.unit
 }

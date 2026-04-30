@@ -1,6 +1,7 @@
 package io.release.monorepo.internal
 
 import cats.effect.IO
+import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoCrossBuild
@@ -36,22 +37,41 @@ private[monorepo] object MonorepoComposer {
 
     if (plan.hasSelectionBoundary)
       for {
-        setupCtx <- runSequentialValidateThenExecute(
-                      plan.setupSteps,
-                      initialCtx,
-                      crossBuild
-                    )
-        finalCtx <- if (setupCtx.failed) IO.pure(setupCtx)
-                    else
-                      logSelectedProjects(setupCtx) *>
-                        runMainSegment(plan.mainSteps, setupCtx, crossBuild)
+        preSetupCtx <- runSequentialValidateThenExecute(
+                         plan.preSelectionSetupSteps,
+                         initialCtx,
+                         crossBuild
+                       )
+        finalCtx    <- if (preSetupCtx.failed) IO.pure(preSetupCtx)
+                       else
+                         VcsOps
+                           .preparePushReleaseIfNeeded(
+                             preSetupCtx,
+                             plan.mainSteps,
+                             LogPrefix
+                           )
+                           .flatMap { preparedCtx =>
+                             for {
+                               postSetupCtx <- runSequentialValidateThenExecute(
+                                                 plan.postSelectionSetupSteps,
+                                                 preparedCtx,
+                                                 crossBuild
+                                               )
+                               resultCtx    <- if (postSetupCtx.failed) IO.pure(postSetupCtx)
+                                               else
+                                                 logSelectedProjects(postSetupCtx) *>
+                                                   runMainSegment(
+                                                     plan.mainSteps,
+                                                     postSetupCtx,
+                                                     crossBuild
+                                                   )
+                             } yield resultCtx
+                           }
       } yield finalCtx
     else
-      runSequentialValidateThenExecute(
-        steps,
-        initialCtx,
-        crossBuild
-      )
+      VcsOps
+        .preparePushReleaseIfNeeded(initialCtx, steps, LogPrefix)
+        .flatMap(runSequentialValidateThenExecute(steps, _, crossBuild))
   }
 
   private[monorepo] def selectedProjectsLine(ctx: MonorepoContext): String = {

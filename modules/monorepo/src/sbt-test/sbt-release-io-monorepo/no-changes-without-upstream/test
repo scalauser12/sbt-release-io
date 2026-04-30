@@ -1,0 +1,27 @@
+# Test: with push enabled but no upstream tracking branch configured, the
+# detect-changes "no projects changed" path must still abort cleanly. Push
+# readiness is deferred until after project selection, so the missing upstream
+# is never observed when there is nothing to release.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Create tags for all projects (simulating a prior release).
+$ exec git tag core/v0.1.0
+$ exec git tag api/v0.1.0
+
+# No remote / upstream is configured for the current branch. With push enabled
+# (default), the release must still abort because no projects changed; it must
+# not fail earlier on a tracking-branch precheck.
+-> releaseIOMonorepo with-defaults
+
+# The failure must be the no-projects path, not a missing-upstream precheck.
+# sbt writes state.log output to target/global-logging/sbt-global-log<digits>.log
+# inside the scripted test workspace.
+$ exec /bin/sh -c 'grep -q "No projects have changed" target/global-logging/sbt-global-log*.log'
+$ exec /bin/sh -c 'if grep -q "No tracking branch configured" target/global-logging/sbt-global-log*.log; then exit 1; fi'
+
+# Verify nothing was tagged or written: versions unchanged, no v0.2.0 tags.
+> checkAll

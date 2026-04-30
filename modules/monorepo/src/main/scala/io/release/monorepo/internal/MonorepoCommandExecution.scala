@@ -2,7 +2,6 @@ package io.release.monorepo.internal
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.runtime.ExecutionFlags
@@ -235,24 +234,18 @@ private[monorepo] object MonorepoCommandExecution {
     for {
       finalCtx <- runtime.resource.use { resourceValue =>
                     for {
-                      steps       <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
-                      _           <- IO.blocking(
-                                       logReleaseStart(
-                                         session.cleanState,
-                                         steps.length,
-                                         session.context.projects.length,
-                                         command.flags
-                                       )
-                                     )
-                      preparedCtx <-
-                        VcsOps.preparePushReleaseIfNeeded(
-                          session.context,
-                          steps,
-                          ReleaseLogPrefixes.Monorepo
-                        )
-                      finalCtx    <-
+                      steps    <- resolveReleaseRun(session.cleanState, resourceValue, runtime)
+                      _        <- IO.blocking(
+                                    logReleaseStart(
+                                      session.cleanState,
+                                      steps.length,
+                                      session.context.projects.length,
+                                      command.flags
+                                    )
+                                  )
+                      finalCtx <-
                         MonorepoComposer.compose(steps, command.flags.crossBuild)(
-                          preparedCtx
+                          session.context
                         )
                     } yield finalCtx
                   }
