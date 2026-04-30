@@ -15,12 +15,15 @@ private[monorepo] object MonorepoProjectResolver {
       val projectRefs =
         extracted.get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects)
 
-      projectRefs.map { ref =>
-        val baseDir = (ref / baseDirectory).get(extracted.structure.data)
-        (ref, baseDir, MonorepoVersionFiles.resolve(runtime, ref))
-      }
-    }.flatMap { entries =>
-      val missing = entries.collect { case (ref, None, _) => ref.project }
+      val baseDirs =
+        projectRefs.map(ref => ref -> (ref / baseDirectory).get(extracted.structure.data))
+      (runtime, baseDirs)
+    }.flatMap { case (runtime, baseDirs) =>
+      // Resolve baseDirectory before touching any other project-scoped key. An
+      // invalid ref's `releaseIOMonorepoVersioningFile` lookup raises an
+      // "undefined setting" error that would otherwise mask the friendly
+      // diagnostic below.
+      val missing = baseDirs.collect { case (ref, None) => ref.project }
       if (missing.nonEmpty)
         IO.raiseError(
           new IllegalStateException(
@@ -29,14 +32,16 @@ private[monorepo] object MonorepoProjectResolver {
           )
         )
       else
-        IO.pure(entries.collect { case (ref, Some(base), vf) =>
-          ProjectReleaseInfo(
-            ref = ref,
-            name = ref.project,
-            baseDir = base,
-            versionFile = vf
-          )
-        })
+        IO.blocking {
+          baseDirs.collect { case (ref, Some(base)) =>
+            ProjectReleaseInfo(
+              ref = ref,
+              name = ref.project,
+              baseDir = base,
+              versionFile = MonorepoVersionFiles.resolve(runtime, ref)
+            )
+          }
+        }
     }
 
   def resolveOrdered(state: State): IO[Seq[ProjectReleaseInfo]] =

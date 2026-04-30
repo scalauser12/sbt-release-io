@@ -37,6 +37,27 @@ private[monorepo] object MonorepoPublishSteps {
 
   private val PublishArtifactsActionName = "publish-artifacts"
 
+  /** Publish hooks freeze their validate-time gate decision, so the cache key
+    * must ignore mutable project fields like `versions` and `tagName` while
+    * still distinguishing cross-build iterations. Stable project identity plus
+    * the current Scala version gives each project/version pair its own frozen
+    * decision.
+    *
+    * The Scala version is read at `project.ref` scope, not unscoped: cross-build
+    * scopes the switch to the affected project ref(s) only, so the unscoped
+    * `Keys.scalaVersion` (which resolves at sbt's `currentRef`, typically the
+    * aggregate root) doesn't change between iterations and would collapse every
+    * iteration's cache key onto a single shared decision.
+    */
+  private[monorepo] val publishGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
+    (ctx, project) => {
+      val sv = SbtRuntime
+        .extracted(ctx.state)
+        .getOpt(project.ref / Keys.scalaVersion)
+        .getOrElse("")
+      s"${project.ref.project}:$sv"
+    }
+
   private def fallbackToPublishWarning(project: ProjectReleaseInfo): String =
     s"${project.name}: ${releaseIOPublishAction.key.label} is undefined; " +
       s"falling back to ${publish.key.label}"
@@ -251,9 +272,14 @@ private[monorepo] object MonorepoPublishSteps {
     ProcessStep.PerItem(
       name = "publish-artifacts",
       roles = Set(BuiltInStepRole.PublishArtifacts),
-      execute = (ctx, project) =>
-        if (ctx.skipPublish)
-          logInfo(ctx, s"Skipping publish for ${project.name}").as(ctx)
+      execute = (ctx, project) => {
+        // Marking the per-project publish-execution snapshot here ensures
+        // `after-publish` hooks observe a non-empty `publishExecutedKeys` map
+        // even when every project skipped, so the gate distinguishes
+        // "publish step ran" from "publish step never ran".
+        val startedCtx = ctx.markPublishExecutionStarted
+        if (startedCtx.skipPublish)
+          logInfo(startedCtx, s"Skipping publish for ${project.name}").as(startedCtx)
         else
           // Persistent overlays (release version, hash, tag) live in
           // `session.rawAppend` from earlier steps via
@@ -263,22 +289,25 @@ private[monorepo] object MonorepoPublishSteps {
           // `withProjectReleaseState` only fills the hash gap if the release
           // commit was a no-op; it runs after the skip eval so a `true` skip
           // short-circuits before any optional VCS work.
-          evaluatePublishSkipPropagating(ctx, project).flatMap { case (skipCtx, skipped) =>
+          evaluatePublishSkipPropagating(startedCtx, project).flatMap { case (skipCtx, skipped) =>
             if (skipped)
               logInfo(skipCtx, s"Skipping publish for ${project.name} (publish / skip := true)")
                 .as(skipCtx)
             else
               withProjectReleaseState(skipCtx, project).flatMap { releaseCtx =>
-                if (
-                  LoadCompat
-                    .containsScopedKey(releaseCtx.state, project.ref / releaseIOPublishAction)
-                )
-                  runProjectTask(releaseCtx, project.ref / releaseIOPublishAction)
-                else
-                  logWarn(releaseCtx, fallbackToPublishWarning(project)) *>
-                    runProjectTask(releaseCtx, project.ref / publish)
+                val publishStep =
+                  if (
+                    LoadCompat
+                      .containsScopedKey(releaseCtx.state, project.ref / releaseIOPublishAction)
+                  )
+                    runProjectTask(releaseCtx, project.ref / releaseIOPublishAction)
+                  else
+                    logWarn(releaseCtx, fallbackToPublishWarning(project)) *>
+                      runProjectTask(releaseCtx, project.ref / publish)
+                publishStep.map(_.recordPublishExecuted(publishGateKey(releaseCtx, project)))
               }
-          },
+          }
+      },
       validateWithContext = Some((ctx, project) =>
         if (ctx.skipPublish) IO.pure(ctx)
         else

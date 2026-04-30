@@ -9,7 +9,6 @@ import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
-import io.release.runtime.sbt.SbtRuntime
 import sbt.*
 
 /** Canonical monorepo lifecycle order and hook compilation. */
@@ -25,6 +24,7 @@ private[release] object MonorepoLifecycle {
 
   private case class ProjectHookPhaseConfig(
       phase: String,
+      narrowExecute: Option[(MonorepoContext, ProjectReleaseInfo) => IO[Boolean]] = None,
       resolveHooks: MonorepoHookConfiguration => Seq[
         MonorepoProjectHookIO
       ],
@@ -92,34 +92,27 @@ private[release] object MonorepoLifecycle {
       crossBuild = config.crossBuild,
       freezeGate = config.freezeGate,
       gateKey = config.gateKey,
-      enabled = config.enabled
+      enabled = config.enabled,
+      narrowExecute = config.narrowExecute
     )
-
-  /** Publish hooks freeze their validate-time gate decision, so the
-    * cache key must ignore mutable project fields like `versions` and
-    * `tagName` while still distinguishing cross-build iterations.
-    * Stable project identity plus the current Scala version gives each
-    * project/version pair its own frozen decision.
-    *
-    * The Scala version is read at `project.ref` scope, not unscoped: cross-build
-    * scopes the switch to the affected project ref(s) only, so the unscoped
-    * `Keys.scalaVersion` (which resolves at sbt's `currentRef`, typically the aggregate
-    * root) doesn't change between iterations and would collapse every iteration's
-    * cache key onto a single shared decision.
-    */
-  private[monorepo] val publishGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
-    (ctx, project) => {
-      val sv = SbtRuntime
-        .extracted(ctx.state)
-        .getOpt(project.ref / Keys.scalaVersion)
-        .getOrElse("")
-      s"${project.ref.project}:$sv"
-    }
 
   private val publishGate: (MonorepoContext, ProjectReleaseInfo) => IO[
     Boolean
   ] =
     MonorepoPublishSteps.shouldRunPublishHooks
+
+  /** Execute-time AND condition for `after-publish` hooks: combined with the
+    * frozen validate-time gate decision so the hook fires only when the
+    * publish task actually ran for this project/iteration. Validation is
+    * unaffected (uses the cached upper bound), preserving the
+    * validate-before-execute contract for `releaseIOMonorepo check`.
+    */
+  private val afterPublishNarrow: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] =
+    (ctx, project) =>
+      IO.pure(
+        ctx.publishExecutedKeys
+          .exists(_.contains(MonorepoPublishSteps.publishGateKey(ctx, project)))
+      )
 
   // @formatter:off
   private val afterCleanCheck = GlobalHookPhaseConfig(
@@ -178,7 +171,7 @@ private[release] object MonorepoLifecycle {
     gate = publishGate,
     crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
-    gateKey = Some(publishGateKey),
+    gateKey = Some(MonorepoPublishSteps.publishGateKey),
     enabled = _.enablePublish
   )
   private val afterPublish = ProjectHookPhaseConfig(
@@ -187,8 +180,9 @@ private[release] object MonorepoLifecycle {
     gate = publishGate,
     crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
-    gateKey = Some(publishGateKey),
-    enabled = _.enablePublish
+    gateKey = Some(MonorepoPublishSteps.publishGateKey),
+    enabled = _.enablePublish,
+    narrowExecute = Some(afterPublishNarrow)
   )
   private val beforeNextVersionWrite = ProjectHookPhaseConfig(
     phase = HookPhases.BeforeNextVersionWrite,

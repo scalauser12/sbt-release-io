@@ -47,8 +47,8 @@ private[monorepo] object MonorepoSelectionResolver {
       case SelectionMode.DetectChanges =>
         "No projects have changed since their last release tag. " +
           "Check the per-project log output above for last-known tags. " +
-          "To inspect the planned selection without changes, run `releaseIOMonorepo check`. " +
-          "To release all projects regardless, re-run with the `all-changed` flag. " +
+          "To release all projects regardless, re-run with the `all-changed` flag, " +
+          "or pass explicit project names. " +
           "See `releaseIOMonorepo help` for details."
       case _                           =>
         "No projects configured. Nothing to release. " +

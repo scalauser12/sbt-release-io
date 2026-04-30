@@ -6,6 +6,7 @@ import io.release.TestSupport
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
+import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
@@ -182,8 +183,15 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         val publishSkippedCtx   = fixture
           .context(selectedProjectIds = Seq("core"), skipPublish = false)
           .withState(publishSkippedState)
-        val enabledCtx          = fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
+        val baseEnabledCtx      =
+          fixture.context(selectedProjectIds = Seq("core"), skipPublish = false)
         val project             = fixture.projectInfo("core")
+        // After-publish hooks fire only when `publish-artifacts` actually
+        // executed for the project; in the live flow that step records the
+        // gate key on the context. Simulate the recorded outcome here so the
+        // hook gate sees a real publish.
+        val publishedKey        = MonorepoPublishSteps.publishGateKey(baseEnabledCtx, project)
+        val enabledCtx          = baseEnabledCtx.recordPublishExecuted(publishedKey)
 
         compileLifecycle(fixture.state).flatMap { steps =>
           val publishHookSteps = publishProjectHooksOnly(steps)
@@ -205,7 +213,44 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     }
   }
 
-  test("compile - freeze publish hook decisions by project identity and scalaVersion") {
+  test(
+    "compile - keep validate-time gate as upper bound for after-publish even if publish later runs"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed)
+
+      hookFixtureResource("monorepo-hook-compiler-publish-gate-upper-bound", settings).use {
+        fixture =>
+          val publishSkippedState = TestSupport.appendSessionSettings(
+            fixture.state,
+            Seq(fixture.refsById("core") / publish / skip := true)
+          )
+          val baseValidateCtx     = fixture
+            .context(selectedProjectIds = Seq("core"), skipPublish = false)
+            .withState(publishSkippedState)
+          val project             = fixture.projectInfo("core")
+          // Simulate the late-execute flip: validate sees `publish / skip := true`
+          // (so validate-time gate is false), but at execute time a
+          // `before-publish` hook flipped it back, `publish-artifacts` ran, and
+          // recorded the project's gate key. The frozen validate-time decision
+          // must still skip after-publish to preserve the validate-before-execute
+          // contract — recording the published key alone cannot fire the hook.
+          val publishedKey        = MonorepoPublishSteps.publishGateKey(baseValidateCtx, project)
+          val executeCtx          = baseValidateCtx.recordPublishExecuted(publishedKey)
+
+          compileLifecycle(fixture.state).flatMap { steps =>
+            val publishHookSteps = publishProjectHooksOnly(steps)
+            for {
+              _      <- validatePublishHooks(publishHookSteps, baseValidateCtx, project)
+              _      <- executePublishHooks(publishHookSteps, executeCtx, project)
+              events <- observed.get
+            } yield assertEquals(events, Nil)
+          }
+      }
+    }
+  }
+
+  test("compile - distinguish publish hook decisions by project identity and scalaVersion") {
     Ref.of[IO, List[String]](Nil).flatMap { observed =>
       val settings = publishHookSettings(observed)
 
@@ -224,31 +269,38 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         val coreRef        = fixture.refsById("core")
 
         for {
-          scala212State <- stateWithProjectScalaVersion(fixture.state, coreRef, "2.12.21")
-          scala3State   <- stateWithProjectScalaVersion(fixture.state, coreRef, "3.8.1")
-          steps         <- compileLifecycle(fixture.state)
-          publishHooks   = publishProjectHooksOnly(steps)
-          validate212Ctx = fixture
-                             .context(selectedProjectIds = Seq("core"), skipPublish = false)
-                             .withState(scala212State)
-                             .withProjects(Seq(baseProject))
-          validate3Ctx   = fixture
-                             .context(selectedProjectIds = Seq("core"), skipPublish = true)
-                             .withState(scala3State)
-                             .withProjects(Seq(baseProject))
-          execute212Ctx  = fixture
-                             .context(selectedProjectIds = Seq("core"), skipPublish = false)
-                             .withState(scala212State)
-                             .withProjects(Seq(mutatedProject))
-          execute3Ctx    = fixture
-                             .context(selectedProjectIds = Seq("core"), skipPublish = false)
-                             .withState(scala3State)
-                             .withProjects(Seq(mutatedProject))
-          _             <- validatePublishHooks(publishHooks, validate212Ctx, baseProject)
-          _             <- validatePublishHooks(publishHooks, validate3Ctx, baseProject)
-          _             <- executePublishHooks(publishHooks, execute212Ctx, mutatedProject)
-          _             <- executePublishHooks(publishHooks, execute3Ctx, mutatedProject)
-          events        <- observed.get
+          scala212State  <- stateWithProjectScalaVersion(fixture.state, coreRef, "2.12.21")
+          scala3State    <- stateWithProjectScalaVersion(fixture.state, coreRef, "3.8.1")
+          steps          <- compileLifecycle(fixture.state)
+          publishHooks    = publishProjectHooksOnly(steps)
+          validate212Ctx  = fixture
+                              .context(selectedProjectIds = Seq("core"), skipPublish = false)
+                              .withState(scala212State)
+                              .withProjects(Seq(baseProject))
+          validate3Ctx    = fixture
+                              .context(selectedProjectIds = Seq("core"), skipPublish = true)
+                              .withState(scala3State)
+                              .withProjects(Seq(baseProject))
+          // Simulate publishArtifacts having run for the 2.12.21 iteration only
+          // (the 3.8.1 iteration's frozen `before-publish` decision was false,
+          // so its publish task and per-iteration after-publish should both
+          // skip).
+          published212Key = MonorepoPublishSteps.publishGateKey(validate212Ctx, mutatedProject)
+          execute212Ctx   = fixture
+                              .context(selectedProjectIds = Seq("core"), skipPublish = false)
+                              .withState(scala212State)
+                              .withProjects(Seq(mutatedProject))
+                              .recordPublishExecuted(published212Key)
+          execute3Ctx     = fixture
+                              .context(selectedProjectIds = Seq("core"), skipPublish = false)
+                              .withState(scala3State)
+                              .withProjects(Seq(mutatedProject))
+                              .recordPublishExecuted(published212Key)
+          _              <- validatePublishHooks(publishHooks, validate212Ctx, baseProject)
+          _              <- validatePublishHooks(publishHooks, validate3Ctx, baseProject)
+          _              <- executePublishHooks(publishHooks, execute212Ctx, mutatedProject)
+          _              <- executePublishHooks(publishHooks, execute3Ctx, mutatedProject)
+          events         <- observed.get
         } yield assertEquals(
           events,
           List("validate-before", "validate-after", "execute-before", "execute-after")

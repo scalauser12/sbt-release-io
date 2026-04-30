@@ -88,6 +88,12 @@ private[release] object LifecycleCompiler {
     * @param gateKey extracts a stable cache key from `(context, item)`. Must use
     *   a stable project identifier (e.g. `ProjectRef`) rather than the full item,
     *   since item fields like `versions` and `tagName` change between phases.
+    * @param narrowExecute optional execute-time predicate AND'd with the cached
+    *   validate-time gate decision (only meaningful when `freezeGate = true`).
+    *   Lets a phase use the validate-time gate as an upper bound while further
+    *   gating execution on a runtime signal that the validate phase cannot
+    *   observe (e.g. "did the publish task actually run?"). Validation is
+    *   unaffected, preserving the validate-before-execute contract.
     */
   def perItemHookPhase[Config, C, I, Hook](
       phase: String,
@@ -100,7 +106,8 @@ private[release] object LifecycleCompiler {
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
       gateKey: Option[(C, I) => String] = None,
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      narrowExecute: Option[(C, I) => IO[Boolean]] = None
   ): Phase[Config, C, I] = {
     val gateMode         = gateModeFrom(phase, freezeGate, gateKey)
     val trackedExecuteOf =
@@ -114,7 +121,8 @@ private[release] object LifecycleCompiler {
             phase = phase,
             hooks = resolveHooks(config),
             gate = gate,
-            gateMode = gateMode
+            gateMode = gateMode,
+            narrowExecute = narrowExecute
           )(
             nameOf = nameOf,
             executeOf = executeOf,
@@ -236,7 +244,8 @@ private[release] object LifecycleCompiler {
       phase: String,
       hooks: Seq[Hook],
       gate: (C, I) => IO[Boolean],
-      gateMode: Option[(C, I) => String]
+      gateMode: Option[(C, I) => String],
+      narrowExecute: Option[(C, I) => IO[Boolean]] = None
   )(
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],
@@ -249,11 +258,33 @@ private[release] object LifecycleCompiler {
 
       gateMode match {
         case Some(stableGateKey) =>
+          val narrowedExecute: (C, I) => IO[C]                                 = (c, i) =>
+            narrowExecute match {
+              case Some(narrow) =>
+                narrow(c, i).flatMap { allow =>
+                  if (allow) executeOf(hook)(c, i) else IO.pure(c)
+                }
+              case None         =>
+                executeOf(hook)(c, i)
+            }
+          val narrowedExecuteTracked: (TrackedContextHandle[C], I) => IO[Unit] =
+            (handle, item) =>
+              narrowExecute match {
+                case Some(narrow) =>
+                  handle.get.flatMap(ctx =>
+                    narrow(ctx, item).flatMap { allow =>
+                      if (allow) executeTrackedOf(hook)(handle, item) else IO.unit
+                    }
+                  )
+                case None         =>
+                  executeTrackedOf(hook)(handle, item)
+              }
+
           frozenGateFunctions[(C, I), C](
             gate = { case (c, i) => gate(c, i) },
             gateKey = { case (c, i) => stableGateKey(c, i) },
-            execute = { case (c, i) => executeOf(hook)(c, i) },
-            executeTracked = (handle, args) => executeTrackedOf(hook)(handle, args._2),
+            execute = { case (c, i) => narrowedExecute(c, i) },
+            executeTracked = (handle, args) => narrowedExecuteTracked(handle, args._2),
             validate = { case (c, i) =>
               validateOf(hook)(c, i).as(c)
             },

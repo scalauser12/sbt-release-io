@@ -168,8 +168,57 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")
 
-      MonorepoPublishSteps.publishArtifacts.execute(ctx, project).map { _ =>
+      MonorepoPublishSteps.publishArtifacts.execute(ctx, project).map { result =>
         assert(!new File(fixture.dir, "published.txt").exists())
+        // publishExecutedKeys becomes `Some(...)` so after-publish hooks know
+        // the publish step ran, but the per-project key is *not* recorded
+        // because the actual publish task was skipped.
+        val recorded = result.publishExecutedKeys.getOrElse(Set.empty)
+        assertEquals(recorded, Set.empty[String])
+      }
+    }
+  }
+
+  test("publishArtifacts.execute - record the project key when publish actually runs") {
+    singleProjectFixtureResource("monorepo-publish-records-outcome") { projectBase =>
+      Seq(
+        publish / skip                           := false,
+        publishTo                                := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        ReleaseSharedKeys.releaseIOPublishAction := { /* no-op publish */ }
+      )
+    }.use { fixture =>
+      val ctx     = fixture.context(Seq("core"))
+      val project = fixture.projectInfo("core")
+
+      MonorepoPublishSteps.publishArtifacts.execute(ctx, project).map { result =>
+        val expectedKey = MonorepoPublishSteps.publishGateKey(result, project)
+        assert(
+          result.publishExecutedKeys.exists(_.contains(expectedKey)),
+          s"Expected publishExecutedKeys to contain $expectedKey, got ${result.publishExecutedKeys}"
+        )
+      }
+    }
+  }
+
+  test(
+    "publishArtifacts.execute - mark started but not record key when ctx.skipPublish is true"
+  ) {
+    singleProjectFixtureResource("monorepo-publish-skip-via-context") { _ =>
+      Seq(
+        publish / skip                           := false,
+        ReleaseSharedKeys.releaseIOPublishAction := {
+          throw new RuntimeException("publish action should not run")
+        }
+      )
+    }.use { fixture =>
+      val ctx     = fixture.context(Seq("core"), skipPublish = true)
+      val project = fixture.projectInfo("core")
+
+      MonorepoPublishSteps.publishArtifacts.execute(ctx, project).map { result =>
+        // ctx.skipPublish bypasses publish entirely, so the per-project key is
+        // never recorded — but the started marker is set so the after-publish
+        // gate distinguishes "publish step ran" from "publish step never ran".
+        assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
       }
     }
   }
