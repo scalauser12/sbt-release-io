@@ -278,7 +278,16 @@ private[monorepo] object MonorepoPublishSteps {
         // even when every project skipped, so the gate distinguishes
         // "publish step ran" from "publish step never ran".
         val startedCtx = ctx.markPublishExecutionStarted
-        if (startedCtx.skipPublish)
+        // Replay the validate-time skip *only when it was true*. This locks
+        // down the case where validation skipped the publishTo / `publish /
+        // skip` checks under `ctx.skipPublish = true` — a hook that
+        // subsequently flips it to false at execute time must not bypass those
+        // checks. The reverse direction (validate-time false → execute-time
+        // true) stays observed so hooks can legitimately suppress publish at
+        // execute. When validate has not run (unit-test paths), the frozen
+        // entry is absent and we fall back to the live `skipPublish` value.
+        val skip       = startedCtx.publishSkipFrozen.contains(true) || startedCtx.skipPublish
+        if (skip)
           logInfo(startedCtx, s"Skipping publish for ${project.name}").as(startedCtx)
         else
           // Persistent overlays (release version, hash, tag) live in
@@ -308,13 +317,24 @@ private[monorepo] object MonorepoPublishSteps {
               }
           }
       },
-      validateWithContext = Some((ctx, project) =>
-        if (ctx.skipPublish) IO.pure(ctx)
+      validateWithContext = Some { (ctx, project) =>
+        // Capture the validate-time `skipPublish` decision into context metadata
+        // so execute replays the same decision instead of re-reading the live
+        // field. Closes the asymmetry where a hook running after validation but
+        // before publish could flip `skipPublish` from `true` to `false` and
+        // bypass the publishTo / `publish / skip` checks skipped here.
+        // `freezePublishSkip` is idempotent, so when validate runs once per
+        // project the first call wins for the run.
+        val frozenCtx = ctx.freezePublishSkip(ctx.skipPublish)
+        // `skip` here is the validate-time decision; mirrors the form used in
+        // `execute` for symmetry.
+        val skip      = frozenCtx.publishSkipFrozen.contains(true) || frozenCtx.skipPublish
+        if (skip) IO.pure(frozenCtx)
         else
           IO.blocking(
-            Project.extract(ctx.state).get(releaseIOMonorepoPublishChecks)
+            Project.extract(frozenCtx.state).get(releaseIOMonorepoPublishChecks)
           ).flatMap {
-            case false => IO.pure(ctx)
+            case false => IO.pure(frozenCtx)
             case true  =>
               // Evaluate skip + publishTo against a transient overlay state so
               // version-dependent `publish / skip := isSnapshot.value` resolves
@@ -328,7 +348,7 @@ private[monorepo] object MonorepoPublishSteps {
               // so `inquireVersions.execute` later sees the original snapshot
               // state for its version-task evaluation.
               MonorepoVersionWorkflow
-                .withReleaseVersionOverlay(ctx) { tempState =>
+                .withReleaseVersionOverlay(frozenCtx) { tempState =>
                   for {
                     skipResult                      <- evaluatePublishSkipAt(tempState, project)
                     (afterSkipState, publishSkipped) = skipResult
@@ -342,9 +362,9 @@ private[monorepo] object MonorepoPublishSteps {
                                                        )(publishSkipped, publishTarget.isEmpty)
                   } yield ()
                 }
-                .as(ctx)
+                .as(frozenCtx)
           }
-      ),
+      },
       enableCrossBuild = true
     )
 }

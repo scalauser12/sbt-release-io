@@ -103,6 +103,20 @@ case class ReleaseContext(
     if (publishExecutedKeys.isDefined) this
     else withMetadata(ReleaseContext.publishExecutedKeysKey, Set.empty[String])
 
+  /** Frozen validate-time decision for `publish-artifacts`. Captured by the publish
+    * step's validation so that a hook running after validation but before publish
+    * cannot flip `skipPublish` from `true` to `false` and bypass the publishTo /
+    * `publish / skip` checks the validation skipped under the original decision.
+    * `None` means validation has not run yet (e.g. unit-test paths that invoke
+    * execute directly); execute then falls back to the live `skipPublish` value.
+    */
+  private[release] def publishSkipFrozen: Option[Boolean] =
+    metadata(ReleaseContext.publishSkipFrozenKey)
+
+  private[release] def freezePublishSkip(skip: Boolean): ReleaseContext =
+    if (publishSkipFrozen.isDefined) this
+    else withMetadata(ReleaseContext.publishSkipFrozenKey, skip)
+
   /** True iff `push-changes` actually pushed to the remote during this release.
     * False when the operator declined the push (CLI `default-push-answer n`,
     * `releaseIODefaultsPushAnswer := Some(false)`, non-interactive no-default,
@@ -128,6 +142,9 @@ object ReleaseContext {
   // `unapply` remain accessible to hook and custom-plugin code.
   private val publishExecutedKeysKey: AttributeKey[Set[String]] =
     AttributeKey[Set[String]]("releaseIOInternalCorePublishExecutedKeys")
+
+  private val publishSkipFrozenKey: AttributeKey[Boolean] =
+    AttributeKey[Boolean]("releaseIOInternalCorePublishSkipFrozen")
 
   private val pushExecutedKey: AttributeKey[Boolean] =
     AttributeKey[Boolean]("releaseIOInternalCorePushExecuted")

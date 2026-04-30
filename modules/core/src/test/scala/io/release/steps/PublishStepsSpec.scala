@@ -56,6 +56,56 @@ class PublishStepsSpec extends CatsEffectSuite {
   }
 
   test(
+    "publishArtifacts: validate freezes skipPublish=true; execute respects the freeze " +
+      "even when a hook flipped ctx.skipPublish back to false"
+  ) {
+    // No publishTo configured. If execute were to honor a hook that flipped
+    // skipPublish back to false, the publish task would run after validation
+    // skipped the publishTo check — exactly the bypass the freeze prevents.
+    loadedContextResource(s"$fixturePrefix-freeze-skip-true") { _ =>
+      () -> Seq(ReleasePluginIO.autoImport.releaseIOPublishChecks := true)
+    }.use { case (ctx, _) =>
+      val skippedAtValidate = ctx.copy(skipPublish = true)
+      for {
+        validated  <- PublishSteps.publishArtifacts.validate(skippedAtValidate)
+        _           = assertEquals(validated.publishSkipFrozen, Some(true))
+        // Simulate a hook (e.g. afterTag) that flips skipPublish back to false
+        // on the threaded context between validate and execute.
+        hookFlipped = validated.copy(skipPublish = false)
+        result     <- PublishSteps.publishArtifacts.execute(hookFlipped)
+        _           = assert(!result.failed)
+        // Publish step ran but the task was not executed for any iteration.
+        _           = assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      } yield ()
+    }
+  }
+
+  test(
+    "publishArtifacts: validate freezes skipPublish=false; execute still skips when a hook " +
+      "flips ctx.skipPublish to true (preserves the documented hook pattern)"
+  ) {
+    loadedContextResource(s"$fixturePrefix-freeze-flip-true") { dir =>
+      () -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publishTo                                         := Some(
+          Resolver.file("local", new File(dir, "repo"))
+        )
+      )
+    }.use { case (ctx, _) =>
+      for {
+        validated  <- PublishSteps.publishArtifacts.validate(ctx)
+        _           = assertEquals(validated.publishSkipFrozen, Some(false))
+        // Documented pattern: a hook (e.g. transform("skip-publish-for-snapshot"))
+        // flips skipPublish to true at execute based on the resolved version.
+        hookFlipped = validated.copy(skipPublish = true)
+        result     <- PublishSteps.publishArtifacts.execute(hookFlipped)
+        _           = assert(!result.failed)
+        _           = assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      } yield ()
+    }
+  }
+
+  test(
     "publishArtifacts.execute - propagate FailureCommand from a task-valued publish/skip " +
       "that returns true"
   ) {

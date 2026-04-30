@@ -168,6 +168,21 @@ case class MonorepoContext(
     if (publishExecutedKeys.isDefined) this
     else withMetadata(MonorepoContext.publishExecutedKeysKey, Set.empty[String])
 
+  /** Frozen validate-time decision for `publish-artifacts`. Captured by the
+    * publish step's validation so that a hook running after validation but
+    * before publish cannot flip `skipPublish` from `true` to `false` and
+    * bypass the publishTo / `publish / skip` checks that validation skipped
+    * under the original decision. `None` means validation has not run yet
+    * (e.g. unit-test paths that invoke execute directly); execute then falls
+    * back to the live `skipPublish` value.
+    */
+  private[monorepo] def publishSkipFrozen: Option[Boolean] =
+    metadata(MonorepoContext.publishSkipFrozenKey)
+
+  private[monorepo] def freezePublishSkip(skip: Boolean): MonorepoContext =
+    if (publishSkipFrozen.isDefined) this
+    else withMetadata(MonorepoContext.publishSkipFrozenKey, skip)
+
   /** True iff the monorepo `push-changes` step actually pushed to the remote.
     * False when the operator declined (`default-push-answer n`,
     * `releaseIOMonorepoDefaultsPushAnswer := Some(false)`, non-interactive
@@ -211,6 +226,9 @@ object MonorepoContext {
 
   private val publishExecutedKeysKey: AttributeKey[Set[String]] =
     AttributeKey[Set[String]]("releaseIOInternalMonorepoPublishExecutedKeys")
+
+  private val publishSkipFrozenKey: AttributeKey[Boolean] =
+    AttributeKey[Boolean]("releaseIOInternalMonorepoPublishSkipFrozen")
 
   private val pushExecutedKey: AttributeKey[Boolean] =
     AttributeKey[Boolean]("releaseIOInternalMonorepoPushExecuted")

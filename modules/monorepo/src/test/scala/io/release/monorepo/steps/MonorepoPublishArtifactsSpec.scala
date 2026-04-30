@@ -223,6 +223,75 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
     }
   }
 
+  test(
+    "publishArtifacts: validate freezes skipPublish=true; execute respects the freeze " +
+      "even when a hook flipped ctx.skipPublish back to false"
+  ) {
+    // No publishTo, so if execute were to honor a hook that flipped skipPublish
+    // back to false the publish task would run after validation skipped the
+    // publishTo check — the freeze is what prevents that bypass.
+    singleProjectFixtureResource(
+      "monorepo-publish-freeze-skip-true",
+      rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+      )
+    ) { _ =>
+      Seq(
+        publish / skip                           := false,
+        publishTo                                := None,
+        ReleaseSharedKeys.releaseIOPublishAction := {
+          throw new RuntimeException("publish action should not run")
+        }
+      )
+    }.use { fixture =>
+      val ctx     = fixture.context(Seq("core"), skipPublish = true)
+      val project = fixture.projectInfo("core")
+
+      for {
+        validated  <- MonorepoPublishSteps.publishArtifacts.validate(ctx, project)
+        _           = assertEquals(validated.publishSkipFrozen, Some(true))
+        hookFlipped = validated.copy(skipPublish = false)
+        result     <- MonorepoPublishSteps.publishArtifacts.execute(hookFlipped, project)
+        _           = assert(!result.failed)
+        _           = assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      } yield ()
+    }
+  }
+
+  test(
+    "publishArtifacts: validate freezes skipPublish=false; execute still skips when a hook " +
+      "flips ctx.skipPublish to true (preserves the documented hook pattern)"
+  ) {
+    singleProjectFixtureResource(
+      "monorepo-publish-freeze-flip-true",
+      rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+      )
+    ) { projectBase =>
+      Seq(
+        publish / skip                           := false,
+        publishTo                                := Some(
+          Resolver.file("local", new File(projectBase.getParentFile, "repo"))
+        ),
+        ReleaseSharedKeys.releaseIOPublishAction := {
+          throw new RuntimeException("publish action should not run")
+        }
+      )
+    }.use { fixture =>
+      val ctx     = fixture.context(Seq("core"))
+      val project = fixture.projectInfo("core")
+
+      for {
+        validated  <- MonorepoPublishSteps.publishArtifacts.validate(ctx, project)
+        _           = assertEquals(validated.publishSkipFrozen, Some(false))
+        hookFlipped = validated.copy(skipPublish = true)
+        result     <- MonorepoPublishSteps.publishArtifacts.execute(hookFlipped, project)
+        _           = assert(!result.failed)
+        _           = assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      } yield ()
+    }
+  }
+
   test("publishArtifacts.execute - run the configured publish task when publish is enabled") {
     singleProjectFixtureResource("monorepo-publish-run-action") { projectBase =>
       val marker         = new File(projectBase.getParentFile, "published.txt")

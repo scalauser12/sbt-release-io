@@ -68,7 +68,17 @@ private[release] object PublishSteps {
       // step skipped, so the gate distinguishes "publish step ran" from
       // "publish step never ran".
       val startedCtx = ctx.markPublishExecutionStarted
-      if (startedCtx.skipPublish) {
+      // Replay the validate-time skip *only when it was true*. This locks down
+      // the case where validation skipped the publishTo / `publish / skip`
+      // checks under `ctx.skipPublish = true` — a hook that subsequently flips
+      // it to false at execute time must not bypass those checks. The reverse
+      // direction (validate-time false → execute-time true) stays observed
+      // because hooks legitimately suppress publish via that path
+      // (see ReleaseHookIO.transform docstring example). When validate has
+      // not run (unit-test paths), the frozen entry is absent and we fall
+      // back to the live `skipPublish` value.
+      val skip       = startedCtx.publishSkipFrozen.contains(true) || startedCtx.skipPublish
+      if (skip) {
         IO.blocking(startedCtx.state.log.info(s"${ReleaseLogPrefixes.Core} Skipping publish"))
           .as(startedCtx)
       } else {
@@ -112,41 +122,57 @@ private[release] object PublishSteps {
         }
       }
     },
-    validate = ctx =>
-      if (ctx.skipPublish) IO.unit
-      else
-        IO.blocking(SbtRuntime.getSetting(ctx.state, releaseIOPublishChecks)).flatMap {
-          case false => IO.unit
-          case true  =>
-            // Evaluate publish/skip and publishTo against a transient state with the
-            // resolved release version overlaid, so version-dependent skip patterns
-            // (`publish / skip := isSnapshot.value`) are checked against the same
-            // version state that publish-artifacts.execute will see. The transient
-            // state is discarded — see ReleaseVersionWorkflow.withReleaseVersionOverlay.
-            ReleaseVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
-              for {
-                allRefs <- publishTargetRefs(tempState)
-                missing <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
-                             ioAcc.flatMap { acc =>
-                               checkPublishSkip(ref, tempState).flatMap { skipped =>
-                                 if (skipped) IO.pure(acc)
-                                 else
-                                   checkPublishToMissing(ref, tempState).map { missing =>
-                                     if (missing) acc :+ ref else acc
-                                   }
+    validateWithContext = Some(ctx => {
+      // Capture the validate-time `skipPublish` decision into context metadata so
+      // execute replays the same decision instead of re-reading the live field.
+      // This closes the asymmetry where a hook running after validation but
+      // before publish could flip `skipPublish` from `true` to `false` and
+      // bypass the publishTo / `publish / skip` checks that were skipped here.
+      // `freezePublishSkip` is idempotent across cross-build iterations: only
+      // the first call sets the metadata, so subsequent iterations preserve
+      // the original decision rather than overwriting it.
+      val frozenCtx        = ctx.freezePublishSkip(ctx.skipPublish)
+      // `skip` here is the validate-time decision (which is what we just
+      // captured). `frozenCtx.skipPublish` is the same value at validate time;
+      // we use the frozen entry for symmetry with `execute`.
+      val skip             = frozenCtx.publishSkipFrozen.contains(true) || frozenCtx.skipPublish
+      val checks: IO[Unit] =
+        if (skip) IO.unit
+        else
+          IO.blocking(SbtRuntime.getSetting(frozenCtx.state, releaseIOPublishChecks)).flatMap {
+            case false => IO.unit
+            case true  =>
+              // Evaluate publish/skip and publishTo against a transient state with the
+              // resolved release version overlaid, so version-dependent skip patterns
+              // (`publish / skip := isSnapshot.value`) are checked against the same
+              // version state that publish-artifacts.execute will see. The transient
+              // state is discarded — see ReleaseVersionWorkflow.withReleaseVersionOverlay.
+              ReleaseVersionWorkflow.withReleaseVersionOverlay(frozenCtx) { tempState =>
+                for {
+                  allRefs <- publishTargetRefs(tempState)
+                  missing <- allRefs.foldLeft(IO.pure(Vector.empty[ProjectRef])) { (ioAcc, ref) =>
+                               ioAcc.flatMap { acc =>
+                                 checkPublishSkip(ref, tempState).flatMap { skipped =>
+                                   if (skipped) IO.pure(acc)
+                                   else
+                                     checkPublishToMissing(ref, tempState).map { missing =>
+                                       if (missing) acc :+ ref else acc
+                                     }
+                                 }
                                }
                              }
-                           }
-                result  <- {
-                  val names = missing.map(_.project)
-                  PublishValidation.requirePublishTarget(names.mkString(", "))(
-                    publishSkipped = false,
-                    publishToEmpty = missing.nonEmpty
-                  )
-                }
-              } yield result
-            }
-        },
+                  result  <- {
+                    val names = missing.map(_.project)
+                    PublishValidation.requirePublishTarget(names.mkString(", "))(
+                      publishSkipped = false,
+                      publishToEmpty = missing.nonEmpty
+                    )
+                  }
+                } yield result
+              }
+          }
+      checks.as(frozenCtx)
+    }),
     enableCrossBuild = true
   )
 
