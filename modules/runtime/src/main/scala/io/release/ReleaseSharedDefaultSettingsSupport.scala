@@ -6,10 +6,13 @@ import sbt.Keys.*
 
 private[release] object ReleaseSharedDefaultSettingsSupport {
 
+  // Project-scoped defaults (`pluginDefaultSettings`) intentionally exclude the decision
+  // and VCS keys: those are set at `ThisBuild` scope via `buildDefaultSettings` so that
+  // user `ThisBuild / ...` overrides flow through to project-scope lookups via sbt's
+  // delegation. A duplicate project-scoped `:= None` / `:= false` would shadow the user
+  // override (project scope wins over ThisBuild).
   lazy val pluginDefaultSettings: Seq[Setting[?]] = Seq(
-    decisionDefaults,
     versioningDefaults,
-    vcsDefaults,
     publishAndDiagnosticsDefaults
   ).flatten
 
@@ -17,14 +20,6 @@ private[release] object ReleaseSharedDefaultSettingsSupport {
     buildDecisionDefaults,
     buildVcsDefaults
   ).flatten
-
-  private lazy val decisionDefaults: Seq[Setting[?]] = Seq(
-    ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer            := None,
-    ReleaseSharedKeys.releaseIODefaultsSnapshotDependenciesAnswer := None,
-    ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer   := None,
-    ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer       := None,
-    ReleaseSharedKeys.releaseIODefaultsPushAnswer                 := None
-  )
 
   private lazy val versioningDefaults: Seq[Setting[?]] = Seq(
     ReleaseSharedKeys.releaseIOVersioningFile                   := baseDirectory.value / "version.sbt",
@@ -51,15 +46,6 @@ private[release] object ReleaseSharedDefaultSettingsSupport {
     ThisBuild / ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer   := None,
     ThisBuild / ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer       := None,
     ThisBuild / ReleaseSharedKeys.releaseIODefaultsPushAnswer                 := None
-  )
-
-  private lazy val vcsDefaults: Seq[Setting[?]] = Seq(
-    ReleaseSharedKeys.releaseIOVcsSign                 := false,
-    ReleaseSharedKeys.releaseIOVcsSignOff              := false,
-    ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles := false,
-    ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout   := scala.concurrent.duration
-      .DurationInt(60)
-      .seconds
   )
 
   private lazy val buildVcsDefaults: Seq[Setting[?]] = Seq(

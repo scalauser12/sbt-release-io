@@ -43,7 +43,7 @@ private[monorepo] object MonorepoComposer {
                           crossBuild
                         )
         preparedCtx  <- haltIfFailed(preSetupCtx) { ctx =>
-                          VcsOps.preparePushReleaseIfNeeded(ctx, plan.mainSteps, LogPrefix)
+                          preparePushIfDecisionAllows(ctx, plan.mainSteps)
                         }
         postSetupCtx <- haltIfFailed(preparedCtx) { ctx =>
                           runSequentialValidateThenExecute(
@@ -58,8 +58,7 @@ private[monorepo] object MonorepoComposer {
                         }
       } yield finalCtx
     else
-      VcsOps
-        .preparePushReleaseIfNeeded(initialCtx, steps, LogPrefix)
+      preparePushIfDecisionAllows(initialCtx, steps)
         .flatMap(runSequentialValidateThenExecute(steps, _, crossBuild))
   }
 
@@ -67,6 +66,18 @@ private[monorepo] object MonorepoComposer {
       next: MonorepoContext => IO[MonorepoContext]
   ): IO[MonorepoContext] =
     if (ctx.failed) IO.pure(ctx) else next(ctx)
+
+  /** Skip the early remote warmup when the operator's effective push decision is "no"
+    * (CLI `default-push-answer n` or `releaseIODefaultsPushAnswer := Some(false)`);
+    * otherwise a local/no-upstream release would abort here even though the user
+    * explicitly chose not to push.
+    */
+  private def preparePushIfDecisionAllows(
+      ctx: MonorepoContext,
+      steps: Seq[AnyStep]
+  ): IO[MonorepoContext] =
+    if (ctx.decisionDefaults.pushAnswer.contains(false)) IO.pure(ctx)
+    else VcsOps.preparePushReleaseIfNeeded(ctx, steps, LogPrefix)
 
   private[monorepo] def selectedProjectsLine(ctx: MonorepoContext): String = {
     val selected = ctx.currentProjects

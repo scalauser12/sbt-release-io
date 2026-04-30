@@ -255,39 +255,54 @@ private[release] object VcsSteps {
   }
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
-  // deferred to execute to avoid blocking the validation phase on a network call.
+  // deferred to execute to avoid blocking the validation phase on a network call. When the
+  // operator's effective push decision is "no" (CLI `default-push-answer n` or
+  // `releaseIODefaultsPushAnswer := Some(false)`) both validate and execute short-circuit
+  // before any upstream / remote requirement, so a local/no-upstream release is allowed.
   val pushChanges: Step = ProcessStep.Single(
     name = "push-changes",
     roles = Set(BuiltInStepRole.PushChanges),
     validateWithContext = Some(ctx =>
-      required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-        VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Core)
-      }
+      if (ctx.decisionDefaults.pushAnswer.contains(false)) IO.pure(ctx)
+      else
+        required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") {
+          vcs =>
+            VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Core)
+        }
     ),
     execute = ctx =>
-      requireVcs(ctx) { vcs =>
-        VcsOps.interactivePushAfterRemote(
-          ctx,
-          vcs,
-          ReleaseLogPrefixes.Core,
-          remoteCheckLog =
-            Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))
-        )(
-          doPush = currentCtx =>
-            vcs.commandName match {
-              case "git" => gitPush(currentCtx, vcs)
-              case _     => vcs.pushChanges.as(currentCtx)
-            },
-          onDeclinePush = currentCtx =>
-            IO
-              .blocking(
-                currentCtx.state.log.warn(
-                  s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+      if (ctx.decisionDefaults.pushAnswer.contains(false))
+        IO
+          .blocking(
+            ctx.state.log.warn(
+              s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+            )
+          )
+          .as(ctx)
+      else
+        requireVcs(ctx) { vcs =>
+          VcsOps.interactivePushAfterRemote(
+            ctx,
+            vcs,
+            ReleaseLogPrefixes.Core,
+            remoteCheckLog =
+              Some(r => ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Checking remote [$r] ..."))
+          )(
+            doPush = currentCtx =>
+              vcs.commandName match {
+                case "git" => gitPush(currentCtx, vcs)
+                case _     => vcs.pushChanges.as(currentCtx)
+              },
+            onDeclinePush = currentCtx =>
+              IO
+                .blocking(
+                  currentCtx.state.log.warn(
+                    s"${ReleaseLogPrefixes.Core} Remember to push the changes yourself!"
+                  )
                 )
-              )
-              .as(currentCtx)
-        )
-      }
+                .as(currentCtx)
+          )
+        }
   )
 
 }

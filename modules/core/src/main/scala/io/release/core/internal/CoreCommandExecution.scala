@@ -223,11 +223,19 @@ private[release] object CoreCommandExecution {
                                        CoreExecutionState(inputs.plan)
                                      )
                       preparedCtx <-
-                        VcsOps.preparePushReleaseIfNeeded(
-                          seededCtx,
-                          steps,
-                          ReleaseLogPrefixes.Core
-                        )
+                        // Skip the early remote warmup when the operator's effective push
+                        // decision is "no" (CLI `default-push-answer n` or
+                        // `releaseIODefaultsPushAnswer := Some(false)`); otherwise a
+                        // local/no-upstream release would abort here even though the user
+                        // explicitly chose not to push.
+                        if (seededCtx.decisionDefaults.pushAnswer.contains(false))
+                          IO.pure(seededCtx)
+                        else
+                          VcsOps.preparePushReleaseIfNeeded(
+                            seededCtx,
+                            steps,
+                            ReleaseLogPrefixes.Core
+                          )
                       finalCtx    <- ReleaseComposer.compose(
                                        steps,
                                        inputs.crossEnabled

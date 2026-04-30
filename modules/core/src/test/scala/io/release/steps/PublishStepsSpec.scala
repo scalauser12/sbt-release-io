@@ -73,6 +73,49 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "publishArtifacts.validate - propagate FailureCommand from a task-valued publish/skip " +
+      "that returns true"
+  ) {
+    loadedContextResource(s"$fixturePrefix-validate-skip-failure-command") { dir =>
+      val marker = new File(dir, "publish-skip-validate-ran.txt")
+      marker -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publishTo                                         := Some(
+          Resolver.file("local-test", new File(dir, "publish-target"))
+        ),
+        CoreStepTestCompat.failureCommandPublishSkipSetting(marker)
+      )
+    }.use { case (ctx, marker) =>
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.publishArtifacts.validate(ctx).void
+      ) { err =>
+        assert(marker.exists())
+        assert(err.getMessage.contains("FailureCommand"))
+      }
+    }
+  }
+
+  test(
+    "publishArtifacts.validate - propagate FailureCommand from a task-valued publishTo"
+  ) {
+    loadedContextResource(s"$fixturePrefix-validate-publishto-failure-command") { dir =>
+      val marker = new File(dir, "publishto-validate-ran.txt")
+      marker -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publish / skip                                    := false,
+        CoreStepTestCompat.failureCommandPublishToSetting(marker)
+      )
+    }.use { case (ctx, marker) =>
+      assertFailure[IllegalStateException, Unit](
+        PublishSteps.publishArtifacts.validate(ctx).void
+      ) { err =>
+        assert(marker.exists())
+        assert(err.getMessage.contains("FailureCommand"))
+      }
+    }
+  }
+
   // ── publishArtifacts.validate ───────────────────────────────────────
 
   test("checkSnapshotDependencies.validate - fail on snapshot dependencies") {

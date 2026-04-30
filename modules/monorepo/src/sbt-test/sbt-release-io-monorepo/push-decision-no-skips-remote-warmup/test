@@ -1,0 +1,12 @@
+# Initialize git repository — deliberately NO upstream / remote configured.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add build.sbt project/plugins.sbt core/version.sbt
+$ exec git commit -m "Initial commit"
+
+# Push policy is enabled but `releaseIODefaultsPushAnswer := Some(false)` declines at
+# decision time. The release should complete locally and create the per-project tag.
+> releaseIOMonorepo with-defaults all-changed release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+> checkReleaseTagged

@@ -214,34 +214,44 @@ private[monorepo] object MonorepoVcsSteps {
   /** Push branch and tags to the remote. Tag pushing is implemented only for git.
     * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
     * users should verify their VCS behavior.
+    *
+    * When the operator's effective push decision is "no" (CLI `default-push-answer n`
+    * or `releaseIODefaultsPushAnswer := Some(false)`) both validate and execute
+    * short-circuit before any upstream / remote requirement, so a local/no-upstream
+    * monorepo release with the policy enabled but the decision declined still succeeds.
     */
   val pushChanges: GlobalStep = ProcessStep.Single(
     name = "push-changes",
     roles = Set(BuiltInStepRole.PushChanges),
     validateWithContext = Some(ctx =>
-      required(ctx.vcs, MissingVcsMessage) { vcs =>
-        VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Monorepo)
-      }
+      if (ctx.decisionDefaults.pushAnswer.contains(false)) IO.pure(ctx)
+      else
+        required(ctx.vcs, MissingVcsMessage) { vcs =>
+          VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Monorepo)
+        }
     ),
     execute = ctx =>
-      required(ctx.vcs, MissingVcsMessage) { vcs =>
-        VcsOps.interactivePushAfterRemote(
-          ctx,
-          vcs,
-          ReleaseLogPrefixes.Monorepo,
-          remoteCheckLog = Some(r =>
-            ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] ...")
+      if (ctx.decisionDefaults.pushAnswer.contains(false))
+        logWarn(ctx, "Remember to push the changes yourself!").as(ctx)
+      else
+        required(ctx.vcs, MissingVcsMessage) { vcs =>
+          VcsOps.interactivePushAfterRemote(
+            ctx,
+            vcs,
+            ReleaseLogPrefixes.Monorepo,
+            remoteCheckLog = Some(r =>
+              ctx.state.log.info(s"${ReleaseLogPrefixes.Monorepo} Checking remote [$r] ...")
+            )
+          )(
+            doPush = currentCtx =>
+              vcs.commandName match {
+                case "git" => gitPush(currentCtx, vcs)
+                case _     => vcs.pushChanges.as(currentCtx)
+              },
+            onDeclinePush = currentCtx =>
+              logWarn(currentCtx, "Remember to push the changes yourself!").as(currentCtx)
           )
-        )(
-          doPush = currentCtx =>
-            vcs.commandName match {
-              case "git" => gitPush(currentCtx, vcs)
-              case _     => vcs.pushChanges.as(currentCtx)
-            },
-          onDeclinePush = currentCtx =>
-            logWarn(currentCtx, "Remember to push the changes yourself!").as(currentCtx)
-        )
-      }
+        }
   )
 
 }

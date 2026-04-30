@@ -160,3 +160,20 @@ private[steps] object CoreStepTestCompat:
         )
       }
       .value
+
+  /** Task-valued `publishTo` that returns `Some(...)` AND arms FailureCommand. Used to
+    * verify that the validate-time preflight propagates the failure before the release
+    * proceeds to commits/tags.
+    */
+  def failureCommandPublishToSetting(marker: File): Setting[?] =
+    publishTo := Def
+      .task[Option[Resolver]] {
+        sbt.IO.write(marker, "ran")
+        Option(Resolver.file("local-test", file("publish-target")))
+      }
+      .updateState { (state: State, _: Option[Resolver]) =>
+        state.copy(
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
+        )
+      }
+      .value

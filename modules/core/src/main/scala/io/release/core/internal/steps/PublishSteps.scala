@@ -289,39 +289,47 @@ private[release] object PublishSteps {
       ref: ProjectRef,
       state: State
   ): IO[Boolean] =
-    IO.blocking {
-      val extracted = SbtRuntime.extracted(state)
-      extracted.runTask(ref / publish / Keys.skip, state)._2
-    }.handleErrorWith {
-      case NonFatal(e) =>
-        IO.blocking {
-          state.log.warn(
-            s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for ${ref.project}: " +
-              s"${errorMessage(e)}. Assuming skip = false."
-          )
-          false
-        }
-      case fatal       =>
-        IO.raiseError(fatal)
-    }
+    runTaskChecked(
+      state,
+      ref / publish / Keys.skip,
+      s"publish-artifacts: sbt task '${(publish / Keys.skip).key.label}'"
+    ).map(_._2)
+      .handleErrorWith {
+        case e: IllegalStateException if e.getMessage.contains("FailureCommand") =>
+          IO.raiseError(e)
+        case NonFatal(e)                                                         =>
+          IO.blocking {
+            state.log.warn(
+              s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for ${ref.project}: " +
+                s"${errorMessage(e)}. Assuming skip = false."
+            )
+            false
+          }
+        case fatal                                                               =>
+          IO.raiseError(fatal)
+      }
 
   private def checkPublishToMissing(
       ref: ProjectRef,
       state: State
   ): IO[Boolean] =
-    IO.blocking {
-      val extracted = SbtRuntime.extracted(state)
-      extracted.runTask(ref / publishTo, state)._2.isEmpty
-    }.handleErrorWith {
-      case NonFatal(e) =>
-        IO.blocking {
-          state.log.warn(
-            s"${ReleaseLogPrefixes.Core} Failed to evaluate publishTo for ${ref.project}: " +
-              s"${errorMessage(e)}. Assuming publishTo is missing."
-          )
-          true
-        }
-      case fatal       =>
-        IO.raiseError(fatal)
-    }
+    runTaskChecked(
+      state,
+      ref / publishTo,
+      s"publish-artifacts: sbt task '${publishTo.key.label}'"
+    ).map(_._2.isEmpty)
+      .handleErrorWith {
+        case e: IllegalStateException if e.getMessage.contains("FailureCommand") =>
+          IO.raiseError(e)
+        case NonFatal(e)                                                         =>
+          IO.blocking {
+            state.log.warn(
+              s"${ReleaseLogPrefixes.Core} Failed to evaluate publishTo for ${ref.project}: " +
+                s"${errorMessage(e)}. Assuming publishTo is missing."
+            )
+            true
+          }
+        case fatal                                                               =>
+          IO.raiseError(fatal)
+      }
 }

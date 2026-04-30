@@ -1,0 +1,13 @@
+# Initialize git repository — no upstream configured (mirrors a local-only build).
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# `ThisBuild / releaseIODefaultsPushAnswer := Some(false)` should flow through to
+# project-scope lookups via sbt's scope delegation. The release succeeds without a
+# remote because the push-decision gate sees Some(false) and short-circuits.
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+> checkReleaseTagged
