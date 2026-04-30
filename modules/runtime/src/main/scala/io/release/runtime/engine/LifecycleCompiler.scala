@@ -252,33 +252,32 @@ private[release] object LifecycleCompiler {
       executeTrackedOf: Hook => (TrackedContextHandle[C], I) => IO[Unit],
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean
-  ): IO[Seq[ProcessStep.PerItem[C, I]]] =
+  ): IO[Seq[ProcessStep.PerItem[C, I]]] = {
+    val applyNarrow: ((C, I) => IO[C]) => (C, I) => IO[C]                                        =
+      narrowExecute match {
+        case Some(narrow) =>
+          f => (c, i) => narrow(c, i).ifM(f(c, i), IO.pure(c))
+        case None         =>
+          identity
+      }
+    val applyNarrowTracked
+        : ((TrackedContextHandle[C], I) => IO[Unit]) => (TrackedContextHandle[C], I) => IO[Unit] =
+      narrowExecute match {
+        case Some(narrow) =>
+          f =>
+            (handle, item) =>
+              handle.get.flatMap(ctx => narrow(ctx, item).ifM(f(handle, item), IO.unit))
+        case None         =>
+          identity
+      }
+
     hooks.toList.traverse { hook =>
       val stepName = s"$phase:${nameOf(hook)}"
 
       gateMode match {
         case Some(stableGateKey) =>
-          val narrowedExecute: (C, I) => IO[C]                                 = (c, i) =>
-            narrowExecute match {
-              case Some(narrow) =>
-                narrow(c, i).flatMap { allow =>
-                  if (allow) executeOf(hook)(c, i) else IO.pure(c)
-                }
-              case None         =>
-                executeOf(hook)(c, i)
-            }
-          val narrowedExecuteTracked: (TrackedContextHandle[C], I) => IO[Unit] =
-            (handle, item) =>
-              narrowExecute match {
-                case Some(narrow) =>
-                  handle.get.flatMap(ctx =>
-                    narrow(ctx, item).flatMap { allow =>
-                      if (allow) executeTrackedOf(hook)(handle, item) else IO.unit
-                    }
-                  )
-                case None         =>
-                  executeTrackedOf(hook)(handle, item)
-              }
+          val narrowedExecute        = applyNarrow(executeOf(hook))
+          val narrowedExecuteTracked = applyNarrowTracked(executeTrackedOf(hook))
 
           frozenGateFunctions[(C, I), C](
             gate = { case (c, i) => gate(c, i) },
@@ -328,6 +327,7 @@ private[release] object LifecycleCompiler {
           )
       }
     }
+  }
 
   // ── Shared gate helpers ─────────────────────────────────────────────
 

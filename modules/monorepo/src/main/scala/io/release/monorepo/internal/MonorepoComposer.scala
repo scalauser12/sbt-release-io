@@ -37,42 +37,36 @@ private[monorepo] object MonorepoComposer {
 
     if (plan.hasSelectionBoundary)
       for {
-        preSetupCtx <- runSequentialValidateThenExecute(
-                         plan.preSelectionSetupSteps,
-                         initialCtx,
-                         crossBuild
-                       )
-        finalCtx    <- if (preSetupCtx.failed) IO.pure(preSetupCtx)
-                       else
-                         VcsOps
-                           .preparePushReleaseIfNeeded(
-                             preSetupCtx,
-                             plan.mainSteps,
-                             LogPrefix
-                           )
-                           .flatMap { preparedCtx =>
-                             for {
-                               postSetupCtx <- runSequentialValidateThenExecute(
-                                                 plan.postSelectionSetupSteps,
-                                                 preparedCtx,
-                                                 crossBuild
-                                               )
-                               resultCtx    <- if (postSetupCtx.failed) IO.pure(postSetupCtx)
-                                               else
-                                                 logSelectedProjects(postSetupCtx) *>
-                                                   runMainSegment(
-                                                     plan.mainSteps,
-                                                     postSetupCtx,
-                                                     crossBuild
-                                                   )
-                             } yield resultCtx
-                           }
+        preSetupCtx  <- runSequentialValidateThenExecute(
+                          plan.preSelectionSetupSteps,
+                          initialCtx,
+                          crossBuild
+                        )
+        preparedCtx  <- haltIfFailed(preSetupCtx) { ctx =>
+                          VcsOps.preparePushReleaseIfNeeded(ctx, plan.mainSteps, LogPrefix)
+                        }
+        postSetupCtx <- haltIfFailed(preparedCtx) { ctx =>
+                          runSequentialValidateThenExecute(
+                            plan.postSelectionSetupSteps,
+                            ctx,
+                            crossBuild
+                          )
+                        }
+        finalCtx     <- haltIfFailed(postSetupCtx) { ctx =>
+                          logSelectedProjects(ctx) *>
+                            runMainSegment(plan.mainSteps, ctx, crossBuild)
+                        }
       } yield finalCtx
     else
       VcsOps
         .preparePushReleaseIfNeeded(initialCtx, steps, LogPrefix)
         .flatMap(runSequentialValidateThenExecute(steps, _, crossBuild))
   }
+
+  private def haltIfFailed(ctx: MonorepoContext)(
+      next: MonorepoContext => IO[MonorepoContext]
+  ): IO[MonorepoContext] =
+    if (ctx.failed) IO.pure(ctx) else next(ctx)
 
   private[monorepo] def selectedProjectsLine(ctx: MonorepoContext): String = {
     val selected = ctx.currentProjects
