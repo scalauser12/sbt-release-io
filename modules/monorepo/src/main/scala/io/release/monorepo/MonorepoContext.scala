@@ -168,6 +168,18 @@ case class MonorepoContext(
     if (publishExecutedKeys.isDefined) this
     else withMetadata(MonorepoContext.publishExecutedKeysKey, Set.empty[String])
 
+  /** True iff the monorepo `push-changes` step actually pushed to the remote.
+    * False when the operator declined (`default-push-answer n`,
+    * `releaseIOMonorepoDefaultsPushAnswer := Some(false)`, non-interactive
+    * no-default, interactive decline, EOF). Used to gate `after-push` global
+    * hooks on the real push outcome.
+    */
+  private[monorepo] def pushExecuted: Boolean =
+    metadata(MonorepoContext.pushExecutedKey).getOrElse(false)
+
+  private[monorepo] def markPushExecuted: MonorepoContext =
+    withMetadata(MonorepoContext.pushExecutedKey, true)
+
   /** Seed internal execution state during initialization.
     * Replaces any prior execution-state payload.
     * Built-in flow calls this once before step execution begins.
@@ -199,4 +211,7 @@ object MonorepoContext {
 
   private val publishExecutedKeysKey: AttributeKey[Set[String]] =
     AttributeKey[Set[String]]("releaseIOInternalMonorepoPublishExecutedKeys")
+
+  private val pushExecutedKey: AttributeKey[Boolean] =
+    AttributeKey[Boolean]("releaseIOInternalMonorepoPushExecuted")
 }

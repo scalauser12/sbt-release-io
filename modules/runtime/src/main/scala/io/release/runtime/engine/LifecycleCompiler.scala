@@ -44,12 +44,13 @@ private[release] object LifecycleCompiler {
     * @param gateKey extracts a cache key from the context; for cross-build
     *   iterations this should fold `scalaVersion` in so each iteration
     *   gets its own frozen decision.
-    * @param narrowExecute optional execute-time predicate AND'd with the cached
-    *   validate-time gate decision (only meaningful when `freezeGate = true`).
-    *   Lets a phase use the validate-time gate as an upper bound while further
-    *   gating execution on a runtime signal that the validate phase cannot
-    *   observe (e.g. "did the publish task actually run?"). Validation is
-    *   unaffected, preserving the validate-before-execute contract.
+    * @param narrowExecute optional execute-time predicate AND'd with `gate`
+    *   (or, when `freezeGate = true`, with the cached validate-time gate
+    *   decision). Lets a phase use the validate-time gate as an upper bound
+    *   while further gating execution on a runtime signal that the validate
+    *   phase cannot observe (e.g. "did the publish task actually run?",
+    *   "did the push actually go through?"). Validation is unaffected,
+    *   preserving the validate-before-execute contract.
     */
   def singleHookPhase[Config, C, I, Hook](
       phase: String,
@@ -96,12 +97,13 @@ private[release] object LifecycleCompiler {
     * @param gateKey extracts a stable cache key from `(context, item)`. Must use
     *   a stable project identifier (e.g. `ProjectRef`) rather than the full item,
     *   since item fields like `versions` and `tagName` change between phases.
-    * @param narrowExecute optional execute-time predicate AND'd with the cached
-    *   validate-time gate decision (only meaningful when `freezeGate = true`).
-    *   Lets a phase use the validate-time gate as an upper bound while further
-    *   gating execution on a runtime signal that the validate phase cannot
-    *   observe (e.g. "did the publish task actually run?"). Validation is
-    *   unaffected, preserving the validate-before-execute contract.
+    * @param narrowExecute optional execute-time predicate AND'd with `gate`
+    *   (or, when `freezeGate = true`, with the cached validate-time gate
+    *   decision). Lets a phase use the validate-time gate as an upper bound
+    *   while further gating execution on a runtime signal that the validate
+    *   phase cannot observe (e.g. "did the publish task actually run?",
+    *   "did the push actually go through?"). Validation is unaffected,
+    *   preserving the validate-before-execute contract.
     */
   def perItemHookPhase[Config, C, I, Hook](
       phase: String,
@@ -248,13 +250,18 @@ private[release] object LifecycleCompiler {
             )
           }
         case None                =>
+          // `narrowExecute` is execute-time only — validation rehearses the hook on
+          // `gate` alone so `releaseIO check` exercises hooks the runtime gate would
+          // later suppress (e.g. afterPush when no push happened).
+          val narrowedExecute        = applyNarrow(executeOf(hook))
+          val narrowedExecuteTracked = applyNarrowTracked(executeTrackedOf(hook))
           IO.pure(
             ProcessStep.Single[C](
               stepName,
-              (ctx: C) => gate(ctx).ifM(executeOf(hook)(ctx), IO.pure(ctx)),
+              (ctx: C) => gate(ctx).ifM(narrowedExecute(ctx), IO.pure(ctx)),
               Some((handle: TrackedContextHandle[C]) =>
                 handle.get.flatMap((ctx: C) =>
-                  gate(ctx).ifM(executeTrackedOf(hook)(handle), IO.unit)
+                  gate(ctx).ifM(narrowedExecuteTracked(handle), IO.unit)
                 )
               ),
               (ctx: C) => gate(ctx).ifM(validateOf(hook)(ctx), IO.unit),
@@ -331,17 +338,21 @@ private[release] object LifecycleCompiler {
             )
           }
         case None                =>
+          // `narrowExecute` is execute-time only; validation rehearses the hook on
+          // `gate` alone so per-item check passes still exercise the hook code.
+          val narrowedExecute        = applyNarrow(executeOf(hook))
+          val narrowedExecuteTracked = applyNarrowTracked(executeTrackedOf(hook))
           IO.pure(
             ProcessStep.PerItem[C, I](
               stepName,
               (ctx: C, item: I) =>
                 gate(ctx, item).ifM(
-                  executeOf(hook)(ctx, item),
+                  narrowedExecute(ctx, item),
                   IO.pure(ctx)
                 ),
               Some((handle: TrackedContextHandle[C], item: I) =>
                 handle.get.flatMap((ctx: C) =>
-                  gate(ctx, item).ifM(executeTrackedOf(hook)(handle, item), IO.unit)
+                  gate(ctx, item).ifM(narrowedExecuteTracked(handle, item), IO.unit)
                 )
               ),
               (ctx: C, item: I) =>

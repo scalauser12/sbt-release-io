@@ -19,7 +19,8 @@ private[release] object MonorepoLifecycle {
       resolveHooks: MonorepoHookConfiguration => Seq[
         MonorepoGlobalHookIO
       ],
-      enabled: MonorepoHookConfiguration => Boolean = _ => true
+      enabled: MonorepoHookConfiguration => Boolean = _ => true,
+      narrowExecute: Option[MonorepoContext => IO[Boolean]] = None
   )
 
   private case class ProjectHookPhaseConfig(
@@ -74,7 +75,8 @@ private[release] object MonorepoLifecycle {
       executeTrackedOf =
         Some((hook: MonorepoGlobalHookIO) => MonorepoGlobalHookIO.trackedExecute(hook)),
       validateOf = (hook: MonorepoGlobalHookIO) => hook.validate,
-      enabled = config.enabled
+      enabled = config.enabled,
+      narrowExecute = config.narrowExecute
     )
 
   private def projectHookPhase(
@@ -113,6 +115,13 @@ private[release] object MonorepoLifecycle {
         ctx.publishExecutedKeys
           .exists(_.contains(MonorepoPublishSteps.publishGateKey(ctx, project)))
       )
+
+  /** Execute-time AND condition for the global `after-push` hook: fires only
+    * when the monorepo `push-changes` step actually pushed. Validation is
+    * unaffected so `releaseIOMonorepo check` still rehearses the hook code.
+    */
+  private val afterPushNarrow: MonorepoContext => IO[Boolean] =
+    ctx => IO.pure(ctx.pushExecuted)
 
   // @formatter:off
   private val afterCleanCheck = GlobalHookPhaseConfig(
@@ -210,7 +219,8 @@ private[release] object MonorepoLifecycle {
   private val afterPush = GlobalHookPhaseConfig(
     phase = HookPhases.AfterPush,
     resolveHooks = _.afterPushHooks,
-    enabled = _.enablePush
+    enabled = _.enablePush,
+    narrowExecute = Some(afterPushNarrow)
   )
   // @formatter:on
 

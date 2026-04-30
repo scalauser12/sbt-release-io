@@ -1,0 +1,16 @@
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# ThisBuild-scoped overrides must be readable from every project scope.
+> checkBuildLevelDefaults
+
+# Run an end-to-end release with all gating supplied via ThisBuild only.
+# Without the fix, releaseIOPolicyEnablePublish would still be true from the
+# project-scoped default, the publish step would attempt to run, and (since no
+# publishTo is configured for libA / libB) the release would fail.
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt

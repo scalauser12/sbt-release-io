@@ -5,18 +5,23 @@ import munit.FunSuite
 
 class CoreDefaultSettingsSpec extends FunSuite {
 
-  test("pluginDefaultSettings include representative core defaults") {
+  test("pluginDefaultSettings include representative project-scoped defaults") {
     val labels = CoreDefaultSettings.pluginDefaultSettings.map(_.key.key.label).toSet
 
-    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild.key.label))
-    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPolicyEnablePush.key.label))
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOVersioningReadVersion.key.label))
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOVcsTagName.key.label))
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPublishChecks.key.label))
   }
 
-  test("pluginDefaultSettings include each lifecycle-derived default exactly once") {
-    val counts = CoreDefaultSettings.pluginDefaultSettings
+  test("buildDefaultSettings include representative build-scoped defaults") {
+    val labels = CoreDefaultSettings.buildDefaultSettings.map(_.key.key.label).toSet
+
+    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild.key.label))
+    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPolicyEnablePush.key.label))
+  }
+
+  test("buildDefaultSettings include each lifecycle-derived default exactly once") {
+    val counts = CoreDefaultSettings.buildDefaultSettings
       .groupBy(_.key.key.label)
       .map { case (label, settings) => label -> settings.size }
       .toMap

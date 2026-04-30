@@ -245,8 +245,8 @@ private[monorepo] object MonorepoVcsSteps {
           )(
             doPush = currentCtx =>
               vcs.commandName match {
-                case "git" => gitPush(currentCtx, vcs)
-                case _     => vcs.pushChanges.as(currentCtx)
+                case "git" => gitPush(currentCtx, vcs).map(_.markPushExecuted)
+                case _     => vcs.pushChanges.as(currentCtx.markPushExecuted)
               },
             onDeclinePush = currentCtx =>
               logWarn(currentCtx, "Remember to push the changes yourself!").as(currentCtx)

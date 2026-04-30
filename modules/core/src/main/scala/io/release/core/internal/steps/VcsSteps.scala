@@ -290,8 +290,8 @@ private[release] object VcsSteps {
           )(
             doPush = currentCtx =>
               vcs.commandName match {
-                case "git" => gitPush(currentCtx, vcs)
-                case _     => vcs.pushChanges.as(currentCtx)
+                case "git" => gitPush(currentCtx, vcs).map(_.markPushExecuted)
+                case _     => vcs.pushChanges.as(currentCtx.markPushExecuted)
               },
             onDeclinePush = currentCtx =>
               IO

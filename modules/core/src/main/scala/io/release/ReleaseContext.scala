@@ -103,6 +103,18 @@ case class ReleaseContext(
     if (publishExecutedKeys.isDefined) this
     else withMetadata(ReleaseContext.publishExecutedKeysKey, Set.empty[String])
 
+  /** True iff `push-changes` actually pushed to the remote during this release.
+    * False when the operator declined the push (CLI `default-push-answer n`,
+    * `releaseIODefaultsPushAnswer := Some(false)`, non-interactive no-default,
+    * interactive decline, EOF). Used to gate `after-push` hooks on the real
+    * push outcome rather than a pre-push policy upper bound.
+    */
+  private[release] def pushExecuted: Boolean =
+    metadata(ReleaseContext.pushExecutedKey).getOrElse(false)
+
+  private[release] def markPushExecuted: ReleaseContext =
+    withMetadata(ReleaseContext.pushExecutedKey, true)
+
   override def fail: ReleaseContext                       = copy(failed = true)
   override def failWith(cause: Throwable): ReleaseContext =
     copy(failed = true, failureCause = Some(cause))
@@ -116,4 +128,7 @@ object ReleaseContext {
   // `unapply` remain accessible to hook and custom-plugin code.
   private val publishExecutedKeysKey: AttributeKey[Set[String]] =
     AttributeKey[Set[String]]("releaseIOInternalCorePublishExecutedKeys")
+
+  private val pushExecutedKey: AttributeKey[Boolean] =
+    AttributeKey[Boolean]("releaseIOInternalCorePushExecuted")
 }

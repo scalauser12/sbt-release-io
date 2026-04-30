@@ -42,30 +42,34 @@ private[release] object CoreHookConfiguration {
 
   private val ai = ReleasePluginIO.autoImport
 
+  // Defaults are scoped to `ThisBuild` so that user `ThisBuild / ...` overrides flow
+  // through to project-scope lookups via sbt's delegation. Project-scoped duplicates
+  // (`projectSettings`) would shadow user `ThisBuild / ...` overrides because project
+  // scope wins over ThisBuild on the project axis.
   lazy val defaultSettings: Seq[Setting[?]] = Seq(
-    ai.releaseIOPolicyEnableSnapshotDependenciesCheck := true,
-    ai.releaseIOPolicyEnableRunClean                  := true,
-    ai.releaseIOPolicyEnableRunTests                  := true,
-    ai.releaseIOPolicyEnableTagging                   := true,
-    ai.releaseIOPolicyEnablePublish                   := true,
-    ai.releaseIOPolicyEnablePush                      := true,
-    ai.releaseIOHooksAfterCleanCheck                  := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforeVersionResolution          := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterVersionResolution           := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforeReleaseVersionWrite        := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterReleaseVersionWrite         := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforeReleaseCommit              := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterReleaseCommit               := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforeTag                        := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterTag                         := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforePublish                    := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterPublish                     := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforeNextVersionWrite           := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterNextVersionWrite            := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforeNextCommit                 := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterNextCommit                  := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksBeforePush                       := Seq.empty[ReleaseHookIO],
-    ai.releaseIOHooksAfterPush                        := Seq.empty[ReleaseHookIO]
+    ThisBuild / ai.releaseIOPolicyEnableSnapshotDependenciesCheck := true,
+    ThisBuild / ai.releaseIOPolicyEnableRunClean                  := true,
+    ThisBuild / ai.releaseIOPolicyEnableRunTests                  := true,
+    ThisBuild / ai.releaseIOPolicyEnableTagging                   := true,
+    ThisBuild / ai.releaseIOPolicyEnablePublish                   := true,
+    ThisBuild / ai.releaseIOPolicyEnablePush                      := true,
+    ThisBuild / ai.releaseIOHooksAfterCleanCheck                  := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforeVersionResolution          := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterVersionResolution           := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforeReleaseVersionWrite        := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterReleaseVersionWrite         := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforeReleaseCommit              := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterReleaseCommit               := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforeTag                        := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterTag                         := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforePublish                    := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterPublish                     := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforeNextVersionWrite           := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterNextVersionWrite            := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforeNextCommit                 := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterNextCommit                  := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksBeforePush                       := Seq.empty[ReleaseHookIO],
+    ThisBuild / ai.releaseIOHooksAfterPush                        := Seq.empty[ReleaseHookIO]
   )
 
   def resolve(state: State): CoreHookConfiguration = {

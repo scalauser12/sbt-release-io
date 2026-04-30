@@ -81,6 +81,17 @@ private[release] object CoreLifecycle {
         ctx.publishExecutedKeys.exists(_.contains(PublishSteps.publishGateKey(ctx)))
       )
 
+  /** Narrow `after-push` execution to releases where `push-changes` actually pushed.
+    * `enablePush` (the policy gate) only says "the push step is in the pipeline";
+    * the step can still complete successfully without pushing when the operator
+    * declined (`default-push-answer n`, `releaseIODefaultsPushAnswer := Some(false)`,
+    * non-interactive no-default, interactive decline, EOF). Validation rehearses
+    * the hook unconditionally (so `releaseIO check` exercises hook code), and
+    * execution requires that the push step recorded `markPushExecuted`.
+    */
+  private val afterPushNarrow: ReleaseContext => IO[Boolean] =
+    ctx => IO.pure(ctx.pushExecuted)
+
   // @formatter:off
   private val afterCleanCheck = HookPhaseConfig(
     phase = HookPhases.AfterCleanCheck,
@@ -165,7 +176,8 @@ private[release] object CoreLifecycle {
   private val afterPush = HookPhaseConfig(
     phase = HookPhases.AfterPush,
     resolveHooks = _.afterPushHooks,
-    enabled = _.enablePush
+    enabled = _.enablePush,
+    narrowExecute = Some(afterPushNarrow)
   )
   // @formatter:on
 

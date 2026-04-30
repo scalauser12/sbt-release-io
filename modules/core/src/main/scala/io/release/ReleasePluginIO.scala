@@ -395,7 +395,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     * Custom plugins that override `buildSettings` should start from `baseBuildSettings`.
     */
   protected def baseBuildSettings: Seq[Setting[?]] =
-    ReleaseSharedDefaultSettingsSupport.buildDefaultSettings
+    ReleaseSharedDefaultSettingsSupport.buildDefaultSettings ++
+      CoreDefaultSettings.buildDefaultSettings
 
   /** Default values for the core-owned release-io setting keys. */
   protected def defaultSettingsValues: Seq[Setting[?]] =

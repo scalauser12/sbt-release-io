@@ -7,18 +7,27 @@ import sbt.Keys.*
 
 private[release] object CoreDefaultSettings {
 
+  // Project-scoped defaults: only keys whose definition references project-scoped
+  // values (e.g. `version.value`, `baseDirectory.value`). Constants and
+  // policy/hook/behavior toggles live in `buildDefaultSettings` at `ThisBuild`
+  // scope so user `ThisBuild / ...` overrides aren't shadowed (project scope
+  // wins over ThisBuild on the project axis).
   lazy val pluginDefaultSettings: Seq[Setting[?]] =
     Seq(
-      behaviorDefaults,
-      CoreLifecycle.configDefaultSettings,
       versioningAndRuntimeDefaults,
       vcsAndPublishDefaults
     ).flatten
 
+  lazy val buildDefaultSettings: Seq[Setting[?]] =
+    Seq(
+      behaviorDefaults,
+      CoreLifecycle.configDefaultSettings
+    ).flatten
+
   private lazy val behaviorDefaults: Seq[Setting[?]] = Seq(
-    releaseIOBehaviorCrossBuild  := false,
-    releaseIOBehaviorSkipPublish := false,
-    releaseIOBehaviorInteractive := false
+    ThisBuild / releaseIOBehaviorCrossBuild  := false,
+    ThisBuild / releaseIOBehaviorSkipPublish := false,
+    ThisBuild / releaseIOBehaviorInteractive := false
   )
 
   private lazy val versioningAndRuntimeDefaults: Seq[Setting[?]] = Seq(
