@@ -13,6 +13,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.preflight.PreflightRendering
 import io.release.runtime.workflow.VersionWorkflowSupport
 import io.release.vcs.TagConflictResolver
@@ -45,30 +46,8 @@ private[monorepo] object MonorepoPreflight {
     SelectionBlockingPhases ++ Set(HookPhases.AfterSelection)
   private val VersionResolutionBlockingPhases =
     ProjectSummaryMutationPhases ++ Set(HookPhases.BeforeVersionResolution)
-  // Phases from AfterVersionResolution through BeforeTag that can reshape the release
-  // commit inspected by the built-in tag preflight.
-  private val TagPreflightRelevantPhases      = Set(
-    HookPhases.AfterVersionResolution,
-    HookPhases.BeforeReleaseVersionWrite,
-    HookPhases.AfterReleaseVersionWrite,
-    HookPhases.BeforeReleaseCommit,
-    HookPhases.AfterReleaseCommit,
-    HookPhases.BeforeTag
-  )
-  private val VersionSummaryMutationPhases    = TagPreflightRelevantPhases ++ Set(
-    HookPhases.AfterTag,
-    HookPhases.BeforePublish,
-    HookPhases.AfterPublish,
-    HookPhases.BeforeNextVersionWrite,
-    HookPhases.AfterNextVersionWrite,
-    HookPhases.BeforeNextCommit
-  )
-  // Built-in tag preflight inspects the would-be release commit, so any hook phase that can
-  // mutate version inputs, write a project version file, or reshape the release commit
-  // (through and including before-tag) invalidates a stable preflight. after-tag and later
-  // phases cannot retroactively change the tag preflight result and are intentionally excluded.
   private val TagAffectingPhases              =
-    VersionResolutionBlockingPhases ++ TagPreflightRelevantPhases
+    PreflightPhaseGroups.tagAffectingPhases(VersionResolutionBlockingPhases)
 
   // Re-export the shared runtime ADT under the existing namespace so external callers
   // (tests, MonorepoPreparedSession, etc.) keep referencing `MonorepoPreflight.Evaluation`.
@@ -138,7 +117,9 @@ private[monorepo] object MonorepoPreflight {
         versionsRequireRuntimeHookResolution =
           VersionResolutionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
         versionsDependOnPostResolutionRuntimeHookState =
-          VersionSummaryMutationPhases.exists(phase => hasHookPhase(stepNames, phase)),
+          PreflightPhaseGroups.VersionSummaryMutationPhases.exists(phase =>
+            hasHookPhase(stepNames, phase)
+          ),
         tagDependsOnRuntimeHookState =
           TagAffectingPhases.exists(phase => hasHookPhase(stepNames, phase)),
         tagFollowsVersionResolution = processPlan.builtInTagPreflightFollowsVersionResolution,

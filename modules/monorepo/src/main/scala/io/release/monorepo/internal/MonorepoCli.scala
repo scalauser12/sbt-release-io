@@ -1,5 +1,7 @@
 package io.release.monorepo.internal
 
+import io.release.runtime.command.SharedReleaseFlags
+
 /** Token-level command parsing for `releaseIOMonorepo`.
   *
   * [[MonorepoCommandParsers]] is the authoritative sbt-facing parser and is responsible for
@@ -59,19 +61,7 @@ private[monorepo] object MonorepoCli {
 
   private def parseArgs(tokens: Seq[String], commandName: String): Either[String, Seq[Arg]] = {
     import Arg.*
-
-    def parseYesNo(
-        flagName: String,
-        value: String
-    ): Either[String, Boolean] =
-      value.trim.toLowerCase match {
-        case "y" => Right(true)
-        case "n" => Right(false)
-        case _   =>
-          Left(
-            s"Invalid value '$value' for '$flagName'. Expected 'y' or 'n'. See '$commandName help' for usage."
-          )
-      }
+    import SharedReleaseFlags.*
 
     def parseVersionArg(value: String, kind: String)(
         build: (String, String) => Arg
@@ -90,46 +80,46 @@ private[monorepo] object MonorepoCli {
 
     def loop(rest: List[String], acc: List[Arg]): Either[String, Seq[Arg]] =
       rest match {
-        case Nil                                                     => Right(acc.reverse)
-        case "project" :: value :: tail                              => loop(tail, SelectProject(value) :: acc)
-        case "with-defaults" :: tail                                 => loop(tail, WithDefaults :: acc)
-        case "skip-tests" :: tail                                    => loop(tail, SkipTests :: acc)
-        case "cross" :: tail                                         => loop(tail, CrossBuild :: acc)
-        case "all-changed" :: tail                                   => loop(tail, AllChanged :: acc)
-        case "default-tag-exists-answer" :: value :: tail            =>
+        case Nil                                                 => Right(acc.reverse)
+        case "project" :: value :: tail                          => loop(tail, SelectProject(value) :: acc)
+        case `WithDefaultsToken` :: tail                         => loop(tail, WithDefaults :: acc)
+        case `SkipTestsToken` :: tail                            => loop(tail, SkipTests :: acc)
+        case `CrossToken` :: tail                                => loop(tail, CrossBuild :: acc)
+        case "all-changed" :: tail                               => loop(tail, AllChanged :: acc)
+        case `DefaultTagExistsToken` :: value :: tail            =>
           loop(tail, TagDefault(value) :: acc)
-        case "default-snapshot-dependencies-answer" :: value :: tail =>
-          parseYesNo("default-snapshot-dependencies-answer", value)
+        case `DefaultSnapshotDependenciesToken` :: value :: tail =>
+          parseYesNo(DefaultSnapshotDependenciesToken, value, commandName)
             .flatMap(parsed => loop(tail, SnapshotDependenciesDefault(parsed) :: acc))
-        case "default-remote-check-failure-answer" :: value :: tail  =>
-          parseYesNo("default-remote-check-failure-answer", value)
+        case `DefaultRemoteCheckFailureToken` :: value :: tail   =>
+          parseYesNo(DefaultRemoteCheckFailureToken, value, commandName)
             .flatMap(parsed => loop(tail, RemoteCheckFailureDefault(parsed) :: acc))
-        case "default-upstream-behind-answer" :: value :: tail       =>
-          parseYesNo("default-upstream-behind-answer", value)
+        case `DefaultUpstreamBehindToken` :: value :: tail       =>
+          parseYesNo(DefaultUpstreamBehindToken, value, commandName)
             .flatMap(parsed => loop(tail, UpstreamBehindDefault(parsed) :: acc))
-        case "default-push-answer" :: value :: tail                  =>
-          parseYesNo("default-push-answer", value)
+        case `DefaultPushToken` :: value :: tail                 =>
+          parseYesNo(DefaultPushToken, value, commandName)
             .flatMap(parsed => loop(tail, PushDefault(parsed) :: acc))
-        case "release-version" :: value :: tail                      =>
+        case "release-version" :: value :: tail                  =>
           parseVersionArg(value, "release-version")(ReleaseVersion.apply)
             .flatMap(arg => loop(tail, arg :: acc))
-        case "next-version" :: value :: tail                         =>
+        case "next-version" :: value :: tail                     =>
           parseVersionArg(value, "next-version")(NextVersion.apply)
             .flatMap(arg => loop(tail, arg :: acc))
-        case "release-version" :: Nil                                => missingValue("release-version")
-        case "next-version" :: Nil                                   => missingValue("next-version")
-        case "default-tag-exists-answer" :: Nil                      => missingValue("default-tag-exists-answer")
-        case "default-snapshot-dependencies-answer" :: Nil           =>
-          missingValue("default-snapshot-dependencies-answer")
-        case "default-remote-check-failure-answer" :: Nil            =>
-          missingValue("default-remote-check-failure-answer")
-        case "default-upstream-behind-answer" :: Nil                 =>
-          missingValue("default-upstream-behind-answer")
-        case "default-push-answer" :: Nil                            => missingValue("default-push-answer")
-        case "project" :: Nil                                        => missingValue("project")
+        case "release-version" :: Nil                            => missingValue("release-version")
+        case "next-version" :: Nil                               => missingValue("next-version")
+        case `DefaultTagExistsToken` :: Nil                      => missingValue(DefaultTagExistsToken)
+        case `DefaultSnapshotDependenciesToken` :: Nil           =>
+          missingValue(DefaultSnapshotDependenciesToken)
+        case `DefaultRemoteCheckFailureToken` :: Nil             =>
+          missingValue(DefaultRemoteCheckFailureToken)
+        case `DefaultUpstreamBehindToken` :: Nil                 =>
+          missingValue(DefaultUpstreamBehindToken)
+        case `DefaultPushToken` :: Nil                           => missingValue(DefaultPushToken)
+        case "project" :: Nil                                    => missingValue("project")
         // Catch-all: token was admitted by MonorepoCommandParsers as a known project name.
         // Direct callers (tests, tooling) must pre-validate tokens; see class Scaladoc.
-        case project :: tail                                         =>
+        case project :: tail                                     =>
           loop(tail, SelectProject(project) :: acc)
       }
 

@@ -1,5 +1,7 @@
 package io.release.core.internal
 
+import io.release.runtime.command.SharedReleaseFlags
+
 /** Token-level command parsing for `releaseIO`.
   *
   * The structured sbt command parser emits canonical token sequences; this object owns
@@ -52,58 +54,46 @@ private[release] object ReleaseCli {
 
   private def parseArgs(tokens: Seq[String], commandName: String): Either[String, Seq[Arg]] = {
     import Arg.*
-
-    def parseYesNo(
-        flagName: String,
-        value: String
-    ): Either[String, Boolean] =
-      value.trim.toLowerCase match {
-        case "y" => Right(true)
-        case "n" => Right(false)
-        case _   =>
-          Left(
-            s"Invalid value '$value' for '$flagName'. Expected 'y' or 'n'. See '$commandName help' for usage."
-          )
-      }
+    import SharedReleaseFlags.*
 
     def missingValue(flag: String): Either[String, Seq[Arg]] =
       Left(s"Missing value after '$flag'. See '$commandName help' for usage.")
 
     def loop(rest: List[String], acc: List[Arg]): Either[String, Seq[Arg]] =
       rest match {
-        case Nil                                                     => Right(acc.reverse)
-        case "with-defaults" :: tail                                 => loop(tail, WithDefaults :: acc)
-        case "skip-tests" :: tail                                    => loop(tail, SkipTests :: acc)
-        case "cross" :: tail                                         => loop(tail, CrossBuild :: acc)
-        case "release-version" :: value :: tail                      =>
+        case Nil                                                 => Right(acc.reverse)
+        case `WithDefaultsToken` :: tail                         => loop(tail, WithDefaults :: acc)
+        case `SkipTestsToken` :: tail                            => loop(tail, SkipTests :: acc)
+        case `CrossToken` :: tail                                => loop(tail, CrossBuild :: acc)
+        case "release-version" :: value :: tail                  =>
           loop(tail, ReleaseVersion(value) :: acc)
-        case "next-version" :: value :: tail                         =>
+        case "next-version" :: value :: tail                     =>
           loop(tail, NextVersion(value) :: acc)
-        case "default-tag-exists-answer" :: value :: tail            =>
+        case `DefaultTagExistsToken` :: value :: tail            =>
           loop(tail, TagDefault(value) :: acc)
-        case "default-snapshot-dependencies-answer" :: value :: tail =>
-          parseYesNo("default-snapshot-dependencies-answer", value)
+        case `DefaultSnapshotDependenciesToken` :: value :: tail =>
+          parseYesNo(DefaultSnapshotDependenciesToken, value, commandName)
             .flatMap(parsed => loop(tail, SnapshotDependenciesDefault(parsed) :: acc))
-        case "default-remote-check-failure-answer" :: value :: tail  =>
-          parseYesNo("default-remote-check-failure-answer", value)
+        case `DefaultRemoteCheckFailureToken` :: value :: tail   =>
+          parseYesNo(DefaultRemoteCheckFailureToken, value, commandName)
             .flatMap(parsed => loop(tail, RemoteCheckFailureDefault(parsed) :: acc))
-        case "default-upstream-behind-answer" :: value :: tail       =>
-          parseYesNo("default-upstream-behind-answer", value)
+        case `DefaultUpstreamBehindToken` :: value :: tail       =>
+          parseYesNo(DefaultUpstreamBehindToken, value, commandName)
             .flatMap(parsed => loop(tail, UpstreamBehindDefault(parsed) :: acc))
-        case "default-push-answer" :: value :: tail                  =>
-          parseYesNo("default-push-answer", value)
+        case `DefaultPushToken` :: value :: tail                 =>
+          parseYesNo(DefaultPushToken, value, commandName)
             .flatMap(parsed => loop(tail, PushDefault(parsed) :: acc))
-        case "release-version" :: Nil                                => missingValue("release-version")
-        case "next-version" :: Nil                                   => missingValue("next-version")
-        case "default-tag-exists-answer" :: Nil                      => missingValue("default-tag-exists-answer")
-        case "default-snapshot-dependencies-answer" :: Nil           =>
-          missingValue("default-snapshot-dependencies-answer")
-        case "default-remote-check-failure-answer" :: Nil            =>
-          missingValue("default-remote-check-failure-answer")
-        case "default-upstream-behind-answer" :: Nil                 =>
-          missingValue("default-upstream-behind-answer")
-        case "default-push-answer" :: Nil                            => missingValue("default-push-answer")
-        case unknown :: _                                            =>
+        case "release-version" :: Nil                            => missingValue("release-version")
+        case "next-version" :: Nil                               => missingValue("next-version")
+        case `DefaultTagExistsToken` :: Nil                      => missingValue(DefaultTagExistsToken)
+        case `DefaultSnapshotDependenciesToken` :: Nil           =>
+          missingValue(DefaultSnapshotDependenciesToken)
+        case `DefaultRemoteCheckFailureToken` :: Nil             =>
+          missingValue(DefaultRemoteCheckFailureToken)
+        case `DefaultUpstreamBehindToken` :: Nil                 =>
+          missingValue(DefaultUpstreamBehindToken)
+        case `DefaultPushToken` :: Nil                           => missingValue(DefaultPushToken)
+        case unknown :: _                                        =>
           Left(s"Unknown argument '$unknown'. See '$commandName help' for usage.")
       }
 

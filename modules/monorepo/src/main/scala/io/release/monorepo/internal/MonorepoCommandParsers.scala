@@ -1,6 +1,7 @@
 package io.release.monorepo.internal
 
 import io.release.monorepo.*
+import io.release.runtime.command.SharedReleaseFlags
 import io.release.runtime.workflow.StepHelpers.errorMessage
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
@@ -77,31 +78,26 @@ private[monorepo] object MonorepoCommandParsers {
   private def normalizeProjectNames(projectNames: Seq[String]): Seq[String] =
     projectNames.sorted
 
+  private def bareToken(name: String): Parser[Tokens] =
+    token(name).map(_ => Seq(name))
+
+  private def valueToken(name: String, metavar: String): Parser[Tokens] =
+    (token(name) ~> Space ~> token(NotSpace, metavar)).map(value => Seq(name, value))
+
   private def argParser(projectNames: Seq[String]): Parser[Tokens] = {
     val projectNameParser     = namedProjectParser(projectNames)
-    val builtInParsers        = Seq(
-      token("with-defaults").map(_ => Seq("with-defaults")),
-      token("skip-tests").map(_ => Seq("skip-tests")),
-      token("cross").map(_ => Seq("cross")),
-      token("all-changed").map(_ => Seq("all-changed")),
-      (token("release-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
-        .map(value => Seq("release-version", value)),
-      (token("next-version") ~> Space ~> token(NotSpace, "<project>=<version>"))
-        .map(value => Seq("next-version", value)),
-      (token("default-tag-exists-answer") ~> Space ~> token(NotSpace, "o|k|a|<tag-name>"))
-        .map(value => Seq("default-tag-exists-answer", value)),
-      (
-        token("default-snapshot-dependencies-answer") ~> Space ~> token(NotSpace, "y|n")
-      ).map(value => Seq("default-snapshot-dependencies-answer", value)),
-      (
-        token("default-remote-check-failure-answer") ~> Space ~> token(NotSpace, "y|n")
-      ).map(value => Seq("default-remote-check-failure-answer", value)),
-      (
-        token("default-upstream-behind-answer") ~> Space ~> token(NotSpace, "y|n")
-      ).map(value => Seq("default-upstream-behind-answer", value)),
-      (token("default-push-answer") ~> Space ~> token(NotSpace, "y|n"))
-        .map(value => Seq("default-push-answer", value))
+    val yesNoFlags            = SharedReleaseFlags.YesNoDefaultTokens.map(
+      valueToken(_, SharedReleaseFlags.YesNoMeta)
     )
+    val builtInParsers        = Seq(
+      bareToken(SharedReleaseFlags.WithDefaultsToken),
+      bareToken(SharedReleaseFlags.SkipTestsToken),
+      bareToken(SharedReleaseFlags.CrossToken),
+      bareToken("all-changed"),
+      valueToken("release-version", "<project>=<version>"),
+      valueToken("next-version", "<project>=<version>"),
+      valueToken(SharedReleaseFlags.DefaultTagExistsToken, SharedReleaseFlags.DefaultTagExistsMeta)
+    ) ++ yesNoFlags
     val explicitProjectParser =
       (token("project") ~> Space ~> projectNameParser).map(name => Seq("project", name))
     val projectParsers        = projectNames.map(name => token(name).map(_ => Seq(name)))

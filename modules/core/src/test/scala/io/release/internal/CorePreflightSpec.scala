@@ -26,15 +26,19 @@ class CorePreflightSpec extends CatsEffectSuite {
 
   test("renderSummary - include resolved versions, tag status, and workflow flags") {
     val summary = CorePreflight.Summary(
-      versions = CorePreflight.VersionsSummary.Resolved(
-        versionFile = new File("/tmp/version.sbt"),
-        currentVersion = "0.1.0-SNAPSHOT",
-        releaseVersion = "0.1.0",
-        nextVersion = "0.2.0-SNAPSHOT"
+      versions = CorePreflight.Evaluation.Resolved(
+        CorePreflight.VersionsValue(
+          versionFile = new File("/tmp/version.sbt"),
+          currentVersion = "0.1.0-SNAPSHOT",
+          releaseVersion = "0.1.0",
+          nextVersion = "0.2.0-SNAPSHOT"
+        )
       ),
-      tag = CorePreflight.TagSummary.Resolved(
-        tagName = "v0.1.0",
-        status = "available"
+      tag = CorePreflight.Evaluation.Resolved(
+        CorePreflight.TagValue(
+          tagName = "v0.1.0",
+          status = "available"
+        )
       ),
       crossBuildEnabled = true,
       publishSummary = "enabled",
@@ -111,16 +115,18 @@ class CorePreflightSpec extends CatsEffectSuite {
       } yield {
         assertEquals(
           summary.versions,
-          CorePreflight.VersionsSummary.Resolved(
-            versionFile = versionFile,
-            currentVersion = "0.1.0-SNAPSHOT",
-            releaseVersion = "0.1.0",
-            nextVersion = "0.2.0-SNAPSHOT"
+          CorePreflight.Evaluation.Resolved(
+            CorePreflight.VersionsValue(
+              versionFile = versionFile,
+              currentVersion = "0.1.0-SNAPSHOT",
+              releaseVersion = "0.1.0",
+              nextVersion = "0.2.0-SNAPSHOT"
+            )
           )
         )
         assertEquals(
           summary.tag,
-          CorePreflight.TagSummary.Resolved("v0.1.0", "available")
+          CorePreflight.Evaluation.Resolved(CorePreflight.TagValue("v0.1.0", "available"))
         )
         assertEquals(summary.publishSummary, "step not configured")
         assertEquals(summary.pushSummary, "step not configured")
@@ -220,7 +226,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         .map { summary =>
           assertEquals(
             summary.versions,
-            CorePreflight.VersionsSummary.NotEvaluated(
+            CorePreflight.Evaluation.NotEvaluated(
               "inquire-versions not in check process"
             )
           )
@@ -250,16 +256,18 @@ class CorePreflightSpec extends CatsEffectSuite {
         .map { summary =>
           assertEquals(
             summary.versions,
-            CorePreflight.VersionsSummary.Resolved(
-              versionFile = versionFile,
-              currentVersion = "0.1.0-SNAPSHOT",
-              releaseVersion = "1.2.3",
-              nextVersion = "1.2.4-SNAPSHOT"
+            CorePreflight.Evaluation.Resolved(
+              CorePreflight.VersionsValue(
+                versionFile = versionFile,
+                currentVersion = "0.1.0-SNAPSHOT",
+                releaseVersion = "1.2.3",
+                nextVersion = "1.2.4-SNAPSHOT"
+              )
             )
           )
           assertEquals(
             summary.tag,
-            CorePreflight.TagSummary.Resolved("v1.2.3", "available")
+            CorePreflight.Evaluation.Resolved(CorePreflight.TagValue("v1.2.3", "available"))
           )
         }
     }
@@ -298,13 +306,13 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.versions,
-              CorePreflight.VersionsSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "versions depend on runtime hook state"
               )
             )
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "tag depends on runtime hook state"
               )
             )
@@ -349,13 +357,13 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.versions,
-              CorePreflight.VersionsSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "versions depend on runtime hook state"
               )
             )
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "tag depends on runtime hook state"
               )
             )
@@ -389,13 +397,13 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.versions,
-              CorePreflight.VersionsSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "versions depend on runtime hook state"
               )
             )
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.NotEvaluated("tag depends on runtime hook state")
+              CorePreflight.Evaluation.NotEvaluated("tag depends on runtime hook state")
             )
             assert(
               summary.stepNames.contains(
@@ -494,9 +502,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                )
               )
             )
           }
@@ -570,9 +580,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; release will keep the existing tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; release will keep the existing tag"
+                )
               )
             )
           }
@@ -602,9 +614,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; release will keep the existing tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; release will keep the existing tag"
+                )
               )
             )
           }
@@ -632,9 +646,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                )
               )
             )
           }
@@ -665,9 +681,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                )
               )
             )
           }
@@ -695,9 +713,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; release will keep the existing tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; release will keep the existing tag"
+                )
               )
             )
           }
@@ -740,9 +760,11 @@ class CorePreflightSpec extends CatsEffectSuite {
       } yield {
         assertEquals(
           summary.tag,
-          CorePreflight.TagSummary.Resolved(
-            "v0.1.0",
-            "exists; release will keep the existing tag"
+          CorePreflight.Evaluation.Resolved(
+            CorePreflight.TagValue(
+              "v0.1.0",
+              "exists; release will keep the existing tag"
+            )
           )
         )
       }
@@ -771,9 +793,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                )
               )
             )
           }
@@ -843,9 +867,11 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved(
-                "v0.1.0",
-                "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+              CorePreflight.Evaluation.Resolved(
+                CorePreflight.TagValue(
+                  "v0.1.0",
+                  "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                )
               )
             )
           }
@@ -865,13 +891,13 @@ class CorePreflightSpec extends CatsEffectSuite {
         .map { summary =>
           assertEquals(
             summary.versions,
-            CorePreflight.VersionsSummary.NotEvaluated(
+            CorePreflight.Evaluation.NotEvaluated(
               "inquire-versions not in check process"
             )
           )
           assertEquals(
             summary.tag,
-            CorePreflight.TagSummary.NotEvaluated("tag-release not in check process")
+            CorePreflight.Evaluation.NotEvaluated("tag-release not in check process")
           )
           assertEquals(summary.publishSummary, "step not configured")
           assertEquals(summary.pushSummary, "step not configured")
@@ -896,13 +922,13 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.versions,
-              CorePreflight.VersionsSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "versions depend on runtime hook state"
               )
             )
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.NotEvaluated("tag depends on runtime hook state")
+              CorePreflight.Evaluation.NotEvaluated("tag depends on runtime hook state")
             )
             assertEquals(summary.publishSummary, "step not configured")
             assertEquals(summary.pushSummary, "step not configured")
@@ -943,7 +969,7 @@ class CorePreflightSpec extends CatsEffectSuite {
             .map { summary =>
               assertEquals(
                 summary.tag,
-                CorePreflight.TagSummary.NotEvaluated("tag depends on runtime hook state")
+                CorePreflight.Evaluation.NotEvaluated("tag depends on runtime hook state")
               )
               assert(summary.stepNames.contains("after-release-version-write:touch-tracked-file"))
             }
@@ -971,13 +997,13 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.versions,
-              CorePreflight.VersionsSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "versions depend on runtime hook state"
               )
             )
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.Resolved("v0.1.0", "available")
+              CorePreflight.Evaluation.Resolved(CorePreflight.TagValue("v0.1.0", "available"))
             )
             assert(
               summary.stepNames.contains(
@@ -1015,13 +1041,13 @@ class CorePreflightSpec extends CatsEffectSuite {
           .map { summary =>
             assertEquals(
               summary.versions,
-              CorePreflight.VersionsSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "versions depend on runtime hook state"
               )
             )
             assertEquals(
               summary.tag,
-              CorePreflight.TagSummary.NotEvaluated(
+              CorePreflight.Evaluation.NotEvaluated(
                 "tag depends on runtime hook state"
               )
             )

@@ -1,5 +1,6 @@
 package io.release.core.internal
 
+import io.release.runtime.command.SharedReleaseFlags
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 
@@ -26,39 +27,29 @@ private[release] object ReleaseCommandParsers {
   private def runParser: Parser[Tokens] =
     (Space ~> argParser).*.map(_.flatten)
 
-  private def argParser: Parser[Tokens] =
+  private def bareToken(name: String): Parser[Tokens] =
+    token(name).map(_ => Seq(name))
+
+  private def valueToken(name: String, metavar: String): Parser[Tokens] =
+    (token(name) ~> Space ~> token(NotSpace, metavar)).map(value => Seq(name, value))
+
+  private def argParser: Parser[Tokens] = {
+    val yesNoFlags = SharedReleaseFlags.YesNoDefaultTokens.map(
+      valueToken(_, SharedReleaseFlags.YesNoMeta)
+    )
     oneOf(
       Seq(
-        token("with-defaults").map(_ => Seq("with-defaults")),
-        token("skip-tests").map(_ => Seq("skip-tests")),
-        token("cross").map(_ => Seq("cross")),
-        (token("release-version") ~> Space ~> token(NotSpace, "<release version>"))
-          .map(value => Seq("release-version", value)),
-        (token("next-version") ~> Space ~> token(NotSpace, "<next version>"))
-          .map(value => Seq("next-version", value)),
-        (token("default-tag-exists-answer") ~> Space ~> token(NotSpace, "o|k|a|<tag-name>"))
-          .map(value => Seq("default-tag-exists-answer", value)),
-        (
-          token("default-snapshot-dependencies-answer") ~> Space ~> token(
-            NotSpace,
-            "y|n"
-          )
-        ).map(value => Seq("default-snapshot-dependencies-answer", value)),
-        (
-          token("default-remote-check-failure-answer") ~> Space ~> token(
-            NotSpace,
-            "y|n"
-          )
-        ).map(value => Seq("default-remote-check-failure-answer", value)),
-        (
-          token("default-upstream-behind-answer") ~> Space ~> token(
-            NotSpace,
-            "y|n"
-          )
-        ).map(value => Seq("default-upstream-behind-answer", value)),
-        (token("default-push-answer") ~> Space ~> token(NotSpace, "y|n"))
-          .map(value => Seq("default-push-answer", value))
-      )
+        bareToken(SharedReleaseFlags.WithDefaultsToken),
+        bareToken(SharedReleaseFlags.SkipTestsToken),
+        bareToken(SharedReleaseFlags.CrossToken),
+        valueToken("release-version", "<release version>"),
+        valueToken("next-version", "<next version>"),
+        valueToken(
+          SharedReleaseFlags.DefaultTagExistsToken,
+          SharedReleaseFlags.DefaultTagExistsMeta
+        )
+      ) ++ yesNoFlags
     )
+  }
 
 }
