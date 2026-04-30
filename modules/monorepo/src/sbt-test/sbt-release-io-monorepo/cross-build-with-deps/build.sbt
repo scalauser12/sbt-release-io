@@ -26,7 +26,7 @@ lazy val api = (project in file("api"))
 // switched to V (sbt-stock `Cross` semantics) so api's compile/publish traverses the
 // dep graph at a coherent Scala version.
 val recordResolvedVersionsHook =
-  MonorepoProjectHookIO.action("record-resolved-versions") { (ctx, project) =>
+  MonorepoProjectHookIO.sideEffect("record-resolved-versions") { (project, ctx) =>
     _root_.cats.effect.IO.blocking {
       val extracted   = sbt.Project.extract(ctx.state)
       val coreRef     =

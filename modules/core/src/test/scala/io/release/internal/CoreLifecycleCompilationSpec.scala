@@ -61,10 +61,10 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       ReleasePluginIO.autoImport.releaseIOPolicyEnableRunTests := false,
       ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish  := false,
       ReleasePluginIO.autoImport.releaseIOHooksBeforeTag       := Seq(
-        ReleaseHookIO.action("before-tag")(_ => IO.unit)
+        ReleaseHookIO.sideEffect("before-tag")(_ => IO.unit)
       ),
       ReleasePluginIO.autoImport.releaseIOHooksAfterNextCommit := Seq(
-        ReleaseHookIO.action("after-next-commit")(_ => IO.unit)
+        ReleaseHookIO.sideEffect("after-next-commit")(_ => IO.unit)
       )
     )
 
@@ -96,19 +96,19 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish                   := false,
       ReleasePluginIO.autoImport.releaseIOPolicyEnablePush                      := false,
       ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck                  := Seq(
-        ReleaseHookIO.action("after-clean")(_ => IO.unit)
+        ReleaseHookIO.sideEffect("after-clean")(_ => IO.unit)
       ),
       ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution          := Seq(
-        ReleaseHookIO.action("before-version")(_ => IO.unit)
+        ReleaseHookIO.sideEffect("before-version")(_ => IO.unit)
       ),
       ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution           := Seq(
-        ReleaseHookIO.action("after-version")(_ => IO.unit)
+        ReleaseHookIO.sideEffect("after-version")(_ => IO.unit)
       ),
       ReleasePluginIO.autoImport.releaseIOHooksBeforeTag                        := Seq(
-        ReleaseHookIO.action("before-tag")(_ => IO.unit)
+        ReleaseHookIO.sideEffect("before-tag")(_ => IO.unit)
       ),
       ReleasePluginIO.autoImport.releaseIOHooksAfterTag                         := Seq(
-        ReleaseHookIO.action("after-tag")(_ => IO.unit)
+        ReleaseHookIO.sideEffect("after-tag")(_ => IO.unit)
       )
     )
 

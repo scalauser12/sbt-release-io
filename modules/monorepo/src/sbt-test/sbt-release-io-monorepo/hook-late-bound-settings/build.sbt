@@ -37,7 +37,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnablePublish          := false,
     releaseIOMonorepoPolicyEnablePush             := false,
     releaseIOMonorepoHooksBeforeVersionResolution := Seq(
-      MonorepoProjectHookIO.io("late-bound-version-settings") { (ctx, _) =>
+      MonorepoProjectHookIO.transform("late-bound-version-settings") { (_, ctx) =>
         IO.blocking {
           // ReleaseSessionOps.appendSessionSettings installs the late-bound
           // version-file mapping into `session.rawAppend` so it survives every
@@ -53,7 +53,7 @@ lazy val root = (project in file("."))
       }
     ),
     releaseIOMonorepoHooksBeforeTag               := Seq(
-      MonorepoProjectHookIO.io("late-bound-tag-settings") { (ctx, _) =>
+      MonorepoProjectHookIO.transform("late-bound-tag-settings") { (_, ctx) =>
         IO.blocking {
           val updatedState = ReleaseSessionOps.appendSessionSettings(
             ctx.state,

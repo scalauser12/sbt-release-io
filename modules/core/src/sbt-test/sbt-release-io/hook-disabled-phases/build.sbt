@@ -16,7 +16,7 @@ releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnablePush        := false
 
 def markerHook(marker: String): ReleaseHookIO =
-  ReleaseHookIO.action(marker) { ctx =>
+  ReleaseHookIO.sideEffect(marker) { ctx =>
     _root_.cats.effect.IO.blocking {
       val base = Project.extract(ctx.state).get(baseDirectory)
       sbt.IO.write(base / s"$marker.marker", marker + "\n")

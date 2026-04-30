@@ -17,11 +17,11 @@ class MonorepoReleasePluginReleaseRunSpec
       val settings: Seq[Setting[?]] = Seq(
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection +=
           MonorepoGlobalHookIO
-            .action("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
+            .sideEffect("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterTag +=
-          MonorepoProjectHookIO.action("plain-after-tag")((_, project) =>
+          MonorepoProjectHookIO.sideEffect("plain-after-tag") { (project, _) =>
             observed.update(_ :+ s"plain-project-execute:${project.name}")
-          )
+          }
       )
 
       stateResource("monorepo-plugin-resource-run", plugin, settings).use { loaded =>
@@ -84,7 +84,7 @@ class MonorepoReleasePluginReleaseRunSpec
   test("resolveReleaseRun keeps custom monorepo plugins on the compiled hook path") {
     val settings: Seq[Setting[?]] = Seq(
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
-        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("before-selection-hook")(_ => IO.unit)
     )
 
     stateResource("monorepo-plugin-custom-run", HookFriendlyPlugin, settings).use { loaded =>

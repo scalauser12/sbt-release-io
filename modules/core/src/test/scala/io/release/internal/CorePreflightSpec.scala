@@ -281,7 +281,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish          := false,
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePush             := false,
         ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution := Seq(
-          ReleaseHookIO.io("late-bound-version-settings") { ctx =>
+          ReleaseHookIO.transform("late-bound-version-settings") { ctx =>
             IO.blocking {
               val newState = SbtRuntime.appendWithSession(
                 ctx.state,
@@ -332,7 +332,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish  := false,
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePush     := false,
         ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck := Seq(
-          ReleaseHookIO.io("late-bound-after-clean-version-settings") { ctx =>
+          ReleaseHookIO.transform("late-bound-after-clean-version-settings") { ctx =>
             IO.blocking {
               val newState = SbtRuntime.appendWithSession(
                 ctx.state,
@@ -385,7 +385,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish         := false,
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePush            := false,
         ReleasePluginIO.autoImport.releaseIOHooksAfterVersionResolution := Seq(
-          ReleaseHookIO.io("rewrite-version-pair-after-resolution") { ctx =>
+          ReleaseHookIO.transform("rewrite-version-pair-after-resolution") { ctx =>
             IO.pure(ctx.withVersions("9.9.9", "10.0.0-SNAPSHOT"))
           }
         )
@@ -426,7 +426,7 @@ class CorePreflightSpec extends CatsEffectSuite {
           IO.raiseError(new IllegalStateException("default readVersion should not run"))
         },
         ReleasePluginIO.autoImport.releaseIOHooksBeforeVersionResolution := Seq(
-          ReleaseHookIO.io("late-bound-version-settings") { ctx =>
+          ReleaseHookIO.transform("late-bound-version-settings") { ctx =>
             IO.blocking {
               val newState = SbtRuntime.appendWithSession(
                 ctx.state,
@@ -912,7 +912,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePush    := false,
         ReleasePluginIO.autoImport.releaseIOHooksBeforeTag      := Seq(
-          ReleaseHookIO.action("before-tag-marker")(_ => IO.unit)
+          ReleaseHookIO.sideEffect("before-tag-marker")(_ => IO.unit)
         )
       )
     ) { case (_, _, initialCtx) =>
@@ -945,7 +945,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish           := false,
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePush              := false,
         ReleasePluginIO.autoImport.releaseIOHooksAfterReleaseVersionWrite := Seq(
-          ReleaseHookIO.action("touch-tracked-file") { ctx =>
+          ReleaseHookIO.sideEffect("touch-tracked-file") { ctx =>
             IO.blocking {
               val trackedFile = new File(ctx.state.configuration.baseDirectory, "tracked.txt")
               sbt.IO.write(
@@ -985,7 +985,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish         := false,
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePush            := false,
         ReleasePluginIO.autoImport.releaseIOHooksBeforeNextVersionWrite := Seq(
-          ReleaseHookIO.io("rewrite-version-pair-before-next-version-write") { ctx =>
+          ReleaseHookIO.transform("rewrite-version-pair-before-next-version-write") { ctx =>
             IO.pure(ctx.withVersions("9.9.9", "10.0.0-SNAPSHOT"))
           }
         )
@@ -1021,7 +1021,7 @@ class CorePreflightSpec extends CatsEffectSuite {
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish  := false,
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePush     := false,
         ReleasePluginIO.autoImport.releaseIOHooksAfterCleanCheck := Seq(
-          ReleaseHookIO.io("late-bound-after-clean-tag-settings") { ctx =>
+          ReleaseHookIO.transform("late-bound-after-clean-tag-settings") { ctx =>
             IO.blocking {
               val newState = SbtRuntime.appendWithSession(
                 ctx.state,

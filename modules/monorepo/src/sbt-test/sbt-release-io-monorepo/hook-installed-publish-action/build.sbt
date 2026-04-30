@@ -36,7 +36,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnableRunTests := false,
     releaseIOVcsIgnoreUntrackedFiles      := true,
     releaseIOMonorepoHooksBeforePublish   := Seq(
-      MonorepoProjectHookIO.io("hook-installed-publish-action") { (ctx, project) =>
+      MonorepoProjectHookIO.transform("hook-installed-publish-action") { (project, ctx) =>
         _root_.cats.effect.IO.blocking {
           val extracted    = Project.extract(ctx.state)
           val baseDir      = extracted.get(baseDirectory)

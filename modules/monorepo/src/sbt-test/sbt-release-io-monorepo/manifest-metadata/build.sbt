@@ -77,7 +77,7 @@ lazy val root = (project in file("."))
     scalaVersion                          := "2.12.18",
     releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoHooksAfterNextCommit := Seq(
-      MonorepoGlobalHookIO.action("record-visible-release-metadata") { ctx =>
+      MonorepoGlobalHookIO.sideEffect("record-visible-release-metadata") { ctx =>
         CatsIO.blocking {
           val extracted = Project.extract(ctx.state)
 

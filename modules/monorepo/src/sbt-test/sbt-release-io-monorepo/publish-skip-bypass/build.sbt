@@ -14,8 +14,8 @@ val checkGitTags             = taskKey[Unit]("Check git tags")
 val checkCoreVersion         = taskKey[Unit]("Check core version.sbt")
 val checkPublishHooksSkipped = taskKey[Unit]("Check publish hooks were skipped for publish / skip")
 
-val beforePublishMarkerHook = MonorepoProjectHookIO.action("before-publish-marker") {
-  (_, project) =>
+val beforePublishMarkerHook = MonorepoProjectHookIO.sideEffect("before-publish-marker") {
+  (project, _) =>
     _root_.cats.effect.IO.blocking {
       val markerDir = project.baseDir / "marker"
       IO.createDirectory(markerDir)
@@ -23,7 +23,7 @@ val beforePublishMarkerHook = MonorepoProjectHookIO.action("before-publish-marke
     }
 }
 
-val afterPublishMarkerHook = MonorepoProjectHookIO.action("after-publish-marker") { (_, project) =>
+val afterPublishMarkerHook = MonorepoProjectHookIO.sideEffect("after-publish-marker") { (project, _) =>
   _root_.cats.effect.IO.blocking {
     val markerDir = project.baseDir / "marker"
     IO.createDirectory(markerDir)

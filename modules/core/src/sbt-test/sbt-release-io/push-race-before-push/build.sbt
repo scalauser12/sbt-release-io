@@ -18,7 +18,7 @@ def runCommand(command: Seq[String]): Unit = {
 }
 
 def advanceRemoteHook: ReleaseHookIO =
-  ReleaseHookIO.action("advance-remote-before-push") { ctx =>
+  ReleaseHookIO.sideEffect("advance-remote-before-push") { ctx =>
     _root_.cats.effect.IO.blocking {
       val base     = Project.extract(ctx.state).get(baseDirectory)
       val tempRepo = base / "temp-remote-advance"

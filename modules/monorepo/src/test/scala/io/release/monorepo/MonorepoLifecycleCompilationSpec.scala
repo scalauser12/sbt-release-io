@@ -76,10 +76,10 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnableRunTests       := false,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnablePublish        := false,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection       := Seq(
-        MonorepoGlobalHookIO.action("before-selection")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("before-selection")(_ => IO.unit)
       ),
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterNextVersionWrite := Seq(
-        MonorepoProjectHookIO.action("after-next-version")((_, _) => IO.unit)
+        MonorepoProjectHookIO.sideEffect("after-next-version")((_, _) => IO.unit)
       )
     )
 
@@ -116,25 +116,25 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnablePublish                   := false,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnablePush                      := false,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterCleanCheck                  := Seq(
-        MonorepoGlobalHookIO.action("after-clean")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("after-clean")(_ => IO.unit)
       ),
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection                  := Seq(
-        MonorepoGlobalHookIO.action("before-selection")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("before-selection")(_ => IO.unit)
       ),
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection                   := Seq(
-        MonorepoGlobalHookIO.action("after-selection")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("after-selection")(_ => IO.unit)
       ),
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeVersionResolution          := Seq(
-        MonorepoProjectHookIO.action("before-version")((_, _) => IO.unit)
+        MonorepoProjectHookIO.sideEffect("before-version")((_, _) => IO.unit)
       ),
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterVersionResolution           := Seq(
-        MonorepoProjectHookIO.action("after-version")((_, _) => IO.unit)
+        MonorepoProjectHookIO.sideEffect("after-version")((_, _) => IO.unit)
       ),
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeTag                        := Seq(
-        MonorepoProjectHookIO.action("before-tag")((_, _) => IO.unit)
+        MonorepoProjectHookIO.sideEffect("before-tag")((_, _) => IO.unit)
       ),
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterTag                         := Seq(
-        MonorepoProjectHookIO.action("after-tag")((_, _) => IO.unit)
+        MonorepoProjectHookIO.sideEffect("after-tag")((_, _) => IO.unit)
       )
     )
 

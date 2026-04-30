@@ -25,7 +25,7 @@ def lateBoundVersionSettings(runtimeVersion: File): Seq[Setting[?]] =
   )
 
 releaseIOHooksBeforeVersionResolution := Seq(
-  ReleaseHookIO.io("late-bound-version-settings") { ctx =>
+  ReleaseHookIO.transform("late-bound-version-settings") { ctx =>
     _root_.cats.effect.IO.blocking {
       val base           = Project.extract(ctx.state).get(baseDirectory)
       val runtimeVersion = base / "version.properties"
@@ -43,7 +43,7 @@ releaseIOHooksBeforeVersionResolution := Seq(
 )
 
 releaseIOHooksBeforeTag := Seq(
-  ReleaseHookIO.io("late-bound-tag-settings") { ctx =>
+  ReleaseHookIO.transform("late-bound-tag-settings") { ctx =>
     _root_.cats.effect.IO.blocking {
       val base           = Project.extract(ctx.state).get(baseDirectory)
       val runtimeVersion = base / "version.properties"

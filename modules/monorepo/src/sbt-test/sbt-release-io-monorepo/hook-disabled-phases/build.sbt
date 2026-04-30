@@ -16,7 +16,7 @@ val checkNoPublishHooks = taskKey[Unit]("Check publish hooks did not run")
 val checkGitTag         = taskKey[Unit]("Check that a git tag exists")
 
 def markerHook(marker: String): MonorepoProjectHookIO =
-  MonorepoProjectHookIO.action(marker) { (_, project) =>
+  MonorepoProjectHookIO.sideEffect(marker) { (project, _) =>
     IO.blocking {
       sbt.IO.write(project.baseDir / s"$marker.marker", marker + "\n")
     }

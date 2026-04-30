@@ -37,10 +37,10 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
       Seq(
         ReleasePluginIO.autoImport.releaseIOPolicyEnablePublish := false,
         ReleasePluginIO.autoImport.releaseIOHooksBeforeTag      := Seq(
-          ReleaseHookIO.action("before-tag")(_ => IO.unit)
+          ReleaseHookIO.sideEffect("before-tag")(_ => IO.unit)
         ),
         ReleasePluginIO.autoImport.releaseIOHooksAfterPush      := Seq(
-          ReleaseHookIO.action("after-push")(_ => IO.unit)
+          ReleaseHookIO.sideEffect("after-push")(_ => IO.unit)
         )
       )
     ).use { state =>
@@ -59,7 +59,7 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
       val left   = hookFields.foldLeft(CoreHookConfiguration.empty) { (config, field) =>
         field.withHooks(
           config,
-          Seq(ReleaseHookIO.action(s"${field.name}-left")(_ => IO.unit))
+          Seq(ReleaseHookIO.sideEffect(s"${field.name}-left")(_ => IO.unit))
         )
       }
       val right  = hookFields
@@ -68,7 +68,7 @@ class CoreHookConfigurationSpec extends CatsEffectSuite {
         }) { (config, field) =>
           field.withHooks(
             config,
-            Seq(ReleaseHookIO.action(s"${field.name}-right")(_ => IO.unit))
+            Seq(ReleaseHookIO.sideEffect(s"${field.name}-right")(_ => IO.unit))
           )
         }
       val merged = CoreHookConfiguration.merge(left, right)

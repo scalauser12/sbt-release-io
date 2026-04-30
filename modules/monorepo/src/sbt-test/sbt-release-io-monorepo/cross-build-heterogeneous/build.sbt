@@ -21,7 +21,7 @@ lazy val api = (project in file("api"))
   )
 
 val checkAll                 = taskKey[Unit]("Run all verification checks")
-val crossBuildMarkerHook     = MonorepoProjectHookIO.action("write-cross-markers") { (ctx, project) =>
+val crossBuildMarkerHook     = MonorepoProjectHookIO.sideEffect("write-cross-markers") { (project, ctx) =>
   _root_.cats.effect.IO.blocking {
     val extracted = sbt.Project.extract(ctx.state)
     val sv        = extracted.get(project.ref / scalaVersion)
@@ -31,8 +31,8 @@ val crossBuildMarkerHook     = MonorepoProjectHookIO.action("write-cross-markers
     IO.append(markerDir / "invocations.txt", sv + "\n")
   }
 }
-val checkRestoredVersionHook = MonorepoProjectHookIO.action("check-restored-version") {
-  (ctx, project) =>
+val checkRestoredVersionHook = MonorepoProjectHookIO.sideEffect("check-restored-version") {
+  (project, ctx) =>
     _root_.cats.effect.IO.blocking {
       val extracted = sbt.Project.extract(ctx.state)
       val sv        = extracted.get(project.ref / scalaVersion)

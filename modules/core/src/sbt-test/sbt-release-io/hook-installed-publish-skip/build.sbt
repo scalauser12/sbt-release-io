@@ -25,7 +25,7 @@ releaseIOPolicyEnableRunClean    := false
 releaseIOPolicyEnableRunTests    := false
 
 releaseIOHooksBeforePublish := Seq(
-  ReleaseHookIO.io("hook-installed-publish-skip") { ctx =>
+  ReleaseHookIO.transform("hook-installed-publish-skip") { ctx =>
     _root_.cats.effect.IO.blocking {
       val extracted    = Project.extract(ctx.state)
       val updatedState = extracted.appendWithSession(

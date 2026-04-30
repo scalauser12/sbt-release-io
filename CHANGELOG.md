@@ -4,6 +4,43 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.0
+
+`v0.13.0` is a minor release for both plugins that finalizes the intent-named hook
+factory API by removing the deprecated `.io`, `.action`, and `.actionTracked`
+constructors that were marked `@deprecated` in v0.12.2. This is a
+source-incompatible change for build code that still uses those factories.
+
+### Breaking changes
+
+- Remove the deprecated factories `.io`, `.action`, and `.actionTracked` from
+  `ReleaseHookIO`, `ReleaseResourceHookIO`, `MonorepoGlobalHookIO`,
+  `MonorepoProjectHookIO`, `MonorepoGlobalResourceHookIO`, and
+  `MonorepoProjectResourceHookIO`.
+
+### Migration
+
+| Old factory | New factory | Argument-shape change |
+|---|---|---|
+| `.io(name)(ctx => f)` | `.transform(name)(ctx => f)` | none (plain hooks) |
+| `.action(name)(ctx => f)` | `.sideEffect(name)(ctx => f)` | none (plain hooks) |
+| `.actionTracked(name)(handle => f)` | `.resumable(name)(handle => f)` | none |
+| `.io[T](name)(t => ctx => f)` (resource) | `.transform[T](name)((t, ctx) => f)` | curry → flat |
+| `.action[T](name)(t => ctx => f)` (resource) | `.sideEffect[T](name)((t, ctx) => f)` | curry → flat |
+| `.io(name)((ctx, p) => f)` (project) | `.transform(name)((p, ctx) => f)` | argument order swap |
+| `.action(name)((ctx, p) => f)` (project) | `.sideEffect(name)((p, ctx) => f)` | argument order swap |
+| `.io[T](name)(t => (ctx, p) => f)` (project resource) | `.transform[T](name)((t, p, ctx) => f)` | flatten + reorder |
+
+The case-class constructors (`ReleaseHookIO(name, execute, validate)` etc.) remain
+public; user code that builds hooks via the case class continues to compile.
+`.ioTracked` remains supported as the lower-level escape hatch when direct
+`TrackedContextHandle` access is needed.
+
+### Documentation
+
+- Drop the deprecated-factory note from `docs/core/customization.md` and
+  `docs/monorepo/customization.md`.
+
 ## v0.12.3
 
 Published: 2026-04-29

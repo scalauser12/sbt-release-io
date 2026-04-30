@@ -50,7 +50,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnablePublish   := false,
     releaseIOMonorepoPolicyEnablePush      := false,
     releaseIOMonorepoHooksBeforeTag        := Seq(
-      MonorepoProjectHookIO.io("late-bound-settings-before-tag") { (ctx, _) =>
+      MonorepoProjectHookIO.transform("late-bound-settings-before-tag") { (_, ctx) =>
         IO.blocking {
           val extracted    = Project.extract(ctx.state)
           val updatedState = extracted.appendWithSession(

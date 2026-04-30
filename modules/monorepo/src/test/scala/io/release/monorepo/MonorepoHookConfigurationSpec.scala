@@ -37,10 +37,10 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
       Seq(
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoPolicyEnablePublish        := false,
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection       := Seq(
-          MonorepoGlobalHookIO.action("before-selection")(_ => IO.unit)
+          MonorepoGlobalHookIO.sideEffect("before-selection")(_ => IO.unit)
         ),
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterNextVersionWrite := Seq(
-          MonorepoProjectHookIO.action("after-next-version")((_, _) => IO.unit)
+          MonorepoProjectHookIO.sideEffect("after-next-version")((_, _) => IO.unit)
         )
       )
     ).use { state =>
@@ -63,12 +63,12 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
         .foldLeft(globalHookFields.foldLeft(MonorepoHookConfiguration.empty) { (config, field) =>
           field.withHooks(
             config,
-            Seq(MonorepoGlobalHookIO.action(s"${field.name}-left")(_ => IO.unit))
+            Seq(MonorepoGlobalHookIO.sideEffect(s"${field.name}-left")(_ => IO.unit))
           )
         }) { (config, field) =>
           field.withHooks(
             config,
-            Seq(MonorepoProjectHookIO.action(s"${field.name}-left")((_, _) => IO.unit))
+            Seq(MonorepoProjectHookIO.sideEffect(s"${field.name}-left")((_, _) => IO.unit))
           )
         }
       val right  = projectHookFields
@@ -80,13 +80,13 @@ class MonorepoHookConfigurationSpec extends CatsEffectSuite {
           ) { (config, field) =>
             field.withHooks(
               config,
-              Seq(MonorepoGlobalHookIO.action(s"${field.name}-right")(_ => IO.unit))
+              Seq(MonorepoGlobalHookIO.sideEffect(s"${field.name}-right")(_ => IO.unit))
             )
           }
         ) { (config, field) =>
           field.withHooks(
             config,
-            Seq(MonorepoProjectHookIO.action(s"${field.name}-right")((_, _) => IO.unit))
+            Seq(MonorepoProjectHookIO.sideEffect(s"${field.name}-right")((_, _) => IO.unit))
           )
         }
       val merged = MonorepoHookConfiguration.merge(left, right)

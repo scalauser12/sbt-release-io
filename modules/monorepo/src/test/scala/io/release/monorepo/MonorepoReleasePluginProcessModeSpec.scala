@@ -14,7 +14,7 @@ class MonorepoReleasePluginProcessModeSpec
   test("resolveProcessMode compiles plain hooks for the default monorepo plugin") {
     val settings: Seq[Setting[?]] = Seq(
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
-        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("before-selection-hook")(_ => IO.unit)
     )
 
     stateResource("monorepo-plugin-compiled-hooks", MonorepoReleasePlugin, settings).use { loaded =>
@@ -32,11 +32,11 @@ class MonorepoReleasePluginProcessModeSpec
       val settings: Seq[Setting[?]] = Seq(
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection +=
           MonorepoGlobalHookIO
-            .action("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
+            .sideEffect("plain-after-selection")(_ => observed.update(_ :+ "plain-global-execute")),
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterTag +=
-          MonorepoProjectHookIO.action("plain-after-tag")((_, project) =>
+          MonorepoProjectHookIO.sideEffect("plain-after-tag") { (project, _) =>
             observed.update(_ :+ s"plain-project-execute:${project.name}")
-          )
+          }
       )
 
       stateResource("monorepo-plugin-resource-check", plugin, settings).use { loaded =>
@@ -71,7 +71,7 @@ class MonorepoReleasePluginProcessModeSpec
   ) {
     val settings: Seq[Setting[?]] = Seq(
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
-        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("before-selection-hook")(_ => IO.unit)
     )
 
     stateResource("monorepo-plugin-custom-compiled-hooks", HookFriendlyPlugin, settings).use {
@@ -87,7 +87,7 @@ class MonorepoReleasePluginProcessModeSpec
   ) {
     val settings: Seq[Setting[?]] = Seq(
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforeSelection +=
-        MonorepoGlobalHookIO.action("before-selection-hook")(_ => IO.unit)
+        MonorepoGlobalHookIO.sideEffect("before-selection-hook")(_ => IO.unit)
     )
 
     stateResource(

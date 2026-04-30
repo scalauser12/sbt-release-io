@@ -77,10 +77,8 @@ MonorepoProjectHookIO.precondition("require-project-readme") { (project, _) =>
 Resource-aware hooks (`MonorepoGlobalResourceHookIO[T]`,
 `MonorepoProjectResourceHookIO[T]`) add the resource `T` as the first argument.
 
-The legacy `.io` / `.action` constructors still compile but are deprecated;
-prefer the four intent-named factories above. `.ioTracked` remains supported as
-a lower-level escape hatch when you need direct `TrackedContextHandle` access.
-`.actionTracked` is deprecated; use `resumable` instead.
+`.ioTracked` remains supported as a lower-level escape hatch when you need
+direct `TrackedContextHandle` access.
 
 > **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
 > `execute` only; their `validate` is a no-op, so `releaseIOMonorepo check` does

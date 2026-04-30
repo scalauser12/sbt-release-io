@@ -46,18 +46,6 @@ object MonorepoGlobalResourceHookIO {
       case execute                    => t => TrackedContextHandle.lift(execute(t))
     }
 
-  /** Create a resource-aware global hook from a context-transforming function. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def io[T](name: String)(
-      f: T => MonorepoContext => IO[MonorepoContext]
-  ): MonorepoGlobalResourceHookIO[T] =
-    MonorepoGlobalResourceHookIO(name, f)
-
   /** Create a tracked resource-aware global hook from context handle updates. */
   def ioTracked[T](name: String)(
       f: T => TrackedContextHandle[MonorepoContext] => IO[Unit]
@@ -73,28 +61,6 @@ object MonorepoGlobalResourceHookIO {
         executeTracked = f
       )
     )
-
-  /** Create a resource-aware global hook from an effect that leaves the context unchanged. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def action[T](name: String)(
-      f: T => MonorepoContext => IO[Unit]
-  ): MonorepoGlobalResourceHookIO[T] =
-    MonorepoGlobalResourceHookIO(name, t => ctx => f(t)(ctx).as(ctx))
-
-  /** Create a tracked resource-aware global hook from effectful handle mutations. */
-  @deprecated(
-    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
-    "0.12.2"
-  )
-  def actionTracked[T](name: String)(
-      f: T => TrackedContextHandle[MonorepoContext] => IO[Unit]
-  ): MonorepoGlobalResourceHookIO[T] =
-    ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
   // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
@@ -227,18 +193,6 @@ object MonorepoProjectResourceHookIO {
       case execute                    => t => TrackedContextHandle.liftPerItem(execute(t))
     }
 
-  /** Create a resource-aware per-project hook from a context-transforming function. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def io[T](name: String)(
-      f: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  ): MonorepoProjectResourceHookIO[T] =
-    MonorepoProjectResourceHookIO(name, f)
-
   /** Create a tracked resource-aware per-project hook from context handle updates. */
   def ioTracked[T](name: String)(
       f: T => (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
@@ -254,28 +208,6 @@ object MonorepoProjectResourceHookIO {
         executeTracked = f
       )
     )
-
-  /** Create a resource-aware per-project hook from an effect that leaves the context unchanged. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def action[T](name: String)(
-      f: T => (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
-  ): MonorepoProjectResourceHookIO[T] =
-    MonorepoProjectResourceHookIO(name, t => (ctx, project) => f(t)(ctx, project).as(ctx))
-
-  /** Create a tracked resource-aware per-project hook from effectful handle mutations. */
-  @deprecated(
-    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
-    "0.12.2"
-  )
-  def actionTracked[T](name: String)(
-      f: T => (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
-  ): MonorepoProjectResourceHookIO[T] =
-    ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
   // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine

@@ -24,7 +24,7 @@ releaseIOPolicyEnablePush := false
 releaseIOVcsIgnoreUntrackedFiles := true
 publishTo                        := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
 
-val crossBuildMarkerHook = ReleaseHookIO.action("write-cross-markers") { ctx =>
+val crossBuildMarkerHook = ReleaseHookIO.sideEffect("write-cross-markers") { ctx =>
   _root_.cats.effect.IO.blocking {
     val base = Project.extract(ctx.state).get(baseDirectory)
     val sv   = Project.extract(ctx.state).get(scalaVersion)

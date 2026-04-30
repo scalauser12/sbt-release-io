@@ -16,7 +16,7 @@ val checkGitTag      = taskKey[Unit]("Check that a git tag exists")
 val checkPublished   = taskKey[Unit]("Check that publish produced files")
 
 def markerHook(marker: String): MonorepoProjectHookIO =
-  MonorepoProjectHookIO.action(marker) { (_, project) =>
+  MonorepoProjectHookIO.sideEffect(marker) { (project, _) =>
     IO.blocking {
       sbt.IO.write(project.baseDir / s"$marker.marker", marker + "\n")
     }

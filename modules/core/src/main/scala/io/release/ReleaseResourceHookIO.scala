@@ -55,18 +55,6 @@ object ReleaseResourceHookIO {
       case execute                    => t => TrackedContextHandle.lift(execute(t))
     }
 
-  /** Create a resource-aware hook from a context-transforming function. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def io[T](name: String)(
-      f: T => ReleaseContext => IO[ReleaseContext]
-  ): ReleaseResourceHookIO[T] =
-    ReleaseResourceHookIO(name, f)
-
   /** Create a tracked resource-aware hook from context handle updates. */
   def ioTracked[T](name: String)(
       f: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
@@ -82,26 +70,6 @@ object ReleaseResourceHookIO {
         executeTracked = f
       )
     )
-
-  /** Create a resource-aware hook from an effect that leaves the context unchanged. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def action[T](name: String)(f: T => ReleaseContext => IO[Unit]): ReleaseResourceHookIO[T] =
-    ReleaseResourceHookIO(name, t => ctx => f(t)(ctx).as(ctx))
-
-  /** Create a tracked resource-aware hook from an effectful handle mutation. */
-  @deprecated(
-    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
-    "0.12.2"
-  )
-  def actionTracked[T](name: String)(
-      f: T => TrackedContextHandle[ReleaseContext] => IO[Unit]
-  ): ReleaseResourceHookIO[T] =
-    ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
   // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine

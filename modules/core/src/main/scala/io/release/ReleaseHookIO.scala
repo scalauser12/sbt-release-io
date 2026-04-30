@@ -51,16 +51,6 @@ object ReleaseHookIO {
       case execute                 => TrackedContextHandle.lift(execute)
     }
 
-  /** Create a hook from a context-transforming function. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def io(name: String)(f: ReleaseContext => IO[ReleaseContext]): ReleaseHookIO =
-    ReleaseHookIO(name, f)
-
   /** Create a hook from tracked context updates. */
   def ioTracked(
       name: String
@@ -75,26 +65,6 @@ object ReleaseHookIO {
         executeTracked = f
       )
     )
-
-  /** Create a hook from an effect that leaves the context unchanged. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def action(name: String)(f: ReleaseContext => IO[Unit]): ReleaseHookIO =
-    ReleaseHookIO(name, ctx => f(ctx).as(ctx))
-
-  /** Create a tracked hook from an effect that mutates the current context via the handle. */
-  @deprecated(
-    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
-    "0.12.2"
-  )
-  def actionTracked(
-      name: String
-  )(f: TrackedContextHandle[ReleaseContext] => IO[Unit]): ReleaseHookIO =
-    ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
   // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine

@@ -99,7 +99,7 @@ trait MonorepoReleasePluginSpecSupport {
     override lazy val projectSettings: Seq[Setting[?]] =
       baseReleaseSettings ++ Seq(
         MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterSelection +=
-          MonorepoGlobalHookIO.action("base-after-selection")(_ => IO.unit)
+          MonorepoGlobalHookIO.sideEffect("base-after-selection")(_ => IO.unit)
       )
 
     def settingsForTests: Seq[Setting[?]] = projectSettings

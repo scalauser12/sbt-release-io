@@ -17,7 +17,7 @@ lazy val top = (project in file("top"))
   .settings(name := "top", scalaVersion := "2.12.18")
 
 val checkAll        = taskKey[Unit]("Run all verification checks")
-val recordOrderHook = MonorepoProjectHookIO.action("record-order") { (_, project) =>
+val recordOrderHook = MonorepoProjectHookIO.sideEffect("record-order") { (project, _) =>
   _root_.cats.effect.IO.blocking {
     val writer = new java.io.FileWriter(file("order.txt"), true)
     writer.write(project.name + "\n")

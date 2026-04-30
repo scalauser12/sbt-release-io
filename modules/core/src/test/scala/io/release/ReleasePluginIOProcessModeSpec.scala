@@ -11,9 +11,9 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
 
   test("resolveProcessMode compiles plain hooks for the default plugin") {
     val settings: Seq[Setting[?]] = Seq(
-      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.action("before-tag-hook")(
-        _ => IO.unit
-      )
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.sideEffect(
+        "before-tag-hook"
+      )(_ => IO.unit)
     )
 
     stateResource("release-plugin-compiled-hooks", ReleasePluginIO, settings).use { loaded =>
@@ -30,7 +30,7 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
       val plugin                    = resourceAwareHookPlugin(observed)
       val settings: Seq[Setting[?]] = Seq(
         ReleasePluginIO.autoImport.releaseIOHooksBeforeTag +=
-          ReleaseHookIO.action("plain-before-tag")(_ => observed.update(_ :+ "plain-execute"))
+          ReleaseHookIO.sideEffect("plain-before-tag")(_ => observed.update(_ :+ "plain-execute"))
       )
 
       stateResource("release-plugin-resource-check", plugin, settings).use { loaded =>
@@ -57,9 +57,9 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
     "resolveProcessMode keeps a direct custom plugin with unrelated overrides on compiled hook mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
-      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.action("before-tag-hook")(
-        _ => IO.unit
-      )
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.sideEffect(
+        "before-tag-hook"
+      )(_ => IO.unit)
     )
 
     stateResource("release-plugin-custom-compiled-hooks", HookFriendlyPlugin, settings).use {
@@ -74,9 +74,9 @@ class ReleasePluginIOProcessModeSpec extends CatsEffectSuite with ReleasePluginI
     "resolveProcessMode keeps an inherited custom plugin with unrelated overrides on compiled hook mode"
   ) {
     val settings: Seq[Setting[?]] = Seq(
-      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.action("before-tag-hook")(
-        _ => IO.unit
-      )
+      ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.sideEffect(
+        "before-tag-hook"
+      )(_ => IO.unit)
     )
 
     stateResource(

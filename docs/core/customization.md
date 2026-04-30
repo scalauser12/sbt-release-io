@@ -79,10 +79,8 @@ ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
 }
 ```
 
-The legacy `.io` / `.action` constructors still compile but are deprecated;
-prefer the four intent-named factories above. `.ioTracked` remains supported as
-a lower-level escape hatch when you need direct `TrackedContextHandle` access.
-`.actionTracked` is deprecated; use `resumable` instead.
+`.ioTracked` remains supported as a lower-level escape hatch when you need
+direct `TrackedContextHandle` access.
 
 ## Hook-based customization
 

@@ -25,7 +25,7 @@ releaseIOPolicyEnableRunClean    := false
 releaseIOPolicyEnableRunTests    := false
 
 releaseIOHooksBeforePublish := Seq(
-  ReleaseHookIO.io("hook-installed-publish-action") { ctx =>
+  ReleaseHookIO.transform("hook-installed-publish-action") { ctx =>
     _root_.cats.effect.IO.blocking {
       val extracted    = Project.extract(ctx.state)
       val base         = extracted.get(baseDirectory)

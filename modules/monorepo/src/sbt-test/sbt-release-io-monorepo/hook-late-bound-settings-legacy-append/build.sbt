@@ -50,7 +50,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnablePublish          := false,
     releaseIOMonorepoPolicyEnablePush             := false,
     releaseIOMonorepoHooksBeforeVersionResolution := Seq(
-      MonorepoProjectHookIO.io("late-bound-version-settings-legacy") { (ctx, _) =>
+      MonorepoProjectHookIO.transform("late-bound-version-settings-legacy") { (_, ctx) =>
         IO.blocking {
           // Legacy install path: `Extracted.appendWithSession` writes only
           // into `structure.settings`. The plugin's lift inside

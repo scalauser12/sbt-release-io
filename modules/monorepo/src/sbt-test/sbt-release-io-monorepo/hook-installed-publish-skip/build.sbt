@@ -37,7 +37,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnableRunTests := false,
     releaseIOVcsIgnoreUntrackedFiles      := true,
     releaseIOMonorepoHooksBeforePublish   := Seq(
-      MonorepoProjectHookIO.io("hook-installed-publish-skip") { (ctx, project) =>
+      MonorepoProjectHookIO.transform("hook-installed-publish-skip") { (project, ctx) =>
         _root_.cats.effect.IO.blocking {
           val extracted    = Project.extract(ctx.state)
           val updatedState = extracted.appendWithSession(

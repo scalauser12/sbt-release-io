@@ -80,7 +80,7 @@ trait ReleasePluginIOSpecSupport {
 
     override lazy val projectSettings: Seq[Setting[?]] =
       baseReleaseSettings ++ Seq(
-        ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.action(
+        ReleasePluginIO.autoImport.releaseIOHooksBeforeTag += ReleaseHookIO.sideEffect(
           "base-before-tag"
         )(_ => IO.unit)
       )

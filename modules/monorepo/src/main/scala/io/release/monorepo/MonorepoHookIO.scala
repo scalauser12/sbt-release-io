@@ -51,16 +51,6 @@ object MonorepoGlobalHookIO {
       case execute                 => TrackedContextHandle.lift(execute)
     }
 
-  /** Create a hook from a context-transforming function. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def io(name: String)(f: MonorepoContext => IO[MonorepoContext]): MonorepoGlobalHookIO =
-    MonorepoGlobalHookIO(name, f)
-
   /** Create a hook from tracked context updates. */
   def ioTracked(
       name: String
@@ -75,26 +65,6 @@ object MonorepoGlobalHookIO {
         executeTracked = f
       )
     )
-
-  /** Create a hook from an effect that leaves the context unchanged. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def action(name: String)(f: MonorepoContext => IO[Unit]): MonorepoGlobalHookIO =
-    MonorepoGlobalHookIO(name, ctx => f(ctx).as(ctx))
-
-  /** Create a tracked hook from an effect that mutates the current context via the handle. */
-  @deprecated(
-    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
-    "0.12.2"
-  )
-  def actionTracked(
-      name: String
-  )(f: TrackedContextHandle[MonorepoContext] => IO[Unit]): MonorepoGlobalHookIO =
-    ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
   // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
@@ -220,18 +190,6 @@ object MonorepoProjectHookIO {
       case execute                 => TrackedContextHandle.liftPerItem(execute)
     }
 
-  /** Create a hook from a context-transforming function. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def io(
-      name: String
-  )(f: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]): MonorepoProjectHookIO =
-    MonorepoProjectHookIO(name, f)
-
   /** Create a hook from tracked context updates. */
   def ioTracked(
       name: String
@@ -248,30 +206,6 @@ object MonorepoProjectHookIO {
         executeTracked = f
       )
     )
-
-  /** Create a hook from an effect that leaves the context unchanged. */
-  @deprecated(
-    "Use sideEffect/transform/resumable instead (or precondition for guards). Legacy hooks " +
-      "recover only the last returned context; the intent-named factories provide tracked " +
-      "checkpointing.",
-    "0.12.2"
-  )
-  def action(name: String)(
-      f: (MonorepoContext, ProjectReleaseInfo) => IO[Unit]
-  ): MonorepoProjectHookIO =
-    MonorepoProjectHookIO(name, (ctx, project) => f(ctx, project).as(ctx))
-
-  /** Create a tracked hook from an effectful handle mutation. */
-  @deprecated(
-    "Use resumable instead; actionTracked is an alias of ioTracked and adds redundant surface.",
-    "0.12.2"
-  )
-  def actionTracked(
-      name: String
-  )(
-      f: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
-  ): MonorepoProjectHookIO =
-    ioTracked(name)(f)
 
   // ── Intent-named factories ──────────────────────────────────────────
   // First three (sideEffect, transform, resumable) delegate to `ioTracked` so the engine
