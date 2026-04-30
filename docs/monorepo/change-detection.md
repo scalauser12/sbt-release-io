@@ -123,4 +123,16 @@ can't find a matching prior release tag. In practice, this behaves like a first 
 under the new tag scheme for those projects until a new baseline tag exists. To re-establish
 that baseline:
 
-- tag the current commit under the new scheme.
+- Tag the current commit under the new scheme. For each project, use the
+  configured `releaseIOMonorepoVcsTagName` to compute the tag (the default is
+  `<name>/v<version>`):
+
+  ```bash
+  git tag core/v1.0.0 -m "baseline tag for core under new scheme"
+  git tag api/v1.0.0  -m "baseline tag for api under new scheme"
+  git push --tags
+  ```
+
+- Re-run `sbt "releaseIOMonorepo check"`. Subsequent runs detect changes
+  against these baseline tags, so only projects with commits since each
+  baseline are flagged as changed.

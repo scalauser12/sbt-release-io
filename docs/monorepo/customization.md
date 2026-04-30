@@ -80,6 +80,10 @@ Resource-aware hooks (`MonorepoGlobalResourceHookIO[T]`,
 `.ioTracked` remains supported as a lower-level escape hatch when you need
 direct `TrackedContextHandle` access.
 
+> **Migrating from v0.12.x.** The `.io`, `.action`, and `.actionTracked`
+> factories were removed in v0.13.0. See the migration table in
+> [CHANGELOG.md](../../CHANGELOG.md) for the old → new mapping.
+
 > **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
 > `execute` only; their `validate` is a no-op, so `releaseIOMonorepo check` does
 > not rehearse them. Use `precondition` for guard hooks that must fail upfront,

@@ -4,7 +4,7 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
-## v0.13.0
+## v0.13.0 (unreleased)
 
 `v0.13.0` is a minor release for both plugins that finalizes the intent-named hook
 factory API by removing the deprecated `.io`, `.action`, and `.actionTracked`

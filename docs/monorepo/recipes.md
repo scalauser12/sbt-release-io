@@ -159,8 +159,8 @@ push already happened), see [Recovery and rollback](operations.md#recovery-and-r
 When change detection is too broad for the question you want to answer, keep the same safe local
 settings but drive the plan with explicit selectors and version overrides.
 
-In `build.sbt`, use an `afterSelection` hook that prints during validation so it appears in
-`check` output:
+In `build.sbt`, use an `afterSelection` hook whose predicate prints during
+validation, which runs in both `releaseIOMonorepo check` and real releases:
 
 ```scala
 import _root_.cats.effect.IO
@@ -170,12 +170,9 @@ releaseIOMonorepoPolicyEnablePush := false
 releaseIOMonorepoPolicyEnablePublish := false
 releaseIOMonorepoPolicyEnableRunClean := false
 releaseIOMonorepoHooksAfterSelection +=
-  MonorepoGlobalHookIO(
-    name = "print-selected-projects",
-    execute = ctx => IO.pure(ctx),
-    validate = ctx =>
-      IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
-  )
+  MonorepoGlobalHookIO.precondition("print-selected-projects") { ctx =>
+    IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
+  }
 ```
 
 Then rehearse one project directly and confirm the selected-project output:

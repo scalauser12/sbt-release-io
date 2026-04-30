@@ -1,5 +1,8 @@
 # Customization (core)
 
+> **Terminology.** Docs say "phase" for a lifecycle slot like `before-tag`;
+> the source calls these "steps" / `ProcessStep`. They're the same concept.
+
 ## Supported customization model
 
 Core release customization has one surface, made of three knobs:
@@ -81,6 +84,10 @@ ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
 
 `.ioTracked` remains supported as a lower-level escape hatch when you need
 direct `TrackedContextHandle` access.
+
+> **Migrating from v0.12.x.** The `.io`, `.action`, and `.actionTracked`
+> factories were removed in v0.13.0. See the migration table in
+> [CHANGELOG.md](../../CHANGELOG.md) for the old → new mapping.
 
 ## Hook-based customization
 

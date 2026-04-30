@@ -61,12 +61,9 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoDetectionIncludeDownstream := true,
     releaseIOMonorepoHooksAfterSelection +=
-      MonorepoGlobalHookIO(
-        name = "print-selected-projects",
-        execute = ctx => IO.pure(ctx),
-        validate = ctx =>
-          IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
-      )
+      MonorepoGlobalHookIO.precondition("print-selected-projects") { ctx =>
+        IO.println(s"[monorepo] selected: ${ctx.currentProjects.map(_.name).mkString(", ")}")
+      }
   )
 ```
 
