@@ -136,4 +136,22 @@ private[steps] object CoreStepTestCompat {
 
   def throwingPublishSkipSetting: Setting[?] =
     publish / skip := { throw new RuntimeException("publish/skip eval error"); false }
+
+  /** Task-valued `publish / skip` that simultaneously returns `true` (skip the
+    * publish task) AND arms sbt's FailureCommand sentinel in state. Used to
+    * verify that the execute-time precheck propagates the failure rather than
+    * silently treating the release as a successful skipped publish.
+    */
+  def failureCommandPublishSkipSetting(marker: File): Setting[?] =
+    publish / skip := Def
+      .task {
+        sbt.IO.write(marker, "ran")
+        true
+      }
+      .updateState { (state: State, _: Boolean) =>
+        state.copy(
+          remainingCommands = SbtCompat.FailureCommand :: state.remainingCommands
+        )
+      }
+      .value
 }

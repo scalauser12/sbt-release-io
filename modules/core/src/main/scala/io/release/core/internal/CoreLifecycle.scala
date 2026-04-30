@@ -21,7 +21,8 @@ private[release] object CoreLifecycle {
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
       gateKey: Option[ReleaseContext => String] = None,
-      enabled: CoreHookConfiguration => Boolean = _ => true
+      enabled: CoreHookConfiguration => Boolean = _ => true,
+      narrowExecute: Option[ReleaseContext => IO[Boolean]] = None
   )
 
   private type Phase =
@@ -49,7 +50,8 @@ private[release] object CoreLifecycle {
       crossBuild = config.crossBuild,
       freezeGate = config.freezeGate,
       gateKey = config.gateKey,
-      enabled = config.enabled
+      enabled = config.enabled,
+      narrowExecute = config.narrowExecute
     )
 
   private val publishGate: ReleaseContext => IO[Boolean] =
@@ -65,6 +67,19 @@ private[release] object CoreLifecycle {
         .extracted(ctx.state)
         .getOpt(Keys.scalaVersion)
         .getOrElse("")
+
+  /** Narrow `after-publish` execution to iterations where `publish-artifacts` actually
+    * ran. The frozen validate-time gate stays the upper bound (so `releaseIO check` still
+    * rehearses the hook); at execute time we additionally require that the publish step
+    * recorded its iteration key. This suppresses afterPublish when a `before-publish`
+    * hook flips `ctx.skipPublish` or installs `publish/skip := true` and the publish task
+    * therefore no-ops.
+    */
+  private val afterPublishNarrow: ReleaseContext => IO[Boolean] =
+    ctx =>
+      IO.pure(
+        ctx.publishExecutedKeys.exists(_.contains(PublishSteps.publishGateKey(ctx)))
+      )
 
   // @formatter:off
   private val afterCleanCheck = HookPhaseConfig(
@@ -123,7 +138,8 @@ private[release] object CoreLifecycle {
       ReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
     gateKey = Some(scalaVersionKey),
-    enabled = _.enablePublish
+    enabled = _.enablePublish,
+    narrowExecute = Some(afterPublishNarrow)
   )
   private val beforeNextVersionWrite = HookPhaseConfig(
     phase = HookPhases.BeforeNextVersionWrite,

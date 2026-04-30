@@ -44,6 +44,12 @@ private[release] object LifecycleCompiler {
     * @param gateKey extracts a cache key from the context; for cross-build
     *   iterations this should fold `scalaVersion` in so each iteration
     *   gets its own frozen decision.
+    * @param narrowExecute optional execute-time predicate AND'd with the cached
+    *   validate-time gate decision (only meaningful when `freezeGate = true`).
+    *   Lets a phase use the validate-time gate as an upper bound while further
+    *   gating execution on a runtime signal that the validate phase cannot
+    *   observe (e.g. "did the publish task actually run?"). Validation is
+    *   unaffected, preserving the validate-before-execute contract.
     */
   def singleHookPhase[Config, C, I, Hook](
       phase: String,
@@ -56,7 +62,8 @@ private[release] object LifecycleCompiler {
       crossBuild: Boolean = false,
       freezeGate: Boolean = false,
       gateKey: Option[C => String] = None,
-      enabled: Config => Boolean = (_: Config) => true
+      enabled: Config => Boolean = (_: Config) => true,
+      narrowExecute: Option[C => IO[Boolean]] = None
   ): Phase[Config, C, I] = {
     val gateMode         = gateModeFrom(phase, freezeGate, gateKey)
     val trackedExecuteOf =
@@ -70,7 +77,8 @@ private[release] object LifecycleCompiler {
             phase = phase,
             hooks = resolveHooks(config),
             gate = gate,
-            gateMode = gateMode
+            gateMode = gateMode,
+            narrowExecute = narrowExecute
           )(
             nameOf = nameOf,
             executeOf = executeOf,
@@ -186,24 +194,44 @@ private[release] object LifecycleCompiler {
       phase: String,
       hooks: Seq[Hook],
       gate: C => IO[Boolean],
-      gateMode: Option[C => String]
+      gateMode: Option[C => String],
+      narrowExecute: Option[C => IO[Boolean]]
   )(
       nameOf: Hook => String,
       executeOf: Hook => C => IO[C],
       executeTrackedOf: Hook => TrackedContextHandle[C] => IO[Unit],
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean
-  ): IO[Seq[ProcessStep.Single[C]]] =
+  ): IO[Seq[ProcessStep.Single[C]]] = {
+    val applyNarrow: (C => IO[C]) => C => IO[C]                                        =
+      narrowExecute match {
+        case Some(narrow) =>
+          f => c => narrow(c).ifM(f(c), IO.pure(c))
+        case None         =>
+          identity
+      }
+    val applyNarrowTracked
+        : (TrackedContextHandle[C] => IO[Unit]) => TrackedContextHandle[C] => IO[Unit] =
+      narrowExecute match {
+        case Some(narrow) =>
+          f => handle => handle.get.flatMap(ctx => narrow(ctx).ifM(f(handle), IO.unit))
+        case None         =>
+          identity
+      }
+
     hooks.toList.traverse { hook =>
       val stepName = s"$phase:${nameOf(hook)}"
 
       gateMode match {
         case Some(stableGateKey) =>
+          val narrowedExecute        = applyNarrow(executeOf(hook))
+          val narrowedExecuteTracked = applyNarrowTracked(executeTrackedOf(hook))
+
           frozenGateFunctions[C, C](
             gate,
             stableGateKey,
-            execute = executeOf(hook),
-            executeTracked = (handle, _) => executeTrackedOf(hook)(handle),
+            execute = narrowedExecute,
+            executeTracked = (handle, _) => narrowedExecuteTracked(handle),
             validate = ctx => validateOf(hook)(ctx).as(ctx),
             skip = ctx => IO.pure(ctx)
           ).map { case (frozenExec, frozenExecTracked, frozenVal) =>
@@ -237,6 +265,7 @@ private[release] object LifecycleCompiler {
           )
       }
     }
+  }
 
   // ── Per-item hooks ──────────────────────────────────────────────────
 

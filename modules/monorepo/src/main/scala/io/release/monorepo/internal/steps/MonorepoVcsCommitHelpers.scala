@@ -39,9 +39,53 @@ private[monorepo] object MonorepoVcsCommitHelpers {
   ): IO[MonorepoContext] =
     vcs.stagedFiles.flatMap { stagedFiles =>
       if (stagedFiles.nonEmpty)
-        vcs.commit(msg, sign, signOff) *> logInfo(ctx, s"Committed: $msg").as(ctx)
+        vcs.commit(msg, sign, signOff) *>
+          assertCleanAfterCommit(vcs) *>
+          logInfo(ctx, s"Committed: $msg").as(ctx)
       else
         IO.pure(ctx)
+    }
+
+  /** Reject the commit if any tracked file outside the configured per-project version files
+    * is dirty. Catches hooks or sbt tasks that staged or modified unrelated files during the
+    * release — `git commit -m` would otherwise pick up whatever is in the index along with
+    * the version files.
+    */
+  private[steps] def assertOnlyVersionFilesDirty(
+      versionFilePaths: Seq[String],
+      vcs: Vcs
+  ): IO[Unit] =
+    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
+      val expected  = versionFilePaths.toSet
+      val unrelated = (modified ++ staged).distinct.filterNot(expected.contains)
+      if (unrelated.isEmpty) IO.unit
+      else
+        IO.raiseError(
+          new IllegalStateException(
+            s"commit-versions: expected only per-project version files (" +
+              s"${versionFilePaths.mkString(", ")}) to be dirty before commit, " +
+              s"but found unrelated tracked changes: ${unrelated.mkString(", ")}. " +
+              "A hook or sbt task likely modified or staged additional files. " +
+              "Reset those changes (or amend the hook) before re-running the release."
+          )
+        )
+    }
+
+  /** Verify the working tree is clean after the version commit so that the next steps run
+    * against a known state.
+    */
+  private[steps] def assertCleanAfterCommit(vcs: Vcs): IO[Unit] =
+    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
+      val leftover = (modified ++ staged).distinct
+      if (leftover.isEmpty) IO.unit
+      else
+        IO.raiseError(
+          new IllegalStateException(
+            s"commit-versions: tracked working tree is not clean after commit; " +
+              s"unexpected leftover changes: ${leftover.mkString(", ")}. " +
+              "Resolve before retrying."
+          )
+        )
     }
 
   /** Stage and commit version files for all non-failed projects. */
@@ -55,6 +99,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
       for {
         paths                        <- resolveRelativePaths(ctx, vcs)
         versionFilePaths              = paths.map(_._2).distinct
+        _                            <- assertOnlyVersionFilesDirty(versionFilePaths, vcs)
         settings                     <- IO.blocking {
                                           val extracted = SbtRuntime.extracted(ctx.state)
                                           (

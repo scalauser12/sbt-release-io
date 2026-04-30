@@ -47,30 +47,71 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
+  /** Per-iteration cache key for publish-related decisions. Cross-build core releases
+    * iterate by `scalaVersion`, and each iteration must be tracked independently so
+    * `after-publish` can observe whether `publish-artifacts` actually ran for *this*
+    * iteration rather than reusing a frozen pre-publish prediction.
+    */
+  private[release] val publishGateKey: ReleaseContext => String =
+    ctx =>
+      SbtRuntime
+        .extracted(ctx.state)
+        .getOpt(scalaVersion)
+        .getOrElse("")
+
   val publishArtifacts: Step = ProcessStep.Single(
     name = "publish-artifacts",
     roles = Set(BuiltInStepRole.PublishArtifacts),
-    execute = ctx =>
-      if (ctx.skipPublish) {
-        IO.blocking(ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Skipping publish")).as(ctx)
+    execute = ctx => {
+      // Marking the publish-execution snapshot here ensures `after-publish` hooks
+      // observe an initialized `publishExecutedKeys` set even when the publish
+      // step skipped, so the gate distinguishes "publish step ran" from
+      // "publish step never ran".
+      val startedCtx = ctx.markPublishExecutionStarted
+      if (startedCtx.skipPublish) {
+        IO.blocking(startedCtx.state.log.info(s"${ReleaseLogPrefixes.Core} Skipping publish"))
+          .as(startedCtx)
       } else {
-        // Persistent overlays installed by set-release-version, commit-release-version,
-        // and tag-release live in `session.rawAppend` (via SbtRuntime.appendSessionSettings),
-        // so the publish task observes the post-release-version state without any local
-        // re-application here. The frozen-gate decision captured at validate time stays
-        // consistent with what publish actually runs.
-        IO.blocking {
-          val extracted = SbtRuntime.extracted(ctx.state)
-          val newState  =
-            extracted.runAggregated(extracted.currentRef / releaseIOPublishAction, ctx.state)
-          failOnSbtTaskFailure(
-            ctx,
-            newState,
-            s"publish-artifacts: sbt task '${releaseIOPublishAction.key.label}' " +
-              "reported failure via FailureCommand"
-          )
+        // Re-evaluate `publish / skip` and project membership at execute time directly
+        // against the post-hook state so a `before-publish` hook that installed
+        // `publish / skip := true` via session settings is observed here. Without this,
+        // runAggregated would honor the skip and no-op while the after-publish gate
+        // would still fire on a frozen pre-publish prediction. The propagating variant
+        // uses `runTaskChecked`, which raises if a task-valued `publish / skip` arms
+        // sbt's FailureCommand sentinel — preserving that signal even when the task
+        // simultaneously returns `true` and we would otherwise short-circuit the
+        // publish task that normally surfaces the failure.
+        anyTargetWillPublishPropagating(
+          startedCtx.state,
+          s"publish-artifacts: sbt task '${(publish / Keys.skip).key.label}'"
+        ).flatMap { case (postSkipState, actuallyRuns) =>
+          val postSkipCtx = startedCtx.withState(postSkipState)
+          if (!actuallyRuns)
+            IO.blocking(
+              postSkipCtx.state.log
+                .info(s"${ReleaseLogPrefixes.Core} Skipping publish (publish / skip := true)")
+            ).as(postSkipCtx)
+          else
+            // Persistent overlays installed by set-release-version, commit-release-version,
+            // and tag-release live in `session.rawAppend` (via SbtRuntime.appendSessionSettings),
+            // so the publish task observes the post-release-version state without any local
+            // re-application here.
+            IO.blocking {
+              val extracted = SbtRuntime.extracted(postSkipCtx.state)
+              val newState  = extracted.runAggregated(
+                extracted.currentRef / releaseIOPublishAction,
+                postSkipCtx.state
+              )
+              failOnSbtTaskFailure(
+                postSkipCtx,
+                newState,
+                s"publish-artifacts: sbt task '${releaseIOPublishAction.key.label}' " +
+                  "reported failure via FailureCommand"
+              )
+            }.map(_.recordPublishExecuted(publishGateKey(postSkipCtx)))
         }
-      },
+      }
+    },
     validate = ctx =>
       if (ctx.skipPublish) IO.unit
       else
@@ -144,6 +185,45 @@ private[release] object PublishSteps {
         )
       }
   )
+
+  /** Execute-time variant of [[shouldRunPublishHooks]]: evaluates per-project
+    * `publish / skip` directly against the current state without applying the release-
+    * version overlay. Used inside `publish-artifacts.execute` to decide whether to skip
+    * the publish task when a `before-publish` hook installed `publish / skip := true`
+    * via session settings on the post-hook state.
+    *
+    * Returns the threaded post-task state so that any `FailureCommand` armed by a
+    * task-valued `publish / skip` is honored by the caller. Specifically:
+    *   - Raises if the task arms sbt's FailureCommand sentinel (via `runTaskChecked`).
+    *   - Falls back to "skip = false" with a warning for `undefined` / evaluation
+    *     errors, matching the original lenient behavior of [[checkPublishSkip]].
+    */
+  private def anyTargetWillPublishPropagating(
+      state: State,
+      actionName: String
+  ): IO[(State, Boolean)] =
+    publishTargetRefs(state).flatMap { refs =>
+      refs.foldLeft(IO.pure((state, false))) { (ioAcc, ref) =>
+        ioAcc.flatMap {
+          case (currentState, true)  => IO.pure((currentState, true))
+          case (currentState, false) =>
+            runTaskChecked(currentState, ref / publish / Keys.skip, actionName)
+              .map { case (nextState, skipped) => (nextState, !skipped) }
+              .handleErrorWith {
+                case e: IllegalStateException if e.getMessage.contains("FailureCommand") =>
+                  IO.raiseError(e)
+                case NonFatal(e)                                                         =>
+                  IO.blocking {
+                    currentState.log.warn(
+                      s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for " +
+                        s"${ref.project}: ${errorMessage(e)}. Assuming skip = false."
+                    )
+                    (currentState, true) // skip=false → publish runs (matches checkPublishSkip)
+                  }
+              }
+        }
+      }
+    }
 
   private[release] def shouldRunPublishHooks(ctx: ReleaseContext): IO[Boolean] =
     if (ctx.skipPublish) IO.pure(false)

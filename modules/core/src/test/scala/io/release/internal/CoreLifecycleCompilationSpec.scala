@@ -7,6 +7,7 @@ import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
 import io.release.TestSupport
 import io.release.core.internal.CoreStepAliases.Step
+import io.release.core.internal.steps.PublishSteps
 import io.release.core.internal.steps.ReleaseSteps
 import munit.CatsEffectSuite
 import sbt.*
@@ -288,7 +289,16 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       steps: Seq[Step],
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
-    validatePublishHooks(steps, ctx).flatMap(executePublishHooks(steps, _))
+    validatePublishHooks(steps, ctx)
+      .flatMap(validatedCtx => executePublishHooks(steps, simulatePublishExecuted(validatedCtx)))
+
+  /** Simulate a successful run of `publish-artifacts` for the current iteration. The
+    * after-publish gate is narrowed at execute time by `ctx.publishExecutedKeys`; tests
+    * that drive only the publish hook steps (without the actual publish-artifacts step)
+    * must record the iteration's gate key so afterPublish observes a real publish.
+    */
+  private def simulatePublishExecuted(ctx: ReleaseContext): ReleaseContext =
+    ctx.recordPublishExecuted(PublishSteps.publishGateKey(ctx))
 
   private def validatePublishHooks(
       steps: Seq[Step],

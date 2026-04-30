@@ -55,6 +55,24 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "publishArtifacts.execute - propagate FailureCommand from a task-valued publish/skip " +
+      "that returns true"
+  ) {
+    loadedContextResource(s"$fixturePrefix-skip-failure-command") { dir =>
+      val marker = new File(dir, "publish-skip-task-ran.txt")
+      marker -> Seq(CoreStepTestCompat.failureCommandPublishSkipSetting(marker))
+    }.use { case (ctx, marker) =>
+      assertFailure[IllegalStateException, ReleaseContext](
+        PublishSteps.publishArtifacts.execute(ctx)
+      ) { err =>
+        assert(marker.exists())
+        assert(err.getMessage.contains("FailureCommand"))
+        assert(err.getMessage.contains("'skip'"))
+      }
+    }
+  }
+
   // ── publishArtifacts.validate ───────────────────────────────────────
 
   test("checkSnapshotDependencies.validate - fail on snapshot dependencies") {

@@ -1,11 +1,13 @@
 package io.release.core.internal.steps
 
 import cats.effect.IO
+import cats.syntax.all.*
 import io.release.ReleaseContext
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import io.release.ReleasePluginIO.autoImport.*
 import io.release.VcsOps
 import io.release.core.internal.VersionPlan
+import io.release.vcs.Vcs
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
@@ -70,7 +72,15 @@ private[release] object ReleaseVersionWorkflow {
     )
 
   def validateInquireVersions(ctx: ReleaseContext): IO[Unit] =
-    IO.blocking(resolveVersionPlan(ctx).versionFile).flatMap(ensureVersionFileExists)
+    IO.blocking(resolveVersionPlan(ctx).versionFile).flatMap { versionFile =>
+      // Detect the VCS at validate time so a misconfigured `releaseIOVersioningFile`
+      // pointing outside the repo fails `releaseIO check` before any execute-time
+      // mutation of an external file.
+      ensureVersionFileExists(versionFile) *>
+        ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
+          VcsOps.relativizeToBase(vcs, versionFile).void
+        }
+    }
 
   def inquireVersions(ctx: ReleaseContext): IO[ReleaseContext] =
     resolveVersions(ctx, allowPrompts = true).flatMap { case (updatedCtx, resolved) =>
@@ -288,11 +298,16 @@ private[release] object ReleaseVersionWorkflow {
       }.flatMap { case (sign, signOff) =>
         VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
           for {
+            _      <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
             status <- VcsOps.trackedStatus(vcs)
             result <- if (status.nonEmpty) {
                         for {
                           commitData        <- runTaskChecked(ctx.state, commitMessageKey, actionName)
                           (commitState, msg) = commitData
+                          // Re-assert dirty status after the commit-message task runs: a
+                          // side-effecting task could have modified or staged unrelated files
+                          // between the initial pre-check and the staging window below.
+                          _                 <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
                           result            <- IO.uncancelable { _ =>
                                                  // Keep staging and commit atomic with respect to
                                                  // cancellation so we do not leave staged-but-
@@ -301,6 +316,7 @@ private[release] object ReleaseVersionWorkflow {
                                                    _    <- vcs.add(relativePath)
                                                    _    <- vcs.commit(msg, sign, signOff)
                                                    hash <- vcs.currentHash
+                                                   _    <- assertCleanAfterCommit(actionName, vcs)
                                                  } yield (ctx.withState(commitState), hash)
                                                }
                         } yield result
@@ -312,9 +328,57 @@ private[release] object ReleaseVersionWorkflow {
       }
     }
 
+  /** Reject the commit if any tracked file other than the configured version file is dirty.
+    * Catches hooks or sbt tasks that staged or modified unrelated files during the release —
+    * `git commit -m` would otherwise pick up whatever is in the index.
+    */
+  private def assertOnlyVersionFileDirty(
+      actionName: String,
+      expectedPath: String,
+      vcs: Vcs
+  ): IO[Unit] =
+    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
+      val unrelated = (modified ++ staged).distinct.filterNot(_ == expectedPath)
+      if (unrelated.isEmpty) IO.unit
+      else
+        IO.raiseError(
+          new IllegalStateException(
+            s"$actionName: expected only `$expectedPath` to be dirty before commit, " +
+              s"but found unrelated tracked changes: ${unrelated.mkString(", ")}. " +
+              "A hook or sbt task likely modified or staged additional files. " +
+              "Reset those changes (or amend the hook) before re-running the release."
+          )
+        )
+    }
+
+  /** Verify the working tree is clean after the version commit so that tagging and pushing run
+    * against a known state. Anything left dirty here would silently ride along on the tag.
+    */
+  private def assertCleanAfterCommit(actionName: String, vcs: Vcs): IO[Unit] =
+    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
+      val leftover = (modified ++ staged).distinct
+      if (leftover.isEmpty) IO.unit
+      else
+        IO.raiseError(
+          new IllegalStateException(
+            s"$actionName: tracked working tree is not clean after commit; " +
+              s"unexpected leftover changes: ${leftover.mkString(", ")}. " +
+              "Resolve before retrying."
+          )
+        )
+    }
+
   private def writeVersion(ctx: ReleaseContext, versionValue: String): IO[ReleaseContext] =
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx))
+      // Re-validate path-within-VCS-root against the freshly resolved plan: a
+      // before-version-resolution hook can install a late-bound `releaseIOVersioningFile`
+      // via session settings after `inquireVersions.validate` ran, so the validate-time
+      // check at [[validateInquireVersions]] cannot see the final value. Running the check
+      // here means an external file is rejected before any mutation rather than after.
+      _           <- ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
+                       VcsOps.relativizeToBase(vcs, versionPlan.versionFile).void
+                     }
       _           <- VersionWorkflowSupport.writeVersionFile(
                        versionPlan.versionFile,
                        versionValue,

@@ -284,6 +284,56 @@ class VersionStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("inquireVersions.validate - fail when version file resolves outside the VCS root") {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-version-file-outside",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        TestSupport.tempDirResource(s"$fixturePrefix-external").use { externalDir =>
+          IO.blocking {
+            val externalVersionFile = new File(externalDir, "version.sbt")
+            sbt.IO.write(externalVersionFile, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n")
+            externalVersionFile
+          }.flatMap { externalVersionFile =>
+            val state = TestSupport.loadedState(
+              repo,
+              Seq(
+                Project("root", repo).settings(
+                  releaseIOVersioningFile           := externalVersionFile,
+                  releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                  releaseIOVersioningFileContents   := VersionSteps
+                    .defaultWriteVersion(useGlobalVersion = true),
+                  releaseIOVersioningUseGlobal      := true,
+                  releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                  releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+                )
+              )
+            )
+
+            TestAssertions.assertFailure[IllegalStateException, Unit](
+              VersionSteps.inquireVersions.validate(promptingContext(state)).void
+            ) { err =>
+              assert(err.getMessage.contains("outside of VCS root"))
+            } *> IO.blocking(
+              // The external file must remain untouched: validate fails before any write.
+              assert(
+                sbt.IO.read(externalVersionFile).contains("0.1.0-SNAPSHOT"),
+                "external version file should not be mutated by failing validate"
+              )
+            )
+          }
+        }
+      }
+  }
+
   test("resolveVersions - fail when version file cannot be parsed") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       writeVersionFile(

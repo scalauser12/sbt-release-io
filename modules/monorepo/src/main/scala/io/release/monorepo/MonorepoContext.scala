@@ -186,8 +186,11 @@ case class MonorepoContext(
     copy(failed = true, failureCause = Some(cause))
 }
 
-private[monorepo] object MonorepoContext {
+object MonorepoContext {
 
+  // Internal metadata keys are kept private; the companion itself stays public so the
+  // case class's synthesized `apply` / `unapply` remain accessible to hook and custom-
+  // plugin code that constructs or pattern-matches `MonorepoContext`.
   private val releaseVersionFilesPrevalidatedKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalMonorepoReleaseVersionFilesPrevalidated")
 

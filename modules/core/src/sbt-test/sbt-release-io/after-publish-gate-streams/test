@@ -1,0 +1,15 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Release; the before-publish hook installs `publish/skip := true` so publish
+# becomes a no-op. The streaming after-publish gate must see that and suppress
+# its hooks.
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+> checkBeforePublishRan
+> checkPublishSkipped
+> checkAfterPublishSuppressed

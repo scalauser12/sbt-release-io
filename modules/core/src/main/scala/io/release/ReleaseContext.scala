@@ -84,7 +84,36 @@ case class ReleaseContext(
   private[release] def decisionDefaults: ReleaseDecisionDefaults =
     executionState.map(_.plan.decisionDefaults).getOrElse(ReleaseDecisionDefaults.empty)
 
+  /** Per-iteration keys (matching `CoreLifecycle.scalaVersionKey`) for which
+    * `publish-artifacts` actually executed the publish task. `None` means the publish
+    * step has not yet run; an empty `Some` means it ran but every iteration skipped.
+    * Used to gate `after-publish` hooks against the actual publish outcome rather than a
+    * pre-publish skip evaluation that a `before-publish` hook may have rendered stale.
+    */
+  private[release] def publishExecutedKeys: Option[Set[String]] =
+    metadata(ReleaseContext.publishExecutedKeysKey)
+
+  private[release] def recordPublishExecuted(key: String): ReleaseContext =
+    withMetadata(
+      ReleaseContext.publishExecutedKeysKey,
+      publishExecutedKeys.getOrElse(Set.empty) + key
+    )
+
+  private[release] def markPublishExecutionStarted: ReleaseContext =
+    if (publishExecutedKeys.isDefined) this
+    else withMetadata(ReleaseContext.publishExecutedKeysKey, Set.empty[String])
+
   override def fail: ReleaseContext                       = copy(failed = true)
   override def failWith(cause: Throwable): ReleaseContext =
     copy(failed = true, failureCause = Some(cause))
+}
+
+object ReleaseContext {
+
+  // Internal metadata key for the publish-execution snapshot consumed by
+  // `CoreLifecycle.afterPublishNarrow`. Hidden from external consumers; the
+  // companion itself stays public so the case class's synthesized `apply` /
+  // `unapply` remain accessible to hook and custom-plugin code.
+  private val publishExecutedKeysKey: AttributeKey[Set[String]] =
+    AttributeKey[Set[String]]("releaseIOInternalCorePublishExecutedKeys")
 }
