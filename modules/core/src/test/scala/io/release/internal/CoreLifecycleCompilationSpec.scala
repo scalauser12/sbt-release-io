@@ -117,6 +117,11 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       compileLifecycle(state).map { steps =>
         val stepNames = steps.map(_.name)
 
+        // `tag-preflight` is intentionally absent: this configuration installs a
+        // `beforeTag` hook, which can rewrite `releaseIOVcsTagName` after the
+        // preflight would have run. CoreLifecycle.tagPreflightEnabled auto-disables
+        // the early preflight in that case so the (potentially stale) default name
+        // cannot trigger a spurious abort.
         assertEquals(
           stepNames,
           Seq(
@@ -137,6 +142,61 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
         )
         assert(!stepNames.exists(_.startsWith("before-publish:")))
         assert(!stepNames.exists(_.startsWith("after-publish:")))
+      }
+    }
+  }
+
+  test(
+    "compile - auto-disable tag-preflight when any intervening hook phase is configured"
+  ) {
+    // tag-preflight evaluates `releaseIOVcsTagName` before later hooks
+    // (beforeReleaseVersionWrite/afterReleaseVersionWrite/beforeReleaseCommit/
+    // afterReleaseCommit/beforeTag) can rewrite it. To avoid spurious aborts on
+    // a stale default name, the lifecycle skips the step when any of those
+    // phases has hooks. Each phase below is exercised in isolation so a future
+    // refactor that misses one fails this test.
+    val phases = Seq(
+      "beforeReleaseVersionWrite" -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksBeforeReleaseVersionWrite
+      ),
+      "afterReleaseVersionWrite"  -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksAfterReleaseVersionWrite
+      ),
+      "beforeReleaseCommit"       -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksBeforeReleaseCommit
+      ),
+      "afterReleaseCommit"        -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksAfterReleaseCommit
+      ),
+      "beforeTag"                 -> ((s: ReleasePluginIO.autoImport.type) => s.releaseIOHooksBeforeTag)
+    )
+
+    phases.foldLeft(IO.unit) { case (acc, (label, key)) =>
+      acc *> {
+        val hookSetting = key(ReleasePluginIO.autoImport) := Seq(
+          ReleaseHookIO.sideEffect(s"$label-hook")(_ => IO.unit)
+        )
+        hookStateResource(s"tag-preflight-disabled-$label", Seq(hookSetting)).use { state =>
+          compileLifecycle(state).map { steps =>
+            assert(
+              !steps.map(_.name).contains("tag-preflight"),
+              s"tag-preflight should be auto-disabled when $label hooks are configured, " +
+                s"but found it in: ${steps.map(_.name)}"
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("compile - keep tag-preflight enabled when no intervening hooks are configured") {
+    hookStateResource("tag-preflight-enabled-default").use { state =>
+      compileLifecycle(state).map { steps =>
+        assert(
+          steps.map(_.name).contains("tag-preflight"),
+          s"tag-preflight should be present in the default lifecycle, " +
+            s"but found: ${steps.map(_.name)}"
+        )
       }
     }
   }
@@ -173,6 +233,102 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
             List("validate-before", "validate-after", "execute-before", "execute-after")
           )
         }
+      }
+    }
+  }
+
+  test(
+    "compile - skip before-publish hooks at execute when an earlier hook flips skipPublish"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed)
+
+      hookStateResource("release-hook-compiler-before-publish-narrow", settings).use { state =>
+        val enabledCtx = ReleaseContext(state = state, skipPublish = false)
+
+        compileLifecycle(state).flatMap { steps =>
+          val publishHookSteps = publishHookStepsOnly(steps)
+          for {
+            validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx)
+            // Simulate a hook earlier in the release flipping skipPublish at execute time only.
+            skippedCtx    = validatedCtx.copy(skipPublish = true)
+            _            <- executePublishHooks(publishHookSteps, skippedCtx)
+            events       <- observed.get
+          } yield assertEquals(
+            events,
+            List("validate-before", "validate-after")
+          )
+        }
+      }
+    }
+  }
+
+  test(
+    "compile - skip before-publish hooks when an execute-only publish/skip is installed"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed)
+
+      hookStateResource("release-hook-compiler-before-publish-skip-drift", settings).use { state =>
+        val enabledCtx = ReleaseContext(state = state, skipPublish = false)
+
+        compileLifecycle(state).flatMap { steps =>
+          val publishHookSteps = publishHookStepsOnly(steps)
+          for {
+            validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx)
+            // Install `publish / skip := true` on the post-validate state so the execute-time
+            // narrow predicate observes it even though the frozen gate decided "run".
+            driftedState  = TestSupport.appendSessionSettings(
+                              validatedCtx.state,
+                              Seq(publish / skip := true)
+                            )
+            driftedCtx    = validatedCtx.copy(state = driftedState)
+            _            <- executePublishHooks(publishHookSteps, driftedCtx)
+            events       <- observed.get
+          } yield assertEquals(
+            events,
+            List("validate-before", "validate-after")
+          )
+        }
+      }
+    }
+  }
+
+  test(
+    "compile - skip before-publish hooks when publish/skip is installed via public appendWithSession"
+  ) {
+    // Locks in the symmetry with the `hook-installed-publish-skip` scripted test:
+    // hooks use the public `Project.extract(state).appendWithSession(...)` API to install
+    // `publish / skip := true`. That API is transient — settings live in `structure.settings`
+    // only — so a narrow predicate that re-applies an overlay via `appendWithSession`
+    // would drop the hook's setting and let before-publish run while publish-artifacts
+    // skips. The execute-time predicate must read `publish / skip` directly against the
+    // post-hook state without re-overlaying.
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed)
+
+      hookStateResource("release-hook-compiler-before-publish-public-append", settings).use {
+        state =>
+          val enabledCtx = ReleaseContext(state = state, skipPublish = false)
+
+          compileLifecycle(state).flatMap { steps =>
+            val publishHookSteps = publishHookStepsOnly(steps)
+            for {
+              validatedCtx <- validatePublishHooks(publishHookSteps, enabledCtx)
+              driftedState  = sbt.Project
+                                .extract(validatedCtx.state)
+                                .appendWithSession(
+                                  Seq(publish / skip := true),
+                                  validatedCtx.state
+                                )
+              driftedCtx    = validatedCtx.copy(state = driftedState)
+              _            <- executePublishHooks(publishHookSteps, driftedCtx)
+              events       <- observed.get
+            } yield assertEquals(
+              events,
+              List("validate-before", "validate-after")
+            )
+          }
       }
     }
   }

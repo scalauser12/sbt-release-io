@@ -68,6 +68,23 @@ private[release] object CoreLifecycle {
         .getOpt(Keys.scalaVersion)
         .getOrElse("")
 
+  /** Narrow `before-publish` execution to iterations where `publish-artifacts` will
+    * actually run. The frozen validate-time gate stays the upper bound (so `releaseIO
+    * check` still rehearses the hook); at execute time we additionally re-evaluate
+    * `ctx.skipPublish` and per-project `publish / skip` so a hook earlier in the
+    * release (e.g. `afterReleaseCommit`, `afterTag`) that flipped `ctx.skipPublish`
+    * or installed `publish / skip := true` suppresses the before-publish phase
+    * symmetrically with `afterPublishNarrow`.
+    *
+    * Uses the execute-time variant of the gate (no fresh release-version overlay) so
+    * a hook that installed `publish / skip := true` via the public sbt
+    * `Project.extract(state).appendWithSession(...)` API is preserved across the
+    * narrow check — re-applying an overlay would re-derive `structure` and drop the
+    * transient setting, leaving before-publish to run while `publish-artifacts` skips.
+    */
+  private val beforePublishNarrow: ReleaseContext => IO[Boolean] =
+    PublishSteps.shouldRunPublishHooksAtExecute
+
   /** Narrow `after-publish` execution to iterations where `publish-artifacts` actually
     * ran. The frozen validate-time gate stays the upper bound (so `releaseIO check` still
     * rehearses the hook); at execute time we additionally require that the publish step
@@ -80,6 +97,28 @@ private[release] object CoreLifecycle {
       IO.pure(
         ctx.publishExecutedKeys.exists(_.contains(PublishSteps.publishGateKey(ctx)))
       )
+
+  /** Auto-disable `tag-preflight` when any hook phase between `inquireVersions` and
+    * `tag-release` is configured. Those hooks (`beforeReleaseVersionWrite`,
+    * `afterReleaseVersionWrite`, `beforeReleaseCommit`, `afterReleaseCommit`,
+    * `beforeTag`) can rewrite `releaseIOVcsTagName` via session settings after the
+    * preflight has already evaluated the default name. Running preflight on the
+    * pre-hook name produces false-positive aborts when the hook's intended tag is
+    * free but the default tag conflicts.
+    *
+    * Builds without intervening hooks (the dominant case) keep the early-abort
+    * preflight; builds with such hooks fall back to `tag-release`'s late conflict
+    * check. To re-enable preflight, move tag-name-affecting logic to
+    * `afterVersionResolution`, which runs before `tag-preflight`.
+    */
+  private val tagPreflightEnabled: CoreHookConfiguration => Boolean =
+    config =>
+      config.enableTagging &&
+        config.beforeReleaseVersionWriteHooks.isEmpty &&
+        config.afterReleaseVersionWriteHooks.isEmpty &&
+        config.beforeReleaseCommitHooks.isEmpty &&
+        config.afterReleaseCommitHooks.isEmpty &&
+        config.beforeTagHooks.isEmpty
 
   /** Narrow `after-push` execution to releases where `push-changes` actually pushed.
     * `enablePush` (the policy gate) only says "the push step is in the pipeline";
@@ -139,7 +178,8 @@ private[release] object CoreLifecycle {
       ReleaseSteps.publishArtifacts.enableCrossBuild,
     freezeGate = true,
     gateKey = Some(scalaVersionKey),
-    enabled = _.enablePublish
+    enabled = _.enablePublish,
+    narrowExecute = Some(beforePublishNarrow)
   )
   private val afterPublish = HookPhaseConfig(
     phase = HookPhases.AfterPublish,
@@ -192,6 +232,7 @@ private[release] object CoreLifecycle {
     hookPhase(beforeVersionResolution),
     builtIn(ReleaseSteps.inquireVersions),
     hookPhase(afterVersionResolution),
+    builtIn(ReleaseSteps.tagPreflight, tagPreflightEnabled),
     builtIn(ReleaseSteps.runClean, _.enableRunClean),
     builtIn(ReleaseSteps.runTests, _.enableRunTests),
     hookPhase(beforeReleaseVersionWrite),

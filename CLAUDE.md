@@ -88,7 +88,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `core/ReleaseComposer.scala` | Composes policies + hooks into the core release sequence |
 | `core/internal/CoreLifecycle.scala` | Wires core policy/hook settings to the shared lifecycle compiler |
 | `core/internal/CoreDecisionDefaultsCli.scala` | Resolves grouped decision-default settings and CLI overrides for core commands |
-| `core/internal/steps/ReleaseSteps.scala` | 13 default steps (initialize-vcs → check-clean → inquire-versions → tag-release → publish-artifacts → push-changes); `private[release]` |
+| `core/internal/steps/ReleaseSteps.scala` | 14 default steps (initialize-vcs → check-clean → inquire-versions → tag-preflight → set-release-version → tag-release → publish-artifacts → push-changes); `private[release]` |
 
 ### Monorepo Module
 

@@ -233,15 +233,32 @@ private[release] object PublishSteps {
       // produce the right decision when the frozen-gate cache is populated at
       // validate time. State is transient — see withReleaseVersionOverlay.
       ReleaseVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
-        publishTargetRefs(tempState).flatMap { refs =>
-          refs.foldLeft(IO.pure(false)) { (ioShouldRun, ref) =>
-            ioShouldRun.flatMap {
-              case true  => IO.pure(true)
-              case false => checkPublishSkip(ref, tempState).map(skipped => !skipped)
-            }
-          }
+        anyTargetWillPublish(tempState)
+      }
+
+  /** Execute-time variant of [[shouldRunPublishHooks]] for hook-narrow predicates.
+    * Evaluates `publish / skip` directly against `ctx.state` without applying a fresh
+    * release-version overlay, because at execute time the version is already pinned
+    * via `appendSessionSettings` (`session.rawAppend`). Re-applying an overlay through
+    * `appendWithSession` would re-derive `structure` from `session.mergeSettings` and
+    * **drop transient settings** that an earlier execute hook installed via the public
+    * `Project.extract(state).appendWithSession(...)` API (the documented pattern, see
+    * the `hook-installed-publish-skip` scripted test). Used by `before-publish` so its
+    * narrow stays consistent with `publish-artifacts.execute`'s own decision.
+    */
+  private[release] def shouldRunPublishHooksAtExecute(ctx: ReleaseContext): IO[Boolean] =
+    if (ctx.skipPublish) IO.pure(false)
+    else anyTargetWillPublish(ctx.state)
+
+  private def anyTargetWillPublish(state: State): IO[Boolean] =
+    publishTargetRefs(state).flatMap { refs =>
+      refs.foldLeft(IO.pure(false)) { (ioShouldRun, ref) =>
+        ioShouldRun.flatMap {
+          case true  => IO.pure(true)
+          case false => checkPublishSkip(ref, state).map(skipped => !skipped)
         }
       }
+    }
 
   /** Resolve the projects that `runAggregated` will actually execute for the publish task.
     * Checks `aggregationEnabled` at each level so the expansion matches sbt's

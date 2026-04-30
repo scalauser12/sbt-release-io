@@ -8,15 +8,15 @@ $ exec git commit -m "Initial commit"
 # Pre-create the tag that will conflict with the release version 0.1.0
 $ exec git tag -a v0.1.0 -m "pre-existing tag"
 
-# Scenario 0: non-interactive mode (default) should abort instead of prompting
-# The release fails at tagRelease but setReleaseVersion/commitReleaseVersion already ran,
-# so we must reset the commit and restore version.sbt afterwards.
+# Scenario 0: non-interactive mode (default) should abort instead of prompting.
+# tag-preflight runs after version resolution but before set-release-version, so
+# the abort leaves the working tree clean — no HEAD reset needed.
 -> releaseIO release-version 0.1.0 next-version 0.2.0-SNAPSHOT
-$ exec git reset --hard HEAD~1
+$ exec grep -q "0.1.0-SNAPSHOT" version.sbt
 
-# Scenario 1: explicit abort (a) — same as default behavior
+# Scenario 1: explicit abort (a) — same as default behavior, also clean.
 -> releaseIO with-defaults default-tag-exists-answer a release-version 0.1.0 next-version 0.2.0-SNAPSHOT
-$ exec git reset --hard HEAD~1
+$ exec grep -q "0.1.0-SNAPSHOT" version.sbt
 
 # Scenario 2: overwrite (o) — git tag -f is used, existing tag is replaced
 > releaseIO with-defaults default-tag-exists-answer o release-version 0.1.0 next-version 0.2.0-SNAPSHOT
@@ -28,12 +28,12 @@ $ exec git tag -d v0.1.0
 $ exec git reset --hard HEAD~2
 > reload
 
-# Scenario 3: keep existing tag (k) — the default flow now rejects keep because
-# the pre-existing tag points at the old commit, not the release commit created
-# just before tagging.
+# Scenario 3: keep existing tag (k) — rejected because the pre-existing tag points
+# at the old commit, not the release commit that would be created just before tagging.
+# tag-preflight catches this before any version write, leaving the working tree clean.
 $ exec git tag -a v0.1.0 -m "pre-existing tag"
 -> releaseIO with-defaults default-tag-exists-answer k release-version 0.1.0 next-version 0.2.0-SNAPSHOT
-$ exec git reset --hard HEAD~1
+$ exec grep -q "0.1.0-SNAPSHOT" version.sbt
 > checkTagExists v0.1.0
 
 # Scenario 4: custom tag name — release uses v0.1.0-custom instead

@@ -7,6 +7,7 @@ private[release] object BuiltInStepRole {
   case object InitializeVcs     extends BuiltInStepRole
   case object ProjectSelection  extends BuiltInStepRole
   case object ResolveVersions   extends BuiltInStepRole
+  case object TagPreflight      extends BuiltInStepRole
   case object TagRelease        extends BuiltInStepRole
   case object PublishArtifacts  extends BuiltInStepRole
   case object PushChanges       extends BuiltInStepRole

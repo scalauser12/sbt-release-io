@@ -82,15 +82,16 @@ The default release process includes:
 2. **check-clean-working-dir** - Verify no uncommitted changes
 3. **check-snapshot-dependencies** - Verify no snapshot dependencies
 4. **inquire-versions** - Determine release and next versions
-5. **run-clean** - Clean project build outputs (project-scoped `clean`)
-6. **run-tests** - Run tests (unless `skip-tests`)
-7. **set-release-version** - Update version.sbt to release version
-8. **commit-release-version** - Commit version change
-9. **tag-release** - Create Git tag
-10. **publish-artifacts** - Publish to repository
-11. **set-next-version** - Update version.sbt to next snapshot
-12. **commit-next-version** - Commit version change
-13. **push-changes** - Push commits and tags to remote
+5. **tag-preflight** - Detect tag conflicts before any version write or commit
+6. **run-clean** - Clean project build outputs (project-scoped `clean`)
+7. **run-tests** - Run tests (unless `skip-tests`)
+8. **set-release-version** - Update version.sbt to release version
+9. **commit-release-version** - Commit version change
+10. **tag-release** - Create Git tag
+11. **publish-artifacts** - Publish to repository
+12. **set-next-version** - Update version.sbt to next snapshot
+13. **commit-next-version** - Commit version change
+14. **push-changes** - Push commits and tags to remote
 
 These names are the stable built-in phase names surfaced by `releaseIO help`, `check`, and the
 hook documentation.

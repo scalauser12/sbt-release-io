@@ -1,0 +1,24 @@
+# Regression test for the tag-preflight false-positive scenario:
+# a `beforeTag` hook rewrites `releaseIOVcsTagName` from the default to a custom
+# value. The pre-existing default tag (`v0.1.0`) would conflict if the early
+# preflight evaluated it, but the release would actually create `release-0.1.0`
+# (which is free). The lifecycle skips `tag-preflight` when any tag-name-affecting
+# hook phase is configured, so the release succeeds.
+
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Pre-create the default tag that would conflict if tag-preflight evaluated it.
+$ exec git tag -a v0.1.0 -m "pre-existing default tag"
+
+# Release should succeed: the beforeTag hook rewrites the tag to `release-0.1.0`,
+# which is free. tag-preflight is auto-disabled because a beforeTag hook exists.
+> releaseIO release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify the rewritten tag was created and the pre-existing tag was untouched.
+> checkRewrittenTagPresent
+> checkDefaultTagUnchanged

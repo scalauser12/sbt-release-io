@@ -978,6 +978,78 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagPreflight.validate - no-op so releaseIO check still renders the tag summary") {
+    // tag-preflight defers to execute so non-fatal interactive cases stay in the
+    // CorePreflight summary instead of raising during validation.
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0")) *>
+        VcsSteps.tagPreflight
+          .validate(
+            ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+          )
+          .void
+    }
+  }
+
+  test("tagPreflight.execute - succeed when no tag conflict exists") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      VcsSteps.tagPreflight
+        .execute(
+          ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+            .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        )
+        .void
+    }
+  }
+
+  test("tagPreflight.execute - fail when the resolved tag already exists") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.0",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      val ctx = ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+        .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+
+      for {
+        startHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _         <- IO.blocking(TestSupport.runGit(repo, "tag", "v1.0.0"))
+        _         <- TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
+                       VcsSteps.tagPreflight.execute(ctx)
+                     ) { err =>
+                       assert(err.getMessage.contains("Tag [v1.0.0] already exists"))
+                     }
+        // Execute must not have created any new commit.
+        endHash   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
+        _          = assertEquals(endHash, startHash)
+      } yield ()
+    }
+  }
+
   private def releaseManifestSettings(
       basePackageOptions: Seq[sbt.PackageOption] = Seq.empty
   ): Seq[sbt.Setting[?]] =

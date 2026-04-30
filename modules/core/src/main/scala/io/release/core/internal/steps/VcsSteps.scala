@@ -22,6 +22,7 @@ import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
+import io.release.runtime.workflow.VersionWorkflowSupport
 import io.release.vcs.GitPushSupport
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
@@ -67,6 +68,101 @@ private[release] object VcsSteps {
     }
   }
 
+  /** Preflight tag conflicts before `setReleaseVersion`/`commitReleaseVersion` mutate the
+    * working tree.
+    *
+    * Validation is intentionally a no-op: `releaseIO check` already renders tag conflicts
+    * via [[io.release.core.internal.CorePreflight]] using the separately-resolved
+    * `tagPreflightInteractive` flag, and forcing a validation-time raise here would
+    * suppress the structured summary for non-fatal cases (e.g. interactive prompts).
+    * Execute runs after `inquireVersions.execute` populates `ctx.releaseVersion` and
+    * before `setReleaseVersion`/`commitReleaseVersion`, so an abort here leaves the
+    * working tree clean — without this step, tag conflicts surfaced only after
+    * `commit-release-version` had already created a commit, requiring callers to
+    * `git reset --hard HEAD~1` to recover.
+    *
+    * Conflict resolution itself remains in `tagRelease.execute`; this step only fails
+    * when the configured `defaultAnswer` / `useDefaults` / `interactive` combination
+    * would lead to a deterministic abort. Interactive prompts and `k`/`o`/custom-tag
+    * answers pass through and are handled at the real `tagRelease` step.
+    *
+    * '''Auto-disabled when intervening hooks are configured.''' Hooks in any of the
+    * `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`, `beforeReleaseCommit`,
+    * `afterReleaseCommit`, or `beforeTag` phases run between `tag-preflight` and
+    * `tag-release` and may rewrite `releaseIOVcsTagName` via session settings. When
+    * any of those phases is configured the lifecycle skips this step entirely so we
+    * don't spuriously abort on the pre-hook tag name. Hookless builds (the dominant
+    * case) keep the early abort. Move tag-name-affecting logic to
+    * `afterVersionResolution` (which runs before `tag-preflight`) to re-enable the
+    * early check. See `CoreLifecycle.tagPreflightEnabled`.
+    *
+    * '''Limitation — non-deterministic tag tasks.''' The early preflight evaluates
+    * `releaseIOVcsTagName` / `releaseIOVcsTagComment` once; `tag-release.execute`
+    * evaluates them again. For deterministic tasks (the dominant pattern,
+    * `s"v${version.value}"`) the two evaluations agree and the preflight is
+    * authoritative. For tasks that depend on time, a counter, or other mutable state,
+    * the two evaluations may diverge and the late `tagRelease` resolution can still
+    * abort after `commit-release-version`. We deliberately re-evaluate at tag-release
+    * rather than pinning the preflighted name; pinning would silently override the
+    * supported pattern of late-binding the tag in `afterVersionResolution`.
+    */
+  val tagPreflight: Step = ProcessStep.Single(
+    name = "tag-preflight",
+    roles = Set(BuiltInStepRole.TagPreflight),
+    execute = ctx => runTagPreflight(ctx).as(ctx)
+  )
+
+  private def runTagPreflight(ctx: ReleaseContext): IO[PreflightTagOutcome] =
+    tagPreflightTarget(ctx).flatMap(target =>
+      preflightTag(ctx, ctx.interactive, _ => IO.pure(target))
+    )
+
+  /** When the release-version write would change `version.sbt`, the release will create
+    * a new commit before tagging — so the tag's target is `FutureReleaseCommit`. When
+    * the version file already matches the resolved release version, no commit is
+    * created and the tag will be applied to the current HEAD.
+    *
+    * Falls back to `ExactCommit(currentHash)` when the version plan cannot be resolved
+    * (minimal/custom test states without `releaseIOVersioningFile`), so the preflight
+    * still exercises the existing-tag check using the non-prompting answer paths.
+    */
+  private def tagPreflightTarget(
+      ctx: ReleaseContext
+  ): IO[TagConflictResolver.PreflightCommitTarget] =
+    ctx.releaseVersion match {
+      case None                 =>
+        currentHashTarget(ctx)
+      case Some(releaseVersion) =>
+        resolveVersionPlanOpt(ctx).flatMap {
+          case None              => currentHashTarget(ctx)
+          case Some(versionPlan) =>
+            VersionWorkflowSupport
+              .wouldChangeVersionFile(
+                versionPlan.versionFile,
+                releaseVersion,
+                versionPlan.versionFileContents
+              )
+              .flatMap { wouldChange =>
+                if (wouldChange)
+                  IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+                else
+                  currentHashTarget(ctx)
+              }
+        }
+    }
+
+  private def resolveVersionPlanOpt(ctx: ReleaseContext): IO[Option[VersionPlan]] =
+    IO.blocking(versionPlanFromState(ctx.state))
+
+  private def currentHashTarget(
+      ctx: ReleaseContext
+  ): IO[TagConflictResolver.PreflightCommitTarget] = {
+    val detectedVcs = ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure)
+    detectedVcs
+      .flatMap(_.currentHash)
+      .map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
+  }
+
   // No validation phase: the tag name depends on releaseIOVcsTagName, which is resolved from the
   // release version set by inquireVersions.execute. At validation time, that version is not yet
   // available, so tag-exists checks can only run during execution.
@@ -82,9 +178,12 @@ private[release] object VcsSteps {
       }
   )
 
-  private def versionSessionSettings(state: State): Seq[Setting[?]] = {
-    val extracted        = SbtRuntime.extracted(state)
-    val maybeVersionPlan = for {
+  private def versionSessionSettings(state: State): Seq[Setting[?]] =
+    versionPlanFromState(state).fold(Seq.empty[Setting[?]])(VersionSteps.sessionSettings)
+
+  private def versionPlanFromState(state: State): Option[VersionPlan] = {
+    val extracted = SbtRuntime.extracted(state)
+    for {
       versionFile         <- extracted.getOpt(releaseIOVersioningFile)
       readVersion         <- extracted.getOpt(releaseIOVersioningReadVersion)
       versionFileContents <- extracted.getOpt(releaseIOVersioningFileContents)
@@ -97,8 +196,6 @@ private[release] object VcsSteps {
       nextVersionOverride = None,
       useGlobalVersion = useGlobalVersion
     )
-
-    maybeVersionPlan.fold(Seq.empty[Setting[?]])(VersionSteps.sessionSettings)
   }
 
   private def resolveTagPlan(ctx: ReleaseContext): IO[TagPlan] =

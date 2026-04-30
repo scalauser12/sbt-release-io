@@ -16,6 +16,7 @@ private[release] object ReleaseSteps {
 
   val initializeVcs: Step        = VcsSteps.initializeVcs
   val checkCleanWorkingDir: Step = VcsSteps.checkCleanWorkingDir
+  val tagPreflight: Step         = VcsSteps.tagPreflight
   val tagRelease: Step           = VcsSteps.tagRelease
   val pushChanges: Step          = VcsSteps.pushChanges
 
