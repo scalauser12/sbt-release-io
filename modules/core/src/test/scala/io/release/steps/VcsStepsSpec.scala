@@ -55,17 +55,23 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("pushChanges.validate - pass with a broken tracking remote when upstream is configured") {
-    ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
-      VcsSteps.pushChanges.validate(ctx).void
+    ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { rawCtx =>
+      // Seed `useDefaults = true` so the validate actually runs the upstream
+      // check against the broken remote. Without seeding, the new
+      // `effectivelyDeclinedPush` predicate short-circuits the validate
+      // (non-interactive no-default declines), and the test would pass for
+      // the wrong reason — never exercising `validatePushReadiness`.
+      VcsSteps.pushChanges.validate(ReleaseTestSupport.withPushIntended(rawCtx)).void
     }
   }
 
   test("pushChanges.validate function value - fail when VCS was not initialized") {
     ReleaseTestSupport.gitRepoWithLoadedStateResource(fixturePrefix).use { case (_, state) =>
       val validate = VcsSteps.pushChanges.validate
+      val ctx      = ReleaseTestSupport.withPushIntended(ReleaseContext(state = state))
 
       TestAssertions.assertFailure[IllegalStateException, Unit](
-        validate(ReleaseContext(state = state)).void
+        validate(ctx).void
       ) { err =>
         assertEquals(
           err.getMessage,
@@ -76,7 +82,12 @@ class VcsStepsSpec extends CatsEffectSuite {
   }
 
   test("pushChanges.execute - fail during remote preflight in non-interactive mode") {
-    ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { ctx =>
+    ReleaseTestSupport.brokenRemoteContextResource(fixturePrefix).use { rawCtx =>
+      // Seed `useDefaults = true` so the execute path actually attempts the
+      // remote preflight (otherwise `effectivelyDeclinedPush` short-circuits
+      // it before any network work — see also the matching note on the
+      // validate test above).
+      val ctx = ReleaseTestSupport.withPushIntended(rawCtx)
       TestAssertions.assertFailure[IllegalStateException, ReleaseContext](
         VcsSteps.pushChanges.execute(ctx)
       )(err => assert(err.getMessage.contains("Aborting the release due to remote check failure.")))

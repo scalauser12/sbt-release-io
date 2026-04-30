@@ -9,6 +9,7 @@ import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.DecisionResolver
 import sbt.*
 
 /** Canonical core lifecycle order and hook compilation. */
@@ -120,6 +121,19 @@ private[release] object CoreLifecycle {
         config.afterReleaseCommitHooks.isEmpty &&
         config.beforeTagHooks.isEmpty
 
+  /** Narrow `before-push` execution to releases where the push decision is not
+    * already a deterministic decline. Unlike `afterPushNarrow`, which observes
+    * the *post-fact* `pushExecuted` signal, this narrow is *ex-ante*: it fires
+    * the hook only when push may actually run. `Some(false)` decisions
+    * (`default-push-answer n`, `releaseIODefaultsPushAnswer := Some(false)`)
+    * and non-interactive no-default releases are deterministic declines and
+    * suppress the hook; interactive prompts remain observed because the
+    * operator may answer either way. Validation rehearses the hook
+    * unconditionally so `releaseIO check` still exercises hook code.
+    */
+  private val beforePushNarrow: ReleaseContext => IO[Boolean] =
+    ctx => IO.pure(!DecisionResolver.effectivelyDeclinedPush(ctx))
+
   /** Narrow `after-push` execution to releases where `push-changes` actually pushed.
     * `enablePush` (the policy gate) only says "the push step is in the pipeline";
     * the step can still complete successfully without pushing when the operator
@@ -211,7 +225,8 @@ private[release] object CoreLifecycle {
   private val beforePush = HookPhaseConfig(
     phase = HookPhases.BeforePush,
     resolveHooks = _.beforePushHooks,
-    enabled = _.enablePush
+    enabled = _.enablePush,
+    narrowExecute = Some(beforePushNarrow)
   )
   private val afterPush = HookPhaseConfig(
     phase = HookPhases.AfterPush,

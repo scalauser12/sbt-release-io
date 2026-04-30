@@ -1,0 +1,17 @@
+# Initialize git repository — deliberately NO upstream / remote configured. The
+# branch has no tracking remote, so `preparePushReleaseIfNeeded` would fail at
+# `ensureTrackingBranchConfigured` if it ran. The push-decision gate must skip
+# that warmup because non-interactive releases without a configured push answer
+# and without `with-defaults` deterministically decline at execute time.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Push policy is enabled but the operator hasn't chosen — non-interactive
+# defaults to "no" at the runtime decision. The release should complete
+# locally and create the tag without contacting any remote.
+> releaseIO release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+> checkReleaseTagged

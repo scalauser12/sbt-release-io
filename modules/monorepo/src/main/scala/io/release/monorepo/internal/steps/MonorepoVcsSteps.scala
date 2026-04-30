@@ -14,6 +14,7 @@ import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.StepHelpers.required
 import io.release.vcs.GitPushSupport
 import io.release.vcs.TagConflictResolver
@@ -215,23 +216,24 @@ private[monorepo] object MonorepoVcsSteps {
     * For other VCS backends, `vcs.pushChanges` is used and tags may not be pushed;
     * users should verify their VCS behavior.
     *
-    * When the operator's effective push decision is "no" (CLI `default-push-answer n`
-    * or `releaseIODefaultsPushAnswer := Some(false)`) both validate and execute
-    * short-circuit before any upstream / remote requirement, so a local/no-upstream
-    * monorepo release with the policy enabled but the decision declined still succeeds.
+    * When the push step is guaranteed to take its decline branch — explicit
+    * `Some(false)` answer or non-interactive with no configured choice and no
+    * `with-defaults` — both validate and execute short-circuit before any
+    * upstream / remote requirement, so a local/no-upstream monorepo release
+    * with the policy enabled but the decision declined still succeeds.
     */
   val pushChanges: GlobalStep = ProcessStep.Single(
     name = "push-changes",
     roles = Set(BuiltInStepRole.PushChanges),
     validateWithContext = Some(ctx =>
-      if (ctx.decisionDefaults.pushAnswer.contains(false)) IO.pure(ctx)
+      if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.pure(ctx)
       else
         required(ctx.vcs, MissingVcsMessage) { vcs =>
           VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Monorepo)
         }
     ),
     execute = ctx =>
-      if (ctx.decisionDefaults.pushAnswer.contains(false))
+      if (DecisionResolver.effectivelyDeclinedPush(ctx))
         logWarn(ctx, "Remember to push the changes yourself!").as(ctx)
       else
         required(ctx.vcs, MissingVcsMessage) { vcs =>

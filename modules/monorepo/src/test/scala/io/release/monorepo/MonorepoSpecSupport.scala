@@ -25,6 +25,18 @@ object MonorepoSpecSupport {
   def dummyContextResource(prefix: String): Resource[IO, MonorepoContext] =
     TestSupport.dummyStateResource(prefix).map(state => MonorepoContext(state = state))
 
+  /** Seed a test context with a release plan that intends to push (`useDefaults = true`),
+    * so push-step validate/execute paths actually run. Without this seeding,
+    * `DecisionResolver.effectivelyDeclinedPush` short-circuits them — non-interactive
+    * releases without a configured push answer and without `with-defaults` are a
+    * deterministic decline.
+    */
+  def withPushIntended(ctx: MonorepoContext): MonorepoContext =
+    withPlan(
+      ctx,
+      releasePlan(flags = defaultFlags.copy(useDefaults = true))
+    )
+
   def loadedContextResource(
       prefix: String,
       selectedProjectIds: Seq[String],

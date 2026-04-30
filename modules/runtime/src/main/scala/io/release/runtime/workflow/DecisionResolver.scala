@@ -115,6 +115,24 @@ private[release] object DecisionResolver {
       }
     }
 
+  /** Returns true when the push step is guaranteed to take its decline branch
+    * for `ctx`, before any prompting. Mirrors the deterministic-decline cases
+    * in [[resolvePushDecision]]:
+    *
+    *   - `pushAnswer = Some(false)` (CLI `default-push-answer n` or
+    *     `releaseIODefaultsPushAnswer := Some(false)`).
+    *   - `pushAnswer` unset, no `with-defaults`, and not interactive
+    *     (CI/scripted with no explicit choice — non-interactive declines).
+    *
+    * The interactive prompt path is inherently undetermined and is not covered
+    * here. Use this predicate to short-circuit work that only matters when push
+    * may actually run: the early remote warmup, push-step validate/execute
+    * upstream guards, and `before-push` hook narrowing.
+    */
+  def effectivelyDeclinedPush[C <: ReleaseCtx { type Self = C }](ctx: C): Boolean =
+    ctx.decisionDefaults.pushAnswer.contains(false) ||
+      (ctx.decisionDefaults.pushAnswer.isEmpty && !ctx.useDefaults && !ctx.interactive)
+
   def resolvePushDecision[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       logPrefix: String

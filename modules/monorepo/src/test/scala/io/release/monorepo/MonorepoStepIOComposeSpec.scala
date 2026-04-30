@@ -612,9 +612,11 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
       dummyProjects("api").flatMap { projects =>
         Ref.of[IO, List[String]](Nil).flatMap { observed =>
           Ref.of[IO, Int](0).flatMap { hasUpstreamCalls =>
-            val pCtx     = ctx.withVcs(
-              new ComposePushPrepStubVcs(hasUpstreamCalls, hasUpstream0 = IO.pure(false))
-            )
+            val pCtx     = MonorepoSpecSupport
+              .withPushIntended(ctx)
+              .withVcs(
+                new ComposePushPrepStubVcs(hasUpstreamCalls, hasUpstream0 = IO.pure(false))
+              )
             val boundary = ProcessStep.Single[MonorepoContext](
               name = "detect-or-select-projects",
               execute = c => observed.update(_ :+ "select").as(c.withProjects(projects)),

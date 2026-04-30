@@ -498,6 +498,79 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "DecisionResolver.effectivelyDeclinedPush - true for pushAnswer=Some(false) regardless " +
+      "of useDefaults / interactive"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      val cases = Seq(
+        (true, true),
+        (true, false),
+        (false, true),
+        (false, false)
+      )
+      cases.foreach { case (interactive, useDefaults) =>
+        val ctx = promptContext(
+          state,
+          interactive = interactive,
+          useDefaults = useDefaults,
+          decisionDefaults = ReleaseDecisionDefaults.empty.copy(pushAnswer = Some(false))
+        )
+        assert(
+          DecisionResolver.effectivelyDeclinedPush(ctx),
+          s"interactive=$interactive useDefaults=$useDefaults"
+        )
+      }
+      IO.unit
+    }
+  }
+
+  test(
+    "DecisionResolver.effectivelyDeclinedPush - true when pushAnswer is unset, " +
+      "non-interactive, and not using defaults"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      val ctx = promptContext(state, interactive = false, useDefaults = false)
+      assert(DecisionResolver.effectivelyDeclinedPush(ctx))
+      IO.unit
+    }
+  }
+
+  test(
+    "DecisionResolver.effectivelyDeclinedPush - false when pushAnswer unset and " +
+      "useDefaults is true (default-yes path)"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      val ctx = promptContext(state, interactive = false, useDefaults = true)
+      assert(!DecisionResolver.effectivelyDeclinedPush(ctx))
+      IO.unit
+    }
+  }
+
+  test(
+    "DecisionResolver.effectivelyDeclinedPush - false when pushAnswer unset and " +
+      "interactive (prompt may answer yes)"
+  ) {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      val ctx = promptContext(state, interactive = true, useDefaults = false)
+      assert(!DecisionResolver.effectivelyDeclinedPush(ctx))
+      IO.unit
+    }
+  }
+
+  test("DecisionResolver.effectivelyDeclinedPush - false when pushAnswer is Some(true)") {
+    TestSupport.dummyStateResource(fixturePrefix).use { state =>
+      val ctx = promptContext(
+        state,
+        interactive = false,
+        useDefaults = false,
+        decisionDefaults = ReleaseDecisionDefaults.empty.copy(pushAnswer = Some(true))
+      )
+      assert(!DecisionResolver.effectivelyDeclinedPush(ctx))
+      IO.unit
+    }
+  }
+
   test("StepHelpers.aggregatedTaskValues - flatten aggregated successful task results") {
     val result =
       ResultTestCompat.aggregatedSuccess(Seq(Seq("core", "api"), Seq("monorepo")))

@@ -9,6 +9,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
+import io.release.runtime.workflow.DecisionResolver
 
 /** Orchestrates monorepo validation and execution with a selection-aware setup boundary.
   */
@@ -67,16 +68,17 @@ private[monorepo] object MonorepoComposer {
   ): IO[MonorepoContext] =
     if (ctx.failed) IO.pure(ctx) else next(ctx)
 
-  /** Skip the early remote warmup when the operator's effective push decision is "no"
-    * (CLI `default-push-answer n` or `releaseIODefaultsPushAnswer := Some(false)`);
-    * otherwise a local/no-upstream release would abort here even though the user
-    * explicitly chose not to push.
+  /** Skip the early remote warmup whenever the push step is guaranteed to take
+    * its decline branch — explicit `Some(false)` answer or non-interactive
+    * with no configured choice and no `with-defaults`. Otherwise a
+    * local/no-upstream release would abort here even though `pushChanges`
+    * would later decline cleanly.
     */
   private def preparePushIfDecisionAllows(
       ctx: MonorepoContext,
       steps: Seq[AnyStep]
   ): IO[MonorepoContext] =
-    if (ctx.decisionDefaults.pushAnswer.contains(false)) IO.pure(ctx)
+    if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.pure(ctx)
     else VcsOps.preparePushReleaseIfNeeded(ctx, steps, LogPrefix)
 
   private[monorepo] def selectedProjectsLine(ctx: MonorepoContext): String = {

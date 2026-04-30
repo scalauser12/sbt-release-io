@@ -513,7 +513,11 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   }
 
   test("pushChanges.execute - fail during remote preflight before any push attempt") {
-    brokenRemoteContextResource.use { ctx =>
+    brokenRemoteContextResource.use { rawCtx =>
+      // Seed `useDefaults = true` so the execute path actually attempts the
+      // remote preflight; otherwise `effectivelyDeclinedPush` short-circuits
+      // it (non-interactive no-default declines).
+      val ctx = MonorepoSpecSupport.withPushIntended(rawCtx)
       TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
         MonorepoVcsSteps.pushChanges.execute(ctx)
       )(err => assert(err.getMessage.contains("Aborting the release due to remote check failure.")))
@@ -665,8 +669,9 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   test("pushChanges.validate - fail when VCS was not initialized by initializeVcs") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
+      val ctx = MonorepoSpecSupport.withPushIntended(MonorepoContext(state = state))
       TestAssertions.assertFailure[IllegalStateException, Unit](
-        MonorepoVcsSteps.pushChanges.validate(MonorepoContext(state = state)).void
+        MonorepoVcsSteps.pushChanges.validate(ctx).void
       ) { err =>
         assertEquals(
           err.getMessage,
@@ -679,9 +684,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("pushChanges.validate function value - fail when VCS was not initialized") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
       val validate = MonorepoVcsSteps.pushChanges.validate
+      val ctx      = MonorepoSpecSupport.withPushIntended(MonorepoContext(state = state))
 
       TestAssertions.assertFailure[IllegalStateException, Unit](
-        validate(MonorepoContext(state = state)).void
+        validate(ctx).void
       ) { err =>
         assertEquals(
           err.getMessage,
@@ -693,8 +699,9 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   test("pushChanges.execute - fail when VCS was not initialized by initializeVcs") {
     gitRepoWithLoadedStateResource().use { case (_, state) =>
+      val ctx = MonorepoSpecSupport.withPushIntended(MonorepoContext(state = state))
       TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
-        MonorepoVcsSteps.pushChanges.execute(MonorepoContext(state = state))
+        MonorepoVcsSteps.pushChanges.execute(ctx)
       ) { err =>
         assertEquals(
           err.getMessage,

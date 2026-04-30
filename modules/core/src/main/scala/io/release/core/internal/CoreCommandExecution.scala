@@ -12,6 +12,7 @@ import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
 import io.release.runtime.command.ReleaseCommandRunner
 import io.release.runtime.workflow.DecisionDefaultsSupport
+import io.release.runtime.workflow.DecisionResolver
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for core command planning and execution.
@@ -223,12 +224,13 @@ private[release] object CoreCommandExecution {
                                        CoreExecutionState(inputs.plan)
                                      )
                       preparedCtx <-
-                        // Skip the early remote warmup when the operator's effective push
-                        // decision is "no" (CLI `default-push-answer n` or
-                        // `releaseIODefaultsPushAnswer := Some(false)`); otherwise a
-                        // local/no-upstream release would abort here even though the user
-                        // explicitly chose not to push.
-                        if (seededCtx.decisionDefaults.pushAnswer.contains(false))
+                        // Skip the early remote warmup whenever the push step is
+                        // guaranteed to take its decline branch — explicit
+                        // `Some(false)` answer or non-interactive with no
+                        // configured choice and no `with-defaults`. Otherwise a
+                        // local/no-upstream release would abort here even though
+                        // `pushChanges.execute` would later decline cleanly.
+                        if (DecisionResolver.effectivelyDeclinedPush(seededCtx))
                           IO.pure(seededCtx)
                         else
                           VcsOps.preparePushReleaseIfNeeded(

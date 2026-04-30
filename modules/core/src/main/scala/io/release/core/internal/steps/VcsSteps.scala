@@ -21,6 +21,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.StepHelpers.*
 import io.release.runtime.workflow.VersionWorkflowSupport
 import io.release.vcs.GitPushSupport
@@ -353,14 +354,15 @@ private[release] object VcsSteps {
 
   // Validation checks upstream config (local, fast). Remote reachability (git ls-remote) is
   // deferred to execute to avoid blocking the validation phase on a network call. When the
-  // operator's effective push decision is "no" (CLI `default-push-answer n` or
-  // `releaseIODefaultsPushAnswer := Some(false)`) both validate and execute short-circuit
-  // before any upstream / remote requirement, so a local/no-upstream release is allowed.
+  // operator's effective push decision is a deterministic decline — explicit `Some(false)`
+  // answer or non-interactive with no configured choice and no `with-defaults` — both
+  // validate and execute short-circuit before any upstream / remote requirement, so a
+  // local/no-upstream release is allowed in those configurations.
   val pushChanges: Step = ProcessStep.Single(
     name = "push-changes",
     roles = Set(BuiltInStepRole.PushChanges),
     validateWithContext = Some(ctx =>
-      if (ctx.decisionDefaults.pushAnswer.contains(false)) IO.pure(ctx)
+      if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.pure(ctx)
       else
         required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") {
           vcs =>
@@ -368,7 +370,7 @@ private[release] object VcsSteps {
         }
     ),
     execute = ctx =>
-      if (ctx.decisionDefaults.pushAnswer.contains(false))
+      if (DecisionResolver.effectivelyDeclinedPush(ctx))
         IO
           .blocking(
             ctx.state.log.warn(

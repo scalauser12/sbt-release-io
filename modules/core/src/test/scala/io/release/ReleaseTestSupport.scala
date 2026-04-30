@@ -2,6 +2,10 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.core.internal.CoreExecutionState
+import io.release.core.internal.CoreReleasePlan
+import io.release.runtime.ExecutionFlags
+import io.release.runtime.ReleaseDecisionDefaults
 import io.release.vcs.Vcs
 import sbt.Project
 import sbt.Setting
@@ -31,6 +35,30 @@ object ReleaseTestSupport {
 
   def dummyContextResource(prefix: String): Resource[IO, ReleaseContext] =
     TestSupport.dummyStateResource(prefix).map(state => ReleaseContext(state = state))
+
+  /** Seed a test context with an execution plan that intends to push (`useDefaults = true`),
+    * so push-step validate/execute paths actually run. Without this seeding, the
+    * `effectivelyDeclinedPush` predicate would short-circuit them — non-interactive
+    * releases without a configured push answer and without `with-defaults` are a
+    * deterministic decline.
+    */
+  def withPushIntended(ctx: ReleaseContext): ReleaseContext =
+    ctx.withExecutionState(
+      CoreExecutionState(
+        CoreReleasePlan(
+          flags = ExecutionFlags(
+            useDefaults = true,
+            skipTests = false,
+            skipPublish = false,
+            interactive = false,
+            crossBuild = false
+          ),
+          releaseVersionOverride = None,
+          nextVersionOverride = None,
+          decisionDefaults = ReleaseDecisionDefaults.empty
+        )
+      )
+    )
 
   def gitRootState(
       repo: File,

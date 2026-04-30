@@ -9,6 +9,7 @@ import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
+import io.release.runtime.workflow.DecisionResolver
 import sbt.*
 
 /** Canonical monorepo lifecycle order and hook compilation. */
@@ -116,6 +117,18 @@ private[release] object MonorepoLifecycle {
           .exists(_.contains(MonorepoPublishSteps.publishGateKey(ctx, project)))
       )
 
+  /** Execute-time AND condition for the global `before-push` hook: fires only
+    * when the push decision is not already a deterministic decline. Mirrors the
+    * core lifecycle's `beforePushNarrow` — `Some(false)` answers and
+    * non-interactive no-default releases suppress the hook because push is
+    * guaranteed to take its decline branch; interactive prompts remain
+    * observed because the operator may still answer either way. Validation
+    * rehearses the hook unconditionally so `releaseIOMonorepo check` still
+    * exercises hook code.
+    */
+  private val beforePushNarrow: MonorepoContext => IO[Boolean] =
+    ctx => IO.pure(!DecisionResolver.effectivelyDeclinedPush(ctx))
+
   /** Execute-time AND condition for the global `after-push` hook: fires only
     * when the monorepo `push-changes` step actually pushed. Validation is
     * unaffected so `releaseIOMonorepo check` still rehearses the hook code.
@@ -214,7 +227,8 @@ private[release] object MonorepoLifecycle {
   private val beforePush = GlobalHookPhaseConfig(
     phase = HookPhases.BeforePush,
     resolveHooks = _.beforePushHooks,
-    enabled = _.enablePush
+    enabled = _.enablePush,
+    narrowExecute = Some(beforePushNarrow)
   )
   private val afterPush = GlobalHookPhaseConfig(
     phase = HookPhases.AfterPush,
