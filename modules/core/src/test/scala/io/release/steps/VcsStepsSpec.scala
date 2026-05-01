@@ -589,6 +589,58 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "preflightTag - reject an invalid releaseIOVcsTagName before any tag-existence check"
+  ) {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          // Space is forbidden by git's ref-naming rules — the resolved tag name
+          // would otherwise reach `git tag` only after `commit-release-version`
+          // has already mutated the repo.
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "bad tag",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      TestAssertions
+        .assertFailure[io.release.vcs.InvalidTagNameException, VcsSteps.PreflightTagOutcome](
+          VcsSteps.preflightTag(
+            ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT"),
+            interactive = false
+          )
+        ) { err =>
+          assert(err.getMessage.contains("Invalid tag name 'bad tag'"))
+          assert(err.getMessage.contains("releaseIOVcsTagName"))
+        }
+    }
+  }
+
+  test("preflightTag - reject an empty releaseIOVcsTagName") {
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      val state = ReleaseTestSupport.gitRootState(
+        repo,
+        Seq(
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "",
+          io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.0"
+        )
+      )
+
+      TestAssertions
+        .assertFailure[io.release.vcs.InvalidTagNameException, VcsSteps.PreflightTagOutcome](
+          VcsSteps.preflightTag(
+            ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+              .withVersions("1.0.0", "1.1.0-SNAPSHOT"),
+            interactive = false
+          )
+        )(err => assert(err.getMessage.contains("must be non-empty")))
+    }
+  }
+
   test("preflightTag - fail deterministically in non-interactive mode when the tag exists") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val state = ReleaseTestSupport.gitRootState(

@@ -1,0 +1,16 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Release must fail because `releaseIOVcsTagName := "-m"` would be parsed by
+# `git tag` as a CLI option, creating the wrong tag. Validation must reject
+# the leading dash at preflight, before any mutation.
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Repo state must be untouched: no version bump, no release commit, no tag.
+> checkVersionUnchanged
+> checkNoExtraCommits
+> checkNoTags

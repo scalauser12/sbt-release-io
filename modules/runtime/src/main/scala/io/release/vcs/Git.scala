@@ -157,6 +157,52 @@ class Git(val baseDir: File) extends Vcs {
     }
   }
 
+  /** Validate `name` against git's ref-naming rules via `git check-ref-format`.
+    *
+    * Catches the cases where preflight's `existsTag` would otherwise return `false`
+    * for a malformed candidate (causing preflight to mark the tag "available" and
+    * letting `git tag` fail only after `commit-release-version` has already mutated
+    * the repository). Empty names and leading-dash names are rejected explicitly
+    * because `git check-ref-format refs/tags/<name>` accepts both — empty because
+    * `refs/tags/` is parsed as a partial ref, and leading-dash because nothing in
+    * the ref format itself forbids the segment, even though `git tag` would later
+    * misinterpret the name as a CLI option.
+    */
+  override def validateTagName(name: String): IO[Unit] =
+    if (name.isEmpty)
+      IO.raiseError(
+        new InvalidTagNameException(
+          "Invalid tag name '': tag name resolved by releaseIOVcsTagName must be non-empty."
+        )
+      )
+    else if (name.startsWith("-"))
+      // Leading dashes pass `git check-ref-format refs/tags/<name>` but cause
+      // `git tag -a <name> -m <comment>` to parse `<name>` as an option flag,
+      // creating the wrong tag (or none) only after release-commit mutation.
+      IO.raiseError(
+        new InvalidTagNameException(
+          s"Invalid tag name '$name': tag names must not start with '-' (git would " +
+            "interpret it as a command-line option). Adjust releaseIOVcsTagName or " +
+            "your retry input."
+        )
+      )
+    else {
+      val args = Seq("check-ref-format", s"refs/tags/$name")
+      GitProcessSupport.runCommandResult(baseDir, args).flatMap { result =>
+        result.exitCode match {
+          case 0 => IO.unit
+          case _ =>
+            IO.raiseError(
+              new InvalidTagNameException(
+                s"Invalid tag name '$name': tag names must follow git ref rules " +
+                  "(no spaces, no '..', no leading '-', not ending in '.lock', etc.). " +
+                  "Adjust releaseIOVcsTagName or your retry input."
+              )
+            )
+        }
+      }
+    }
+
   override def tagCommitHash(name: String): IO[Option[String]] =
     recoverMissingRef(
       runSingleLine("rev-parse", "--verify", s"refs/tags/$name^{commit}")(
@@ -204,7 +250,16 @@ class Git(val baseDir: File) extends Vcs {
   def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] = {
     val forceFlags = if (force) List("-f") else Nil
     val signFlags  = if (sign) List("-s") else Nil
-    runCmd((List("tag") ++ forceFlags ++ List("-a", name, "-m", comment) ++ signFlags)*)("git tag")
+    // The `--` separator forces git to treat `name` as a positional tag name
+    // rather than parsing it as an option. Defence-in-depth alongside the
+    // leading-dash check in `validateTagName` — if validation is ever
+    // bypassed (custom Vcs adapter, future refactor), git will still reject
+    // a malformed name with a clear error rather than silently creating the
+    // wrong tag (e.g. `git tag -a "-m" -m "comment"` historically created a
+    // tag named `comment` because `-m` was parsed as the message flag).
+    runCmd(
+      (List("tag") ++ forceFlags ++ signFlags ++ List("-a", "-m", comment, "--", name))*
+    )("git tag")
   }
 
   private def branchInfo: IO[(String, String)] =

@@ -5,6 +5,13 @@ import cats.effect.IO
 import java.io.File
 import scala.concurrent.duration.FiniteDuration
 
+/** Raised when a candidate tag name fails the VCS's syntactic ref-naming rules
+  * before any tag-creating action is attempted. Distinct from generic VCS
+  * failures so [[io.release.vcs.TagConflictResolver]] can re-prompt for an
+  * interactive retry input without aborting an in-progress release.
+  */
+final class InvalidTagNameException(message: String) extends IllegalStateException(message)
+
 /** IO-native VCS adapter. All operations that perform I/O return `IO`;
   * `commandName` and `baseDir` are synchronous accessors for fixed properties.
   */
@@ -49,6 +56,21 @@ trait Vcs {
 
   /** Returns `true` when the given tag exists in the repository. */
   def existsTag(name: String): IO[Boolean]
+
+  /** Validate that `name` is a syntactically valid tag name for this VCS, before any
+    * action that creates a tag. Raises [[InvalidTagNameException]] when the candidate
+    * is empty, contains characters the backend forbids, or otherwise cannot be used as
+    * a tag.
+    *
+    * Used by [[io.release.vcs.TagConflictResolver]] at the entry of preflight and
+    * resolve loops so that the release aborts before [[Vcs.tag]] can fail mid-flight,
+    * after `set-release-version` and `commit-release-version` have already mutated
+    * the repository.
+    *
+    * The default is a no-op so test stubs and non-strict adapters keep working.
+    * Production adapters with formal ref-naming rules (e.g. Git) must override.
+    */
+  def validateTagName(name: String): IO[Unit] = IO.unit
 
   /** Resolve the commit hash pointed to by a tag, peeling annotated tags.
     * Returns `None` when the tag cannot be resolved.

@@ -79,7 +79,12 @@ private[release] object TagConflictResolver {
         tagName: String,
         defaultAnswer: Option[String]
     ): IO[(C, TagResult)] =
-      vcs.existsTag(tagName).flatMap {
+      // Validate at the top of every iteration so the *initial* tag name (resolved
+      // from `releaseIOVcsTagName`) raises here instead of letting `vcs.tag` fail
+      // mid-flight after `commit-release-version` has already mutated the repo.
+      // The interactive retry path below catches `InvalidTagNameException` and
+      // re-prompts so a typo in the prompt does not abort an in-progress release.
+      vcs.validateTagName(tagName) *> vcs.existsTag(tagName).flatMap {
         case false =>
           vcs
             .tag(tagName, params.tagComment, params.sign)
@@ -128,11 +133,29 @@ private[release] object TagConflictResolver {
                       .tag(tagName, params.tagComment, params.sign, force = true)
                       .as(nextCtx -> TagResult(tagName, overwritten = true))
                 case (nextCtx, ConflictAction.Retry(newTag))                 =>
-                  IO.blocking(
-                    nextCtx.state.log.info(
-                      s"${params.logPrefix} Tag [$tagName] exists. Trying tag [$newTag]."
-                    )
-                  ) *> loop(nextCtx, newTag, defaultAnswer = None)
+                  // Validate the retry name *before* recursing so an invalid
+                  // prompt response is caught here. On invalid retry input we
+                  // log the reason and re-enter the conflict resolution for
+                  // the same `tagName` rather than raising — the release is
+                  // mid-flight and the operator should get another chance to
+                  // type a valid name.
+                  vcs.validateTagName(newTag).attempt.flatMap {
+                    case Right(_)                         =>
+                      IO.blocking(
+                        nextCtx.state.log.info(
+                          s"${params.logPrefix} Tag [$tagName] exists. " +
+                            s"Trying tag [$newTag]."
+                        )
+                      ) *> loop(nextCtx, newTag, defaultAnswer = None)
+                    case Left(e: InvalidTagNameException) =>
+                      IO.blocking(
+                        nextCtx.state.log.warn(
+                          s"${params.logPrefix} ${e.getMessage}"
+                        )
+                      ) *> loop(nextCtx, tagName, defaultAnswer = None)
+                    case Left(other)                      =>
+                      IO.raiseError(other)
+                  }
               }
           }
       }
@@ -151,7 +174,14 @@ private[release] object TagConflictResolver {
     */
   def preflightConflict(vcs: Vcs, params: PreflightParams): IO[PreflightOutcome] = {
     def loop(tagName: String, defaultAnswer: Option[String]): IO[PreflightOutcome] =
-      vcs.existsTag(tagName).flatMap {
+      // Validate the candidate at the top of every iteration so an invalid name —
+      // whether resolved from `releaseIOVcsTagName` or supplied as a retry name via
+      // a configured `defaultAnswer` — raises a clear preflight failure instead of
+      // letting `vcs.tag` fail later, after `set-release-version` and
+      // `commit-release-version` have already mutated the repository. Preflight is
+      // non-interactive, so configured retry names are treated like the initial
+      // name: an invalid one is a configuration error and aborts the release.
+      vcs.validateTagName(tagName) *> vcs.existsTag(tagName).flatMap {
         case false => IO.pure(PreflightOutcome(tagName, "available"))
         case true  =>
           params.target match {

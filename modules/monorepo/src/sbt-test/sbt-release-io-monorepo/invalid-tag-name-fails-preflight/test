@@ -1,0 +1,17 @@
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Per-project tag formatter produces "release core 1.0.0" which contains
+# spaces — invalid as a git ref. `releaseIOMonorepo check` runs `preflightTags`,
+# which calls `validateTagName` on the resolved per-project tag and must reject
+# it before any side effects.
+-> releaseIOMonorepo check core release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+# Repo state must be untouched (check mode is read-only by definition; this
+# also verifies no preflight side effects leaked).
+> checkVersionUnchanged
+> checkNoExtraCommits
+> checkNoTags

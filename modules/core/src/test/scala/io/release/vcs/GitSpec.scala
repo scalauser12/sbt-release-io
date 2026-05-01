@@ -208,6 +208,65 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test("validateTagName - accept a well-formed tag name") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-validate-tag-ok").use { repo =>
+      new Git(repo).validateTagName("v1.2.3").void
+    }
+  }
+
+  test("validateTagName - reject an empty tag name without invoking git") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-validate-tag-empty").use { repo =>
+      assertFailure[InvalidTagNameException, Unit](
+        new Git(repo).validateTagName("").void
+      ) { err =>
+        assert(err.getMessage.contains("must be non-empty"))
+        assert(err.getMessage.contains("releaseIOVcsTagName"))
+      }
+    }
+  }
+
+  test("validateTagName - reject names with spaces") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-validate-tag-space").use { repo =>
+      assertFailure[InvalidTagNameException, Unit](
+        new Git(repo).validateTagName("bad tag").void
+      ) { err =>
+        assert(err.getMessage.contains("Invalid tag name 'bad tag'"))
+        assert(err.getMessage.contains("git ref rules"))
+      }
+    }
+  }
+
+  test("validateTagName - reject names starting with '-'") {
+    // `git check-ref-format refs/tags/-m` returns 0, so without an explicit
+    // leading-dash check we would accept names that `git tag` later parses
+    // as CLI options (creating the wrong tag or none at all, after the
+    // release commit has already landed).
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-validate-tag-leading-dash").use { repo =>
+      assertFailure[InvalidTagNameException, Unit](
+        new Git(repo).validateTagName("-m").void
+      ) { err =>
+        assert(err.getMessage.contains("Invalid tag name '-m'"))
+        assert(err.getMessage.contains("must not start with '-'"))
+      }
+    }
+  }
+
+  test("validateTagName - reject names containing '..'") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-validate-tag-dots").use { repo =>
+      assertFailure[InvalidTagNameException, Unit](
+        new Git(repo).validateTagName("v1..0").void
+      )(err => assert(err.getMessage.contains("Invalid tag name 'v1..0'")))
+    }
+  }
+
+  test("validateTagName - reject names ending with '.lock'") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-validate-tag-lock").use { repo =>
+      assertFailure[InvalidTagNameException, Unit](
+        new Git(repo).validateTagName("release.lock").void
+      )(err => assert(err.getMessage.contains("Invalid tag name 'release.lock'")))
+    }
+  }
+
   test("existsTag - surface the real git error when .git/config is corrupted") {
     TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-exists-tag-corrupt").use { repo =>
       IO.blocking {
