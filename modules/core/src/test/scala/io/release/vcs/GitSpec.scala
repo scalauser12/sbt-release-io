@@ -480,6 +480,62 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test("remoteTagExistsWithTimeout - return Some(true) when the remote advertises the tag") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-present").use {
+      case (repo, _) =>
+        for {
+          _      <- IO.blocking {
+                      TestSupport.runGit(repo, "tag", "v1.0.0")
+                      TestSupport.runGit(repo, "push", "origin", "v1.0.0")
+                      // Delete the tag locally so the probe demonstrates the remote-only
+                      // detection (the local refs no longer carry the tag).
+                      TestSupport.runGit(repo, "tag", "-d", "v1.0.0")
+                      ()
+                    }
+          result <- new Git(repo).remoteTagExistsWithTimeout("origin", "v1.0.0", 30.seconds)
+        } yield assertEquals(result, Some(true))
+    }
+  }
+
+  test("remoteTagExistsWithTimeout - return Some(false) when the remote has no such tag") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-absent").use {
+      case (repo, _) =>
+        new Git(repo)
+          .remoteTagExistsWithTimeout("origin", "v9.9.9", 30.seconds)
+          .map(result => assertEquals(result, Some(false)))
+    }
+  }
+
+  test("remoteTagExistsWithTimeout - return None when the remote URL is unreachable") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-remote-tag-unreachable").use { repo =>
+      // Point at a path that doesn't exist; git ls-remote exits 128 (fatal),
+      // which the implementation maps to "could not determine".
+      val unreachable = new File(repo, "nonexistent-bare.git").getAbsolutePath
+      new Git(repo)
+        .remoteTagExistsWithTimeout(unreachable, "v1.0.0", 10.seconds)
+        .map(result => assertEquals(result, None))
+    }
+  }
+
+  test("add - stage a leading-dash pathspec without parsing it as a CLI option") {
+    // Without the `--` separator, `git add -version.sbt` would treat the path as
+    // an option flag and fail. This test pins the defence-in-depth fix so a
+    // configured `releaseIOVersioningFile` path with a leading dash stages
+    // cleanly instead of leaving the working tree dirty after
+    // `set-release-version` has already mutated the file.
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-add-leading-dash").use { repo =>
+      val versionFile = new File(repo, "-version.sbt")
+      for {
+        _      <- IO.blocking(sbt.IO.write(versionFile, "version := \"0.1.0\"\n"))
+        _      <- new Git(repo).add("-version.sbt")
+        staged <- new Git(repo).stagedFiles
+      } yield assert(
+        staged.contains("-version.sbt"),
+        s"Expected `-version.sbt` to be staged, got: ${staged.mkString(", ")}"
+      )
+    }
+  }
+
   test("runCmd - destroy the spawned git process when the fiber is canceled") {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 

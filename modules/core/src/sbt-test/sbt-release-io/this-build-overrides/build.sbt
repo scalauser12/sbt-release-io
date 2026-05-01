@@ -3,6 +3,15 @@
 // shadowed `ThisBuild / ...` because project scope wins over ThisBuild on the project
 // axis. This test pins the ThisBuild path: set the toggles only at build scope and
 // rely on sbt scope delegation to surface them at every project's lookup.
+//
+// Note: `releaseIOVersioningBump` is also moved to ThisBuild scope by the plugin
+// default, but a user-side `ThisBuild / releaseIOVersioningBump := X` is not
+// exercised here because sbt 2 caches ThisBuild task results and would demand a
+// `JsonFormat[Version.Bump]` for the user expression. The plugin-internal
+// default uses `Def.uncached` to bypass that requirement; user-side ThisBuild
+// overrides on sbt 2 still need either project scope or `Def.uncached`. The
+// scope-delegation invariant is verified below by reading the default at every
+// project scope.
 ThisBuild / releaseIOPolicyEnablePublish     := false
 ThisBuild / releaseIOPolicyEnableRunTests    := false
 ThisBuild / releaseIOPolicyEnableRunClean    := false
@@ -11,6 +20,7 @@ ThisBuild / releaseIOBehaviorSkipPublish     := true
 ThisBuild / releaseIOVcsIgnoreUntrackedFiles := true
 ThisBuild / releaseIODefaultsPushAnswer      := Some(false)
 ThisBuild / releaseIOPublishChecks           := false
+ThisBuild / releaseIOVersioningUseGlobal     := false
 
 lazy val root = (project in file("."))
   .aggregate(libA, libB)
@@ -64,4 +74,30 @@ checkBuildLevelDefaults := {
   assert(!rootPublishChecks, "ThisBuild releaseIOPublishChecks override should reach root")
   assert(!libAPublishChecks, "ThisBuild releaseIOPublishChecks override should reach libA")
   assert(!libBPublishChecks, "ThisBuild releaseIOPublishChecks override should reach libB")
+
+  val rootUseGlobal = (LocalProject("root") / releaseIOVersioningUseGlobal).value
+  val libAUseGlobal = (LocalProject("libA") / releaseIOVersioningUseGlobal).value
+  val libBUseGlobal = (LocalProject("libB") / releaseIOVersioningUseGlobal).value
+  assert(!rootUseGlobal, "ThisBuild releaseIOVersioningUseGlobal override should reach root")
+  assert(!libAUseGlobal, "ThisBuild releaseIOVersioningUseGlobal override should reach libA")
+  assert(!libBUseGlobal, "ThisBuild releaseIOVersioningUseGlobal override should reach libB")
+
+  // The plugin-installed ThisBuild default for `releaseIOVersioningBump` should
+  // be readable at every project scope via sbt delegation, even though no
+  // user-side override is set here (see header note for the sbt 2 limitation).
+  val rootBump = (LocalProject("root") / releaseIOVersioningBump).value
+  val libABump = (LocalProject("libA") / releaseIOVersioningBump).value
+  val libBBump = (LocalProject("libB") / releaseIOVersioningBump).value
+  assert(
+    rootBump == _root_.io.release.version.Version.Bump.default,
+    s"Default releaseIOVersioningBump should reach root, got $rootBump"
+  )
+  assert(
+    libABump == _root_.io.release.version.Version.Bump.default,
+    s"Default releaseIOVersioningBump should reach libA, got $libABump"
+  )
+  assert(
+    libBBump == _root_.io.release.version.Version.Bump.default,
+    s"Default releaseIOVersioningBump should reach libB, got $libBBump"
+  )
 }

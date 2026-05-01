@@ -128,6 +128,35 @@ trait Vcs {
   def checkRemoteWithTimeout(remote: String, timeout: FiniteDuration): IO[Option[Int]] =
     checkRemote(remote).map(Some(_)).timeoutTo(timeout, IO.pure(None))
 
+  /** Probe whether `tagName` already exists on `remote`, bounded by `timeout`.
+    *
+    * Used by tag-preflight to detect remote-only tag conflicts (the local repo
+    * has not fetched the tag — e.g. `remote.<name>.tagOpt = --no-tags` or the
+    * tag points at a commit outside fetched histories) before
+    * `publish-artifacts` runs. Without this check, a remote-only conflict would
+    * surface only at the final atomic push, after artifacts had been published
+    * and the next-version commit recorded.
+    *
+    * Returns:
+    *   - `Some(true)` — the remote advertised a `refs/tags/<tagName>` ref.
+    *   - `Some(false)` — the remote did not advertise it.
+    *   - `None` — the probe could not be completed (timeout, network error,
+    *     unreachable remote). Callers should degrade gracefully on `None`
+    *     rather than aborting the release.
+    *
+    * The default returns `None` so test stubs and non-strict adapters keep
+    * working without surfacing spurious aborts; production adapters with a
+    * real remote query (e.g. Git's `ls-remote`) override this method.
+    */
+  def remoteTagExistsWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[Option[Boolean]] = {
+    val _ = (remote, tagName, timeout)
+    IO.pure(None)
+  }
+
   // ── Actions (raise on non-zero exit) ─────────────────────────────────
 
   /** Stage the given files for the next commit. */

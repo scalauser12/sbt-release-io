@@ -23,7 +23,6 @@ private[release] object ReleaseSharedDefaultSettingsSupport {
 
   private lazy val versioningDefaults: Seq[Setting[?]] = Seq(
     ReleaseSharedKeys.releaseIOVersioningFile                   := baseDirectory.value / "version.sbt",
-    ReleaseSharedKeys.releaseIOVersioningBump                   := Version.Bump.default,
     ReleaseSharedKeys.releaseIOVersioningReleaseVersion         := {
       val bump = ReleaseSharedKeys.releaseIOVersioningBump.value
       defaultReleaseVersionTask(bump)
@@ -54,7 +53,15 @@ private[release] object ReleaseSharedDefaultSettingsSupport {
     ThisBuild / ReleaseSharedKeys.releaseIOVcsIgnoreUntrackedFiles := false,
     ThisBuild / ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout   := scala.concurrent.duration
       .DurationInt(60)
-      .seconds
+      .seconds,
+    // ThisBuild scope so a user `ThisBuild / releaseIOVersioningBump := ...`
+    // is not shadowed by the plugin default. Project scope wins over ThisBuild
+    // on the project axis; project-scoped reads (in
+    // `releaseIOVersioningReleaseVersion` / `releaseIOVersioningNextVersion`)
+    // delegate up to ThisBuild when no project-scoped value is set. The setting
+    // body lives in `ReleaseIOCompat` because sbt 2 needs `Def.uncached` at the
+    // `:=` site to suppress JsonFormat-based caching for `Version.Bump`.
+    ReleaseIOCompat.buildScopedVersioningBumpDefault
   )
 
   private lazy val publishAndDiagnosticsDefaults: Seq[Setting[?]] = Seq(

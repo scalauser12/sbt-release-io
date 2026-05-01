@@ -18,6 +18,16 @@ class CoreDefaultSettingsSpec extends FunSuite {
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild.key.label))
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPolicyEnablePush.key.label))
     assert(labels.contains(ReleasePluginIO.autoImport.releaseIOPublishChecks.key.label))
+    assert(labels.contains(ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal.key.label))
+  }
+
+  test("pluginDefaultSettings exclude defaults that must flow from ThisBuild") {
+    val labels = CoreDefaultSettings.pluginDefaultSettings.map(_.key.key.label).toSet
+
+    // Project-scoped duplicates would shadow `ThisBuild / ...` overrides because
+    // project scope wins over ThisBuild on the project axis. Keep these out of
+    // the project-scope defaults entirely.
+    assert(!labels.contains(ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal.key.label))
   }
 
   test("buildDefaultSettings include each lifecycle-derived default exactly once") {

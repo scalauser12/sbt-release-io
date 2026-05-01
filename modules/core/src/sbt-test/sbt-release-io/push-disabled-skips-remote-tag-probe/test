@@ -1,0 +1,34 @@
+# Initialize a local repo and stage project files.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+
+# Set up a bare remote and configure `tagOpt = --no-tags` so the warmup fetch
+# does not auto-pull the conflicting tag created below.
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git config remote.origin.tagOpt --no-tags
+$ exec git push -u origin main
+
+# Create the conflicting tag from a separate clone.
+$ exec git clone remotes/origin.git temp-clone
+$ exec git -C temp-clone config user.email "other@example.com"
+$ exec git -C temp-clone config user.name "Other Author"
+$ exec git -C temp-clone tag v0.1.0
+$ exec git -C temp-clone push origin v0.1.0
+
+# Confirm the local repo does NOT see the remote tag.
+-$ exec git rev-parse --verify --quiet refs/tags/v0.1.0
+
+# Push is disabled, so the remote tag cannot trigger the atomic-push failure.
+# The release MUST succeed even though the remote advertises v0.1.0 — the probe
+# should be suppressed because `push-changes` is not in the compiled plan.
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Confirm the release advanced versions and created the local tag locally.
+> checkReleaseLanded
+$ exec git rev-parse --verify refs/tags/v0.1.0

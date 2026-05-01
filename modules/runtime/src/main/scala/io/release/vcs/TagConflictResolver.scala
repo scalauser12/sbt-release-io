@@ -37,7 +37,17 @@ private[release] object TagConflictResolver {
     case object FutureReleaseCommit extends PreflightCommitTarget
   }
 
-  /** Parameters for execute-time tag resolution. */
+  /** Parameters for execute-time tag resolution.
+    *
+    * `beforeCreateTag` is invoked with the tag name immediately before each
+    * call to [[Vcs.tag]] (both fresh-create and overwrite paths). Callers use
+    * this to run a remote tag preflight against the FINAL tag name — i.e. the
+    * post-retry name when `defaultAnswer` or an interactive prompt redirects
+    * to a replacement tag. Probing externally (before [[resolveConflict]] is
+    * invoked) cannot observe the redirected name and would miss the
+    * remote-only conflict on the replacement tag. Default is a no-op so
+    * adapters that do not need a probe (monorepo, tests) keep working.
+    */
   final case class TagParams(
       tagName: String,
       tagComment: String,
@@ -47,7 +57,8 @@ private[release] object TagConflictResolver {
       useDefaults: Boolean,
       defaultAnswer: Option[String],
       logPrefix: String,
-      label: String
+      label: String,
+      beforeCreateTag: String => IO[Unit] = _ => IO.unit
   )
 
   /** Parameters for preflight tag checks. */
@@ -86,9 +97,16 @@ private[release] object TagConflictResolver {
       // re-prompts so a typo in the prompt does not abort an in-progress release.
       vcs.validateTagName(tagName) *> vcs.existsTag(tagName).flatMap {
         case false =>
-          vcs
-            .tag(tagName, params.tagComment, params.sign)
-            .as(currentCtx -> TagResult(tagName, overwritten = false))
+          // Probe with the FINAL tag name before creating it locally so a
+          // remote-only conflict aborts before any side effect lands. The
+          // initial-tag-name probe outside `resolveConflict` is not enough:
+          // when the configured `defaultAnswer` (or an interactive prompt)
+          // retries to a replacement, the recursive call lands here with the
+          // replacement name — and the outer probe never observed it.
+          params.beforeCreateTag(tagName) *>
+            vcs
+              .tag(tagName, params.tagComment, params.sign)
+              .as(currentCtx -> TagResult(tagName, overwritten = false))
         case true  =>
           existingTagMatch(vcs, tagName, params.expectedCommitHash).flatMap {
             case MatchStatus(matchesExpectedCommit, actualCommitHash) =>
@@ -129,6 +147,11 @@ private[release] object TagConflictResolver {
                       s"${params.logPrefix} Tag [$tagName] already exists. Overwriting."
                     )
                   ) *>
+                    // The local force-overwrite does not extend to the remote
+                    // (push uses non-force `refs/tags/X:refs/tags/X`), so a
+                    // remote-only conflict on the same tag still has to be
+                    // surfaced before the push fails.
+                    params.beforeCreateTag(tagName) *>
                     vcs
                       .tag(tagName, params.tagComment, params.sign, force = true)
                       .as(nextCtx -> TagResult(tagName, overwritten = true))

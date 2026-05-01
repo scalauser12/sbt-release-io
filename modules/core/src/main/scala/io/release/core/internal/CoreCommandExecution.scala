@@ -11,6 +11,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
 import io.release.runtime.command.ReleaseCommandRunner
+import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.workflow.DecisionDefaultsSupport
 import io.release.runtime.workflow.DecisionResolver
 import sbt.{internal as _, *}
@@ -221,7 +222,11 @@ private[release] object CoreCommandExecution {
                                        inputs.interactive
                                      )
                       seededCtx    = initialCtx.withExecutionState(
-                                       CoreExecutionState(inputs.plan)
+                                       CoreExecutionState(
+                                         inputs.plan,
+                                         pushConfigured =
+                                           steps.exists(_.hasRole(BuiltInStepRole.PushChanges))
+                                       )
                                      )
                       preparedCtx <-
                         // Skip the early remote warmup whenever the push step is
@@ -271,7 +276,12 @@ private[release] object CoreCommandExecution {
                    )
                    .flatMap { initialCtx =>
                      CorePreflight.check(
-                       initialCtx.withExecutionState(CoreExecutionState(inputs.plan)),
+                       initialCtx.withExecutionState(
+                         CoreExecutionState(
+                           inputs.plan,
+                           pushConfigured = steps.exists(_.hasRole(BuiltInStepRole.PushChanges))
+                         )
+                       ),
                        steps,
                        inputs.crossEnabled,
                        tagPreflightInteractive = inputs.configuredInteractive

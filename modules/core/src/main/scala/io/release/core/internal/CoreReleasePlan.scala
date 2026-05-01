@@ -64,8 +64,21 @@ private[release] object CoreReleasePlan {
     )
 }
 
-/** Internal runtime metadata threaded through [[io.release.ReleaseContext]]. */
-private[release] final case class CoreExecutionState(plan: CoreReleasePlan)
+/** Internal runtime metadata threaded through [[io.release.ReleaseContext]].
+  *
+  * `pushConfigured` records whether `push-changes` is in the compiled step
+  * sequence. The remote tag preflight (`tag-preflight`, `tag-release`) gates
+  * on this so a release with `releaseIOPolicyEnablePush := false` does not
+  * abort on a remote-only tag that the local push will never observe.
+  *
+  * Defaults to `true` to keep the conservative "push is happening" behavior
+  * for legacy test paths that construct an execution state without observing
+  * the compiled steps.
+  */
+private[release] final case class CoreExecutionState(
+    plan: CoreReleasePlan,
+    pushConfigured: Boolean = true
+)
 
 private[release] object CoreExecutionState {
 

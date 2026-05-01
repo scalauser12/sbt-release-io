@@ -1,0 +1,36 @@
+# Initialize a local repo, stage project files, and create the local v0.1.0 tag.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+$ exec git tag v0.1.0
+
+# Set up a bare remote with `tagOpt = --no-tags` so the warmup fetch does not
+# auto-pull the conflicting v0.2.0 tag.
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git config remote.origin.tagOpt --no-tags
+$ exec git push -u origin main
+$ exec git push origin v0.1.0
+
+# Create v0.2.0 from a separate clone and push it directly to the remote.
+$ exec git clone remotes/origin.git temp-clone
+$ exec git -C temp-clone config user.email "other@example.com"
+$ exec git -C temp-clone config user.name "Other Author"
+$ exec git -C temp-clone tag v0.2.0
+$ exec git -C temp-clone push origin v0.2.0
+
+# Confirm the local repo does NOT have v0.2.0.
+-$ exec git rev-parse --verify --quiet refs/tags/v0.2.0
+
+# `beforeTag` hook is configured -> `tag-preflight` is auto-disabled, so the
+# only line of defence is the resolver's `beforeCreateTag` callback. Local
+# v0.1.0 exists -> retry to v0.2.0 via `default-tag-exists-answer`. v0.2.0
+# only exists on the remote -> the callback must abort before `vcs.tag`.
+-> releaseIO with-defaults default-tag-exists-answer v0.2.0 release-version 0.1.0 next-version 0.3.0-SNAPSHOT
+
+# Verify the abort happened before the replacement tag was created locally.
+> checkLateRetryProbeAborted

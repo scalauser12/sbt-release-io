@@ -84,6 +84,15 @@ case class ReleaseContext(
   private[release] def decisionDefaults: ReleaseDecisionDefaults =
     executionState.map(_.plan.decisionDefaults).getOrElse(ReleaseDecisionDefaults.empty)
 
+  /** Whether the compiled step sequence includes `push-changes`. Used by the
+    * remote tag preflight to suppress the network probe when push will not
+    * actually run (`releaseIOPolicyEnablePush := false`). Defaults to `true`
+    * so legacy paths that never set the execution state preserve the
+    * conservative "push is happening" behavior.
+    */
+  private[release] def pushConfigured: Boolean =
+    executionState.fold(true)(_.pushConfigured)
+
   /** Per-iteration keys (matching `CoreLifecycle.scalaVersionKey`) for which
     * `publish-artifacts` actually executed the publish task. `None` means the publish
     * step has not yet run; an empty `Some` means it ran but every iteration skipped.

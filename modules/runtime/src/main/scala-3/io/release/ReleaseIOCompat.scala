@@ -1,5 +1,6 @@
 package io.release
 
+import io.release.version.Version
 import sbt.{internal as _, *}
 
 /** Internal sbt-version compatibility shim shared across the core and monorepo modules.
@@ -30,3 +31,14 @@ object ReleaseIOCompat:
     ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies := {
       snapshotDependenciesFromManagedClasspath((Test / Keys.managedClasspath).value)
     }
+
+  /** ThisBuild-scoped default for `releaseIOVersioningBump`.
+    *
+    * sbt 2 caches `ThisBuild`-scoped task results and would otherwise demand a
+    * `JsonFormat[Version.Bump]`; the value is a case-object selector with no I/O,
+    * so caching adds no benefit. The wrapping must be a literal `Def.uncached`
+    * at the `:=` body for the sbt 2 macro to recognize it, so the helper lives
+    * here in the scala-3 source root rather than in shared code.
+    */
+  def buildScopedVersioningBumpDefault: Setting[?] =
+    ThisBuild / ReleaseSharedKeys.releaseIOVersioningBump := Def.uncached(Version.Bump.default)

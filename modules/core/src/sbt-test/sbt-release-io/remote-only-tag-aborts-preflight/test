@@ -1,0 +1,44 @@
+# Initialize a local repo and stage the project files.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+
+# Set up a bare remote and establish tracking. Set `remote.origin.tagOpt =
+# --no-tags` so the early remote warmup (`git fetch origin`) does NOT
+# auto-fetch the conflicting tag the next steps will create on the remote.
+# This is the canonical configuration that surfaces the bug: the local repo
+# is structurally unable to see the remote tag without an explicit
+# `git fetch --tags`.
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git config remote.origin.tagOpt --no-tags
+$ exec git push -u origin main
+
+# Create the conflicting tag from a separate clone and push it directly to the
+# remote. The local repo does not fetch this tag, so `git show-ref --tags` will
+# not see it. This mirrors the real-world scenarios where:
+#   - `remote.origin.tagOpt = --no-tags` is set
+#   - the tag was created on the remote (e.g. via the GitHub UI or a CI job)
+#   - the tag points at a commit outside the local repo's fetched histories
+$ exec git clone remotes/origin.git temp-clone
+$ exec git -C temp-clone config user.email "other@example.com"
+$ exec git -C temp-clone config user.name "Other Author"
+$ exec git -C temp-clone tag v0.1.0
+$ exec git -C temp-clone push origin v0.1.0
+
+# Confirm the local repo does NOT see the tag — this is the precondition that
+# made the bug latent: without the remote preflight, the release would proceed
+# all the way to push before failing. `git rev-parse --verify --quiet` exits
+# non-zero when the ref does not resolve locally, so the `-$` form (expected
+# failure) pins the absence.
+-$ exec git rev-parse --verify --quiet refs/tags/v0.1.0
+
+# The release MUST fail at the tag-preflight step, before any side effects.
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify nothing happened: version file unchanged, no local tag, no extra commits.
+> checkNoReleaseSideEffects

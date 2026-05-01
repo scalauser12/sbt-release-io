@@ -28,7 +28,12 @@ private[release] object CoreDefaultSettings {
     ThisBuild / releaseIOBehaviorCrossBuild  := false,
     ThisBuild / releaseIOBehaviorSkipPublish := false,
     ThisBuild / releaseIOBehaviorInteractive := false,
-    ThisBuild / releaseIOPublishChecks       := true
+    ThisBuild / releaseIOPublishChecks       := true,
+    // ThisBuild scope so a user `ThisBuild / releaseIOVersioningUseGlobal := false`
+    // is not shadowed by the plugin default. Project scope wins over ThisBuild on
+    // the project axis; project-scoped reads delegate up to ThisBuild when no
+    // project-scoped value is set.
+    ThisBuild / releaseIOVersioningUseGlobal := true
   )
 
   private lazy val versioningAndRuntimeDefaults: Seq[Setting[?]] = Seq(
@@ -36,7 +41,6 @@ private[release] object CoreDefaultSettings {
     releaseIOVersioningFileContents := VersionSteps.defaultWriteVersion(
       releaseIOVersioningUseGlobal.value
     ),
-    releaseIOVersioningUseGlobal    := true,
     releaseIORuntimeCurrentVersion  := {
       if (releaseIOVersioningUseGlobal.value) (ThisBuild / version).value
       else version.value

@@ -8,6 +8,7 @@ import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal
+import io.release.ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout
 import io.release.ReleaseSharedKeys.releaseIOVcsSign
 import io.release.ReleaseSharedKeys.releaseIOVersioningFile
 import io.release.VcsOps
@@ -114,9 +115,143 @@ private[release] object VcsSteps {
   )
 
   private def runTagPreflight(ctx: ReleaseContext): IO[PreflightTagOutcome] =
-    tagPreflightTarget(ctx).flatMap(target =>
-      preflightTag(ctx, ctx.interactive, _ => IO.pure(target))
-    )
+    tagPreflightTarget(ctx).flatMap { target =>
+      preflightTag(ctx, ctx.interactive, _ => IO.pure(target)).flatTap(localOutcome =>
+        remoteTagPreflight(ctx, localOutcome.tagName)
+      )
+    }
+
+  /** Detect a remote-only tag conflict before any release side effects.
+    *
+    * The local preflight in [[TagConflictResolver.preflightConflict]] resolves
+    * tag existence against `git show-ref` (local refs only); if the remote
+    * already has the tag but the local repo has not fetched it (e.g.
+    * `remote.<name>.tagOpt = --no-tags` or the tag points at a commit outside
+    * fetched histories), the local check sees no conflict and the release
+    * proceeds to mutate `version.sbt`, commit, tag locally, and publish
+    * artifacts — only to fail at the final atomic push when the remote
+    * rejects the tag update. This probe surfaces the conflict before the
+    * abort costs anything.
+    *
+    * Skipped when:
+    *   - `tagName` already resolves to a local tag, in which case the
+    *     [[TagConflictResolver]] has already engaged and chosen what to do
+    *     (keep / overwrite / retry / abort). Probing the remote on top of
+    *     that would either be redundant or report a conflict the operator
+    *     has already opted to force through.
+    *   - The compiled step plan does not include `push-changes`
+    *     (`releaseIOPolicyEnablePush := false`); a remote tag cannot trigger
+    *     the atomic-push failure this probe is meant to prevent.
+    *   - Push is deterministically declined for this release
+    *     (operator answer `Some(false)` or non-interactive with no configured
+    *     choice and no `with-defaults`).
+    *   - The current branch has no configured upstream (test scenarios,
+    *     local-only branches).
+    *
+    * Network failures (timeout, unreachable remote) degrade to a warning so
+    * offline / slow-network workflows still proceed; the atomic push at the
+    * end of the release will surface any actual conflict.
+    */
+  private[release] def remoteTagPreflight(
+      ctx: ReleaseContext,
+      tagName: String
+  ): IO[Unit] =
+    if (skipRemoteTagProbe(ctx)) IO.unit
+    else
+      ctx.vcs
+        .fold(VcsOps.detectVcs(ctx.state))(IO.pure)
+        .flatMap(vcs => remoteTagPreflightWithVcs(ctx, vcs, tagName))
+
+  private def remoteTagPreflightWithVcs(
+      ctx: ReleaseContext,
+      vcs: Vcs,
+      tagName: String
+  ): IO[Unit] =
+    // The local-existence gate replaces a status-string check that missed the
+    // wrapped retry outcome `"[X] exists; release will retry with [Y] (available)"`:
+    // the final tag the release will create is `Y`, and the gate must reflect
+    // whether `Y` is the actual ref about to land. `existsTag(tagName)` is the
+    // authoritative signal — true means the local conflict resolver already
+    // owns the resolution; false means we are about to create a fresh ref and
+    // need to confirm the remote does not already have one of that name.
+    vcs.existsTag(tagName).flatMap {
+      case true  => IO.unit
+      case false => runRemoteTagProbe(ctx, vcs, tagName)
+    }
+
+  /** Late-path probe invoked from inside [[TagConflictResolver.resolveConflict]]
+    * via the `beforeCreateTag` callback. Unlike [[remoteTagPreflight]] this
+    * does not gate on `existsTag(tagName)` — the conflict resolver has already
+    * committed to a tag-creating action (fresh-create or overwrite), so the
+    * probe must run regardless of local state to catch a remote-only conflict
+    * on either the original or a retry-resolved tag name.
+    */
+  private def remoteTagPreflightForCreate(
+      ctx: ReleaseContext,
+      vcs: Vcs,
+      tagName: String
+  ): IO[Unit] =
+    if (skipRemoteTagProbe(ctx)) IO.unit
+    else runRemoteTagProbe(ctx, vcs, tagName)
+
+  private def skipRemoteTagProbe(ctx: ReleaseContext): Boolean =
+    !ctx.pushConfigured || DecisionResolver.effectivelyDeclinedPush(ctx)
+
+  private def runRemoteTagProbe(
+      ctx: ReleaseContext,
+      vcs: Vcs,
+      tagName: String
+  ): IO[Unit] =
+    vcs.hasUpstream.flatMap {
+      case false => IO.unit
+      case true  =>
+        for {
+          remote  <- vcs.trackingRemote
+          timeout <- IO.blocking(remoteCheckTimeout(ctx))
+          result  <- vcs.remoteTagExistsWithTimeout(remote, tagName, timeout)
+          _       <- handleRemoteTagProbe(ctx, tagName, remote, result)
+        } yield ()
+    }
+
+  private def handleRemoteTagProbe(
+      ctx: ReleaseContext,
+      tagName: String,
+      remote: String,
+      result: Option[Boolean]
+  ): IO[Unit] =
+    result match {
+      case Some(true)  =>
+        IO.raiseError(
+          new IllegalStateException(remoteOnlyTagConflictMessage(ctx, tagName, remote))
+        )
+      case Some(false) => IO.unit
+      case None        =>
+        IO.blocking(
+          ctx.state.log.warn(
+            s"${ReleaseLogPrefixes.Core} Could not query remote [$remote] for " +
+              s"tag [$tagName]; the atomic push will surface any conflict that exists."
+          )
+        )
+    }
+
+  private def remoteOnlyTagConflictMessage(
+      ctx: ReleaseContext,
+      tagName: String,
+      remote: String
+  ): String = {
+    val commandName =
+      ctx.executionState.map(_.plan.commandName).getOrElse(CoreReleasePlan.DefaultCommandName)
+    s"Tag [$tagName] already exists on remote [$remote] but is not present locally. " +
+      s"Run `git fetch $remote --tags` to bring the tag into your local repository, " +
+      "then re-run the release to resolve the conflict (overwrite, keep, or pick a new tag). " +
+      s"Use `$commandName help` for tag conflict options."
+  }
+
+  private def remoteCheckTimeout(ctx: ReleaseContext): scala.concurrent.duration.FiniteDuration =
+    SbtRuntime
+      .extracted(ctx.state)
+      .getOpt(releaseIOVcsRemoteCheckTimeout)
+      .getOrElse(VcsOps.DefaultRemoteCheckTimeout)
 
   /** When the release-version write would change `version.sbt`, the release will create
     * a new commit before tagging — so the tag's target is `FutureReleaseCommit`. When
@@ -167,6 +302,17 @@ private[release] object VcsSteps {
   // No validation phase: the tag name depends on releaseIOVcsTagName, which is resolved from the
   // release version set by inquireVersions.execute. At validation time, that version is not yet
   // available, so tag-exists checks can only run during execution.
+  //
+  // The remote tag probe is threaded into `TagConflictResolver` via the `beforeCreateTag`
+  // callback in `resolveTag`, so it observes the FINAL tag name — including the post-retry
+  // name when `default-tag-exists-answer <newTag>` or an interactive prompt redirects to a
+  // replacement. `tag-preflight` is auto-disabled when any of `beforeReleaseVersionWrite`,
+  // `afterReleaseVersionWrite`, `beforeReleaseCommit`, `afterReleaseCommit`, or `beforeTag`
+  // hooks are configured (those phases can rewrite `releaseIOVcsTagName` after the early
+  // preflight already evaluated it); the callback inside the conflict resolver is the only
+  // line of defence in those builds. Aborting here leaves the release commit in place
+  // (recovery: `git reset --hard HEAD~1`) — materially better than a partial post-publish
+  // failure.
   val tagRelease: Step = ProcessStep.Single(
     name = "tag-release",
     roles = Set(BuiltInStepRole.TagRelease),
@@ -295,7 +441,12 @@ private[release] object VcsSteps {
             useDefaults = ctx.useDefaults,
             defaultAnswer = params.defaultAnswer,
             logPrefix = ReleaseLogPrefixes.Core,
-            label = ""
+            label = "",
+            // Probe with the FINAL resolved tag name (post-retry / post-prompt).
+            // Inside the conflict resolver this fires for both fresh-create and
+            // overwrite paths; outside it, we cannot observe a redirected name.
+            beforeCreateTag = finalTagName =>
+              remoteTagPreflightForCreate(ctx.withState(params.state), vcs, finalTagName)
           )
         )
         .map { case (updatedCtx, result) =>

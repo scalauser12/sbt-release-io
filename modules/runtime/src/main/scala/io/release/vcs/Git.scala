@@ -256,10 +256,50 @@ class Git(val baseDir: File) extends Vcs {
       timeout
     )
 
+  override def remoteTagExistsWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[Option[Boolean]] =
+    // `--exit-code` flips git's status:
+    //   0   -> the ref pattern matched at least one ref (tag exists remotely)
+    //   2   -> no ref matched (tag is not on the remote)
+    //   1   -> input/usage error (e.g. malformed remote URL)
+    //   128 -> unreachable / network / auth failure
+    // We treat 0/2 as a definitive answer and any other outcome as "could not
+    // determine" so transient failures degrade to a warning rather than
+    // blocking the release. The `--` separator and explicit `refs/tags/` ref
+    // form are defence-in-depth against pathological tag names.
+    GitProcessSupport
+      .runCommandWithTimeout(
+        GitProcessSupport.javaCmd(
+          baseDir,
+          "ls-remote",
+          "--exit-code",
+          "--tags",
+          "--",
+          remote,
+          s"refs/tags/$tagName"
+        ),
+        timeout
+      )
+      .map {
+        case Some(0) => Some(true)
+        case Some(2) => Some(false)
+        case _       => None
+      }
+
   // ── Actions ──────────────────────────────────────────────────────────
 
   def add(files: String*): IO[Unit] =
-    runCmd(("add" +: files)*)("git add")
+    // The `--` separator forces git to treat every entry in `files` as a positional
+    // pathspec rather than parsing it as an option. Defence-in-depth alongside the
+    // `Vcs.add` callers: the version file path is derived from
+    // `releaseIOVersioningFile` and is not validated for leading dashes upstream,
+    // so a configured path like `-foo.sbt` would otherwise be interpreted as a
+    // git option after `set-release-version` has already mutated the working tree
+    // (mirrors the leading-dash defence in `Git.tag`).
+    runCmd(("add" :: "--" :: files.toList)*)("git add")
 
   def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit] = {
     val flags = List(

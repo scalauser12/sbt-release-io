@@ -1,0 +1,18 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Run release end-to-end with the dash-prefixed version file. Before the fix,
+# the `git add -version.sbt` invoked from `commit-release-version` would have
+# failed with "unknown switch", leaving the tree dirty.
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# Verify the next-version commit landed cleanly.
+> checkDashVersionFile 0.2.0-SNAPSHOT
+$ exec git diff --quiet --exit-code
+
+# Verify the release tag was created on the release-version commit.
+$ exec git rev-parse v0.1.0
