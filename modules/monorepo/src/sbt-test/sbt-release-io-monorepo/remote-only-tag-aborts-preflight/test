@@ -1,0 +1,35 @@
+# Initialize a local repo and stage project files.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt project/plugins.sbt core/version.sbt api/version.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+
+# Set up a bare remote with `tagOpt = --no-tags` so the warmup fetch does not
+# auto-pull the conflicting tag created on the remote below.
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git config remote.origin.tagOpt --no-tags
+$ exec git push -u origin main
+
+# Create a per-project tag on the remote that the local repo cannot see.
+$ exec git clone remotes/origin.git temp-clone
+$ exec git -C temp-clone config user.email "other@example.com"
+$ exec git -C temp-clone config user.name "Other Author"
+$ exec git -C temp-clone tag core/v0.1.0
+$ exec git -C temp-clone push origin core/v0.1.0
+
+# Confirm the local repo does NOT see the tag.
+-$ exec git rev-parse --verify --quiet refs/tags/core/v0.1.0
+
+# The release MUST abort at `tag-preflight` before any side effect lands. The
+# per-project tag-preflight runs with isolation+propagation: core's preflight
+# raises (remote-only conflict), the failure propagates, and every later
+# phase (set-release-versions, commit-release-versions, tag-releases,
+# publish-artifacts, push-changes) is skipped.
+-> releaseIOMonorepo core api with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify nothing happened.
+> checkNoReleaseSideEffects

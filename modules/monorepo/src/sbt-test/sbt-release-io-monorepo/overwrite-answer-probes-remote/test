@@ -1,0 +1,34 @@
+# Initialize a local repo, stage project files, and create the local
+# core/v0.1.0 tag.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt project/plugins.sbt core/version.sbt api/version.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+$ exec git tag core/v0.1.0
+
+# Set up a bare remote and push the initial state INCLUDING core/v0.1.0 so
+# the remote also advertises it. Then configure `tagOpt = --no-tags` so the
+# warmup fetch later does not try to refresh tags.
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git push -u origin main
+$ exec git push origin core/v0.1.0
+$ exec git config remote.origin.tagOpt --no-tags
+
+# Confirm BOTH local and remote have the tag.
+$ exec git rev-parse --verify --quiet refs/tags/core/v0.1.0
+$ exec git ls-remote --exit-code --tags origin refs/tags/core/v0.1.0
+
+# Run the release with `default-tag-exists-answer o` (overwrite). The local
+# tag exists and would be force-recreated; the push would attempt a
+# non-force `refs/tags/core/v0.1.0:refs/tags/core/v0.1.0` update. With the
+# remote also advertising the tag at a different commit (the future release
+# commit will not match the original tagged commit), the push would reject
+# atomically. The MUST abort at `tag-preflight` before any side effect.
+-> releaseIOMonorepo core api with-defaults default-tag-exists-answer o release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify nothing happened on the local side.
+> checkNoReleaseSideEffects

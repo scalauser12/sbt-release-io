@@ -1,13 +1,13 @@
 import scala.sys.process.*
 
 // Mirror of the core `invalid-tag-name-fails-preflight` regression for the
-// monorepo plugin. The monorepo lifecycle does not include an in-flow
-// `tag-preflight` step (tag-preflight runs only during `releaseIOMonorepo
-// check` via `MonorepoPreflight`), so the invariant we can assert here is
-// that `check` rejects an invalid `releaseIOMonorepoVcsTagName` formatter
-// up-front — exercising the same `validateTagName` gate that core's in-flow
-// preflight relies on. Adding an in-flow tag-preflight step to the monorepo
-// lifecycle would be a separate architectural change.
+// monorepo plugin. The monorepo lifecycle now includes an in-flow
+// `tag-preflight` step that runs per-item with isolation + propagation, so a
+// `releaseIOMonorepo` release (not just `check`) rejects an invalid
+// `releaseIOMonorepoVcsTagName` formatter before any side effect lands. The
+// `check` mode invariant below is the historical regression and remains
+// valid because `MonorepoPreflight.check` exercises the same
+// `validateTagName` gate via `preflightTags`.
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
@@ -33,7 +33,7 @@ lazy val root = (project in file("."))
 
 val checkVersionUnchanged = taskKey[Unit]("Verify core/version.sbt is untouched")
 checkVersionUnchanged := {
-  val contents = sbt.IO.read(baseDirectory.value / "core" / "version.sbt").trim
+  val contents = sbt.IO.read(file("core/version.sbt")).trim
   val expected = """version := "0.1.0-SNAPSHOT""""
   assert(
     contents == expected,

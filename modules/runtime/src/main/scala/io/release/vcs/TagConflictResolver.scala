@@ -17,12 +17,23 @@ private[release] object TagConflictResolver {
 
   /** Outcome of a preflight tag check.
     *
-    * @param tagName the tag name that would be used at execute time (may differ from the
-    *                requested name when the resolver retries with a new tag).
-    * @param status  human-readable description of the expected execute-time behavior
-    *                (e.g. `"available"`, `"exists; release will overwrite the tag"`).
+    * @param tagName        the tag name that would be used at execute time (may differ from the
+    *                       requested name when the resolver retries with a new tag).
+    * @param status         human-readable description of the expected execute-time behavior
+    *                       (e.g. `"available"`, `"exists; release will overwrite the tag"`).
+    * @param willCreateTag  `true` when the resolver has deterministically committed to
+    *                       creating or force-recreating the local tag at execute time
+    *                       (`available`, `overwrite`, retry-resolved-to-available paths).
+    *                       `false` when no new ref will land (`keep`, no-op) or the decision
+    *                       is deferred to an interactive prompt. Callers use this to gate the
+    *                       remote tag probe: the probe must run whenever the release will
+    *                       actually try to create or update a tag ref, because the atomic
+    *                       push uses non-force `refs/tags/X:refs/tags/X` and a remote-only
+    *                       conflict (or a remote tag at a different commit) would otherwise
+    *                       only surface at the final push, after release-version writes and
+    *                       the release commit have already landed.
     */
-  final case class PreflightOutcome(tagName: String, status: String)
+  final case class PreflightOutcome(tagName: String, status: String, willCreateTag: Boolean)
 
   /** Describes what the tag is expected to point at when the release executes. */
   sealed trait PreflightCommitTarget
@@ -205,7 +216,11 @@ private[release] object TagConflictResolver {
       // non-interactive, so configured retry names are treated like the initial
       // name: an invalid one is a configuration error and aborts the release.
       vcs.validateTagName(tagName) *> vcs.existsTag(tagName).flatMap {
-        case false => IO.pure(PreflightOutcome(tagName, "available"))
+        case false =>
+          // Local does not have this ref → release will create it freshly.
+          // Remote probe must run regardless of any defaultAnswer because the
+          // create is unconditional in this branch.
+          IO.pure(PreflightOutcome(tagName, "available", willCreateTag = true))
         case true  =>
           params.target match {
             case PreflightCommitTarget.ExactCommit(expectedCommitHash) =>
@@ -219,9 +234,15 @@ private[release] object TagConflictResolver {
                     onKeep =
                       if (matchesExpectedCommit)
                         IO.pure(
+                          // Keep: no new ref will land. Push will see the tag
+                          // ref unchanged and either no-op (matching commit on
+                          // remote) or fail at push (different commit on
+                          // remote). The remote probe stays out of the way
+                          // because the user explicitly opted to keep.
                           PreflightOutcome(
                             tagName,
-                            "exists; release will keep the existing tag"
+                            "exists; release will keep the existing tag",
+                            willCreateTag = false
                           )
                         )
                       else
@@ -238,16 +259,24 @@ private[release] object TagConflictResolver {
                     onInteractiveNone =
                       if (matchesExpectedCommit)
                         IO.pure(
+                          // Decision deferred to execute-time prompt; we do
+                          // not know yet whether the operator will choose
+                          // overwrite, keep, abort, or a new tag, so the
+                          // remote probe stays out and the in-resolver
+                          // beforeCreateTag callback handles the actual
+                          // probe once the resolution is final.
                           PreflightOutcome(
                             tagName,
-                            "exists; interactive release will prompt for overwrite, keep, abort, or a new tag"
+                            "exists; interactive release will prompt for overwrite, keep, abort, or a new tag",
+                            willCreateTag = false
                           )
                         )
                       else
                         IO.pure(
                           PreflightOutcome(
                             tagName,
-                            "exists on a different commit; interactive release will prompt for overwrite, abort, or a new tag"
+                            "exists on a different commit; interactive release will prompt for overwrite, abort, or a new tag",
+                            willCreateTag = false
                           )
                         )
                   )
@@ -266,7 +295,8 @@ private[release] object TagConflictResolver {
                 onInteractiveNone = IO.pure(
                   PreflightOutcome(
                     tagName,
-                    "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                    "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag",
+                    willCreateTag = false
                   )
                 )
               )
@@ -287,10 +317,25 @@ private[release] object TagConflictResolver {
     defaultAnswer.map(parseAnswer) match {
       case Some(ParsedAnswer.Keep)              => onKeep
       case Some(ParsedAnswer.Overwrite)         =>
-        IO.pure(PreflightOutcome(tagName, "exists; release will overwrite the tag"))
+        // Overwrite: local force-recreates the tag and the push will attempt
+        // a non-force `refs/tags/X:refs/tags/X` update. A remote-only tag at
+        // a different commit would still reject the push, so the remote
+        // probe must run despite local existence — `willCreateTag = true`.
+        IO.pure(
+          PreflightOutcome(
+            tagName,
+            "exists; release will overwrite the tag",
+            willCreateTag = true
+          )
+        )
       case Some(ParsedAnswer.Abort)             =>
         preflightAbort(tagName, params, "Current settings would abort the release.")
       case Some(ParsedAnswer.Retry(newTagName)) =>
+        // Retry recursion: the inner loop returns its own `willCreateTag`
+        // verdict for `newTagName` (true when the inner branch resolves to
+        // `available` or `overwrite`, false when it ends in interactive
+        // prompt). `copy` preserves it so the outer status wrap inherits the
+        // correct gate.
         loop(newTagName, None).map { outcome =>
           outcome.copy(
             status =

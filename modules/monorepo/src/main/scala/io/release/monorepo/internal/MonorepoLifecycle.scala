@@ -129,6 +129,30 @@ private[release] object MonorepoLifecycle {
   private val beforePushNarrow: MonorepoContext => IO[Boolean] =
     ctx => IO.pure(!DecisionResolver.effectivelyDeclinedPush(ctx))
 
+  /** Auto-disable `tag-preflight` whenever any hook phase between version
+    * resolution and tag creation is configured. Those hooks
+    * (`beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
+    * `beforeReleaseCommit`, `afterReleaseCommit`, `beforeTag`) can rewrite
+    * `releaseIOMonorepoVcsTagName` via session settings after the preflight
+    * has already evaluated the default name. Running preflight on the
+    * pre-hook name produces false-positive aborts when the hook's intended
+    * tag is free but the default tag conflicts.
+    *
+    * Hookless builds (the dominant case) keep the early-abort preflight;
+    * hooked builds rely on the in-resolver `beforeCreateTag` callback in
+    * `tag-releases` to catch conflicts on the post-hook tag name. To
+    * re-enable preflight, move tag-name-affecting logic to
+    * `afterVersionResolution`, which runs before `tag-preflight`.
+    */
+  private val tagPreflightEnabled: MonorepoHookConfiguration => Boolean =
+    config =>
+      config.enableTagging &&
+        config.beforeReleaseVersionWriteHooks.isEmpty &&
+        config.afterReleaseVersionWriteHooks.isEmpty &&
+        config.beforeReleaseCommitHooks.isEmpty &&
+        config.afterReleaseCommitHooks.isEmpty &&
+        config.beforeTagHooks.isEmpty
+
   /** Execute-time AND condition for the global `after-push` hook: fires only
     * when the monorepo `push-changes` step actually pushed. Validation is
     * unaffected so `releaseIOMonorepo check` still rehearses the hook code.
@@ -261,6 +285,10 @@ private[release] object MonorepoLifecycle {
       MonorepoReleaseSteps.inquireVersions
     ),
     projectHookPhase(afterVersionResolution),
+    perItemBuiltIn(
+      MonorepoReleaseSteps.tagPreflight,
+      tagPreflightEnabled
+    ),
     perItemBuiltIn(
       MonorepoReleaseSteps.runClean,
       _.enableRunClean

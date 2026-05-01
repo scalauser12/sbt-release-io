@@ -38,7 +38,8 @@ private[release] object VcsSteps {
 
   private[release] final case class PreflightTagOutcome(
       tagName: String,
-      status: String
+      status: String,
+      willCreateTag: Boolean
   )
 
   val initializeVcs: Step = CoreStepFactory.io("initialize-vcs") { ctx =>
@@ -117,7 +118,7 @@ private[release] object VcsSteps {
   private def runTagPreflight(ctx: ReleaseContext): IO[PreflightTagOutcome] =
     tagPreflightTarget(ctx).flatMap { target =>
       preflightTag(ctx, ctx.interactive, _ => IO.pure(target)).flatTap(localOutcome =>
-        remoteTagPreflight(ctx, localOutcome.tagName)
+        remoteTagPreflight(ctx, localOutcome.tagName, localOutcome.willCreateTag)
       )
     }
 
@@ -154,30 +155,32 @@ private[release] object VcsSteps {
     */
   private[release] def remoteTagPreflight(
       ctx: ReleaseContext,
-      tagName: String
+      tagName: String,
+      willCreateTag: Boolean
   ): IO[Unit] =
+    // The gate is the resolver's verdict on whether the release will create
+    // or force-recreate this tag:
+    //   - "available" → fresh-create (true).
+    //   - "overwrite" via `default-tag-exists-answer o` → force-recreate (true).
+    //     The push uses non-force `refs/tags/X:refs/tags/X`, so a remote tag
+    //     at a different commit would still reject the push; the probe must
+    //     run despite the tag existing locally.
+    //   - retry-resolved-to-available → fresh-create at the new name (true).
+    //   - "keep" / interactive prompt → no new ref (false). For interactive,
+    //     the resolution happens at execute time and the in-resolver
+    //     `beforeCreateTag` callback runs the probe with the actual final
+    //     name once the operator answers.
+    // The previous gate used `existsTag(tagName)` which conflated "keep"
+    // (correctly skipped) with "overwrite" (incorrectly skipped) — the
+    // overwrite-with-remote-conflict scenario then surfaced only at
+    // `tag-release.execute`'s in-resolver probe, after `set-release-version`
+    // and `commit-release-version` had already mutated the repo.
     if (skipRemoteTagProbe(ctx)) IO.unit
+    else if (!willCreateTag) IO.unit
     else
       ctx.vcs
         .fold(VcsOps.detectVcs(ctx.state))(IO.pure)
-        .flatMap(vcs => remoteTagPreflightWithVcs(ctx, vcs, tagName))
-
-  private def remoteTagPreflightWithVcs(
-      ctx: ReleaseContext,
-      vcs: Vcs,
-      tagName: String
-  ): IO[Unit] =
-    // The local-existence gate replaces a status-string check that missed the
-    // wrapped retry outcome `"[X] exists; release will retry with [Y] (available)"`:
-    // the final tag the release will create is `Y`, and the gate must reflect
-    // whether `Y` is the actual ref about to land. `existsTag(tagName)` is the
-    // authoritative signal — true means the local conflict resolver already
-    // owns the resolution; false means we are about to create a fresh ref and
-    // need to confirm the remote does not already have one of that name.
-    vcs.existsTag(tagName).flatMap {
-      case true  => IO.unit
-      case false => runRemoteTagProbe(ctx, vcs, tagName)
-    }
+        .flatMap(vcs => runRemoteTagProbe(ctx, vcs, tagName))
 
   /** Late-path probe invoked from inside [[TagConflictResolver.resolveConflict]]
     * via the `beforeCreateTag` callback. Unlike [[remoteTagPreflight]] this
@@ -478,7 +481,7 @@ private[release] object VcsSteps {
             label = ""
           )
         )
-        .map(o => PreflightTagOutcome(o.tagName, o.status))
+        .map(o => PreflightTagOutcome(o.tagName, o.status, o.willCreateTag))
     }
 
   private def logInfo(ctx: ReleaseContext, msg: String): IO[Unit] =

@@ -1,0 +1,36 @@
+# Initialize a local repo and stage project files.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt project/plugins.sbt core/version.sbt api/version.sbt
+$ exec git commit -m "Initial commit"
+$ exec git branch -M main
+
+# Set up a bare remote with `tagOpt = --no-tags` so the warmup fetch does not
+# auto-pull the conflicting tag.
+$ exec mkdir remotes
+$ exec git init --bare remotes/origin.git
+$ exec git remote add origin remotes/origin.git
+$ exec git config remote.origin.tagOpt --no-tags
+$ exec git push -u origin main
+
+# Create the conflicting per-project tag on the remote.
+$ exec git clone remotes/origin.git temp-clone
+$ exec git -C temp-clone config user.email "other@example.com"
+$ exec git -C temp-clone config user.name "Other Author"
+$ exec git -C temp-clone tag core/v0.1.0
+$ exec git -C temp-clone push origin core/v0.1.0
+
+# Confirm the local repo does NOT see it.
+-$ exec git rev-parse --verify --quiet refs/tags/core/v0.1.0
+
+# `beforeTag` hook auto-disables `tag-preflight`. The release proceeds through
+# `set-release-versions` and `commit-release-versions`, then the per-project
+# `tag-releases` step invokes `TagConflictResolver`. The `beforeCreateTag`
+# callback fires before each `vcs.tag` call and aborts on `core`'s remote-only
+# conflict — so the local tag is NOT created and `publish-artifacts` never
+# runs.
+-> releaseIOMonorepo core api with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify side effects: release commit landed, no local tags, no publish.
+> checkLateProbeAborted

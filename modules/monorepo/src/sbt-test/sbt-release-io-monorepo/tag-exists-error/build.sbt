@@ -32,23 +32,37 @@ lazy val root = (project in file("."))
         s"Expected pre-existing tag core/v1.0.0 but tags are: ${tags.mkString(", ")}"
       )
 
-      // Per-project error isolation: core failed but api's tag should still have been created
+      // The new monorepo `tag-preflight` step runs per-item with isolation BUT
+      // propagates project failures to the global context, so when ANY project
+      // fails preflight (here: core's pre-existing tag with the abort-on-default
+      // configured answer) every later phase is skipped — set-release-versions,
+      // commit-release-versions, tag-releases, publish-artifacts, push-changes.
+      // Net effect: the working tree is clean, no new tags, no release commit.
       assert(
-        tags.contains("api/v1.0.0"),
-        s"Expected api/v1.0.0 tag (per-project isolation) but tags are: ${tags.mkString(", ")}"
+        !tags.contains("api/v1.0.0"),
+        s"Expected api/v1.0.0 NOT to be created (early preflight propagates to a " +
+          s"clean abort) but tags are: ${tags.mkString(", ")}"
       )
 
-      // Tag failure should propagate globally and skip set-next-version.
-      // Version files should contain the release version (1.0.0), not the next SNAPSHOT.
-      val coreVer = IO.read(file("core/version.sbt"))
-      val apiVer  = IO.read(file("api/version.sbt"))
+      // Version files must be untouched — preflight aborted before
+      // `set-release-versions` ran for any project.
+      val coreVer = IO.read(file("core/version.sbt")).trim
+      val apiVer  = IO.read(file("api/version.sbt")).trim
+      val initial = """version := "1.0.0-SNAPSHOT""""
       assert(
-        !coreVer.contains("1.1.0-SNAPSHOT"),
-        s"core version.sbt should not contain next SNAPSHOT after tag failure: $coreVer"
+        coreVer == initial,
+        s"core version.sbt should remain '$initial' but got: $coreVer"
       )
       assert(
-        !apiVer.contains("1.1.0-SNAPSHOT"),
-        s"api version.sbt should not contain next SNAPSHOT after tag failure: $apiVer"
+        apiVer == initial,
+        s"api version.sbt should remain '$initial' but got: $apiVer"
+      )
+
+      // Only the initial commit should exist — release commit never landed.
+      val commits = "git rev-list --count HEAD".!!.trim
+      assert(
+        commits == "1",
+        s"Expected only the initial commit but found count $commits"
       )
     }
   )

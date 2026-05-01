@@ -7,6 +7,7 @@ import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoCrossBuild
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
+import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.workflow.DecisionResolver
@@ -73,13 +74,23 @@ private[monorepo] object MonorepoComposer {
     * with no configured choice and no `with-defaults`. Otherwise a
     * local/no-upstream release would abort here even though `pushChanges`
     * would later decline cleanly.
+    *
+    * Also seeds `pushConfigured` from the compiled steps so downstream consumers
+    * (notably the remote tag preflight in [[MonorepoVcsSteps]]) can suppress
+    * the network probe when `push-changes` is absent from the plan
+    * (`releaseIOMonorepoPolicyEnablePush := false`). The flag is observed once
+    * at the entry point of release execution and survives intervening
+    * steps via the context metadata bag.
     */
   private def preparePushIfDecisionAllows(
       ctx: MonorepoContext,
       steps: Seq[AnyStep]
-  ): IO[MonorepoContext] =
-    if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.pure(ctx)
-    else VcsOps.preparePushReleaseIfNeeded(ctx, steps, LogPrefix)
+  ): IO[MonorepoContext] = {
+    val pushConfigured = steps.exists(_.hasRole(BuiltInStepRole.PushChanges))
+    val seeded         = ctx.withPushConfigured(pushConfigured)
+    if (DecisionResolver.effectivelyDeclinedPush(seeded)) IO.pure(seeded)
+    else VcsOps.preparePushReleaseIfNeeded(seeded, steps, LogPrefix)
+  }
 
   private[monorepo] def selectedProjectsLine(ctx: MonorepoContext): String = {
     val selected = ctx.currentProjects

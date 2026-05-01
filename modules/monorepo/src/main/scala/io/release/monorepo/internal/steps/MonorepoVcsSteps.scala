@@ -3,9 +3,12 @@ package io.release.monorepo.internal.steps
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
+import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.*
+import io.release.monorepo.internal.MonorepoPreflight
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
@@ -28,7 +31,8 @@ private[monorepo] object MonorepoVcsSteps {
   private[monorepo] final case class PreflightTagOutcome(
       projectName: String,
       rendered: String,
-      status: String
+      status: String,
+      willCreateTag: Boolean
   )
 
   val initializeVcs: GlobalStep = ProcessStep.Single(
@@ -73,12 +77,111 @@ private[monorepo] object MonorepoVcsSteps {
           useDefaults = ctx.useDefaults,
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
           logPrefix = ReleaseLogPrefixes.Monorepo,
-          label = label
+          label = label,
+          // Probe the remote for the FINAL resolved tag name (post-retry /
+          // post-prompt) before each `vcs.tag` call. Without this, a per-project
+          // tag that exists only on the remote would be created locally,
+          // publish-artifacts would run, and only the global atomic push at the
+          // end would fail — leaving partially-published artifacts without the
+          // matching pushed release tags.
+          beforeCreateTag =
+            finalTagName => remoteTagPreflightForCreate(ctx, vcs, finalTagName, label)
         )
       )
       .map { case (updatedCtx, result) =>
         (updatedCtx, result.tagName)
       }
+
+  /** Detect a remote-only per-project tag conflict before any tag side
+    * effect. Invoked from the `beforeCreateTag` callback so it observes the
+    * FINAL resolved tag name — including the post-retry name when
+    * `default-tag-exists-answer <newTag>` or an interactive prompt redirects.
+    *
+    * Skipped when:
+    *   - The compiled step plan does not include `push-changes`
+    *     (`releaseIOMonorepoPolicyEnablePush := false`); a remote tag cannot
+    *     trigger the atomic-push failure this probe is meant to prevent.
+    *   - Push is deterministically declined (`Some(false)` answer or
+    *     non-interactive with no configured choice and no `with-defaults`).
+    *   - The current branch has no configured upstream.
+    *
+    * Network failures (timeout, unreachable remote) degrade to a warning so
+    * offline / slow-network workflows still proceed; the atomic push at the
+    * end of the release will surface any actual conflict.
+    */
+  private def remoteTagPreflightForCreate(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      tagName: String,
+      label: String
+  ): IO[Unit] =
+    if (!ctx.pushConfigured) IO.unit
+    else if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.unit
+    else runRemoteTagProbe(ctx, vcs, tagName, label)
+
+  private def runRemoteTagProbe(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      tagName: String,
+      label: String
+  ): IO[Unit] =
+    vcs.hasUpstream.flatMap {
+      case false => IO.unit
+      case true  =>
+        for {
+          remote  <- vcs.trackingRemote
+          timeout <- IO.blocking(remoteCheckTimeout(ctx))
+          result  <- vcs.remoteTagExistsWithTimeout(remote, tagName, timeout)
+          _       <- handleRemoteTagProbe(ctx, tagName, remote, label, result)
+        } yield ()
+    }
+
+  private def handleRemoteTagProbe(
+      ctx: MonorepoContext,
+      tagName: String,
+      remote: String,
+      label: String,
+      result: Option[Boolean]
+  ): IO[Unit] =
+    result match {
+      case Some(true)  =>
+        IO.raiseError(
+          new IllegalStateException(remoteOnlyTagConflictMessage(ctx, tagName, remote, label))
+        )
+      case Some(false) => IO.unit
+      case None        =>
+        IO.blocking(
+          ctx.state.log.warn(
+            s"${ReleaseLogPrefixes.Monorepo} Could not query remote [$remote] for " +
+              s"tag [$tagName]${forLabel(label)}; the atomic push will surface any conflict."
+          )
+        )
+    }
+
+  private def remoteOnlyTagConflictMessage(
+      ctx: MonorepoContext,
+      tagName: String,
+      remote: String,
+      label: String
+  ): String = {
+    val commandName =
+      ctx.releasePlan.map(_.commandName).getOrElse(MonorepoReleasePlan.DefaultCommandName)
+    s"Tag [$tagName]${forLabel(label)} already exists on remote [$remote] but is not " +
+      s"present locally. Run `git fetch $remote --tags` to bring the tag into your local " +
+      s"repository, then re-run the release to resolve the conflict (overwrite, keep, or " +
+      s"pick a new tag). Use `$commandName help` for tag conflict options."
+  }
+
+  private def forLabel(label: String): String =
+    if (label.isEmpty) "" else s" for $label"
+
+  private def remoteCheckTimeout(
+      ctx: MonorepoContext
+  ): scala.concurrent.duration.FiniteDuration =
+    SbtRuntime
+      .extracted(ctx.state)
+      .getOpt(releaseIOVcsRemoteCheckTimeout)
+      .getOrElse(VcsOps.DefaultRemoteCheckTimeout)
 
   private def preflightCreateTag(
       ctx: MonorepoContext,
@@ -104,7 +207,7 @@ private[monorepo] object MonorepoVcsSteps {
           label = projectName
         )
       )
-      .map(o => PreflightTagOutcome(projectName, o.tagName, o.status))
+      .map(o => PreflightTagOutcome(projectName, o.tagName, o.status, o.willCreateTag))
   }
 
   /** Preflight tag categorization.
@@ -136,6 +239,126 @@ private[monorepo] object MonorepoVcsSteps {
         }
       }
     }
+
+  /** Preflight per-project tag conflicts before any release side effect.
+    *
+    * Mirrors core's `tag-preflight`: validates each rendered tag name (raises early
+    * on a malformed `releaseIOMonorepoVcsTagName` so the abort happens before
+    * `set-release-versions` mutates files), runs the local conflict resolver in
+    * preflight mode (raises on deterministic existing-tag aborts), and probes the
+    * remote for each tag (raises on remote-only conflicts). Aborting here keeps
+    * the working tree clean — the bug class is "abort surfaces only after
+    * commit-release-versions / publish-artifacts has already landed".
+    *
+    * Per-item with isolation: each project is preflighted independently so all
+    * errors are reported at once and a single failing project does not mask the
+    * remaining projects' diagnostics. Per-project failures still propagate to
+    * the global context (via `runPerProject`), so once any preflight fails the
+    * release skips every later step (`set-release-versions`,
+    * `commit-release-versions`, `tag-releases`, `publish-artifacts`,
+    * `push-changes`) — the clean-abort outcome the reviewer asked for.
+    *
+    * Auto-disabled by [[MonorepoLifecycle.tagPreflightEnabled]] when intervening
+    * hooks (`beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
+    * `beforeReleaseCommit`, `afterReleaseCommit`, `beforeTag`) can rewrite
+    * `releaseIOMonorepoVcsTagName` after the early evaluation. Hookless builds
+    * (the dominant case) keep the early-abort preflight; hooked builds rely on
+    * the in-resolver `beforeCreateTag` callback in `tag-releases` to catch
+    * remote-only conflicts on the post-hook tag name.
+    */
+  private[monorepo] val tagPreflight: ProjectStep = ProcessStep.PerItem(
+    name = "tag-preflight",
+    roles = Set(BuiltInStepRole.TagPreflight),
+    execute = (ctx, project) => runProjectTagPreflight(ctx, project).as(ctx)
+  )
+
+  private def runProjectTagPreflight(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[PreflightTagOutcome] =
+    required(ctx.vcs, MissingVcsMessage) { vcs =>
+      required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
+        case (releaseVer, _) =>
+          MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
+            val rendered = settings.perProjectTagName(project.name, releaseVer)
+            tagPreflightTarget(ctx, vcs).flatMap { target =>
+              preflightCreateTag(
+                ctx,
+                vcs,
+                rendered,
+                target,
+                project.name,
+                ctx.interactive
+              ).flatTap(outcome =>
+                // Probe the FINAL tag name resolved by `preflightCreateTag`
+                // (post-retry / post-prompt). When `default-tag-exists-answer
+                // <newTag>` redirects from `rendered` to the replacement, the
+                // outcome's `rendered` field carries the replacement; passing
+                // the original `rendered` would let the gate short-circuit
+                // (the original IS in the local repo — that is what triggered
+                // the retry) and miss a remote-only conflict on the
+                // replacement.
+                //
+                // The gate is the resolver's `willCreateTag` verdict, not
+                // local existence: `default-tag-exists-answer o` (overwrite)
+                // also triggers a tag ref update at push time, so the probe
+                // must run even when the tag exists locally.
+                remoteTagPreflightForPreflightStep(
+                  ctx,
+                  vcs,
+                  outcome.rendered,
+                  project.name,
+                  outcome.willCreateTag
+                )
+              )
+            }
+          }
+      }
+    }
+
+  /** Determine the commit the per-project tags will point to at execute time.
+    *
+    * If any selected project's release-version write would change its version
+    * file, the release will create a single shared release commit and every
+    * tag points there ([[TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit]]).
+    * Otherwise the tags apply to the current `HEAD`.
+    */
+  private def tagPreflightTarget(
+      ctx: MonorepoContext,
+      vcs: Vcs
+  ): IO[TagConflictResolver.PreflightCommitTarget] =
+    MonorepoPreflight.builtInReleaseWritesWouldChange(ctx).flatMap { wouldChange =>
+      if (wouldChange)
+        IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+      else
+        vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
+    }
+
+  /** Probe variant used by the early `tag-preflight` step. Gates on the
+    * resolver's `willCreateTag` verdict — `true` for `available` /
+    * `overwrite` / retry-to-available paths (the release will create or
+    * force-recreate the local tag and the push will attempt a non-force
+    * `refs/tags/X:refs/tags/X` update); `false` for `keep` (no new ref) or
+    * interactive prompts (deferred to execute time, where the in-resolver
+    * [[remoteTagPreflightForCreate]] picks up).
+    *
+    * The previous gate used `vcs.existsTag(tagName)` which conflated `keep`
+    * (correctly skipped) with `overwrite` (incorrectly skipped) — the
+    * overwrite-with-remote-conflict scenario then surfaced only at
+    * `tag-releases.execute`'s in-resolver probe, after `set-release-versions`
+    * and `commit-release-versions` had already mutated the repo.
+    */
+  private def remoteTagPreflightForPreflightStep(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      tagName: String,
+      label: String,
+      willCreateTag: Boolean
+  ): IO[Unit] =
+    if (!ctx.pushConfigured) IO.unit
+    else if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.unit
+    else if (!willCreateTag) IO.unit
+    else runRemoteTagProbe(ctx, vcs, tagName, label)
 
   private[monorepo] val tagReleasesPerProject: ProjectStep =
     ProcessStep.PerItem(

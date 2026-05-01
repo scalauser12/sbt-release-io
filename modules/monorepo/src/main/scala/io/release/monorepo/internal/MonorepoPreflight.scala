@@ -482,7 +482,7 @@ private[monorepo] object MonorepoPreflight {
           MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive)
       }
 
-  private def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
+  private[monorepo] def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
     // Sequential traverse: MonorepoVersionFiles.resolveInputs reads sbt state, which is not
     // safe for concurrent fiber access.
     ctx.currentProjects.toList

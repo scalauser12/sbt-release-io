@@ -1648,9 +1648,12 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       )
       val tags     = MonorepoPreflight.Evaluation.Resolved(
         Seq(
-          MonorepoVcsSteps.PreflightTagOutcome("core", "core/v1.0.0", "available"),
-          MonorepoVcsSteps.PreflightTagOutcome("api", "api/v2.0.0", "available"),
-          MonorepoVcsSteps.PreflightTagOutcome("extra", "extra/v3.0.0", "available")
+          MonorepoVcsSteps
+            .PreflightTagOutcome("core", "core/v1.0.0", "available", willCreateTag = true),
+          MonorepoVcsSteps
+            .PreflightTagOutcome("api", "api/v2.0.0", "available", willCreateTag = true),
+          MonorepoVcsSteps
+            .PreflightTagOutcome("extra", "extra/v3.0.0", "available", willCreateTag = true)
         )
       )
 

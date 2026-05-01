@@ -208,6 +208,18 @@ case class MonorepoContext(
   private[release] def decisionDefaults: ReleaseDecisionDefaults =
     releasePlan.map(_.decisionDefaults).getOrElse(ReleaseDecisionDefaults.empty)
 
+  /** Whether the compiled step sequence includes `push-changes`. Used by the
+    * remote tag preflight to suppress the network probe when push will not
+    * actually run (`releaseIOMonorepoPolicyEnablePush := false`). Defaults to
+    * `true` so legacy paths that never set the metadata preserve the
+    * conservative "push is happening" behavior.
+    */
+  private[release] def pushConfigured: Boolean =
+    metadata(MonorepoContext.pushConfiguredKey).getOrElse(true)
+
+  private[monorepo] def withPushConfigured(value: Boolean): MonorepoContext =
+    withMetadata(MonorepoContext.pushConfiguredKey, value)
+
   override def fail: MonorepoContext                       = copy(failed = true)
   override def failWith(cause: Throwable): MonorepoContext =
     copy(failed = true, failureCause = Some(cause))
@@ -232,4 +244,7 @@ object MonorepoContext {
 
   private val pushExecutedKey: AttributeKey[Boolean] =
     AttributeKey[Boolean]("releaseIOInternalMonorepoPushExecuted")
+
+  private val pushConfiguredKey: AttributeKey[Boolean] =
+    AttributeKey[Boolean]("releaseIOInternalMonorepoPushConfigured")
 }

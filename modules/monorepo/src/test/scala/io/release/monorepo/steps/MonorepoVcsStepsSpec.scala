@@ -356,7 +356,14 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       MonorepoVcsSteps.preflightTags(ctx, interactive = false).map { outcomes =>
         assertEquals(
           outcomes,
-          Seq(MonorepoVcsSteps.PreflightTagOutcome("core", "core-v1.0.0", "available"))
+          Seq(
+            MonorepoVcsSteps.PreflightTagOutcome(
+              "core",
+              "core-v1.0.0",
+              "available",
+              willCreateTag = true
+            )
+          )
         )
       }
     }
@@ -392,7 +399,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             MonorepoVcsSteps.PreflightTagOutcome(
               "core",
               "core-v1.0.0",
-              "exists; release will keep the existing tag"
+              "exists; release will keep the existing tag",
+              willCreateTag = false
             )
           )
         )
@@ -443,7 +451,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                 MonorepoVcsSteps.PreflightTagOutcome(
                   "core",
                   "core-v1.0.0",
-                  "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag"
+                  "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag",
+                  willCreateTag = false
                 )
               )
             )
