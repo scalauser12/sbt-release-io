@@ -43,20 +43,22 @@ releaseIOHooksBeforeVersionResolution := Seq(
 )
 
 releaseIOHooksBeforeTag := Seq(
-  ReleaseHookIO.transform("late-bound-tag-settings") { ctx =>
-    _root_.cats.effect.IO.blocking {
-      val base           = Project.extract(ctx.state).get(baseDirectory)
-      val runtimeVersion = base / "version.properties"
-      val updatedState   = ReleaseSessionOps.appendSessionSettings(
-        ctx.state,
-        lateBoundVersionSettings(runtimeVersion) ++ Seq(
-          releaseIOVcsTagName := "late-bound-runtime-tag"
+  ReleaseHookIO
+    .transform("late-bound-tag-settings") { ctx =>
+      _root_.cats.effect.IO.blocking {
+        val base           = Project.extract(ctx.state).get(baseDirectory)
+        val runtimeVersion = base / "version.properties"
+        val updatedState   = ReleaseSessionOps.appendSessionSettings(
+          ctx.state,
+          lateBoundVersionSettings(runtimeVersion) ++ Seq(
+            releaseIOVcsTagName := "late-bound-runtime-tag"
+          )
         )
-      )
-      sbt.IO.touch(base / "late-bound-tag-settings-ran")
-      ctx.withState(updatedState)
+        sbt.IO.touch(base / "late-bound-tag-settings-ran")
+        ctx.withState(updatedState)
+      }
     }
-  }
+    .copy(mayChangeTagSettings = true)
 )
 
 val checkRuntimeVersionFile = taskKey[Unit]("Check the late-bound version file")

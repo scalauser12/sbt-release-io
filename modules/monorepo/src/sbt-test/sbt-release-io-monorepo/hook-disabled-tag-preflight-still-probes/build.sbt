@@ -2,14 +2,14 @@ import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 // Pin the in-resolver remote tag probe for hook-disabled monorepo releases.
-// A `beforeTag` hook auto-disables the new monorepo `tag-preflight` step
-// (mirroring core's behaviour: tag-affecting hooks can rewrite
-// `releaseIOMonorepoVcsTagName` after preflight has already evaluated it).
-// In hook-bearing builds the only line of defence against a remote-only
-// per-project tag is the `beforeCreateTag` callback wired through
-// `TagConflictResolver` from `tag-releases`. Without it, the local tag is
-// created, publish runs, next-version commits, and only the global atomic
-// push rejects — leaving partial side effects.
+// A `beforeTag` hook flagged `mayChangeTagSettings = true` auto-disables the
+// monorepo `tag-preflight` step (mirroring core's behaviour: tag-affecting
+// hooks can rewrite `releaseIOMonorepoVcsTagName` after preflight has already
+// evaluated it). In hook-bearing builds with the flag set, the only line of
+// defence against a remote-only per-project tag is the `beforeCreateTag`
+// callback wired through `TagConflictResolver` from `tag-releases`. Without
+// it, the local tag is created, publish runs, next-version commits, and only
+// the global atomic push rejects — leaving partial side effects.
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
@@ -32,13 +32,13 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnableRunClean := false,
     releaseIOMonorepoPolicyEnableRunTests := false,
     releaseIOVcsIgnoreUntrackedFiles      := true,
-    // A no-op `beforeTag` hook auto-disables `tag-preflight` via
-    // `tagPreflightEnabled` so the in-resolver `beforeCreateTag` callback is
-    // the only line of defence.
+    // A no-op `beforeTag` hook flagged with `mayChangeTagSettings = true`
+    // auto-disables `tag-preflight` via `tagPreflightEnabled`, so the
+    // in-resolver `beforeCreateTag` callback is the only line of defence.
     releaseIOMonorepoHooksBeforeTag       := Seq(
-      MonorepoProjectHookIO.sideEffect("noop-before-tag")((_, _) =>
-        _root_.cats.effect.IO.unit
-      )
+      MonorepoProjectHookIO
+        .sideEffect("noop-before-tag")((_, _) => _root_.cats.effect.IO.unit)
+        .copy(mayChangeTagSettings = true)
     )
   )
 

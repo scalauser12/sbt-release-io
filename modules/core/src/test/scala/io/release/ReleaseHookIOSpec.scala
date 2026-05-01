@@ -23,7 +23,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       val copied = hook.copy(name = "copied-hook")
 
       copied.execute(ctx).map { result =>
-        val ReleaseHookIO(name, execute, validate) = hook
+        val ReleaseHookIO(name, execute, validate, _) = hook
         assertEquals(name, "legacy-hook")
         assertEquals(validate, hook.validate)
         assertEquals(execute, hook.execute)
@@ -278,7 +278,7 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
       val copied      = hook.copy(name = "copied-resource-hook")
 
       copied.execute("bound")(ctx).map { result =>
-        val ReleaseResourceHookIO(name, execute, validate) = hook
+        val ReleaseResourceHookIO(name, execute, validate, _) = hook
         assertEquals(name, "legacy-resource-hook")
         assertEquals(validate, hook.validate)
         assertEquals(execute, hook.execute)
@@ -566,6 +566,34 @@ class ReleaseHookIOSpec extends CatsEffectSuite {
         assertEquals(config.afterPublishHooks, Seq.empty)
         assertEquals(config.beforePushHooks, Seq.empty)
         assertEquals(config.afterPushHooks, Seq.empty)
+      }
+    }
+  }
+
+  test(
+    "ReleaseResourceHooks.materialize - forwards mayChangeTagSettings onto materialized hooks"
+  ) {
+    // Without this forwarding, custom plugins that wire a resource hook into one of the
+    // tag-affecting phases cannot opt out of the early `tag-preflight` step — the
+    // materialized `ReleaseHookIO` would always carry the default `false`, leaving the
+    // lifecycle gate to evaluate the stale pre-hook tag name.
+    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { _ =>
+      val flagged   = ReleaseResourceHookIO
+        .sideEffect[String]("flagged-before-tag")((_, _) => IO.unit)
+        .copy(mayChangeTagSettings = true)
+      val unflagged =
+        ReleaseResourceHookIO.sideEffect[String]("plain-after-clean")((_, _) => IO.unit)
+      val config    = ReleaseResourceHooks.materialize(
+        ReleaseResourceHooks[String](
+          beforeTagHooks = Seq(flagged),
+          afterCleanCheckHooks = Seq(unflagged)
+        ),
+        None
+      )
+
+      IO {
+        assertEquals(config.beforeTagHooks.head.mayChangeTagSettings, true)
+        assertEquals(config.afterCleanCheckHooks.head.mayChangeTagSettings, false)
       }
     }
   }

@@ -2,16 +2,16 @@ import scala.sys.process.*
 import _root_.io.release.ReleaseHookIO
 
 // Pin the in-resolver remote tag probe for hook-disabled releases that retry
-// to a replacement tag. With a `beforeTag` hook configured `tag-preflight`
-// is auto-disabled, so the only line of defence is the
-// `TagConflictResolver.beforeCreateTag` callback. The original tag (v0.1.0)
-// exists locally; `default-tag-exists-answer v0.2.0` redirects the resolver
-// to v0.2.0; v0.2.0 exists only on the remote. Before the fix, the previous
-// "probe params.tagName at tag-release" path skipped the probe entirely (the
-// `existsTag(v0.1.0)` gate triggered) and the release reached the final
-// atomic push after publish/next-version side effects had landed. The
-// callback observes the FINAL resolved tag name (v0.2.0) so the abort
-// happens before `vcs.tag` creates the local replacement.
+// to a replacement tag. With a `beforeTag` hook flagged
+// `mayChangeTagSettings = true` `tag-preflight` is auto-disabled, so the only
+// line of defence is the `TagConflictResolver.beforeCreateTag` callback. The
+// original tag (v0.1.0) exists locally; `default-tag-exists-answer v0.2.0`
+// redirects the resolver to v0.2.0; v0.2.0 exists only on the remote. Before
+// the fix, the previous "probe params.tagName at tag-release" path skipped
+// the probe entirely (the `existsTag(v0.1.0)` gate triggered) and the release
+// reached the final atomic push after publish/next-version side effects had
+// landed. The callback observes the FINAL resolved tag name (v0.2.0) so the
+// abort happens before `vcs.tag` creates the local replacement.
 name         := "hook-disabled-retry-tag-probes-remote-test"
 scalaVersion := "2.12.18"
 
@@ -20,8 +20,12 @@ releaseIOPolicyEnableRunClean    := false
 releaseIOPolicyEnableRunTests    := false
 releaseIOVcsIgnoreUntrackedFiles := true
 
+// `mayChangeTagSettings = true` opts the hook into the auto-disable path so
+// this test exercises the in-resolver probe rather than the early preflight.
 releaseIOHooksBeforeTag := Seq(
-  ReleaseHookIO.sideEffect("noop-before-tag")(_ => _root_.cats.effect.IO.unit)
+  ReleaseHookIO
+    .sideEffect("noop-before-tag")(_ => _root_.cats.effect.IO.unit)
+    .copy(mayChangeTagSettings = true)
 )
 
 val checkLateRetryProbeAborted =

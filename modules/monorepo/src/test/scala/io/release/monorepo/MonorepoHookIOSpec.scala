@@ -24,7 +24,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         val copied = hook.copy(name = "copied-global-hook")
 
         copied.execute(ctx).map { result =>
-          val MonorepoGlobalHookIO(name, execute, validate) = hook
+          val MonorepoGlobalHookIO(name, execute, validate, _) = hook
           assertEquals(name, "legacy-global-hook")
           assertEquals(validate, hook.validate)
           assertEquals(execute, hook.execute)
@@ -186,7 +186,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         val copied = hook.copy(name = "copied-project-hook")
 
         copied.execute(ctx, project).map { result =>
-          val MonorepoProjectHookIO(name, execute, validate) = hook
+          val MonorepoProjectHookIO(name, execute, validate, _) = hook
           assertEquals(name, "legacy-project-hook")
           assertEquals(validate, hook.validate)
           assertEquals(execute, hook.execute)
@@ -396,7 +396,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
       val copied      = hook.copy(name = "copied-global-resource-hook")
 
       copied.execute("bound")(ctx).map { result =>
-        val MonorepoGlobalResourceHookIO(name, execute, validate) = hook
+        val MonorepoGlobalResourceHookIO(name, execute, validate, _) = hook
         assertEquals(name, "legacy-global-resource-hook")
         assertEquals(validate, hook.validate)
         assertEquals(execute, hook.execute)
@@ -548,7 +548,7 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
         val copied = hook.copy(name = "copied-project-resource-hook")
 
         copied.execute("bound")(ctx, project).map { result =>
-          val MonorepoProjectResourceHookIO(name, execute, validate) = hook
+          val MonorepoProjectResourceHookIO(name, execute, validate, _) = hook
           assertEquals(name, "legacy-project-resource-hook")
           assertEquals(validate, hook.validate)
           assertEquals(execute, hook.execute)
@@ -841,6 +841,46 @@ class MonorepoHookIOSpec extends CatsEffectSuite with MonorepoDummyProjectSuppor
             }
           }
         }
+      }
+    }
+  }
+
+  test(
+    "MonorepoResourceHooks.materialize - forwards mayChangeTagSettings onto materialized hooks"
+  ) {
+    // Without forwarding, custom monorepo plugins that wire a resource hook into one of
+    // the tag-affecting phases cannot opt out of the early `tag-preflight` step — the
+    // materialized `MonorepoGlobalHookIO` / `MonorepoProjectHookIO` would always carry
+    // the default `false`, leaving the lifecycle gate to evaluate the stale pre-hook
+    // tag name.
+    MonorepoSpecSupport.dummyContextResource("monorepo-hook-io-spec").use { _ =>
+      val flaggedGlobal    = MonorepoGlobalResourceHookIO
+        .sideEffect[String]("flagged-before-release-commit")((_, _) => IO.unit)
+        .copy(mayChangeTagSettings = true)
+      val unflaggedGlobal  =
+        MonorepoGlobalResourceHookIO
+          .sideEffect[String]("plain-after-clean")((_, _) => IO.unit)
+      val flaggedProject   = MonorepoProjectResourceHookIO
+        .sideEffect[String]("flagged-before-tag")((_, _, _) => IO.unit)
+        .copy(mayChangeTagSettings = true)
+      val unflaggedProject =
+        MonorepoProjectResourceHookIO
+          .sideEffect[String]("plain-before-version")((_, _, _) => IO.unit)
+      val config           = MonorepoResourceHooks.materialize(
+        MonorepoResourceHooks[String](
+          afterCleanCheckHooks = Seq(unflaggedGlobal),
+          beforeReleaseCommitHooks = Seq(flaggedGlobal),
+          beforeVersionResolutionHooks = Seq(unflaggedProject),
+          beforeTagHooks = Seq(flaggedProject)
+        ),
+        None
+      )
+
+      IO {
+        assertEquals(config.beforeReleaseCommitHooks.head.mayChangeTagSettings, true)
+        assertEquals(config.afterCleanCheckHooks.head.mayChangeTagSettings, false)
+        assertEquals(config.beforeTagHooks.head.mayChangeTagSettings, true)
+        assertEquals(config.beforeVersionResolutionHooks.head.mayChangeTagSettings, false)
       }
     }
   }

@@ -258,12 +258,13 @@ private[monorepo] object MonorepoVcsSteps {
     * `commit-release-versions`, `tag-releases`, `publish-artifacts`,
     * `push-changes`) — the clean-abort outcome the reviewer asked for.
     *
-    * Auto-disabled by [[MonorepoLifecycle.tagPreflightEnabled]] when intervening
-    * hooks (`beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
-    * `beforeReleaseCommit`, `afterReleaseCommit`, `beforeTag`) can rewrite
-    * `releaseIOMonorepoVcsTagName` after the early evaluation. Hookless builds
-    * (the dominant case) keep the early-abort preflight; hooked builds rely on
-    * the in-resolver `beforeCreateTag` callback in `tag-releases` to catch
+    * Auto-disabled by [[MonorepoLifecycle.tagPreflightEnabled]] when an intervening
+    * hook (`beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
+    * `beforeReleaseCommit`, `afterReleaseCommit`, `beforeTag`) opts in to
+    * `mayChangeTagSettings = true`, signalling that it may rewrite
+    * `releaseIOMonorepoVcsTagName` after the early evaluation. Unflagged hooks
+    * (the dominant case) keep the early-abort preflight active; opted-in builds
+    * rely on the in-resolver `beforeCreateTag` callback in `tag-releases` to catch
     * remote-only conflicts on the post-hook tag name.
     */
   private[monorepo] val tagPreflight: ProjectStep = ProcessStep.PerItem(

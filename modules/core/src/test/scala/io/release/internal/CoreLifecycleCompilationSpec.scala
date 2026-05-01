@@ -117,11 +117,13 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
       compileLifecycle(state).map { steps =>
         val stepNames = steps.map(_.name)
 
-        // `tag-preflight` is intentionally absent: this configuration installs a
-        // `beforeTag` hook, which can rewrite `releaseIOVcsTagName` after the
-        // preflight would have run. CoreLifecycle.tagPreflightEnabled auto-disables
-        // the early preflight in that case so the (potentially stale) default name
-        // cannot trigger a spurious abort.
+        // `tag-preflight` is present: the installed `beforeTag` hook does not opt
+        // in to `mayChangeTagSettings`, so the early preflight stays active and
+        // catches conflicts before any version write or release commit lands.
+        // Hooks that actually rewrite `releaseIOVcsTagName` opt out via
+        // `.copy(mayChangeTagSettings = true)`; that opt-out is exercised by
+        // `compile - auto-disable tag-preflight when an intervening hook flags
+        // mayChangeTagSettings` below.
         assertEquals(
           stepNames,
           Seq(
@@ -131,6 +133,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
             "before-version-resolution:before-version",
             "inquire-versions",
             "after-version-resolution:after-version",
+            "tag-preflight",
             "set-release-version",
             "commit-release-version",
             "before-tag:before-tag",
@@ -147,14 +150,60 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
   }
 
   test(
-    "compile - auto-disable tag-preflight when any intervening hook phase is configured"
+    "compile - auto-disable tag-preflight when an intervening hook flags mayChangeTagSettings"
   ) {
     // tag-preflight evaluates `releaseIOVcsTagName` before later hooks
     // (beforeReleaseVersionWrite/afterReleaseVersionWrite/beforeReleaseCommit/
-    // afterReleaseCommit/beforeTag) can rewrite it. To avoid spurious aborts on
-    // a stale default name, the lifecycle skips the step when any of those
-    // phases has hooks. Each phase below is exercised in isolation so a future
-    // refactor that misses one fails this test.
+    // afterReleaseCommit/beforeTag) can rewrite it. Hooks that opt in to
+    // `mayChangeTagSettings = true` cause the lifecycle to skip the early
+    // preflight so the post-hook tag name is authoritative. Each phase below
+    // is exercised in isolation so a future refactor that misses one fails
+    // this test.
+    val phases = Seq(
+      "beforeReleaseVersionWrite" -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksBeforeReleaseVersionWrite
+      ),
+      "afterReleaseVersionWrite"  -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksAfterReleaseVersionWrite
+      ),
+      "beforeReleaseCommit"       -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksBeforeReleaseCommit
+      ),
+      "afterReleaseCommit"        -> ((s: ReleasePluginIO.autoImport.type) =>
+        s.releaseIOHooksAfterReleaseCommit
+      ),
+      "beforeTag"                 -> ((s: ReleasePluginIO.autoImport.type) => s.releaseIOHooksBeforeTag)
+    )
+
+    phases.foldLeft(IO.unit) { case (acc, (label, key)) =>
+      acc *> {
+        val hookSetting = key(ReleasePluginIO.autoImport) := Seq(
+          ReleaseHookIO
+            .sideEffect(s"$label-hook")(_ => IO.unit)
+            .copy(mayChangeTagSettings = true)
+        )
+        hookStateResource(s"tag-preflight-disabled-$label", Seq(hookSetting)).use { state =>
+          compileLifecycle(state).map { steps =>
+            assert(
+              !steps.map(_.name).contains("tag-preflight"),
+              s"tag-preflight should be auto-disabled when a $label hook with " +
+                s"mayChangeTagSettings = true is configured, but found it in: ${steps.map(_.name)}"
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "compile - keep tag-preflight enabled when intervening hooks do not flag mayChangeTagSettings"
+  ) {
+    // The dominant case: hooks that don't touch tag settings (logging, signing,
+    // changelog updates, …) leave the early `tag-preflight` step active. The
+    // previous design auto-disabled preflight for any non-empty hook list, which
+    // pushed conflict detection past `set-release-version` and
+    // `commit-release-version` even for builds whose hooks could not possibly
+    // mutate the tag name.
     val phases = Seq(
       "beforeReleaseVersionWrite" -> ((s: ReleasePluginIO.autoImport.type) =>
         s.releaseIOHooksBeforeReleaseVersionWrite
@@ -176,12 +225,13 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
         val hookSetting = key(ReleasePluginIO.autoImport) := Seq(
           ReleaseHookIO.sideEffect(s"$label-hook")(_ => IO.unit)
         )
-        hookStateResource(s"tag-preflight-disabled-$label", Seq(hookSetting)).use { state =>
+        hookStateResource(s"tag-preflight-enabled-$label", Seq(hookSetting)).use { state =>
           compileLifecycle(state).map { steps =>
             assert(
-              !steps.map(_.name).contains("tag-preflight"),
-              s"tag-preflight should be auto-disabled when $label hooks are configured, " +
-                s"but found it in: ${steps.map(_.name)}"
+              steps.map(_.name).contains("tag-preflight"),
+              s"tag-preflight should remain enabled when a $label hook without " +
+                s"mayChangeTagSettings is configured, but it was missing from: " +
+                steps.map(_.name).mkString(", ")
             )
           }
         }

@@ -89,15 +89,16 @@ private[release] object VcsSteps {
     * would lead to a deterministic abort. Interactive prompts and `k`/`o`/custom-tag
     * answers pass through and are handled at the real `tagRelease` step.
     *
-    * '''Auto-disabled when intervening hooks are configured.''' Hooks in any of the
-    * `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`, `beforeReleaseCommit`,
-    * `afterReleaseCommit`, or `beforeTag` phases run between `tag-preflight` and
-    * `tag-release` and may rewrite `releaseIOVcsTagName` via session settings. When
-    * any of those phases is configured the lifecycle skips this step entirely so we
-    * don't spuriously abort on the pre-hook tag name. Hookless builds (the dominant
+    * '''Auto-disabled when an intervening hook flags `mayChangeTagSettings`.''' Hooks
+    * in any of the `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
+    * `beforeReleaseCommit`, `afterReleaseCommit`, or `beforeTag` phases run between
+    * `tag-preflight` and `tag-release` and may rewrite `releaseIOVcsTagName` via
+    * session settings. Hooks that opt in by constructing with
+    * `.copy(mayChangeTagSettings = true)` cause the lifecycle to skip this step so we
+    * don't spuriously abort on the pre-hook tag name. Unflagged hooks (the dominant
     * case) keep the early abort. Move tag-name-affecting logic to
     * `afterVersionResolution` (which runs before `tag-preflight`) to re-enable the
-    * early check. See `CoreLifecycle.tagPreflightEnabled`.
+    * early check without the opt-out. See `CoreLifecycle.tagPreflightEnabled`.
     *
     * '''Limitation — non-deterministic tag tasks.''' The early preflight evaluates
     * `releaseIOVcsTagName` / `releaseIOVcsTagComment` once; `tag-release.execute`

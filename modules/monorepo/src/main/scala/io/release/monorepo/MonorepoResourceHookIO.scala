@@ -10,11 +10,19 @@ import io.release.runtime.TrackedContextHandle
   * resource. Legacy `execute` hooks recover only the last returned context; hooks that need
   * recovery from intermediate context checkpoints should use the tracked constructors in the
   * companion object.
+  *
+  * @param mayChangeTagSettings opt-in flag mirroring [[MonorepoGlobalHookIO.mayChangeTagSettings]] —
+  *                             set to `true` for resource hooks in `beforeReleaseCommit` or
+  *                             `afterReleaseCommit` that rewrite `releaseIOMonorepoVcsTagName`.
+  *                             Forwarded onto the materialized [[MonorepoGlobalHookIO]] so the
+  *                             lifecycle's `tagPreflightEnabled` gate observes it. Defaults
+  *                             to `false`.
   */
 case class MonorepoGlobalResourceHookIO[T](
     name: String,
     execute: T => MonorepoContext => IO[MonorepoContext],
-    validate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit
+    validate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit,
+    mayChangeTagSettings: Boolean = false
 )
 
 object MonorepoGlobalResourceHookIO {
@@ -152,12 +160,20 @@ object MonorepoGlobalResourceHookIO {
   *
   * Legacy `execute` hooks recover only the last returned context; hooks that need recovery from
   * intermediate context checkpoints should use the tracked constructors in the companion object.
+  *
+  * @param mayChangeTagSettings opt-in flag mirroring [[MonorepoProjectHookIO.mayChangeTagSettings]]
+  *                             — set to `true` for resource hooks in `beforeReleaseVersionWrite` /
+  *                             `afterReleaseVersionWrite` / `beforeTag` that rewrite
+  *                             `releaseIOMonorepoVcsTagName`. Forwarded onto the materialized
+  *                             [[MonorepoProjectHookIO]] so the lifecycle's
+  *                             `tagPreflightEnabled` gate observes it. Defaults to `false`.
   */
 case class MonorepoProjectResourceHookIO[T](
     name: String,
     execute: T => (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
     validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
-      (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit
+      (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit,
+    mayChangeTagSettings: Boolean = false
 )
 
 object MonorepoProjectResourceHookIO {
@@ -376,7 +392,8 @@ object MonorepoResourceHooks {
               MonorepoGlobalResourceHookIO.trackedExecute(hook)(r)(handle)
             )
         ),
-        validate = hook.validate
+        validate = hook.validate,
+        mayChangeTagSettings = hook.mayChangeTagSettings
       )
 
     def projectHook(
@@ -392,7 +409,8 @@ object MonorepoResourceHooks {
               MonorepoProjectResourceHookIO.trackedExecute(hook)(r)(handle, project)
             )
         ),
-        validate = hook.validate
+        validate = hook.validate,
+        mayChangeTagSettings = hook.mayChangeTagSettings
       )
 
     MonorepoHookConfiguration(

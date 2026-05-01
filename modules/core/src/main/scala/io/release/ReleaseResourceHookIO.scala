@@ -16,14 +16,25 @@ import io.release.runtime.TrackedContextHandle
   * Legacy `execute` hooks recover only the last returned context. Hooks that need recovery from
   * intermediate context checkpoints should use the tracked constructors in the companion object.
   *
-  * @param name     human-readable hook name, used in step names and log output
-  * @param execute  the main hook logic; receives the shared resource and the current context
-  * @param validate optional pre-flight validation; defaults to no-op
+  * @param name                 human-readable hook name, used in step names and log output
+  * @param execute              the main hook logic; receives the shared resource and the current
+  *                             context
+  * @param validate             optional pre-flight validation; defaults to no-op
+  * @param mayChangeTagSettings opt-in flag mirroring [[ReleaseHookIO.mayChangeTagSettings]] —
+  *                             set to `true` for resource hooks installed in
+  *                             `beforeReleaseVersionWrite` / `afterReleaseVersionWrite` /
+  *                             `beforeReleaseCommit` / `afterReleaseCommit` / `beforeTag` that
+  *                             rewrite `releaseIOVcsTagName` (or related tag settings) via
+  *                             session settings. The flag is forwarded by
+  *                             [[ReleaseResourceHooks.materialize]] onto the underlying plain
+  *                             hook so the lifecycle's `tagPreflightEnabled` gate can observe
+  *                             it. Defaults to `false`.
   */
 case class ReleaseResourceHookIO[T](
     name: String,
     execute: T => ReleaseContext => IO[ReleaseContext],
-    validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit
+    validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
+    mayChangeTagSettings: Boolean = false
 )
 
 object ReleaseResourceHookIO {
@@ -209,7 +220,8 @@ object ReleaseResourceHooks {
           executeTracked = handle =>
             maybeResource.fold(IO.unit)(r => ReleaseResourceHookIO.trackedExecute(hook)(r)(handle))
         ),
-        validate = hook.validate
+        validate = hook.validate,
+        mayChangeTagSettings = hook.mayChangeTagSettings
       )
 
     CoreHookConfiguration(

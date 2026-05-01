@@ -2,9 +2,9 @@ import scala.sys.process.*
 import _root_.io.release.ReleaseHookIO
 
 // Pin the late remote tag probe at `tag-release.execute` for builds where
-// `tag-preflight` is auto-disabled. Any non-empty hook in
-// `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
-// `beforeReleaseCommit`, `afterReleaseCommit`, or `beforeTag` strips
+// `tag-preflight` is auto-disabled. A hook in `beforeReleaseVersionWrite`,
+// `afterReleaseVersionWrite`, `beforeReleaseCommit`, `afterReleaseCommit`, or
+// `beforeTag` that opts in to `mayChangeTagSettings = true` strips
 // `tag-preflight` from the compiled plan because those phases can rewrite
 // `releaseIOVcsTagName` after the early preflight has already evaluated it.
 // Without the late probe, a remote-only tag conflict would only surface at
@@ -20,11 +20,15 @@ releaseIOPolicyEnableRunClean    := false
 releaseIOPolicyEnableRunTests    := false
 releaseIOVcsIgnoreUntrackedFiles := true
 
-// A no-op `beforeTag` hook is enough to trigger `tagPreflightEnabled = false`
-// in CoreLifecycle, simulating any real build that wires tag-affecting hooks
-// (e.g. release-note generation, late-bound `releaseIOVcsTagName`).
+// A no-op `beforeTag` hook flagged with `mayChangeTagSettings = true` triggers
+// `tagPreflightEnabled = false` in CoreLifecycle, simulating any real build
+// that wires tag-affecting hooks (e.g. release-note generation, late-bound
+// `releaseIOVcsTagName`). Unflagged hooks intentionally do NOT disable the
+// early preflight — see the `tag-preflight` lifecycle docs.
 releaseIOHooksBeforeTag := Seq(
-  ReleaseHookIO.sideEffect("noop-before-tag")(_ => _root_.cats.effect.IO.unit)
+  ReleaseHookIO
+    .sideEffect("noop-before-tag")(_ => _root_.cats.effect.IO.unit)
+    .copy(mayChangeTagSettings = true)
 )
 
 val checkNoTagOrPublishSideEffects =

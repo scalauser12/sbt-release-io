@@ -15,14 +15,37 @@ import io.release.runtime.TrackedContextHandle
   * Legacy `execute` hooks recover only the last returned context. Hooks that need recovery from
   * intermediate context checkpoints should use the tracked constructors in the companion object.
   *
-  * @param name     human-readable hook name, used in log output
-  * @param execute  the main hook logic; receives and returns a [[ReleaseContext]]
-  * @param validate optional pre-flight validation; defaults to no-op
+  * @param name                 human-readable hook name, used in log output
+  * @param execute              the main hook logic; receives and returns a [[ReleaseContext]]
+  * @param validate             optional pre-flight validation; defaults to no-op
+  * @param mayChangeTagSettings opt-in flag for hooks installed in
+  *                             `beforeReleaseVersionWrite` / `afterReleaseVersionWrite` /
+  *                             `beforeReleaseCommit` / `afterReleaseCommit` / `beforeTag`
+  *                             that may rewrite `releaseIOVcsTagName` (or related tag
+  *                             settings) via session settings. The early `tag-preflight`
+  *                             step evaluates the tag name once before any of those phases
+  *                             run; flag a hook here to skip the early preflight and rely
+  *                             on the in-resolver check at `tag-release` instead, avoiding
+  *                             spurious aborts on the stale pre-hook tag name. Defaults to
+  *                             `false` because most hooks do not touch tag settings, so
+  *                             the early preflight stays available and catches conflicts
+  *                             before any version write or release commit lands.
+  *
+  * @note Adding this field changes the synthetic `apply`/`unapply`/`copy`/constructor
+  *       signatures of the case class. Source-level callers that omit this argument keep
+  *       working (the default `false` fills in), but downstream plugins compiled against
+  *       earlier versions need to be recompiled — pre-built jars expecting the original
+  *       3-arity `apply(String, ReleaseContext => IO[ReleaseContext], ReleaseContext =>
+  *       IO[Unit])` will hit `NoSuchMethodError` against this version's bytecode. Pattern
+  *       destructures with explicit positional arity (`case ReleaseHookIO(n, e, v) =>`)
+  *       must absorb the new field with `_`. This is an acceptable evolution for the
+  *       pre-1.0 plugin and is documented in the release notes.
   */
 case class ReleaseHookIO(
     name: String,
     execute: ReleaseContext => IO[ReleaseContext],
-    validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit
+    validate: ReleaseContext => IO[Unit] = (_ctx: ReleaseContext) => IO.unit,
+    mayChangeTagSettings: Boolean = false
 )
 
 object ReleaseHookIO {

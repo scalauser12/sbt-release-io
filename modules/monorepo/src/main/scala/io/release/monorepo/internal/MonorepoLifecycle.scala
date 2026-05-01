@@ -129,8 +129,8 @@ private[release] object MonorepoLifecycle {
   private val beforePushNarrow: MonorepoContext => IO[Boolean] =
     ctx => IO.pure(!DecisionResolver.effectivelyDeclinedPush(ctx))
 
-  /** Auto-disable `tag-preflight` whenever any hook phase between version
-    * resolution and tag creation is configured. Those hooks
+  /** Auto-disable `tag-preflight` whenever any intervening hook between version
+    * resolution and tag creation opts in to `mayChangeTagSettings`. Those hooks
     * (`beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
     * `beforeReleaseCommit`, `afterReleaseCommit`, `beforeTag`) can rewrite
     * `releaseIOMonorepoVcsTagName` via session settings after the preflight
@@ -138,20 +138,23 @@ private[release] object MonorepoLifecycle {
     * pre-hook name produces false-positive aborts when the hook's intended
     * tag is free but the default tag conflicts.
     *
-    * Hookless builds (the dominant case) keep the early-abort preflight;
-    * hooked builds rely on the in-resolver `beforeCreateTag` callback in
-    * `tag-releases` to catch conflicts on the post-hook tag name. To
-    * re-enable preflight, move tag-name-affecting logic to
-    * `afterVersionResolution`, which runs before `tag-preflight`.
+    * Hooks default to `mayChangeTagSettings = false`, so unflagged hooks (the
+    * dominant case — logging, signing, changelog updates) keep the early-abort
+    * preflight active. Hook authors that actually rewrite tag settings opt in
+    * by constructing the hook with `.copy(mayChangeTagSettings = true)`,
+    * accepting the late `beforeCreateTag` check inside `tag-releases` in
+    * exchange for the post-hook tag name being authoritative. To re-enable
+    * the early preflight without the opt-out, move tag-name-affecting logic
+    * to `afterVersionResolution`, which runs before `tag-preflight`.
     */
   private val tagPreflightEnabled: MonorepoHookConfiguration => Boolean =
     config =>
       config.enableTagging &&
-        config.beforeReleaseVersionWriteHooks.isEmpty &&
-        config.afterReleaseVersionWriteHooks.isEmpty &&
-        config.beforeReleaseCommitHooks.isEmpty &&
-        config.afterReleaseCommitHooks.isEmpty &&
-        config.beforeTagHooks.isEmpty
+        !config.beforeReleaseVersionWriteHooks.exists(_.mayChangeTagSettings) &&
+        !config.afterReleaseVersionWriteHooks.exists(_.mayChangeTagSettings) &&
+        !config.beforeReleaseCommitHooks.exists(_.mayChangeTagSettings) &&
+        !config.afterReleaseCommitHooks.exists(_.mayChangeTagSettings) &&
+        !config.beforeTagHooks.exists(_.mayChangeTagSettings)
 
   /** Execute-time AND condition for the global `after-push` hook: fires only
     * when the monorepo `push-changes` step actually pushed. Validation is

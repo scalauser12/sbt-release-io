@@ -118,6 +118,39 @@ Hook semantics:
 - `releaseIO check` validates the same lifecycle shape that `releaseIO` executes
 - hooks extend behavior, but they do not change phase ordering
 
+### Hooks that rewrite tag settings
+
+The early `tag-preflight` step evaluates `releaseIOVcsTagName` once before any
+of the `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
+`beforeReleaseCommit`, `afterReleaseCommit`, or `beforeTag` hooks run. If a hook
+in those slots rewrites the tag name (or anything `releaseIOVcsTagName` depends
+on) via session settings, the preflight would evaluate the stale pre-hook name
+and could spuriously abort when the post-hook tag is actually free. Opt out by
+setting `mayChangeTagSettings = true` on the hook:
+
+```scala
+releaseIOHooksBeforeTag += ReleaseHookIO
+  .sideEffect("rewrite-tag-name") { ctx =>
+    IO.blocking { /* mutate releaseIOVcsTagName via appendWithSession … */ }
+  }
+  .copy(mayChangeTagSettings = true)
+```
+
+The lifecycle then skips the early preflight for that release, deferring the
+conflict check to `tag-release`. Leave the flag at its default `false` for
+hooks that only log, sign, update changelogs, etc. — preflight remains active
+and catches conflicts before any version write or release commit lands.
+
+The same flag is available on `ReleaseResourceHookIO`. `ReleaseResourceHooks
+.materialize` forwards it onto the materialized `ReleaseHookIO`, so a
+resource-aware hook that rewrites tag settings can opt out the same way:
+
+```scala
+ReleaseResourceHookIO
+  .sideEffect[HttpClient]("rewrite-tag-name") { (client, ctx) => /* … */ }
+  .copy(mayChangeTagSettings = true)
+```
+
 ## Hook and policy recipes
 
 These are common recipes, not the exhaustive hook/policy catalog; see

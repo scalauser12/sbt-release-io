@@ -131,6 +131,40 @@ Hook semantics:
 The tagging lifecycle phase is still named `tag-releases`. Customize around it with
 `releaseIOMonorepoHooksBeforeTag` and `releaseIOMonorepoHooksAfterTag`.
 
+### Hooks that rewrite tag settings
+
+The early `tag-preflight` step evaluates `releaseIOMonorepoVcsTagName` once per
+project before any of the `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
+`beforeReleaseCommit`, `afterReleaseCommit`, or `beforeTag` hooks run. If a hook
+in those slots rewrites the tag name via session settings, the preflight would
+evaluate the stale pre-hook name and could spuriously abort when the post-hook
+tag is actually free. Opt out by setting `mayChangeTagSettings = true` on the
+hook:
+
+```scala
+releaseIOMonorepoHooksBeforeTag += MonorepoProjectHookIO
+  .sideEffect("rewrite-tag-name") { (project, ctx) =>
+    IO.blocking { /* mutate releaseIOMonorepoVcsTagName via appendWithSession … */ }
+  }
+  .copy(mayChangeTagSettings = true)
+```
+
+The lifecycle then skips the early preflight for that release, deferring the
+conflict check to `tag-releases`. Leave the flag at its default `false` for
+hooks that only log, sign, update changelogs, etc. — preflight remains active
+and catches conflicts before any version write or release commit lands.
+
+The same flag is available on `MonorepoGlobalResourceHookIO` and
+`MonorepoProjectResourceHookIO`. `MonorepoResourceHooks.materialize` forwards
+it onto the materialized `MonorepoGlobalHookIO` / `MonorepoProjectHookIO`, so
+a resource-aware hook that rewrites tag settings can opt out the same way:
+
+```scala
+MonorepoProjectResourceHookIO
+  .sideEffect[HttpClient]("rewrite-tag-name") { (client, project, ctx) => /* … */ }
+  .copy(mayChangeTagSettings = true)
+```
+
 ## Hook and policy recipes
 
 These are common recipes, not the exhaustive hook/policy catalog; see

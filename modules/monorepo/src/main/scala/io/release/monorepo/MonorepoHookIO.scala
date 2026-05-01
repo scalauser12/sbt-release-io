@@ -15,14 +15,31 @@ import io.release.runtime.TrackedContextHandle
   * Legacy `execute` hooks recover only the last returned context. Hooks that need recovery from
   * intermediate context checkpoints should use the tracked constructors in the companion object.
   *
-  * @param name     human-readable hook name, used in step names and log output
-  * @param execute  the main hook logic; receives and returns a [[MonorepoContext]]
-  * @param validate optional pre-flight validation; defaults to no-op
+  * @param name                 human-readable hook name, used in step names and log output
+  * @param execute              the main hook logic; receives and returns a [[MonorepoContext]]
+  * @param validate             optional pre-flight validation; defaults to no-op
+  * @param mayChangeTagSettings opt-in flag for hooks installed in `beforeReleaseCommit` or
+  *                             `afterReleaseCommit` that may rewrite
+  *                             `releaseIOMonorepoVcsTagName` (or related tag settings) via
+  *                             session settings. The early `tag-preflight` step evaluates
+  *                             the tag name once before those phases run; flag a hook here
+  *                             to skip the early preflight and rely on the in-resolver
+  *                             check at `tag-releases` instead, avoiding spurious aborts
+  *                             on the stale pre-hook tag name. Defaults to `false` because
+  *                             most hooks do not touch tag settings, so the early preflight
+  *                             stays available and catches conflicts before any version
+  *                             write or release commit lands.
+  *
+  * @note Adding this field changes the synthetic `apply`/`unapply`/`copy`/constructor
+  *       signatures of the case class. See `ReleaseHookIO` for the same compatibility
+  *       note: source-level callers omitting the argument keep working, but pre-compiled
+  *       downstream plugins must be recompiled.
   */
 case class MonorepoGlobalHookIO(
     name: String,
     execute: MonorepoContext => IO[MonorepoContext],
-    validate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit
+    validate: MonorepoContext => IO[Unit] = (_ctx: MonorepoContext) => IO.unit,
+    mayChangeTagSettings: Boolean = false
 )
 
 object MonorepoGlobalHookIO {
@@ -148,15 +165,29 @@ object MonorepoGlobalHookIO {
   * Legacy `execute` hooks recover only the last returned context. Hooks that need recovery from
   * intermediate context checkpoints should use the tracked constructors in the companion object.
   *
-  * @param name     human-readable hook name, used in step names and log output
-  * @param execute  the main hook logic; receives the current context and project
-  * @param validate optional pre-flight validation; defaults to no-op
+  * @param name                 human-readable hook name, used in step names and log output
+  * @param execute              the main hook logic; receives the current context and project
+  * @param validate             optional pre-flight validation; defaults to no-op
+  * @param mayChangeTagSettings opt-in flag for hooks installed in `beforeReleaseVersionWrite` /
+  *                             `afterReleaseVersionWrite` / `beforeTag` that may rewrite
+  *                             `releaseIOMonorepoVcsTagName` (or related tag settings) via
+  *                             session settings. The early `tag-preflight` step evaluates
+  *                             the per-project tag name once before those phases run; flag
+  *                             a hook here to skip the early preflight and rely on the
+  *                             in-resolver check at `tag-releases` instead, avoiding
+  *                             spurious aborts on the stale pre-hook tag name. Defaults
+  *                             to `false`.
+  *
+  * @note Adding this field changes the synthetic `apply`/`unapply`/`copy`/constructor
+  *       signatures of the case class. See `ReleaseHookIO` for the compatibility note —
+  *       pre-compiled downstream plugins must be recompiled against this version.
   */
 case class MonorepoProjectHookIO(
     name: String,
     execute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
     validate: (MonorepoContext, ProjectReleaseInfo) => IO[Unit] =
-      (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit
+      (_ctx: MonorepoContext, _project: ProjectReleaseInfo) => IO.unit,
+    mayChangeTagSettings: Boolean = false
 )
 
 object MonorepoProjectHookIO {

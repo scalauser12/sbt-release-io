@@ -99,27 +99,30 @@ private[release] object CoreLifecycle {
         ctx.publishExecutedKeys.exists(_.contains(PublishSteps.publishGateKey(ctx)))
       )
 
-  /** Auto-disable `tag-preflight` when any hook phase between `inquireVersions` and
-    * `tag-release` is configured. Those hooks (`beforeReleaseVersionWrite`,
-    * `afterReleaseVersionWrite`, `beforeReleaseCommit`, `afterReleaseCommit`,
-    * `beforeTag`) can rewrite `releaseIOVcsTagName` via session settings after the
-    * preflight has already evaluated the default name. Running preflight on the
-    * pre-hook name produces false-positive aborts when the hook's intended tag is
-    * free but the default tag conflicts.
+  /** Auto-disable `tag-preflight` when any intervening hook between `inquireVersions` and
+    * `tag-release` opts in to `mayChangeTagSettings`. Those hooks
+    * (`beforeReleaseVersionWrite`, `afterReleaseVersionWrite`, `beforeReleaseCommit`,
+    * `afterReleaseCommit`, `beforeTag`) can rewrite `releaseIOVcsTagName` via session
+    * settings after the preflight has already evaluated the default name. Running
+    * preflight on the pre-hook name produces false-positive aborts when the hook's
+    * intended tag is free but the default tag conflicts.
     *
-    * Builds without intervening hooks (the dominant case) keep the early-abort
-    * preflight; builds with such hooks fall back to `tag-release`'s late conflict
-    * check. To re-enable preflight, move tag-name-affecting logic to
-    * `afterVersionResolution`, which runs before `tag-preflight`.
+    * Hooks default to `mayChangeTagSettings = false`, so unflagged hooks (the dominant
+    * case — logging, signing, changelog updates) keep the early-abort preflight active.
+    * Hook authors that actually rewrite tag settings opt in by constructing the hook
+    * with `.copy(mayChangeTagSettings = true)`, accepting the late conflict check at
+    * `tag-release` in exchange for the post-hook tag name being authoritative. To
+    * re-enable the early preflight without the opt-out, move tag-name-affecting logic
+    * to `afterVersionResolution`, which runs before `tag-preflight`.
     */
   private val tagPreflightEnabled: CoreHookConfiguration => Boolean =
     config =>
       config.enableTagging &&
-        config.beforeReleaseVersionWriteHooks.isEmpty &&
-        config.afterReleaseVersionWriteHooks.isEmpty &&
-        config.beforeReleaseCommitHooks.isEmpty &&
-        config.afterReleaseCommitHooks.isEmpty &&
-        config.beforeTagHooks.isEmpty
+        !config.beforeReleaseVersionWriteHooks.exists(_.mayChangeTagSettings) &&
+        !config.afterReleaseVersionWriteHooks.exists(_.mayChangeTagSettings) &&
+        !config.beforeReleaseCommitHooks.exists(_.mayChangeTagSettings) &&
+        !config.afterReleaseCommitHooks.exists(_.mayChangeTagSettings) &&
+        !config.beforeTagHooks.exists(_.mayChangeTagSettings)
 
   /** Narrow `before-push` execution to releases where the push decision is not
     * already a deterministic decline. Unlike `afterPushNarrow`, which observes

@@ -142,6 +142,9 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       compileLifecycle(fixture.state).map { steps =>
         val stepNames = steps.map(_.name)
 
+        // `tag-preflight` is present: the installed `beforeTag` hook does not opt
+        // in to `mayChangeTagSettings`, so the early preflight stays active.
+        // The opt-out path is exercised below in the `mayChangeTagSettings` tests.
         assertEquals(
           stepNames,
           Seq(
@@ -155,6 +158,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
             "before-version-resolution:before-version",
             "inquire-versions",
             "after-version-resolution:after-version",
+            "tag-preflight",
             "set-release-version",
             "commit-release-versions",
             "before-tag:before-tag",
@@ -168,6 +172,138 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         assert(!stepNames.exists(_.startsWith("after-publish:")))
       }
     }
+  }
+
+  test(
+    "compile - auto-disable tag-preflight when an intervening hook flags mayChangeTagSettings"
+  ) {
+    val projectPhases = Seq(
+      "beforeReleaseVersionWrite" -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksBeforeReleaseVersionWrite
+      ),
+      "afterReleaseVersionWrite"  -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksAfterReleaseVersionWrite
+      ),
+      "beforeTag"                 -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksBeforeTag
+      )
+    )
+    val globalPhases  = Seq(
+      "beforeReleaseCommit" -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksBeforeReleaseCommit
+      ),
+      "afterReleaseCommit"  -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksAfterReleaseCommit
+      )
+    )
+
+    val projectChecks = projectPhases.foldLeft(IO.unit) { case (acc, (label, key)) =>
+      acc *> {
+        val hookSetting = key(MonorepoReleasePlugin.autoImport) := Seq(
+          MonorepoProjectHookIO
+            .sideEffect(s"$label-hook")((_, _) => IO.unit)
+            .copy(mayChangeTagSettings = true)
+        )
+        hookFixtureResource(s"monorepo-tag-preflight-disabled-$label", Seq(hookSetting)).use {
+          fixture =>
+            compileLifecycle(fixture.state).map { steps =>
+              assert(
+                !steps.map(_.name).contains("tag-preflight"),
+                s"tag-preflight should be auto-disabled when a $label per-project hook " +
+                  s"with mayChangeTagSettings = true is configured, but found it in: " +
+                  steps.map(_.name).mkString(", ")
+              )
+            }
+        }
+      }
+    }
+
+    val globalChecks = globalPhases.foldLeft(IO.unit) { case (acc, (label, key)) =>
+      acc *> {
+        val hookSetting = key(MonorepoReleasePlugin.autoImport) := Seq(
+          MonorepoGlobalHookIO
+            .sideEffect(s"$label-hook")(_ => IO.unit)
+            .copy(mayChangeTagSettings = true)
+        )
+        hookFixtureResource(s"monorepo-tag-preflight-disabled-$label", Seq(hookSetting)).use {
+          fixture =>
+            compileLifecycle(fixture.state).map { steps =>
+              assert(
+                !steps.map(_.name).contains("tag-preflight"),
+                s"tag-preflight should be auto-disabled when a $label global hook " +
+                  s"with mayChangeTagSettings = true is configured, but found it in: " +
+                  steps.map(_.name).mkString(", ")
+              )
+            }
+        }
+      }
+    }
+
+    projectChecks *> globalChecks
+  }
+
+  test(
+    "compile - keep tag-preflight enabled when intervening hooks do not flag mayChangeTagSettings"
+  ) {
+    val projectPhases = Seq(
+      "beforeReleaseVersionWrite" -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksBeforeReleaseVersionWrite
+      ),
+      "afterReleaseVersionWrite"  -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksAfterReleaseVersionWrite
+      ),
+      "beforeTag"                 -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksBeforeTag
+      )
+    )
+    val globalPhases  = Seq(
+      "beforeReleaseCommit" -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksBeforeReleaseCommit
+      ),
+      "afterReleaseCommit"  -> ((s: MonorepoReleasePlugin.autoImport.type) =>
+        s.releaseIOMonorepoHooksAfterReleaseCommit
+      )
+    )
+
+    val projectChecks = projectPhases.foldLeft(IO.unit) { case (acc, (label, key)) =>
+      acc *> {
+        val hookSetting = key(MonorepoReleasePlugin.autoImport) := Seq(
+          MonorepoProjectHookIO.sideEffect(s"$label-hook")((_, _) => IO.unit)
+        )
+        hookFixtureResource(s"monorepo-tag-preflight-enabled-$label", Seq(hookSetting)).use {
+          fixture =>
+            compileLifecycle(fixture.state).map { steps =>
+              assert(
+                steps.map(_.name).contains("tag-preflight"),
+                s"tag-preflight should remain enabled when a $label per-project hook without " +
+                  s"mayChangeTagSettings is configured, but it was missing from: " +
+                  steps.map(_.name).mkString(", ")
+              )
+            }
+        }
+      }
+    }
+
+    val globalChecks = globalPhases.foldLeft(IO.unit) { case (acc, (label, key)) =>
+      acc *> {
+        val hookSetting = key(MonorepoReleasePlugin.autoImport) := Seq(
+          MonorepoGlobalHookIO.sideEffect(s"$label-hook")(_ => IO.unit)
+        )
+        hookFixtureResource(s"monorepo-tag-preflight-enabled-$label", Seq(hookSetting)).use {
+          fixture =>
+            compileLifecycle(fixture.state).map { steps =>
+              assert(
+                steps.map(_.name).contains("tag-preflight"),
+                s"tag-preflight should remain enabled when a $label global hook without " +
+                  s"mayChangeTagSettings is configured, but it was missing from: " +
+                  steps.map(_.name).mkString(", ")
+              )
+            }
+        }
+      }
+    }
+
+    projectChecks *> globalChecks
   }
 
   test("compile - skip publish hook validation and execution when publish is skipped at runtime") {

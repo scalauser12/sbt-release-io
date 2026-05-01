@@ -17,20 +17,24 @@ releaseIOPolicyEnablePush        := false
 // `release-0.1.0`. If `tag-preflight` ran here, it would evaluate the default
 // `v0.1.0` and abort because that tag already exists in the repo (set up by the
 // scripted test below) — even though `release-0.1.0` is free and the release
-// would have completed successfully. The lifecycle auto-disables `tag-preflight`
-// whenever any of `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
-// `beforeReleaseCommit`, `afterReleaseCommit`, or `beforeTag` hooks are
-// configured, so this release proceeds.
+// would have completed successfully. The hook opts in to `mayChangeTagSettings`,
+// which signals to the lifecycle that the post-hook tag name is authoritative;
+// the lifecycle then skips `tag-preflight` so this release proceeds. Without the
+// opt-in flag, hooks default to leaving the early preflight active so unrelated
+// hooks (logging, signing, changelog updates) don't push tag-conflict detection
+// past the release commit.
 releaseIOHooksBeforeTag := Seq(
-  ReleaseHookIO.transform("rewrite-tag-name") { ctx =>
-    _root_.cats.effect.IO.blocking {
-      val updatedState = ReleaseSessionOps.appendSessionSettings(
-        ctx.state,
-        Seq(releaseIOVcsTagName := "release-0.1.0")
-      )
-      ctx.withState(updatedState)
+  ReleaseHookIO
+    .transform("rewrite-tag-name") { ctx =>
+      _root_.cats.effect.IO.blocking {
+        val updatedState = ReleaseSessionOps.appendSessionSettings(
+          ctx.state,
+          Seq(releaseIOVcsTagName := "release-0.1.0")
+        )
+        ctx.withState(updatedState)
+      }
     }
-  }
+    .copy(mayChangeTagSettings = true)
 )
 
 val checkRewrittenTagPresent  = taskKey[Unit]("Assert the rewritten tag was created")
