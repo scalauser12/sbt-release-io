@@ -442,6 +442,44 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test("isIgnored - return true for a path matched by .gitignore") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-isignored-true").use { repo =>
+      IO.blocking {
+        sbt.IO.write(new File(repo, ".gitignore"), "version.sbt\n")
+        sbt.IO.write(new File(repo, "version.sbt"), "version := \"0.1.0\"\n")
+      } *> new Git(repo).isIgnored("version.sbt").map(assertEquals(_, true))
+    }
+  }
+
+  test("isIgnored - return false for a tracked path with no matching rule") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-isignored-false").use { repo =>
+      new Git(repo).isIgnored("file.txt").map(assertEquals(_, false))
+    }
+  }
+
+  test("isIgnored - return false for an untracked path with no matching rule") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-isignored-other").use { repo =>
+      IO.blocking(sbt.IO.write(new File(repo, "version.sbt"), "version := \"0.1.0\"\n")) *>
+        new Git(repo).isIgnored("version.sbt").map(assertEquals(_, false))
+    }
+  }
+
+  test("isIgnored - surface a fatal exit when invoked outside a repository") {
+    TestSupport.tempDirResource(s"$fixturePrefix-isignored-fatal").use { dir =>
+      new Git(dir).isIgnored("version.sbt").attempt.map {
+        case Left(err: IllegalStateException) =>
+          assert(err.getMessage.contains("git check-ignore"))
+          assert(err.getMessage.contains("exit code"))
+        case Left(other)                      =>
+          fail(
+            s"Expected IllegalStateException, got ${other.getClass.getName}: ${other.getMessage}"
+          )
+        case Right(value)                     =>
+          fail(s"Expected failure outside a repository, got value: $value")
+      }
+    }
+  }
+
   test("runCmd - destroy the spawned git process when the fiber is canceled") {
     assume(new File("/bin/sh").exists(), "requires /bin/sh")
 

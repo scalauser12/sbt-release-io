@@ -219,6 +219,28 @@ class Git(val baseDir: File) extends Vcs {
   def untrackedFiles: IO[Seq[String]] =
     runLines("ls-files", "--other", "--exclude-standard")("git ls-files --other")
 
+  override def isIgnored(path: String): IO[Boolean] =
+    GitProcessSupport
+      .runCommandResult(baseDir, Seq("check-ignore", "--quiet", "--", path))
+      .flatMap { result =>
+        // git check-ignore exit codes:
+        //   0   -> path matches a .gitignore (or equivalent) rule
+        //   1   -> path is not ignored
+        //   128 -> fatal (e.g. not in a repo); surface so callers don't silently
+        //          treat a misconfigured repo as "not ignored"
+        result.exitCode match {
+          case 0 => IO.pure(true)
+          case 1 => IO.pure(false)
+          case n =>
+            val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
+            IO.raiseError(
+              new IllegalStateException(
+                s"git check-ignore --quiet -- $path failed with exit code $n$stderrSuffix"
+              )
+            )
+        }
+      }
+
   def status: IO[String] =
     runLines("status", "--porcelain")("git status").map(_.mkString("\n"))
 

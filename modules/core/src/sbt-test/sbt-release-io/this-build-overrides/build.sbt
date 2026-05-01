@@ -10,6 +10,7 @@ ThisBuild / releaseIOPolicyEnablePush        := false
 ThisBuild / releaseIOBehaviorSkipPublish     := true
 ThisBuild / releaseIOVcsIgnoreUntrackedFiles := true
 ThisBuild / releaseIODefaultsPushAnswer      := Some(false)
+ThisBuild / releaseIOPublishChecks           := false
 
 lazy val root = (project in file("."))
   .aggregate(libA, libB)
@@ -57,4 +58,10 @@ checkBuildLevelDefaults := {
   assert(rootBehaviorSkip, "ThisBuild releaseIOBehaviorSkipPublish should reach root")
   assert(libBBehaviorSkip, "ThisBuild releaseIOBehaviorSkipPublish should reach libB")
 
+  val rootPublishChecks = (LocalProject("root") / releaseIOPublishChecks).value
+  val libAPublishChecks = (LocalProject("libA") / releaseIOPublishChecks).value
+  val libBPublishChecks = (LocalProject("libB") / releaseIOPublishChecks).value
+  assert(!rootPublishChecks, "ThisBuild releaseIOPublishChecks override should reach root")
+  assert(!libAPublishChecks, "ThisBuild releaseIOPublishChecks override should reach libA")
+  assert(!libBPublishChecks, "ThisBuild releaseIOPublishChecks override should reach libB")
 }

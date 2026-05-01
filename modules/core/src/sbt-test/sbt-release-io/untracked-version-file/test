@@ -1,0 +1,19 @@
+# Initialize a git repo with everything tracked EXCEPT version.sbt.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add build.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit (version.sbt deliberately untracked)"
+
+# Sanity: version.sbt is present on disk but untracked.
+$ exists version.sbt
+
+# Release should not silently no-op the version commit when the version file is untracked.
+> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+# After release, version.sbt must be tracked and the tag must contain the release version.
+> checkVersionFileTracked
+> checkVersionInTag
+
+# Final on-disk version is the next-version bump.
+$ exec grep -q "0.2.0-SNAPSHOT" version.sbt

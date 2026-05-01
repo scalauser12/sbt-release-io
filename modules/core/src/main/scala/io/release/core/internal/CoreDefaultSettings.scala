@@ -27,7 +27,8 @@ private[release] object CoreDefaultSettings {
   private lazy val behaviorDefaults: Seq[Setting[?]] = Seq(
     ThisBuild / releaseIOBehaviorCrossBuild  := false,
     ThisBuild / releaseIOBehaviorSkipPublish := false,
-    ThisBuild / releaseIOBehaviorInteractive := false
+    ThisBuild / releaseIOBehaviorInteractive := false,
+    ThisBuild / releaseIOPublishChecks       := true
   )
 
   private lazy val versioningAndRuntimeDefaults: Seq[Setting[?]] = Seq(
@@ -46,7 +47,6 @@ private[release] object CoreDefaultSettings {
     releaseIOVcsTagName              := s"v${releaseIORuntimeCurrentVersion.value}",
     releaseIOVcsTagComment           := s"Releasing ${releaseIORuntimeCurrentVersion.value}",
     releaseIOVcsReleaseCommitMessage := s"Setting release version to ${releaseIORuntimeCurrentVersion.value}",
-    releaseIOVcsNextCommitMessage    := s"Setting next version to ${releaseIORuntimeCurrentVersion.value}",
-    releaseIOPublishChecks           := true
+    releaseIOVcsNextCommitMessage    := s"Setting next version to ${releaseIORuntimeCurrentVersion.value}"
   )
 }

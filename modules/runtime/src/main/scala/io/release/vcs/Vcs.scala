@@ -90,6 +90,18 @@ trait Vcs {
   /** Files that are neither tracked nor ignored. */
   def untrackedFiles: IO[Seq[String]]
 
+  /** Returns `true` when `path` matches a `.gitignore` (or equivalent) rule.
+    *
+    * Used by version-commit preflight to distinguish a legitimately-untracked version file
+    * (which the release should commit) from a version file the user has actively excluded
+    * (which would silently no-op the commit because ignored files appear in neither
+    * [[modifiedFiles]], [[stagedFiles]], nor [[untrackedFiles]]).
+    *
+    * The default returns `false` so test stubs and non-strict adapters keep working;
+    * production adapters with an ignore mechanism (e.g. Git) override.
+    */
+  def isIgnored(path: String): IO[Boolean] = IO.pure(false)
+
   /** Porcelain status output. Raises on non-zero exit code. */
   def status: IO[String]
 

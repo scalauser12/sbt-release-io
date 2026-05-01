@@ -75,10 +75,14 @@ private[release] object ReleaseVersionWorkflow {
     IO.blocking(resolveVersionPlan(ctx).versionFile).flatMap { versionFile =>
       // Detect the VCS at validate time so a misconfigured `releaseIOVersioningFile`
       // pointing outside the repo fails `releaseIO check` before any execute-time
-      // mutation of an external file.
+      // mutation of an external file. The same probe also catches a gitignored
+      // version file at validate time, before `set-release-version` rewrites it
+      // on disk and leaves a corrupted (yet git-invisible) state behind.
       ensureVersionFileExists(versionFile) *>
         ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
-          VcsOps.relativizeToBase(vcs, versionFile).void
+          VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
+            assertVersionFileNotIgnored("inquire-versions", relativePath, vcs)
+          }
         }
     }
 
@@ -103,7 +107,7 @@ private[release] object ReleaseVersionWorkflow {
 
   def writeReleaseVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (releaseVersion, _) =>
-      writeVersion(ctx, releaseVersion)
+      writeVersion(ctx, "write-release-version", releaseVersion)
     }
 
   /** Run `body` against a transient sbt `State` that has a release version applied via
@@ -168,7 +172,7 @@ private[release] object ReleaseVersionWorkflow {
 
   def writeNextVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (_, nextVersion) =>
-      writeVersion(ctx, nextVersion)
+      writeVersion(ctx, "write-next-version", nextVersion)
     }
 
   def commitReleaseVersion(ctx: ReleaseContext): IO[ReleaseContext] =
@@ -298,31 +302,60 @@ private[release] object ReleaseVersionWorkflow {
       }.flatMap { case (sign, signOff) =>
         VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
           for {
-            _      <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
-            status <- VcsOps.trackedStatus(vcs)
-            result <- if (status.nonEmpty) {
-                        for {
-                          commitData        <- runTaskChecked(ctx.state, commitMessageKey, actionName)
-                          (commitState, msg) = commitData
-                          // Re-assert dirty status after the commit-message task runs: a
-                          // side-effecting task could have modified or staged unrelated files
-                          // between the initial pre-check and the staging window below.
-                          _                 <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
-                          result            <- IO.uncancelable { _ =>
-                                                 // Keep staging and commit atomic with respect to
-                                                 // cancellation so we do not leave staged-but-
-                                                 // uncommitted changes behind.
-                                                 for {
-                                                   _    <- vcs.add(relativePath)
-                                                   _    <- vcs.commit(msg, sign, signOff)
-                                                   hash <- vcs.currentHash
-                                                   _    <- assertCleanAfterCommit(actionName, vcs)
-                                                 } yield (ctx.withState(commitState), hash)
-                                               }
-                        } yield result
-                      } else {
-                        vcs.currentHash.map(hash => (ctx, hash))
-                      }
+            _               <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
+            trackedDirty    <- VcsOps.trackedStatus(vcs)
+            untracked       <- vcs.untrackedFiles
+            // The version file may be untracked when `releaseIOVcsIgnoreUntrackedFiles
+            // := true` lets the clean check pass with an untracked version file.
+            // After `writeVersion` it is still untracked, so `trackedDirty` is empty
+            // and the no-op branch would otherwise tag/push without ever committing
+            // the version bump.
+            versionUntracked = untracked.contains(relativePath)
+            shouldCommit     = trackedDirty.nonEmpty || versionUntracked
+            // Gitignored version files appear in neither `trackedDirty` nor
+            // `untracked` (`git ls-files --other --exclude-standard` filters out
+            // ignored). When we'd otherwise take the no-op branch, probe the
+            // ignore rules and fail loudly — silently tagging/pushing without
+            // committing the version bump is the worst outcome, and forcibly
+            // adding a file the user excluded would be surprising.
+            _               <- if (shouldCommit) IO.unit
+                               else assertVersionFileNotIgnored(actionName, relativePath, vcs)
+            result          <- if (shouldCommit) {
+                                 for {
+                                   commitData        <- runTaskChecked(
+                                                          ctx.state,
+                                                          commitMessageKey,
+                                                          actionName
+                                                        )
+                                   (commitState, msg) = commitData
+                                   // Re-assert dirty status after the commit-message task runs:
+                                   // a side-effecting task could have modified or staged
+                                   // unrelated files between the initial pre-check and the
+                                   // staging window below.
+                                   _                 <- assertOnlyVersionFileDirty(
+                                                          actionName,
+                                                          relativePath,
+                                                          vcs
+                                                        )
+                                   result            <- IO.uncancelable { _ =>
+                                                          // Keep staging and commit atomic with
+                                                          // respect to cancellation so we do not
+                                                          // leave staged-but-uncommitted
+                                                          // changes behind.
+                                                          for {
+                                                            _    <- vcs.add(relativePath)
+                                                            _    <- vcs.commit(msg, sign, signOff)
+                                                            hash <- vcs.currentHash
+                                                            _    <- assertCleanAfterCommit(
+                                                                      actionName,
+                                                                      vcs
+                                                                    )
+                                                          } yield (ctx.withState(commitState), hash)
+                                                        }
+                                 } yield result
+                               } else {
+                                 vcs.currentHash.map(hash => (ctx, hash))
+                               }
           } yield result
         }
       }
@@ -351,6 +384,38 @@ private[release] object ReleaseVersionWorkflow {
         )
     }
 
+  /** Reject the release when the version file is matched by a `.gitignore` rule.
+    *
+    * Called at three points to fail as early as possible:
+    *   - [[validateInquireVersions]] so `releaseIO check` reports the problem before any
+    *     execute-time mutation.
+    *   - [[writeVersion]] just before the on-disk write, to catch a hook-installed
+    *     late-bound version file the validate-time check could not see.
+    *   - [[commitVersionNative]] on the no-op path, as a defensive last line before
+    *     tag/push runs against a commit that has no version bump.
+    *
+    * Failing earlier matters because an ignored file does not show up in `git status`,
+    * so a write that goes through with no commit leaves a silently corrupted on-disk
+    * state that can poison later releases.
+    */
+  private def assertVersionFileNotIgnored(
+      actionName: String,
+      versionPath: String,
+      vcs: Vcs
+  ): IO[Unit] =
+    vcs.isIgnored(versionPath).flatMap {
+      case false => IO.unit
+      case true  =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"$actionName: version file `$versionPath` is matched by a .gitignore rule, " +
+              "so the release cannot commit a version bump for it. Remove the matching " +
+              "pattern from `.gitignore` (or `.git/info/exclude`) before re-running the " +
+              "release."
+          )
+        )
+    }
+
   /** Verify the working tree is clean after the version commit so that tagging and pushing run
     * against a known state. Anything left dirty here would silently ride along on the tag.
     */
@@ -368,16 +433,23 @@ private[release] object ReleaseVersionWorkflow {
         )
     }
 
-  private def writeVersion(ctx: ReleaseContext, versionValue: String): IO[ReleaseContext] =
+  private def writeVersion(
+      ctx: ReleaseContext,
+      actionName: String,
+      versionValue: String
+  ): IO[ReleaseContext] =
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx))
-      // Re-validate path-within-VCS-root against the freshly resolved plan: a
-      // before-version-resolution hook can install a late-bound `releaseIOVersioningFile`
-      // via session settings after `inquireVersions.validate` ran, so the validate-time
-      // check at [[validateInquireVersions]] cannot see the final value. Running the check
-      // here means an external file is rejected before any mutation rather than after.
+      // Re-validate path-within-VCS-root and gitignore status against the freshly
+      // resolved plan: a before-version-resolution hook can install a late-bound
+      // `releaseIOVersioningFile` via session settings after `inquireVersions.validate`
+      // ran, so the validate-time checks at [[validateInquireVersions]] cannot see the
+      // final value. Running the checks here means a misconfigured or gitignored file
+      // is rejected before the on-disk write rather than after.
       _           <- ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
-                       VcsOps.relativizeToBase(vcs, versionPlan.versionFile).void
+                       VcsOps.relativizeToBase(vcs, versionPlan.versionFile).flatMap { rel =>
+                         assertVersionFileNotIgnored(actionName, rel, vcs)
+                       }
                      }
       _           <- VersionWorkflowSupport.writeVersionFile(
                        versionPlan.versionFile,
