@@ -54,7 +54,22 @@ private[monorepo] object MonorepoVersionWorkflow {
           versionInputs.versionFile,
           includeConfigurationGuidance = true
         )
-      )
+      ) *>
+        // Probe for a gitignored version file at validate time so `releaseIOMonorepo check`
+        // reports the problem before any execute-time mutation. Mirrors the core guard at
+        // [[ReleaseVersionWorkflow.validateInquireVersions]]: with
+        // `releaseIOVcsIgnoreUntrackedFiles := true` an ignored per-project version file
+        // slips past the initial clean check, then `set-release-version` rewrites it and
+        // the later `git add` declines, leaving a mutated, git-invisible file behind.
+        resolveCurrentVcs(ctx).flatMap { vcs =>
+          VcsOps.relativizeToBase(vcs, versionInputs.versionFile).flatMap { relativePath =>
+            assertVersionFileNotIgnored(
+              s"inquire-versions (${project.name})",
+              relativePath,
+              vcs
+            )
+          }
+        }
     }
 
   def inquireVersions(
@@ -107,6 +122,7 @@ private[monorepo] object MonorepoVersionWorkflow {
     writeVersionFromPair(
       ctx,
       project,
+      "set-release-version",
       _._1
     )
 
@@ -187,6 +203,7 @@ private[monorepo] object MonorepoVersionWorkflow {
     writeVersionFromPair(
       ctx,
       project,
+      "set-next-version",
       _._2
     )
 
@@ -204,6 +221,7 @@ private[monorepo] object MonorepoVersionWorkflow {
   private def writeVersionFromPair(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
+      actionName: String,
       selectVersion: ((String, String)) => String
   ): IO[MonorepoContext] =
     versionsPairOrFail(project).flatMap { versions =>
@@ -218,6 +236,15 @@ private[monorepo] object MonorepoVersionWorkflow {
                           versionInputs.versionFile,
                           includeSelectedMarker = false
                         )
+        // Re-check the gitignore status against the freshly resolved per-project version
+        // file. A before-version-resolution hook can install a late-bound
+        // `releaseIOMonorepoVersioningFile` via session settings after
+        // `inquireVersions.validate` ran, so the validate-time probe in
+        // [[validateInquireVersions]] cannot see the final value. Running the check here
+        // means a misconfigured or gitignored file is rejected before the on-disk write.
+        relativePath <- VcsOps.relativizeToBase(vcs, versionInputs.versionFile)
+        scopedAction  = s"$actionName (${project.name})"
+        _            <- assertVersionFileNotIgnored(scopedAction, relativePath, vcs)
         updatedCtx   <- writeProjectVersion(ctx, project, selectVersion(versions), versionInputs)
       } yield updatedCtx
     }
@@ -428,6 +455,32 @@ private[monorepo] object MonorepoVersionWorkflow {
           project,
           MonorepoVersionFiles.resolve(runtime, project.ref),
           highlightedProjectRef.contains(project.ref)
+        )
+    }
+
+  /** Reject the release when a per-project version file is matched by a `.gitignore` rule.
+    *
+    * Mirrors [[io.release.core.internal.steps.ReleaseVersionWorkflow.assertVersionFileNotIgnored]]:
+    * a gitignored version file is invisible to `git status` and therefore would survive the
+    * untracked-files clean check (especially with `releaseIOVcsIgnoreUntrackedFiles := true`).
+    * Without the probe, `set-release-version` rewrites the file, the subsequent `git add`
+    * declines, and the abort leaves the file mutated on disk.
+    */
+  private def assertVersionFileNotIgnored(
+      actionName: String,
+      versionPath: String,
+      vcs: Vcs
+  ): IO[Unit] =
+    vcs.isIgnored(versionPath).flatMap {
+      case false => IO.unit
+      case true  =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"$actionName: version file `$versionPath` is matched by a .gitignore rule, " +
+              "so the release cannot commit a version bump for it. Remove the matching " +
+              "pattern from `.gitignore` (or `.git/info/exclude`) before re-running the " +
+              "release."
+          )
         )
     }
 

@@ -1,0 +1,37 @@
+# Initialize a git repo where core/version.sbt is matched by .gitignore.
+# `untrackedFiles` (`git ls-files --other --exclude-standard`) does NOT report
+# ignored files, so without the explicit isIgnored probe the release would
+# silently rewrite the version file and only fail later at `git add`, leaving
+# the file mutated on disk.
+# core/version.sbt is generated at test time rather than shipped in the fixture
+# because the .gitignore below also applies to the outer sbt-release-io repo;
+# committing the file would require `git add -f`, and a fresh clone would
+# otherwise leave it absent. Generating it here keeps the fixture self-contained.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec sh -c 'mkdir -p core && printf "version := \"0.1.0-SNAPSHOT\"\n" > core/version.sbt'
+$ exec git add .gitignore build.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit (core/version.sbt deliberately gitignored)"
+
+# Sanity: core/version.sbt is on disk but matched by .gitignore.
+$ exists core/version.sbt
+
+# `releaseIOMonorepo check` must fail at validate time — before any disk mutation.
+-> releaseIOMonorepo check core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Even after a failed validate, core/version.sbt must be untouched.
+> checkVersionFileUnchanged
+
+# A full release must also abort, and (critically) abort BEFORE
+# set-release-version rewrites the file. Otherwise a retry would compute
+# next-version from the corrupted "release version" still sitting on disk.
+-> releaseIOMonorepo core with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
+
+# Post-abort invariants:
+# 1. core/version.sbt content is unchanged (no mid-flight rewrite leaked through).
+> checkVersionFileUnchanged
+# 2. core/version.sbt remains untracked (no surprise force-add behind user's back).
+> checkVersionFileStillIgnored
+# 3. No release tag was created.
+> checkNoReleaseTag
