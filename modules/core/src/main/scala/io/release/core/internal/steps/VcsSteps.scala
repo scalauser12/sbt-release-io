@@ -219,25 +219,30 @@ private[release] object VcsSteps {
   private def tagPreflightTarget(
       ctx: ReleaseContext
   ): IO[TagConflictResolver.PreflightCommitTarget] =
+    futureReleaseCommitNeeded(ctx).flatMap {
+      case true  => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
+      case false => currentHashTarget(ctx)
+    }
+
+  /** Returns `true` when the release will create a new commit before tagging
+    * (the version file would be written and committed), so the preflight must
+    * use [[TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit]].
+    * Returns `false` when no release version is set (preflight runs against
+    * current state) or the version plan cannot be resolved (minimal/custom
+    * test states without `releaseIOVersioningFile`).
+    */
+  private def futureReleaseCommitNeeded(ctx: ReleaseContext): IO[Boolean] =
     ctx.releaseVersion match {
-      case None                 =>
-        currentHashTarget(ctx)
+      case None                 => IO.pure(false)
       case Some(releaseVersion) =>
         resolveVersionPlanOpt(ctx).flatMap {
-          case None              => currentHashTarget(ctx)
+          case None              => IO.pure(false)
           case Some(versionPlan) =>
-            VersionWorkflowSupport
-              .wouldChangeVersionFile(
-                versionPlan.versionFile,
-                releaseVersion,
-                versionPlan.versionFileContents
-              )
-              .flatMap { wouldChange =>
-                if (wouldChange)
-                  IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
-                else
-                  currentHashTarget(ctx)
-              }
+            VersionWorkflowSupport.wouldChangeVersionFile(
+              versionPlan.versionFile,
+              releaseVersion,
+              versionPlan.versionFileContents
+            )
         }
     }
 

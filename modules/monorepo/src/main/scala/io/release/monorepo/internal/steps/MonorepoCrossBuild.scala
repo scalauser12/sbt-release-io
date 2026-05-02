@@ -119,8 +119,8 @@ private[monorepo] object MonorepoCrossBuild {
       )
 
   /** Cross-build a single project across its `crossScalaVersions`.
-    * Reads cross-build settings, validates non-empty, then delegates to
-    * [[CrossBuildExecution]] for the actual version-switching loop.
+    * Reads cross-build settings, validates non-empty, then runs the
+    * version-switching loop inline.
     */
   private def runCrossBuildForProject(
       ctx: MonorepoContext,

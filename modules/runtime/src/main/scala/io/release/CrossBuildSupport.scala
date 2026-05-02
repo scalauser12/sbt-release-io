@@ -91,7 +91,7 @@ private[release] object CrossBuildSupport {
     * X` after, rather than silently snapping back to the build's loaded version.
     *
     * Settings applied via `Extracted.appendWithSession` (which never persist into the
-    * session) are intentionally NOT preserved by any [[reapplyScalaSlice]] call,
+    * session) are intentionally NOT preserved by any [[rebuildWithScalaSlice]] call,
     * including the switch itself — the rebuild reads the Scala slice from
     * `session.mergeSettings`, which doesn't see appendWithSession's structure-only
     * additions. Replaying them would inject duplicates into `rawAppend` that survive a
