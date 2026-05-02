@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
 
 /** Raised when a candidate tag name fails the VCS's syntactic ref-naming rules
   * before any tag-creating action is attempted. Distinct from generic VCS
-  * failures so [[io.release.vcs.TagConflictResolver]] can re-prompt for an
+  * failures so `TagConflictResolver` can re-prompt for an
   * interactive retry input without aborting an in-progress release.
   */
 final class InvalidTagNameException(message: String) extends IllegalStateException(message)
@@ -62,7 +62,7 @@ trait Vcs {
     * is empty, contains characters the backend forbids, or otherwise cannot be used as
     * a tag.
     *
-    * Used by [[io.release.vcs.TagConflictResolver]] at the entry of preflight and
+    * Used by `TagConflictResolver` at the entry of preflight and
     * resolve loops so that the release aborts before [[Vcs.tag]] can fail mid-flight,
     * after `set-release-version` and `commit-release-version` have already mutated
     * the repository.
@@ -77,7 +77,7 @@ trait Vcs {
     *
     * @note The default `IO.pure(None)` exists for binary compatibility. Adapters whose
     *       backend can track annotated tags should override this method — otherwise
-    *       [[io.release.vcs.TagConflictResolver]] cannot detect commit-mismatch conflicts.
+    *       `TagConflictResolver` cannot detect commit-mismatch conflicts.
     */
   def tagCommitHash(name: String): IO[Option[String]] = IO.pure(None)
 

@@ -26,7 +26,7 @@ import io.release.runtime.TrackedContextHandle
   *                             `beforeReleaseCommit` / `afterReleaseCommit` / `beforeTag` that
   *                             rewrite `releaseIOVcsTagName` (or related tag settings) via
   *                             session settings. The flag is forwarded by
-  *                             [[ReleaseResourceHooks.materialize]] onto the underlying plain
+  *                             `ReleaseResourceHooks.materialize` onto the underlying plain
   *                             hook so the lifecycle's `tagPreflightEnabled` gate can observe
   *                             it. Defaults to `false`.
   */
