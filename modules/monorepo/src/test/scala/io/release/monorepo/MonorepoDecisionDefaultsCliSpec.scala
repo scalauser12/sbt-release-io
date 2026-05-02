@@ -38,8 +38,8 @@ class MonorepoDecisionDefaultsCliSpec
     }
   }
 
-  test("resolve suppresses duplicate push warnings in check mode") {
-    stateResource("monorepo-command-defaults-check", MonorepoReleasePlugin).use { loaded =>
+  test("resolve suppresses duplicate push warnings when warnOnDuplicates is false") {
+    stateResource("monorepo-command-defaults-suppressed", MonorepoReleasePlugin).use { loaded =>
       IO {
         val defaults = MonorepoDecisionDefaultsCli.resolve(
           loaded.state,

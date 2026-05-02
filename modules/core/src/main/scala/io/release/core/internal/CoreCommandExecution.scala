@@ -84,7 +84,7 @@ private[release] object CoreCommandExecution {
       state,
       args,
       runtime,
-      warnOnDuplicates = false,
+      warnOnDuplicates = true,
       resolveInteractive = _ => false,
       run = runPlannedCheck(_, runtime)
     )

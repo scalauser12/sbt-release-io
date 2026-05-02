@@ -174,6 +174,24 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
     }
   }
 
+  test("doCheck preserves duplicate default warnings through command preparation") {
+    import MonorepoCli.Arg.*
+
+    stateResource("monorepo-command-check-duplicate-defaults", MonorepoReleasePlugin).use {
+      loaded =>
+        IO {
+          val _   = MonorepoCommandExecution.doCheck(
+            loaded.state,
+            Seq(PushDefault(true), PushDefault(false)),
+            runtime()
+          )
+          val log = loaded.consoleBuffer.toString("UTF-8")
+
+          assert(log.contains("Multiple default-push-answer args provided; using 'n'"))
+        }
+    }
+  }
+
   test("releaseStartLines include cross-build and skip messages when enabled") {
     val lines = MonorepoCommandExecution.releaseStartLines(
       stepCount = 12,

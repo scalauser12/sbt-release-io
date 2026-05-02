@@ -90,7 +90,7 @@ private[monorepo] object MonorepoCommandExecution {
       args,
       runtime,
       interactiveEnabled = false,
-      warnOnDuplicates = false
+      warnOnDuplicates = true
     ) { (command, session) =>
       runPlannedCheck(command, session, runtime)
     }

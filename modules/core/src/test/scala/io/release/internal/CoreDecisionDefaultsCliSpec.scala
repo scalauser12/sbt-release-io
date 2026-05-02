@@ -33,8 +33,8 @@ class CoreDecisionDefaultsCliSpec extends CatsEffectSuite with ReleasePluginIOSp
     }
   }
 
-  test("resolve suppresses duplicate push warnings in check mode") {
-    stateResource("core-command-defaults-check", HookFriendlyPlugin).use { loaded =>
+  test("resolve suppresses duplicate push warnings when warnOnDuplicates is false") {
+    stateResource("core-command-defaults-suppressed", HookFriendlyPlugin).use { loaded =>
       IO {
         val defaults = CoreDecisionDefaultsCli.resolve(
           loaded.state,

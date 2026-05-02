@@ -108,6 +108,30 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
     )
   }
 
+  Seq(
+    "release-version",
+    "next-version",
+    "default-tag-exists-answer",
+    "default-snapshot-dependencies-answer",
+    "default-remote-check-failure-answer",
+    "default-upstream-behind-answer",
+    "default-push-answer",
+    "project",
+    "skip-tests",
+    "all-changed"
+  ).foreach { reserved =>
+    test(
+      s"build - parse explicit project selector when project id collides with '$reserved'"
+    ) {
+      val parser = MonorepoCommandParsers.build(Seq("core", reserved))
+
+      assertEquals(
+        ParserImpl.parse(s" project $reserved with-defaults", parser),
+        Right(Seq("project", reserved, "with-defaults"))
+      )
+    }
+  }
+
   test("build - keep later help and check tokens as project names when they are real ids") {
     val parser = MonorepoCommandParsers.build(Seq("core", "help", "check"))
     val result = ParserImpl.parse(" core help check", parser)
@@ -238,6 +262,58 @@ class MonorepoCommandParsersSpec extends CatsEffectSuite {
         }
       }
     }
+  }
+
+  test(
+    "build + MonorepoCli.parse - admission and decoder agree on every reserved keyword class"
+  ) {
+    val parser = MonorepoCommandParsers.build(Seq("core", "api"))
+
+    val input =
+      " core" +
+        " project api" +
+        " with-defaults" +
+        " skip-tests" +
+        " cross" +
+        " all-changed" +
+        " release-version core=1.0.0" +
+        " next-version core=1.1.0-SNAPSHOT" +
+        " default-tag-exists-answer k" +
+        " default-snapshot-dependencies-answer y" +
+        " default-remote-check-failure-answer n" +
+        " default-upstream-behind-answer y" +
+        " default-push-answer n"
+
+    val tokens = ParserImpl.parse(input, parser) match {
+      case Right(tokens) => tokens
+      case Left(err)     => fail(s"Parser rejected admission-test input: $err")
+    }
+
+    val parsed = MonorepoCli.parse(tokens, "releaseIOMonorepo") match {
+      case Right(parsed) => parsed
+      case Left(err)     => fail(s"Decoder rejected parser-admitted tokens: $err")
+    }
+
+    import MonorepoCli.Arg.*
+    assertEquals(parsed.mode, MonorepoCli.CommandMode.Run)
+    assertEquals(
+      parsed.args,
+      Seq(
+        SelectProject("core"),
+        SelectProject("api"),
+        WithDefaults,
+        SkipTests,
+        CrossBuild,
+        AllChanged,
+        ReleaseVersion("core", "1.0.0"),
+        NextVersion("core", "1.1.0-SNAPSHOT"),
+        TagDefault("k"),
+        SnapshotDependenciesDefault(true),
+        RemoteCheckFailureDefault(false),
+        UpstreamBehindDefault(true),
+        PushDefault(false)
+      )
+    )
   }
 
   test("buildFromState - reject non-help input when project ids cannot be resolved") {

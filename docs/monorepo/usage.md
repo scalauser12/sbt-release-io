@@ -25,7 +25,12 @@ Use selectors to choose projects:
 project <project>
 ```
 
-Bare project ids work for ordinary names. Use `project <id>` to force project selection when an id collides with a CLI keyword or subcommand such as `help`, `check`, `cross`, `with-defaults`, `skip-tests`, `all-changed`, `release-version`, or `next-version`.
+Bare project ids work for ordinary names. Use `project <id>` to force project selection
+when an id collides with a CLI keyword or subcommand. The reserved tokens are
+`help`, `check`, `project`, `cross`, `with-defaults`, `skip-tests`, `all-changed`,
+`release-version`, `next-version`, `default-tag-exists-answer`,
+`default-snapshot-dependencies-answer`, `default-remote-check-failure-answer`,
+`default-upstream-behind-answer`, and `default-push-answer`.
 
 ## Flags
 
