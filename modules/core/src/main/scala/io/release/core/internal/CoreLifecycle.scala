@@ -16,17 +16,6 @@ import sbt.*
 /** Canonical core lifecycle order and hook compilation. */
 private[release] object CoreLifecycle {
 
-  private case class HookPhaseConfig(
-      phase: String,
-      resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],
-      gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
-      crossBuild: Boolean = false,
-      freezeGate: Boolean = false,
-      gateKey: Option[ReleaseContext => String] = None,
-      enabled: CoreHookConfiguration => Boolean = _ => true,
-      narrowExecute: Option[ReleaseContext => IO[Boolean]] = None
-  )
-
   private type Phase =
     LifecycleCompiler.Phase[
       CoreHookConfiguration,
@@ -40,20 +29,29 @@ private[release] object CoreLifecycle {
   ): Phase =
     LifecycleCompiler.singleBuiltIn(step = step, enabled = enabled)
 
-  private def hookPhase(config: HookPhaseConfig): Phase =
+  private def hookPhase(
+      phase: String,
+      resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],
+      gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
+      crossBuild: Boolean = false,
+      freezeGate: Boolean = false,
+      gateKey: Option[ReleaseContext => String] = None,
+      enabled: CoreHookConfiguration => Boolean = _ => true,
+      narrowExecute: Option[ReleaseContext => IO[Boolean]] = None
+  ): Phase =
     LifecycleCompiler.singleHookPhase(
-      phase = config.phase,
-      resolveHooks = config.resolveHooks,
-      gate = config.gate,
+      phase = phase,
+      resolveHooks = resolveHooks,
+      gate = gate,
       nameOf = (hook: ReleaseHookIO) => hook.name,
       executeOf = (hook: ReleaseHookIO) => hook.execute,
       executeTrackedOf = Some((hook: ReleaseHookIO) => ReleaseHookIO.trackedExecute(hook)),
       validateOf = (hook: ReleaseHookIO) => hook.validate,
-      crossBuild = config.crossBuild,
-      freezeGate = config.freezeGate,
-      gateKey = config.gateKey,
-      enabled = config.enabled,
-      narrowExecute = config.narrowExecute
+      crossBuild = crossBuild,
+      freezeGate = freezeGate,
+      gateKey = gateKey,
+      enabled = enabled,
+      narrowExecute = narrowExecute
     )
 
   private val publishGate: ReleaseContext => IO[Boolean] =
@@ -151,141 +149,66 @@ private[release] object CoreLifecycle {
   private val afterPushNarrow: ReleaseContext => IO[Boolean] =
     ctx => IO.pure(ctx.pushExecuted)
 
-  // @formatter:off
-  private val afterCleanCheck = HookPhaseConfig(
-    phase = HookPhases.AfterCleanCheck,
-    resolveHooks = _.afterCleanCheckHooks
-  )
-  private val beforeVersionResolution = HookPhaseConfig(
-    phase = HookPhases.BeforeVersionResolution,
-    resolveHooks = _.beforeVersionResolutionHooks
-  )
-  private val afterVersionResolution = HookPhaseConfig(
-    phase = HookPhases.AfterVersionResolution,
-    resolveHooks = _.afterVersionResolutionHooks
-  )
-  private val beforeReleaseVersionWrite = HookPhaseConfig(
-    phase = HookPhases.BeforeReleaseVersionWrite,
-    resolveHooks = _.beforeReleaseVersionWriteHooks
-  )
-  private val afterReleaseVersionWrite = HookPhaseConfig(
-    phase = HookPhases.AfterReleaseVersionWrite,
-    resolveHooks = _.afterReleaseVersionWriteHooks
-  )
-  private val beforeReleaseCommit = HookPhaseConfig(
-    phase = HookPhases.BeforeReleaseCommit,
-    resolveHooks = _.beforeReleaseCommitHooks
-  )
-  private val afterReleaseCommit = HookPhaseConfig(
-    phase = HookPhases.AfterReleaseCommit,
-    resolveHooks = _.afterReleaseCommitHooks
-  )
-  private val beforeTag = HookPhaseConfig(
-    phase = HookPhases.BeforeTag,
-    resolveHooks = _.beforeTagHooks,
-    enabled = _.enableTagging
-  )
-  private val afterTag = HookPhaseConfig(
-    phase = HookPhases.AfterTag,
-    resolveHooks = _.afterTagHooks,
-    enabled = _.enableTagging
-  )
-  private val beforePublish = HookPhaseConfig(
-    phase = HookPhases.BeforePublish,
-    resolveHooks = _.beforePublishHooks,
-    gate = publishGate,
-    crossBuild =
-      ReleaseSteps.publishArtifacts.enableCrossBuild,
-    freezeGate = true,
-    gateKey = Some(scalaVersionKey),
-    enabled = _.enablePublish,
-    narrowExecute = Some(beforePublishNarrow)
-  )
-  private val afterPublish = HookPhaseConfig(
-    phase = HookPhases.AfterPublish,
-    resolveHooks = _.afterPublishHooks,
-    gate = publishGate,
-    crossBuild =
-      ReleaseSteps.publishArtifacts.enableCrossBuild,
-    freezeGate = true,
-    gateKey = Some(scalaVersionKey),
-    enabled = _.enablePublish,
-    narrowExecute = Some(afterPublishNarrow)
-  )
-  private val beforeNextVersionWrite = HookPhaseConfig(
-    phase = HookPhases.BeforeNextVersionWrite,
-    resolveHooks = _.beforeNextVersionWriteHooks
-  )
-  private val afterNextVersionWrite = HookPhaseConfig(
-    phase = HookPhases.AfterNextVersionWrite,
-    resolveHooks = _.afterNextVersionWriteHooks
-  )
-  private val beforeNextCommit = HookPhaseConfig(
-    phase = HookPhases.BeforeNextCommit,
-    resolveHooks = _.beforeNextCommitHooks
-  )
-  private val afterNextCommit = HookPhaseConfig(
-    phase = HookPhases.AfterNextCommit,
-    resolveHooks = _.afterNextCommitHooks
-  )
-  private val beforePush = HookPhaseConfig(
-    phase = HookPhases.BeforePush,
-    resolveHooks = _.beforePushHooks,
-    enabled = _.enablePush,
-    narrowExecute = Some(beforePushNarrow)
-  )
-  private val afterPush = HookPhaseConfig(
-    phase = HookPhases.AfterPush,
-    resolveHooks = _.afterPushHooks,
-    enabled = _.enablePush,
-    narrowExecute = Some(afterPushNarrow)
-  )
-  // @formatter:on
-
   private[release] lazy val phases: Seq[Phase] = Seq(
     builtIn(ReleaseSteps.initializeVcs),
     builtIn(ReleaseSteps.checkCleanWorkingDir),
-    hookPhase(afterCleanCheck),
-    builtIn(
-      ReleaseSteps.checkSnapshotDependencies,
-      _.enableSnapshotDependenciesCheck
-    ),
-    hookPhase(beforeVersionResolution),
+    hookPhase(HookPhases.AfterCleanCheck, _.afterCleanCheckHooks),
+    builtIn(ReleaseSteps.checkSnapshotDependencies, _.enableSnapshotDependenciesCheck),
+    hookPhase(HookPhases.BeforeVersionResolution, _.beforeVersionResolutionHooks),
     builtIn(ReleaseSteps.inquireVersions),
-    hookPhase(afterVersionResolution),
+    hookPhase(HookPhases.AfterVersionResolution, _.afterVersionResolutionHooks),
     builtIn(ReleaseSteps.tagPreflight, tagPreflightEnabled),
     builtIn(ReleaseSteps.runClean, _.enableRunClean),
     builtIn(ReleaseSteps.runTests, _.enableRunTests),
-    hookPhase(beforeReleaseVersionWrite),
+    hookPhase(HookPhases.BeforeReleaseVersionWrite, _.beforeReleaseVersionWriteHooks),
     builtIn(ReleaseSteps.setReleaseVersion),
-    hookPhase(afterReleaseVersionWrite),
-    hookPhase(beforeReleaseCommit),
+    hookPhase(HookPhases.AfterReleaseVersionWrite, _.afterReleaseVersionWriteHooks),
+    hookPhase(HookPhases.BeforeReleaseCommit, _.beforeReleaseCommitHooks),
     builtIn(ReleaseSteps.commitReleaseVersion),
-    hookPhase(afterReleaseCommit),
-    hookPhase(beforeTag),
-    builtIn(
-      ReleaseSteps.tagRelease,
-      _.enableTagging
+    hookPhase(HookPhases.AfterReleaseCommit, _.afterReleaseCommitHooks),
+    hookPhase(HookPhases.BeforeTag, _.beforeTagHooks, enabled = _.enableTagging),
+    builtIn(ReleaseSteps.tagRelease, _.enableTagging),
+    hookPhase(HookPhases.AfterTag, _.afterTagHooks, enabled = _.enableTagging),
+    hookPhase(
+      HookPhases.BeforePublish,
+      _.beforePublishHooks,
+      gate = publishGate,
+      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      freezeGate = true,
+      gateKey = Some(scalaVersionKey),
+      enabled = _.enablePublish,
+      narrowExecute = Some(beforePublishNarrow)
     ),
-    hookPhase(afterTag),
-    hookPhase(beforePublish),
-    builtIn(
-      ReleaseSteps.publishArtifacts,
-      _.enablePublish
+    builtIn(ReleaseSteps.publishArtifacts, _.enablePublish),
+    hookPhase(
+      HookPhases.AfterPublish,
+      _.afterPublishHooks,
+      gate = publishGate,
+      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      freezeGate = true,
+      gateKey = Some(scalaVersionKey),
+      enabled = _.enablePublish,
+      narrowExecute = Some(afterPublishNarrow)
     ),
-    hookPhase(afterPublish),
-    hookPhase(beforeNextVersionWrite),
+    hookPhase(HookPhases.BeforeNextVersionWrite, _.beforeNextVersionWriteHooks),
     builtIn(ReleaseSteps.setNextVersion),
-    hookPhase(afterNextVersionWrite),
-    hookPhase(beforeNextCommit),
+    hookPhase(HookPhases.AfterNextVersionWrite, _.afterNextVersionWriteHooks),
+    hookPhase(HookPhases.BeforeNextCommit, _.beforeNextCommitHooks),
     builtIn(ReleaseSteps.commitNextVersion),
-    hookPhase(afterNextCommit),
-    hookPhase(beforePush),
-    builtIn(
-      ReleaseSteps.pushChanges,
-      _.enablePush
+    hookPhase(HookPhases.AfterNextCommit, _.afterNextCommitHooks),
+    hookPhase(
+      HookPhases.BeforePush,
+      _.beforePushHooks,
+      enabled = _.enablePush,
+      narrowExecute = Some(beforePushNarrow)
     ),
-    hookPhase(afterPush)
+    builtIn(ReleaseSteps.pushChanges, _.enablePush),
+    hookPhase(
+      HookPhases.AfterPush,
+      _.afterPushHooks,
+      enabled = _.enablePush,
+      narrowExecute = Some(afterPushNarrow)
+    )
   )
 
   private[release] lazy val configDefaultSettings: Seq[Setting[?]] =

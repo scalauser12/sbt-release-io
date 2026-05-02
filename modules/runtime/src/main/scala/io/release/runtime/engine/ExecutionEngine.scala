@@ -156,40 +156,31 @@ private[release] object ExecutionEngine {
       )
     else IO.pure(ctx)
 
+  private def logAndFailContext[C <: ReleaseCtx { type Self = C }](
+      logPrefix: String,
+      ctx: C,
+      err: Throwable
+  ): IO[C] =
+    IO.blocking(
+      ctx.state.log.error(s"$logPrefix Error: ${StepHelpers.errorMessage(err)}")
+    ).as(ctx.failWith(err))
+
   def recoverWithContext[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,
       ctx: C
   )(program: IO[C]): IO[C] =
-    program.handleErrorWith { err =>
-      err match {
-        case NonFatal(nonFatalErr) =>
-          IO.blocking(
-            ctx.state.log.error(
-              s"$logPrefix Error: ${StepHelpers.errorMessage(nonFatalErr)}"
-            )
-          ).as(ctx.failWith(nonFatalErr))
-        case fatal                 =>
-          IO.raiseError(fatal)
-      }
+    program.handleErrorWith {
+      case NonFatal(e) => logAndFailContext(logPrefix, ctx, e)
+      case fatal       => IO.raiseError(fatal)
     }
 
   def recoverWithContext[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,
       handle: TrackedContextHandle[C]
   )(program: IO[Unit]): IO[Unit] =
-    program.handleErrorWith { err =>
-      err match {
-        case NonFatal(nonFatalErr) =>
-          handle.update { ctx =>
-            IO.blocking(
-              ctx.state.log.error(
-                s"$logPrefix Error: ${StepHelpers.errorMessage(nonFatalErr)}"
-              )
-            ).as(ctx.failWith(nonFatalErr))
-          }.void
-        case fatal                 =>
-          IO.raiseError(fatal)
-      }
+    program.handleErrorWith {
+      case NonFatal(e) => handle.update(ctx => logAndFailContext(logPrefix, ctx, e)).void
+      case fatal       => IO.raiseError(fatal)
     }
 
   def withErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(
