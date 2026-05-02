@@ -16,7 +16,6 @@ import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.preflight.PreflightRendering
 import io.release.runtime.workflow.VersionWorkflowSupport
-import io.release.vcs.TagConflictResolver
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
@@ -98,9 +97,6 @@ private[monorepo] object MonorepoPreflight {
   )
 
   private object CheckSteps {
-    private def hasHookPhase(stepNames: Seq[String], phase: String): Boolean =
-      stepNames.exists(_.startsWith(s"$phase:"))
-
     def apply(processPlan: MonorepoProcessPlan): CheckSteps = {
       val stepNames = processPlan.stepNames
 
@@ -109,17 +105,17 @@ private[monorepo] object MonorepoPreflight {
         shouldResolveVersions = processPlan.shouldResolveVersions,
         shouldPreflightTags = processPlan.shouldPreflightTags,
         selectionDependsOnRuntimeHookState =
-          SelectionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
+          PreflightPhaseGroups.anyPhasePresent(stepNames, SelectionBlockingPhases),
         projectsDependOnRuntimeHookState =
-          ProjectSummaryMutationPhases.exists(phase => hasHookPhase(stepNames, phase)),
+          PreflightPhaseGroups.anyPhasePresent(stepNames, ProjectSummaryMutationPhases),
         versionsRequireRuntimeHookResolution =
-          VersionResolutionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
-        versionsDependOnPostResolutionRuntimeHookState =
-          PreflightPhaseGroups.VersionSummaryMutationPhases.exists(phase =>
-            hasHookPhase(stepNames, phase)
-          ),
+          PreflightPhaseGroups.anyPhasePresent(stepNames, VersionResolutionBlockingPhases),
+        versionsDependOnPostResolutionRuntimeHookState = PreflightPhaseGroups.anyPhasePresent(
+          stepNames,
+          PreflightPhaseGroups.VersionSummaryMutationPhases
+        ),
         tagDependsOnRuntimeHookState =
-          TagAffectingPhases.exists(phase => hasHookPhase(stepNames, phase)),
+          PreflightPhaseGroups.anyPhasePresent(stepNames, TagAffectingPhases),
         tagFollowsVersionResolution = processPlan.builtInTagPreflightFollowsVersionResolution,
         builtInTagPreflightIncludesReleaseWriteAndCommit =
           processPlan.builtInTagPreflightIncludesReleaseWriteAndCommit
@@ -465,19 +461,13 @@ private[monorepo] object MonorepoPreflight {
       builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean,
       tagPreflightInteractive: Boolean
   ): IO[Seq[MonorepoVcsSteps.PreflightTagOutcome]] =
-    if (!builtInTagPreflightIncludesReleaseWriteAndCommit)
-      MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive)
-    else
-      builtInReleaseWritesWouldChange(ctx).flatMap { wouldChange =>
-        if (wouldChange)
-          MonorepoVcsSteps.preflightTags(
-            ctx,
-            tagPreflightInteractive,
-            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
-          )
-        else
-          MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive)
-      }
+    PreflightPhaseGroups.dispatchPreflightTag(
+      builtInTagPreflightIncludesReleaseWriteAndCommit,
+      builtInReleaseWritesWouldChange(ctx),
+      _.fold(MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive))(callback =>
+        MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive, callback)
+      )
+    )
 
   private[monorepo] def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
     // Sequential traverse: MonorepoVersionFiles.resolveInputs reads sbt state, which is not

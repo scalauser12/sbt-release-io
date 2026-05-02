@@ -1,6 +1,9 @@
 package io.release.runtime.preflight
 
+import cats.effect.IO
 import io.release.runtime.HookPhases
+import io.release.vcs.TagConflictResolver
+import io.release.vcs.Vcs
 
 /** Shared preflight phase classifications used by both core and monorepo preflight.
   *
@@ -55,4 +58,44 @@ private[release] object PreflightPhaseGroups {
     */
   def tagPreflightEnabled(enableTagging: Boolean, hookGroupsMayChange: Boolean*): Boolean =
     enableTagging && !hookGroupsMayChange.contains(true)
+
+  /** Returns `true` if any compiled step name matches one of the given hook
+    * `phases` (matching the lifecycle compiler's `"$phase:$hookName"` format).
+    * Used by core/monorepo preflight to detect when a runtime hook may still
+    * mutate state observed by `check` mode summaries.
+    */
+  def hasHookPhase(stepNames: Seq[String], phase: String): Boolean =
+    stepNames.exists(_.startsWith(s"$phase:"))
+
+  /** Convenience: returns `true` if any compiled step name matches any of the
+    * supplied hook `phases`.
+    */
+  def anyPhasePresent(stepNames: Seq[String], phases: Set[String]): Boolean =
+    phases.exists(p => hasHookPhase(stepNames, p))
+
+  /** Run the appropriate preflight call given whether the built-in preflight
+    * already covers the release-write-and-commit pair.
+    *
+    * When the built-in pair is in the plan AND the release write would mutate
+    * the version file, the underlying preflight runs with a callback that pins
+    * the expected commit to [[TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit]]
+    * — telling the conflict resolver "the tag will land on a NEW commit." When
+    * the pair isn't in the plan or the release write is a no-op (version file
+    * already matches), the preflight runs with its default commit-target callback
+    * (`vcs.currentHash` → `ExactCommit`).
+    */
+  def dispatchPreflightTag[A](
+      builtInIncludesReleaseWriteAndCommit: Boolean,
+      wouldChange: => IO[Boolean],
+      runPreflight: Option[Vcs => IO[TagConflictResolver.PreflightCommitTarget]] => IO[A]
+  ): IO[A] =
+    if (!builtInIncludesReleaseWriteAndCommit) runPreflight(None)
+    else
+      wouldChange.flatMap {
+        case true  =>
+          runPreflight(
+            Some(_ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit))
+          )
+        case false => runPreflight(None)
+      }
 }

@@ -16,7 +16,6 @@ import io.release.runtime.engine.StepOrderingSupport
 import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.preflight.PreflightRendering
 import io.release.runtime.workflow.VersionWorkflowSupport
-import io.release.vcs.TagConflictResolver
 
 import java.io.File
 
@@ -55,9 +54,6 @@ private[release] object CorePreflight {
   )
 
   private object CheckSteps {
-    private def hasHookPhase(stepNames: Seq[String], phase: String): Boolean =
-      stepNames.exists(_.startsWith(s"$phase:"))
-
     def apply(steps: Seq[Step]): CheckSteps = {
       val stepNames    = steps.map(_.name)
       val versionIndex = steps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
@@ -70,13 +66,13 @@ private[release] object CorePreflight {
         shouldResolveVersions = versionIndex >= 0,
         shouldPreflightTag = tagIndex >= 0,
         versionsRequireRuntimeHookResolution =
-          VersionResolutionBlockingPhases.exists(phase => hasHookPhase(stepNames, phase)),
-        versionsDependOnPostResolutionRuntimeHookState =
-          PreflightPhaseGroups.VersionSummaryMutationPhases.exists(phase =>
-            hasHookPhase(stepNames, phase)
-          ),
+          PreflightPhaseGroups.anyPhasePresent(stepNames, VersionResolutionBlockingPhases),
+        versionsDependOnPostResolutionRuntimeHookState = PreflightPhaseGroups.anyPhasePresent(
+          stepNames,
+          PreflightPhaseGroups.VersionSummaryMutationPhases
+        ),
         tagDependsOnRuntimeHookState =
-          TagAffectingPhases.exists(phase => hasHookPhase(stepNames, phase)),
+          PreflightPhaseGroups.anyPhasePresent(stepNames, TagAffectingPhases),
         tagFollowsVersionResolution = versionIndex >= 0 && tagIndex > versionIndex,
         builtInTagPreflightIncludesReleaseWriteAndCommit =
           StepOrderingSupport.containsOrderedSubsequence(
@@ -290,19 +286,13 @@ private[release] object CorePreflight {
       checkSteps: CheckSteps,
       tagPreflightInteractive: Boolean
   ): IO[VcsSteps.PreflightTagOutcome] =
-    if (!checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit)
-      VcsSteps.preflightTag(ctx, tagPreflightInteractive)
-    else
-      builtInReleaseWriteWouldChange(ctx).flatMap { wouldChange =>
-        if (wouldChange)
-          VcsSteps.preflightTag(
-            ctx,
-            tagPreflightInteractive,
-            _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
-          )
-        else
-          VcsSteps.preflightTag(ctx, tagPreflightInteractive)
-      }
+    PreflightPhaseGroups.dispatchPreflightTag(
+      checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit,
+      builtInReleaseWriteWouldChange(ctx),
+      _.fold(VcsSteps.preflightTag(ctx, tagPreflightInteractive))(callback =>
+        VcsSteps.preflightTag(ctx, tagPreflightInteractive, callback)
+      )
+    )
 
   private[release] def builtInReleaseWriteWouldChange(ctx: ReleaseContext): IO[Boolean] =
     IO.fromOption(ctx.releaseVersion)(

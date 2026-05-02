@@ -47,6 +47,20 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
+  /** Effective publish-skip decision combining the validate-time frozen value
+    * (when set to `true`) with the live `skipPublish` field. The frozen entry
+    * locks down the validate-time `true` decision so a hook flipping
+    * `skipPublish` to `false` at execute time cannot bypass the publishTo /
+    * `publish / skip` checks already skipped at validate; the reverse
+    * direction (validate-time `false` → execute-time `true`) stays observed so
+    * hooks can legitimately suppress publish via that path
+    * (see `ReleaseHookIO.transform` docstring example). When validate has not
+    * run (unit-test paths), the frozen entry is absent and we fall back to the
+    * live `skipPublish` value.
+    */
+  private def effectiveSkip(ctx: ReleaseContext): Boolean =
+    ctx.publishSkipFrozen.contains(true) || ctx.skipPublish
+
   /** Per-iteration cache key for publish-related decisions. Cross-build core releases
     * iterate by `scalaVersion`, and each iteration must be tracked independently so
     * `after-publish` can observe whether `publish-artifacts` actually ran for *this*
@@ -68,17 +82,7 @@ private[release] object PublishSteps {
       // step skipped, so the gate distinguishes "publish step ran" from
       // "publish step never ran".
       val startedCtx = ctx.markPublishExecutionStarted
-      // Replay the validate-time skip *only when it was true*. This locks down
-      // the case where validation skipped the publishTo / `publish / skip`
-      // checks under `ctx.skipPublish = true` — a hook that subsequently flips
-      // it to false at execute time must not bypass those checks. The reverse
-      // direction (validate-time false → execute-time true) stays observed
-      // because hooks legitimately suppress publish via that path
-      // (see ReleaseHookIO.transform docstring example). When validate has
-      // not run (unit-test paths), the frozen entry is absent and we fall
-      // back to the live `skipPublish` value.
-      val skip       = startedCtx.publishSkipFrozen.contains(true) || startedCtx.skipPublish
-      if (skip) {
+      if (effectiveSkip(startedCtx)) {
         IO.blocking(startedCtx.state.log.info(s"${ReleaseLogPrefixes.Core} Skipping publish"))
           .as(startedCtx)
       } else {
@@ -132,12 +136,8 @@ private[release] object PublishSteps {
       // the first call sets the metadata, so subsequent iterations preserve
       // the original decision rather than overwriting it.
       val frozenCtx        = ctx.freezePublishSkip(ctx.skipPublish)
-      // `skip` here is the validate-time decision (which is what we just
-      // captured). `frozenCtx.skipPublish` is the same value at validate time;
-      // we use the frozen entry for symmetry with `execute`.
-      val skip             = frozenCtx.publishSkipFrozen.contains(true) || frozenCtx.skipPublish
       val checks: IO[Unit] =
-        if (skip) IO.unit
+        if (effectiveSkip(frozenCtx)) IO.unit
         else
           IO.blocking(SbtRuntime.getSetting(frozenCtx.state, releaseIOPublishChecks)).flatMap {
             case false => IO.unit

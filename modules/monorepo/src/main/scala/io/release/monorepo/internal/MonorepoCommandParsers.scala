@@ -1,6 +1,8 @@
 package io.release.monorepo.internal
 
 import io.release.monorepo.*
+import io.release.runtime.command.ReleaseCommandParserSupport
+import io.release.runtime.command.ReleaseCommandParserSupport.{Tokens, bareToken, valueToken}
 import io.release.runtime.command.SharedReleaseFlags
 import io.release.runtime.workflow.StepHelpers.errorMessage
 import sbt.complete.DefaultParsers.*
@@ -17,18 +19,21 @@ import scala.util.Try
   */
 private[monorepo] object MonorepoCommandParsers {
 
-  private type Tokens = Seq[String]
-
   def build(projectNames: Seq[String]): Parser[Tokens] =
     validateProjectNames(projectNames) match {
-      case Right(normalized) => helpParser | checkParser(normalized) | runParser(normalized)
-      case Left(message)     => helpParser | sbt.complete.DefaultParsers.failure(message)
+      case Right(normalized) =>
+        ReleaseCommandParserSupport.helpParser |
+          ReleaseCommandParserSupport.checkParser(runParser(normalized)) |
+          runParser(normalized)
+      case Left(message)     =>
+        ReleaseCommandParserSupport.helpParser | sbt.complete.DefaultParsers.failure(message)
     }
 
   def buildFromState(state: State, commandName: String): Parser[Tokens] =
     resolveProjectNames(state, commandName) match {
       case Right(projectNames) => build(projectNames)
-      case Left(message)       => helpParser | sbt.complete.DefaultParsers.failure(message)
+      case Left(message)       =>
+        ReleaseCommandParserSupport.helpParser | sbt.complete.DefaultParsers.failure(message)
     }
 
   def resolveProjectNames(state: State, commandName: String): Either[String, Seq[String]] =
@@ -64,25 +69,11 @@ private[monorepo] object MonorepoCommandParsers {
       )
   }
 
-  private def helpParser: Parser[Tokens] =
-    (Space ~> token("help")).map(_ => Seq("help"))
-
-  private def checkParser(projectNames: Seq[String]): Parser[Tokens] =
-    ((Space ~> token("check")) ~ runParser(projectNames)).map { case _ ~ args =>
-      "check" +: args
-    }
-
   private def runParser(projectNames: Seq[String]): Parser[Tokens] =
     (Space ~> argParser(projectNames)).*.map(_.flatten)
 
   private def normalizeProjectNames(projectNames: Seq[String]): Seq[String] =
     projectNames.sorted
-
-  private def bareToken(name: String): Parser[Tokens] =
-    token(name).map(_ => Seq(name))
-
-  private def valueToken(name: String, metavar: String): Parser[Tokens] =
-    (token(name) ~> Space ~> token(NotSpace, metavar)).map(value => Seq(name, value))
 
   private def argParser(projectNames: Seq[String]): Parser[Tokens] = {
     val projectNameParser     = namedProjectParser(projectNames)
