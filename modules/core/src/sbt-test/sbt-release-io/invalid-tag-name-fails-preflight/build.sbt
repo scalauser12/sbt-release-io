@@ -1,12 +1,22 @@
 import scala.sys.process.*
 
-// Regression: when `releaseIOVcsTagName` resolves to a syntactically invalid
-// git ref (here, a name containing a space), the release must abort during
+// Integration smoke test for tag-name validation at preflight time.
+//
+// When `releaseIOVcsTagName` resolves to a syntactically invalid git ref
+// (here, a name containing a space), the release must abort during
 // `tag-preflight` — *before* `set-release-version` and `commit-release-version`
 // have mutated the repository. Prior to the fix, preflight only asked
 // `git show-ref` whether the candidate existed; that returned "not found", so
 // preflight reported "available", and `git tag` failed only after the release
 // commit had already landed.
+//
+// This test covers the integration: that `tag-preflight` invokes
+// `Vcs.validateTagName` and propagates an `InvalidTagNameException` as a
+// release abort. The specific patterns (empty string, leading dash, embedded
+// space, etc.) are each covered by dedicated unit tests in
+// `modules/core/src/test/scala/io/release/vcs/GitSpec.scala`
+// (`validateTagName - reject ...`). Keeping the scripted test count to one
+// avoids paying the per-test sbt VM startup overhead for each pattern.
 name         := "invalid-tag-name-fails-preflight"
 scalaVersion := "2.12.18"
 

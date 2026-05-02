@@ -23,13 +23,17 @@ Legacy step-list editing fixtures were retired. New scripted tests should use li
 
 - Core flow and CLI: `simple`, `help`, `check`, `with-defaults`, `interactive-with-defaults`, `command-line-version-numbers`
 - Grouped-key surface and plugin coexistence: `grouped-keys`, `coexisting-plugins-shared-keys`
-- Hook and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`
-- Versioning and tags: `custom-tag`, `custom-version-format`, `global-version-false`, `invalid-version-input`, `version-bump`, `tag-default`
+- Hook lifecycle and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`
+- Hook gating and narrow predicates: `after-publish-gate-streams`, `before-push-hook-gated`, `after-push-hook-gated`, `after-push-hook-runs-on-push`, `hook-installed-publish-action`, `hook-installed-publish-skip`
+- ThisBuild scopes and decision defaults: `this-build-overrides`, `thisbuild-decision-default-honored`
+- Versioning and tags: `custom-tag`, `custom-version-format`, `global-version-false`, `invalid-version-input`, `version-bump`, `tag-default`, `version-task-sees-snapshot`
+- Tag preflight and remote tag probe: `invalid-tag-name-fails-preflight`, `tag-preflight-skipped-with-hook`, `hook-disabled-tag-preflight-still-probes`, `hook-disabled-retry-tag-probes-remote`, `retry-tag-name-probes-remote`, `remote-only-tag-aborts-preflight`
 - Cross-build behavior: `cross`, `cross-build-setting`
 - Test and clean phases: `run-clean`, `fail-test`, `run-tests-aggregate-fail`, `skip-tests`
-- Publish and push flow: `publish-to-check`, `publish-skip`, `publish-skip-root`, `skip-publish-setting`, `publish-multi-project`, `publish-nested-aggregate`, `push-changes`, `push-explicit-tag`, `push-first-tracked-branch`, `push-behind-remote`, `push-race-before-push`, `custom-publish-action`
-- Repository hygiene: `modified-files-fail`, `untracked-files`, `untracked-files-fail`, `vcs-signoff`
-- Version-file and dependency edge cases: `missing-version-file`, `snapshot-deps`, `snapshot-deps-test-scope`, `snapshot-deps-cross`, `empty-commit`, `empty-commit-noop`
+- Publish and push flow: `publish-to-check`, `publish-skip`, `publish-skip-root`, `publish-skip-isSnapshot`, `publish-skip-isSnapshot-default-flow`, `publish-runs-after-tag`, `skip-publish-setting`, `publish-multi-project`, `publish-nested-aggregate`, `push-changes`, `push-explicit-tag`, `push-first-tracked-branch`, `push-behind-remote`, `push-race-before-push`, `custom-publish-action`
+- Push decision and remote warmup: `push-decision-no-skips-remote-warmup`, `push-decision-non-interactive-no-warmup`, `push-disabled-skips-remote-tag-probe`
+- Repository hygiene: `modified-files-fail`, `untracked-files`, `untracked-files-fail`, `vcs-signoff`, `commit-message-task-stages-extra`, `commit-rejects-extra-staged`
+- Version-file and dependency edge cases: `missing-version-file`, `dash-prefixed-version-file`, `gitignored-version-file`, `untracked-version-file`, `version-file-outside-vcs`, `late-bound-version-file-outside-vcs`, `snapshot-deps`, `snapshot-deps-test-scope`, `snapshot-deps-cross`, `empty-commit`, `empty-commit-noop`
 - Documentation packaging: `bundled-runtime-docs`
 
 ## Running tests
