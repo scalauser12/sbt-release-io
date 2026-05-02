@@ -194,7 +194,15 @@ private[monorepo] object MonorepoVersionWorkflow {
   ): IO[Option[String]] =
     resolveProjectVersions(ctx, project, allowPrompts = false)
       .map { case (_, resolved) => Option(resolved.releaseVersion).filter(_.nonEmpty) }
-      .handleError(_ => None)
+      .handleErrorWith { err =>
+        IO.blocking {
+          ctx.state.log.debug(
+            s"${ReleaseLogPrefixes.Monorepo} Tentative release-version overlay skipped " +
+              s"for ${project.name}: ${StepHelpers.errorMessage(err)}. " +
+              "inquireVersions will surface this if it persists."
+          )
+        }.as(None)
+      }
 
   def writeNextVersion(
       ctx: MonorepoContext,
@@ -249,6 +257,17 @@ private[monorepo] object MonorepoVersionWorkflow {
       } yield updatedCtx
     }
 
+  /** Per-phase prevalidation guarded by a context flag.
+    *
+    * Validation runs once per write phase (across all selected projects), and the success is
+    * memoized on [[MonorepoContext]] via `markValidated`. The flag travels with the context, so
+    * a hook that mutates state via `ctx.withState(...)` after prevalidation will keep the cached
+    * decision. The execute path remains authoritative: `writeVersionFromPair` re-runs
+    * `validateDistinctVersionFiles`, `validateSelectedVersionFileUnderVcsRoot`, and
+    * `assertVersionFileNotIgnored` per project before the on-disk write, so a late-bound
+    * `releaseIOMonorepoVersioningFile` change still fails the release — at execute time rather
+    * than validate time, with worse UX but no loss of safety.
+    */
   private def validateWritePhase(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
@@ -410,6 +429,12 @@ private[monorepo] object MonorepoVersionWorkflow {
     * late-bound steps that may have mutated `releaseIOMonorepoVersioningFile`. Checks all projects
     * from `releaseIOMonorepoSelectionProjects`, not just the selected subset, so that a partial release
     * still detects a shared file that would be mutated for unreleased siblings.
+    *
+    * Path equality uses `getCanonicalPath` and groups by string equality, which inherits the
+    * host filesystem's case sensitivity. On case-insensitive filesystems (macOS APFS default,
+    * Windows NTFS default) two refs pointing at the same file via different cases canonicalize
+    * to one entry and group correctly; on case-sensitive filesystems differently-cased paths
+    * resolve to genuinely distinct files.
     */
   private def validateDistinctVersionFiles(runtime: MonorepoRuntime): IO[Unit] =
     IO.blocking {

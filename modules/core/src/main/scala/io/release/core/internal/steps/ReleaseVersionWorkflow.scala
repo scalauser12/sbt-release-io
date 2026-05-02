@@ -168,7 +168,14 @@ private[release] object ReleaseVersionWorkflow {
   private def resolveTentativeReleaseVersion(ctx: ReleaseContext): IO[Option[String]] =
     resolveVersions(ctx, allowPrompts = false)
       .map { case (_, resolved) => Option(resolved.releaseVersion).filter(_.nonEmpty) }
-      .handleError(_ => None)
+      .handleErrorWith { err =>
+        IO.blocking {
+          ctx.state.log.debug(
+            s"${ReleaseLogPrefixes.Core} Tentative release-version overlay skipped: " +
+              s"${errorMessage(err)}. inquire-versions will surface this if it persists."
+          )
+        }.as(None)
+      }
 
   def writeNextVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (_, nextVersion) =>
