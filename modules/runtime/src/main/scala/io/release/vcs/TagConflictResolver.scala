@@ -128,20 +128,20 @@ private[release] object TagConflictResolver {
                 params,
                 allowKeep = matchesExpectedCommit
               ).flatMap {
-                case (_, ConflictAction.Abort)                               =>
+                case (_, ParsedAnswer.Abort)                               =>
                   IO.raiseError(
                     new IllegalStateException(
                       s"${params.logPrefix} Tag [$tagName] already exists${forLabel(params.label)}. " +
                         "Aborting release!"
                     )
                   )
-                case (nextCtx, ConflictAction.Keep) if matchesExpectedCommit =>
+                case (nextCtx, ParsedAnswer.Keep) if matchesExpectedCommit =>
                   IO.blocking(
                     nextCtx.state.log.warn(
                       s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
                     )
                   ).as(nextCtx -> TagResult(tagName, overwritten = false))
-                case (_, ConflictAction.Keep)                                =>
+                case (_, ParsedAnswer.Keep)                                =>
                   IO.raiseError(
                     new IllegalStateException(
                       keepMismatchMessage(
@@ -152,7 +152,7 @@ private[release] object TagConflictResolver {
                       )
                     )
                   )
-                case (nextCtx, ConflictAction.Overwrite)                     =>
+                case (nextCtx, ParsedAnswer.Overwrite)                     =>
                   IO.blocking(
                     nextCtx.state.log.warn(
                       s"${params.logPrefix} Tag [$tagName] already exists. Overwriting."
@@ -166,7 +166,7 @@ private[release] object TagConflictResolver {
                     vcs
                       .tag(tagName, params.tagComment, params.sign, force = true)
                       .as(nextCtx -> TagResult(tagName, overwritten = true))
-                case (nextCtx, ConflictAction.Retry(newTag))                 =>
+                case (nextCtx, ParsedAnswer.Retry(newTag))                 =>
                   // Validate the retry name *before* recursing so an invalid
                   // prompt response is caught here. On invalid retry input we
                   // log the reason and re-enter the conflict resolution for
@@ -356,14 +356,6 @@ private[release] object TagConflictResolver {
       actualCommitHash: Option[String]
   )
 
-  private sealed trait ConflictAction
-  private object ConflictAction {
-    case object Abort                   extends ConflictAction
-    case object Keep                    extends ConflictAction
-    case object Overwrite               extends ConflictAction
-    final case class Retry(tag: String) extends ConflictAction
-  }
-
   private sealed trait ParsedAnswer
   private object ParsedAnswer {
     case object Abort                      extends ParsedAnswer
@@ -402,9 +394,9 @@ private[release] object TagConflictResolver {
       defaultAnswer: Option[String],
       params: TagParams,
       allowKeep: Boolean
-  ): IO[(C, ConflictAction)] = {
-    val effectiveAnswer: IO[(C, String)] =
-      DecisionResolver.resolveTagAnswer(
+  ): IO[(C, ParsedAnswer)] =
+    DecisionResolver
+      .resolveTagAnswer(
         ctx,
         configuredAnswer = defaultAnswer,
         tagName = tagName,
@@ -412,17 +404,7 @@ private[release] object TagConflictResolver {
         logPrefix = params.logPrefix,
         prompt = promptFor(tagName, params.label, allowKeep)
       )
-
-    effectiveAnswer.map { case (nextCtx, answer) =>
-      val action = parseAnswer(answer) match {
-        case ParsedAnswer.Abort         => ConflictAction.Abort
-        case ParsedAnswer.Keep          => ConflictAction.Keep
-        case ParsedAnswer.Overwrite     => ConflictAction.Overwrite
-        case ParsedAnswer.Retry(newTag) => ConflictAction.Retry(newTag)
-      }
-      (nextCtx, action)
-    }
-  }
+      .map { case (nextCtx, answer) => (nextCtx, parseAnswer(answer)) }
 
   private def keepMismatchMessage(
       tagName: String,
