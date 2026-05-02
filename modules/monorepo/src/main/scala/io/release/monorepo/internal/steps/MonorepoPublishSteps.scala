@@ -272,99 +272,118 @@ private[monorepo] object MonorepoPublishSteps {
     ProcessStep.PerItem(
       name = "publish-artifacts",
       roles = Set(BuiltInStepRole.PublishArtifacts),
-      execute = (ctx, project) => {
-        // Marking the per-project publish-execution snapshot here ensures
-        // `after-publish` hooks observe a non-empty `publishExecutedKeys` map
-        // even when every project skipped, so the gate distinguishes
-        // "publish step ran" from "publish step never ran".
-        val startedCtx = ctx.markPublishExecutionStarted
-        // Replay the validate-time skip *only when it was true*. This locks
-        // down the case where validation skipped the publishTo / `publish /
-        // skip` checks under `ctx.skipPublish = true` — a hook that
-        // subsequently flips it to false at execute time must not bypass those
-        // checks. The reverse direction (validate-time false → execute-time
-        // true) stays observed so hooks can legitimately suppress publish at
-        // execute. When validate has not run (unit-test paths), the frozen
-        // entry is absent and we fall back to the live `skipPublish` value.
-        val skip       = startedCtx.publishSkipFrozen.contains(true) || startedCtx.skipPublish
-        if (skip)
-          logInfo(startedCtx, s"Skipping publish for ${project.name}").as(startedCtx)
-        else
-          // Persistent overlays (release version, hash, tag) live in
-          // `session.rawAppend` from earlier steps via
-          // [[SbtRuntime.appendSessionSettings]], so version-dependent skip
-          // patterns (`publish / skip := isSnapshot.value`) evaluate against
-          // the post-release-version state here without any local overlay.
-          // `withProjectReleaseState` only fills the hash gap if the release
-          // commit was a no-op; it runs after the skip eval so a `true` skip
-          // short-circuits before any optional VCS work.
-          evaluatePublishSkipPropagating(startedCtx, project).flatMap { case (skipCtx, skipped) =>
-            if (skipped)
-              logInfo(skipCtx, s"Skipping publish for ${project.name} (publish / skip := true)")
-                .as(skipCtx)
-            else
-              withProjectReleaseState(skipCtx, project).flatMap { releaseCtx =>
-                val publishStep =
-                  if (
-                    LoadCompat
-                      .containsScopedKey(releaseCtx.state, project.ref / releaseIOPublishAction)
-                  )
-                    runProjectTask(releaseCtx, project.ref / releaseIOPublishAction)
-                  else
-                    logWarn(releaseCtx, fallbackToPublishWarning(project)) *>
-                      runProjectTask(releaseCtx, project.ref / publish)
-                publishStep.map(_.recordPublishExecuted(publishGateKey(releaseCtx, project)))
-              }
-          }
-      },
-      validateWithContext = Some { (ctx, project) =>
-        // Capture the validate-time `skipPublish` decision into context metadata
-        // so execute replays the same decision instead of re-reading the live
-        // field. Closes the asymmetry where a hook running after validation but
-        // before publish could flip `skipPublish` from `true` to `false` and
-        // bypass the publishTo / `publish / skip` checks skipped here.
-        // `freezePublishSkip` is idempotent, so when validate runs once per
-        // project the first call wins for the run.
-        val frozenCtx = ctx.freezePublishSkip(ctx.skipPublish)
-        // `skip` here is the validate-time decision; mirrors the form used in
-        // `execute` for symmetry.
-        val skip      = frozenCtx.publishSkipFrozen.contains(true) || frozenCtx.skipPublish
-        if (skip) IO.pure(frozenCtx)
-        else
-          IO.blocking(
-            Project.extract(frozenCtx.state).get(releaseIOMonorepoPublishChecks)
-          ).flatMap {
-            case false => IO.pure(frozenCtx)
-            case true  =>
-              // Evaluate skip + publishTo against a transient overlay state so
-              // version-dependent `publish / skip := isSnapshot.value` resolves
-              // against the post-`set-release-version` value. State mutations
-              // from the skip task are threaded into the publishTo evaluation
-              // (matches the pre-refactor behavior where evaluatePublishTarget
-              // received the ctx threaded out of evaluatePublishSkip — important
-              // for builds whose `publish / skip` is a task that installs
-              // resolver settings via session updates). The overlay state and
-              // any task-induced mutations are discarded once the body returns,
-              // so `inquireVersions.execute` later sees the original snapshot
-              // state for its version-task evaluation.
-              MonorepoVersionWorkflow
-                .withReleaseVersionOverlay(frozenCtx) { tempState =>
-                  for {
-                    skipResult                      <- evaluatePublishSkipAt(tempState, project)
-                    (afterSkipState, publishSkipped) = skipResult
-                    publishTarget                   <-
-                      if (publishSkipped) IO.pure(Option.empty[Resolver])
-                      else
-                        evaluatePublishTargetAt(afterSkipState, project)
-                          .map { case (_, target) => target }
-                    _                               <- PublishValidation.requirePublishTarget(
-                                                         project.ref.project
-                                                       )(publishSkipped, publishTarget.isEmpty)
-                  } yield ()
-                }
-                .as(frozenCtx)
-          }
-      },
+      execute = executePublish,
+      validateWithContext = Some(validatePublish),
       enableCrossBuild = true
     )
+
+  private def executePublish(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] = {
+    // Marking the per-project publish-execution snapshot here ensures
+    // `after-publish` hooks observe a non-empty `publishExecutedKeys` map
+    // even when every project skipped, so the gate distinguishes
+    // "publish step ran" from "publish step never ran".
+    val startedCtx = ctx.markPublishExecutionStarted
+    if (effectiveSkip(startedCtx))
+      logInfo(startedCtx, s"Skipping publish for ${project.name}").as(startedCtx)
+    else
+      // Persistent overlays (release version, hash, tag) live in
+      // `session.rawAppend` from earlier steps via
+      // [[SbtRuntime.appendSessionSettings]], so version-dependent skip
+      // patterns (`publish / skip := isSnapshot.value`) evaluate against the
+      // post-release-version state here without any local overlay.
+      // `withProjectReleaseState` only fills the hash gap if the release
+      // commit was a no-op; it runs after the skip eval so a `true` skip
+      // short-circuits before any optional VCS work.
+      evaluatePublishSkipPropagating(startedCtx, project).flatMap {
+        case (skipCtx, true)  =>
+          logInfo(skipCtx, s"Skipping publish for ${project.name} (publish / skip := true)")
+            .as(skipCtx)
+        case (skipCtx, false) =>
+          withProjectReleaseState(skipCtx, project).flatMap(runProjectPublish(_, project))
+      }
+  }
+
+  private def validatePublish(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] = {
+    // Capture the validate-time `skipPublish` decision into context metadata
+    // so execute replays the same decision instead of re-reading the live
+    // field. Closes the asymmetry where a hook running after validation but
+    // before publish could flip `skipPublish` from `true` to `false` and
+    // bypass the publishTo / `publish / skip` checks skipped here.
+    // `freezePublishSkip` is idempotent, so when validate runs once per
+    // project the first call wins for the run.
+    val frozenCtx = ctx.freezePublishSkip(ctx.skipPublish)
+    if (effectiveSkip(frozenCtx)) IO.pure(frozenCtx)
+    else
+      publishChecksEnabled(frozenCtx).flatMap {
+        case false => IO.pure(frozenCtx)
+        case true  => validatePublishTargetForProject(frozenCtx, project).as(frozenCtx)
+      }
+  }
+
+  /** Effective publish-skip decision combining the validate-time frozen
+    * value (when set to `true`) with the live `skipPublish` field. The frozen
+    * entry locks down the validate-time `true` decision so a hook flipping
+    * `skipPublish` to `false` at execute time cannot bypass the publishTo /
+    * `publish / skip` checks already skipped at validate; the reverse
+    * direction (validate-time `false` → execute-time `true`) stays observed
+    * so hooks can legitimately suppress publish at execute. When validate
+    * has not run (unit-test paths), the frozen entry is absent and we fall
+    * back to the live `skipPublish` value.
+    */
+  private def effectiveSkip(ctx: MonorepoContext): Boolean =
+    ctx.publishSkipFrozen.contains(true) || ctx.skipPublish
+
+  /** Resolve and run the publish task for a single project. Falls back to
+    * `publish` with a warning when `releaseIOPublishAction` is not registered
+    * for the project's scope.
+    */
+  private def runProjectPublish(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] = {
+    val publishStep =
+      if (LoadCompat.containsScopedKey(ctx.state, project.ref / releaseIOPublishAction))
+        runProjectTask(ctx, project.ref / releaseIOPublishAction)
+      else
+        logWarn(ctx, fallbackToPublishWarning(project)) *>
+          runProjectTask(ctx, project.ref / publish)
+    publishStep.map(_.recordPublishExecuted(publishGateKey(ctx, project)))
+  }
+
+  private def publishChecksEnabled(ctx: MonorepoContext): IO[Boolean] =
+    IO.blocking(Project.extract(ctx.state).get(releaseIOMonorepoPublishChecks))
+
+  /** Validate-time publishTo + skip checks for one project. Evaluates skip +
+    * publishTo against a transient overlay state so version-dependent
+    * `publish / skip := isSnapshot.value` resolves against the
+    * post-`set-release-version` value. State mutations from the skip task
+    * are threaded into the publishTo evaluation (important for builds whose
+    * `publish / skip` is a task that installs resolver settings via session
+    * updates). The overlay state and any task-induced mutations are
+    * discarded once the body returns, so `inquireVersions.execute` later
+    * sees the original snapshot state for its version-task evaluation.
+    */
+  private def validatePublishTargetForProject(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Unit] =
+    MonorepoVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
+      for {
+        skipResult                      <- evaluatePublishSkipAt(tempState, project)
+        (afterSkipState, publishSkipped) = skipResult
+        publishTarget                   <-
+          if (publishSkipped) IO.pure(Option.empty[Resolver])
+          else
+            evaluatePublishTargetAt(afterSkipState, project).map { case (_, target) => target }
+        _                               <- PublishValidation.requirePublishTarget(
+                                             project.ref.project
+                                           )(publishSkipped, publishTarget.isEmpty)
+      } yield ()
+    }
 }
