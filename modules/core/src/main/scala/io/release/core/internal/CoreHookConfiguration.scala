@@ -2,6 +2,7 @@ package io.release.core.internal
 
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
+import io.release.runtime.HookPhases
 import io.release.runtime.sbt.SbtRuntime
 import sbt.*
 
@@ -42,6 +43,122 @@ private[release] object CoreHookConfiguration {
 
   private val ai = ReleasePluginIO.autoImport
 
+  /** Single source of truth for the 16 hook phases this configuration owns.
+    * Adding a new phase requires one entry here, one field on the case class,
+    * and one phase entry in [[CoreLifecycle.phases]] — nothing else.
+    */
+  private final case class PhaseEntry(
+      phase: String,
+      settingKey: SettingKey[Seq[ReleaseHookIO]],
+      get: CoreHookConfiguration => Seq[ReleaseHookIO],
+      set: (CoreHookConfiguration, Seq[ReleaseHookIO]) => CoreHookConfiguration
+  )
+
+  private val phaseRegistry: Seq[PhaseEntry] = Seq(
+    PhaseEntry(
+      HookPhases.AfterCleanCheck,
+      ai.releaseIOHooksAfterCleanCheck,
+      _.afterCleanCheckHooks,
+      (c, h) => c.copy(afterCleanCheckHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforeVersionResolution,
+      ai.releaseIOHooksBeforeVersionResolution,
+      _.beforeVersionResolutionHooks,
+      (c, h) => c.copy(beforeVersionResolutionHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterVersionResolution,
+      ai.releaseIOHooksAfterVersionResolution,
+      _.afterVersionResolutionHooks,
+      (c, h) => c.copy(afterVersionResolutionHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforeReleaseVersionWrite,
+      ai.releaseIOHooksBeforeReleaseVersionWrite,
+      _.beforeReleaseVersionWriteHooks,
+      (c, h) => c.copy(beforeReleaseVersionWriteHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterReleaseVersionWrite,
+      ai.releaseIOHooksAfterReleaseVersionWrite,
+      _.afterReleaseVersionWriteHooks,
+      (c, h) => c.copy(afterReleaseVersionWriteHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforeReleaseCommit,
+      ai.releaseIOHooksBeforeReleaseCommit,
+      _.beforeReleaseCommitHooks,
+      (c, h) => c.copy(beforeReleaseCommitHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterReleaseCommit,
+      ai.releaseIOHooksAfterReleaseCommit,
+      _.afterReleaseCommitHooks,
+      (c, h) => c.copy(afterReleaseCommitHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforeTag,
+      ai.releaseIOHooksBeforeTag,
+      _.beforeTagHooks,
+      (c, h) => c.copy(beforeTagHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterTag,
+      ai.releaseIOHooksAfterTag,
+      _.afterTagHooks,
+      (c, h) => c.copy(afterTagHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforePublish,
+      ai.releaseIOHooksBeforePublish,
+      _.beforePublishHooks,
+      (c, h) => c.copy(beforePublishHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterPublish,
+      ai.releaseIOHooksAfterPublish,
+      _.afterPublishHooks,
+      (c, h) => c.copy(afterPublishHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforeNextVersionWrite,
+      ai.releaseIOHooksBeforeNextVersionWrite,
+      _.beforeNextVersionWriteHooks,
+      (c, h) => c.copy(beforeNextVersionWriteHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterNextVersionWrite,
+      ai.releaseIOHooksAfterNextVersionWrite,
+      _.afterNextVersionWriteHooks,
+      (c, h) => c.copy(afterNextVersionWriteHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforeNextCommit,
+      ai.releaseIOHooksBeforeNextCommit,
+      _.beforeNextCommitHooks,
+      (c, h) => c.copy(beforeNextCommitHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterNextCommit,
+      ai.releaseIOHooksAfterNextCommit,
+      _.afterNextCommitHooks,
+      (c, h) => c.copy(afterNextCommitHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.BeforePush,
+      ai.releaseIOHooksBeforePush,
+      _.beforePushHooks,
+      (c, h) => c.copy(beforePushHooks = h)
+    ),
+    PhaseEntry(
+      HookPhases.AfterPush,
+      ai.releaseIOHooksAfterPush,
+      _.afterPushHooks,
+      (c, h) => c.copy(afterPushHooks = h)
+    )
+  )
+
   // Defaults are scoped to `ThisBuild` so that user `ThisBuild / ...` overrides flow
   // through to project-scope lookups via sbt's delegation. Project-scoped duplicates
   // (`projectSettings`) would shadow user `ThisBuild / ...` overrides because project
@@ -52,91 +169,37 @@ private[release] object CoreHookConfiguration {
     ThisBuild / ai.releaseIOPolicyEnableRunTests                  := true,
     ThisBuild / ai.releaseIOPolicyEnableTagging                   := true,
     ThisBuild / ai.releaseIOPolicyEnablePublish                   := true,
-    ThisBuild / ai.releaseIOPolicyEnablePush                      := true,
-    ThisBuild / ai.releaseIOHooksAfterCleanCheck                  := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforeVersionResolution          := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterVersionResolution           := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforeReleaseVersionWrite        := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterReleaseVersionWrite         := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforeReleaseCommit              := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterReleaseCommit               := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforeTag                        := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterTag                         := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforePublish                    := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterPublish                     := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforeNextVersionWrite           := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterNextVersionWrite            := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforeNextCommit                 := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterNextCommit                  := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksBeforePush                       := Seq.empty[ReleaseHookIO],
-    ThisBuild / ai.releaseIOHooksAfterPush                        := Seq.empty[ReleaseHookIO]
-  )
+    ThisBuild / ai.releaseIOPolicyEnablePush                      := true
+  ) ++ phaseRegistry.map(entry => ThisBuild / entry.settingKey := Seq.empty[ReleaseHookIO])
 
   def resolve(state: State): CoreHookConfiguration = {
-    val e = SbtRuntime.extracted(state)
-    CoreHookConfiguration(
+    val e    = SbtRuntime.extracted(state)
+    val base = CoreHookConfiguration(
       enableSnapshotDependenciesCheck = e.get(ai.releaseIOPolicyEnableSnapshotDependenciesCheck),
       enableRunClean = e.get(ai.releaseIOPolicyEnableRunClean),
       enableRunTests = e.get(ai.releaseIOPolicyEnableRunTests),
       enableTagging = e.get(ai.releaseIOPolicyEnableTagging),
       enablePublish = e.get(ai.releaseIOPolicyEnablePublish),
-      enablePush = e.get(ai.releaseIOPolicyEnablePush),
-      afterCleanCheckHooks = e.get(ai.releaseIOHooksAfterCleanCheck),
-      beforeVersionResolutionHooks = e.get(ai.releaseIOHooksBeforeVersionResolution),
-      afterVersionResolutionHooks = e.get(ai.releaseIOHooksAfterVersionResolution),
-      beforeReleaseVersionWriteHooks = e.get(ai.releaseIOHooksBeforeReleaseVersionWrite),
-      afterReleaseVersionWriteHooks = e.get(ai.releaseIOHooksAfterReleaseVersionWrite),
-      beforeReleaseCommitHooks = e.get(ai.releaseIOHooksBeforeReleaseCommit),
-      afterReleaseCommitHooks = e.get(ai.releaseIOHooksAfterReleaseCommit),
-      beforeTagHooks = e.get(ai.releaseIOHooksBeforeTag),
-      afterTagHooks = e.get(ai.releaseIOHooksAfterTag),
-      beforePublishHooks = e.get(ai.releaseIOHooksBeforePublish),
-      afterPublishHooks = e.get(ai.releaseIOHooksAfterPublish),
-      beforeNextVersionWriteHooks = e.get(ai.releaseIOHooksBeforeNextVersionWrite),
-      afterNextVersionWriteHooks = e.get(ai.releaseIOHooksAfterNextVersionWrite),
-      beforeNextCommitHooks = e.get(ai.releaseIOHooksBeforeNextCommit),
-      afterNextCommitHooks = e.get(ai.releaseIOHooksAfterNextCommit),
-      beforePushHooks = e.get(ai.releaseIOHooksBeforePush),
-      afterPushHooks = e.get(ai.releaseIOHooksAfterPush)
+      enablePush = e.get(ai.releaseIOPolicyEnablePush)
     )
+    phaseRegistry.foldLeft(base)((cfg, entry) => entry.set(cfg, e.get(entry.settingKey)))
   }
 
   def merge(
       left: CoreHookConfiguration,
       right: CoreHookConfiguration
-  ): CoreHookConfiguration =
-    CoreHookConfiguration(
-      enableSnapshotDependenciesCheck = left.enableSnapshotDependenciesCheck &&
-        right.enableSnapshotDependenciesCheck,
+  ): CoreHookConfiguration = {
+    val merged = CoreHookConfiguration(
+      enableSnapshotDependenciesCheck =
+        left.enableSnapshotDependenciesCheck && right.enableSnapshotDependenciesCheck,
       enableRunClean = left.enableRunClean && right.enableRunClean,
       enableRunTests = left.enableRunTests && right.enableRunTests,
       enableTagging = left.enableTagging && right.enableTagging,
       enablePublish = left.enablePublish && right.enablePublish,
-      enablePush = left.enablePush && right.enablePush,
-      afterCleanCheckHooks = left.afterCleanCheckHooks ++ right.afterCleanCheckHooks,
-      beforeVersionResolutionHooks = left.beforeVersionResolutionHooks ++
-        right.beforeVersionResolutionHooks,
-      afterVersionResolutionHooks = left.afterVersionResolutionHooks ++
-        right.afterVersionResolutionHooks,
-      beforeReleaseVersionWriteHooks = left.beforeReleaseVersionWriteHooks ++
-        right.beforeReleaseVersionWriteHooks,
-      afterReleaseVersionWriteHooks = left.afterReleaseVersionWriteHooks ++
-        right.afterReleaseVersionWriteHooks,
-      beforeReleaseCommitHooks = left.beforeReleaseCommitHooks ++
-        right.beforeReleaseCommitHooks,
-      afterReleaseCommitHooks = left.afterReleaseCommitHooks ++
-        right.afterReleaseCommitHooks,
-      beforeTagHooks = left.beforeTagHooks ++ right.beforeTagHooks,
-      afterTagHooks = left.afterTagHooks ++ right.afterTagHooks,
-      beforePublishHooks = left.beforePublishHooks ++ right.beforePublishHooks,
-      afterPublishHooks = left.afterPublishHooks ++ right.afterPublishHooks,
-      beforeNextVersionWriteHooks = left.beforeNextVersionWriteHooks ++
-        right.beforeNextVersionWriteHooks,
-      afterNextVersionWriteHooks = left.afterNextVersionWriteHooks ++
-        right.afterNextVersionWriteHooks,
-      beforeNextCommitHooks = left.beforeNextCommitHooks ++ right.beforeNextCommitHooks,
-      afterNextCommitHooks = left.afterNextCommitHooks ++ right.afterNextCommitHooks,
-      beforePushHooks = left.beforePushHooks ++ right.beforePushHooks,
-      afterPushHooks = left.afterPushHooks ++ right.afterPushHooks
+      enablePush = left.enablePush && right.enablePush
     )
+    phaseRegistry.foldLeft(merged)((cfg, entry) =>
+      entry.set(cfg, entry.get(left) ++ entry.get(right))
+    )
+  }
 }
