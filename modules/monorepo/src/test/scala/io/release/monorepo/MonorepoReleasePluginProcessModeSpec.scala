@@ -172,13 +172,27 @@ class MonorepoReleasePluginProcessModeSpec
     }
   }
 
-  test("monorepo plugin projectSettings include command registration plus the full default block") {
+  test(
+    "monorepo plugin projectSettings include command registration plus project-scoped defaults"
+  ) {
     IO {
       val labels = MonorepoReleasePlugin.projectSettings.map(_.key.key.label).toSet
 
       assert(labels.contains("commands"))
       assert(
         MonorepoDefaultSettings.pluginDefaultSettings
+          .map(_.key.key.label)
+          .forall(labels.contains)
+      )
+    }
+  }
+
+  test("monorepo plugin buildSettings expose ThisBuild-scoped defaults") {
+    IO {
+      val labels = MonorepoReleasePlugin.buildSettings.map(_.key.key.label).toSet
+
+      assert(
+        MonorepoDefaultSettings.buildDefaultSettings
           .map(_.key.key.label)
           .forall(labels.contains)
       )

@@ -9,32 +9,43 @@ import sbt.Keys.*
 
 private[monorepo] object MonorepoDefaultSettings {
 
+  // Project-scoped defaults: only keys whose definition references project-scoped
+  // values (e.g. `loadedBuild.value`, `thisProjectRef.value`). Constants and
+  // policy/hook/behavior toggles live in `buildDefaultSettings` at `ThisBuild`
+  // scope so user `ThisBuild / ...` overrides aren't shadowed (project scope
+  // wins over ThisBuild on the project axis).
   lazy val pluginDefaultSettings: Seq[Setting[?]] =
+    selectionProjectDefaults
+
+  lazy val buildDefaultSettings: Seq[Setting[?]] =
     Seq(
       behaviorDefaults,
       MonorepoLifecycle.configDefaultSettings,
-      selectionAndDetectionDefaults,
+      detectionDefaults,
       versioningAndVcsDefaults,
       publishDefaults
     ).flatten
 
   private lazy val behaviorDefaults: Seq[Setting[?]] = Seq(
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild  := false,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests   := false,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish := false,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive := false
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild  := false,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests   := false,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish := false,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive := false
   )
 
-  private lazy val selectionAndDetectionDefaults: Seq[Setting[?]] = Seq(
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionEnabled           := true,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionIncludeDownstream := false,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionChangeDetector    := None,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionExcludes          := Seq.empty,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionSharedPaths       := Seq(
+  private lazy val detectionDefaults: Seq[Setting[?]] = Seq(
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionEnabled           := true,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionIncludeDownstream := false,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionChangeDetector    := None,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionExcludes          := Seq.empty,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionSharedPaths       := Seq(
       "build.sbt",
       "project/"
-    ),
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects          := {
+    )
+  )
+
+  private lazy val selectionProjectDefaults: Seq[Setting[?]] = Seq(
+    MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects := {
       val build      = loadedBuild.value
       val root       = thisProjectRef.value
       val projectMap = build.allProjectRefs.map { case (ref, proj) =>
@@ -53,23 +64,24 @@ private[monorepo] object MonorepoDefaultSettings {
   )
 
   private lazy val versioningAndVcsDefaults: Seq[Setting[?]] = Seq(
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsReleaseCommitMessage := (
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsReleaseCommitMessage := (
       (summary: String) => s"Setting release versions: $summary"
     ),
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsNextCommitMessage    := ((summary: String) =>
-      s"Setting next versions: $summary"
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsNextCommitMessage    := (
+      (summary: String) => s"Setting next versions: $summary"
     ),
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName              := ((name: String, ver: String) =>
-      s"$name/v$ver"
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName              := (
+      (name: String, ver: String) => s"$name/v$ver"
     ),
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment           := (
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment           := (
       (name: String, ver: String) => s"Release $name $ver"
     ),
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningReadVersion   := DefaultVersionFileIO.defaultReadVersion,
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFileContents  := { (_, ver) =>
-      IO.pure(s"""version := "$ver"\n""")
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningReadVersion   := DefaultVersionFileIO.defaultReadVersion,
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFileContents  := {
+      (_, ver) =>
+        IO.pure(s"""version := "$ver"\n""")
     },
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile          := {
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile          := {
       (ref: ProjectRef, state: State) =>
         val extracted = Project.extract(state)
         extracted.get(ref / releaseIOVersioningFile)
@@ -77,6 +89,6 @@ private[monorepo] object MonorepoDefaultSettings {
   )
 
   private lazy val publishDefaults: Seq[Setting[?]] = Seq(
-    MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
   )
 }

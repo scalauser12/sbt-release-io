@@ -982,7 +982,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
     aggregated.settings(
       (
-        MonorepoDefaultSettings.pluginDefaultSettings ++
+        MonorepoDefaultSettings.buildDefaultSettings ++
+          MonorepoDefaultSettings.pluginDefaultSettings ++
           Seq(
             io.release.ReleaseSharedKeys.releaseIOVersioningFile          := new File(
               repo,

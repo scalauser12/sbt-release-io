@@ -402,7 +402,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * Custom plugins that override `buildSettings` should start from `baseBuildSettings`.
     */
   protected def baseBuildSettings: Seq[Setting[?]] =
-    Nil
+    MonorepoDefaultSettings.buildDefaultSettings
 
   override lazy val buildSettings: Seq[Setting[?]] =
     baseBuildSettings

@@ -182,15 +182,22 @@ private[monorepo] object MonorepoHookConfiguration {
     )
   )
 
+  // Defaults are scoped to `ThisBuild` so that user `ThisBuild / ...` overrides flow
+  // through to project-scope lookups via sbt's delegation. Project-scoped duplicates
+  // (`projectSettings`) would shadow user `ThisBuild / ...` overrides because project
+  // scope wins over ThisBuild on the project axis.
   lazy val defaultSettings: Seq[Setting[?]] = Seq(
-    ai.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := true,
-    ai.releaseIOMonorepoPolicyEnableRunClean                  := true,
-    ai.releaseIOMonorepoPolicyEnableRunTests                  := true,
-    ai.releaseIOMonorepoPolicyEnableTagging                   := true,
-    ai.releaseIOMonorepoPolicyEnablePublish                   := true,
-    ai.releaseIOMonorepoPolicyEnablePush                      := true
-  ) ++ globalRegistry.map(entry => entry.settingKey := Seq.empty[MonorepoGlobalHookIO]) ++
-    projectRegistry.map(entry => entry.settingKey := Seq.empty[MonorepoProjectHookIO])
+    ThisBuild / ai.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck := true,
+    ThisBuild / ai.releaseIOMonorepoPolicyEnableRunClean                  := true,
+    ThisBuild / ai.releaseIOMonorepoPolicyEnableRunTests                  := true,
+    ThisBuild / ai.releaseIOMonorepoPolicyEnableTagging                   := true,
+    ThisBuild / ai.releaseIOMonorepoPolicyEnablePublish                   := true,
+    ThisBuild / ai.releaseIOMonorepoPolicyEnablePush                      := true
+  ) ++ globalRegistry.map(entry =>
+    ThisBuild / entry.settingKey := Seq.empty[MonorepoGlobalHookIO]
+  ) ++ projectRegistry.map(entry =>
+    ThisBuild / entry.settingKey := Seq.empty[MonorepoProjectHookIO]
+  )
 
   def resolve(state: State): MonorepoHookConfiguration = {
     val e           = SbtRuntime.extracted(state)
