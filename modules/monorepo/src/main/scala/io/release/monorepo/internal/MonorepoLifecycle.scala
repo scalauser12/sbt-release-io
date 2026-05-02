@@ -91,6 +91,22 @@ private[release] object MonorepoLifecycle {
   ] =
     MonorepoPublishSteps.shouldRunPublishHooks
 
+  /** Execute-time AND condition for `before-publish` hooks: combined with the
+    * frozen validate-time gate decision so the hook fires only when the
+    * publish task will actually run for this project/iteration at execute
+    * time. Re-evaluates `ctx.skipPublish` (folded in via
+    * [[MonorepoPublishSteps.shouldRunPublishHooksAtExecute]]'s `effectiveSkip`
+    * check) and per-project `publish / skip` against `ctx.state` so a hook
+    * earlier in the release (e.g., `afterReleaseCommit`, `afterTag`) that
+    * flipped `ctx.skipPublish` or installed `publish / skip := true` via
+    * session settings suppresses the before-publish phase symmetrically with
+    * [[afterPublishNarrow]]. Validation is unaffected (uses the cached upper
+    * bound), preserving the validate-before-execute contract for
+    * `releaseIOMonorepo check`.
+    */
+  private val beforePublishNarrow: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] =
+    MonorepoPublishSteps.shouldRunPublishHooksAtExecute
+
   /** Execute-time AND condition for `after-publish` hooks: combined with the
     * frozen validate-time gate decision so the hook fires only when the
     * publish task actually ran for this project/iteration. Validation is
@@ -202,7 +218,8 @@ private[release] object MonorepoLifecycle {
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
       freezeGate = true,
       gateKey = Some(MonorepoPublishSteps.publishGateKey),
-      enabled = _.enablePublish
+      enabled = _.enablePublish,
+      narrowExecute = Some(beforePublishNarrow)
     ),
     perItemBuiltIn(MonorepoReleaseSteps.publishArtifacts, _.enablePublish),
     projectHookPhase(

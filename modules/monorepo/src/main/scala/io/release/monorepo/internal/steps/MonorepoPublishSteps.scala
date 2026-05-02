@@ -162,6 +162,26 @@ private[monorepo] object MonorepoPublishSteps {
         evaluatePublishSkipAt(tempState, project).map { case (_, skipped) => !skipped }
       }
 
+  /** Execute-time variant of [[shouldRunPublishHooks]] for hook-narrow
+    * predicates. Evaluates `publish / skip` for the project directly against
+    * `ctx.state` without applying a fresh release-version overlay, because at
+    * execute time the version is already pinned via `appendSessionSettings`
+    * (`session.rawAppend`). Re-applying an overlay through `appendWithSession`
+    * would re-derive `structure` from `session.mergeSettings` and **drop
+    * transient settings** that an earlier execute hook installed via the public
+    * `Project.extract(state).appendWithSession(...)` API. Used by
+    * `before-publish` so its narrow stays consistent with
+    * `publish-artifacts.execute`'s own decision (also folds in
+    * [[effectiveSkip]] so `ctx.skipPublish` flipped at execute time suppresses
+    * the hook symmetrically).
+    */
+  private[monorepo] def shouldRunPublishHooksAtExecute(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Boolean] =
+    if (effectiveSkip(ctx)) IO.pure(false)
+    else evaluatePublishSkipAt(ctx.state, project).map { case (_, skipped) => !skipped }
+
   /** Execute-path skip evaluation that threads the task's state mutations
     * back through `ctx`. Used by `publishArtifacts.execute` because side
     * effects from the skip evaluation (e.g., resolver setup) should persist

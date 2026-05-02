@@ -1,0 +1,18 @@
+# Regression: when an earlier execute-time hook (`after-tag` here) flips
+# `publish / skip := true` for a project via `appendWithSession`, the
+# `before-publish` hook MUST be suppressed for that project — otherwise its
+# side effects (staging, notifications, etc.) outlive the publish decision.
+# `publish-artifacts` already skips correctly; the regression covers the
+# matching narrow on `before-publish`.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Release with CLI override; the after-tag hook flips publish/skip := true.
+> releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+# before-publish must have been suppressed, and publish must not have run.
+> checkBeforePublishHookSuppressed
+> checkPublishSkipped
