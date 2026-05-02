@@ -235,18 +235,10 @@ private[release] object PublishSteps {
           case (currentState, false) =>
             runTaskChecked(currentState, ref / publish / Keys.skip, actionName)
               .map { case (nextState, skipped) => (nextState, !skipped) }
-              .handleErrorWith {
-                case e: IllegalStateException if e.getMessage.contains("FailureCommand") =>
-                  IO.raiseError(e)
-                case NonFatal(e)                                                         =>
-                  IO.blocking {
-                    currentState.log.warn(
-                      s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for " +
-                        s"${ref.project}: ${errorMessage(e)}. Assuming skip = false."
-                    )
-                    (currentState, true) // skip=false → publish runs (matches checkPublishSkip)
-                  }
-              }
+              .handleErrorWith(
+                // skip=false → publish runs (matches checkPublishSkip's lenient fallback)
+                recoverPublishProbeError(currentState, ref.project, (currentState, true))
+              )
         }
       }
     }
@@ -337,20 +329,32 @@ private[release] object PublishSteps {
       ref / publish / Keys.skip,
       s"publish-artifacts: sbt task '${(publish / Keys.skip).key.label}'"
     ).map(_._2)
-      .handleErrorWith {
-        case e: IllegalStateException if e.getMessage.contains("FailureCommand") =>
-          IO.raiseError(e)
-        case NonFatal(e)                                                         =>
-          IO.blocking {
-            state.log.warn(
-              s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for ${ref.project}: " +
-                s"${errorMessage(e)}. Assuming skip = false."
-            )
-            false
-          }
-        case fatal                                                               =>
-          IO.raiseError(fatal)
-      }
+      .handleErrorWith(recoverPublishProbeError(state, ref.project, fallback = false))
+
+  /** Recovery cascade shared by [[anyTargetWillPublishPropagating]] and
+    * [[checkPublishSkip]]: re-raise on `FailureCommand` (sbt task explicitly
+    * armed sbt's failure sentinel), warn and fall back on `NonFatal` (typical
+    * "publishTo undefined" / evaluation errors), re-raise on fatal.
+    */
+  private def recoverPublishProbeError[A](
+      state: State,
+      refLabel: String,
+      fallback: A
+  )(err: Throwable): IO[A] =
+    err match {
+      case e: IllegalStateException if e.getMessage.contains("FailureCommand") =>
+        IO.raiseError(e)
+      case NonFatal(e)                                                         =>
+        IO.blocking {
+          state.log.warn(
+            s"${ReleaseLogPrefixes.Core} Failed to evaluate publish / skip for $refLabel: " +
+              s"${errorMessage(e)}. Assuming skip = false."
+          )
+          fallback
+        }
+      case fatal                                                               =>
+        IO.raiseError(fatal)
+    }
 
   private def checkPublishToMissing(
       ref: ProjectRef,

@@ -9,7 +9,6 @@ import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.preflight.PreflightPhaseGroups
-import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.DecisionResolver
 import sbt.*
 
@@ -60,13 +59,10 @@ private[release] object CoreLifecycle {
   // Publish hooks freeze their validate-time gate decision so publishTo / publish / skip
   // drift between cross-build iterations cannot flip execute-time behavior. Core runs
   // against a single active release context, so the current unscoped scalaVersion is the
-  // stable per-iteration key.
+  // stable per-iteration key — shared with `publish-artifacts` itself so before-publish
+  // hooks see the same key the publish step records its iteration result under.
   private val scalaVersionKey: ReleaseContext => String =
-    ctx =>
-      SbtRuntime
-        .extracted(ctx.state)
-        .getOpt(Keys.scalaVersion)
-        .getOrElse("")
+    PublishSteps.publishGateKey
 
   /** Narrow `before-publish` execution to iterations where `publish-artifacts` will
     * actually run. The frozen validate-time gate stays the upper bound (so `releaseIO

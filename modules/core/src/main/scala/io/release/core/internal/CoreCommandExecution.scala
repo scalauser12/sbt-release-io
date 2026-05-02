@@ -66,30 +66,36 @@ private[release] object CoreCommandExecution {
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
   ): State =
-    ReleaseCommandRunner.runPreparedCommand(
-      state = state,
-      cleanState = state => CommandStateSupport.cleanReleaseState(state),
-      logPrefix = ReleaseLogPrefixes.Core
-    )(
-      cleanState =>
-        IO
-          .blocking(
-            buildCommandInputs(
-              cleanState,
-              args,
-              warnOnDuplicates = true,
-              interactiveEnabled = runtime.resolveInteractiveEnabled(cleanState),
-              runtime
-            )
-          )
-          .map(Right(_)),
-      (inputs: CoreCommandInputs) => runPlannedRelease(inputs, runtime)
+    runCommand(
+      state,
+      args,
+      runtime,
+      warnOnDuplicates = true,
+      resolveInteractive = runtime.resolveInteractiveEnabled,
+      run = runPlannedRelease(_, runtime)
     )
 
   def doCheck[T](
       state: State,
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T]
+  ): State =
+    runCommand(
+      state,
+      args,
+      runtime,
+      warnOnDuplicates = false,
+      resolveInteractive = _ => false,
+      run = runPlannedCheck(_, runtime)
+    )
+
+  private def runCommand[T](
+      state: State,
+      args: Seq[ReleaseCli.Arg],
+      runtime: CommandRuntime[T],
+      warnOnDuplicates: Boolean,
+      resolveInteractive: State => Boolean,
+      run: CoreCommandInputs => IO[State]
   ): State =
     ReleaseCommandRunner.runPreparedCommand(
       state = state,
@@ -102,13 +108,13 @@ private[release] object CoreCommandExecution {
             buildCommandInputs(
               cleanState,
               args,
-              warnOnDuplicates = false,
-              interactiveEnabled = false,
+              warnOnDuplicates = warnOnDuplicates,
+              interactiveEnabled = resolveInteractive(cleanState),
               runtime
             )
           )
           .map(Right(_)),
-      (inputs: CoreCommandInputs) => runPlannedCheck(inputs, runtime)
+      run
     )
 
   def resolveProcessMode[T](

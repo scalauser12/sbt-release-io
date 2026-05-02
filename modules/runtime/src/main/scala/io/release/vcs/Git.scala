@@ -34,6 +34,23 @@ class Git(val baseDir: File) extends Vcs {
   private def runSingleLine(args: String*)(context: => String): IO[String] =
     GitProcessSupport.runSingleLine(baseDir, args)(context)
 
+  /** Run a `git` subcommand whose semantics map exit 0 → true and exit 1 → false
+    * (e.g., `git show-ref`, `git config <key>`, `git check-ignore`). Any other
+    * non-zero exit raises with the command context plus stderr.
+    */
+  private def runBooleanProbe(args: Seq[String], context: String): IO[Boolean] =
+    GitProcessSupport.runCommandResult(baseDir, args).flatMap { result =>
+      result.exitCode match {
+        case 0 => IO.pure(true)
+        case 1 => IO.pure(false)
+        case n =>
+          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
+          IO.raiseError(
+            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
+          )
+      }
+    }
+
   // ── Queries ──────────────────────────────────────────────────────────
 
   def currentHash: IO[String] =
@@ -114,21 +131,11 @@ class Git(val baseDir: File) extends Vcs {
       }
     }
 
-  private def probeBranchKey(branch: String, key: String): IO[Boolean] = {
-    val args    = Seq("config", s"branch.$branch.$key")
-    val context = s"git config branch.$branch.$key"
-    GitProcessSupport.runCommandResult(baseDir, args).flatMap { result =>
-      result.exitCode match {
-        case 0 => IO.pure(true)
-        case 1 => IO.pure(false)
-        case n =>
-          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
-          IO.raiseError(
-            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
-          )
-      }
-    }
-  }
+  private def probeBranchKey(branch: String, key: String): IO[Boolean] =
+    runBooleanProbe(
+      Seq("config", s"branch.$branch.$key"),
+      s"git config branch.$branch.$key"
+    )
 
   def isBehindRemote: IO[Boolean] =
     for {
@@ -141,21 +148,11 @@ class Git(val baseDir: File) extends Vcs {
           .map(_.nonEmpty)
     } yield behind
 
-  def existsTag(name: String): IO[Boolean] = {
-    val args    = Seq("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name")
-    val context = s"git show-ref refs/tags/$name"
-    GitProcessSupport.runCommandResult(baseDir, args).flatMap { result =>
-      result.exitCode match {
-        case 0 => IO.pure(true)
-        case 1 => IO.pure(false)
-        case n =>
-          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
-          IO.raiseError(
-            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
-          )
-      }
-    }
-  }
+  def existsTag(name: String): IO[Boolean] =
+    runBooleanProbe(
+      Seq("show-ref", "--quiet", "--tags", "--verify", s"refs/tags/$name"),
+      s"git show-ref refs/tags/$name"
+    )
 
   /** Validate `name` against git's ref-naming rules via `git check-ref-format`.
     *
@@ -220,26 +217,15 @@ class Git(val baseDir: File) extends Vcs {
     runLines("ls-files", "--other", "--exclude-standard")("git ls-files --other")
 
   override def isIgnored(path: String): IO[Boolean] =
-    GitProcessSupport
-      .runCommandResult(baseDir, Seq("check-ignore", "--quiet", "--", path))
-      .flatMap { result =>
-        // git check-ignore exit codes:
-        //   0   -> path matches a .gitignore (or equivalent) rule
-        //   1   -> path is not ignored
-        //   128 -> fatal (e.g. not in a repo); surface so callers don't silently
-        //          treat a misconfigured repo as "not ignored"
-        result.exitCode match {
-          case 0 => IO.pure(true)
-          case 1 => IO.pure(false)
-          case n =>
-            val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
-            IO.raiseError(
-              new IllegalStateException(
-                s"git check-ignore --quiet -- $path failed with exit code $n$stderrSuffix"
-              )
-            )
-        }
-      }
+    // git check-ignore exit codes:
+    //   0   -> path matches a .gitignore (or equivalent) rule
+    //   1   -> path is not ignored
+    //   128 -> fatal (e.g. not in a repo); surfaced via runBooleanProbe so callers
+    //          don't silently treat a misconfigured repo as "not ignored"
+    runBooleanProbe(
+      Seq("check-ignore", "--quiet", "--", path),
+      s"git check-ignore --quiet -- $path"
+    )
 
   def status: IO[String] =
     runLines("status", "--porcelain")("git status").map(_.mkString("\n"))

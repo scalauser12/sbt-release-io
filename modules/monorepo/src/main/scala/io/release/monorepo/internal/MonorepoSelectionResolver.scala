@@ -32,11 +32,6 @@ private[monorepo] object MonorepoSelectionResolver {
       sharedPaths: Seq[String]
   )
 
-  private final case class DuplicateProjectName(
-      name: String,
-      projects: Seq[ProjectReleaseInfo]
-  )
-
   /** Shared error message for the "no projects selected" case.
     *
     * Used by [[MonorepoPreparation.selectProjects]], which is shared by both the
@@ -255,24 +250,24 @@ private[monorepo] object MonorepoSelectionResolver {
 
   private def findDuplicateProjectNames(
       projects: Seq[ProjectReleaseInfo]
-  ): Seq[DuplicateProjectName] =
+  ): Seq[(String, Seq[ProjectReleaseInfo])] =
     projects
       .groupBy(_.name)
       .collect {
         case (name, matching) if matching.length > 1 =>
-          DuplicateProjectName(name, matching.sortBy(projectIdentity))
+          name -> matching.sortBy(projectIdentity)
       }
       .toSeq
-      .sortBy(_.name)
+      .sortBy(_._1)
 
   private def duplicateProjectNamesMessage(
-      duplicates: Seq[DuplicateProjectName]
+      duplicates: Seq[(String, Seq[ProjectReleaseInfo])]
   ): String = {
-    val duplicateNames = duplicates.map(_.name).mkString(", ")
+    val duplicateNames = duplicates.map(_._1).mkString(", ")
     val details        = duplicates
-      .map { duplicate =>
-        val locations = duplicate.projects.map(projectIdentity).mkString(", ")
-        s"${duplicate.name} -> $locations"
+      .map { case (name, projects) =>
+        val locations = projects.map(projectIdentity).mkString(", ")
+        s"$name -> $locations"
       }
       .mkString("; ")
 

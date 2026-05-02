@@ -177,55 +177,50 @@ private[release] object ReleaseVersionWorkflow {
 
   def commitReleaseVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (releaseVersion, _) =>
-      for {
-        versionPlan             <- IO.blocking(resolveVersionPlan(ctx))
-        commitResult            <- commitVersionNative(
-                                     ctx,
-                                     "commit-release-version",
-                                     releaseIOVcsReleaseCommitMessage,
-                                     versionPlan.versionFile
-                                   )
-        (resultCtx, currentHash) = commitResult
-        finalCtx                <-
-          ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resultCtx)(
-            IO.blocking {
-              val newState = SbtRuntime.appendSessionSettings(
-                resultCtx.state,
-                sessionSettings(versionPlan) ++
-                  Seq(releaseIOInternalReleaseHash := Some(currentHash)) ++
-                  versionValueSettings(versionPlan, releaseVersion)
-              )
-              resultCtx.withState(newState)
-            }
-          )
-      } yield finalCtx
+      commitVersion(
+        ctx = ctx,
+        actionName = "commit-release-version",
+        msgKey = releaseIOVcsReleaseCommitMessage,
+        version = releaseVersion,
+        extraSettings = currentHash => Seq(releaseIOInternalReleaseHash := Some(currentHash))
+      )
     }
 
   def commitNextVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (_, nextVersion) =>
-      for {
-        versionPlan   <- IO.blocking(resolveVersionPlan(ctx))
-        commitResult  <-
-          commitVersionNative(
-            ctx,
-            "commit-next-version",
-            releaseIOVcsNextCommitMessage,
-            versionPlan.versionFile
-          )
-        (resultCtx, _) = commitResult
-        finalCtx      <-
-          ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resultCtx)(
-            IO.blocking {
-              val newState = SbtRuntime.appendSessionSettings(
-                resultCtx.state,
-                sessionSettings(versionPlan) ++
-                  versionValueSettings(versionPlan, nextVersion)
-              )
-              resultCtx.withState(newState)
-            }
-          )
-      } yield finalCtx
+      commitVersion(
+        ctx = ctx,
+        actionName = "commit-next-version",
+        msgKey = releaseIOVcsNextCommitMessage,
+        version = nextVersion,
+        extraSettings = _ => Seq.empty
+      )
     }
+
+  private def commitVersion(
+      ctx: ReleaseContext,
+      actionName: String,
+      msgKey: TaskKey[String],
+      version: String,
+      extraSettings: String => Seq[Setting[?]]
+  ): IO[ReleaseContext] =
+    for {
+      versionPlan             <- IO.blocking(resolveVersionPlan(ctx))
+      commitResult            <- commitVersionNative(ctx, actionName, msgKey, versionPlan.versionFile)
+      (resultCtx, currentHash) = commitResult
+      finalCtx                <-
+        ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resultCtx)(
+          IO.blocking {
+            val newState = SbtRuntime.appendSessionSettings(
+              resultCtx.state,
+              sessionSettings(versionPlan) ++
+                extraSettings(currentHash) ++
+                versionValueSettings(versionPlan, version)
+            )
+            resultCtx.withState(newState)
+          }
+        )
+    } yield finalCtx
 
   private[release] def resolveVersions(
       ctx: ReleaseContext,

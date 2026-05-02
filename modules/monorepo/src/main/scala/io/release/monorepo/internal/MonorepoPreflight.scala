@@ -21,19 +21,17 @@ import io.release.vcs.TagConflictResolver
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
 private[monorepo] object MonorepoPreflight {
 
-  private object Messages {
-    val SelectionRuntimeHookState: String = "selection depends on runtime hook state"
-    val ProjectsRuntimeHookState: String  = "projects depend on runtime hook state"
-    val VersionsRuntimeHookState: String  = "versions depend on runtime hook state"
-    val TagsRuntimeHookState: String      = "tags depend on runtime hook state"
-    val TagsRuntimeSetup: String          = "tags depend on runtime/custom version setup"
+  private val SelectionRuntimeHookState: String = "selection depends on runtime hook state"
+  private val ProjectsRuntimeHookState: String  = "projects depend on runtime hook state"
+  private val VersionsRuntimeHookState: String  = "versions depend on runtime hook state"
+  private val TagsRuntimeHookState: String      = "tags depend on runtime hook state"
+  private val TagsRuntimeSetup: String          = "tags depend on runtime/custom version setup"
 
-    def stepNotInCheckProcess(stepName: String): String =
-      s"$stepName not in check process"
+  private def stepNotInCheckProcess(stepName: String): String =
+    s"$stepName not in check process"
 
-    def versionsNotResolvedForProject(projectName: String): String =
-      s"versions were not resolved for $projectName"
-  }
+  private def versionsNotResolvedForProject(projectName: String): String =
+    s"versions were not resolved for $projectName"
 
   private val DetectOrSelectProjectsStep      = MonorepoReleaseSteps.detectOrSelectProjects.name
   private val InquireVersionsStep             = MonorepoReleaseSteps.inquireVersions.name
@@ -264,9 +262,9 @@ private[monorepo] object MonorepoPreflight {
             buildSummary(
               selectionMode = selected.selectionMode,
               projects = selected.projects,
-              versions = Evaluation.NotEvaluated(Messages.VersionsRuntimeHookState),
+              versions = Evaluation.NotEvaluated(VersionsRuntimeHookState),
               ctx = checkedSetup,
-              tagOutcomes = Evaluation.NotEvaluated(Messages.TagsRuntimeHookState),
+              tagOutcomes = Evaluation.NotEvaluated(TagsRuntimeHookState),
               processPlan = processPlan,
               crossBuildEnabled = crossBuildEnabled
             )
@@ -292,8 +290,7 @@ private[monorepo] object MonorepoPreflight {
   ): IO[Summary] = {
     checkVersionAwareSegment(
       baseCtx = baseCtx,
-      selectionMode =
-        Evaluation.NotEvaluated(Messages.stepNotInCheckProcess(DetectOrSelectProjectsStep)),
+      selectionMode = Evaluation.NotEvaluated(stepNotInCheckProcess(DetectOrSelectProjectsStep)),
       projects = Evaluation.Resolved(()),
       processPlan = processPlan,
       checkSteps = checkSteps,
@@ -365,7 +362,7 @@ private[monorepo] object MonorepoPreflight {
         SelectionSnapshot(
           context = ctx,
           selectionMode =
-            Evaluation.NotEvaluated(Messages.stepNotInCheckProcess(DetectOrSelectProjectsStep)),
+            Evaluation.NotEvaluated(stepNotInCheckProcess(DetectOrSelectProjectsStep)),
           projects = Evaluation.Resolved(())
         )
       )
@@ -373,8 +370,8 @@ private[monorepo] object MonorepoPreflight {
       IO.pure(
         SelectionSnapshot(
           context = ctx,
-          selectionMode = Evaluation.NotEvaluated(Messages.SelectionRuntimeHookState),
-          projects = Evaluation.NotEvaluated(Messages.ProjectsRuntimeHookState)
+          selectionMode = Evaluation.NotEvaluated(SelectionRuntimeHookState),
+          projects = Evaluation.NotEvaluated(ProjectsRuntimeHookState)
         )
       )
     else
@@ -386,7 +383,7 @@ private[monorepo] object MonorepoPreflight {
             selectionMode = Evaluation.Resolved(selected.selectionMode),
             projects =
               if (checkSteps.projectsDependOnRuntimeHookState)
-                Evaluation.NotEvaluated(Messages.ProjectsRuntimeHookState)
+                Evaluation.NotEvaluated(ProjectsRuntimeHookState)
               else Evaluation.Resolved(())
           )
         )
@@ -400,7 +397,7 @@ private[monorepo] object MonorepoPreflight {
       IO.pure(
         VersionSnapshot(
           context = ctx,
-          versions = Evaluation.NotEvaluated(Messages.stepNotInCheckProcess(InquireVersionsStep)),
+          versions = Evaluation.NotEvaluated(stepNotInCheckProcess(InquireVersionsStep)),
           versionsResolved = false,
           blockedByRuntimeHookState = false
         )
@@ -411,7 +408,7 @@ private[monorepo] object MonorepoPreflight {
           IO.pure(
             VersionSnapshot(
               context = ctx,
-              versions = Evaluation.NotEvaluated(Messages.VersionsRuntimeHookState),
+              versions = Evaluation.NotEvaluated(VersionsRuntimeHookState),
               versionsResolved = false,
               blockedByRuntimeHookState = true
             )
@@ -421,7 +418,7 @@ private[monorepo] object MonorepoPreflight {
             IO.pure(
               VersionSnapshot(
                 context = ctx,
-                versions = Evaluation.NotEvaluated(Messages.VersionsRuntimeHookState),
+                versions = Evaluation.NotEvaluated(VersionsRuntimeHookState),
                 versionsResolved = false,
                 blockedByRuntimeHookState = true
               )
@@ -432,7 +429,7 @@ private[monorepo] object MonorepoPreflight {
                 context = updatedCtx,
                 versions =
                   if (checkSteps.versionsDependOnPostResolutionRuntimeHookState)
-                    Evaluation.NotEvaluated(Messages.VersionsRuntimeHookState)
+                    Evaluation.NotEvaluated(VersionsRuntimeHookState)
                   else Evaluation.Resolved(()),
                 versionsResolved = true,
                 blockedByRuntimeHookState = false
@@ -447,15 +444,15 @@ private[monorepo] object MonorepoPreflight {
       tagPreflightInteractive: Boolean
   ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
     if (!checkSteps.shouldPreflightTags)
-      IO.pure(Evaluation.NotEvaluated(Messages.stepNotInCheckProcess(TagReleasesStep)))
+      IO.pure(Evaluation.NotEvaluated(stepNotInCheckProcess(TagReleasesStep)))
     else if (!checkSteps.tagFollowsVersionResolution)
-      IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeSetup))
+      IO.pure(Evaluation.NotEvaluated(TagsRuntimeSetup))
     else if (!versionSnapshot.versionsResolved && versionSnapshot.blockedByRuntimeHookState)
-      IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeHookState))
+      IO.pure(Evaluation.NotEvaluated(TagsRuntimeHookState))
     else if (!versionSnapshot.versionsResolved)
-      IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeSetup))
+      IO.pure(Evaluation.NotEvaluated(TagsRuntimeSetup))
     else if (checkSteps.tagDependsOnRuntimeHookState)
-      IO.pure(Evaluation.NotEvaluated(Messages.TagsRuntimeHookState))
+      IO.pure(Evaluation.NotEvaluated(TagsRuntimeHookState))
     else
       preflightTags(
         ctx,
@@ -639,7 +636,7 @@ private[monorepo] object MonorepoPreflight {
           case Some((releaseVersion, nextVersion)) =>
             Evaluation.Resolved(ProjectVersions(releaseVersion, nextVersion))
           case None                                =>
-            Evaluation.NotEvaluated(Messages.versionsNotResolvedForProject(project.name))
+            Evaluation.NotEvaluated(versionsNotResolvedForProject(project.name))
         }
     }
 
