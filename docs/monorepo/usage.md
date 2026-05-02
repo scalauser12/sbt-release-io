@@ -12,7 +12,7 @@ sbt "releaseIOMonorepo [help | check] [selectors] [flags] [version overrides]"
 |------------|--------|
 | _(none)_ | Run the full release |
 | `help` | Print usage, flags, examples, and docs links |
-| `check` | Run a preflight with no release side effects: resolve projects, versions, and tags, run step validations, and print a summary — without writing version files, creating commits or tags, publishing, or pushing |
+| `check` | Run a preflight with no release side effects: resolve projects, versions, and tags when runtime hook state cannot still change them (otherwise summarize them as not evaluated), run step validations, and print a summary — without writing version files, creating commits or tags, publishing, or pushing |
 
 `help` and `check` are reserved only as the first token after `releaseIOMonorepo`. If a subproject collides with a subcommand or CLI keyword, select it with `project <id>`.
 
