@@ -22,6 +22,7 @@ private[monorepo] object MonorepoDefaultSettings {
       behaviorDefaults,
       MonorepoLifecycle.configDefaultSettings,
       detectionDefaults,
+      selectionBuildDefaults,
       versioningAndVcsDefaults,
       publishDefaults
     ).flatten
@@ -44,22 +45,46 @@ private[monorepo] object MonorepoDefaultSettings {
     )
   )
 
+  // The ThisBuild sentinel pairs with the project-scoped default below.
+  //
+  // A user `ThisBuild / releaseIOMonorepoSelectionProjects := Seq(...)` (or
+  // `+= ref` / `++= refs`) populates the ThisBuild value, which the project
+  // default forwards. The sentinel exists so append-style overrides have a
+  // base value to extend; without it, sbt rejects `ThisBuild / k += ...` at
+  // build-load time as a reference to an undefined setting.
+  //
+  // Trade-off: the value-sentinel can't distinguish a user's explicit
+  // `ThisBuild / k := Seq.empty` from the default (both surface as
+  // `Seq.empty`), so an explicit empty *at ThisBuild scope* falls back to
+  // the aggregate computation. To express an explicit empty selection, set
+  // the key at project scope (`releaseIOMonorepoSelectionProjects :=
+  // Seq.empty` on the root) — that overrides the project-scoped default
+  // directly without going through the ThisBuild handshake.
+  private lazy val selectionBuildDefaults: Seq[Setting[?]] = Seq(
+    ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects := Seq.empty
+  )
+
   private lazy val selectionProjectDefaults: Seq[Setting[?]] = Seq(
     MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects := {
-      val build      = loadedBuild.value
-      val root       = thisProjectRef.value
-      val projectMap = build.allProjectRefs.map { case (ref, proj) =>
-        ref -> proj.aggregate
-      }.toMap
+      val thisBuildValue =
+        (ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects).value
+      if (thisBuildValue.nonEmpty) thisBuildValue
+      else {
+        val build      = loadedBuild.value
+        val root       = thisProjectRef.value
+        val projectMap = build.allProjectRefs.map { case (ref, proj) =>
+          ref -> proj.aggregate
+        }.toMap
 
-      def transitive(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
-        if (visited.contains(ref)) Seq.empty
-        else {
-          val directAggs = projectMap.getOrElse(ref, Seq.empty)
-          directAggs.flatMap(agg => agg +: transitive(agg, visited + ref))
-        }
+        def transitive(ref: ProjectRef, visited: Set[ProjectRef]): Seq[ProjectRef] =
+          if (visited.contains(ref)) Seq.empty
+          else {
+            val directAggs = projectMap.getOrElse(ref, Seq.empty)
+            directAggs.flatMap(agg => agg +: transitive(agg, visited + ref))
+          }
 
-      transitive(root, Set.empty).distinct
+        transitive(root, Set.empty).distinct
+      }
     }
   )
 

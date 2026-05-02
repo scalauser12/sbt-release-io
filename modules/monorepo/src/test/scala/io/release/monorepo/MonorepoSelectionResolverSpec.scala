@@ -252,6 +252,57 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "default - aggregate computation runs when no ThisBuild override is configured"
+  ) {
+    resolverFixtureResource("monorepo-selection-default-aggregates").use { fixture =>
+      MonorepoProjectResolver.resolveAll(fixture.state).map { resolved =>
+        assertEquals(resolved.map(_.name).sorted, Seq("api", "consumer", "core"))
+      }
+    }
+  }
+
+  test(
+    "default - ThisBuild releaseIOMonorepoSelectionProjects override wins over the plugin's project default"
+  ) {
+    val overrideSettings: Seq[sbt.Def.Setting[?]] = Seq(
+      sbt.ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects := {
+        val build = sbt.Keys.loadedBuild.value
+        build.allProjectRefs.collect { case (ref, _) if ref.project == "api" => ref }
+      }
+    )
+    resolverFixtureResource(
+      "monorepo-selection-thisbuild-override",
+      rootSettings = overrideSettings
+    ).use { fixture =>
+      MonorepoProjectResolver.resolveAll(fixture.state).map { resolved =>
+        assertEquals(resolved.map(_.name), Seq("api"))
+      }
+    }
+  }
+
+  test(
+    "default - ThisBuild ++= extends the empty plugin base"
+  ) {
+    // `+=` / `++=` need a ThisBuild base value to append to. The plugin
+    // installs `ThisBuild / k := Seq.empty` as that base, so append idioms
+    // resolve to the appended elements (not an "undefined setting" error).
+    val overrideSettings: Seq[sbt.Def.Setting[?]] = Seq(
+      sbt.ThisBuild / MonorepoReleasePlugin.autoImport.releaseIOMonorepoSelectionProjects ++= {
+        val build = sbt.Keys.loadedBuild.value
+        build.allProjectRefs.collect { case (ref, _) if ref.project == "api" => ref }
+      }
+    )
+    resolverFixtureResource(
+      "monorepo-selection-thisbuild-append",
+      rootSettings = overrideSettings
+    ).use { fixture =>
+      MonorepoProjectResolver.resolveAll(fixture.state).map { resolved =>
+        assertEquals(resolved.map(_.name), Seq("api"))
+      }
+    }
+  }
+
   test("validateResolvedProjects - reject duplicate live project names before selection") {
     Resource
       .both(

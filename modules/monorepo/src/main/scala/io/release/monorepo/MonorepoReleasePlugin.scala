@@ -18,7 +18,15 @@ object MonorepoReleasePluginAutoImport {
   lazy val releaseIOMonorepoSelectionProjects: SettingKey[Seq[ProjectRef]] =
     SettingKey[Seq[ProjectRef]](
       "releaseIOMonorepoSelectionProjects",
-      "Which subprojects participate in monorepo releases"
+      "Which subprojects participate in monorepo releases. " +
+        "Settable at project or ThisBuild scope. ThisBuild scope supports " +
+        "`:=`, `+=`, and `++=` (the plugin installs an empty ThisBuild base so " +
+        "append idioms have something to extend); the project default forwards a " +
+        "non-empty ThisBuild value and falls back to computing aggregates from " +
+        "the root otherwise. Caveat: an explicit `ThisBuild / ... := Seq.empty` " +
+        "is indistinguishable from the empty plugin default and triggers the " +
+        "aggregate fallback — set the key at project scope to express an " +
+        "explicit empty selection."
     )
 
   // ── Behavior keys ─────────────────────────────────────────────────
