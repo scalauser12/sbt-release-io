@@ -290,71 +290,80 @@ private[release] object ReleaseVersionWorkflow {
       versionFile: File
   ): IO[(ReleaseContext, String)] =
     required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
-      IO.blocking {
-        val sign    = SbtRuntime.getSetting(ctx.state, releaseIOVcsSign)
-        val signOff = SbtRuntime.getSetting(ctx.state, releaseIOVcsSignOff)
-        (sign, signOff)
-      }.flatMap { case (sign, signOff) =>
-        VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
-          for {
-            _               <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
-            trackedDirty    <- VcsOps.trackedStatus(vcs)
-            untracked       <- vcs.untrackedFiles
-            // The version file may be untracked when `releaseIOVcsIgnoreUntrackedFiles
-            // := true` lets the clean check pass with an untracked version file.
-            // After `writeVersion` it is still untracked, so `trackedDirty` is empty
-            // and the no-op branch would otherwise tag/push without ever committing
-            // the version bump.
-            versionUntracked = untracked.contains(relativePath)
-            shouldCommit     = trackedDirty.nonEmpty || versionUntracked
-            // Gitignored version files appear in neither `trackedDirty` nor
-            // `untracked` (`git ls-files --other --exclude-standard` filters out
-            // ignored). When we'd otherwise take the no-op branch, probe the
-            // ignore rules and fail loudly — silently tagging/pushing without
-            // committing the version bump is the worst outcome, and forcibly
-            // adding a file the user excluded would be surprising.
-            _               <- if (shouldCommit) IO.unit
-                               else assertVersionFileNotIgnored(actionName, relativePath, vcs)
-            result          <- if (shouldCommit) {
-                                 for {
-                                   commitData        <- runTaskChecked(
-                                                          ctx.state,
-                                                          commitMessageKey,
-                                                          actionName
-                                                        )
-                                   (commitState, msg) = commitData
-                                   // Re-assert dirty status after the commit-message task runs:
-                                   // a side-effecting task could have modified or staged
-                                   // unrelated files between the initial pre-check and the
-                                   // staging window below.
-                                   _                 <- assertOnlyVersionFileDirty(
-                                                          actionName,
-                                                          relativePath,
-                                                          vcs
-                                                        )
-                                   result            <- IO.uncancelable { _ =>
-                                                          // Keep staging and commit atomic with
-                                                          // respect to cancellation so we do not
-                                                          // leave staged-but-uncommitted
-                                                          // changes behind.
-                                                          for {
-                                                            _    <- vcs.add(relativePath)
-                                                            _    <- vcs.commit(msg, sign, signOff)
-                                                            hash <- vcs.currentHash
-                                                            _    <- assertCleanAfterCommit(
-                                                                      actionName,
-                                                                      vcs
-                                                                    )
-                                                          } yield (ctx.withState(commitState), hash)
-                                                        }
-                                 } yield result
-                               } else {
-                                 vcs.currentHash.map(hash => (ctx, hash))
-                               }
-          } yield result
-        }
-      }
+      for {
+        signFlags       <- loadSignFlags(ctx.state)
+        relativePath    <- VcsOps.relativizeToBase(vcs, versionFile)
+        _               <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
+        trackedDirty    <- VcsOps.trackedStatus(vcs)
+        untracked       <- vcs.untrackedFiles
+        // The version file may be untracked when `releaseIOVcsIgnoreUntrackedFiles
+        // := true` lets the clean check pass with an untracked version file.
+        // After `writeVersion` it is still untracked, so `trackedDirty` is empty
+        // and the no-op branch would otherwise tag/push without ever committing
+        // the version bump.
+        versionUntracked = untracked.contains(relativePath)
+        shouldCommit     = trackedDirty.nonEmpty || versionUntracked
+        result          <-
+          if (shouldCommit)
+            performCommit(ctx, actionName, vcs, relativePath, signFlags, commitMessageKey)
+          else
+            noOpCommit(ctx, actionName, vcs, relativePath)
+      } yield result
     }
+
+  private def loadSignFlags(state: State): IO[(Boolean, Boolean)] =
+    IO.blocking(
+      (
+        SbtRuntime.getSetting(state, releaseIOVcsSign),
+        SbtRuntime.getSetting(state, releaseIOVcsSignOff)
+      )
+    )
+
+  private def performCommit(
+      ctx: ReleaseContext,
+      actionName: String,
+      vcs: Vcs,
+      relativePath: String,
+      signFlags: (Boolean, Boolean),
+      commitMessageKey: TaskKey[String]
+  ): IO[(ReleaseContext, String)] = {
+    val (sign, signOff) = signFlags
+    for {
+      commitData        <- runTaskChecked(ctx.state, commitMessageKey, actionName)
+      (commitState, msg) = commitData
+      // Re-assert dirty status after the commit-message task runs: a side-effecting
+      // task could have modified or staged unrelated files between the initial
+      // pre-check and the staging window below.
+      _                 <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
+      result            <- IO.uncancelable { _ =>
+                             // Keep staging and commit atomic with respect to cancellation so we
+                             // do not leave staged-but-uncommitted changes behind.
+                             for {
+                               _    <- vcs.add(relativePath)
+                               _    <- vcs.commit(msg, sign, signOff)
+                               hash <- vcs.currentHash
+                               _    <- assertCleanAfterCommit(actionName, vcs)
+                             } yield (ctx.withState(commitState), hash)
+                           }
+    } yield result
+  }
+
+  /** No-op path: the working tree is clean, so `commit-release-version` /
+    * `commit-next-version` has nothing to commit. We still probe the ignore
+    * rules — gitignored version files appear in neither `trackedDirty` nor
+    * `untracked` (`git ls-files --other --exclude-standard` filters out
+    * ignored), and silently tagging/pushing without committing the version
+    * bump is the worst outcome. Forcibly adding a file the user excluded
+    * would be surprising, so we fail loudly instead.
+    */
+  private def noOpCommit(
+      ctx: ReleaseContext,
+      actionName: String,
+      vcs: Vcs,
+      relativePath: String
+  ): IO[(ReleaseContext, String)] =
+    assertVersionFileNotIgnored(actionName, relativePath, vcs) *>
+      vcs.currentHash.map(hash => (ctx, hash))
 
   /** Reject the commit if any tracked file other than the configured version file is dirty.
     * Catches hooks or sbt tasks that staged or modified unrelated files during the release —
