@@ -20,7 +20,7 @@ import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.sbt.SnapshotDependencyTasks
 import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.PublishValidation
-import io.release.runtime.workflow.StepHelpers.runTaskChecked
+import io.release.runtime.workflow.StepHelpers.{errorMessage, runTaskChecked}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -79,17 +79,39 @@ private[monorepo] object MonorepoPublishSteps {
       case _                          => false
     }
 
+  /** Match core's publish-probe recovery: `FailureCommand` still aborts, while
+    * ordinary evaluation errors mean "not skipped" so publish/publishTo checks
+    * continue and the actual publish path can surface the build's configured failure.
+    */
+  private def recoverPublishSkipProbeError[A](
+      state: State,
+      project: ProjectReleaseInfo,
+      fallback: A
+  )(cause: Throwable): IO[A] =
+    cause match {
+      case NonFatal(err) if isFailureCommandTaskError(err) =>
+        IO.raiseError(err)
+      case NonFatal(err)                                   =>
+        IO.blocking {
+          state.log.warn(
+            s"${ReleaseLogPrefixes.Monorepo} Failed to evaluate publish / skip for " +
+              s"${project.name}: ${errorMessage(err)}. Assuming skip = false."
+          )
+          fallback
+        }
+      case fatal                                           =>
+        IO.raiseError(fatal)
+    }
+
   /** Evaluate `key` against the given `state` and return both the next state
     * and the result. The next state preserves any session mutations the task
-    * produced (e.g., resolver setup) so that the next evaluation in the chain
-    * (typically `publishTo` after `publish / skip`) sees them, matching the
-    * pre-refactor behavior where `evaluatePublishTarget` received the ctx
-    * threaded out of `evaluatePublishSkip`.
+    * produced (e.g., resolver setup) so subsequent evaluations in the chain
+    * see them.
     *
     * Used from validators that compute against a transient overlay state via
-    * [[MonorepoVersionWorkflow.withReleaseVersionOverlay]] — the overlay
-    * state plus any task-induced mutations stay local to the body and are
-    * discarded once the body returns.
+    * [[MonorepoVersionWorkflow.withReleaseVersionOverlay]] — currently only
+    * `publishTo` evaluation. The overlay state plus any task-induced mutations
+    * stay local to the body and are discarded once the body returns.
     */
   private def evaluateTaskAtState[A](
       state: State,
@@ -108,10 +130,12 @@ private[monorepo] object MonorepoPublishSteps {
       state: State,
       project: ProjectReleaseInfo
   ): IO[(State, Boolean)] =
-    evaluateTaskAtState(
+    runTaskChecked(
       state,
       project.ref / publish / Keys.skip,
-      s"Failed to evaluate publish / skip for ${project.name}"
+      PublishArtifactsActionName
+    ).handleErrorWith(
+      recoverPublishSkipProbeError(state, project, fallback = (state, false))
     )
 
   private def evaluatePublishTargetAt(
@@ -149,17 +173,9 @@ private[monorepo] object MonorepoPublishSteps {
   ): IO[(MonorepoContext, Boolean)] =
     runTaskChecked(ctx.state, project.ref / publish / Keys.skip, PublishArtifactsActionName)
       .map { case (newState, value) => (ctx.withState(newState), value) }
-      .recoverWith {
-        case NonFatal(cause) if isFailureCommandTaskError(cause) =>
-          IO.raiseError(cause)
-        case NonFatal(cause)                                     =>
-          IO.raiseError(
-            new IllegalStateException(
-              s"Failed to evaluate publish / skip for ${project.name}",
-              cause
-            )
-          )
-      }
+      .handleErrorWith(
+        recoverPublishSkipProbeError(ctx.state, project, fallback = (ctx, false))
+      )
 
   /** Install release-manifest metadata fallbacks for a project before its publish task runs.
     *

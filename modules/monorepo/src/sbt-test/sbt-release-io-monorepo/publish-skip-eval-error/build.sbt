@@ -2,9 +2,10 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future, TimeoutException, blocking}
 import scala.sys.process.*
 
-val checkNoReleaseChanges        = taskKey[Unit]("Verify no release commit or tag was created")
-val expectPublishSkipEvalFailure =
-  taskKey[Unit]("Run release and assert publish / skip evaluation failure")
+val checkNoReleaseChanges                       =
+  taskKey[Unit]("Verify no release commit or tag was created")
+val expectPublishSkipFallbackThenPublishToError =
+  taskKey[Unit]("Run release and assert publish / skip evaluation falls back")
 
 val NestedSbtTimeout = 5.minutes
 
@@ -81,7 +82,7 @@ lazy val root = (project in file("."))
     releaseIOMonorepoPolicyEnablePush                      := false,
     releaseIOMonorepoPolicyEnableRunClean                  := false,
     releaseIOMonorepoPolicyEnableRunTests                  := false,
-    expectPublishSkipEvalFailure                           := {
+    expectPublishSkipFallbackThenPublishToError            := {
       val sbtVersionProp     = sbtVersion.value
       val pluginVersionProp  =
         sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))
@@ -95,14 +96,22 @@ lazy val root = (project in file("."))
         baseDirectory.value
       )
 
-      assert(exitCode != 0, "Expected nested sbt release command to fail")
+      assert(exitCode != 0, "Expected nested sbt release command to fail on publishTo validation")
       assert(
         output.contains("Failed to evaluate publish / skip for core"),
-        "Expected wrapped publish / skip evaluation failure message"
+        s"Expected publish / skip fallback warning. Output was:\n$output"
+      )
+      assert(
+        output.contains("Assuming skip = false"),
+        s"Expected publish / skip fallback to assume skip=false. Output was:\n$output"
       )
       assert(
         output.contains("publish / skip exploded"),
-        "Expected original publish / skip error message"
+        s"Expected original publish / skip error message. Output was:\n$output"
+      )
+      assert(
+        output.contains("publishTo not configured for: core"),
+        s"Expected release to continue to publishTo validation. Output was:\n$output"
       )
     },
     checkNoReleaseChanges                                  := {

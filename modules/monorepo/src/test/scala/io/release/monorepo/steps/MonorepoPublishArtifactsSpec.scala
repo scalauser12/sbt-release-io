@@ -46,6 +46,36 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
   }
 
   test(
+    "publishArtifacts.validate - treat publish / skip eval error as not skipped " +
+      "(pass when publishTo is set)"
+  ) {
+    singleProjectFixtureResource(
+      "monorepo-publish-validate-throw-skip",
+      rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+      )
+    ) { projectBase =>
+      Seq(
+        MonorepoStepTestCompat.throwingPublishSkipSetting,
+        publishTo := Some(Resolver.file("local-test", projectBase.getParentFile))
+      )
+    }.use { fixture =>
+      val buffered      = MonorepoPublishArtifactsSpec.bufferedFixture(fixture)
+      val ctx           = buffered.fixture.context(Seq("core"))
+      val project       = buffered.fixture.projectInfo("core")
+      val warningPrefix =
+        s"${ReleaseLogPrefixes.Monorepo} Failed to evaluate publish / skip for core: "
+
+      for {
+        _   <- MonorepoPublishSteps.publishArtifacts.validate(ctx, project)
+        log <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+      } yield {
+        assertEquals(TestSupport.warningCount(log, warningPrefix), 1)
+      }
+    }
+  }
+
+  test(
     "publishArtifacts.validate - fail with publishTo error when CLI release-version override " +
       "is present and publish/skip := isSnapshot.value (overlay engages, catches the bypass)"
   ) {

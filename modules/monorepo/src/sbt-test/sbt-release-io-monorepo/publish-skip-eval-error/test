@@ -5,8 +5,8 @@ $ exec git config user.name "Test User"
 $ exec git add .
 $ exec git commit -m "Initial commit"
 
-# Release should fail while evaluating publish / skip
-> expectPublishSkipEvalFailure
+# Release should warn on publish / skip and then fail publishTo validation
+> expectPublishSkipFallbackThenPublishToError
 
 # Verify no release commit or tag was created
 > checkNoReleaseChanges

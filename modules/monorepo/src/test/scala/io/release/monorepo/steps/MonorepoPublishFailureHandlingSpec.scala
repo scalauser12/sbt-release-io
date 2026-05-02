@@ -85,29 +85,29 @@ class MonorepoPublishFailureHandlingSpec
     }
   }
 
-  test("publishArtifacts.execute - wrap NonFatal evaluation error in IllegalStateException") {
+  test("publishArtifacts.execute - warn and publish when publish / skip evaluation fails") {
     singleProjectFixtureResource(
       "monorepo-publish-eval-error",
       rootSettings = Seq(
         io.release.monorepo.MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
       )
-    ) { _ =>
-      Seq(MonorepoStepTestCompat.throwingPublishSkipSetting)
+    ) { projectBase =>
+      val publishMarker = new File(projectBase, "publish-ran.txt")
+      Seq(
+        MonorepoStepTestCompat.throwingPublishSkipSetting,
+        io.release.ReleaseSharedKeys.releaseIOPublishAction := {
+          sbt.IO.write(publishMarker, "ran")
+        }
+      )
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
       MonorepoComposer
         .compose(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
         .map { result =>
-          assert(result.failed)
-          val aggregate = requireProjectFailures(result.failureCause)
-          assertEquals(aggregate.failures.map(_.projectName), Seq("core"))
-          assert(aggregate.failures.head.cause.exists(_.isInstanceOf[IllegalStateException]))
-          assert(
-            aggregate.failures.head.cause.exists(
-              _.getMessage.contains("Failed to evaluate publish / skip for core")
-            )
-          )
+          val publishMarker = new File(fixture.projectInfo("core").baseDir, "publish-ran.txt")
+          assert(!result.failed)
+          assert(publishMarker.exists())
         }
     }
   }
