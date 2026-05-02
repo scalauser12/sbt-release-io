@@ -1,6 +1,5 @@
 package io.release.monorepo.internal
 
-import io.release.ReleaseSharedKeys
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.DecisionDefaultsSupport
@@ -8,46 +7,24 @@ import sbt.*
 
 private[monorepo] object MonorepoDecisionDefaultsCli {
 
-  private val defaultSettingKeys = DecisionDefaultsSupport.DefaultSettingKeys(
-    tagExists = ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer,
-    snapshotDependencies = ReleaseSharedKeys.releaseIODefaultsSnapshotDependenciesAnswer,
-    remoteCheckFailure = ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer,
-    upstreamBehind = ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer,
-    push = ReleaseSharedKeys.releaseIODefaultsPushAnswer
+  private val cliExtractors = DecisionDefaultsSupport.CliExtractors[MonorepoCli.Arg](
+    tagExists = { case MonorepoCli.Arg.TagDefault(value) => value },
+    snapshotDependencies = { case MonorepoCli.Arg.SnapshotDependenciesDefault(value) => value },
+    remoteCheckFailure = { case MonorepoCli.Arg.RemoteCheckFailureDefault(value) => value },
+    upstreamBehind = { case MonorepoCli.Arg.UpstreamBehindDefault(value) => value },
+    push = { case MonorepoCli.Arg.PushDefault(value) => value }
   )
-
-  def cliInputsFromArgs(args: Seq[MonorepoCli.Arg]): DecisionDefaultsSupport.CliInputs = {
-    import MonorepoCli.Arg.*
-    def allArgs[A](extract: PartialFunction[MonorepoCli.Arg, A]): Seq[A] =
-      args.collect(extract)
-    DecisionDefaultsSupport.CliInputs(
-      tagExistsAnswers = allArgs { case TagDefault(value) => value },
-      snapshotDependenciesAnswers = allArgs { case SnapshotDependenciesDefault(value) =>
-        value
-      },
-      remoteCheckFailureAnswers = allArgs { case RemoteCheckFailureDefault(value) =>
-        value
-      },
-      upstreamBehindAnswers = allArgs { case UpstreamBehindDefault(value) =>
-        value
-      },
-      pushAnswers = allArgs { case PushDefault(value) => value }
-    )
-  }
 
   def resolve(
       state: State,
       args: Seq[MonorepoCli.Arg],
       warnOnDuplicates: Boolean
   ): ReleaseDecisionDefaults =
-    DecisionDefaultsSupport.resolve(
-      state = state,
-      prefix = ReleaseLogPrefixes.Monorepo,
-      settings = DecisionDefaultsSupport.settingsFromExtracted(
-        Project.extract(state),
-        defaultSettingKeys
-      ),
-      cliInputs = cliInputsFromArgs(args),
-      warnOnDuplicates = warnOnDuplicates
+    DecisionDefaultsSupport.resolveFromArgs(
+      state,
+      ReleaseLogPrefixes.Monorepo,
+      args,
+      cliExtractors,
+      warnOnDuplicates
     )
 }

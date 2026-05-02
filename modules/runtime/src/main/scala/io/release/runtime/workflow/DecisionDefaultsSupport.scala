@@ -1,7 +1,8 @@
 package io.release.runtime.workflow
 
-import _root_.sbt.{Extracted, SettingKey, State}
+import io.release.ReleaseSharedKeys
 import io.release.runtime.ReleaseDecisionDefaults
+import _root_.sbt.{internal as _, *}
 
 private[release] object DecisionDefaultsSupport {
 
@@ -21,8 +22,48 @@ private[release] object DecisionDefaultsSupport {
       pushAnswers: Seq[Boolean] = Nil
   )
 
+  final case class CliExtractors[A](
+      tagExists: PartialFunction[A, String],
+      snapshotDependencies: PartialFunction[A, Boolean],
+      remoteCheckFailure: PartialFunction[A, Boolean],
+      upstreamBehind: PartialFunction[A, Boolean],
+      push: PartialFunction[A, Boolean]
+  )
+
+  val defaultDecisionSettingKeys: DefaultSettingKeys = DefaultSettingKeys(
+    tagExists = ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer,
+    snapshotDependencies = ReleaseSharedKeys.releaseIODefaultsSnapshotDependenciesAnswer,
+    remoteCheckFailure = ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer,
+    upstreamBehind = ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer,
+    push = ReleaseSharedKeys.releaseIODefaultsPushAnswer
+  )
+
   def renderYesNo(value: Boolean): String =
     if (value) "y" else "n"
+
+  def cliInputsFromArgs[A](args: Seq[A], extractors: CliExtractors[A]): CliInputs =
+    CliInputs(
+      tagExistsAnswers = args.collect(extractors.tagExists),
+      snapshotDependenciesAnswers = args.collect(extractors.snapshotDependencies),
+      remoteCheckFailureAnswers = args.collect(extractors.remoteCheckFailure),
+      upstreamBehindAnswers = args.collect(extractors.upstreamBehind),
+      pushAnswers = args.collect(extractors.push)
+    )
+
+  def resolveFromArgs[A](
+      state: State,
+      prefix: String,
+      args: Seq[A],
+      extractors: CliExtractors[A],
+      warnOnDuplicates: Boolean
+  ): ReleaseDecisionDefaults =
+    resolve(
+      state = state,
+      prefix = prefix,
+      settings = settingsFromExtracted(Project.extract(state), defaultDecisionSettingKeys),
+      cliInputs = cliInputsFromArgs(args, extractors),
+      warnOnDuplicates = warnOnDuplicates
+    )
 
   def settingsFromExtracted(
       extracted: Extracted,

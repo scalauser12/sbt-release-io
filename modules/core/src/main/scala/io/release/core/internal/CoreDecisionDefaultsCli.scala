@@ -1,6 +1,5 @@
 package io.release.core.internal
 
-import io.release.ReleaseSharedKeys
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.workflow.DecisionDefaultsSupport
@@ -8,46 +7,24 @@ import sbt.*
 
 private[core] object CoreDecisionDefaultsCli {
 
-  private val defaultSettingKeys = DecisionDefaultsSupport.DefaultSettingKeys(
-    tagExists = ReleaseSharedKeys.releaseIODefaultsTagExistsAnswer,
-    snapshotDependencies = ReleaseSharedKeys.releaseIODefaultsSnapshotDependenciesAnswer,
-    remoteCheckFailure = ReleaseSharedKeys.releaseIODefaultsRemoteCheckFailureAnswer,
-    upstreamBehind = ReleaseSharedKeys.releaseIODefaultsUpstreamBehindAnswer,
-    push = ReleaseSharedKeys.releaseIODefaultsPushAnswer
+  private val cliExtractors = DecisionDefaultsSupport.CliExtractors[ReleaseCli.Arg](
+    tagExists = { case ReleaseCli.Arg.TagDefault(value) => value },
+    snapshotDependencies = { case ReleaseCli.Arg.SnapshotDependenciesDefault(value) => value },
+    remoteCheckFailure = { case ReleaseCli.Arg.RemoteCheckFailureDefault(value) => value },
+    upstreamBehind = { case ReleaseCli.Arg.UpstreamBehindDefault(value) => value },
+    push = { case ReleaseCli.Arg.PushDefault(value) => value }
   )
-
-  def cliInputsFromArgs(args: Seq[ReleaseCli.Arg]): DecisionDefaultsSupport.CliInputs = {
-    import ReleaseCli.Arg.*
-    def allArgs[A](extract: PartialFunction[ReleaseCli.Arg, A]): Seq[A] =
-      args.collect(extract)
-    DecisionDefaultsSupport.CliInputs(
-      tagExistsAnswers = allArgs { case TagDefault(value) => value },
-      snapshotDependenciesAnswers = allArgs { case SnapshotDependenciesDefault(value) =>
-        value
-      },
-      remoteCheckFailureAnswers = allArgs { case RemoteCheckFailureDefault(value) =>
-        value
-      },
-      upstreamBehindAnswers = allArgs { case UpstreamBehindDefault(value) =>
-        value
-      },
-      pushAnswers = allArgs { case PushDefault(value) => value }
-    )
-  }
 
   def resolve(
       state: State,
       args: Seq[ReleaseCli.Arg],
       warnOnDuplicates: Boolean
   ): ReleaseDecisionDefaults =
-    DecisionDefaultsSupport.resolve(
-      state = state,
-      prefix = ReleaseLogPrefixes.Core,
-      settings = DecisionDefaultsSupport.settingsFromExtracted(
-        Project.extract(state),
-        defaultSettingKeys
-      ),
-      cliInputs = cliInputsFromArgs(args),
-      warnOnDuplicates = warnOnDuplicates
+    DecisionDefaultsSupport.resolveFromArgs(
+      state,
+      ReleaseLogPrefixes.Core,
+      args,
+      cliExtractors,
+      warnOnDuplicates
     )
 }

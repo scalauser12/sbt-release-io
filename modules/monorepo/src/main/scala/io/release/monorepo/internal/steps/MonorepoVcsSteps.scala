@@ -3,7 +3,6 @@ package io.release.monorepo.internal.steps
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseManifestMetadataSupport
-import io.release.ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.ProjectReleaseInfo
@@ -20,6 +19,7 @@ import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.StepHelpers.required
 import io.release.vcs.GitPushSupport
+import io.release.vcs.RemoteTagProbe
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 
@@ -114,74 +114,19 @@ private[monorepo] object MonorepoVcsSteps {
       vcs: Vcs,
       tagName: String,
       label: String
-  ): IO[Unit] =
-    if (!ctx.pushConfigured) IO.unit
-    else if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.unit
-    else runRemoteTagProbe(ctx, vcs, tagName, label)
-
-  private def runRemoteTagProbe(
-      ctx: MonorepoContext,
-      vcs: Vcs,
-      tagName: String,
-      label: String
-  ): IO[Unit] =
-    vcs.hasUpstream.flatMap {
-      case false => IO.unit
-      case true  =>
-        for {
-          remote  <- vcs.trackingRemote
-          timeout <- IO.blocking(remoteCheckTimeout(ctx))
-          result  <- vcs.remoteTagExistsWithTimeout(remote, tagName, timeout)
-          _       <- handleRemoteTagProbe(ctx, tagName, remote, label, result)
-        } yield ()
-    }
-
-  private def handleRemoteTagProbe(
-      ctx: MonorepoContext,
-      tagName: String,
-      remote: String,
-      label: String,
-      result: Option[Boolean]
-  ): IO[Unit] =
-    result match {
-      case Some(true)  =>
-        IO.raiseError(
-          new IllegalStateException(remoteOnlyTagConflictMessage(ctx, tagName, remote, label))
-        )
-      case Some(false) => IO.unit
-      case None        =>
-        IO.blocking(
-          ctx.state.log.warn(
-            s"${ReleaseLogPrefixes.Monorepo} Could not query remote [$remote] for " +
-              s"tag [$tagName]${forLabel(label)}; the atomic push will surface any conflict."
-          )
-        )
-    }
-
-  private def remoteOnlyTagConflictMessage(
-      ctx: MonorepoContext,
-      tagName: String,
-      remote: String,
-      label: String
-  ): String = {
+  ): IO[Unit] = {
     val commandName =
       ctx.releasePlan.map(_.commandName).getOrElse(MonorepoReleasePlan.DefaultCommandName)
-    s"Tag [$tagName]${forLabel(label)} already exists on remote [$remote] but is not " +
-      s"present locally. Run `git fetch $remote --tags` to bring the tag into your local " +
-      s"repository, then re-run the release to resolve the conflict (overwrite, keep, or " +
-      s"pick a new tag). Use `$commandName help` for tag conflict options."
+    RemoteTagProbe.probeForCreate(
+      ctx,
+      vcs,
+      tagName,
+      commandName,
+      ReleaseLogPrefixes.Monorepo,
+      label = if (label.isEmpty) None else Some(label),
+      pushConfigured = ctx.pushConfigured
+    )
   }
-
-  private def forLabel(label: String): String =
-    if (label.isEmpty) "" else s" for $label"
-
-  private def remoteCheckTimeout(
-      ctx: MonorepoContext
-  ): scala.concurrent.duration.FiniteDuration =
-    SbtRuntime
-      .extracted(ctx.state)
-      .getOpt(releaseIOVcsRemoteCheckTimeout)
-      .getOrElse(VcsOps.DefaultRemoteCheckTimeout)
 
   private def preflightCreateTag(
       ctx: MonorepoContext,
@@ -356,10 +301,8 @@ private[monorepo] object MonorepoVcsSteps {
       label: String,
       willCreateTag: Boolean
   ): IO[Unit] =
-    if (!ctx.pushConfigured) IO.unit
-    else if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.unit
-    else if (!willCreateTag) IO.unit
-    else runRemoteTagProbe(ctx, vcs, tagName, label)
+    if (!willCreateTag) IO.unit
+    else remoteTagPreflightForCreate(ctx, vcs, tagName, label)
 
   private[monorepo] val tagReleasesPerProject: ProjectStep =
     ProcessStep.PerItem(

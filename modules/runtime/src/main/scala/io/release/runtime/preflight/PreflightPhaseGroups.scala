@@ -46,4 +46,13 @@ private[release] object PreflightPhaseGroups {
     */
   def tagAffectingPhases(versionResolutionBlockingPhases: Set[String]): Set[String] =
     versionResolutionBlockingPhases ++ TagPreflightRelevantPhases
+
+  /** Built-in tag preflight should run iff tagging is enabled and no hook in any
+    * tag-preflight-relevant phase has opted out via `mayChangeTagSettings`. Each
+    * boolean in `hookGroupsMayChange` reports whether the corresponding hook list
+    * (typically the five phases in [[TagPreflightRelevantPhases]] minus the
+    * runtime-installed `AfterVersionResolution` step) contains an opt-in hook.
+    */
+  def tagPreflightEnabled(enableTagging: Boolean, hookGroupsMayChange: Boolean*): Boolean =
+    enableTagging && !hookGroupsMayChange.contains(true)
 }

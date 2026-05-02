@@ -1,5 +1,6 @@
 package io.release.core.internal
 
+import io.release.runtime.command.CommandModeParsing
 import io.release.runtime.command.SharedReleaseFlags
 
 /** Token-level command parsing for `releaseIO`.
@@ -9,11 +10,13 @@ import io.release.runtime.command.SharedReleaseFlags
   */
 private[release] object ReleaseCli {
 
-  sealed trait CommandMode
-  object CommandMode {
-    case object Help  extends CommandMode
-    case object Check extends CommandMode
-    case object Run   extends CommandMode
+  type CommandMode = CommandModeParsing.CommandMode
+  val CommandMode: CommandModeParsing.CommandMode.type = CommandModeParsing.CommandMode
+
+  type Parsed = CommandModeParsing.Parsed[Arg]
+  object Parsed {
+    def apply(mode: CommandMode, args: Seq[Arg]): Parsed =
+      CommandModeParsing.Parsed(mode, args)
   }
 
   sealed trait Arg
@@ -30,34 +33,18 @@ private[release] object ReleaseCli {
     case class PushDefault(value: Boolean)                 extends Arg
   }
 
-  final case class Parsed(mode: CommandMode, args: Seq[Arg])
-
   def splitMode(tokens: Seq[String]): (CommandMode, Seq[String]) =
-    tokens.toList match {
-      case "help" :: rest  => CommandMode.Help  -> rest
-      case "check" :: rest => CommandMode.Check -> rest
-      case _               => CommandMode.Run   -> tokens
-    }
+    CommandModeParsing.splitMode(tokens)
 
-  def parse(tokens: Seq[String], commandName: String): Either[String, Parsed] = {
-    val (mode, remaining) = splitMode(tokens)
-
-    mode match {
-      case CommandMode.Help  =>
-        if (remaining.nonEmpty)
-          Left(s"Unexpected arguments after 'help'. See '$commandName help' for usage.")
-        else Right(Parsed(mode, Nil))
-      case CommandMode.Run   => parseArgs(remaining, commandName).map(Parsed(mode, _))
-      case CommandMode.Check => parseArgs(remaining, commandName).map(Parsed(mode, _))
-    }
-  }
+  def parse(tokens: Seq[String], commandName: String): Either[String, Parsed] =
+    CommandModeParsing.parse[Arg](tokens, commandName, parseArgs)
 
   private def parseArgs(tokens: Seq[String], commandName: String): Either[String, Seq[Arg]] = {
     import Arg.*
     import SharedReleaseFlags.*
 
     def missingValue(flag: String): Either[String, Seq[Arg]] =
-      Left(s"Missing value after '$flag'. See '$commandName help' for usage.")
+      Left(CommandModeParsing.missingValue(flag, commandName))
 
     def loop(rest: List[String], acc: List[Arg]): Either[String, Seq[Arg]] =
       rest match {
@@ -94,7 +81,7 @@ private[release] object ReleaseCli {
           missingValue(DefaultUpstreamBehindToken)
         case `DefaultPushToken` :: Nil                           => missingValue(DefaultPushToken)
         case unknown :: _                                        =>
-          Left(s"Unknown argument '$unknown'. See '$commandName help' for usage.")
+          Left(CommandModeParsing.unknownArgument(unknown, commandName))
       }
 
     loop(tokens.toList, Nil)

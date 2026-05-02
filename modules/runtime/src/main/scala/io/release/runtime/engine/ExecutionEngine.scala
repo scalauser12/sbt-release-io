@@ -202,6 +202,27 @@ private[release] object ExecutionEngine {
   ): TrackedContextHandle[C] => IO[Unit] =
     (handle: TrackedContextHandle[C]) => recoverWithContext(logPrefix, handle)(f(handle))
 
+  /** Prepend a single info-log line to an action. The log fires once per call,
+    * so when the wrapped action is itself wrapped in an iterating combinator
+    * (e.g. cross-build switching), the log fires once per iteration.
+    */
+  def withLogged[C <: ReleaseCtx { type Self = C }](logPrefix: String, message: String)(
+      action: C => IO[C]
+  ): C => IO[C] =
+    (ctx: C) => IO.blocking(ctx.state.log.info(s"$logPrefix $message")) *> action(ctx)
+
+  /** Tracked variant of [[withLogged]]: fetches the current context from the
+    * handle to write the log line, then invokes the action against the handle.
+    */
+  def withLoggedTracked[C <: ReleaseCtx { type Self = C }](
+      logPrefix: String,
+      message: String
+  )(action: TrackedContextHandle[C] => IO[Unit]): TrackedContextHandle[C] => IO[Unit] =
+    (handle: TrackedContextHandle[C]) =>
+      handle.get.flatMap(ctx =>
+        IO.blocking(ctx.state.log.info(s"$logPrefix $message")) *> action(handle)
+      )
+
   private def runPreparedStep[C <: ReleaseCtx { type Self = C }](
       step: PreparedStep[C],
       startCtx: C

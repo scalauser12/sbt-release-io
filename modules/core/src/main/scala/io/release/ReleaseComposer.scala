@@ -59,25 +59,23 @@ private[release] object ReleaseComposer {
   private def preparedStep(
       step: Step,
       crossBuild: Boolean
-  ): ExecutionEngine.PreparedStep[ReleaseContext] =
+  ): ExecutionEngine.PreparedStep[ReleaseContext] = {
+    val logMessage = s"Executing step: ${step.name}"
     ExecutionEngine.PreparedStep(
       name = step.name,
       validate = wrapWithCrossBuild(step, crossBuild)(step.validate),
       execute = ExecutionEngine.withErrorRecovery(LogPrefix)(
-        wrapWithCrossBuild(step, crossBuild) { ctx =>
-          IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *>
-            step.execute(ctx)
-        }
+        wrapWithCrossBuild(step, crossBuild)(
+          ExecutionEngine.withLogged(LogPrefix, logMessage)(step.execute)
+        )
       ),
       executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(
-        wrapWithCrossBuildTracked(step, crossBuild) { handle =>
-          handle.get.flatMap(ctx =>
-            IO.blocking(ctx.state.log.info(s"$LogPrefix Executing step: ${step.name}")) *>
-              step.executeTracked(handle)
-          )
-        }
+        wrapWithCrossBuildTracked(step, crossBuild)(
+          ExecutionEngine.withLoggedTracked(LogPrefix, logMessage)(step.executeTracked)
+        )
       )
     )
+  }
 
   private def wrapWithCrossBuild(
       step: Step,

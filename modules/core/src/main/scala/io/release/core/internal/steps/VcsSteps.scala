@@ -8,7 +8,6 @@ import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal
-import io.release.ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout
 import io.release.ReleaseSharedKeys.releaseIOVcsSign
 import io.release.ReleaseSharedKeys.releaseIOVersioningFile
 import io.release.VcsOps
@@ -26,6 +25,7 @@ import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.StepHelpers.*
 import io.release.runtime.workflow.VersionWorkflowSupport
 import io.release.vcs.GitPushSupport
+import io.release.vcs.RemoteTagProbe
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import sbt.Keys.*
@@ -176,12 +176,11 @@ private[release] object VcsSteps {
     // overwrite-with-remote-conflict scenario then surfaced only at
     // `tag-release.execute`'s in-resolver probe, after `set-release-version`
     // and `commit-release-version` had already mutated the repo.
-    if (skipRemoteTagProbe(ctx)) IO.unit
-    else if (!willCreateTag) IO.unit
+    if (!willCreateTag) IO.unit
     else
       ctx.vcs
         .fold(VcsOps.detectVcs(ctx.state))(IO.pure)
-        .flatMap(vcs => runRemoteTagProbe(ctx, vcs, tagName))
+        .flatMap(vcs => remoteTagPreflightForCreate(ctx, vcs, tagName))
 
   /** Late-path probe invoked from inside [[TagConflictResolver.resolveConflict]]
     * via the `beforeCreateTag` callback. Unlike [[remoteTagPreflight]] this
@@ -194,68 +193,19 @@ private[release] object VcsSteps {
       ctx: ReleaseContext,
       vcs: Vcs,
       tagName: String
-  ): IO[Unit] =
-    if (skipRemoteTagProbe(ctx)) IO.unit
-    else runRemoteTagProbe(ctx, vcs, tagName)
-
-  private def skipRemoteTagProbe(ctx: ReleaseContext): Boolean =
-    !ctx.pushConfigured || DecisionResolver.effectivelyDeclinedPush(ctx)
-
-  private def runRemoteTagProbe(
-      ctx: ReleaseContext,
-      vcs: Vcs,
-      tagName: String
-  ): IO[Unit] =
-    vcs.hasUpstream.flatMap {
-      case false => IO.unit
-      case true  =>
-        for {
-          remote  <- vcs.trackingRemote
-          timeout <- IO.blocking(remoteCheckTimeout(ctx))
-          result  <- vcs.remoteTagExistsWithTimeout(remote, tagName, timeout)
-          _       <- handleRemoteTagProbe(ctx, tagName, remote, result)
-        } yield ()
-    }
-
-  private def handleRemoteTagProbe(
-      ctx: ReleaseContext,
-      tagName: String,
-      remote: String,
-      result: Option[Boolean]
-  ): IO[Unit] =
-    result match {
-      case Some(true)  =>
-        IO.raiseError(
-          new IllegalStateException(remoteOnlyTagConflictMessage(ctx, tagName, remote))
-        )
-      case Some(false) => IO.unit
-      case None        =>
-        IO.blocking(
-          ctx.state.log.warn(
-            s"${ReleaseLogPrefixes.Core} Could not query remote [$remote] for " +
-              s"tag [$tagName]; the atomic push will surface any conflict that exists."
-          )
-        )
-    }
-
-  private def remoteOnlyTagConflictMessage(
-      ctx: ReleaseContext,
-      tagName: String,
-      remote: String
-  ): String = {
+  ): IO[Unit] = {
     val commandName =
       ctx.executionState.map(_.plan.commandName).getOrElse(CoreReleasePlan.DefaultCommandName)
-    s"Tag [$tagName] already exists on remote [$remote] but is not present locally. " +
-      s"Run `git fetch $remote --tags` to bring the tag into your local repository, " +
-      "then re-run the release to resolve the conflict (overwrite, keep, or pick a new tag). " +
-      s"Use `$commandName help` for tag conflict options."
+    RemoteTagProbe.probeForCreate(
+      ctx,
+      vcs,
+      tagName,
+      commandName,
+      ReleaseLogPrefixes.Core,
+      label = None,
+      pushConfigured = ctx.pushConfigured
+    )
   }
-
-  private def remoteCheckTimeout(ctx: ReleaseContext): scala.concurrent.duration.FiniteDuration =
-    SbtRuntime
-      .extracted(ctx.state)
-      .getOpt(releaseIOVcsRemoteCheckTimeout)
-      .getOrElse(VcsOps.DefaultRemoteCheckTimeout)
 
   /** When the release-version write would change `version.sbt`, the release will create
     * a new commit before tagging — so the tag's target is `FutureReleaseCommit`. When

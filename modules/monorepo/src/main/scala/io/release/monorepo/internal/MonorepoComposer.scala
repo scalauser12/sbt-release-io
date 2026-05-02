@@ -139,15 +139,11 @@ private[monorepo] object MonorepoComposer {
         ExecutionEngine.PreparedStep(
           name = single.name,
           validate = single.validate,
-          execute = ExecutionEngine.withErrorRecovery(LogPrefix)(currentCtx =>
-            IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${single.name}")) *>
-              single.execute(currentCtx)
+          execute = ExecutionEngine.withErrorRecovery(LogPrefix)(
+            ExecutionEngine.withLogged(LogPrefix, single.name)(single.execute)
           ),
-          executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(handle =>
-            handle.get.flatMap(currentCtx =>
-              IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${single.name}")) *>
-                single.executeTracked(handle)
-            )
+          executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(
+            ExecutionEngine.withLoggedTracked(LogPrefix, single.name)(single.executeTracked)
           )
         ),
       typed => {

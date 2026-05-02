@@ -9,6 +9,7 @@ import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
+import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.workflow.DecisionResolver
 import sbt.*
 
@@ -149,12 +150,14 @@ private[release] object MonorepoLifecycle {
     */
   private val tagPreflightEnabled: MonorepoHookConfiguration => Boolean =
     config =>
-      config.enableTagging &&
-        !config.beforeReleaseVersionWriteHooks.exists(_.mayChangeTagSettings) &&
-        !config.afterReleaseVersionWriteHooks.exists(_.mayChangeTagSettings) &&
-        !config.beforeReleaseCommitHooks.exists(_.mayChangeTagSettings) &&
-        !config.afterReleaseCommitHooks.exists(_.mayChangeTagSettings) &&
-        !config.beforeTagHooks.exists(_.mayChangeTagSettings)
+      PreflightPhaseGroups.tagPreflightEnabled(
+        config.enableTagging,
+        config.beforeReleaseVersionWriteHooks.exists(_.mayChangeTagSettings),
+        config.afterReleaseVersionWriteHooks.exists(_.mayChangeTagSettings),
+        config.beforeReleaseCommitHooks.exists(_.mayChangeTagSettings),
+        config.afterReleaseCommitHooks.exists(_.mayChangeTagSettings),
+        config.beforeTagHooks.exists(_.mayChangeTagSettings)
+      )
 
   /** Execute-time AND condition for the global `after-push` hook: fires only
     * when the monorepo `push-changes` step actually pushed. Validation is
