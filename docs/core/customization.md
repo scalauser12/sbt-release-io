@@ -1,7 +1,7 @@
 # Customization (core)
 
-> **Terminology.** Docs say "phase" for a lifecycle slot like `before-tag`;
-> the source calls these "steps" / `ProcessStep`. They're the same concept.
+> **Terminology.** Docs use "phase" for both built-in steps like `tag-release` and
+> hook slots like `before-tag`. The source calls these "steps" / `ProcessStep`.
 
 ## Supported customization model
 
@@ -66,12 +66,13 @@ ReleaseHookIO.precondition("validate-main-branch") { ctx =>
 ```
 
 > **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
-> `execute` only; their `validate` is a no-op, so `releaseIO check` does not
-> rehearse them. Use `precondition` for guard hooks that must fail upfront, or
-> set `validate` directly via the case-class constructor when a hook needs both
-> a non-trivial `validate` and `execute`. A `precondition` is registered through
-> a lifecycle hook slot, but its predicate runs during validation/check rather
-> than during release execution.
+> `execute` only — their `validate` is a no-op, so `releaseIO check` does not
+> rehearse them. Use `precondition` for guard hooks that must fail upfront; its
+> predicate runs during validation/check rather than during release execution.
+
+If a hook genuinely needs both a non-trivial `validate` and `execute`, build it
+through the case-class constructor (`ReleaseHookIO(name, execute, validate)`)
+instead of one of the factories.
 
 Resource-aware hooks (`ReleaseResourceHookIO[T]`) add the resource `T` as the
 first argument:
@@ -82,11 +83,12 @@ ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
 }
 ```
 
-`.ioTracked` remains supported as a lower-level escape hatch when you need
-direct `TrackedContextHandle` access.
+`.ioTracked` remains supported as a lower-level escape hatch when a hook needs
+to publish multiple recoverable checkpoints from inside its own loop, working
+directly with the `TrackedContextHandle` that `resumable` wraps.
 
-> **Migrating from v0.12.x.** The `.io`, `.action`, and `.actionTracked`
-> factories were removed in v0.13.0. See the migration table in
+> **Coming in v0.13.0.** The `.io`, `.action`, and `.actionTracked` factories
+> will be removed; they are deprecated in v0.12.x. See the migration table in
 > [CHANGELOG.md](../../CHANGELOG.md) for the old → new mapping.
 
 ## Hook-based customization
@@ -113,8 +115,7 @@ releaseIOHooksAfterTag += markerHook("after-tag")
 
 Hook semantics:
 
-- `beforeX` / `afterX` hooks run only when phase `X` is present in the compiled lifecycle
-- disabled phases do not run their hooks
+- `beforeX` / `afterX` hooks run only when phase `X` is present in the compiled lifecycle (so disabled phases also disable their hooks)
 - `releaseIO check` validates the same lifecycle shape that `releaseIO` executes
 - hooks extend behavior, but they do not change phase ordering
 
@@ -141,9 +142,8 @@ conflict check to `tag-release`. Leave the flag at its default `false` for
 hooks that only log, sign, update changelogs, etc. — preflight remains active
 and catches conflicts before any version write or release commit lands.
 
-The same flag is available on `ReleaseResourceHookIO`. `ReleaseResourceHooks
-.materialize` forwards it onto the materialized `ReleaseHookIO`, so a
-resource-aware hook that rewrites tag settings can opt out the same way:
+The same flag works on `ReleaseResourceHookIO` — set `mayChangeTagSettings = true`
+and the resource-aware hook opts out the same way:
 
 ```scala
 ReleaseResourceHookIO
@@ -213,10 +213,6 @@ For `.scala` sources under `project/`, import grouped keys from the core plugin 
 ```scala
 import io.release.ReleasePluginIO.autoImport.*
 ```
-
-`ReleasePluginIO.autoImport.*` is the supported grouped-key surface for both core-only and shared
-`releaseIO*` settings. Custom plugins that extend `ReleasePluginIOLike` inherit the same surface
-through `MyReleasePlugin.autoImport.*`.
 
 ```scala
 // project/MyReleasePlugin.scala

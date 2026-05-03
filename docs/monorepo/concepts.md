@@ -8,9 +8,9 @@
 | 2 | `check-clean-working-dir` | Global | Validation-only step that fails if uncommitted changes exist |
 | 3 | `resolve-release-order` | Global | Topologically sort projects by dependencies |
 | 4 | `detect-or-select-projects` | Global | Run change detection or use explicit CLI selection |
-| 5 | `check-snapshot-dependencies` | PerProject | Validation-only step that checks SNAPSHOT dependencies and aborts only if the operator or policy declines to continue (cross-build) |
+| 5 | `check-snapshot-dependencies` | PerProject | Validation-only step that checks SNAPSHOT dependencies and aborts only if the operator or policy declines to continue (checks every Scala version in `crossScalaVersions` when cross-build is enabled) |
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
-| 7 | `run-clean` | PerProject | Clean selected project outputs; sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide |
+| 7 | `run-clean` | PerProject | Clean selected project outputs (see note below) |
 | 8 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
 | 9 | `set-release-version` | PerProject | Write release version to `version.sbt` |
 | 10 | `commit-release-versions` | Global | Single commit staging all version files |
@@ -22,15 +22,17 @@
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order. Only selected projects participate — child projects that weren't selected or discovered by change detection are skipped.
 
+> **Note on `run-clean`:** sbt 2 stays on project-scoped `clean` because `cleanFull` is build-wide and would also clean projects not in the release selection.
+
 ## Execution model
 
-### Validate / Execute Model
+### Validate / execute model
 
-1. **Setup segment**: Steps up to and including `detect-or-select-projects`, plus any immediately following `after-selection:*` hooks, run validate-then-execute sequentially. Custom steps inserted here can read state or perform checks before project selection is finalized, and post-selection hooks can still mutate the selected project snapshot before the main segment begins.
-2. **Main validation**: Remaining step validation runs against the selected project snapshot produced by setup. In this main segment, later step validation cannot depend on earlier step execution because all main-step validation finishes before any main-step execution begins. The strict "validate everything before mutations" guarantee starts only after the setup segment, which intentionally interleaves validation and execution.
+1. **Setup segment**: Steps up to and including `detect-or-select-projects`, plus any immediately following `after-selection:*` hooks, run validate-then-execute sequentially. Custom hooks attached here can read state or perform checks before project selection is finalized, and post-selection hooks can still mutate the selected project snapshot before the main segment begins.
+2. **Main validation**: Validation of all main-segment steps completes before any main-segment execution starts. So a step's validate cannot observe the effects of an earlier step's execute. The setup segment is the exception — it intentionally interleaves validation and execution per step.
 3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Task-level failures are detected between steps.
 
-Author implication: if a custom step needs strict validate -> execute ordering relative to later checks, place it in the setup segment or fold the dependent check and action into the same step.
+Author implication: if a custom hook needs strict validate -> execute ordering relative to later checks, place it in the setup segment or fold the dependent check and action into the same hook.
 
 ### Per-project failure isolation
 
@@ -46,7 +48,7 @@ so the remaining projects in the same step can still complete.
 4. Once the step finishes, the plugin checks whether any project is marked failed.
    If so, the global release context is marked failed and **all subsequent steps**
    (both Global and PerProject) are skipped entirely.
-5. At the end of the release, the overall failure keeps a `MonorepoProjectFailures` cause so the per-project root exceptions remain available. This exception contains a `Seq[MonorepoProjectFailure]`, each with `projectName: String` and `cause: Option[Throwable]`.
+5. At the end of the release, the overall failure keeps a `MonorepoProjectFailures` cause so the per-project root exceptions remain available for diagnostics. This exception contains a `Seq[MonorepoProjectFailure]`, each with `projectName: String` and `cause: Option[Throwable]`. The type lives under `io.release.monorepo.internal`, so prefer reading the message rather than catching by type.
 
 Given three projects — `core`, `api`, and `web` — with the release steps
 `run-tests` → `set-release-version` → `publish-artifacts`:

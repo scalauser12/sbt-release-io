@@ -77,20 +77,22 @@ MonorepoProjectHookIO.precondition("require-project-readme") { (project, _) =>
 Resource-aware hooks (`MonorepoGlobalResourceHookIO[T]`,
 `MonorepoProjectResourceHookIO[T]`) add the resource `T` as the first argument.
 
-`.ioTracked` remains supported as a lower-level escape hatch when you need
-direct `TrackedContextHandle` access.
+`.ioTracked` remains supported as a lower-level escape hatch when a hook needs
+to publish multiple recoverable checkpoints from inside its own loop, working
+directly with the `TrackedContextHandle` that `resumable` wraps.
 
-> **Migrating from v0.12.x.** The `.io`, `.action`, and `.actionTracked`
-> factories were removed in v0.13.0. See the migration table in
+> **Coming in v0.13.0.** The `.io`, `.action`, and `.actionTracked` factories
+> will be removed; they are deprecated in v0.12.x. See the migration table in
 > [CHANGELOG.md](../../CHANGELOG.md) for the old → new mapping.
 
 > **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
-> `execute` only; their `validate` is a no-op, so `releaseIOMonorepo check` does
-> not rehearse them. Use `precondition` for guard hooks that must fail upfront,
-> or set `validate` directly via the case-class constructor when a hook needs
-> both a non-trivial `validate` and `execute`. A `precondition` is registered
-> through a lifecycle hook slot, but its predicate runs during validation/check
-> rather than during release execution.
+> `execute` only — their `validate` is a no-op, so `releaseIOMonorepo check` does
+> not rehearse them. Use `precondition` for guard hooks that must fail upfront;
+> its predicate runs during validation/check rather than during release execution.
+
+If a hook genuinely needs both a non-trivial `validate` and `execute`, build it
+through the case-class constructor (`MonorepoGlobalHookIO(name, execute, validate)`
+or `MonorepoProjectHookIO(name, execute, validate)`) instead of one of the factories.
 
 ## Hook-based customization
 
@@ -120,16 +122,12 @@ releaseIOMonorepoHooksAfterTag += markerHook("after-tag")
 
 Hook semantics:
 
-- `beforeX` / `afterX` hooks run only when phase `X` is present in the compiled lifecycle
-- disabled phases do not run their hooks
+- `beforeX` / `afterX` hooks run only when phase `X` is present in the compiled lifecycle (so disabled phases also disable their hooks)
 - global lifecycle points use `MonorepoGlobalHookIO`
 - per-project lifecycle points use `MonorepoProjectHookIO`
-- `releaseIOMonorepo check` validates the same lifecycle shape that `releaseIOMonorepo`
-  executes, but defers downstream selection/version-dependent validation when runtime hook
-  state can still change those inputs
-
-The tagging lifecycle phase is still named `tag-releases`. Customize around it with
-`releaseIOMonorepoHooksBeforeTag` and `releaseIOMonorepoHooksAfterTag`.
+- `releaseIOMonorepo check` validates the same hook and policy configuration the real
+  release would run; selection- and version-dependent validation is deferred when runtime
+  hooks could still change those inputs
 
 ### Hooks that rewrite tag settings
 
@@ -154,10 +152,8 @@ conflict check to `tag-releases`. Leave the flag at its default `false` for
 hooks that only log, sign, update changelogs, etc. — preflight remains active
 and catches conflicts before any version write or release commit lands.
 
-The same flag is available on `MonorepoGlobalResourceHookIO` and
-`MonorepoProjectResourceHookIO`. `MonorepoResourceHooks.materialize` forwards
-it onto the materialized `MonorepoGlobalHookIO` / `MonorepoProjectHookIO`, so
-a resource-aware hook that rewrites tag settings can opt out the same way:
+The same flag works on `MonorepoGlobalResourceHookIO` and `MonorepoProjectResourceHookIO`
+— set `mayChangeTagSettings = true` and the resource-aware hook opts out the same way:
 
 ```scala
 MonorepoProjectResourceHookIO
@@ -242,26 +238,14 @@ as an HTTP client. The supported extension points are `monorepoResourceHooks` pl
 protected behavior hooks `crossBuildEnabled`, `skipTestsEnabled`, `skipPublishEnabled`,
 and `interactiveEnabled`.
 
-For new `.scala` sources, import monorepo-specific grouped keys from the monorepo plugin:
-
-```scala
-import _root_.io.release.monorepo.MonorepoReleasePlugin.autoImport.*
-```
-
-Shared/core `releaseIO*` keys are owned by the core plugin surface. When grouped keys are needed
-from `.scala` sources, import them from
+For `.scala` sources under `project/`, import monorepo-specific keys from
+`MonorepoReleasePlugin.autoImport.*` and shared/core `releaseIO*` keys from
 `ReleasePluginIO.autoImport.*`:
 
 ```scala
+import _root_.io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 import _root_.io.release.ReleasePluginIO.autoImport.*
 ```
-
-Because `MonorepoReleasePlugin` requires `ReleasePluginIO`, monorepo installs already bring the
-shared/core `releaseIO*` settings surface along transitively.
-
-When grouped keys are needed in custom Scala build code under `project/`, import
-`releaseIOMonorepo*` keys from `MonorepoReleasePlugin.autoImport.*` and shared/core `releaseIO*`
-keys from `ReleasePluginIO.autoImport.*`.
 
 ```scala
 // project/MyMonorepoRelease.scala

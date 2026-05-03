@@ -2,7 +2,14 @@
 
 ## Recovery and rollback
 
-### What each release phase modifies
+The tag names in the recipes below (`core/v0.1.0`, `api/v0.1.0`) are illustrative per-project
+tags. Substitute the actual tag names your release created.
+
+### What each release step modifies
+
+Only mutating steps are listed; preflight checks (`check-clean-working-dir`,
+`inquire-versions`, `tag-preflight`, `resolve-release-order`, `detect-or-select-projects`,
+etc.) leave no state behind.
 
 | Step | Modifies |
 |------|----------|
@@ -24,7 +31,15 @@ cat core/version.sbt   # inspect a version file
 
 ### Rollback: push has not happened
 
-The tag names below are illustrative per-project tags. Delete the tags created by your release.
+Per-project failure isolation means a `tag-releases` step that fails mid-way can leave *some*
+projects tagged but not others. List what actually exists before deleting:
+
+```bash
+git tag --list 'core/v*' 'api/v*'   # adjust patterns to your projects / tag scheme
+```
+
+`git reset --hard` discards uncommitted changes in the working tree; commit or stash anything
+else first.
 
 ```bash
 # Delete tags created by tag-releases
@@ -35,10 +50,23 @@ git tag -d api/v0.1.0
 git reset --hard HEAD~2
 ```
 
+If the release failed before any commit (e.g., during `set-release-version` or `run-tests`),
+no tag exists yet and only the per-project version files are dirty in the working tree:
+
+```bash
+git checkout -- '*/version.sbt'   # or list the affected paths explicitly
+```
+
 ### Rollback: push has already happened
 
-The tag names below are illustrative per-project tags. Delete the tags created by your release,
-and push the revert to the same tracking remote and upstream branch that `push-changes` used.
+Push the revert to the same tracking remote and upstream branch that `push-changes` used.
+This recipe auto-discovers your tracking remote and branch via `@{upstream}`; substitute
+concrete values if `@{upstream}` isn't set.
+
+Pull first and confirm the last two commits are still the release commits before running this
+— if anyone else pushed in the meantime, the range will revert unrelated commits. See also
+[per-project failure isolation](concepts.md#per-project-failure-isolation) for why partial
+tag sets can occur.
 
 ```bash
 # Inspect the tracked remote / upstream branch used by push-changes

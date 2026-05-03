@@ -30,8 +30,10 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.12.3")
 sbt.version=1.12.3
 ```
 
-Pinning `sbt.version` up front avoids sbt auto-creating `project/build.properties` on first
-launch, which would otherwise appear as an untracked file and fail `check-clean-working-dir`.
+> **Tip:** Pin `sbt.version` up front. Otherwise sbt auto-creates `project/build.properties`
+> on first launch, which would appear as an untracked file and fail
+> `check-clean-working-dir` (the validation step that rejects an unclean working tree —
+> see [Concepts](concepts.md#default-release-steps)).
 
 ## 2. Configure the build
 
@@ -78,16 +80,23 @@ What this config does:
 
 ## 3. Create version files
 
-Create one `version.sbt` per subproject:
+Create one `version.sbt` per subproject.
+
+`core/version.sbt`:
 
 ```scala
-// core/version.sbt
 version := "0.2.0-SNAPSHOT"
+```
 
-// api/version.sbt
+`api/version.sbt`:
+
+```scala
 version := "0.2.0-SNAPSHOT"
+```
 
-// web/version.sbt
+`web/version.sbt`:
+
+```scala
 version := "0.2.0-SNAPSHOT"
 ```
 
@@ -105,6 +114,10 @@ git tag api/v0.1.0
 git tag web/v0.1.0
 ```
 
+The tags above use the default pattern `<name>/v<version>`. If you've overridden
+`releaseIOMonorepoVcsTagName`, use that pattern instead — change detection looks up tags via
+the same function (see [How change detection works](change-detection.md#how-it-works)).
+
 At this point, the repo represents a monorepo that already released `0.1.0` for each project and
 is now on `0.2.0-SNAPSHOT`.
 
@@ -119,10 +132,10 @@ git add core/src/main/scala/Core.scala
 git commit -m "Touch core"
 ```
 
-The change must be committed: `check-clean-working-dir` runs in validation phase and the
-default `releaseIOVcsIgnoreUntrackedFiles := false` rejects both unstaged modifications and
-untracked files. Change detection then compares each project against its last release tag, so
-the committed file in `core/` is what selects the project.
+The change must be committed: `check-clean-working-dir` runs as a validation step before any
+release action and the default `releaseIOVcsIgnoreUntrackedFiles := false` rejects both
+unstaged modifications and untracked files. Change detection then compares each project
+against its last release tag, so the committed file in `core/` is what selects the project.
 
 Now run a no-side-effect rehearsal:
 
@@ -155,8 +168,9 @@ explicit selectors and per-project version overrides:
 sbt "releaseIOMonorepo check api with-defaults release-version api=0.2.0 next-version api=0.3.0-SNAPSHOT"
 ```
 
-In this mode, `detect-or-select-projects` uses the explicit selector instead of git-based change
-detection, so the rehearsal focuses on `api`.
+In this mode, the project-selection step (`detect-or-select-projects` — see
+[Concepts](concepts.md#default-release-steps)) uses the explicit selector instead of git-based
+change detection, so the rehearsal focuses on `api`.
 
 Use this when:
 
@@ -169,6 +183,9 @@ For example, if a project were named `cross`, you would write:
 ```bash
 sbt "releaseIOMonorepo check project cross with-defaults"
 ```
+
+(`cross` is also the cross-build CLI flag, which is exactly when `project <id>` disambiguation
+is needed.)
 
 ## 7. Where to go next
 

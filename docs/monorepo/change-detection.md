@@ -7,16 +7,18 @@ The plugin detects which projects have changed since their last release tag usin
 1. For each project, find the most recent matching tag. The tag pattern comes from
    `releaseIOMonorepoVcsTagName(project.name, "*")`, so the default pattern is
    `<projectName>/v*` (e.g., `core/v*`); if you override the tag name function, the
-   detection pattern follows automatically.
+   detection pattern follows automatically. Your tag function must produce a
+   `git tag -l`-compatible glob when called with `"*"` as the version — most simple
+   `s"…/v$ver"` shapes work as-is.
 2. If no tag exists, the project is treated as changed (first release).
 3. Run `git diff --name-only <tag>..HEAD -- <projectDir>`.
 4. Filter out each project's own version file and any files or directories in
-   `releaseIOMonorepoDetectionExcludes`.
+   `releaseIOMonorepoDetectionExcludes` (see [Excluding files or directories from
+   detection](#excluding-files-or-directories-from-detection)).
 5. If any significant files remain, the project is changed.
 
-In addition, `releaseIOMonorepoDetectionSharedPaths` (see below) is checked against
-each project's tag — if shared paths changed, every project that resolves to that tag
-is marked as changed.
+If any path in `releaseIOMonorepoDetectionSharedPaths` (see below) has changed since
+a project's last tag, that project is also marked as changed.
 
 Any git command failure conservatively treats the project as changed.
 
@@ -80,6 +82,9 @@ This releases `api` at version `1.0.0` regardless of whether change detection fo
 
 ## Custom change detector
 
+The example below assumes `build.sbt` scope, where `ProjectRef`, `File`, and `State` are
+already in scope. In `.scala` build sources under `project/`, add `import sbt.*`.
+
 ```scala
 import _root_.cats.effect.IO
 
@@ -98,13 +103,11 @@ On detector error, the project is conservatively treated as changed.
 
 ```scala
 // In the root project settings — exclude a subproject's generated changelog
+// and an entire generated directory tree
 releaseIOMonorepoDetectionExcludes := Seq(
-  (core / baseDirectory).value / "CHANGELOG.md"
-)
-
-// Exclude an entire generated directory tree
-releaseIOMonorepoDetectionExcludes +=
+  (core / baseDirectory).value / "CHANGELOG.md",
   (core / baseDirectory).value / "target" / "generated-docs"
+)
 ```
 
 This setting is read from the **root project** scope, so use `(subproject / baseDirectory).value`
@@ -117,11 +120,9 @@ This setting only applies to the built-in detector and is ignored when `releaseI
 On a brand-new repo with no prior release tags, change detection marks all projects as
 changed — this is expected and is how first releases work.
 
-If you changed `releaseIOMonorepoVcsTagName` after previous releases, the new tag pattern
-won't match the old tags, so affected projects are treated as changed because the detector
-can't find a matching prior release tag. In practice, this behaves like a first release
-under the new tag scheme for those projects until a new baseline tag exists. To re-establish
-that baseline:
+Changing `releaseIOMonorepoVcsTagName` after a previous release leaves the new pattern
+unable to match the old tags, so the detector falls back to first-release behavior for
+affected projects until a new baseline tag exists. To re-establish that baseline:
 
 - Tag the current commit under the new scheme. For each project, use the
   configured `releaseIOMonorepoVcsTagName` to compute the tag (the default is

@@ -45,6 +45,10 @@ around all other lifecycle phases still run once per project. Resource hooks fol
 same phase-level rule as plain hooks:
 
 ```scala
+// build.sbt
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoProjectHookIO
+
 releaseIOMonorepoHooksBeforePublish +=
   MonorepoProjectHookIO.sideEffect("verify-publish-env") { (project, _) =>
     IO.println(s"[monorepo] verifying publish environment for ${project.name}")
@@ -53,7 +57,7 @@ releaseIOMonorepoHooksBeforePublish +=
 
 ## CI/CD integration
 
-The plugin defaults to non-interactive mode (`releaseIOMonorepoBehaviorInteractive := false`), so it works in CI without additional configuration. Pass `with-defaults` to suppress the remaining prompts, and supply versions explicitly.
+The plugin defaults to non-interactive mode (`releaseIOMonorepoBehaviorInteractive := false`), so it works in CI without extra configuration. Pass `with-defaults` to accept the computed release/next versions without confirmation, and supply versions explicitly.
 
 ### Per-project version overrides
 
@@ -64,6 +68,16 @@ sbt "releaseIOMonorepo with-defaults release-version core=1.0.0 release-version 
 ### GitHub Actions example
 
 ```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      core_version:
+        description: Release version for core (e.g. 1.0.0)
+        required: true
+      core_next_version:
+        description: Next snapshot version for core (e.g. 1.1.0-SNAPSHOT)
+        required: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -116,13 +130,9 @@ sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-
 push. With cross-build validation enabled, sbt may temporarily switch Scala versions during
 validation and then restore the entry version.
 
-`releaseIOMonorepoBehaviorSkipPublish := true` keeps the publish step in the compiled
-lifecycle but skips its body at execution time; **`releaseIOMonorepoHooksBeforePublish`
-and `releaseIOMonorepoHooksAfterPublish` are also gated off** in this mode (the gate is
-decided at validate time and stays frozen). Attach rehearsal logic to a non-publish phase
-such as `releaseIOMonorepoHooksAfterTag` if it must run when skip-publish is on. If you
-want to remove publish from the compiled lifecycle entirely, use
-`releaseIOMonorepoPolicyEnablePublish := false` instead.
+See [Disabling publish: policy vs behavior](configuration.md#disabling-publish-policy-vs-behavior)
+for why `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` are
+gated off in this mode and where to attach rehearsal logic instead.
 
 Then run the real release with explicit project and versions so the tag names and commit
 count are predictable:
@@ -143,7 +153,8 @@ cat core/version.sbt
 ```
 
 To clean up after the rehearsal run, verify that the last two commits are the release
-commits, then delete the tag and roll back:
+commits, then delete the tag and roll back. `git reset --hard` discards uncommitted
+working-tree changes, so commit or stash anything else first.
 
 ```bash
 git log -2 --oneline         # should show the two release commits
@@ -156,11 +167,11 @@ push already happened), see [Recovery and rollback](operations.md#recovery-and-r
 
 ## Targeted project rehearsal
 
-When change detection is too broad for the question you want to answer, keep the same safe local
-settings but drive the plan with explicit selectors and version overrides.
+When change detection is too broad for the question you want to answer, drive the plan with
+explicit selectors and version overrides instead.
 
-In `build.sbt`, use an `afterSelection` hook whose predicate prints during
-validation, which runs in both `releaseIOMonorepo check` and real releases:
+In `build.sbt`, use an `afterSelection` precondition hook that prints during validation,
+which runs in both `releaseIOMonorepo check` and real releases:
 
 ```scala
 import _root_.cats.effect.IO

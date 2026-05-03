@@ -20,13 +20,9 @@ Add to `project/plugins.sbt`:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.12.3")
 ```
 
-> **Note:** This page describes the current published monorepo contract in `v0.12.3`; see
-> [CHANGELOG.md](../../CHANGELOG.md) for the full release history and upgrade notes.
-
 This installs the monorepo plugin plus the transitive core settings surface, so
 `releaseIOMonorepo`, `releaseIOMonorepo*`, and shared/core `releaseIO*` settings are
-available once the plugin is enabled. In the documented monorepo setup, the supported release
-workflow still uses `releaseIOMonorepo`.
+available once the plugin is enabled. Use `releaseIOMonorepo` to drive a release.
 
 Enable on your root project in `build.sbt`:
 
@@ -46,11 +42,21 @@ lazy val root = (project in file("."))
   )
 ```
 
-By default, each subproject needs a `version.sbt` file (e.g., `core/version.sbt`, `api/version.sbt`) containing `version := "0.1.0-SNAPSHOT"`. The plugin reads and writes these files during the release. The file path and format can be customized — see [Versioning settings](reference.md#versioning-settings).
+By default, each subproject needs its own `version.sbt` file (e.g., `core/version.sbt`,
+`api/version.sbt`):
+
+```scala
+version := "0.1.0-SNAPSHOT"
+```
+
+The plugin reads and writes these files during the release. The file path and format can be
+customized — see [Versioning settings](reference.md#versioning-settings).
 
 This starter path disables push and publish so your first run stays local. Re-enable them once `publishTo` and your remote release workflow are ready.
 
-If you are migrating from an older configuration, move any shared root version file setup to per-project `version.sbt` files and replace any global CLI overrides with `project=version` overrides.
+> **Migrating from an older configuration:** move any shared root version file setup to
+> per-project `version.sbt` files, and replace any global CLI overrides with
+> `project=version` overrides.
 
 For working examples, see [scala-monorepo-demo](https://github.com/scalauser12/scala-monorepo-demo) and [files-monorepo-demo](https://github.com/scalauser12/files-monorepo-demo).
 
@@ -73,7 +79,7 @@ sbt "releaseIOMonorepo check with-defaults"
 
 `check` resolves the selected projects, computes versions and tags when their inputs are stable, runs release-step validations, and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
-For resource-aware custom plugins, `check` stays resource-free: it validates only hook phases whose validation context is stable without replaying earlier hook executes, and it never acquires the shared plugin resource or executes resource-backed actions. See [Customization](customization.md) for the execution-model details.
+For resource-aware custom plugins, `check` never acquires the shared plugin resource or runs resource-backed actions; it only rehearses validation that doesn't depend on earlier hook executions. See [Customization](customization.md) for the execution-model details.
 
 Run the first local release (changed projects detected automatically, versions computed from each subproject's `version.sbt`):
 
@@ -81,7 +87,9 @@ Run the first local release (changed projects detected automatically, versions c
 sbt "releaseIOMonorepo with-defaults"
 ```
 
-With the starter settings above, this performs a local release only: it computes versions, writes version files, creates the release and next-version commits, and tags each selected project, but it does not publish artifacts or push to the remote. Remove those two policy settings once you are ready to enable publish and push. For details, see [Change detection](change-detection.md). If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
+With the starter settings above, this performs a local release only: it computes versions, writes version files, creates the release and next-version commits, and tags each selected project, but it does not publish artifacts or push to the remote. Remove those two policy settings once you are ready to enable publish and push.
+
+For how change detection picks the project set, see [Change detection](change-detection.md). If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
 
 When a per-project step fails, the remaining projects in that same step still finish before the release stops. Later steps are then skipped globally. See [Concepts](concepts.md) for the full failure-propagation rules.
 
@@ -103,7 +111,9 @@ sbt "releaseIOMonorepo check core with-defaults release-version core=1.0.0 next-
 sbt "releaseIOMonorepo api core with-defaults release-version api=2.0.0 release-version core=1.0.0 next-version api=2.1.0-SNAPSHOT next-version core=1.1.0-SNAPSHOT"
 ```
 
-If a project id collides with a CLI keyword or subcommand, select it with `project <id>`:
+If a project id collides with a CLI keyword or subcommand, select it with `project <id>`.
+The example below uses `cross` — a project name that's also the cross-build CLI flag — which
+is exactly when `project <id>` disambiguation is needed:
 
 ```bash
 sbt "releaseIOMonorepo project cross with-defaults release-version cross=1.0.0 next-version cross=1.1.0-SNAPSHOT"

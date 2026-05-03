@@ -10,6 +10,19 @@ Settings prefixed `releaseIOMonorepo` come from the monorepo plugin. Shared/core
 plus the shared settings most relevant to the monorepo flow. For the full shared `releaseIO*`
 catalog, see the [core settings reference](../core/reference.md).
 
+> **Coming from sbt-release?** The original plugin enables interactive prompts by default.
+> This plugin defaults to `releaseIOMonorepoBehaviorInteractive := false` — decision points
+> that have no configured answer **fail fast** instead of prompting.
+>
+> You have two options:
+> - `releaseIOMonorepoBehaviorInteractive := true` — re-enable interactive prompts for
+>   versions, confirmation, and push decisions.
+> - `with-defaults` CLI flag — auto-accept safe built-in defaults without prompting
+>   and without enabling interactive mode. Useful for CI.
+>
+> The two can be combined: when both are active, `with-defaults` pre-answers prompts
+> that would otherwise appear.
+
 ## Selection settings
 
 | Setting | Type | Default | Description |
@@ -25,12 +38,6 @@ catalog, see the [core settings reference](../core/reference.md).
 | `releaseIOMonorepoBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step body and its `beforePublish` / `afterPublish` hooks at runtime |
 | `releaseIOMonorepoBehaviorInteractive` | `Boolean` | `false` | Enable prompting in `run` mode |
 
-## Shared release settings
-
-| Setting | Type | Default | Description |
-| ------- | ---- | ------- | ----------- |
-| `releaseIOVcsRemoteCheckTimeout` | `FiniteDuration` | `60.seconds` | Timeout for the shared remote reachability check before push |
-
 ## Shared decision-default settings
 
 These shared release settings also apply to `releaseIOMonorepo`.
@@ -39,7 +46,7 @@ These shared release settings also apply to `releaseIOMonorepo`.
 | ------- | ---- | ------- | ----------- |
 | `releaseIODefaultsTagExistsAnswer` | `Option[String]` | `None` | Pre-answer for per-project tag conflicts: `"o"` (overwrite), `"k"` (keep existing), `"a"` (abort), or a replacement tag name. `None` = prompt or abort |
 | `releaseIODefaultsSnapshotDependenciesAnswer` | `Option[Boolean]` | `None` | Pre-answer for snapshot dependencies: `true` = continue, `false` = abort. `None` = prompt or abort |
-| `releaseIODefaultsRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Pre-answer when remote check fails before push: `true` = continue, `false` = abort. `None` = prompt or abort |
+| `releaseIODefaultsRemoteCheckFailureAnswer` | `Option[Boolean]` | `None` | Pre-answer when remote check fails or times out: `true` = continue, `false` = abort. `None` = prompt or abort |
 | `releaseIODefaultsUpstreamBehindAnswer` | `Option[Boolean]` | `None` | Pre-answer when branch is behind upstream: `true` = continue, `false` = abort. `None` = prompt or abort |
 | `releaseIODefaultsPushAnswer` | `Option[Boolean]` | `None` | Pre-answer for push: `true` = push, `false` = skip push. `None` = prompt or skip |
 
@@ -48,14 +55,8 @@ These shared release settings also apply to `releaseIOMonorepo`.
 These settings compile into the built-in monorepo lifecycle for both `releaseIOMonorepo`
 and `releaseIOMonorepo check`.
 
-`releaseIOMonorepoBehaviorSkipPublish` keeps the publish step in the compiled lifecycle but
-skips its body at runtime, and `releaseIOMonorepoHooksBeforePublish` /
-`releaseIOMonorepoHooksAfterPublish` are also gated off (the gate is decided at validate time
-and stays frozen). Attach rehearsal logic to a non-publish phase such as
-`releaseIOMonorepoHooksAfterTag` if it must run in skip-publish mode.
-`releaseIOMonorepoPolicyEnablePublish` removes the publish phase from the compiled lifecycle
-entirely, so `releaseIOMonorepoHooksBeforePublish` / `releaseIOMonorepoHooksAfterPublish` have
-no effect when it is `false`.
+`releaseIOMonorepoBehaviorSkipPublish` and `releaseIOMonorepoPolicyEnablePublish` disable
+publish in different ways — see [Disabling publish: policy vs behavior](configuration.md#disabling-publish-policy-vs-behavior).
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -101,6 +102,7 @@ no effect when it is `false`.
 | `releaseIOMonorepoVcsTagComment` | `(String, String) => String` | `(name, ver) => s"Release $name $ver"` | Format per-project tag comments |
 | `releaseIOMonorepoVcsReleaseCommitMessage` | `String => String` | summary formatter | Commit message for release-version commits |
 | `releaseIOMonorepoVcsNextCommitMessage` | `String => String` | summary formatter | Commit message for next-version commits |
+| `releaseIOVcsRemoteCheckTimeout` (shared) | `FiniteDuration` | `60.seconds` | Timeout for the remote reachability check before push |
 
 ## Publish settings
 
@@ -118,5 +120,12 @@ no effect when it is `false`.
 | `releaseIOMonorepoDetectionExcludes` | `Seq[File]` | `Seq.empty` | Files or directories to exclude from detection |
 | `releaseIOMonorepoDetectionSharedPaths` | `Seq[String]` | `Seq("build.sbt", "project/")` | Root-level shared paths checked per project |
 
-Files matching `releaseIOMonorepoDetectionSharedPaths` are checked against each project's last
-release tag. If any shared file changed since that tag, the project is marked as changed.
+For how shared paths interact with per-project detection, see
+[Shared paths](change-detection.md#shared-paths).
+
+## CLI
+
+For the full CLI grammar — subcommands (`help`, `check`), project selectors, flags
+(`with-defaults`, `skip-tests`, `cross`, `all-changed`), and per-project version override
+syntax (`release-version <project>=<ver>`, `next-version <project>=<ver>`) — see
+[Usage](usage.md).

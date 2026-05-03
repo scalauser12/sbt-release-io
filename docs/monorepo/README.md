@@ -28,8 +28,11 @@ change detection, topological ordering, and failure isolation.
   Default release phases, validate/execute flow, failure isolation, and topological ordering.
 - [Change detection](change-detection.md)
   Git diff semantics, downstream inclusion, shared paths, and custom detectors.
-- [Tagging and versions](tagging-and-versions.md)
-  Per-project tags, version files, and cross-build implications.
+- **Tagging, versions, and cross-build:** the [VCS](reference.md#vcs-settings) and
+  [Versioning](reference.md#versioning-settings) sections of the settings reference cover
+  per-project tag formats and version-file overrides; [Concepts → Cross-build scope](concepts.md#cross-build-scope)
+  explains per-project `crossScalaVersions` mechanics; and [Recipes → Cross-build releases](recipes.md#cross-build-releases)
+  has a Step / Cross-built / Why table.
 
 ## Customize
 

@@ -36,27 +36,30 @@ releaseIOBehaviorCrossBuild := true
 // before/after publish hooks at execution time
 releaseIOBehaviorSkipPublish := true
 
-// Interactive prompts are disabled by default (unlike sbt-release, which prompts by
-// default). Enable to get the guided sbt-release-style experience for version
-// confirmation and push decisions.
+// Interactive prompts are disabled by default for CI safety. Enable for guided
+// version confirmation and push decisions.
 releaseIOBehaviorInteractive := true
 
 // Fail the remote reachability check if it hangs for too long
 releaseIOVcsRemoteCheckTimeout := scala.concurrent.duration.DurationInt(30).seconds
 ```
 
-For custom version-file formats (non-sbt projects, polyglot monorepos), override the
-version settings together as shown in [Custom version formats](#custom-version-formats) below
-— overriding only the reader without also pointing `releaseIOVersioningFile` at a compatible
-file will cause the version bump step to fail.
+For custom version-file formats (non-sbt projects, polyglot monorepos), see
+[Custom version formats](#custom-version-formats) below.
 
-`releaseIOPolicyEnablePublish := false` removes publish from the compiled lifecycle entirely,
-including `beforePublish` / `afterPublish` hooks. `releaseIOBehaviorSkipPublish := true`
-keeps the publish step in the compiled lifecycle but skips its body at execution time, and
-**`releaseIOHooksBeforePublish` and `releaseIOHooksAfterPublish` are also gated off** (the
-gate is decided at validate time and stays frozen). Rehearsal logic that should run in
-skip-publish mode must live in a non-publish phase — `releaseIOHooksAfterTag` is the usual
-fit.
+### Disabling publish: policy vs behavior
+
+Two settings disable publish, and they behave differently:
+
+- `releaseIOPolicyEnablePublish := false` — removes publish from the compiled lifecycle
+  entirely, including `beforePublish` / `afterPublish` hooks.
+- `releaseIOBehaviorSkipPublish := true` — keeps the publish step in the compiled lifecycle
+  but skips its body at execution time. **`releaseIOHooksBeforePublish` and
+  `releaseIOHooksAfterPublish` are also gated off** (the gate is decided at validate time
+  and stays frozen).
+
+Rehearsal logic that should run in skip-publish mode must live in a non-publish phase —
+`releaseIOHooksAfterTag` is the usual fit.
 
 ## Example: Persistent decision defaults
 
@@ -73,15 +76,17 @@ releaseIODefaultsPushAnswer := Some(true)
 
 ## Custom version formats
 
-The default reader and writer assume a `version.sbt` file containing `[ThisBuild /] version := "x.y.z"`. To use a different version file format — for example, in a non-Scala project or a polyglot monorepo — override three settings together:
+The default reader and writer assume a `version.sbt` file containing `version := "x.y.z"`
+(with or without a `ThisBuild /` prefix). To use a different version file format — for
+example, in a non-Scala project or a polyglot monorepo — override these three settings
+together. Overriding only the reader without also pointing `releaseIOVersioningFile` at a
+compatible file will fail the version bump step.
 
-| Setting                        | Role                                                                               |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `releaseIOVersioningFile` | Path to the version file |
-| `releaseIOVersioningReadVersion` | `File => IO[String]` — extract the version string from the file |
-| `releaseIOVersioningFileContents` | `(File, String) => IO[String]` — returns the version file content to write to disk |
-
-The function receives the current file as its first argument, so it can read existing content and replace only the version line while preserving other fields.
+| Setting | Type | Role |
+| ------- | ---- | ---- |
+| `releaseIOVersioningFile` | `File` | Path to the version file |
+| `releaseIOVersioningReadVersion` | `File => IO[String]` | Extract the current version string from the file |
+| `releaseIOVersioningFileContents` | `(File, String) => IO[String]` | Read the existing file and return the new full contents to write back, replacing only the version |
 
 ### Example: Java `.properties` file
 

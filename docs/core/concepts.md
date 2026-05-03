@@ -5,7 +5,7 @@ Use this page for the core plugin's execution model and the conceptual differenc
 
 ## Validate / execute model
 
-Internally, the compiled core lifecycle is expressed in terms of `ProcessStep`, the internal
+The compiled core lifecycle is expressed in terms of `ProcessStep`, the internal
 validate/execute runtime model that policies and hooks compile into. Each compiled step has two
 phases:
 
@@ -13,19 +13,14 @@ phases:
 - `execute: ReleaseContext => IO[ReleaseContext]`
 
 Author-facing hooks use a narrower API: `ReleaseHookIO.validate` (and the resource-hook
-variants) return `IO[Unit]`, while `ReleaseHookIO.execute` returns `IO[ReleaseContext]`.
-When those hooks compile into `ProcessStep.Single` and then `ExecutionEngine.PreparedStep`,
-the runtime wraps unit-returning validations and side-effect-only hook actions so the internal
-lifecycle still threads `ReleaseContext` through both phases.
+variants) return `IO[Unit]`, while `ReleaseHookIO.execute` returns `IO[ReleaseContext]`. The
+runtime adapts both into the internal `ProcessStep` model so the lifecycle keeps threading
+`ReleaseContext` through every phase.
 
 The release engine validates the planned lifecycle before it performs any release actions.
 That means `releaseIO check` can run validations and print the plan without writing version
-files, creating commits or tags, publishing, or pushing. When runtime hook state cannot still
+files, creating commits or tags, publishing, or pushing. When runtime hooks can no longer
 change them, it also resolves versions and tags; otherwise it marks them as not evaluated.
-
-Hook and policy settings compile into the validate/execute lifecycle that `releaseIO` runs.
-The release command then executes the planned steps sequentially, threading `ReleaseContext`
-through the run.
 
 ## Execution model: sbt-release-io vs sbt-release
 
@@ -44,7 +39,7 @@ validation checks before mutating actions. The main difference is the effect mod
 
 - **Resource safety**: `Resource.use` guarantees cleanup for shared resources
 - **Composability**: hooks and internal process helpers can use normal cats-effect combinators
-- **User-facing hooks cannot mutate context**: `ReleaseHookIO.validate` returns `IO[Unit]`, so a hook's pre-flight check cannot alter the release context
+- **Hook validations cannot mutate context**: `ReleaseHookIO.validate` returns `IO[Unit]`, so a hook's pre-flight check cannot alter the release context (the `execute` phase still returns `IO[ReleaseContext]` and can update it)
 - **Explicit blocking boundaries**: `IO.blocking` marks shell-outs and sbt task execution
 - **Typed context threading**: `ReleaseContext` carries versions, VCS state, flags, and typed metadata
 - **Cross-build validation**: both `validate` and `execute` phases can cross-build when enabled
@@ -69,6 +64,3 @@ validation checks before mutating actions. The main difference is the effect mod
 | VCS support             | Git, Mercurial, Subversion                  | Git only                                          |
 | Error handling          | `FailureCommand` sentinel in State          | `IO.raiseError` + `handleErrorWith`               |
 | Composability           | `Function.chain`                            | Monadic (`for`/`flatMap`)                         |
-
-The plugin ports sbt-release's types, settings, and execution model onto cats-effect IO,
-with no runtime dependency on sbt-release.

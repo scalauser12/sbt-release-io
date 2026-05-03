@@ -2,6 +2,17 @@
 
 This page maps **sbt modules**, **runtime layers**, and **internal types** so you can navigate the codebase without duplicating the user-facing guides in [Core concepts](core/concepts.md) and [Monorepo concepts](monorepo/concepts.md).
 
+### Where to look first
+
+| Task | Start here |
+| ---- | ---------- |
+| Add or reorder a lifecycle phase | [`CoreLifecycle`](../modules/core/src/main/scala/io/release/core/internal/CoreLifecycle.scala) / [`MonorepoLifecycle`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoLifecycle.scala) |
+| Add or change a public setting key | [`ReleasePluginIO`](../modules/core/src/main/scala/io/release/ReleasePluginIO.scala) / [`MonorepoReleasePlugin`](../modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala) |
+| Adjust shared default settings | [`ReleaseSharedDefaultSettingsSupport`](../modules/runtime/src/main/scala/io/release/ReleaseSharedDefaultSettingsSupport.scala) |
+| Adjust validate/execute scheduling | [`ExecutionEngine`](../modules/runtime/src/main/scala/io/release/runtime/engine/ExecutionEngine.scala) / [`LifecycleCompiler`](../modules/runtime/src/main/scala/io/release/runtime/engine/LifecycleCompiler.scala) |
+| Modify a built-in step's body | [`modules/core/.../steps/`](../modules/core/src/main/scala/io/release/core/internal/steps) / [`modules/monorepo/.../steps/`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/steps) |
+| Change CLI parsing | [`MonorepoCommandParsers`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandParsers.scala) / [`ReleaseCommandParserSupport`](../modules/runtime/src/main/scala/io/release/runtime/command/ReleaseCommandParserSupport.scala) |
+
 ## Module layout
 
 sbt modules under `modules/`:
@@ -13,10 +24,10 @@ sbt modules under `modules/`:
 | **monorepo** | Multi-project plugin (`MonorepoReleasePlugin`), `MonorepoContext`, change detection, per-project steps. Depends on **core**, **runtime**, and **testkit** (tests). |
 | **testkit** | Test fixtures and assertions. Used by core/monorepo tests. |
 
-At the code/build level, `runtime` owns the shared-key/defaults implementation.
-`ReleasePluginIO` is the public grouped-key surface for shared `releaseIO*` settings, and
-`MonorepoReleasePlugin` requires `ReleasePluginIO`, so monorepo-only installs inherit both
-`releaseIOMonorepo*` and the shared/core `releaseIO*` layer transitively.
+At the code/build level, `runtime` owns the shared-key/defaults implementation;
+`ReleasePluginIO` exposes them as the public grouped-key surface for shared `releaseIO*`
+settings; and `MonorepoReleasePlugin` requires `ReleasePluginIO`, so monorepo-only installs
+inherit `releaseIOMonorepo*` and `releaseIO*` together.
 
 ```mermaid
 flowchart TB
@@ -39,9 +50,10 @@ Both plugins block the sbt command thread, prepare a plan, compile hooks/policie
 run them with cats-effect `IO` (`unsafeRunSync` at the command boundary). Shared engine pieces
 live in **runtime**; plugin-specific wiring lives in **core** or **monorepo**.
 
-There is no public shared AutoPlugin. `ReleasePluginIO` owns the public shared/core `releaseIO*`
-import surface, and `MonorepoReleasePlugin` requires it while keeping its own
-`releaseIOMonorepo*` contract.
+`ReleasePluginIO` owns the public shared/core `releaseIO*` import surface, and
+`MonorepoReleasePlugin` requires it while keeping its own `releaseIOMonorepo*` contract.
+There is no separate shared AutoPlugin — the `requires ReleasePluginIO` chain is the
+mechanism for transitive availability.
 
 ### Core (single-project)
 
@@ -76,7 +88,10 @@ flowchart LR
 
 - Registration: [`MonorepoReleasePlugin`](../modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala)
 - CLI, planning, merge/compile: [`MonorepoCommandExecution`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandExecution.scala)
-- Selection boundary (default built-in flow): setup segment uses sequential validate-then-execute through `detect-or-select-projects` and any immediately following `after-selection:*` hooks; main segment uses validate-all-then-execute (same engine mode as core main). If no selection-boundary step is present, the whole process falls back to sequential validate-then-execute: [`MonorepoComposer`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoComposer.scala)
+- Selection boundary (default built-in flow) — see [`MonorepoComposer`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoComposer.scala):
+  - **Setup segment** runs sequential validate-then-execute through `detect-or-select-projects` and any immediately following `after-selection:*` hooks.
+  - **Main segment** runs validate-all-then-execute (same engine mode as core main).
+  - **Fallback:** if no selection-boundary step is present, the whole process runs sequential validate-then-execute.
 
 ## Glossary
 
@@ -84,12 +99,12 @@ flowchart LR
 | ---- | ------- |
 | `ProcessStep` | Internal ADT: [`Single`](../modules/runtime/src/main/scala/io/release/runtime/engine/ProcessStep.scala) (one context) or `PerItem` (context + item, e.g. project). Policies and hooks compile to these via [`LifecycleCompiler`](../modules/runtime/src/main/scala/io/release/runtime/engine/LifecycleCompiler.scala). |
 | `ExecutionEngine.PreparedStep` | Thin runtime wrapper (`validate` / `execute` as `C => IO[C]`) used only inside [`ExecutionEngine`](../modules/runtime/src/main/scala/io/release/runtime/engine/ExecutionEngine.scala). Composers build these from `ProcessStep`. |
-| Core `Step` | Type alias for `ProcessStep.Single[ReleaseContext]` (see core step aliases). |
+| Core `Step` | Type alias for `ProcessStep.Single[ReleaseContext]` — see [`CoreStepAliases`](../modules/core/src/main/scala/io/release/core/internal/CoreStepAliases.scala). |
 | Monorepo `AnyStep` | `ProcessStep[MonorepoContext, ProjectReleaseInfo]` (single or per-project). |
 | `ReleaseContext` | Core threaded state (versions, VCS, sbt `State`, flags). |
 | `MonorepoContext` | Global monorepo state plus per-project info and selection. |
 
-For validate vs execute semantics and `releaseIO check` / `releaseIOMonorepo check`, see [Core concepts](core/concepts.md) and [Monorepo concepts](monorepo/concepts.md).
+For validate/execute semantics and `releaseIO check` / `releaseIOMonorepo check`, see [Core concepts](core/concepts.md) and [Monorepo concepts](monorepo/concepts.md).
 
 ## Related reading
 

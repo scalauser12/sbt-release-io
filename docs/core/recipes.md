@@ -43,6 +43,10 @@ phases still run once per release. `ReleaseResourceHookIO` follows the same phas
 rule as plain hooks:
 
 ```scala
+// build.sbt
+import _root_.cats.effect.IO
+import _root_.io.release.ReleaseHookIO
+
 releaseIOHooksBeforePublish += ReleaseHookIO.sideEffect("verify-publish-env") { ctx =>
   IO.blocking(ctx.state.log.info("[release-io] verifying publish environment"))
 }
@@ -50,7 +54,7 @@ releaseIOHooksBeforePublish += ReleaseHookIO.sideEffect("verify-publish-env") { 
 
 ## CI/CD integration
 
-The plugin defaults to non-interactive mode (`releaseIOBehaviorInteractive := false`), so it works in CI without additional configuration. Pass `with-defaults` to suppress the remaining version prompts, and supply versions explicitly:
+The plugin defaults to non-interactive mode (`releaseIOBehaviorInteractive := false`), so it works in CI without extra configuration. Pass `with-defaults` to accept the computed release/next versions without confirmation, and supply versions explicitly:
 
 ```bash
 sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
@@ -65,6 +69,16 @@ sbt "releaseIO with-defaults skip-tests release-version 1.0.0 next-version 1.1.0
 ### GitHub Actions example
 
 ```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (e.g. 1.0.0)
+        required: true
+      next_version:
+        description: Next snapshot version (e.g. 1.1.0-SNAPSHOT)
+        required: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -96,11 +110,9 @@ releaseIOPolicyEnablePush := false
 releaseIOBehaviorSkipPublish := true
 ```
 
-`releaseIOBehaviorSkipPublish := true` keeps the publish step in the compiled lifecycle but
-skips its body at runtime; **`releaseIOHooksBeforePublish` and `releaseIOHooksAfterPublish`
-are also gated off** in this mode (the gate is decided at validate time and stays frozen).
-Attach rehearsal logic to a non-publish phase such as `releaseIOHooksAfterTag` if it must
-run when skip-publish is on.
+See [Disabling publish: policy vs behavior](configuration.md#disabling-publish-policy-vs-behavior)
+for why `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` are gated off in this
+mode and where to attach rehearsal logic instead.
 
 First run the preflight with no release side effects:
 
@@ -114,7 +126,7 @@ Or with explicit versions:
 sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
-`check` has no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hook state cannot still change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` has no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hooks can no longer change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
 Then run the real release with explicit versions so the tag name and commit count are
 predictable:
@@ -135,7 +147,8 @@ cat version.sbt
 ```
 
 To clean up after the rehearsal run, verify that the last two commits are the release
-commits, then delete the tag and roll back:
+commits, then delete the tag and roll back. `git reset --hard` discards uncommitted
+working-tree changes, so commit or stash anything else first.
 
 ```bash
 git log -2 --oneline         # should show the two release commits

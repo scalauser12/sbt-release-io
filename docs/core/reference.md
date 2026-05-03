@@ -6,15 +6,16 @@ walkthrough, start with [Getting started](getting-started.md).
 
 In `.scala` build sources under `project/`, import grouped keys from
 `ReleasePluginIO.autoImport.*`. That surface owns both the core-only keys and the shared
-`releaseIO*` settings. In `.sbt` files, use the normal `ReleasePluginIO` surface.
+`releaseIO*` settings. In `.sbt` files, the keys are auto-imported via the plugin's
+`autoImport` — no import needed.
 
 > **Coming from sbt-release?** The original plugin enables interactive prompts by default.
 > This plugin defaults to `releaseIOBehaviorInteractive := false` — decision points that
 > have no configured answer **fail fast** instead of prompting.
 >
 > You have two options:
-> - `releaseIOBehaviorInteractive := true` — restore the guided sbt-release-style
->   experience where the plugin prompts for versions, confirmation, and push decisions.
+> - `releaseIOBehaviorInteractive := true` — re-enable interactive prompts for versions,
+>   confirmation, and push decisions.
 > - `with-defaults` CLI flag — auto-accept safe built-in defaults without prompting
 >   and without enabling interactive mode. Useful for CI.
 >
@@ -39,7 +40,14 @@ When interactive mode is enabled and no decision default is configured, five pro
 | `Error while checking remote. Still continue (y/n)? [n]` | Remote check fails or times out | no (abort) |
 | `The upstream branch has unmerged commits. A subsequent push may fail! Continue (y/n)? [n]` | Local branch is behind upstream | no (abort) |
 
-When interactive is `false` (the default) and no decision default is set: snapshot-dependency and tag-conflict issues raise errors, push is skipped, and remote-check failures abort. The `with-defaults` CLI flag pre-answers all prompts with safe defaults without enabling interactive mode.
+When interactive is `false` (the default) and no decision default is set:
+
+- snapshot-dependency and tag-conflict issues raise errors
+- push is skipped
+- remote-check failures abort
+
+The `with-defaults` CLI flag pre-answers all prompts with safe defaults without enabling
+interactive mode.
 
 ## Shared decision-default settings
 
@@ -83,7 +91,7 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 | `releaseIOPublishAction` | `Unit` | `publish.value` | Task that performs the publish |
 | `releaseIOPublishChecks` | `Boolean` | `true` | Validate `publishTo` / `skip` before publish |
 
-## Shared diagnostics and core runtime
+## Diagnostics and runtime
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -95,12 +103,8 @@ When interactive is `false` (the default) and no decision default is set: snapsh
 These settings compile into the built-in lifecycle for both `releaseIO` and
 `releaseIO check`.
 
-`releaseIOBehaviorSkipPublish` keeps the publish step in the compiled lifecycle but skips its
-body at runtime, and `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` are also
-gated off (the gate is decided at validate time and stays frozen). Attach rehearsal logic to a
-non-publish phase such as `releaseIOHooksAfterTag` if it must run in skip-publish mode.
-`releaseIOPolicyEnablePublish` removes the publish phase from the compiled lifecycle entirely,
-so `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` have no effect when it is `false`.
+`releaseIOBehaviorSkipPublish` and `releaseIOPolicyEnablePublish` disable publish in different
+ways — see [Disabling publish: policy vs behavior](configuration.md#disabling-publish-policy-vs-behavior).
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
@@ -158,7 +162,7 @@ so `releaseIOHooksBeforePublish` / `releaseIOHooksAfterPublish` have no effect w
 | `cross` | Enable cross-building |
 | `release-version <ver>` | Override the release version |
 | `next-version <ver>` | Override the next snapshot version |
-| `default-tag-exists-answer <o\|k\|a\|<tag-name>>` | Auto-answer tag-conflict handling |
+| `default-tag-exists-answer o \| k \| a \| <new-tag>` | Auto-answer tag-conflict handling: `o` (overwrite), `k` (keep), `a` (abort), or a replacement tag name |
 | `default-snapshot-dependencies-answer <y\|n>` | Auto-answer snapshot-dependency confirmation |
 | `default-remote-check-failure-answer <y\|n>` | Auto-answer remote-check failure confirmation |
 | `default-upstream-behind-answer <y\|n>` | Auto-answer upstream-behind confirmation |

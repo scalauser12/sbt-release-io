@@ -3,13 +3,12 @@
 ## Features
 
 - **Two-phase release steps**: Each step has a `validate` phase (preflight checks) and an `execute` phase (actions), both running in cats-effect `IO`
-- **Independent codebase**: Ports sbt-release's types, settings, and execution model onto cats-effect IO — no runtime dependency on sbt-release
 - **Policy and hook customization**: Extend the built-in release flow with grouped `releaseIOPolicy*` keys and `releaseIOHooks*`
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
 - **Resource-safe custom plugins**: Acquire shared resources (HTTP clients, temp dirs, etc.) once for the entire release with guaranteed cleanup via `Resource[IO, T]`
-- **Non-interactive by default**: Unlike sbt-release, interactive prompts are disabled by default for CI safety. Set `releaseIOBehaviorInteractive := true` for the guided sbt-release-style experience — see [Behavior settings](reference.md#behavior-settings)
-- **Configurable**: Comprehensive settings for commit messages, signing, version bumping, etc.
+- **Non-interactive by default**: Interactive prompts are disabled by default for CI safety. Set `releaseIOBehaviorInteractive := true` to re-enable guided prompts — see [Behavior settings](reference.md#behavior-settings)
+- **Configurable**: Settings for commit messages, GPG signing, version bumping, and publish gating
 
 > **Note:** This plugin supports Git only. If your project uses Mercurial or Subversion, see [sbt-release](https://github.com/sbt/sbt-release).
 
@@ -21,7 +20,13 @@ Add to `project/plugins.sbt`:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.12.3")
 ```
 
-The project needs a `version.sbt` file containing `ThisBuild / version := "0.1.0-SNAPSHOT"`. The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom version formats](configuration.md#custom-version-formats).
+The project needs a `version.sbt` file:
+
+```scala
+ThisBuild / version := "0.1.0-SNAPSHOT"
+```
+
+The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom version formats](configuration.md#custom-version-formats).
 
 ## Usage
 
@@ -37,7 +42,7 @@ Run a preflight to validate the release setup without side effects:
 sbt "releaseIO check with-defaults"
 ```
 
-`check` runs release-step validations and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hook state cannot still change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` runs release-step validations and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hooks can no longer change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
 
 Run the release (versions computed from `version.sbt`):
 

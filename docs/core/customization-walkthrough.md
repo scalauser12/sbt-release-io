@@ -1,20 +1,17 @@
 # Customization walkthrough (core)
 
 This walkthrough shows how to customize the core plugin. Customization is done through policy
-keys and lifecycle hooks — that is the only build-facing customization surface, so there is no
-alternative "edit the step list" path to compare against. Phase ordering is fixed by the
-engine; policies toggle phases on or off, hooks attach behavior to phases. This page walks
-through a typical setup:
+keys and lifecycle hooks. Phase ordering is fixed by the engine; policies toggle phases on or
+off, hooks attach behavior to phases. This page walks through a typical setup:
 
 - disable mutating remote phases with policy keys
 - add small lifecycle hooks around the built-in phases
 - use `releaseIO check` for local rehearsal
 
-**Prerequisites:** this walkthrough assumes an existing git-initialized Scala project
-with a clean working tree, on branch `main` or `master` (the `validate-main-branch` hook
-below enforces this). If you are adding the plugin to an existing project, commit any
-outstanding changes before running the rehearsal. If you are starting from scratch, run
-`git init && git add . && git commit -m "Initial commit"` after step 3.
+> **Prerequisites:** an existing git-initialized Scala project with a clean working tree, on
+> branch `main` or `master` (the `validate-main-branch` hook below enforces this). If you are
+> adding the plugin to an existing project, commit any outstanding changes before running the
+> rehearsal.
 
 ## 1. Add the plugin
 
@@ -73,6 +70,12 @@ What this config does:
 - one hook validates the release branch after the clean-working-dir check
 - one hook logs just before tagging
 
+If you are starting from a fresh directory, initialize the repo before continuing:
+
+```bash
+git init && git add . && git commit -m "Initial commit"
+```
+
 ## 4. Inspect the command help
 
 ```bash
@@ -85,7 +88,7 @@ sbt "releaseIO help"
 sbt "releaseIO check with-defaults"
 ```
 
-This validates the same compiled hook/policy shape that the real release would run, but with no
+This validates the same hook and policy configuration the real release would run, but with no
 release side effects: no version-file writes, commits, tags, publish, or push.
 
 ## 6. Rehearse explicit versions
@@ -95,8 +98,8 @@ sbt "releaseIO check with-defaults release-version 0.3.0 next-version 0.4.0-SNAP
 ```
 
 This is useful when you want to confirm commit messages and hook execution against a specific
-version pair before a real release. Version and tag summaries remain available as long as
-execute-time hooks do not late-bind them.
+version pair before a real release. Version and tag summaries remain available as long as no
+execute-time hook rewrites them.
 
 ## 7. Run the local-only release
 
@@ -116,7 +119,8 @@ cat version.sbt
 ```
 
 To clean up after the rehearsal, verify that the last two commits are the release commits,
-then delete the tag and roll back:
+then delete the tag and roll back. `git reset --hard` discards uncommitted working-tree
+changes, so commit or stash anything else first.
 
 ```bash
 git log -2 --oneline         # should show the two release commits

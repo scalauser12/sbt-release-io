@@ -30,8 +30,10 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.12.3")
 sbt.version=1.12.3
 ```
 
-Pinning `sbt.version` up front avoids sbt auto-creating `project/build.properties` on first
-launch, which would otherwise appear as an untracked file and fail `check-clean-working-dir`.
+> **Tip:** Pin `sbt.version` up front. Otherwise sbt auto-creates `project/build.properties`
+> on first launch, which would appear as an untracked file and fail
+> `check-clean-working-dir` (the validation step that fails on uncommitted changes —
+> see [Concepts](concepts.md#default-release-steps)).
 
 ## 2. Configure the build
 
@@ -57,13 +59,19 @@ lazy val root = (project in file("."))
 
 ## 3. Create version files
 
-`core/version.sbt` and `api/version.sbt`:
+This walkthrough uses the per-project model, so each subproject gets its own `version.sbt`.
+
+`core/version.sbt`:
 
 ```scala
 version := "0.1.0-SNAPSHOT"
 ```
 
-This walkthrough uses the per-project model, so each subproject gets its own `version.sbt`.
+`api/version.sbt`:
+
+```scala
+version := "0.1.0-SNAPSHOT"
+```
 
 ## 4. Initialise git and make the first commit
 
@@ -99,10 +107,10 @@ After the release:
 
 ```bash
 git log --oneline     # 3 commits: Initial, release versions, next versions
-git tag               # core/v0.1.0  api/v0.1.0
+git tag               # core/v0.1.0, api/v0.1.0
 cat core/version.sbt  # version := "0.1.1-SNAPSHOT"
 ```
 
 > **Note:** The first release triggers all projects as changed because change detection looks for a prior release tag and finds none. On subsequent runs, only projects with file changes since their last tag are released. To force all projects regardless, use the `all-changed` flag.
 
-> **Local rehearsal:** The walkthrough above already disables `push-changes` and `publish-artifacts` via hook/policy settings. Use the same pattern together with `releaseIOMonorepo check` to rehearse any release locally before running the real command. To undo a rehearsal run, see [Recovery and Rollback](operations.md#recovery-and-rollback).
+> **Local rehearsal:** The walkthrough above already disables `push-changes` and `publish-artifacts` via policy settings. Use the same pattern together with `releaseIOMonorepo check` to rehearse any release locally before running the real command. To undo a rehearsal run, see [Recovery and rollback](operations.md#recovery-and-rollback).
