@@ -9,17 +9,22 @@ import io.release.monorepo.MonorepoProjectResourceHookIO
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 import io.release.monorepo.MonorepoReleasePluginLike
 import io.release.monorepo.MonorepoResourceHooks
+import io.release.runtime.ReleaseLogPrefixes
 import sbt.*
 
-/** Examples showing the supported hook/policy monorepo customization path.
-  *
-  * '''How to read this file (recommended path):'''
-  *   1. Start with `firstHookSettings` for an immediate hook-based setup.
-  *   2. Move to `customHookSettings` for a richer global/per-project example.
-  *   3. See `MyMonorepoRelease` for advanced resource-aware customization.
-  *
-  * Plugin objects like `MyMonorepoRelease` must live in `project/` (as `.scala` files)
-  * to be discovered by sbt. The objects below are examples to copy there.
+/**
+ * Examples showing the supported hook/policy monorepo customization path.
+ *
+ * '''How to read this file (recommended path):'''
+ *  1. Start with `firstHookSettings` for an immediate hook-based setup.
+ *  2. Move to `customHookSettings` for a richer global/per-project example.
+ *  3. Reach for the focused templates — `selectionAndDetectionSettings`,
+ *     `targetedRehearsalSettings`, and `propertiesVersionSettings` — when you need a
+ *     side-effect-free dry run, a targeted rehearsal, or a custom version-file format.
+ *  4. See `MyMonorepoRelease` for advanced resource-aware customization.
+ *
+ * Plugin objects like `MyMonorepoRelease` must live in `project/` (as `.scala` files)
+ * to be discovered by sbt. The objects below are examples to copy there.
  */
 object CustomMonorepoStepExamples {
 
@@ -34,7 +39,7 @@ object CustomMonorepoStepExamples {
     *
     * Run with: `sbt "releaseIOMonorepo with-defaults"`
     */
-  val firstHookSettings: Seq[Setting[?]] = Seq(
+  lazy val firstHookSettings: Seq[Setting[?]] = Seq(
     releaseIOMonorepoPolicyEnablePush := false,
     releaseIOMonorepoHooksAfterSelection += printSummaryHook
   )
@@ -46,7 +51,7 @@ object CustomMonorepoStepExamples {
     *   .settings(CustomMonorepoStepExamples.customHookSettings)
     * }}}
     */
-  val customHookSettings: Seq[Setting[?]] = Seq(
+  lazy val customHookSettings: Seq[Setting[?]] = Seq(
     releaseIOMonorepoPolicyEnablePush := false,
     releaseIOMonorepoHooksAfterSelection += printSummaryHook,
     releaseIOMonorepoHooksBeforeVersionResolution += checkReadmeHook,
@@ -71,7 +76,7 @@ object CustomMonorepoStepExamples {
     * // sbt "releaseIOMonorepo check api with-defaults release-version api=1.1.0 next-version api=1.2.0-SNAPSHOT"
     * }}}
     */
-  val selectionAndDetectionSettings: Seq[Setting[?]] = Seq(
+  lazy val selectionAndDetectionSettings: Seq[Setting[?]] = Seq(
     releaseIOMonorepoPolicyEnablePush           := false,
     releaseIOMonorepoPolicyEnablePublish        := false,
     releaseIOMonorepoPolicyEnableRunClean       := false,
@@ -93,7 +98,7 @@ object CustomMonorepoStepExamples {
     * // sbt "releaseIOMonorepo check api with-defaults release-version api=1.1.0 next-version api=1.2.0-SNAPSHOT"
     * }}}
     */
-  val targetedRehearsalSettings: Seq[Setting[?]] = Seq(
+  lazy val targetedRehearsalSettings: Seq[Setting[?]] = Seq(
     releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoPolicyEnablePublish  := false,
     releaseIOMonorepoPolicyEnableRunClean := false,
@@ -113,7 +118,7 @@ object CustomMonorepoStepExamples {
     *   .settings(CustomMonorepoStepExamples.propertiesVersionSettings)
     * }}}
     */
-  val propertiesVersionSettings: Seq[Setting[?]] = Seq(
+  lazy val propertiesVersionSettings: Seq[Setting[?]] = Seq(
     releaseIOMonorepoVersioningFile         := { (ref: ProjectRef, state: State) =>
       Project.extract(state).get(ref / Keys.baseDirectory) /
         "version.properties"
@@ -148,7 +153,8 @@ object CustomMonorepoStepExamples {
   val printSummaryHook: MonorepoGlobalHookIO =
     MonorepoGlobalHookIO.sideEffect("print-summary")(ctx =>
       IO.println(
-        s"[monorepo] Releasing projects: ${ctx.currentProjects.map(_.name).mkString(", ")}"
+        s"${ReleaseLogPrefixes.Monorepo} Releasing projects: " +
+          ctx.currentProjects.map(_.name).mkString(", ")
       )
     )
 
@@ -165,6 +171,11 @@ object CustomMonorepoStepExamples {
       }
     }
 
+  /** Per-project changelog generator.
+    *
+    * The new entry is appended at the end of the file; for a chronological "newest first"
+    * changelog, splice the entry under the `# <project> Changelog` heading instead.
+    */
   val generateChangelogHook: MonorepoProjectHookIO =
     MonorepoProjectHookIO.sideEffect("generate-changelog") { (project, _) =>
       project.versions match {
@@ -175,9 +186,13 @@ object CustomMonorepoStepExamples {
             val existing =
               if (file.exists()) sbt.IO.read(file) else s"# ${project.name} Changelog\n"
             sbt.IO.write(file, existing + entry)
-          } *> IO.println(s"[monorepo] Updated CHANGELOG.md for ${project.name} $releaseVer")
+          } *> IO.println(
+            s"${ReleaseLogPrefixes.Monorepo} Updated CHANGELOG.md for ${project.name} $releaseVer"
+          )
         case None                  =>
-          IO.println(s"[monorepo] Skipping changelog for ${project.name} — no versions set")
+          IO.println(
+            s"${ReleaseLogPrefixes.Monorepo} Skipping changelog for ${project.name} — no versions set"
+          )
       }
     }
 

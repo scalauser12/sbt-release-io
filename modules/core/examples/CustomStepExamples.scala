@@ -11,15 +11,14 @@ import io.release.runtime.ReleaseLogPrefixes
 import sbt.*
 import sbt.Keys.thisProject
 
-import scala.util.control.NonFatal
-
 /**
  * Examples showing the supported hook/policy customization path.
  *
  * '''How to read this file (recommended path):'''
  *  1. Start with `firstHookSettings` for a working hook-based setup.
  *  2. Move to `customHookSettings` for a richer policy + lifecycle example.
- *  3. Use `MyReleasePlugin` for advanced resource-aware customization.
+ *  3. Reach for `rehearsalSettings` when you want a side-effect-free local dry run.
+ *  4. Use `MyReleasePlugin` for advanced resource-aware customization.
  *
  * Note: plugin objects like `MyReleasePlugin` must live in `project/MyReleasePlugin.scala`
  * to be discovered by sbt. The object below is an example to copy there.
@@ -118,6 +117,9 @@ object CustomStepExamples {
 
   /** Hook variant of the changelog example. Attach after version resolution or before
     * writing the release version so `ctx.releaseVersion` is already available.
+    *
+    * The new entry is appended at the end of the file; for a chronological "newest first"
+    * changelog, splice the entry under the `# Changelog` heading instead.
     */
   val generateChangelogHook: ReleaseHookIO =
     ReleaseHookIO.sideEffect("generate-changelog")(ctx =>
@@ -143,15 +145,13 @@ object CustomStepExamples {
     IO.blocking {
       val version = ctx.releaseVersion.getOrElse("unknown")
       ctx.state.log.info(s"${ReleaseLogPrefixes.Core} Notifying release of $version...")
-    }.handleErrorWith {
-      case NonFatal(err) =>
-        IO.blocking(
-          ctx.state.log.warn(
-            s"${ReleaseLogPrefixes.Core} Notification failed: ${err.getMessage}, continuing..."
-          )
+    }.handleErrorWith(err =>
+      IO.blocking(
+        ctx.state.log.warn(
+          s"${ReleaseLogPrefixes.Core} Notification failed: ${err.getMessage}, continuing..."
         )
-      case fatal         => IO.raiseError(fatal)
-    }
+      )
+    )
   )
 
   val markReleaseDoneHook: ReleaseHookIO =
@@ -194,11 +194,8 @@ trait HttpClient {
  * // enablePlugins(MyReleasePlugin)
  * }}}
  *
- * If this plugin needs grouped keys in `.scala` sources, import core-specific keys from
- * `ReleasePluginIO.autoImport.*` and shared `releaseIO*` keys from
- * `ReleasePluginIO.autoImport.*`. Existing shared-key imports through
- * `ReleasePluginIO.autoImport.*` remain supported for compatibility, but
- * `ReleasePluginIO.autoImport.*` is the preferred import for new Scala build code.
+ * If this plugin needs grouped `releaseIO*` keys in `.scala` sources, import them from
+ * `ReleasePluginIO.autoImport.*`.
  *
  * Run with:
  * {{{
