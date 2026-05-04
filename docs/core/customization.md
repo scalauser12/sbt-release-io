@@ -87,10 +87,6 @@ ReleaseResourceHookIO.sideEffect[HttpClient]("notify-api") { (client, ctx) =>
 to publish multiple recoverable checkpoints from inside its own loop, working
 directly with the `TrackedContextHandle` that `resumable` wraps.
 
-> **Coming in v0.13.0.** The `.io`, `.action`, and `.actionTracked` factories
-> will be removed; they are deprecated in v0.12.x. See the migration table in
-> [CHANGELOG.md](../../CHANGELOG.md) for the old → new mapping.
-
 ## Hook-based customization
 
 ```scala

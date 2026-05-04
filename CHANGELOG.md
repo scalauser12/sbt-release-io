@@ -4,7 +4,11 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
-## v0.13.0 (unreleased)
+## v0.13.0
+
+Published: 2026-05-04
+GitHub release:
+[v0.13.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.0)
 
 `v0.13.0` is a minor release for both plugins that finalizes the intent-named hook
 factory API by removing the deprecated `.io`, `.action`, and `.actionTracked`
@@ -40,6 +44,17 @@ public; user code that builds hooks via the case class continues to compile.
 
 - Drop the deprecated-factory note from `docs/core/customization.md` and
   `docs/monorepo/customization.md`.
+- Refresh the root README, module READMEs, and published walkthrough/getting-started docs to
+  reference `0.13.0`.
+
+### Verification
+
+- `git diff --check`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
 
 ## v0.12.3
 

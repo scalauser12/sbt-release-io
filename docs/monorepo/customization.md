@@ -81,10 +81,6 @@ Resource-aware hooks (`MonorepoGlobalResourceHookIO[T]`,
 to publish multiple recoverable checkpoints from inside its own loop, working
 directly with the `TrackedContextHandle` that `resumable` wraps.
 
-> **Coming in v0.13.0.** The `.io`, `.action`, and `.actionTracked` factories
-> will be removed; they are deprecated in v0.12.x. See the migration table in
-> [CHANGELOG.md](../../CHANGELOG.md) for the old → new mapping.
-
 > **Check-mode visibility.** `sideEffect`, `transform`, and `resumable` populate
 > `execute` only — their `validate` is a no-op, so `releaseIOMonorepo check` does
 > not rehearse them. Use `precondition` for guard hooks that must fail upfront;

@@ -18,7 +18,7 @@ off, hooks attach behavior to phases. This page walks through a typical setup:
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.12.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.0")
 ```
 
 ## 2. Add a version file
