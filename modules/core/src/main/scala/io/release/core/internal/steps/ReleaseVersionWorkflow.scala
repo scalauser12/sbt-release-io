@@ -81,7 +81,11 @@ private[release] object ReleaseVersionWorkflow {
       ensureVersionFileExists(versionFile) *>
         ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
           VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
-            assertVersionFileNotIgnored("inquire-versions", relativePath, vcs)
+            VersionWorkflowSupport.assertVersionFileNotIgnored(
+              "inquire-versions",
+              relativePath,
+              vcs
+            )
           }
         }
     }
@@ -369,7 +373,7 @@ private[release] object ReleaseVersionWorkflow {
       vcs: Vcs,
       relativePath: String
   ): IO[(ReleaseContext, String)] =
-    assertVersionFileNotIgnored(actionName, relativePath, vcs) *>
+    VersionWorkflowSupport.assertVersionFileNotIgnored(actionName, relativePath, vcs) *>
       vcs.currentHash.map(hash => (ctx, hash))
 
   /** Reject the commit if any tracked file other than the configured version file is dirty.
@@ -391,38 +395,6 @@ private[release] object ReleaseVersionWorkflow {
               s"but found unrelated tracked changes: ${unrelated.mkString(", ")}. " +
               "A hook or sbt task likely modified or staged additional files. " +
               "Reset those changes (or amend the hook) before re-running the release."
-          )
-        )
-    }
-
-  /** Reject the release when the version file is matched by a `.gitignore` rule.
-    *
-    * Called at three points to fail as early as possible:
-    *   - [[validateInquireVersions]] so `releaseIO check` reports the problem before any
-    *     execute-time mutation.
-    *   - [[writeVersion]] just before the on-disk write, to catch a hook-installed
-    *     late-bound version file the validate-time check could not see.
-    *   - [[commitVersionNative]] on the no-op path, as a defensive last line before
-    *     tag/push runs against a commit that has no version bump.
-    *
-    * Failing earlier matters because an ignored file does not show up in `git status`,
-    * so a write that goes through with no commit leaves a silently corrupted on-disk
-    * state that can poison later releases.
-    */
-  private def assertVersionFileNotIgnored(
-      actionName: String,
-      versionPath: String,
-      vcs: Vcs
-  ): IO[Unit] =
-    vcs.isIgnored(versionPath).flatMap {
-      case false => IO.unit
-      case true  =>
-        IO.raiseError(
-          new IllegalStateException(
-            s"$actionName: version file `$versionPath` is matched by a .gitignore rule, " +
-              "so the release cannot commit a version bump for it. Remove the matching " +
-              "pattern from `.gitignore` (or `.git/info/exclude`) before re-running the " +
-              "release."
           )
         )
     }
@@ -459,7 +431,7 @@ private[release] object ReleaseVersionWorkflow {
       // is rejected before the on-disk write rather than after.
       _           <- ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
                        VcsOps.relativizeToBase(vcs, versionPlan.versionFile).flatMap { rel =>
-                         assertVersionFileNotIgnored(actionName, rel, vcs)
+                         VersionWorkflowSupport.assertVersionFileNotIgnored(actionName, rel, vcs)
                        }
                      }
       _           <- VersionWorkflowSupport.writeVersionFile(

@@ -3,6 +3,7 @@ package io.release.runtime.workflow
 import _root_.sbt.TaskKey
 import cats.effect.IO
 import io.release.runtime.ReleaseCtx
+import io.release.vcs.Vcs
 
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -64,6 +65,31 @@ private[release] object VersionWorkflowSupport {
     IO.blocking(versionFile.exists()).flatMap { exists =>
       if (exists) IO.unit
       else IO.raiseError(new IllegalStateException(notFoundMessage))
+    }
+
+  /** Reject the release when the version file is matched by a `.gitignore` rule.
+    *
+    * A gitignored version file is invisible to `git status`, so a write that goes through
+    * with no commit would leave a silently corrupted on-disk state that can poison later
+    * releases. Used by both core and monorepo workflows at validate time, just before the
+    * on-disk write, and on the no-op commit path.
+    */
+  def assertVersionFileNotIgnored(
+      actionName: String,
+      versionPath: String,
+      vcs: Vcs
+  ): IO[Unit] =
+    vcs.isIgnored(versionPath).flatMap {
+      case false => IO.unit
+      case true  =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"$actionName: version file `$versionPath` is matched by a .gitignore rule, " +
+              "so the release cannot commit a version bump for it. Remove the matching " +
+              "pattern from `.gitignore` (or `.git/info/exclude`) before re-running the " +
+              "release."
+          )
+        )
     }
 
   def resolveVersionInputsFromTasks[C <: ReleaseCtx { type Self = C }](

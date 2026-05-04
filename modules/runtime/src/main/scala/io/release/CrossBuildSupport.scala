@@ -11,6 +11,48 @@ import _root_.sbt.{internal as _, *}
   */
 private[release] object CrossBuildSupport {
 
+  /** Captured state needed to drive a per-project cross-build iteration: the project's
+    * distinct `crossScalaVersions`, the entry sbt `State` to restore against on
+    * completion, and the per-iteration "compatible refs" filter. Bundled because the
+    * tracked and untracked monorepo cross-build paths capture the same three values.
+    */
+  final case class ProjectCrossBuildSetup(
+      crossVersions: Seq[String],
+      entryState: State,
+      affectedFor: String => Seq[ProjectRef]
+  )
+
+  /** Capture the per-project cross-build setup. Reads `crossScalaVersions` for `projectRef`
+    * (deduped), captures the per-iteration compatibility filter once via
+    * [[affectedRefsByVersion]], and fails fast with a contextual message when no versions
+    * are configured — matching the inline validation that previously appeared in both the
+    * tracked and untracked monorepo cross-build paths.
+    */
+  def loadProjectSetup(
+      state: State,
+      projectRef: ProjectRef,
+      projectName: String,
+      logPrefix: String
+  ): IO[ProjectCrossBuildSetup] =
+    IO.blocking {
+      val extracted     = Project.extract(state)
+      val crossVersions =
+        extracted
+          .getOpt(projectRef / Keys.crossScalaVersions)
+          .getOrElse(Seq.empty)
+          .distinct
+      val affectedFor   = affectedRefsByVersion(state)
+      (crossVersions, affectedFor)
+    }.flatMap { case (crossVersions, affectedFor) =>
+      if (crossVersions.isEmpty)
+        IO.raiseError(
+          new IllegalStateException(
+            s"$logPrefix Cross-build enabled but $projectName has empty crossScalaVersions"
+          )
+        )
+      else IO.pure(ProjectCrossBuildSetup(crossVersions, state, affectedFor))
+    }
+
   /** Switch Scala version by reapplying the project structure with per-project Scala
     * overrides recorded in `session.rawAppend`. Modeled on
     * `_root_.sbt.Cross.setScalaVersionsForProjects`: scoped overrides

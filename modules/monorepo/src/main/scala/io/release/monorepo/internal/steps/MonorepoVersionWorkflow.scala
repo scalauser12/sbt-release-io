@@ -63,7 +63,7 @@ private[monorepo] object MonorepoVersionWorkflow {
         // the later `git add` declines, leaving a mutated, git-invisible file behind.
         resolveCurrentVcs(ctx).flatMap { vcs =>
           VcsOps.relativizeToBase(vcs, versionInputs.versionFile).flatMap { relativePath =>
-            assertVersionFileNotIgnored(
+            VersionWorkflowSupport.assertVersionFileNotIgnored(
               s"inquire-versions (${project.name})",
               relativePath,
               vcs
@@ -252,7 +252,7 @@ private[monorepo] object MonorepoVersionWorkflow {
         // means a misconfigured or gitignored file is rejected before the on-disk write.
         relativePath <- VcsOps.relativizeToBase(vcs, versionInputs.versionFile)
         scopedAction  = s"$actionName (${project.name})"
-        _            <- assertVersionFileNotIgnored(scopedAction, relativePath, vcs)
+        _            <- VersionWorkflowSupport.assertVersionFileNotIgnored(scopedAction, relativePath, vcs)
         updatedCtx   <- writeProjectVersion(ctx, project, selectVersion(versions), versionInputs)
       } yield updatedCtx
     }
@@ -480,32 +480,6 @@ private[monorepo] object MonorepoVersionWorkflow {
           project,
           MonorepoVersionFiles.resolve(runtime, project.ref),
           highlightedProjectRef.contains(project.ref)
-        )
-    }
-
-  /** Reject the release when a per-project version file is matched by a `.gitignore` rule.
-    *
-    * Mirrors [[io.release.core.internal.steps.ReleaseVersionWorkflow.assertVersionFileNotIgnored]]:
-    * a gitignored version file is invisible to `git status` and therefore would survive the
-    * untracked-files clean check (especially with `releaseIOVcsIgnoreUntrackedFiles := true`).
-    * Without the probe, `set-release-version` rewrites the file, the subsequent `git add`
-    * declines, and the abort leaves the file mutated on disk.
-    */
-  private def assertVersionFileNotIgnored(
-      actionName: String,
-      versionPath: String,
-      vcs: Vcs
-  ): IO[Unit] =
-    vcs.isIgnored(versionPath).flatMap {
-      case false => IO.unit
-      case true  =>
-        IO.raiseError(
-          new IllegalStateException(
-            s"$actionName: version file `$versionPath` is matched by a .gitignore rule, " +
-              "so the release cannot commit a version bump for it. Remove the matching " +
-              "pattern from `.gitignore` (or `.git/info/exclude`) before re-running the " +
-              "release."
-          )
         )
     }
 

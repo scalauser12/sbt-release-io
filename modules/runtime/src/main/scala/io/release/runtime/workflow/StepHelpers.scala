@@ -10,8 +10,50 @@ import cats.effect.IO
 import io.release.runtime.sbt.SbtRuntime
 import io.release.version.Version
 
+import scala.util.control.NonFatal
+
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
+
+  /** Substring present in any `IllegalStateException` emitted by [[runTaskChecked]] after
+    * an sbt task armed sbt's `FailureCommand` sentinel. Detection paths match on this; if
+    * you change the emitted wording in [[runTaskChecked]], update this constant.
+    */
+  private[release] val FailureCommandMarker: String = "reported failure via FailureCommand"
+
+  /** True when `err` is the `IllegalStateException` raised by [[runTaskChecked]] for a
+    * task that armed sbt's `FailureCommand` sentinel. Use to distinguish a legitimate
+    * task-driven abort from an ordinary evaluation error in probe recoveries.
+    */
+  def isFailureCommandTaskError(err: Throwable): Boolean =
+    err match {
+      case ise: IllegalStateException =>
+        Option(ise.getMessage).exists(_.contains(FailureCommandMarker))
+      case _                          => false
+    }
+
+  /** Recovery cascade shared by validate-time probes (publish/skip, publishTo, etc.):
+    *   - re-raise on the `FailureCommand` sentinel so a task-driven abort still aborts;
+    *   - on ordinary `NonFatal` errors, log `warnLine(err)` at warn and yield `fallback`
+    *     so the caller's "assume safe default" path can continue;
+    *   - re-raise on fatal.
+    */
+  def recoverProbeError[A](
+      state: State,
+      warnLine: Throwable => String,
+      fallback: A
+  )(err: Throwable): IO[A] =
+    err match {
+      case ise: IllegalStateException if isFailureCommandTaskError(ise) =>
+        IO.raiseError(ise)
+      case NonFatal(e)                                                  =>
+        IO.blocking {
+          state.log.warn(warnLine(e))
+          fallback
+        }
+      case fatal                                                        =>
+        IO.raiseError(fatal)
+    }
 
   def errorMessage(err: Throwable): String =
     Option(err.getMessage).getOrElse(err.toString)

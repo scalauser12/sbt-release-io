@@ -8,6 +8,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.workflow.StepHelpers.errorMessage
 
 import scala.util.control.NonFatal
@@ -29,10 +30,10 @@ import scala.util.control.NonFatal
 private[monorepo] object MonorepoStepHelpers {
 
   /** Substring present in any `IllegalStateException` emitted after an sbt task triggered
-    * `FailureCommand`. Detection paths (e.g. `MonorepoPublishSteps.isFailureCommandTaskError`)
-    * match on this. If you change the emitted wording, update both sides.
+    * `FailureCommand`. Sourced from [[StepHelpers.FailureCommandMarker]] so both modules
+    * stay in sync if the wording emitted by `runTaskChecked` changes.
     */
-  private[monorepo] val FailureCommandMarker: String = "reported failure via FailureCommand"
+  private[monorepo] val FailureCommandMarker: String = StepHelpers.FailureCommandMarker
 
   // ── Per-project execution ─────────────────────────────────────────────
 

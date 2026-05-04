@@ -8,7 +8,6 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
-import sbt.Keys.*
 import sbt.{internal as _, *}
 
 /** Cross-build executor for monorepo per-project steps.
@@ -121,40 +120,26 @@ private[monorepo] object MonorepoCrossBuild {
   /** Cross-build a single project across its `crossScalaVersions`.
     * Reads cross-build settings, validates non-empty, then runs the
     * version-switching loop inline.
+    *
+    * Setup capture (versions + entry state + per-iteration compatibility filter) is
+    * shared with the tracked variant via [[CrossBuildSupport.loadProjectSetup]].
+    * `affectedRefsByVersion` returns, for each iteration scalaVersion, every project
+    * ref whose `crossScalaVersions` contains it — switching that whole compatible set
+    * per iteration is sbt's stock `Cross.switchVersion` behavior so transitive deps stay
+    * at a coherent Scala version without us walking the graph by hand.
     */
   private def runCrossBuildForProject(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
       action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
   ): IO[MonorepoContext] =
-    IO.blocking {
-      val extracted     = SbtRuntime.extracted(ctx.state)
-      val crossVersions =
-        extracted
-          .getOpt(project.ref / crossScalaVersions)
-          .getOrElse(Seq.empty)
-          .distinct
-      // Capture the per-iteration compatibility filter once: `affectedRefsByVersion`
-      // returns, for each iteration scalaVersion, every project ref whose own
-      // `crossScalaVersions` contains it. Switching that whole compatible set per
-      // iteration is sbt's stock `Cross.switchVersion` behavior — it aligns
-      // inter-project deps so the iterating project's transitive compile/test/publish
-      // sees a coherent Scala version across the build, without us having to walk the
-      // dep graph by hand.
-      val affectedFor   = CrossBuildSupport.affectedRefsByVersion(ctx.state)
-      (crossVersions, ctx.state, affectedFor)
-    }.flatMap { case (crossVersions, entryState, affectedFor) =>
-      if (crossVersions.isEmpty)
-        IO.raiseError(
-          new IllegalStateException(
-            s"$LogPrefix Cross-build enabled but ${project.name} has empty crossScalaVersions"
-          )
-        )
-      else {
+    CrossBuildSupport
+      .loadProjectSetup(ctx.state, project.ref, project.name, LogPrefix)
+      .flatMap { setup =>
         def refreshedProject(currentCtx: MonorepoContext): ProjectReleaseInfo =
           latestProject(currentCtx, project)
 
-        crossVersions
+        setup.crossVersions
           .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
             ioCtx.flatMap { currentCtx =>
               if (shouldSkipProject(currentCtx, project)) IO.pure(currentCtx)
@@ -169,7 +154,7 @@ private[monorepo] object MonorepoCrossBuild {
                                 .switchScalaVersion(
                                   currentCtx.state,
                                   version,
-                                  affectedFor(version),
+                                  setup.affectedFor(version),
                                   LogPrefix
                                 )
                                 .map(currentCtx.withState)
@@ -184,7 +169,7 @@ private[monorepo] object MonorepoCrossBuild {
           }
           .flatMap(currentCtx =>
             CrossBuildSupport
-              .restoreEntryScalaSession(entryState, currentCtx.state)
+              .restoreEntryScalaSession(setup.entryState, currentCtx.state)
               .map(currentCtx.withState)
               .attempt
               .flatMap {
@@ -195,90 +180,70 @@ private[monorepo] object MonorepoCrossBuild {
               }
           )
       }
-    }
 
   private def runCrossBuildForProjectTracked(
       handle: TrackedContextHandle[MonorepoContext],
       project: ProjectReleaseInfo,
       action: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
   ): IO[Unit] =
-    handle.get.flatMap { ctx =>
-      IO.blocking {
-        val extracted     = SbtRuntime.extracted(ctx.state)
-        val crossVersions =
-          extracted
-            .getOpt(project.ref / crossScalaVersions)
-            .getOrElse(Seq.empty)
-            .distinct
-        // See `runCrossBuildForProject` above for why we capture the compatibility
-        // filter once: sbt-stock `Cross.switchVersion` switches every project whose
-        // `crossScalaVersions` contains the iteration version, aligning inter-project
-        // deps automatically.
-        val affectedFor   = CrossBuildSupport.affectedRefsByVersion(ctx.state)
-        (crossVersions, ctx.state, affectedFor)
-      }.flatMap { case (crossVersions, entryState, affectedFor) =>
-        if (crossVersions.isEmpty)
-          IO.raiseError(
-            new IllegalStateException(
-              s"$LogPrefix Cross-build enabled but ${project.name} has empty crossScalaVersions"
-            )
+    handle.get
+      .flatMap(ctx =>
+        CrossBuildSupport.loadProjectSetup(ctx.state, project.ref, project.name, LogPrefix)
+      )
+      .flatMap { setup =>
+        def refreshedProject(currentCtx: MonorepoContext): ProjectReleaseInfo =
+          latestProject(currentCtx, project)
+
+        def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
+          CrossBuildSupport
+            .restoreEntryScalaSession(setup.entryState, currentCtx.state)
+            .map(currentCtx.withState)
+
+        def restoreTrackedContext: IO[Unit] =
+          TrackedContextHandle.restoreLatest(handle)(
+            restore = restoreEntry,
+            onRestoreError = (currentCtx, restoreErr) =>
+              logRestoreAfterCompletionFailure(currentCtx, project, restoreErr)
           )
-        else {
-          def refreshedProject(currentCtx: MonorepoContext): ProjectReleaseInfo =
-            latestProject(currentCtx, project)
 
-          def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
-            CrossBuildSupport
-              .restoreEntryScalaSession(entryState, currentCtx.state)
-              .map(currentCtx.withState)
+        def restoreAfterFailure(actionErr: Throwable): IO[Unit] =
+          restoreTrackedContext *> IO.raiseError(actionErr)
 
-          def restoreTrackedContext: IO[Unit] =
-            TrackedContextHandle.restoreLatest(handle)(
-              restore = restoreEntry,
-              onRestoreError = (currentCtx, restoreErr) =>
-                logRestoreAfterCompletionFailure(currentCtx, project, restoreErr)
-            )
-
-          def restoreAfterFailure(actionErr: Throwable): IO[Unit] =
-            restoreTrackedContext *> IO.raiseError(actionErr)
-
-          crossVersions
-            .foldLeft(IO.unit) { (ioUnit, version) =>
-              ioUnit.flatMap { _ =>
-                handle.get.flatMap { currentCtx =>
-                  if (shouldSkipProject(currentCtx, refreshedProject(currentCtx))) IO.unit
-                  else
-                    for {
-                      _        <- IO.blocking(
-                                    currentCtx.state.log.info(
-                                      s"$LogPrefix Cross-building ${project.name} with Scala $version"
+        setup.crossVersions
+          .foldLeft(IO.unit) { (ioUnit, version) =>
+            ioUnit.flatMap { _ =>
+              handle.get.flatMap { currentCtx =>
+                if (shouldSkipProject(currentCtx, refreshedProject(currentCtx))) IO.unit
+                else
+                  for {
+                    _        <- IO.blocking(
+                                  currentCtx.state.log.info(
+                                    s"$LogPrefix Cross-building ${project.name} with Scala $version"
+                                  )
+                                )
+                    switched <-
+                      SbtRuntime.switchScalaVersion(
+                        currentCtx.state,
+                        version,
+                        setup.affectedFor(version),
+                        LogPrefix
+                      )
+                    _        <- handle.set(currentCtx.withState(switched))
+                    latest   <- handle.get
+                    _        <- action(handle, refreshedProject(latest))
+                    _        <- handle
+                                  .update(ctx =>
+                                    MonorepoStepHelpers.detectProjectFailureCommand(
+                                      ctx,
+                                      refreshedProject(ctx)
                                     )
                                   )
-                      switched <-
-                        SbtRuntime.switchScalaVersion(
-                          currentCtx.state,
-                          version,
-                          affectedFor(version),
-                          LogPrefix
-                        )
-                      _        <- handle.set(currentCtx.withState(switched))
-                      latest   <- handle.get
-                      _        <- action(handle, refreshedProject(latest))
-                      _        <- handle
-                                    .update(ctx =>
-                                      MonorepoStepHelpers.detectProjectFailureCommand(
-                                        ctx,
-                                        refreshedProject(ctx)
-                                      )
-                                    )
-                                    .void
-                    } yield ()
-                }
+                                  .void
+                  } yield ()
               }
             }
-            .handleErrorWith(restoreAfterFailure)
-            .flatMap(_ => restoreTrackedContext)
-        }
+          }
+          .handleErrorWith(restoreAfterFailure)
+          .flatMap(_ => restoreTrackedContext)
       }
-    }
 }

@@ -20,6 +20,7 @@ import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.sbt.SnapshotDependencyTasks
 import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.PublishValidation
+import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.workflow.StepHelpers.{errorMessage, runTaskChecked}
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -73,11 +74,7 @@ private[monorepo] object MonorepoPublishSteps {
     }
 
   private def isFailureCommandTaskError(cause: Throwable): Boolean =
-    cause match {
-      case err: IllegalStateException =>
-        Option(err.getMessage).exists(_.contains(MonorepoStepHelpers.FailureCommandMarker))
-      case _                          => false
-    }
+    StepHelpers.isFailureCommandTaskError(cause)
 
   /** Match core's publish-probe recovery: `FailureCommand` still aborts, while
     * ordinary evaluation errors mean "not skipped" so publish/publishTo checks
@@ -88,20 +85,13 @@ private[monorepo] object MonorepoPublishSteps {
       project: ProjectReleaseInfo,
       fallback: A
   )(cause: Throwable): IO[A] =
-    cause match {
-      case NonFatal(err) if isFailureCommandTaskError(err) =>
-        IO.raiseError(err)
-      case NonFatal(err)                                   =>
-        IO.blocking {
-          state.log.warn(
-            s"${ReleaseLogPrefixes.Monorepo} Failed to evaluate publish / skip for " +
-              s"${project.name}: ${errorMessage(err)}. Assuming skip = false."
-          )
-          fallback
-        }
-      case fatal                                           =>
-        IO.raiseError(fatal)
-    }
+    StepHelpers.recoverProbeError(
+      state,
+      warnLine = err =>
+        s"${ReleaseLogPrefixes.Monorepo} Failed to evaluate publish / skip for " +
+          s"${project.name}: ${errorMessage(err)}. Assuming skip = false.",
+      fallback = fallback
+    )(cause)
 
   /** Evaluate `key` against the given `state` and return both the next state
     * and the result. The next state preserves any session mutations the task
