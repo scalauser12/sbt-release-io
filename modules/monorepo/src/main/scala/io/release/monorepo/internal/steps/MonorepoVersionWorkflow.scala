@@ -518,12 +518,6 @@ private[monorepo] object MonorepoVersionWorkflow {
                        versionValue,
                        versionInputs.versionFileContents
                      )
-      // Install the per-project version into `session.rawAppend` via
-      // `appendSessionSettings` so it survives every subsequent
-      // `appendWithSession` call (commit/tag steps, hook overlays). Earlier
-      // projects' writes also live in `rawAppend`, so we don't need to
-      // re-supply them here — `mergeSettings` accumulates them across calls.
-      //
       // For next-version writes, `versionValue` is the next snapshot. Because
       // the release-version write for the same project added an earlier
       // `project.ref / version := releaseVer`, and the next-version write
