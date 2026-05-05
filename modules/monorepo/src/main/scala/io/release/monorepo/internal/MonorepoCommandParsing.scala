@@ -14,13 +14,13 @@ import scala.util.Try
 
 /** Token-level command parsing for `releaseIOMonorepo`.
   *
-  * [[MonorepoCommandParsers]] is the authoritative sbt-facing parser and is responsible for
-  * admitting valid project-name tokens. This object only decodes canonical tokens after parser
-  * admission; direct use of [[parse]] must not be treated as project-name validation.
+  * Decodes canonical token sequences emitted by [[MonorepoCommandParsers]] into the typed
+  * `Arg` ADT. Direct callers must pre-validate project names — only the sbt parser admits
+  * valid project tokens; `parse` itself is permissive on plain tokens.
   *
-  * The structured sbt parser guarantees that later plain tokens are either known project names,
-  * explicit `project <id>` selector tokens, or override values; only the first token reserves
-  * `help` and `check`.
+  * The structured sbt parser guarantees that later plain tokens are either known project
+  * names, explicit `project <id>` selector tokens, or override values; only the first token
+  * reserves `help` and `check`.
   */
 private[monorepo] object MonorepoCli {
 
