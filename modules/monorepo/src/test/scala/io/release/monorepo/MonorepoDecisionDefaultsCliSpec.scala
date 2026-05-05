@@ -4,14 +4,23 @@ import cats.effect.IO
 import munit.CatsEffectSuite
 
 import io.release.monorepo.internal.MonorepoCli
-import io.release.monorepo.internal.MonorepoDecisionDefaultsCli
 import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.workflow.DecisionDefaultsSupport
 
 class MonorepoDecisionDefaultsCliSpec
     extends CatsEffectSuite
     with MonorepoReleasePluginSpecSupport {
 
   import MonorepoCli.Arg.*
+
+  private val cliExtractors = DecisionDefaultsSupport.CliExtractors[MonorepoCli.Arg](
+    tagExists = { case MonorepoCli.Arg.TagDefault(value) => value },
+    snapshotDependencies = { case MonorepoCli.Arg.SnapshotDependenciesDefault(value) => value },
+    remoteCheckFailure = { case MonorepoCli.Arg.RemoteCheckFailureDefault(value) => value },
+    upstreamBehind = { case MonorepoCli.Arg.UpstreamBehindDefault(value) => value },
+    push = { case MonorepoCli.Arg.PushDefault(value) => value }
+  )
 
   MonorepoDecisionDefaultsCliSpec.duplicateCases.foreach { testCase =>
     test(s"resolve warns on duplicate ${testCase.label} defaults in release mode") {
@@ -20,9 +29,11 @@ class MonorepoDecisionDefaultsCliSpec
         MonorepoReleasePlugin
       ).use { loaded =>
         IO {
-          val defaults = MonorepoDecisionDefaultsCli.resolve(
+          val defaults = DecisionDefaultsSupport.resolveFromArgs(
             loaded.state,
+            ReleaseLogPrefixes.Monorepo,
             testCase.args,
+            cliExtractors,
             warnOnDuplicates = true
           )
           val log      = loaded.consoleBuffer.toString("UTF-8")
@@ -41,9 +52,11 @@ class MonorepoDecisionDefaultsCliSpec
   test("resolve suppresses duplicate push warnings when warnOnDuplicates is false") {
     stateResource("monorepo-command-defaults-suppressed", MonorepoReleasePlugin).use { loaded =>
       IO {
-        val defaults = MonorepoDecisionDefaultsCli.resolve(
+        val defaults = DecisionDefaultsSupport.resolveFromArgs(
           loaded.state,
+          ReleaseLogPrefixes.Monorepo,
           Seq(PushDefault(true), PushDefault(false)),
+          cliExtractors,
           warnOnDuplicates = false
         )
         val log      = loaded.consoleBuffer.toString("UTF-8")

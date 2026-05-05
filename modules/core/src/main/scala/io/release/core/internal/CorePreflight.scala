@@ -269,17 +269,15 @@ private[release] object CorePreflight {
       checkSteps: CheckSteps,
       tagPreflightInteractive: Boolean
   ): IO[Evaluation[TagValue]] =
-    if (!checkSteps.shouldPreflightTag)
-      IO.pure(Evaluation.NotEvaluated(Messages.stepNotInCheckProcess(TagReleaseStep)))
-    else if (!checkSteps.tagFollowsVersionResolution)
-      IO.pure(Evaluation.NotEvaluated(Messages.TagRuntimeSetup))
-    else if (!snapshot.versionsResolved)
-      IO.pure(Evaluation.NotEvaluated(Messages.TagRuntimeHookState))
-    else if (checkSteps.tagDependsOnRuntimeHookState)
-      IO.pure(Evaluation.NotEvaluated(Messages.TagRuntimeHookState))
-    else
+    Evaluation.guarded(
+      !checkSteps.shouldPreflightTag          -> Messages.stepNotInCheckProcess(TagReleaseStep),
+      !checkSteps.tagFollowsVersionResolution -> Messages.TagRuntimeSetup,
+      !snapshot.versionsResolved              -> Messages.TagRuntimeHookState,
+      checkSteps.tagDependsOnRuntimeHookState -> Messages.TagRuntimeHookState
+    ) {
       preflightTag(snapshot.context, checkSteps, tagPreflightInteractive)
         .map(outcome => Evaluation.Resolved(TagValue(outcome.tagName, outcome.status)))
+    }
 
   private def preflightTag(
       ctx: ReleaseContext,

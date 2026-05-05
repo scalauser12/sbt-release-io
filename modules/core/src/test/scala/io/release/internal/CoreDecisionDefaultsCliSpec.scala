@@ -5,19 +5,31 @@ import munit.CatsEffectSuite
 
 import io.release.ReleasePluginIOSpecSupport
 import io.release.runtime.ReleaseDecisionDefaults
+import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.workflow.DecisionDefaultsSupport
 
 class CoreDecisionDefaultsCliSpec extends CatsEffectSuite with ReleasePluginIOSpecSupport {
 
   import ReleaseCli.Arg.*
+
+  private val cliExtractors = DecisionDefaultsSupport.CliExtractors[ReleaseCli.Arg](
+    tagExists = { case ReleaseCli.Arg.TagDefault(value) => value },
+    snapshotDependencies = { case ReleaseCli.Arg.SnapshotDependenciesDefault(value) => value },
+    remoteCheckFailure = { case ReleaseCli.Arg.RemoteCheckFailureDefault(value) => value },
+    upstreamBehind = { case ReleaseCli.Arg.UpstreamBehindDefault(value) => value },
+    push = { case ReleaseCli.Arg.PushDefault(value) => value }
+  )
 
   CoreDecisionDefaultsCliSpec.duplicateCases.foreach { testCase =>
     test(s"resolve warns on duplicate ${testCase.label} defaults in release mode") {
       stateResource(s"core-command-${testCase.id}-defaults-release", HookFriendlyPlugin).use {
         loaded =>
           IO {
-            val defaults = CoreDecisionDefaultsCli.resolve(
+            val defaults = DecisionDefaultsSupport.resolveFromArgs(
               loaded.state,
+              ReleaseLogPrefixes.Core,
               testCase.args,
+              cliExtractors,
               warnOnDuplicates = true
             )
             val log      = loaded.consoleBuffer.toString("UTF-8")
@@ -36,9 +48,11 @@ class CoreDecisionDefaultsCliSpec extends CatsEffectSuite with ReleasePluginIOSp
   test("resolve suppresses duplicate push warnings when warnOnDuplicates is false") {
     stateResource("core-command-defaults-suppressed", HookFriendlyPlugin).use { loaded =>
       IO {
-        val defaults = CoreDecisionDefaultsCli.resolve(
+        val defaults = DecisionDefaultsSupport.resolveFromArgs(
           loaded.state,
+          ReleaseLogPrefixes.Core,
           Seq(PushDefault(true), PushDefault(false)),
+          cliExtractors,
           warnOnDuplicates = false
         )
         val log      = loaded.consoleBuffer.toString("UTF-8")

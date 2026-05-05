@@ -12,6 +12,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
+import io.release.runtime.workflow.VersionCommitSupport
 import io.release.runtime.workflow.VersionWorkflowSupport
 import sbt.Keys.*
 import sbt.{internal as _, *}
@@ -346,17 +347,15 @@ private[release] object ReleaseVersionWorkflow {
       // task could have modified or staged unrelated files between the initial
       // pre-check and the staging window below.
       _                 <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
-      result            <- IO.uncancelable { _ =>
-                             // Keep staging and commit atomic with respect to cancellation so we
-                             // do not leave staged-but-uncommitted changes behind.
-                             for {
-                               _    <- vcs.add(relativePath)
-                               _    <- vcs.commit(msg, sign, signOff)
-                               hash <- vcs.currentHash
-                               _    <- assertCleanAfterCommit(actionName, vcs)
-                             } yield (ctx.withState(commitState), hash)
-                           }
-    } yield result
+      hash              <- VersionCommitSupport.stageAndCommitAtomic(
+                             vcs,
+                             Seq(relativePath),
+                             msg,
+                             sign,
+                             signOff,
+                             postCommitVerify = assertCleanAfterCommit(actionName, vcs)
+                           )
+    } yield (ctx.withState(commitState), hash)
   }
 
   /** No-op path: the working tree is clean, so `commit-release-version` /
@@ -385,8 +384,7 @@ private[release] object ReleaseVersionWorkflow {
       expectedPath: String,
       vcs: Vcs
   ): IO[Unit] =
-    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
-      val unrelated = (modified ++ staged).distinct.filterNot(_ == expectedPath)
+    VersionCommitSupport.unrelatedDirtyFiles(Set(expectedPath), vcs).flatMap { unrelated =>
       if (unrelated.isEmpty) IO.unit
       else
         IO.raiseError(
@@ -403,8 +401,7 @@ private[release] object ReleaseVersionWorkflow {
     * against a known state. Anything left dirty here would silently ride along on the tag.
     */
   private def assertCleanAfterCommit(actionName: String, vcs: Vcs): IO[Unit] =
-    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
-      val leftover = (modified ++ staged).distinct
+    VersionCommitSupport.remainingDirtyFiles(vcs).flatMap { leftover =>
       if (leftover.isEmpty) IO.unit
       else
         IO.raiseError(

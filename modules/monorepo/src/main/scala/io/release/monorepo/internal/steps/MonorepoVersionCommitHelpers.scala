@@ -13,11 +13,12 @@ import io.release.monorepo.internal.steps.MonorepoStepHelpers.logInfo
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.versionSummary
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.required
+import io.release.runtime.workflow.VersionCommitSupport
 import io.release.vcs.Vcs
 import sbt.{internal as _, *}
 
-/** VCS commit helpers for monorepo release steps. */
-private[monorepo] object MonorepoVcsCommitHelpers {
+/** Version-commit helpers for monorepo release steps. */
+private[monorepo] object MonorepoVersionCommitHelpers {
 
   private def resolveRelativePaths(
       ctx: MonorepoContext,
@@ -55,9 +56,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
       versionFilePaths: Seq[String],
       vcs: Vcs
   ): IO[Unit] =
-    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
-      val expected  = versionFilePaths.toSet
-      val unrelated = (modified ++ staged).distinct.filterNot(expected.contains)
+    VersionCommitSupport.unrelatedDirtyFiles(versionFilePaths.toSet, vcs).flatMap { unrelated =>
       if (unrelated.isEmpty) IO.unit
       else
         IO.raiseError(
@@ -75,8 +74,7 @@ private[monorepo] object MonorepoVcsCommitHelpers {
     * against a known state.
     */
   private[steps] def assertCleanAfterCommit(vcs: Vcs): IO[Unit] =
-    (vcs.modifiedFiles, vcs.stagedFiles).tupled.flatMap { case (modified, staged) =>
-      val leftover = (modified ++ staged).distinct
+    VersionCommitSupport.remainingDirtyFiles(vcs).flatMap { leftover =>
       if (leftover.isEmpty) IO.unit
       else
         IO.raiseError(

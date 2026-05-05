@@ -3,7 +3,7 @@ package io.release.monorepo.internal.steps
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
-import io.release.monorepo.internal.steps.MonorepoVcsCommitHelpers.commitVersions
+import io.release.monorepo.internal.steps.MonorepoVersionCommitHelpers.commitVersions
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 

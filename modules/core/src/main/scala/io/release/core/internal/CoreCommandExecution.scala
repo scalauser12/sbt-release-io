@@ -54,6 +54,14 @@ private[release] object CoreCommandExecution {
       plan: CoreReleasePlan
   )
 
+  private val cliExtractors = DecisionDefaultsSupport.CliExtractors[ReleaseCli.Arg](
+    tagExists = { case ReleaseCli.Arg.TagDefault(value) => value },
+    snapshotDependencies = { case ReleaseCli.Arg.SnapshotDependenciesDefault(value) => value },
+    remoteCheckFailure = { case ReleaseCli.Arg.RemoteCheckFailureDefault(value) => value },
+    upstreamBehind = { case ReleaseCli.Arg.UpstreamBehindDefault(value) => value },
+    push = { case ReleaseCli.Arg.PushDefault(value) => value }
+  )
+
   def doHelp(state: State, commandName: String): State =
     ReleaseCommandRunner.runSync(state, ReleaseLogPrefixes.Core) {
       ReleaseCommandRunner
@@ -196,9 +204,11 @@ private[release] object CoreCommandExecution {
         crossBuild = crossEnabled,
         releaseVersionOverride = releaseVersionArg,
         nextVersionOverride = nextVersionArg,
-        decisionDefaults = CoreDecisionDefaultsCli.resolve(
+        decisionDefaults = DecisionDefaultsSupport.resolveFromArgs(
           cleanState,
+          ReleaseLogPrefixes.Core,
           args,
+          cliExtractors,
           warnOnDuplicates
         ),
         commandName = runtime.commandName

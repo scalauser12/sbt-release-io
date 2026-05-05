@@ -10,6 +10,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.CommandStateSupport
 import io.release.runtime.command.ReleaseCommandRunner
+import io.release.runtime.workflow.DecisionDefaultsSupport
 import sbt.{internal as _, *}
 
 /** Internal runtime helpers for monorepo command planning and execution.
@@ -56,6 +57,14 @@ private[monorepo] object MonorepoCommandExecution {
       cleanState: State,
       flags: ReleaseFlags,
       plan: MonorepoReleasePlan
+  )
+
+  private val cliExtractors = DecisionDefaultsSupport.CliExtractors[MonorepoCli.Arg](
+    tagExists = { case MonorepoCli.Arg.TagDefault(value) => value },
+    snapshotDependencies = { case MonorepoCli.Arg.SnapshotDependenciesDefault(value) => value },
+    remoteCheckFailure = { case MonorepoCli.Arg.RemoteCheckFailureDefault(value) => value },
+    upstreamBehind = { case MonorepoCli.Arg.UpstreamBehindDefault(value) => value },
+    push = { case MonorepoCli.Arg.PushDefault(value) => value }
   )
 
   def doHelp(state: State, commandName: String): State =
@@ -181,9 +190,11 @@ private[monorepo] object MonorepoCommandExecution {
     for {
       flags    <- IO.blocking(resolveFlags(cleanState, args, runtime, interactiveEnabled))
       defaults <- IO.blocking(
-                    MonorepoDecisionDefaultsCli.resolve(
+                    DecisionDefaultsSupport.resolveFromArgs(
                       cleanState,
+                      ReleaseLogPrefixes.Monorepo,
                       args,
+                      cliExtractors,
                       warnOnDuplicates
                     )
                   )
