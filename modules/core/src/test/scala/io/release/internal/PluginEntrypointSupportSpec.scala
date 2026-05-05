@@ -46,11 +46,11 @@ class PluginEntrypointSupportSpec extends CatsEffectSuite {
         )
       val releaseCliSource         =
         TestRepoFiles.readString(
-          "modules/core/src/main/scala/io/release/core/internal/ReleaseCli.scala"
+          "modules/core/src/main/scala/io/release/core/internal/ReleaseCommandParsing.scala"
         )
       val monorepoCliSource        =
         TestRepoFiles.readString(
-          "modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCli.scala"
+          "modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandParsing.scala"
         )
 
       assert(!shellSource.contains("DispatchAdapter"))

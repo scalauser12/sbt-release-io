@@ -190,7 +190,7 @@ private[monorepo] object MonorepoPublishSteps {
   /** Install release-manifest metadata fallbacks for a project before its publish task runs.
     *
     * Hash and tag are normally installed into `session.rawAppend` by
-    * [[MonorepoVcsCommitHelpers.commitVersions]] (when the release commit happens) and
+    * [[MonorepoVersionCommitHelpers.commitVersions]] (when the release commit happens) and
     * [[MonorepoVcsSteps.tagReleasesPerProject]] (when the tag is created). This helper
     * fills the gap when the release commit was a no-op (no changes to commit) by using
     * `vcs.currentHash`, then installs it via `appendSessionSettings` so the publish task

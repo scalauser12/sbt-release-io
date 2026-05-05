@@ -14,7 +14,6 @@ import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.preflight.PreflightPhaseGroups
-import io.release.runtime.preflight.PreflightRendering
 import io.release.runtime.workflow.VersionWorkflowSupport
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
@@ -177,22 +176,7 @@ private[monorepo] object MonorepoPreflight {
     )
 
   def renderSummary(summary: Summary): List[String] =
-    List(
-      "Preflight summary:",
-      pad("selection mode") + renderSelectionMode(summary.selectionMode),
-      pad("cross-build") + CheckModeOutput.enabled(summary.crossBuildEnabled),
-      pad("publish") + summary.publishSummary,
-      pad("push") + summary.pushSummary,
-      pad("steps") + summary.stepNames.mkString(" -> ")
-    ) ++ renderProjectSection(summary.projects)
-
-  // Width fits the longest monorepo summary label ("selection mode"). Core uses 15 in
-  // CorePreflight.SummaryLabelWidth — the constants are intentionally module-local.
-  private val SummaryLabelWidth = 14
-
-  private def pad(label: String): String          = PreflightRendering.pad(label, SummaryLabelWidth)
-  private def padLabelOnly(label: String): String =
-    PreflightRendering.padLabelOnly(label, SummaryLabelWidth)
+    MonorepoPreflightRendering.renderSummary(summary)
 
   def check(
       session: MonorepoPreparedSession,
@@ -283,7 +267,7 @@ private[monorepo] object MonorepoPreflight {
       checkSteps: CheckSteps,
       crossBuildEnabled: Boolean,
       tagPreflightInteractive: Boolean
-  ): IO[Summary] = {
+  ): IO[Summary] =
     checkVersionAwareSegment(
       baseCtx = baseCtx,
       selectionMode = Evaluation.NotEvaluated(stepNotInCheckProcess(DetectOrSelectProjectsStep)),
@@ -293,7 +277,6 @@ private[monorepo] object MonorepoPreflight {
       crossBuildEnabled = crossBuildEnabled,
       tagPreflightInteractive = tagPreflightInteractive
     )
-  }
 
   private def checkVersionAwareSegment(
       baseCtx: MonorepoContext,
@@ -344,51 +327,45 @@ private[monorepo] object MonorepoPreflight {
   ): IO[MonorepoContext] =
     // Check mode does not replay arbitrary setup executes, so bootstrap only the built-in
     // VCS context that later validations and summaries are allowed to depend on.
-    if (processPlan.shouldBootstrapVcs)
-      VcsOps.detectAndInit(ctx)
-    else IO.pure(ctx)
+    if (processPlan.shouldBootstrapVcs) VcsOps.detectAndInit(ctx) else IO.pure(ctx)
 
   private def resolveSelectionSnapshot(
       ctx: MonorepoContext,
       plan: MonorepoReleasePlan,
       checkSteps: CheckSteps
-  ): IO[SelectionSnapshot] =
+  ): IO[SelectionSnapshot] = {
+    def early(modeReason: String, projectsEval: Evaluation[Unit]): SelectionSnapshot =
+      SelectionSnapshot(ctx, Evaluation.NotEvaluated(modeReason), projectsEval)
+
     if (!checkSteps.shouldResolveSelection)
       IO.pure(
-        SelectionSnapshot(
-          context = ctx,
-          selectionMode =
-            Evaluation.NotEvaluated(stepNotInCheckProcess(DetectOrSelectProjectsStep)),
-          projects = Evaluation.Resolved(())
-        )
+        early(stepNotInCheckProcess(DetectOrSelectProjectsStep), Evaluation.Resolved(()))
       )
     else if (checkSteps.selectionDependsOnRuntimeHookState)
-      IO.pure(
-        SelectionSnapshot(
-          context = ctx,
-          selectionMode = Evaluation.NotEvaluated(SelectionRuntimeHookState),
-          projects = Evaluation.NotEvaluated(ProjectsRuntimeHookState)
-        )
-      )
+      IO.pure(early(SelectionRuntimeHookState, Evaluation.NotEvaluated(ProjectsRuntimeHookState)))
     else
-      MonorepoPreparation
-        .selectProjects(ctx, plan)
-        .map(selected =>
-          SelectionSnapshot(
-            context = selected.context,
-            selectionMode = Evaluation.Resolved(selected.selectionMode),
-            projects =
-              if (checkSteps.projectsDependOnRuntimeHookState)
-                Evaluation.NotEvaluated(ProjectsRuntimeHookState)
-              else Evaluation.Resolved(())
-          )
+      MonorepoPreparation.selectProjects(ctx, plan).map { selected =>
+        SelectionSnapshot(
+          context = selected.context,
+          selectionMode = Evaluation.Resolved(selected.selectionMode),
+          projects =
+            if (checkSteps.projectsDependOnRuntimeHookState)
+              Evaluation.NotEvaluated(ProjectsRuntimeHookState)
+            else Evaluation.Resolved(())
         )
+      }
+  }
 
   private def resolveVersionSnapshot(
       ctx: MonorepoContext,
       projects: Evaluation[Unit],
       checkSteps: CheckSteps
-  ): IO[VersionSnapshot] =
+  ): IO[VersionSnapshot] = {
+    val projectsBlocked = projects match {
+      case Evaluation.NotEvaluated(_) => true
+      case Evaluation.Resolved(_)     => false
+    }
+
     if (!checkSteps.shouldResolveVersions)
       IO.pure(
         VersionSnapshot(
@@ -398,40 +375,28 @@ private[monorepo] object MonorepoPreflight {
           blockedByRuntimeHookState = false
         )
       )
+    else if (projectsBlocked || checkSteps.versionsRequireRuntimeHookResolution)
+      IO.pure(
+        VersionSnapshot(
+          context = ctx,
+          versions = Evaluation.NotEvaluated(VersionsRuntimeHookState),
+          versionsResolved = false,
+          blockedByRuntimeHookState = true
+        )
+      )
     else
-      projects match {
-        case Evaluation.NotEvaluated(_) =>
-          IO.pure(
-            VersionSnapshot(
-              context = ctx,
-              versions = Evaluation.NotEvaluated(VersionsRuntimeHookState),
-              versionsResolved = false,
-              blockedByRuntimeHookState = true
-            )
-          )
-        case Evaluation.Resolved(_)     =>
-          if (checkSteps.versionsRequireRuntimeHookResolution)
-            IO.pure(
-              VersionSnapshot(
-                context = ctx,
-                versions = Evaluation.NotEvaluated(VersionsRuntimeHookState),
-                versionsResolved = false,
-                blockedByRuntimeHookState = true
-              )
-            )
-          else
-            MonorepoPreparation.resolveVersions(ctx, allowPrompts = false).map { updatedCtx =>
-              VersionSnapshot(
-                context = updatedCtx,
-                versions =
-                  if (checkSteps.versionsDependOnPostResolutionRuntimeHookState)
-                    Evaluation.NotEvaluated(VersionsRuntimeHookState)
-                  else Evaluation.Resolved(()),
-                versionsResolved = true,
-                blockedByRuntimeHookState = false
-              )
-            }
+      MonorepoPreparation.resolveVersions(ctx, allowPrompts = false).map { updatedCtx =>
+        VersionSnapshot(
+          context = updatedCtx,
+          versions =
+            if (checkSteps.versionsDependOnPostResolutionRuntimeHookState)
+              Evaluation.NotEvaluated(VersionsRuntimeHookState)
+            else Evaluation.Resolved(()),
+          versionsResolved = true,
+          blockedByRuntimeHookState = false
+        )
       }
+  }
 
   private def resolveTagSnapshot(
       ctx: MonorepoContext,
@@ -439,22 +404,20 @@ private[monorepo] object MonorepoPreflight {
       checkSteps: CheckSteps,
       tagPreflightInteractive: Boolean
   ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
-    if (!checkSteps.shouldPreflightTags)
-      IO.pure(Evaluation.NotEvaluated(stepNotInCheckProcess(TagReleasesStep)))
-    else if (!checkSteps.tagFollowsVersionResolution)
-      IO.pure(Evaluation.NotEvaluated(TagsRuntimeSetup))
-    else if (!versionSnapshot.versionsResolved && versionSnapshot.blockedByRuntimeHookState)
-      IO.pure(Evaluation.NotEvaluated(TagsRuntimeHookState))
-    else if (!versionSnapshot.versionsResolved)
-      IO.pure(Evaluation.NotEvaluated(TagsRuntimeSetup))
-    else if (checkSteps.tagDependsOnRuntimeHookState)
-      IO.pure(Evaluation.NotEvaluated(TagsRuntimeHookState))
-    else
+    Evaluation.guarded(
+      !checkSteps.shouldPreflightTags         -> stepNotInCheckProcess(TagReleasesStep),
+      !checkSteps.tagFollowsVersionResolution -> TagsRuntimeSetup,
+      (!versionSnapshot.versionsResolved && versionSnapshot.blockedByRuntimeHookState)
+        -> TagsRuntimeHookState,
+      !versionSnapshot.versionsResolved       -> TagsRuntimeSetup,
+      checkSteps.tagDependsOnRuntimeHookState -> TagsRuntimeHookState
+    ) {
       preflightTags(
         ctx,
         checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit,
         tagPreflightInteractive
       ).map(Evaluation.Resolved(_))
+    }
 
   private def preflightTags(
       ctx: MonorepoContext,
@@ -559,14 +522,12 @@ private[monorepo] object MonorepoPreflight {
         stepNames = processPlan.stepNames
       )
 
-    projects match {
-      case Evaluation.NotEvaluated(reason) =>
-        IO.pure(summaryOf(Evaluation.NotEvaluated(reason)))
-      case Evaluation.Resolved(_)          =>
-        renderProjects(ctx.currentProjects, versions, tagOutcomes).map { resolvedProjects =>
-          summaryOf(Evaluation.Resolved(resolvedProjects))
-        }
-    }
+    Evaluation
+      .flatMap(projects)(_ =>
+        renderProjects(ctx.currentProjects, versions, tagOutcomes)
+          .map(Evaluation.Resolved(_))
+      )
+      .map(summaryOf)
   }
 
   private[monorepo] def renderProjects(
@@ -629,44 +590,4 @@ private[monorepo] object MonorepoPreflight {
             Evaluation.NotEvaluated(versionsNotResolvedForProject(project.name))
         }
     }
-
-  private def renderEvaluation[A](
-      evaluation: Evaluation[A]
-  )(
-      onResolved: A => String,
-      onNotEvaluated: String => String = reason => s"not evaluated ($reason)"
-  ): String =
-    evaluation match {
-      case Evaluation.Resolved(value)      => onResolved(value)
-      case Evaluation.NotEvaluated(reason) => onNotEvaluated(reason)
-    }
-
-  private def renderSelectionMode(mode: Evaluation[SelectionMode]): String =
-    renderEvaluation(mode) {
-      case SelectionMode.ExplicitSelection => "explicit selection"
-      case SelectionMode.AllChanged        => "all changed"
-      case SelectionMode.DetectChanges     => "detect changes"
-    }
-
-  private def renderProjectSection(
-      projects: Evaluation[Seq[ProjectSummary]]
-  ): List[String] =
-    projects match {
-      case Evaluation.Resolved(resolvedProjects) =>
-        padLabelOnly("projects") :: resolvedProjects.map(renderProject).toList
-      case Evaluation.NotEvaluated(reason)       =>
-        List(pad("projects") + s"not evaluated ($reason)")
-    }
-
-  private def renderProject(project: ProjectSummary): String = {
-    val versionText = renderEvaluation(project.versions)(
-      v => s"release ${v.releaseVersion}, next ${v.nextVersion}",
-      reason => s"release/next not evaluated ($reason)"
-    )
-    val tagText     = renderEvaluation(project.tag)(
-      t => s"tag ${t.tagName} (${t.tagStatus})",
-      reason => s"tag not evaluated ($reason)"
-    )
-    s"    - ${project.name}: $versionText, $tagText"
-  }
 }

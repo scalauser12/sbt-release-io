@@ -11,7 +11,7 @@ import sbt.Project
 
 import java.io.File
 
-class MonorepoVcsCommitHelpersSpec extends CatsEffectSuite {
+class MonorepoVersionCommitHelpersSpec extends CatsEffectSuite {
 
   test("commitIfChanged - commits and returns context when tracked changes are staged") {
     gitRepoWithVcsResource.use { case (repo, vcs) =>
@@ -23,7 +23,7 @@ class MonorepoVcsCommitHelpersSpec extends CatsEffectSuite {
                             sbt.IO.write(new File(repo, "changes.txt"), "new content")
                             TestSupport.runGit(repo, "add", "changes.txt")
                           }
-        result         <- MonorepoVcsCommitHelpers.commitIfChanged(
+        result         <- MonorepoVersionCommitHelpers.commitIfChanged(
                             ctx,
                             vcs,
                             msg = "chore: bump versions",
@@ -45,7 +45,7 @@ class MonorepoVcsCommitHelpersSpec extends CatsEffectSuite {
 
       for {
         commitsBefore <- IO.blocking(TestSupport.runGit(repo, "log", "--oneline"))
-        result        <- MonorepoVcsCommitHelpers.commitIfChanged(
+        result        <- MonorepoVersionCommitHelpers.commitIfChanged(
                            ctx,
                            vcs,
                            msg = "chore: should not appear",
@@ -69,7 +69,7 @@ class MonorepoVcsCommitHelpersSpec extends CatsEffectSuite {
 
         for {
           commitsBefore <- IO.blocking(TestSupport.runGit(repo, "log", "--oneline"))
-          result        <- MonorepoVcsCommitHelpers.commitIfChanged(
+          result        <- MonorepoVersionCommitHelpers.commitIfChanged(
                              ctx,
                              vcs,
                              msg = "chore: should not appear",
@@ -94,7 +94,7 @@ class MonorepoVcsCommitHelpersSpec extends CatsEffectSuite {
 
           for {
             commitsBefore <- IO.blocking(TestSupport.runGit(repo, "log", "--oneline"))
-            result        <- MonorepoVcsCommitHelpers.commitIfChanged(
+            result        <- MonorepoVersionCommitHelpers.commitIfChanged(
                                ctx,
                                vcs,
                                msg = "chore: should not appear",

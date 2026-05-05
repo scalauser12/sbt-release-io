@@ -7,7 +7,7 @@ import io.release.ReleaseManifestMetadataSupport
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
 import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
 import io.release.TestSupport
-import io.release.monorepo.internal.steps.MonorepoVcsCommitHelpers
+import io.release.monorepo.internal.steps.MonorepoVersionCommitHelpers
 import io.release.monorepo.internal.steps.MonorepoVersionSteps
 import io.release.runtime.sbt.SbtRuntime
 import io.release.vcs.Vcs
@@ -39,7 +39,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       for {
         _           <- writeVersion(new File(new File(fixture.dir, "core"), "version.sbt"), "1.0.0")
         _           <- writeVersion(new File(new File(fixture.dir, "api"), "version.sbt"), "2.0.0")
-        result      <- MonorepoVcsCommitHelpers.commitVersions(
+        result      <- MonorepoVersionCommitHelpers.commitVersions(
                          ctx,
                          MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsReleaseCommitMessage,
                          { case (releaseVer, _) => releaseVer },
@@ -72,7 +72,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
 
       for {
         beforeHash <- vcs.currentHash
-        result     <- MonorepoVcsCommitHelpers.commitVersions(
+        result     <- MonorepoVersionCommitHelpers.commitVersions(
                         ctx,
                         MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsReleaseCommitMessage,
                         { case (releaseVer, _) => releaseVer },
@@ -242,7 +242,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
           vcs = Some(vcs)
         )
 
-        MonorepoVcsCommitHelpers
+        MonorepoVersionCommitHelpers
           .commitVersions(
             ctx,
             MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsReleaseCommitMessage,
@@ -265,7 +265,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
           vcs = Some(vcs)
         )
 
-        MonorepoVcsCommitHelpers
+        MonorepoVersionCommitHelpers
           .commitVersions(
             ctx,
             MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsReleaseCommitMessage,
