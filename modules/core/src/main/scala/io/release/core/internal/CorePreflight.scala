@@ -5,7 +5,7 @@ import io.release.ReleaseComposer
 import io.release.ReleaseContext
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.steps.ReleaseSteps
-import io.release.core.internal.steps.VcsSteps
+import io.release.core.internal.steps.TagSteps
 import io.release.core.internal.steps.VersionSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.command.CheckModeOutput
@@ -80,7 +80,7 @@ private[release] object CorePreflight {
             Seq(
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             )
           )
       )
@@ -283,12 +283,12 @@ private[release] object CorePreflight {
       ctx: ReleaseContext,
       checkSteps: CheckSteps,
       tagPreflightInteractive: Boolean
-  ): IO[VcsSteps.PreflightTagOutcome] =
+  ): IO[TagSteps.PreflightTagOutcome] =
     PreflightPhaseGroups.dispatchPreflightTag(
       checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit,
       builtInReleaseWriteWouldChange(ctx),
-      _.fold(VcsSteps.preflightTag(ctx, tagPreflightInteractive))(callback =>
-        VcsSteps.preflightTag(ctx, tagPreflightInteractive, callback)
+      _.fold(TagSteps.preflightTag(ctx, tagPreflightInteractive))(callback =>
+        TagSteps.preflightTag(ctx, tagPreflightInteractive, callback)
       )
     )
 
