@@ -87,7 +87,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `core/ReleaseResourceHookIO.scala` | Resource-lifecycle hook for acquire/release around the run |
 | `core/ReleaseComposer.scala` | Composes policies + hooks into the core release sequence |
 | `core/internal/CoreLifecycle.scala` | Wires core policy/hook settings to the shared lifecycle compiler |
-| `core/internal/CoreDecisionDefaultsCli.scala` | Resolves grouped decision-default settings and CLI overrides for core commands |
+| `core/internal/CoreCommandExecution.scala` | Core command preparation, planning, and release/check orchestration |
 | `core/internal/steps/ReleaseSteps.scala` | 14 default steps (initialize-vcs → check-clean → inquire-versions → tag-preflight → set-release-version → tag-release → publish-artifacts → push-changes); `private[release]` |
 
 ### Monorepo Module
@@ -100,7 +100,6 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `monorepo/MonorepoResourceHookIO.scala` | Global resource hook type for acquire/release around the run |
 | `monorepo/internal/MonorepoComposer.scala` | Composes global and per-project steps into release sequence |
 | `monorepo/internal/MonorepoCommandExecution.scala` | Monorepo command preparation, planning, and release/check orchestration |
-| `monorepo/internal/MonorepoDecisionDefaultsCli.scala` | Monorepo CLI parsing for decision-default answers |
 | `monorepo/internal/ChangeDetection.scala` | Git diff-based change detection with shared-paths support |
 | `monorepo/internal/MonorepoProjectResolver.scala` | Dependency graph resolution and topological sorting |
 | `monorepo/internal/MonorepoSelectionResolver.scala` | Project selection (by name or change detection) |
@@ -115,9 +114,11 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `runtime/engine/BuiltInStepRole.scala` | Typed role markers for built-in steps used in orchestration decisions |
 | `runtime/TrackedContextHandle.scala` | Serialized, reentry-checked mutable checkpoint handle for tracked execution |
 | `runtime/command/ReleaseCommandRunner.scala` | Shared command-boundary execution (incl. `runPreparedCommand`), logging, and final state handling |
+| `runtime/command/ReleaseCommandCli.scala` | Shared CLI parsing for release commands and decision-default overrides |
+| `runtime/workflow/DecisionDefaultsSupport.scala` | Shared resolution of grouped decision-default settings reused by core and monorepo |
 | `ReleaseSharedKeys.scala` | Runtime-owned shared sbt setting/task keys reused by `core` and `monorepo` without duplicating key identity |
 | `ReleaseSharedDefaultSettingsSupport.scala` | Runtime-owned shared default-setting logic reused by internal workflows and plugin setup |
-| `runtime/workflow/VersionWorkflowSupport.scala` | Default version-file IO and publish validation helpers |
+| `runtime/workflow/VersionWorkflow.scala` | Default version-file IO and publish validation helpers |
 | `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
 | `version/Version.scala` | Version model |
 
