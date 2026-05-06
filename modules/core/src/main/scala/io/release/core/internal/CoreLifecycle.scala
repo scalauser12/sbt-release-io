@@ -26,15 +26,14 @@ private[release] object CoreLifecycle {
       step: ProcessStep.Single[ReleaseContext],
       enabled: CoreHookConfiguration => Boolean = _ => true
   ): Phase =
-    LifecycleCompiler.singleBuiltIn(step = step, enabled = enabled)
+    LifecycleCompiler.builtIn(step = step, enabled = enabled)
 
   private def hookPhase(
       phase: String,
       resolveHooks: CoreHookConfiguration => Seq[ReleaseHookIO],
       gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
       crossBuild: Boolean = false,
-      freezeGate: Boolean = false,
-      gateKey: Option[ReleaseContext => String] = None,
+      freezeGateKey: Option[ReleaseContext => String] = None,
       enabled: CoreHookConfiguration => Boolean = _ => true,
       narrowExecute: Option[ReleaseContext => IO[Boolean]] = None
   ): Phase =
@@ -47,8 +46,7 @@ private[release] object CoreLifecycle {
       executeTrackedOf = Some((hook: ReleaseHookIO) => ReleaseHookIO.trackedExecute(hook)),
       validateOf = (hook: ReleaseHookIO) => hook.validate,
       crossBuild = crossBuild,
-      freezeGate = freezeGate,
-      gateKey = gateKey,
+      freezeGateKey = freezeGateKey,
       enabled = enabled,
       narrowExecute = narrowExecute
     )
@@ -170,8 +168,7 @@ private[release] object CoreLifecycle {
       _.beforePublishHooks,
       gate = publishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
-      freezeGate = true,
-      gateKey = Some(scalaVersionKey),
+      freezeGateKey = Some(scalaVersionKey),
       enabled = _.enablePublish,
       narrowExecute = Some(beforePublishNarrow)
     ),
@@ -181,8 +178,7 @@ private[release] object CoreLifecycle {
       _.afterPublishHooks,
       gate = publishGate,
       crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
-      freezeGate = true,
-      gateKey = Some(scalaVersionKey),
+      freezeGateKey = Some(scalaVersionKey),
       enabled = _.enablePublish,
       narrowExecute = Some(afterPublishNarrow)
     ),

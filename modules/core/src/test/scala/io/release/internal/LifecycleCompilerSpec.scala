@@ -75,13 +75,13 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       execute = (ctx, _) => IO.pure(ctx)
     )
     val phases     = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, String]](
-      LifecycleCompiler.singleBuiltIn(singleStep),
+      LifecycleCompiler.builtIn(singleStep),
       singleHookPhase(
         phase = "before-publish",
         resolveHooks = _.singleHooks,
         gate = _ => IO.pure(true)
       ),
-      LifecycleCompiler.perItemBuiltIn(itemStep),
+      LifecycleCompiler.builtIn(itemStep),
       itemHookPhase(
         phase = "after-publish",
         resolveHooks = _.itemHooks,
@@ -170,8 +170,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
               nameOf = (h: SingleHook) => h.name,
               executeOf = (h: SingleHook) => h.execute,
               validateOf = (h: SingleHook) => h.validate,
-              freezeGate = true,
-              gateKey = Some(_ => "publish")
+              freezeGateKey = Some(_ => "publish")
             )
           )
         for {
@@ -212,8 +211,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
               nameOf = (h: SingleHook) => h.name,
               executeOf = (h: SingleHook) => h.execute,
               validateOf = (h: SingleHook) => h.validate,
-              freezeGate = true,
-              gateKey = Some(_.gateKey)
+              freezeGateKey = Some(_.gateKey)
             )
           )
         val first  = TestContext(gateOpen = true, gateKey = "2.12")
@@ -245,25 +243,6 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
     }
   }
 
-  test("singleHookPhase - require an explicit gateKey when freezing is enabled") {
-    val err = intercept[IllegalArgumentException] {
-      LifecycleCompiler.singleHookPhase[TestConfig, TestContext, Nothing, SingleHook](
-        phase = "before-publish",
-        resolveHooks = _.singleHooks,
-        gate = _ => IO.pure(true),
-        nameOf = (hook: SingleHook) => hook.name,
-        executeOf = (hook: SingleHook) => hook.execute,
-        validateOf = (hook: SingleHook) => hook.validate,
-        freezeGate = true
-      )
-    }
-
-    assertEquals(
-      err.getMessage,
-      "requirement failed: phase 'before-publish' requires an explicit stable gateKey when freezeGate = true"
-    )
-  }
-
   test("compile - frozen single gate execute fails fast when validate did not run") {
     val hook   = SingleHook(name = "publish-check")
     val phases =
@@ -275,8 +254,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
           nameOf = (h: SingleHook) => h.name,
           executeOf = (h: SingleHook) => h.execute,
           validateOf = (h: SingleHook) => h.validate,
-          freezeGate = true,
-          gateKey = Some(_ => "core")
+          freezeGateKey = Some(_ => "core")
         )
       )
 
@@ -284,7 +262,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
       .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
       .flatMap { steps =>
         interceptMessageIO[IllegalStateException](
-          "Frozen gate decision missing for key 'core'; validate must run before execute when freezeGate = true"
+          "Frozen gate decision missing for key 'core'; validate must run before execute when freezeGateKey is set"
         ) {
           steps.head.execute(TestContext(gateOpen = true)).void
         }
@@ -311,8 +289,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
             nameOf = (h: ItemHook) => h.name,
             executeOf = (h: ItemHook) => h.execute,
             validateOf = (h: ItemHook) => h.validate,
-            freezeGate = true,
-            gateKey = Some((_, item) => item)
+            freezeGateKey = Some((_, item) => item)
           )
         )
         for {
@@ -346,25 +323,6 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
     }
   }
 
-  test("perItemHookPhase - require an explicit gateKey when freezing is enabled") {
-    val err = intercept[IllegalArgumentException] {
-      LifecycleCompiler.perItemHookPhase[TestConfig, TestContext, String, ItemHook](
-        phase = "before-publish",
-        resolveHooks = _.itemHooks,
-        gate = (_, _) => IO.pure(true),
-        nameOf = (hook: ItemHook) => hook.name,
-        executeOf = (hook: ItemHook) => hook.execute,
-        validateOf = (hook: ItemHook) => hook.validate,
-        freezeGate = true
-      )
-    }
-
-    assertEquals(
-      err.getMessage,
-      "requirement failed: phase 'before-publish' requires an explicit stable gateKey when freezeGate = true"
-    )
-  }
-
   test("compile - frozen per-item gate execute fails fast when validate did not run") {
     val hook   = ItemHook(name = "publish-check")
     val phases = Seq[LifecycleCompiler.Phase[
@@ -379,8 +337,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
         nameOf = (h: ItemHook) => h.name,
         executeOf = (h: ItemHook) => h.execute,
         validateOf = (h: ItemHook) => h.validate,
-        freezeGate = true,
-        gateKey = Some((_, item) => item)
+        freezeGateKey = Some((_, item) => item)
       )
     )
 
@@ -394,7 +351,7 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
           )
 
         interceptMessageIO[IllegalStateException](
-          "Frozen gate decision missing for key 'core'; validate must run before execute when freezeGate = true"
+          "Frozen gate decision missing for key 'core'; validate must run before execute when freezeGateKey is set"
         ) {
           step.execute(TestContext(gateOpen = true), "core").void
         }

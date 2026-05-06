@@ -16,21 +16,9 @@ private[release] object LifecycleCompiler {
       compileSteps(config)
   }
 
-  def singleBuiltIn[Config, C, I](
-      step: ProcessStep.Single[C],
-      enabled: Config => Boolean = (_: Config) => true
-  ): Phase[Config, C, I] =
-    builtIn(step, enabled)
-
-  def perItemBuiltIn[Config, C, I](
-      step: ProcessStep.PerItem[C, I],
-      enabled: Config => Boolean = (_: Config) => true
-  ): Phase[Config, C, I] =
-    builtIn(step, enabled)
-
-  private def builtIn[Config, C, I](
+  def builtIn[Config, C, I](
       step: ProcessStep[C, I],
-      enabled: Config => Boolean
+      enabled: Config => Boolean = (_: Config) => true
   ): Phase[Config, C, I] =
     Phase(
       phaseName = None,
@@ -38,18 +26,19 @@ private[release] object LifecycleCompiler {
       compileSteps = config => IO.pure(if (enabled(config)) Seq(step) else Seq.empty)
     )
 
-  /** Compile a single-context hook phase. See the *freeze-gate contract* note
-    * near `gateModeFrom` for the `freezeGate` / `gateKey` semantics.
+  /** Compile a single-context hook phase. See the *freeze-gate contract* note below for
+    * `freezeGateKey` semantics.
     *
-    * @param gateKey extracts a cache key from the context; for cross-build
-    *   iterations this should fold `scalaVersion` in so each iteration
-    *   gets its own frozen decision.
-    * @param narrowExecute optional execute-time predicate AND'd with `gate`
-    *   (or, when `freezeGate = true`, with the cached validate-time gate
-    *   decision). Lets a phase use the validate-time gate as an upper bound
-    *   while further gating execution on a runtime signal that the validate
-    *   phase cannot observe (e.g. "did the publish task actually run?",
-    *   "did the push actually go through?"). Validation is unaffected,
+    * @param freezeGateKey when `Some(fn)`, the gate is frozen — captured at validate time
+    *   and replayed at execute time, with `fn(ctx)` naming the cache slot per iteration
+    *   (cross-build, per-project). When `None`, the gate is streaming (re-evaluated each
+    *   call). For cross-build iterations, fold `scalaVersion` into the key so each
+    *   iteration gets its own frozen decision.
+    * @param narrowExecute optional execute-time predicate AND'd with `gate` (or, when
+    *   `freezeGateKey` is set, with the cached validate-time gate decision). Lets a phase
+    *   use the validate-time gate as an upper bound while further gating execution on a
+    *   runtime signal the validate phase cannot observe (e.g. "did the publish task
+    *   actually run?", "did the push actually go through?"). Validation is unaffected,
     *   preserving the validate-before-execute contract.
     */
   def singleHookPhase[Config, C, I, Hook](
@@ -61,12 +50,10 @@ private[release] object LifecycleCompiler {
       executeTrackedOf: Option[Hook => TrackedContextHandle[C] => IO[Unit]] = None,
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
-      freezeGate: Boolean = false,
-      gateKey: Option[C => String] = None,
+      freezeGateKey: Option[C => String] = None,
       enabled: Config => Boolean = (_: Config) => true,
       narrowExecute: Option[C => IO[Boolean]] = None
   ): Phase[Config, C, I] = {
-    val gateMode         = gateModeFrom(phase, freezeGate, gateKey)
     val trackedExecuteOf =
       executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.lift(executeOf(hook)))
     Phase(
@@ -78,7 +65,7 @@ private[release] object LifecycleCompiler {
             phase = phase,
             hooks = resolveHooks(config),
             gate = gate,
-            gateMode = gateMode,
+            gateMode = freezeGateKey,
             narrowExecute = narrowExecute
           )(
             nameOf = nameOf,
@@ -91,18 +78,19 @@ private[release] object LifecycleCompiler {
     )
   }
 
-  /** Compile a per-item hook phase. See the *freeze-gate contract* note near
-    * `gateModeFrom` for the `freezeGate` / `gateKey` semantics.
+  /** Compile a per-item hook phase. See the *freeze-gate contract* note below for
+    * `freezeGateKey` semantics.
     *
-    * @param gateKey extracts a stable cache key from `(context, item)`. Must use
-    *   a stable project identifier (e.g. `ProjectRef`) rather than the full item,
-    *   since item fields like `versions` and `tagName` change between phases.
-    * @param narrowExecute optional execute-time predicate AND'd with `gate`
-    *   (or, when `freezeGate = true`, with the cached validate-time gate
-    *   decision). Lets a phase use the validate-time gate as an upper bound
-    *   while further gating execution on a runtime signal that the validate
-    *   phase cannot observe (e.g. "did the publish task actually run?",
-    *   "did the push actually go through?"). Validation is unaffected,
+    * @param freezeGateKey when `Some(fn)`, the gate is frozen — captured at validate time
+    *   and replayed at execute time, with `fn(ctx, item)` naming the cache slot per
+    *   iteration. Must use a stable project identifier (e.g. `ProjectRef`) rather than
+    *   the full item, since item fields like `versions` and `tagName` change between
+    *   phases. When `None`, the gate is streaming (re-evaluated each call).
+    * @param narrowExecute optional execute-time predicate AND'd with `gate` (or, when
+    *   `freezeGateKey` is set, with the cached validate-time gate decision). Lets a phase
+    *   use the validate-time gate as an upper bound while further gating execution on a
+    *   runtime signal the validate phase cannot observe (e.g. "did the publish task
+    *   actually run?", "did the push actually go through?"). Validation is unaffected,
     *   preserving the validate-before-execute contract.
     */
   def perItemHookPhase[Config, C, I, Hook](
@@ -114,12 +102,10 @@ private[release] object LifecycleCompiler {
       executeTrackedOf: Option[Hook => (TrackedContextHandle[C], I) => IO[Unit]] = None,
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
-      freezeGate: Boolean = false,
-      gateKey: Option[(C, I) => String] = None,
+      freezeGateKey: Option[(C, I) => String] = None,
       enabled: Config => Boolean = (_: Config) => true,
       narrowExecute: Option[(C, I) => IO[Boolean]] = None
   ): Phase[Config, C, I] = {
-    val gateMode         = gateModeFrom(phase, freezeGate, gateKey)
     val trackedExecuteOf =
       executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.liftPerItem(executeOf(hook)))
     Phase(
@@ -131,7 +117,7 @@ private[release] object LifecycleCompiler {
             phase = phase,
             hooks = resolveHooks(config),
             gate = gate,
-            gateMode = gateMode,
+            gateMode = freezeGateKey,
             narrowExecute = narrowExecute
           )(
             nameOf = nameOf,
@@ -168,27 +154,12 @@ private[release] object LifecycleCompiler {
 
   // ── Freeze-gate contract ────────────────────────────────────────────
   //
-  // When `freezeGate = true`, gate decisions are captured during validation
-  // and replayed during execution so that state mutations between phases
-  // cannot flip the decision. `gateKey` is required in that case: it names
-  // the cache slot each iteration (cross-build, per-project, …) reads from
-  // and writes to. When `freezeGate = false`, the gate is streaming — every
-  // call re-evaluates the current `gate` function. Represented here as
-  // `Option[K]`: `Some(key)` means frozen, `None` means streaming.
-
-  private def gateModeFrom[K](
-      phase: String,
-      freezeGate: Boolean,
-      gateKey: Option[K]
-  ): Option[K] =
-    if (!freezeGate) None
-    else {
-      require(
-        gateKey.isDefined,
-        s"phase '$phase' requires an explicit stable gateKey when freezeGate = true"
-      )
-      gateKey
-    }
+  // When `freezeGateKey = Some(fn)`, gate decisions are captured during
+  // validation and replayed during execution so state mutations between
+  // phases cannot flip the decision. `fn` names the cache slot each
+  // iteration (cross-build, per-project, …) reads from and writes to.
+  // When `freezeGateKey = None`, the gate is streaming — every call
+  // re-evaluates the current `gate` function.
 
   // ── Single-context hooks ────────────────────────────────────────────
 
@@ -421,7 +392,7 @@ private[release] object LifecycleCompiler {
       case None           =>
         IO.raiseError(
           new IllegalStateException(
-            s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGate = true"
+            s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGateKey is set"
           )
         )
     }

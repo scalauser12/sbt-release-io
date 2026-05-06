@@ -27,7 +27,7 @@ private[release] object MonorepoLifecycle {
       step: GlobalStep,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   ): Phase =
-    LifecycleCompiler.singleBuiltIn(
+    LifecycleCompiler.builtIn(
       step = step,
       enabled = enabled
     )
@@ -36,7 +36,7 @@ private[release] object MonorepoLifecycle {
       step: ProjectStep,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   ): Phase =
-    LifecycleCompiler.perItemBuiltIn(
+    LifecycleCompiler.builtIn(
       step = step,
       enabled = enabled
     )
@@ -65,8 +65,7 @@ private[release] object MonorepoLifecycle {
       resolveHooks: MonorepoHookConfiguration => Seq[MonorepoProjectHookIO],
       gate: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] = (_, _) => IO.pure(true),
       crossBuild: Boolean = false,
-      freezeGate: Boolean = false,
-      gateKey: Option[(MonorepoContext, ProjectReleaseInfo) => String] = None,
+      freezeGateKey: Option[(MonorepoContext, ProjectReleaseInfo) => String] = None,
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
       narrowExecute: Option[(MonorepoContext, ProjectReleaseInfo) => IO[Boolean]] = None
   ): Phase =
@@ -80,8 +79,7 @@ private[release] object MonorepoLifecycle {
         Some((hook: MonorepoProjectHookIO) => MonorepoProjectHookIO.trackedExecute(hook)),
       validateOf = (hook: MonorepoProjectHookIO) => hook.validate,
       crossBuild = crossBuild,
-      freezeGate = freezeGate,
-      gateKey = gateKey,
+      freezeGateKey = freezeGateKey,
       enabled = enabled,
       narrowExecute = narrowExecute
     )
@@ -216,8 +214,7 @@ private[release] object MonorepoLifecycle {
       _.beforePublishHooks,
       gate = publishGate,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
-      freezeGate = true,
-      gateKey = Some(MonorepoPublishSteps.publishGateKey),
+      freezeGateKey = Some(MonorepoPublishSteps.publishGateKey),
       enabled = _.enablePublish,
       narrowExecute = Some(beforePublishNarrow)
     ),
@@ -227,8 +224,7 @@ private[release] object MonorepoLifecycle {
       _.afterPublishHooks,
       gate = publishGate,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
-      freezeGate = true,
-      gateKey = Some(MonorepoPublishSteps.publishGateKey),
+      freezeGateKey = Some(MonorepoPublishSteps.publishGateKey),
       enabled = _.enablePublish,
       narrowExecute = Some(afterPublishNarrow)
     ),
