@@ -1,9 +1,7 @@
 package io.release.core.internal
 
-import io.release.runtime.command.CommandModeParsing
-import io.release.runtime.command.ReleaseCommandParserSupport
-import io.release.runtime.command.ReleaseCommandParserSupport.{Tokens, bareToken, valueToken}
-import io.release.runtime.command.SharedReleaseFlags
+import io.release.runtime.command.ReleaseCommandCli
+import io.release.runtime.command.ReleaseCommandCli.{Tokens, bareToken, valueToken}
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
 
@@ -14,13 +12,13 @@ import sbt.complete.Parser
   */
 private[release] object ReleaseCli {
 
-  type CommandMode = CommandModeParsing.CommandMode
-  val CommandMode: CommandModeParsing.CommandMode.type = CommandModeParsing.CommandMode
+  type CommandMode = ReleaseCommandCli.CommandMode
+  val CommandMode: ReleaseCommandCli.CommandMode.type = ReleaseCommandCli.CommandMode
 
-  type Parsed = CommandModeParsing.Parsed[Arg]
+  type Parsed = ReleaseCommandCli.Parsed[Arg]
   object Parsed {
     def apply(mode: CommandMode, args: Seq[Arg]): Parsed =
-      CommandModeParsing.Parsed(mode, args)
+      ReleaseCommandCli.Parsed(mode, args)
   }
 
   sealed trait Arg
@@ -38,17 +36,17 @@ private[release] object ReleaseCli {
   }
 
   def splitMode(tokens: Seq[String]): (CommandMode, Seq[String]) =
-    CommandModeParsing.splitMode(tokens)
+    ReleaseCommandCli.splitMode(tokens)
 
   def parse(tokens: Seq[String], commandName: String): Either[String, Parsed] =
-    CommandModeParsing.parse[Arg](tokens, commandName, parseArgs)
+    ReleaseCommandCli.parse[Arg](tokens, commandName, parseArgs)
 
   private def parseArgs(tokens: Seq[String], commandName: String): Either[String, Seq[Arg]] = {
     import Arg.*
-    import SharedReleaseFlags.*
+    import ReleaseCommandCli.*
 
     def missingValue(flag: String): Either[String, Seq[Arg]] =
-      Left(CommandModeParsing.missingValue(flag, commandName))
+      Left(ReleaseCommandCli.missingValue(flag, commandName))
 
     def loop(rest: List[String], acc: List[Arg]): Either[String, Seq[Arg]] =
       rest match {
@@ -85,7 +83,7 @@ private[release] object ReleaseCli {
           missingValue(DefaultUpstreamBehindToken)
         case `DefaultPushToken` :: Nil                           => missingValue(DefaultPushToken)
         case unknown :: _                                        =>
-          Left(CommandModeParsing.unknownArgument(unknown, commandName))
+          Left(ReleaseCommandCli.unknownArgument(unknown, commandName))
       }
 
     loop(tokens.toList, Nil)
@@ -100,27 +98,27 @@ private[release] object ReleaseCli {
 private[release] object ReleaseCommandParsers {
 
   def build: Parser[Tokens] =
-    ReleaseCommandParserSupport.helpParser |
-      ReleaseCommandParserSupport.checkParser(runParser) |
+    ReleaseCommandCli.helpParser |
+      ReleaseCommandCli.checkParser(runParser) |
       runParser
 
   private def runParser: Parser[Tokens] =
     (Space ~> argParser).*.map(_.flatten)
 
   private def argParser: Parser[Tokens] = {
-    val yesNoFlags = SharedReleaseFlags.YesNoDefaultTokens.map(
-      valueToken(_, SharedReleaseFlags.YesNoMeta)
+    val yesNoFlags = ReleaseCommandCli.YesNoDefaultTokens.map(
+      valueToken(_, ReleaseCommandCli.YesNoMeta)
     )
     oneOf(
       Seq(
-        bareToken(SharedReleaseFlags.WithDefaultsToken),
-        bareToken(SharedReleaseFlags.SkipTestsToken),
-        bareToken(SharedReleaseFlags.CrossToken),
+        bareToken(ReleaseCommandCli.WithDefaultsToken),
+        bareToken(ReleaseCommandCli.SkipTestsToken),
+        bareToken(ReleaseCommandCli.CrossToken),
         valueToken("release-version", "<release version>"),
         valueToken("next-version", "<next version>"),
         valueToken(
-          SharedReleaseFlags.DefaultTagExistsToken,
-          SharedReleaseFlags.DefaultTagExistsMeta
+          ReleaseCommandCli.DefaultTagExistsToken,
+          ReleaseCommandCli.DefaultTagExistsMeta
         )
       ) ++ yesNoFlags
     )

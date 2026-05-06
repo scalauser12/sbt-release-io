@@ -9,7 +9,6 @@ import io.release.VcsOps
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
-import io.release.runtime.command.CommandStateSupport
 import io.release.runtime.command.ReleaseCommandRunner
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.workflow.DecisionDefaultsSupport
@@ -107,7 +106,7 @@ private[release] object CoreCommandExecution {
   ): State =
     ReleaseCommandRunner.runPreparedCommand(
       state = state,
-      cleanState = state => CommandStateSupport.cleanReleaseState(state),
+      cleanState = state => ReleaseCommandRunner.cleanReleaseState(state),
       logPrefix = ReleaseLogPrefixes.Core
     )(
       cleanState =>
@@ -267,7 +266,7 @@ private[release] object CoreCommandExecution {
                   }
       result   <- ReleaseCommandRunner.finalizeWithCleanState(
                     finalCtx,
-                    cleanState = state => CommandStateSupport.cleanReleaseState(state),
+                    cleanState = state => ReleaseCommandRunner.cleanReleaseState(state),
                     prefix = ReleaseLogPrefixes.Core
                   )
     } yield result

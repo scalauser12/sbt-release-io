@@ -8,7 +8,6 @@ import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
-import io.release.runtime.command.CommandStateSupport
 import io.release.runtime.command.ReleaseCommandRunner
 import io.release.runtime.workflow.DecisionDefaultsSupport
 import sbt.{internal as _, *}
@@ -212,7 +211,7 @@ private[monorepo] object MonorepoCommandExecution {
       warnOnDuplicates: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
     val cleanStateFn: State => State =
-      state => CommandStateSupport.cleanReleaseState(state)
+      state => ReleaseCommandRunner.cleanReleaseState(state)
 
     ReleaseCommandRunner.runPreparedCommand(
       state = state,
@@ -262,7 +261,7 @@ private[monorepo] object MonorepoCommandExecution {
                   }
       result   <- ReleaseCommandRunner.finalizeWithCleanState(
                     finalCtx,
-                    cleanState = state => CommandStateSupport.cleanReleaseState(state),
+                    cleanState = state => ReleaseCommandRunner.cleanReleaseState(state),
                     prefix = ReleaseLogPrefixes.Monorepo
                   )
     } yield result
