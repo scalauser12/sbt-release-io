@@ -6,7 +6,7 @@ import io.release.monorepo.*
 import sbt.{internal as _, *}
 
 /** Internal helpers for resolving monorepo tag settings from sbt state. */
-private[monorepo] object MonorepoTagSettingsSupport {
+private[monorepo] object MonorepoTagSettings {
 
   final case class ResolvedMonorepoTagSettings(
       perProjectTagName: (String, String) => String,

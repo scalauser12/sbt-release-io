@@ -5,7 +5,7 @@ import _root_.sbt.Package.ManifestAttributes
 import _root_.sbt.{internal as _, *}
 
 /** Internal helpers for release-only manifest metadata. */
-private[release] object ReleaseManifestMetadataSupport {
+private[release] object ReleaseManifestMetadata {
 
   val releaseIOInternalReleaseHash: SettingKey[Option[String]] =
     SettingKey[Option[String]](

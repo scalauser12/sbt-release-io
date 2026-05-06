@@ -2,7 +2,7 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadata
 import io.release.ReleaseSharedKeys.releaseIOVcsSign
 import io.release.ReleaseSharedKeys.releaseIOVcsSignOff
 import io.release.VcsOps
@@ -128,9 +128,8 @@ private[monorepo] object MonorepoVersionCommitHelpers {
         projectRefs                   = result.currentProjects.map(_.ref)
         hashSettings                 <-
           if (persistReleaseHash)
-            vcs.currentHash.map(hash =>
-              ReleaseManifestMetadataSupport.releaseManifestHashSettings(projectRefs, hash)
-            )
+            vcs.currentHash
+              .map(hash => ReleaseManifestMetadata.releaseManifestHashSettings(projectRefs, hash))
           else IO.pure(Seq.empty[Setting[?]])
         finalResult                  <- IO.blocking {
                                           // Lift any hook-installed late-bound monorepo

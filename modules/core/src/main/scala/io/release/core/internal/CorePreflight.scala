@@ -12,10 +12,10 @@ import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ExecutionEngine
-import io.release.runtime.engine.StepOrderingSupport
+import io.release.runtime.engine.StepOrdering
 import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.preflight.PreflightRendering
-import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.runtime.workflow.VersionWorkflow
 
 import java.io.File
 
@@ -74,15 +74,14 @@ private[release] object CorePreflight {
         tagDependsOnRuntimeHookState =
           PreflightPhaseGroups.anyPhasePresent(stepNames, TagAffectingPhases),
         tagFollowsVersionResolution = versionIndex >= 0 && tagIndex > versionIndex,
-        builtInTagPreflightIncludesReleaseWriteAndCommit =
-          StepOrderingSupport.containsOrderedSubsequence(
-            steps,
-            Seq(
-              VersionSteps.setReleaseVersion,
-              VersionSteps.commitReleaseVersion,
-              TagSteps.tagRelease
-            )
+        builtInTagPreflightIncludesReleaseWriteAndCommit = StepOrdering.containsOrderedSubsequence(
+          steps,
+          Seq(
+            VersionSteps.setReleaseVersion,
+            VersionSteps.commitReleaseVersion,
+            TagSteps.tagRelease
           )
+        )
       )
     }
   }
@@ -300,7 +299,7 @@ private[release] object CorePreflight {
       )
     ).flatMap { releaseVersion =>
       IO.blocking(VersionSteps.resolveVersionPlan(ctx)).flatMap { versionPlan =>
-        VersionWorkflowSupport.wouldChangeVersionFile(
+        VersionWorkflow.wouldChangeVersionFile(
           versionPlan.versionFile,
           releaseVersion,
           versionPlan.versionFileContents

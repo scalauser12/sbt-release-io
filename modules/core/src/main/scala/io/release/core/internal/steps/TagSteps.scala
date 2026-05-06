@@ -2,7 +2,7 @@ package io.release.core.internal.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents
@@ -21,7 +21,7 @@ import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
-import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.runtime.workflow.VersionWorkflow
 import io.release.vcs.RemoteTagProbe
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
@@ -206,7 +206,7 @@ private[release] object TagSteps {
         resolveVersionPlanOpt(ctx).flatMap {
           case None              => IO.pure(false)
           case Some(versionPlan) =>
-            VersionWorkflowSupport.wouldChangeVersionFile(
+            VersionWorkflow.wouldChangeVersionFile(
               versionPlan.versionFile,
               releaseVersion,
               versionPlan.versionFileContents

@@ -6,7 +6,7 @@ import io.release.ReleasePluginIO
 import io.release.monorepo.internal.*
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
-import io.release.runtime.command.PluginEntrypointSupport
+import io.release.runtime.command.PluginEntrypoint
 import sbt.complete.Parser
 import sbt.{internal as _, *}
 
@@ -355,7 +355,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild` setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(
+    PluginEntrypoint.settingValue(
       state,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild
     )
@@ -365,7 +365,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests` setting.
     */
   protected def skipTestsEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(
+    PluginEntrypoint.settingValue(
       state,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests
     )
@@ -374,7 +374,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish` setting.
     */
   protected def skipPublishEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(
+    PluginEntrypoint.settingValue(
       state,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish
     )
@@ -384,7 +384,7 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive` setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(
+    PluginEntrypoint.settingValue(
       state,
       MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive
     )
@@ -398,9 +398,9 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`.
     */
   protected def baseReleaseSettings: Seq[Setting[?]] =
-    PluginEntrypointSupport.pluginSettings(
+    PluginEntrypoint.pluginSettings(
       MonorepoDefaultSettings.pluginDefaultSettings,
-      PluginEntrypointSupport.commandSetting(commandName)(
+      PluginEntrypoint.commandSetting(commandName)(
         monorepoParser,
         (state, tokens) => handleMonorepoCommandTokens(state, tokens)
       )

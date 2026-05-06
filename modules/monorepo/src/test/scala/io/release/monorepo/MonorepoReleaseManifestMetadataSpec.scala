@@ -3,9 +3,9 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
-import io.release.ReleaseManifestMetadataSupport
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
+import io.release.ReleaseManifestMetadata
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
 import io.release.TestSupport
 import io.release.monorepo.internal.steps.MonorepoVersionCommitHelpers
 import io.release.monorepo.internal.steps.MonorepoVersionSteps
@@ -291,14 +291,14 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         val apiRef  = fixture.refsById("api")
         val seeded  = TestSupport.appendSessionSettings(
           fixture.state,
-          ReleaseManifestMetadataSupport
+          ReleaseManifestMetadata
             .releaseManifestHashSettings(Seq(coreRef, apiRef), "abc123") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(coreRef, "core/v1.0.0") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(apiRef, "api/v2.0.0")
         )
-        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
+        val cleared = ReleaseManifestMetadata.clearReleaseManifestMetadata(seeded)
 
         assertEquals(
           TestSupport.manifestAttributes(seeded, coreRef),
@@ -331,14 +331,14 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         val apiRef  = fixture.refsById("api")
         val seeded  = TestSupport.appendSessionSettings(
           fixture.state,
-          ReleaseManifestMetadataSupport
+          ReleaseManifestMetadata
             .releaseManifestHashSettings(Seq(coreRef, apiRef), "stale-hash") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(coreRef, "core/v0.0.0-stale") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(apiRef, "api/v0.0.0-stale")
         )
-        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
+        val cleared = ReleaseManifestMetadata.clearReleaseManifestMetadata(seeded)
         // Trigger a session-level structure rebuild that does NOT touch the
         // manifest keys. Pre-fix, this rebuilt mergeSettings = original ++
         // append ++ rawAppend(stale) and reintroduced the stale Some(...).
@@ -360,21 +360,21 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
         val apiRef     = fixture.refsById("api")
         val firstPass  = TestSupport.appendSessionSettings(
           fixture.state,
-          ReleaseManifestMetadataSupport
+          ReleaseManifestMetadata
             .releaseManifestHashSettings(Seq(coreRef, apiRef), "first-hash") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(coreRef, "core/v1.0.0") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(apiRef, "api/v1.0.0")
         )
-        val cleared    = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(firstPass)
+        val cleared    = ReleaseManifestMetadata.clearReleaseManifestMetadata(firstPass)
         val secondPass = TestSupport.appendSessionSettings(
           cleared,
-          ReleaseManifestMetadataSupport
+          ReleaseManifestMetadata
             .releaseManifestHashSettings(Seq(coreRef, apiRef), "second-hash") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(coreRef, "core/v2.0.0") ++
-            ReleaseManifestMetadataSupport
+            ReleaseManifestMetadata
               .releaseManifestTagSettings(apiRef, "api/v2.0.0")
         )
 
@@ -467,7 +467,7 @@ class MonorepoReleaseManifestMetadataSpec extends CatsEffectSuite {
       releaseIOInternalReleaseTag  := None,
       packageOptions ++= {
         val _ = fixtureNonce.value
-        ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+        ReleaseManifestMetadata.releaseManifestPackageOptions(
           releaseIOInternalReleaseHash.value,
           releaseIOInternalReleaseTag.value
         )

@@ -11,7 +11,7 @@ This page maps **sbt modules**, **runtime layers**, and **internal types** so yo
 | Adjust shared default settings | [`ReleaseSharedDefaultSettingsSupport`](../modules/runtime/src/main/scala/io/release/ReleaseSharedDefaultSettingsSupport.scala) |
 | Adjust validate/execute scheduling | [`ExecutionEngine`](../modules/runtime/src/main/scala/io/release/runtime/engine/ExecutionEngine.scala) / [`LifecycleCompiler`](../modules/runtime/src/main/scala/io/release/runtime/engine/LifecycleCompiler.scala) |
 | Modify a built-in step's body | [`modules/core/.../steps/`](../modules/core/src/main/scala/io/release/core/internal/steps) / [`modules/monorepo/.../steps/`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/steps) |
-| Change CLI parsing | [`MonorepoCommandParsers`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandParsers.scala) / [`ReleaseCommandParserSupport`](../modules/runtime/src/main/scala/io/release/runtime/command/ReleaseCommandParserSupport.scala) |
+| Change CLI parsing | [`MonorepoCommandParsers`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandParsing.scala) / [`ReleaseCommandCli`](../modules/runtime/src/main/scala/io/release/runtime/command/ReleaseCommandCli.scala) |
 
 ## Module layout
 

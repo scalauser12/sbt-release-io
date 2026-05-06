@@ -4,7 +4,7 @@ import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.engine.BuiltInStepRole
-import io.release.runtime.engine.StepOrderingSupport
+import io.release.runtime.engine.StepOrdering
 
 private[monorepo] final case class MonorepoProcessPlan(
     stepNames: Seq[String],
@@ -57,7 +57,7 @@ private[monorepo] final case class MonorepoProcessPlan(
   }
 
   def builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean =
-    StepOrderingSupport.containsOrderedSubsequence(
+    StepOrdering.containsOrderedSubsequence(
       mainSteps,
       Seq(
         MonorepoReleaseSteps.setReleaseVersions,

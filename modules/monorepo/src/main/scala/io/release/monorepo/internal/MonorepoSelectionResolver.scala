@@ -145,7 +145,7 @@ private[monorepo] object MonorepoSelectionResolver {
           detectWithCustomDetector(ctx, orderedProjects, detector)
         case None           =>
           for {
-            tagSettings <- MonorepoTagSettingsSupport.resolveTagSettings(ctx.state)
+            tagSettings <- MonorepoTagSettings.resolveTagSettings(ctx.state)
             vcs         <- IO.fromOption(ctx.vcs)(
                              new IllegalStateException("VCS not initialized")
                            )

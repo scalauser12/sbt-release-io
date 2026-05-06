@@ -5,7 +5,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.syntax.all.*
 import io.release.ReleaseKeys
-import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadata
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.workflow.StepHelpers
 
@@ -18,7 +18,7 @@ private[release] object ReleaseCommandRunner {
 
   /** Drop release metadata from `state` so a fresh command run starts clean. */
   def cleanReleaseState(state: State): State =
-    ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
+    ReleaseManifestMetadata.clearReleaseManifestMetadata(
       state.remove(ReleaseKeys.versions)
     )
 

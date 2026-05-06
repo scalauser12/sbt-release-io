@@ -2,7 +2,7 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.syntax.all.*
-import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadata
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.ProjectReleaseInfo
@@ -171,7 +171,7 @@ private[monorepo] object MonorepoVcsSteps {
       // Check mode only reaches tag preflight after MonorepoPreflight has ruled out tag-affecting
       // runtime hook state, so a single tag-settings resolution here is stable enough. Live tagging
       // still re-resolves below per project to observe late-bound before-tag mutations.
-      MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
+      MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
         ctx.currentProjects.toList.traverse { project =>
           required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
             case (releaseVer, _) =>
@@ -225,7 +225,7 @@ private[monorepo] object MonorepoVcsSteps {
     required(ctx.vcs, MissingVcsMessage) { vcs =>
       required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
         case (releaseVer, _) =>
-          MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
+          MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
             val rendered = settings.perProjectTagName(project.name, releaseVer)
             tagPreflightTarget(ctx, vcs).flatMap { target =>
               preflightCreateTag(
@@ -314,7 +314,7 @@ private[monorepo] object MonorepoVcsSteps {
             case (releaseVer, _) =>
               // Resolved per-project: tag name/comment depend on releaseIORuntimeCurrentVersion
               // which varies by project.
-              MonorepoTagSettingsSupport.resolveTagSettings(ctx.state).flatMap { settings =>
+              MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
                 val initialTagName = settings.perProjectTagName(project.name, releaseVer)
                 // releaseIOInternalReleaseHash remains provenance for manifests/publish, but
                 // global/per-project hooks may have advanced HEAD after the release commit; tag
@@ -345,7 +345,7 @@ private[monorepo] object MonorepoVcsSteps {
                                         .liftLateBoundVersioningSettings(updatedCtx.state)
                                       SbtRuntime.appendSessionSettings(
                                         lifted,
-                                        ReleaseManifestMetadataSupport
+                                        ReleaseManifestMetadata
                                           .releaseManifestTagSettings(
                                             project.ref,
                                             resolvedTagName

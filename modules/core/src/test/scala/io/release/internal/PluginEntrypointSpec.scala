@@ -6,16 +6,16 @@ import munit.CatsEffectSuite
 import sbt.*
 import sbt.complete.DefaultParsers.success
 
-class PluginEntrypointSupportSpec extends CatsEffectSuite {
+class PluginEntrypointSpec extends CatsEffectSuite {
 
   test("pluginSettings appends command registration after defaults") {
     IO {
-      val settings = PluginEntrypointSupport.pluginSettings(
+      val settings = PluginEntrypoint.pluginSettings(
         defaultSettings = Seq(
-          PluginEntrypointSupportSpec.DefaultAKey := "default-a",
-          PluginEntrypointSupportSpec.DefaultBKey := "default-b"
+          PluginEntrypointSpec.DefaultAKey := "default-a",
+          PluginEntrypointSpec.DefaultBKey := "default-b"
         ),
-        commandSetting = PluginEntrypointSupport.commandSetting("releaseIO")(
+        commandSetting = PluginEntrypoint.commandSetting("releaseIO")(
           _ => success(Seq.empty[String]),
           (state, _) => state
         )
@@ -25,8 +25,8 @@ class PluginEntrypointSupportSpec extends CatsEffectSuite {
       assertEquals(
         labels,
         Seq(
-          PluginEntrypointSupportSpec.DefaultAKey.key.label,
-          PluginEntrypointSupportSpec.DefaultBKey.key.label,
+          PluginEntrypointSpec.DefaultAKey.key.label,
+          PluginEntrypointSpec.DefaultBKey.key.label,
           "commands"
         )
       )
@@ -38,7 +38,7 @@ class PluginEntrypointSupportSpec extends CatsEffectSuite {
     IO {
       val shellSource             =
         TestRepoFiles.readString(
-          "modules/runtime/src/main/scala/io/release/runtime/command/PluginEntrypointSupport.scala"
+          "modules/runtime/src/main/scala/io/release/runtime/command/PluginEntrypoint.scala"
         )
       val releaseCommandCliSource =
         TestRepoFiles.readString(
@@ -64,17 +64,17 @@ class PluginEntrypointSupportSpec extends CatsEffectSuite {
   }
 }
 
-object PluginEntrypointSupportSpec {
+object PluginEntrypointSpec {
 
   val DefaultAKey: SettingKey[String] =
     SettingKey[String](
-      "pluginEntrypointSupportSpecDefaultA",
-      "Plugin entrypoint support spec default A"
+      "pluginEntrypointSpecDefaultA",
+      "Plugin entrypoint spec default A"
     )
 
   val DefaultBKey: SettingKey[String] =
     SettingKey[String](
-      "pluginEntrypointSupportSpecDefaultB",
-      "Plugin entrypoint support spec default B"
+      "pluginEntrypointSpecDefaultB",
+      "Plugin entrypoint spec default B"
     )
 }

@@ -10,7 +10,7 @@ import _root_.sbt.complete.Parser
   * they share the small amount of sbt boilerplate needed to read settings from state, register a
   * command next to default settings, and aggregate those settings into one plugin surface.
   */
-private[release] object PluginEntrypointSupport {
+private[release] object PluginEntrypoint {
 
   def settingValue[A](state: State, key: SettingKey[A]): A =
     Project.extract(state).get(key)

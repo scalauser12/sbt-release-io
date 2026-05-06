@@ -2,7 +2,7 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadata
 import io.release.ReleaseSharedKeys
 import io.release.TestAssertions.assertIllegalStateMessage
 import io.release.TestSupport
@@ -472,18 +472,18 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val marker = new File(projectBase.getParentFile, "publish-metadata.txt")
 
       Seq(
-        publish / skip                                              := false,
-        publishTo                                                   := Some(Resolver.file("local-test", projectBase.getParentFile)),
-        version                                                     := "0.1.0-SNAPSHOT",
-        packageOptions                                              := Seq.empty,
-        ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
-        ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
-        packageOptions ++= ReleaseManifestMetadataSupport
+        publish / skip                                       := false,
+        publishTo                                            := Some(Resolver.file("local-test", projectBase.getParentFile)),
+        version                                              := "0.1.0-SNAPSHOT",
+        packageOptions                                       := Seq.empty,
+        ReleaseManifestMetadata.releaseIOInternalReleaseHash := None,
+        ReleaseManifestMetadata.releaseIOInternalReleaseTag  := None,
+        packageOptions ++= ReleaseManifestMetadata
           .releaseManifestPackageOptions(
-            ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
-            ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
+            ReleaseManifestMetadata.releaseIOInternalReleaseHash.value,
+            ReleaseManifestMetadata.releaseIOInternalReleaseTag.value
           ),
-        ReleaseSharedKeys.releaseIOPublishAction                    := {
+        ReleaseSharedKeys.releaseIOPublishAction             := {
           def manifestEntries(options: Seq[PackageOption]): Map[String, String] =
             options.flatMap {
               case product: Product if product.productPrefix == "ManifestAttributes" =>
@@ -518,9 +518,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val seededState = TestSupport.appendSessionSettings(
         fixture.state,
         Seq(coreRef / version := "1.0.0") ++
-          ReleaseManifestMetadataSupport
+          ReleaseManifestMetadata
             .releaseManifestHashSettings(Seq(coreRef), "abc123") ++
-          ReleaseManifestMetadataSupport
+          ReleaseManifestMetadata
             .releaseManifestTagSettings(coreRef, "core/v1.0.0")
       )
       val project     = fixture.projectInfo(
