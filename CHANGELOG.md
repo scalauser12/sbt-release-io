@@ -4,6 +4,45 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.1
+
+Published: 2026-05-06
+GitHub release:
+[v0.13.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.1)
+
+`v0.13.1` is a patch release for both plugins that keeps the public contract
+unchanged while simplifying internal release command, lifecycle, tagging, and
+monorepo preflight boundaries.
+
+### Compatibility notes
+
+- No public API or release-flow behavior changes are intended in this release.
+
+### Improvements
+
+- Consolidate core and monorepo command parsing through the shared
+  `ReleaseCommandCli` helper while preserving the existing command grammar.
+- Extract tag handling into `TagSteps` and split monorepo preflight/version
+  helpers into smaller internal modules.
+- Rename several internal support types (`PluginEntrypoint`, `VersionWorkflow`,
+  and related helpers) for clearer runtime and workflow boundaries.
+- Simplify lifecycle compiler built-in phase construction and freeze-gate naming.
+
+### Documentation
+
+- Refresh agent-facing architecture references after the internal file moves.
+- Refresh the root README, module READMEs, and published walkthrough/getting-started docs to
+  reference `0.13.1`.
+
+### Verification
+
+- `git diff --check`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.13.0
 
 Published: 2026-05-04
