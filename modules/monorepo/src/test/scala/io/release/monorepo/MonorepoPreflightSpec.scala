@@ -3,7 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.Resource
-import io.release.ReleaseManifestMetadataSupport
+import io.release.ReleaseManifestMetadata
 import io.release.ReleaseSharedKeys.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
@@ -985,7 +985,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
               IO.blocking {
                 val seededState = TestSupport.appendSessionSettings(
                   currentCtx.state,
-                  ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+                  ReleaseManifestMetadata.releaseManifestHashSettings(
                     currentCtx.currentProjects.map(_.ref),
                     headRev
                   )
@@ -1214,7 +1214,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         seededState        =
           TestSupport.appendSessionSettings(
             ctx.state,
-            ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+            ReleaseManifestMetadata.releaseManifestHashSettings(
               ctx.currentProjects.map(_.ref),
               releaseCommitHash
             )

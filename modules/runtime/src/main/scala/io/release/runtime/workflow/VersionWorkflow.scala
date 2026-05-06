@@ -9,7 +9,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-private[release] object VersionWorkflowSupport {
+private[release] object VersionWorkflow {
 
   final case class ResolvedVersionInputs[C <: ReleaseCtx](
       context: C,

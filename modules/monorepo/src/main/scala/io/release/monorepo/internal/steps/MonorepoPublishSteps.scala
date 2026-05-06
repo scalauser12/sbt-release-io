@@ -4,8 +4,8 @@ import cats.effect.IO
 import io.release.CleanCompat
 import io.release.LoadCompat
 import io.release.ReleaseIOCompat
-import io.release.ReleaseManifestMetadataSupport
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadata
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
 import io.release.ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
 import io.release.ReleaseSharedKeys.releaseIOPublishAction
 import io.release.monorepo.MonorepoContext
@@ -218,7 +218,7 @@ private[monorepo] object MonorepoPublishSteps {
                   IO.blocking {
                     val newState = SbtRuntime.appendSessionSettings(
                       ctx.state,
-                      ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+                      ReleaseManifestMetadata.releaseManifestHashSettings(
                         Seq(project.ref),
                         hash
                       )

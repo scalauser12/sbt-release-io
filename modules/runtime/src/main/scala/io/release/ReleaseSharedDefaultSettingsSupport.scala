@@ -22,20 +22,20 @@ private[release] object ReleaseSharedDefaultSettingsSupport {
   ).flatten
 
   private lazy val versioningDefaults: Seq[Setting[?]] = Seq(
-    ReleaseSharedKeys.releaseIOVersioningFile                   := baseDirectory.value / "version.sbt",
-    ReleaseSharedKeys.releaseIOVersioningReleaseVersion         := {
+    ReleaseSharedKeys.releaseIOVersioningFile            := baseDirectory.value / "version.sbt",
+    ReleaseSharedKeys.releaseIOVersioningReleaseVersion  := {
       val bump = ReleaseSharedKeys.releaseIOVersioningBump.value
       defaultReleaseVersionTask(bump)
     },
-    ReleaseSharedKeys.releaseIOVersioningNextVersion            := {
+    ReleaseSharedKeys.releaseIOVersioningNextVersion     := {
       val bump = ReleaseSharedKeys.releaseIOVersioningBump.value
       defaultNextVersionTask(bump)
     },
-    ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash := None,
-    ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag  := None,
-    packageOptions ++= ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
-      ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash.value,
-      ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag.value
+    ReleaseManifestMetadata.releaseIOInternalReleaseHash := None,
+    ReleaseManifestMetadata.releaseIOInternalReleaseTag  := None,
+    packageOptions ++= ReleaseManifestMetadata.releaseManifestPackageOptions(
+      ReleaseManifestMetadata.releaseIOInternalReleaseHash.value,
+      ReleaseManifestMetadata.releaseIOInternalReleaseTag.value
     )
   )
 

@@ -19,7 +19,7 @@ import sbt.State
 
 import java.io.File
 
-class VersionWorkflowSupportSpec extends CatsEffectSuite {
+class VersionWorkflowSpec extends CatsEffectSuite {
 
   private val fixturePrefix       = "version-workflow-support-spec"
   private val startupFlags        = ExecutionFlags(
@@ -37,7 +37,7 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
       val missing = new File(dir, "missing-version.sbt")
 
       assertFailure[IllegalStateException, Unit](
-        VersionWorkflowSupport.ensureVersionFileExists(missing, "custom missing message")
+        VersionWorkflow.ensureVersionFileExists(missing, "custom missing message")
       )(err => assertEquals(err.getMessage, "custom missing message"))
     }
   }
@@ -60,7 +60,7 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
         )
       )
 
-      VersionWorkflowSupport
+      VersionWorkflow
         .resolveVersionInputsFromTasks(
           ctx = ctx,
           currentVersion = "0.1.0-SNAPSHOT",
@@ -87,7 +87,7 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
       val throwIfCalled =
         (_: String) => throw new IllegalArgumentException("suggestion function must not be invoked")
 
-      VersionWorkflowSupport
+      VersionWorkflow
         .resolveVersionInputs(
           ctx = ctx,
           currentVersion = "0.1.0",
@@ -111,7 +111,7 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       val ctx = promptingContext(loadedState(dir, Seq.empty))
 
-      VersionWorkflowSupport
+      VersionWorkflow
         .resolveVersionInputs(
           ctx = ctx,
           currentVersion = "0.1.0-SNAPSHOT",
@@ -151,7 +151,7 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
 
       Ref.of[IO, Boolean](false).flatMap { beforePromptRan =>
         TestSupport.withInput("") {
-          VersionWorkflowSupport
+          VersionWorkflow
             .resolveVersionInputsFromTasks(
               ctx = ctx,
               currentVersion = "0.1.0-SNAPSHOT",
@@ -185,7 +185,7 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
         _           <- IO.blocking(
                          sbt.IO.write(versionFile, """ThisBuild / version := "1.0.0"""" + "\n")
                        )
-        wouldChange <- VersionWorkflowSupport.wouldChangeVersionFile(
+        wouldChange <- VersionWorkflow.wouldChangeVersionFile(
                          versionFile,
                          "1.0.0",
                          DefaultVersionFileIO.defaultWriteVersion(useGlobalVersion = true)
@@ -205,7 +205,7 @@ class VersionWorkflowSupportSpec extends CatsEffectSuite {
                            """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
                          )
                        )
-        wouldChange <- VersionWorkflowSupport.wouldChangeVersionFile(
+        wouldChange <- VersionWorkflow.wouldChangeVersionFile(
                          versionFile,
                          "0.1.0",
                          DefaultVersionFileIO.defaultWriteVersion(useGlobalVersion = true)

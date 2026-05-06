@@ -3,7 +3,7 @@ package io.release.core.internal.steps
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseContext
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
 import io.release.ReleasePluginIO.autoImport.*
 import io.release.VcsOps
 import io.release.core.internal.VersionPlan
@@ -13,7 +13,7 @@ import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
 import io.release.runtime.workflow.VersionCommitSupport
-import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.runtime.workflow.VersionWorkflow
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -82,7 +82,7 @@ private[release] object ReleaseVersionWorkflow {
       ensureVersionFileExists(versionFile) *>
         ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
           VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
-            VersionWorkflowSupport.assertVersionFileNotIgnored(
+            VersionWorkflow.assertVersionFileNotIgnored(
               "inquire-versions",
               relativePath,
               vcs
@@ -242,7 +242,7 @@ private[release] object ReleaseVersionWorkflow {
       versionPlan    <- IO.blocking(resolveVersionPlan(ctx))
       _              <- ensureVersionFileExists(versionPlan.versionFile)
       currentVer     <- versionPlan.readVersion(versionPlan.versionFile)
-      resolvedInputs <- VersionWorkflowSupport.resolveVersionInputsFromTasks(
+      resolvedInputs <- VersionWorkflow.resolveVersionInputsFromTasks(
                           ctx = ctx,
                           currentVersion = currentVer,
                           releaseVersionTask = releaseIOVersioningReleaseVersion,
@@ -287,7 +287,7 @@ private[release] object ReleaseVersionWorkflow {
   }
 
   private def ensureVersionFileExists(versionFile: File): IO[Unit] =
-    VersionWorkflowSupport.ensureVersionFileExists(
+    VersionWorkflow.ensureVersionFileExists(
       versionFile,
       s"Version file not found: ${versionFile.getPath}. " +
         "Create it with contents like `version := \"0.1.0-SNAPSHOT\"`, " +
@@ -372,7 +372,7 @@ private[release] object ReleaseVersionWorkflow {
       vcs: Vcs,
       relativePath: String
   ): IO[(ReleaseContext, String)] =
-    VersionWorkflowSupport.assertVersionFileNotIgnored(actionName, relativePath, vcs) *>
+    VersionWorkflow.assertVersionFileNotIgnored(actionName, relativePath, vcs) *>
       vcs.currentHash.map(hash => (ctx, hash))
 
   /** Reject the commit if any tracked file other than the configured version file is dirty.
@@ -428,10 +428,10 @@ private[release] object ReleaseVersionWorkflow {
       // is rejected before the on-disk write rather than after.
       _           <- ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
                        VcsOps.relativizeToBase(vcs, versionPlan.versionFile).flatMap { rel =>
-                         VersionWorkflowSupport.assertVersionFileNotIgnored(actionName, rel, vcs)
+                         VersionWorkflow.assertVersionFileNotIgnored(actionName, rel, vcs)
                        }
                      }
-      _           <- VersionWorkflowSupport.writeVersionFile(
+      _           <- VersionWorkflow.writeVersionFile(
                        versionPlan.versionFile,
                        versionValue,
                        versionPlan.versionFileContents

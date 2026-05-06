@@ -2,9 +2,9 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
-import io.release.ReleaseManifestMetadataSupport
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
+import io.release.ReleaseManifestMetadata
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
 import io.release.TestAssertions
 import io.release.TestSupport
 import io.release.monorepo.MonorepoContext
@@ -85,7 +85,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         seededState        =
           TestSupport.appendSessionSettings(
             baseCtx.state,
-            ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+            ReleaseManifestMetadata.releaseManifestHashSettings(
               Seq(project.ref),
               releaseCommitHash
             )
@@ -140,7 +140,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     twoProjectTagContextResource.use { case (_, coreProject, apiProject, ctx) =>
       val seededState = TestSupport.appendSessionSettings(
         ctx.state,
-        ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+        ReleaseManifestMetadata.releaseManifestHashSettings(
           Seq(coreProject.ref, apiProject.ref),
           "release-hash"
         )
@@ -381,7 +381,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         seededState        =
           TestSupport.appendSessionSettings(
             baseCtx.state,
-            ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+            ReleaseManifestMetadata.releaseManifestHashSettings(
               Seq(project.ref),
               releaseCommitHash
             )
@@ -468,7 +468,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         seededState =
           TestSupport.appendSessionSettings(
             baseCtx.state,
-            ReleaseManifestMetadataSupport.releaseManifestHashSettings(
+            ReleaseManifestMetadata.releaseManifestHashSettings(
               Seq(project.ref),
               headRev
             )
@@ -1079,7 +1079,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       releaseIOInternalReleaseTag  := None,
       packageOptions ++= {
         val _ = fixtureNonce.value
-        ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+        ReleaseManifestMetadata.releaseManifestPackageOptions(
           releaseIOInternalReleaseHash.value,
           releaseIOInternalReleaseTag.value
         )

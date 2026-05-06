@@ -13,7 +13,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers
-import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.runtime.workflow.VersionWorkflow
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -37,7 +37,7 @@ private[monorepo] object MonorepoVersionWorkflow {
       project: ProjectReleaseInfo
   ): IO[Unit] =
     MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
-      VersionWorkflowSupport.ensureVersionFileExists(
+      VersionWorkflow.ensureVersionFileExists(
         versionInputs.versionFile,
         missingVersionFileMessage(
           project,
@@ -53,7 +53,7 @@ private[monorepo] object MonorepoVersionWorkflow {
         // the later `git add` declines, leaving a mutated, git-invisible file behind.
         resolveCurrentVcs(ctx).flatMap { vcs =>
           VcsOps.relativizeToBase(vcs, versionInputs.versionFile).flatMap { relativePath =>
-            VersionWorkflowSupport.assertVersionFileNotIgnored(
+            VersionWorkflow.assertVersionFileNotIgnored(
               s"inquire-versions (${project.name})",
               relativePath,
               vcs
@@ -242,7 +242,7 @@ private[monorepo] object MonorepoVersionWorkflow {
         // means a misconfigured or gitignored file is rejected before the on-disk write.
         relativePath <- VcsOps.relativizeToBase(vcs, versionInputs.versionFile)
         scopedAction  = s"$actionName (${project.name})"
-        _            <- VersionWorkflowSupport.assertVersionFileNotIgnored(scopedAction, relativePath, vcs)
+        _            <- VersionWorkflow.assertVersionFileNotIgnored(scopedAction, relativePath, vcs)
         updatedCtx   <- writeProjectVersion(ctx, project, selectVersion(versions), versionInputs)
       } yield updatedCtx
     }
@@ -288,7 +288,7 @@ private[monorepo] object MonorepoVersionWorkflow {
   ): IO[(MonorepoContext, ResolvedProjectVersions)] =
     for {
       versionInputs          <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
-      _                      <- VersionWorkflowSupport.ensureVersionFileExists(
+      _                      <- VersionWorkflow.ensureVersionFileExists(
                                   versionInputs.versionFile,
                                   missingVersionFileMessage(
                                     project,
@@ -313,7 +313,7 @@ private[monorepo] object MonorepoVersionWorkflow {
                                   "inquire-versions"
                                 )
       (taskCtx, nextFn)       = nextData
-      resolvedInputs         <- VersionWorkflowSupport.resolveVersionInputs(
+      resolvedInputs         <- VersionWorkflow.resolveVersionInputs(
                                   ctx = taskCtx,
                                   currentVersion = currentVersion,
                                   releaseVersionFn = releaseFn,
@@ -352,7 +352,7 @@ private[monorepo] object MonorepoVersionWorkflow {
   ): IO[MonorepoContext] =
     for {
       versionFile <- IO.pure(versionInputs.versionFile)
-      _           <- VersionWorkflowSupport.writeVersionFile(
+      _           <- VersionWorkflow.writeVersionFile(
                        versionInputs.versionFile,
                        versionValue,
                        versionInputs.versionFileContents

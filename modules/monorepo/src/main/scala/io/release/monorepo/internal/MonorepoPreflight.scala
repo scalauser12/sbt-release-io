@@ -13,7 +13,7 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.ExecutionEngine
-import io.release.runtime.workflow.VersionWorkflowSupport
+import io.release.runtime.workflow.VersionWorkflow
 
 /** Preflight support for `releaseIOMonorepo check` and help text without release side effects.
   *
@@ -302,7 +302,7 @@ private[monorepo] object MonorepoPreflight {
     project.resolvedVersions match {
       case Some((releaseVersion, _)) =>
         MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
-          VersionWorkflowSupport.wouldChangeVersionFile(
+          VersionWorkflow.wouldChangeVersionFile(
             versionInputs.versionFile,
             releaseVersion,
             versionInputs.versionFileContents

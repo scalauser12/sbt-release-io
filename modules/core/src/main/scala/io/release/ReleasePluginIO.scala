@@ -8,7 +8,7 @@ import io.release.core.internal.ReleaseCli
 import io.release.core.internal.ReleaseCommandParsers
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
-import io.release.runtime.command.PluginEntrypointSupport
+import io.release.runtime.command.PluginEntrypoint
 import io.release.runtime.workflow.StepHelpers
 import io.release.vcs.Vcs
 import io.release.version.Version
@@ -357,7 +357,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     * setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(
+    PluginEntrypoint.settingValue(
       state,
       ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild
     )
@@ -366,7 +366,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     * `ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish` setting.
     */
   protected def skipPublishEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(
+    PluginEntrypoint.settingValue(
       state,
       ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish
     )
@@ -376,7 +376,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     * setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    PluginEntrypointSupport.settingValue(
+    PluginEntrypoint.settingValue(
       state,
       ReleasePluginIO.autoImport.releaseIOBehaviorInteractive
     )
@@ -386,7 +386,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     * the release command and required keys stay defined.
     */
   protected def baseReleaseSettings: Seq[Setting[?]] =
-    PluginEntrypointSupport.pluginSettings(
+    PluginEntrypoint.pluginSettings(
       ReleaseSharedDefaultSettingsSupport.pluginDefaultSettings ++ defaultSettingsValues,
       releaseIOCommand
     )
@@ -423,7 +423,7 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
 
   /** Setting that registers the release command. Uses [[commandName]]. */
   protected def releaseIOCommand: Setting[?] =
-    PluginEntrypointSupport.commandSetting(commandName)(
+    PluginEntrypoint.commandSetting(commandName)(
       _ => releaseParser,
       (state, tokens) => handleReleaseCommandTokens(state, tokens)
     )

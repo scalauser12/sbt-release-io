@@ -1,8 +1,8 @@
 package io.release.core.internal.steps
 
-import _root_.io.release.ReleaseManifestMetadataSupport
-import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
-import _root_.io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
+import _root_.io.release.ReleaseManifestMetadata
+import _root_.io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
+import _root_.io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
 import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseContext
@@ -1120,7 +1120,7 @@ class VcsStepsSpec extends CatsEffectSuite {
       packageOptions               := basePackageOptions,
       releaseIOInternalReleaseHash := None,
       releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseManifestMetadataSupport
+      packageOptions ++= ReleaseManifestMetadata
         .releaseManifestPackageOptions(
           releaseIOInternalReleaseHash.value,
           releaseIOInternalReleaseTag.value

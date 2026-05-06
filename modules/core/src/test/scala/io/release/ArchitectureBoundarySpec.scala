@@ -67,7 +67,7 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "LifecycleCompiler",
     "CheckModeOutput",
     "HelpDocsLinks",
-    "PluginEntrypointSupport",
+    "PluginEntrypoint",
     "ReleaseCommandRunner",
     "ReleaseCommandCli",
     "LoadCompat",
@@ -76,10 +76,10 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "SnapshotDependencyTasks",
     "DecisionResolver",
     "PublishValidation",
-    "VersionWorkflowSupport",
+    "VersionWorkflow",
     "DefaultVersionFileIO",
     "ReleaseIOCompat",
-    "ReleaseManifestMetadataSupport",
+    "ReleaseManifestMetadata",
     "VcsOps"
   )
 

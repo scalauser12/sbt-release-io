@@ -1,9 +1,9 @@
 package io.release.internal
 
 import cats.effect.IO
-import io.release.ReleaseManifestMetadataSupport
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseHash
-import io.release.ReleaseManifestMetadataSupport.releaseIOInternalReleaseTag
+import io.release.ReleaseManifestMetadata
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
 import io.release.TestSupport
 import munit.CatsEffectSuite
 import sbt.Keys.packageOptions
@@ -33,7 +33,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         val cleared =
-          ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
+          ReleaseManifestMetadata.clearReleaseManifestMetadata(seeded)
 
         assertEquals(
           TestSupport.manifestAttributes(seeded),
@@ -60,7 +60,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
             releaseIOInternalReleaseTag  := Some("v0.0.0-stale")
           )
         )
-        val cleared = ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(seeded)
+        val cleared = ReleaseManifestMetadata.clearReleaseManifestMetadata(seeded)
         // Trigger a session-level structure rebuild that does NOT touch the
         // manifest keys. Pre-fix, this rebuilt mergeSettings = original ++
         // append ++ rawAppend(stale) and reintroduced the stale Some(...).
@@ -87,7 +87,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
           )
         )
         val cleared    =
-          ReleaseManifestMetadataSupport
+          ReleaseManifestMetadata
             .clearReleaseManifestMetadata(firstPass)
         val secondPass = TestSupport.appendSessionSettings(
           cleared,
@@ -143,7 +143,7 @@ class ReleaseManifestMetadataSpec extends CatsEffectSuite {
       releaseIOInternalReleaseTag  := None,
       packageOptions ++= {
         val _ = fixtureNonce.value
-        ReleaseManifestMetadataSupport.releaseManifestPackageOptions(
+        ReleaseManifestMetadata.releaseManifestPackageOptions(
           releaseIOInternalReleaseHash.value,
           releaseIOInternalReleaseTag.value
         )
