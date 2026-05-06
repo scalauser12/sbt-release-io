@@ -4,6 +4,8 @@ import _root_.sbt.State
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.syntax.all.*
+import io.release.ReleaseKeys
+import io.release.ReleaseManifestMetadataSupport
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.workflow.StepHelpers
 
@@ -13,6 +15,12 @@ import scala.util.control.NonFatal
   * `NonFatal` recovery inside the `IO` program.
   */
 private[release] object ReleaseCommandRunner {
+
+  /** Drop release metadata from `state` so a fresh command run starts clean. */
+  def cleanReleaseState(state: State): State =
+    ReleaseManifestMetadataSupport.clearReleaseManifestMetadata(
+      state.remove(ReleaseKeys.versions)
+    )
 
   def recoverNonFatal(
       failureState: State,

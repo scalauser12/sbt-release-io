@@ -1,10 +1,8 @@
 package io.release.monorepo.internal
 
 import io.release.monorepo.*
-import io.release.runtime.command.CommandModeParsing
-import io.release.runtime.command.ReleaseCommandParserSupport
-import io.release.runtime.command.ReleaseCommandParserSupport.{Tokens, bareToken, valueToken}
-import io.release.runtime.command.SharedReleaseFlags
+import io.release.runtime.command.ReleaseCommandCli
+import io.release.runtime.command.ReleaseCommandCli.{Tokens, bareToken, valueToken}
 import io.release.runtime.workflow.StepHelpers.errorMessage
 import sbt.complete.DefaultParsers.*
 import sbt.complete.Parser
@@ -24,13 +22,13 @@ import scala.util.Try
   */
 private[monorepo] object MonorepoCli {
 
-  type CommandMode = CommandModeParsing.CommandMode
-  val CommandMode: CommandModeParsing.CommandMode.type = CommandModeParsing.CommandMode
+  type CommandMode = ReleaseCommandCli.CommandMode
+  val CommandMode: ReleaseCommandCli.CommandMode.type = ReleaseCommandCli.CommandMode
 
-  type Parsed = CommandModeParsing.Parsed[Arg]
+  type Parsed = ReleaseCommandCli.Parsed[Arg]
   object Parsed {
     def apply(mode: CommandMode, args: Seq[Arg]): Parsed =
-      CommandModeParsing.Parsed(mode, args)
+      ReleaseCommandCli.Parsed(mode, args)
   }
 
   sealed trait Arg
@@ -50,14 +48,14 @@ private[monorepo] object MonorepoCli {
   }
 
   def splitMode(tokens: Seq[String]): (CommandMode, Seq[String]) =
-    CommandModeParsing.splitMode(tokens)
+    ReleaseCommandCli.splitMode(tokens)
 
   def parse(tokens: Seq[String], commandName: String): Either[String, Parsed] =
-    CommandModeParsing.parse[Arg](tokens, commandName, parseArgs)
+    ReleaseCommandCli.parse[Arg](tokens, commandName, parseArgs)
 
   private def parseArgs(tokens: Seq[String], commandName: String): Either[String, Seq[Arg]] = {
     import Arg.*
-    import SharedReleaseFlags.*
+    import ReleaseCommandCli.*
 
     def parseVersionArg(value: String, kind: String)(
         build: (String, String) => Arg
@@ -72,7 +70,7 @@ private[monorepo] object MonorepoCli {
     }
 
     def missingValue(flag: String): Either[String, Seq[Arg]] =
-      Left(CommandModeParsing.missingValue(flag, commandName))
+      Left(ReleaseCommandCli.missingValue(flag, commandName))
 
     def loop(rest: List[String], acc: List[Arg]): Either[String, Seq[Arg]] =
       rest match {
@@ -134,18 +132,18 @@ private[monorepo] object MonorepoCommandParsers {
   def build(projectNames: Seq[String]): Parser[Tokens] =
     validateProjectNames(projectNames) match {
       case Right(normalized) =>
-        ReleaseCommandParserSupport.helpParser |
-          ReleaseCommandParserSupport.checkParser(runParser(normalized)) |
+        ReleaseCommandCli.helpParser |
+          ReleaseCommandCli.checkParser(runParser(normalized)) |
           runParser(normalized)
       case Left(message)     =>
-        ReleaseCommandParserSupport.helpParser | sbt.complete.DefaultParsers.failure(message)
+        ReleaseCommandCli.helpParser | sbt.complete.DefaultParsers.failure(message)
     }
 
   def buildFromState(state: State, commandName: String): Parser[Tokens] =
     resolveProjectNames(state, commandName) match {
       case Right(projectNames) => build(projectNames)
       case Left(message)       =>
-        ReleaseCommandParserSupport.helpParser | sbt.complete.DefaultParsers.failure(message)
+        ReleaseCommandCli.helpParser | sbt.complete.DefaultParsers.failure(message)
     }
 
   def resolveProjectNames(state: State, commandName: String): Either[String, Seq[String]] =
@@ -189,17 +187,17 @@ private[monorepo] object MonorepoCommandParsers {
 
   private def argParser(projectNames: Seq[String]): Parser[Tokens] = {
     val projectNameParser     = namedProjectParser(projectNames)
-    val yesNoFlags            = SharedReleaseFlags.YesNoDefaultTokens.map(
-      valueToken(_, SharedReleaseFlags.YesNoMeta)
+    val yesNoFlags            = ReleaseCommandCli.YesNoDefaultTokens.map(
+      valueToken(_, ReleaseCommandCli.YesNoMeta)
     )
     val builtInParsers        = Seq(
-      bareToken(SharedReleaseFlags.WithDefaultsToken),
-      bareToken(SharedReleaseFlags.SkipTestsToken),
-      bareToken(SharedReleaseFlags.CrossToken),
+      bareToken(ReleaseCommandCli.WithDefaultsToken),
+      bareToken(ReleaseCommandCli.SkipTestsToken),
+      bareToken(ReleaseCommandCli.CrossToken),
       bareToken("all-changed"),
       valueToken("release-version", "<project>=<version>"),
       valueToken("next-version", "<project>=<version>"),
-      valueToken(SharedReleaseFlags.DefaultTagExistsToken, SharedReleaseFlags.DefaultTagExistsMeta)
+      valueToken(ReleaseCommandCli.DefaultTagExistsToken, ReleaseCommandCli.DefaultTagExistsMeta)
     ) ++ yesNoFlags
     val explicitProjectParser =
       (token("project") ~> Space ~> projectNameParser).map(name => Seq("project", name))
