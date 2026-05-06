@@ -11,6 +11,7 @@ import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.steps.ReleaseSteps
+import io.release.core.internal.steps.TagSteps
 import io.release.core.internal.steps.VcsSteps
 import io.release.core.internal.steps.VersionSteps
 import io.release.runtime.ReleaseDecisionDefaults
@@ -106,7 +107,7 @@ class CorePreflightSpec extends CatsEffectSuite {
                            Seq(
                              VcsSteps.checkCleanWorkingDir,
                              VersionSteps.inquireVersions,
-                             VcsSteps.tagRelease
+                             TagSteps.tagRelease
                            ),
                            crossBuild = false
                          )
@@ -249,7 +250,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               nextVersion = "1.2.4-SNAPSHOT"
             ),
             VersionSteps.inquireVersions,
-            VcsSteps.tagRelease
+            TagSteps.tagRelease
           ),
           crossBuild = false
         )
@@ -465,7 +466,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.inquireVersions,
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false
           )
@@ -494,7 +495,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.inquireVersions,
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false,
             tagPreflightInteractive = true
@@ -545,7 +546,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               seedReleaseHashInValidation,
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false
           )
@@ -573,7 +574,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VcsSteps.checkCleanWorkingDir,
               VersionSteps.inquireVersions,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false
           )
@@ -607,7 +608,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.inquireVersions,
               customSetReleaseVersionNameStep,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false
           )
@@ -638,7 +639,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VcsSteps.checkCleanWorkingDir,
               VersionSteps.inquireVersions,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false,
             tagPreflightInteractive = true
@@ -673,7 +674,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.inquireVersions,
               customSetReleaseVersionNameStep,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false,
             tagPreflightInteractive = true
@@ -706,7 +707,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.inquireVersions,
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false
           )
@@ -753,7 +754,7 @@ class CorePreflightSpec extends CatsEffectSuite {
                                  VersionSteps.inquireVersions,
                                  VersionSteps.setReleaseVersion,
                                  VersionSteps.commitReleaseVersion,
-                                 VcsSteps.tagRelease
+                                 TagSteps.tagRelease
                                ),
                                crossBuild = false
                              )
@@ -785,7 +786,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.inquireVersions,
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false,
             tagPreflightInteractive = true
@@ -829,7 +830,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.commitReleaseVersion,
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false
           )
@@ -859,7 +860,7 @@ class CorePreflightSpec extends CatsEffectSuite {
               VersionSteps.commitReleaseVersion,
               VersionSteps.setReleaseVersion,
               VersionSteps.commitReleaseVersion,
-              VcsSteps.tagRelease
+              TagSteps.tagRelease
             ),
             crossBuild = false,
             tagPreflightInteractive = true

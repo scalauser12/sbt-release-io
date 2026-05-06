@@ -4,8 +4,8 @@ import cats.effect.IO
 import cats.syntax.all.*
 import io.release.VcsOps
 import io.release.monorepo.*
+import io.release.monorepo.internal.MonorepoPreflightSegments.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
-import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.monorepo.internal.steps.MonorepoStepHelpers
 import io.release.monorepo.internal.steps.MonorepoVcsSteps
 import io.release.runtime.HookPhases
@@ -13,37 +13,15 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
 import io.release.runtime.command.HelpDocsLinks
 import io.release.runtime.engine.ExecutionEngine
-import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.workflow.VersionWorkflowSupport
 
-/** Preflight support for `releaseIOMonorepo check` and help text without release side effects. */
+/** Preflight support for `releaseIOMonorepo check` and help text without release side effects.
+  *
+  * The deep machinery — phase analysis, snapshot resolution, summary building — lives in
+  * [[MonorepoPreflightSegments]]. This object owns the public surface (types, entry points)
+  * and the high-level `check` orchestration.
+  */
 private[monorepo] object MonorepoPreflight {
-
-  private val SelectionRuntimeHookState: String = "selection depends on runtime hook state"
-  private val ProjectsRuntimeHookState: String  = "projects depend on runtime hook state"
-  private val VersionsRuntimeHookState: String  = "versions depend on runtime hook state"
-  private val TagsRuntimeHookState: String      = "tags depend on runtime hook state"
-  private val TagsRuntimeSetup: String          = "tags depend on runtime/custom version setup"
-
-  private def stepNotInCheckProcess(stepName: String): String =
-    s"$stepName not in check process"
-
-  private def versionsNotResolvedForProject(projectName: String): String =
-    s"versions were not resolved for $projectName"
-
-  private val DetectOrSelectProjectsStep      = MonorepoReleaseSteps.detectOrSelectProjects.name
-  private val InquireVersionsStep             = MonorepoReleaseSteps.inquireVersions.name
-  private val TagReleasesStep                 = MonorepoReleaseSteps.tagReleasesPerProject.name
-  private val SelectionBlockingPhases         = Set(
-    HookPhases.AfterCleanCheck,
-    HookPhases.BeforeSelection
-  )
-  private val ProjectSummaryMutationPhases    =
-    SelectionBlockingPhases ++ Set(HookPhases.AfterSelection)
-  private val VersionResolutionBlockingPhases =
-    ProjectSummaryMutationPhases ++ Set(HookPhases.BeforeVersionResolution)
-  private val TagAffectingPhases              =
-    PreflightPhaseGroups.tagAffectingPhases(VersionResolutionBlockingPhases)
 
   // Re-export the shared runtime ADT under the existing namespace so external callers
   // (tests, MonorepoPreparedSession, etc.) keep referencing `MonorepoPreflight.Evaluation`.
@@ -68,59 +46,6 @@ private[monorepo] object MonorepoPreflight {
       pushSummary: String,
       stepNames: Seq[String]
   )
-
-  private final case class SelectionSnapshot(
-      context: MonorepoContext,
-      selectionMode: Evaluation[SelectionMode],
-      projects: Evaluation[Unit]
-  )
-
-  private final case class VersionSnapshot(
-      context: MonorepoContext,
-      versions: Evaluation[Unit],
-      versionsResolved: Boolean,
-      blockedByRuntimeHookState: Boolean
-  )
-
-  private final case class CheckSteps(
-      shouldResolveSelection: Boolean,
-      shouldResolveVersions: Boolean,
-      shouldPreflightTags: Boolean,
-      selectionDependsOnRuntimeHookState: Boolean,
-      projectsDependOnRuntimeHookState: Boolean,
-      versionsRequireRuntimeHookResolution: Boolean,
-      versionsDependOnPostResolutionRuntimeHookState: Boolean,
-      tagDependsOnRuntimeHookState: Boolean,
-      tagFollowsVersionResolution: Boolean,
-      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean
-  )
-
-  private object CheckSteps {
-    def apply(processPlan: MonorepoProcessPlan): CheckSteps = {
-      val stepNames = processPlan.stepNames
-
-      CheckSteps(
-        shouldResolveSelection = processPlan.shouldResolveSelection,
-        shouldResolveVersions = processPlan.shouldResolveVersions,
-        shouldPreflightTags = processPlan.shouldPreflightTags,
-        selectionDependsOnRuntimeHookState =
-          PreflightPhaseGroups.anyPhasePresent(stepNames, SelectionBlockingPhases),
-        projectsDependOnRuntimeHookState =
-          PreflightPhaseGroups.anyPhasePresent(stepNames, ProjectSummaryMutationPhases),
-        versionsRequireRuntimeHookResolution =
-          PreflightPhaseGroups.anyPhasePresent(stepNames, VersionResolutionBlockingPhases),
-        versionsDependOnPostResolutionRuntimeHookState = PreflightPhaseGroups.anyPhasePresent(
-          stepNames,
-          PreflightPhaseGroups.VersionSummaryMutationPhases
-        ),
-        tagDependsOnRuntimeHookState =
-          PreflightPhaseGroups.anyPhasePresent(stepNames, TagAffectingPhases),
-        tagFollowsVersionResolution = processPlan.builtInTagPreflightFollowsVersionResolution,
-        builtInTagPreflightIncludesReleaseWriteAndCommit =
-          processPlan.builtInTagPreflightIncludesReleaseWriteAndCommit
-      )
-    }
-  }
 
   def helpLines(commandName: String): List[String] =
     List(
@@ -329,139 +254,6 @@ private[monorepo] object MonorepoPreflight {
     // VCS context that later validations and summaries are allowed to depend on.
     if (processPlan.shouldBootstrapVcs) VcsOps.detectAndInit(ctx) else IO.pure(ctx)
 
-  private def resolveSelectionSnapshot(
-      ctx: MonorepoContext,
-      plan: MonorepoReleasePlan,
-      checkSteps: CheckSteps
-  ): IO[SelectionSnapshot] = {
-    def early(modeReason: String, projectsEval: Evaluation[Unit]): SelectionSnapshot =
-      SelectionSnapshot(ctx, Evaluation.NotEvaluated(modeReason), projectsEval)
-
-    if (!checkSteps.shouldResolveSelection)
-      IO.pure(
-        early(stepNotInCheckProcess(DetectOrSelectProjectsStep), Evaluation.Resolved(()))
-      )
-    else if (checkSteps.selectionDependsOnRuntimeHookState)
-      IO.pure(early(SelectionRuntimeHookState, Evaluation.NotEvaluated(ProjectsRuntimeHookState)))
-    else
-      MonorepoPreparation.selectProjects(ctx, plan).map { selected =>
-        SelectionSnapshot(
-          context = selected.context,
-          selectionMode = Evaluation.Resolved(selected.selectionMode),
-          projects =
-            if (checkSteps.projectsDependOnRuntimeHookState)
-              Evaluation.NotEvaluated(ProjectsRuntimeHookState)
-            else Evaluation.Resolved(())
-        )
-      }
-  }
-
-  private def resolveVersionSnapshot(
-      ctx: MonorepoContext,
-      projects: Evaluation[Unit],
-      checkSteps: CheckSteps
-  ): IO[VersionSnapshot] = {
-    val projectsBlocked = projects match {
-      case Evaluation.NotEvaluated(_) => true
-      case Evaluation.Resolved(_)     => false
-    }
-
-    if (!checkSteps.shouldResolveVersions)
-      IO.pure(
-        VersionSnapshot(
-          context = ctx,
-          versions = Evaluation.NotEvaluated(stepNotInCheckProcess(InquireVersionsStep)),
-          versionsResolved = false,
-          blockedByRuntimeHookState = false
-        )
-      )
-    else if (projectsBlocked || checkSteps.versionsRequireRuntimeHookResolution)
-      IO.pure(
-        VersionSnapshot(
-          context = ctx,
-          versions = Evaluation.NotEvaluated(VersionsRuntimeHookState),
-          versionsResolved = false,
-          blockedByRuntimeHookState = true
-        )
-      )
-    else
-      MonorepoPreparation.resolveVersions(ctx, allowPrompts = false).map { updatedCtx =>
-        VersionSnapshot(
-          context = updatedCtx,
-          versions =
-            if (checkSteps.versionsDependOnPostResolutionRuntimeHookState)
-              Evaluation.NotEvaluated(VersionsRuntimeHookState)
-            else Evaluation.Resolved(()),
-          versionsResolved = true,
-          blockedByRuntimeHookState = false
-        )
-      }
-  }
-
-  private def resolveTagSnapshot(
-      ctx: MonorepoContext,
-      versionSnapshot: VersionSnapshot,
-      checkSteps: CheckSteps,
-      tagPreflightInteractive: Boolean
-  ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
-    Evaluation.guarded(
-      !checkSteps.shouldPreflightTags         -> stepNotInCheckProcess(TagReleasesStep),
-      !checkSteps.tagFollowsVersionResolution -> TagsRuntimeSetup,
-      (!versionSnapshot.versionsResolved && versionSnapshot.blockedByRuntimeHookState)
-        -> TagsRuntimeHookState,
-      !versionSnapshot.versionsResolved       -> TagsRuntimeSetup,
-      checkSteps.tagDependsOnRuntimeHookState -> TagsRuntimeHookState
-    ) {
-      preflightTags(
-        ctx,
-        checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit,
-        tagPreflightInteractive
-      ).map(Evaluation.Resolved(_))
-    }
-
-  private def preflightTags(
-      ctx: MonorepoContext,
-      builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean,
-      tagPreflightInteractive: Boolean
-  ): IO[Seq[MonorepoVcsSteps.PreflightTagOutcome]] =
-    PreflightPhaseGroups.dispatchPreflightTag(
-      builtInTagPreflightIncludesReleaseWriteAndCommit,
-      builtInReleaseWritesWouldChange(ctx),
-      _.fold(MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive))(callback =>
-        MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive, callback)
-      )
-    )
-
-  private[monorepo] def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
-    // Sequential traverse: MonorepoVersionFiles.resolveInputs reads sbt state, which is not
-    // safe for concurrent fiber access.
-    ctx.currentProjects.toList
-      .traverse(projectReleaseWriteWouldChange(ctx, _))
-      .map(_.exists(identity))
-
-  private def projectReleaseWriteWouldChange(
-      ctx: MonorepoContext,
-      project: ProjectReleaseInfo
-  ): IO[Boolean] =
-    project.resolvedVersions match {
-      case Some((releaseVersion, _)) =>
-        MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
-          VersionWorkflowSupport.wouldChangeVersionFile(
-            versionInputs.versionFile,
-            releaseVersion,
-            versionInputs.versionFileContents
-          )
-        }
-      case None                      =>
-        IO.raiseError(
-          new IllegalStateException(
-            s"Internal invariant violated: resolved versions missing for ${project.name} " +
-              "during preflight tag-change probe; this branch should only execute when " +
-              "versions are resolved."
-          )
-        )
-    }
-
   private def validateSegment(
       steps: Seq[AnyStep],
       crossBuild: Boolean
@@ -496,39 +288,35 @@ private[monorepo] object MonorepoPreflight {
     notify *> validateSegment(safePrefix, crossBuild)(ctx)
   }
 
-  private def buildSummary(
-      selectionMode: Evaluation[SelectionMode],
-      projects: Evaluation[Unit],
-      versions: Evaluation[Unit],
+  private[monorepo] def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
+    // Sequential traverse: MonorepoVersionFiles.resolveInputs reads sbt state, which is not
+    // safe for concurrent fiber access.
+    ctx.currentProjects.toList
+      .traverse(projectReleaseWriteWouldChange(ctx, _))
+      .map(_.exists(identity))
+
+  private def projectReleaseWriteWouldChange(
       ctx: MonorepoContext,
-      tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]],
-      processPlan: MonorepoProcessPlan,
-      crossBuildEnabled: Boolean
-  ): IO[Summary] = {
-    val publishSummary = CheckModeOutput.publishStatus(
-      publishConfigured = processPlan.publishConfigured,
-      skipPublish = ctx.skipPublish,
-      skippedMessage = "skipped via releaseIOMonorepoBehaviorSkipPublish := true"
-    )
-    val pushSummary    = CheckModeOutput.pushStatus(processPlan.pushConfigured)
-
-    def summaryOf(resolvedProjects: Evaluation[Seq[ProjectSummary]]): Summary =
-      Summary(
-        selectionMode = selectionMode,
-        projects = resolvedProjects,
-        crossBuildEnabled = crossBuildEnabled,
-        publishSummary = publishSummary,
-        pushSummary = pushSummary,
-        stepNames = processPlan.stepNames
-      )
-
-    Evaluation
-      .flatMap(projects)(_ =>
-        renderProjects(ctx.currentProjects, versions, tagOutcomes)
-          .map(Evaluation.Resolved(_))
-      )
-      .map(summaryOf)
-  }
+      project: ProjectReleaseInfo
+  ): IO[Boolean] =
+    project.resolvedVersions match {
+      case Some((releaseVersion, _)) =>
+        MonorepoVersionFiles.resolveInputs(ctx.state, project.ref).flatMap { versionInputs =>
+          VersionWorkflowSupport.wouldChangeVersionFile(
+            versionInputs.versionFile,
+            releaseVersion,
+            versionInputs.versionFileContents
+          )
+        }
+      case None                      =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"Internal invariant violated: resolved versions missing for ${project.name} " +
+              "during preflight tag-change probe; this branch should only execute when " +
+              "versions are resolved."
+          )
+        )
+    }
 
   private[monorepo] def renderProjects(
       projects: Seq[ProjectReleaseInfo],
@@ -575,19 +363,4 @@ private[monorepo] object MonorepoPreflight {
       }
     }
   }
-
-  private def renderProjectVersions(
-      project: ProjectReleaseInfo,
-      versions: Evaluation[Unit]
-  ): Evaluation[ProjectVersions] =
-    versions match {
-      case Evaluation.NotEvaluated(reason) => Evaluation.NotEvaluated(reason)
-      case Evaluation.Resolved(_)          =>
-        project.resolvedVersions match {
-          case Some((releaseVersion, nextVersion)) =>
-            Evaluation.Resolved(ProjectVersions(releaseVersion, nextVersion))
-          case None                                =>
-            Evaluation.NotEvaluated(versionsNotResolvedForProject(project.name))
-        }
-    }
 }
