@@ -81,9 +81,11 @@ private[release] object ExecutionEngine {
       // ctx flows into execute and either bypasses interactive prompts
       // (monorepo) or violates the `beforeVersionResolution` execute-hook
       // contract (both modules). Skipped when validation already failed —
-      // execute will not run anyway, and preserving the seeded snapshot
-      // keeps any future failure-context summary (per-project tentative
-      // resolution result) intact instead of restoring it to `None`.
+      // execute will not run anyway, and the seeded snapshot is left intact
+      // for any future failure-context summary to inspect (today the core
+      // path only logs `failureCause.message`; this leaves room for a
+      // per-project tentative-resolution summary without reshaping the
+      // engine boundary).
       cleanedCtx    = if (validatedCtx.failed) validatedCtx else validatedCtx.clearTentativeSeeds
       resultCtx    <-
         if (cleanedCtx.failed) IO.pure(cleanedCtx)

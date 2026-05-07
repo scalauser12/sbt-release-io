@@ -106,6 +106,15 @@ private[release] object ReleaseVersionWorkflow {
     * delegates CLI-override precedence to `resolveVersionPlan`, and silently swallows
     * resolution errors (debug log) so the real failure surfaces from
     * `inquireVersions.execute` instead of from `releaseIO check`.
+    *
+    * Precondition: `ctx.releaseVersion` (mirrored from `ReleaseKeys.versions` via
+    * `ReleaseContext.initialContext`) must reflect the current run only.
+    * `ReleaseCommandRunner.cleanReleaseState` enforces this at the command boundary
+    * by removing `ReleaseKeys.versions` from `State` before `ReleaseComposer.compose`
+    * runs. Programmatic callers that bypass the command boundary (custom hosts, test
+    * harnesses) must scrub `ReleaseKeys.versions` themselves; otherwise a stale
+    * prior-run value will short-circuit the seeder and `ctx.versions` will silently
+    * carry a value from the previous release.
     */
   def validateInquireVersionsWithContext(ctx: ReleaseContext): IO[ReleaseContext] =
     if (ctx.releaseVersion.isDefined) IO.pure(ctx)

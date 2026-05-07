@@ -46,7 +46,7 @@ class AggregatePublishTargetsSpec extends CatsEffectSuite {
   }
 
   test(
-    "of - stops descent at an intermediate project that disables aggregation"
+    "of - includes a non-aggregating intermediate project but skips its descendants"
   ) {
     threeProjectFixture(
       s"$fixturePrefix-mid-prune",
