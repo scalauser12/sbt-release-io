@@ -160,7 +160,7 @@ private[steps] object MonorepoVersionResolvers {
       versionFile: File,
       includeSelectedMarker: Boolean
   ): IO[Unit] =
-    VcsOps.relativizeToBase(vcs, versionFile).void.recoverWith { case _: IllegalStateException =>
+    VcsOps.relativizeToBase(vcs, versionFile).void.recoverWith { case err: IllegalStateException =>
       IO.blocking {
         val selectedMarker =
           if (includeSelectedMarker) "selected " else ""
@@ -171,7 +171,8 @@ private[steps] object MonorepoVersionResolvers {
           s"Resolved ${selectedMarker}version file for ${project.name} is outside the VCS root: " +
             s"$versionPath (repo root: $repoRoot). " +
             "Configure releaseIOMonorepoVersioningFile to return a file under the repository. " +
-            "See `releaseIOMonorepo help`."
+            "See `releaseIOMonorepo help`.",
+          err
         )
       }.flatMap(IO.raiseError)
     }

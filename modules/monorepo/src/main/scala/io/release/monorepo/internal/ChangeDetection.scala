@@ -132,9 +132,7 @@ private[monorepo] object ChangeDetection {
     for {
       projectScopes     <- IO.blocking(resolveProjectScopes(vcs, projects))
       _                 <- IO.blocking(logUnresolvedProjectScopes(state, projectScopes.unresolved))
-      globalExcludes    <- IO.blocking(
-                             additionalExcludeFiles.flatMap(gitRelativize(vcs.baseDir, _)).toSet
-                           )
+      globalExcludes    <- IO.blocking(resolveGlobalExcludes(vcs, state, additionalExcludeFiles))
       diffScopeByProject =
         projectScopes.resolved.map(r => r.name -> Right(r.path)).toMap ++
           projectScopes.unresolved.map(u => u.name -> Left(u.details)).toMap
@@ -191,6 +189,30 @@ private[monorepo] object ChangeDetection {
       )
     }
 
+  private def resolveGlobalExcludes(
+      vcs: Vcs,
+      state: State,
+      additionalExcludeFiles: Seq[File]
+  ): Set[String] = {
+    val (resolved, unresolved) =
+      additionalExcludeFiles.foldLeft((Vector.empty[String], Vector.empty[File])) {
+        case ((res, unres), file) =>
+          gitRelativize(vcs.baseDir, file) match {
+            case Some(path) => (res :+ path, unres)
+            case None       => (res, unres :+ file)
+          }
+      }
+    if (unresolved.nonEmpty) {
+      val paths = unresolved.map(_.getAbsolutePath).mkString(", ")
+      state.log.warn(
+        s"${ReleaseLogPrefixes.Monorepo} releaseIOMonorepoDetectionExcludes " +
+          s"entries are outside the VCS root '${vcs.baseDir.getAbsolutePath}' " +
+          s"and were ignored: $paths"
+      )
+    }
+    resolved.toSet
+  }
+
   /** Evaluate a single project: look up its tag, check shared paths, diff project files.
     * Returns the updated shared-path cache and whether the project has changed.
     */
@@ -231,7 +253,17 @@ private[monorepo] object ChangeDetection {
   ): IO[ProjectTagLookup] = {
     // "*" is used as a glob wildcard for git tag lookup — tag formatters must preserve it literally.
     val pattern = inputs.tagNameFn(project.name, "*")
-    lookupLastTag(inputs.vcs, pattern).map(result => ProjectTagLookup(pattern, result))
+    if (!pattern.contains("*"))
+      IO.raiseError(
+        new IllegalStateException(
+          s"releaseIOMonorepoVcsTagName for project '${project.name}' produced " +
+            s"'$pattern' from the wildcard probe — formatters must preserve the " +
+            "version argument literally so change detection can build a `git tag` " +
+            "glob. Ensure the formatter interpolates both arguments."
+        )
+      )
+    else
+      lookupLastTag(inputs.vcs, pattern).map(result => ProjectTagLookup(pattern, result))
   }
 
   private def sharedPathsChanged(

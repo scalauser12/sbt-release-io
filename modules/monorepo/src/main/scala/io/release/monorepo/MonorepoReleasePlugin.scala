@@ -267,7 +267,11 @@ object MonorepoReleasePluginAutoImport {
   lazy val releaseIOMonorepoVcsTagName: SettingKey[(String, String) => String] =
     SettingKey[(String, String) => String](
       "releaseIOMonorepoVcsTagName",
-      "Tag name formatter for per-project tags: (name, version) => tag"
+      "Tag name formatter for per-project tags: (name, version) => tag. " +
+        "Change detection invokes the formatter with the version argument set " +
+        "to `\"*\"` to build a `git tag` glob, so formatters must preserve the " +
+        "version argument verbatim — dropping or rewriting it will break " +
+        "change detection."
     )
 
   lazy val releaseIOMonorepoVcsTagComment: SettingKey[(String, String) => String] =

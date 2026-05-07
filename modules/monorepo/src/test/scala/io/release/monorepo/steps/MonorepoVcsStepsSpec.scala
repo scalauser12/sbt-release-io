@@ -30,6 +30,7 @@ import sbt.ProjectRef
 import sbt.State
 import sbt.settingKey
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 class MonorepoVcsStepsSpec extends CatsEffectSuite {
@@ -500,6 +501,62 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("preflightTags - warn when releaseIOMonorepoVcsTagName drops the wildcard arg") {
+    brokenWildcardTagFormatterResource.use { case (_, ctx, buffer) =>
+      MonorepoVcsSteps.preflightTags(ctx, interactive = false).map { outcomes =>
+        val log = buffer.toString("UTF-8")
+        assertEquals(
+          outcomes,
+          Seq(
+            MonorepoVcsSteps.PreflightTagOutcome(
+              "core",
+              "core-release",
+              "available",
+              willCreateTag = true
+            )
+          )
+        )
+        assert(
+          log.contains("releaseIOMonorepoVcsTagName"),
+          s"expected wildcard-probe warning to mention the setting; log=$log"
+        )
+        assert(
+          log.contains("project 'core'"),
+          s"expected wildcard-probe warning to mention the project; log=$log"
+        )
+        assert(
+          log.contains("'core-release'"),
+          s"expected wildcard-probe warning to include the produced pattern; log=$log"
+        )
+      }
+    }
+  }
+
+  test(
+    "preflightTags - tolerate releaseIOMonorepoVcsTagName that throws on the wildcard probe"
+  ) {
+    throwingWildcardTagFormatterResource.use { case (_, ctx, buffer) =>
+      MonorepoVcsSteps.preflightTags(ctx, interactive = false).map { outcomes =>
+        val log = buffer.toString("UTF-8")
+        assertEquals(
+          outcomes,
+          Seq(
+            MonorepoVcsSteps.PreflightTagOutcome(
+              "core",
+              "core-v1.0.0",
+              "available",
+              willCreateTag = true
+            )
+          )
+        )
+        assert(
+          !log.contains("drops the version argument"),
+          s"expected no wildcard-probe warning when the formatter throws on '*'; log=$log"
+        )
+      }
+    }
+  }
+
   test("preflightTags - use the configured command name in tag conflict guidance") {
     perProjectTagContextResource.use { case (repo, _, baseCtx) =>
       val ctx = MonorepoSpecSupport.withPlan(
@@ -817,6 +874,119 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             interactive = false,
             projects = Seq(project)
           )
+        )
+      }
+    }
+
+  private val brokenWildcardTagFormatterResource
+      : Resource[IO, (File, MonorepoContext, ByteArrayOutputStream)] =
+    gitRepoWithVcsResource { repo =>
+      sbt.IO.write(new File(repo, "file.txt"), "initial")
+      val coreBase = new File(repo, "core")
+      coreBase.mkdirs()
+      sbt.IO.write(new File(coreBase, "version.sbt"), """version := "1.0.0-SNAPSHOT"""" + "\n")
+    }.evalMap { case (repo, vcs) =>
+      IO.blocking {
+        val coreBase = new File(repo, "core")
+        val projects = Seq(
+          rootProject(
+            repo,
+            aggregateIds = Seq("core"),
+            settings = Seq(
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName    := (
+                (name: String, _: String) => s"$name-release"
+              ),
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment := (
+                (name: String, ver: String) => s"Release $name $ver"
+              ),
+              io.release.ReleaseSharedKeys.releaseIOVcsSign                   := false
+            )
+          ),
+          versionedProject(coreBase, "core")
+        )
+        val buffered = TestSupport.bufferedState(repo)
+        val state    = sbt.TestBuildState(
+          baseState = buffered.state,
+          baseDir = repo,
+          projects = projects,
+          currentProjectId = Some("root")
+        )
+        val project  = projectInfo(
+          state,
+          projects,
+          "core",
+          versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")
+        )
+
+        (
+          repo,
+          MonorepoContext(
+            state = state,
+            vcs = Some(vcs),
+            interactive = false,
+            projects = Seq(project)
+          ),
+          buffered.consoleBuffer
+        )
+      }
+    }
+
+  private val throwingWildcardTagFormatterResource
+      : Resource[IO, (File, MonorepoContext, ByteArrayOutputStream)] =
+    gitRepoWithVcsResource { repo =>
+      sbt.IO.write(new File(repo, "file.txt"), "initial")
+      val coreBase = new File(repo, "core")
+      coreBase.mkdirs()
+      sbt.IO.write(new File(coreBase, "version.sbt"), """version := "1.0.0-SNAPSHOT"""" + "\n")
+    }.evalMap { case (repo, vcs) =>
+      IO.blocking {
+        val coreBase = new File(repo, "core")
+        val projects = Seq(
+          rootProject(
+            repo,
+            aggregateIds = Seq("core"),
+            settings = Seq(
+              // Formatter that strict-parses the version segment — succeeds on
+              // real semvers, throws on the wildcard "*" probe. Mirrors a
+              // common build-side pattern (validate before tagging).
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName    := (
+                (name: String, ver: String) =>
+                  io.release.version
+                    .Version(ver)
+                    .map(v => s"$name-v${v.render}")
+                    .getOrElse(throw new IllegalArgumentException(s"not a semver: $ver"))
+              ),
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagComment := (
+                (name: String, ver: String) => s"Release $name $ver"
+              ),
+              io.release.ReleaseSharedKeys.releaseIOVcsSign                   := false
+            )
+          ),
+          versionedProject(coreBase, "core")
+        )
+        val buffered = TestSupport.bufferedState(repo)
+        val state    = sbt.TestBuildState(
+          baseState = buffered.state,
+          baseDir = repo,
+          projects = projects,
+          currentProjectId = Some("root")
+        )
+        val project  = projectInfo(
+          state,
+          projects,
+          "core",
+          versions = Some("1.0.0" -> "1.1.0-SNAPSHOT")
+        )
+
+        (
+          repo,
+          MonorepoContext(
+            state = state,
+            vcs = Some(vcs),
+            interactive = false,
+            projects = Seq(project)
+          ),
+          buffered.consoleBuffer
         )
       }
     }

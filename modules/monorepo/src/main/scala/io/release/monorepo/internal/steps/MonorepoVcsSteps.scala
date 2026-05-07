@@ -18,6 +18,7 @@ import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.StepHelpers.required
+import sbt.State
 import io.release.vcs.GitPushSupport
 import io.release.vcs.RemoteTagProbe
 import io.release.vcs.TagConflictResolver
@@ -176,12 +177,48 @@ private[monorepo] object MonorepoVcsSteps {
           required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
             case (releaseVer, _) =>
               val rendered = settings.perProjectTagName(project.name, releaseVer)
-              preflightTagTarget(vcs)
-                .flatMap(target =>
-                  preflightCreateTag(ctx, vcs, rendered, target, project.name, interactive)
-                )
+              warnIfTagFormatterDropsWildcard(
+                ctx.state,
+                project.name,
+                settings.perProjectTagName
+              ) *>
+                preflightTagTarget(vcs)
+                  .flatMap(target =>
+                    preflightCreateTag(ctx, vcs, rendered, target, project.name, interactive)
+                  )
           }
         }
+      }
+    }
+
+  /** Soft-warn when `releaseIOMonorepoVcsTagName` drops the version argument.
+    *
+    * Change detection probes the formatter with `"*"` to build a `git tag` glob; a
+    * formatter that ignores the version argument silently breaks detection. The
+    * hard contract lives in `ChangeDetection.projectTagLookup`; this preflight-side
+    * warning is defense-in-depth so a build that bypasses change detection still
+    * sees the contract violation.
+    *
+    * The probe is guarded — formatters that parse/normalize real semvers can throw
+    * on `"*"`. We treat a throwing probe as no signal: don't abort the preflight
+    * and don't warn (change detection enforces the hard contract when it runs).
+    */
+  private def warnIfTagFormatterDropsWildcard(
+      state: State,
+      projectName: String,
+      perProjectTagName: (String, String) => String
+  ): IO[Unit] =
+    IO.blocking {
+      scala.util.Try(perProjectTagName(projectName, "*")).toOption match {
+        case Some(wildcardProbe) if !wildcardProbe.contains("*") =>
+          state.log.warn(
+            s"${ReleaseLogPrefixes.Monorepo} releaseIOMonorepoVcsTagName for " +
+              s"project '$projectName' drops the version argument when probed " +
+              s"with the wildcard '*' (produced: '$wildcardProbe'). " +
+              "Change detection's git-tag glob lookup will not work for this " +
+              "project. Update the formatter to interpolate both arguments."
+          )
+        case _                                                   => ()
       }
     }
 
@@ -227,37 +264,42 @@ private[monorepo] object MonorepoVcsSteps {
         case (releaseVer, _) =>
           MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
             val rendered = settings.perProjectTagName(project.name, releaseVer)
-            tagPreflightTarget(ctx, vcs).flatMap { target =>
-              preflightCreateTag(
-                ctx,
-                vcs,
-                rendered,
-                target,
-                project.name,
-                ctx.interactive
-              ).flatTap(outcome =>
-                // Probe the FINAL tag name resolved by `preflightCreateTag`
-                // (post-retry / post-prompt). When `default-tag-exists-answer
-                // <newTag>` redirects from `rendered` to the replacement, the
-                // outcome's `rendered` field carries the replacement; passing
-                // the original `rendered` would let the gate short-circuit
-                // (the original IS in the local repo — that is what triggered
-                // the retry) and miss a remote-only conflict on the
-                // replacement.
-                //
-                // The gate is the resolver's `willCreateTag` verdict, not
-                // local existence: `default-tag-exists-answer o` (overwrite)
-                // also triggers a tag ref update at push time, so the probe
-                // must run even when the tag exists locally.
-                remoteTagPreflightForPreflightStep(
+            warnIfTagFormatterDropsWildcard(
+              ctx.state,
+              project.name,
+              settings.perProjectTagName
+            ) *>
+              tagPreflightTarget(ctx, vcs).flatMap { target =>
+                preflightCreateTag(
                   ctx,
                   vcs,
-                  outcome.rendered,
+                  rendered,
+                  target,
                   project.name,
-                  outcome.willCreateTag
+                  ctx.interactive
+                ).flatTap(outcome =>
+                  // Probe the FINAL tag name resolved by `preflightCreateTag`
+                  // (post-retry / post-prompt). When `default-tag-exists-answer
+                  // <newTag>` redirects from `rendered` to the replacement, the
+                  // outcome's `rendered` field carries the replacement; passing
+                  // the original `rendered` would let the gate short-circuit
+                  // (the original IS in the local repo — that is what triggered
+                  // the retry) and miss a remote-only conflict on the
+                  // replacement.
+                  //
+                  // The gate is the resolver's `willCreateTag` verdict, not
+                  // local existence: `default-tag-exists-answer o` (overwrite)
+                  // also triggers a tag ref update at push time, so the probe
+                  // must run even when the tag exists locally.
+                  remoteTagPreflightForPreflightStep(
+                    ctx,
+                    vcs,
+                    outcome.rendered,
+                    project.name,
+                    outcome.willCreateTag
+                  )
                 )
-              )
-            }
+              }
           }
       }
     }

@@ -425,4 +425,47 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
       }
     }
   }
+
+  test("detectChangedProjects - fail when tagNameFn drops the wildcard version arg") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core"))
+        sbt.IO.write(
+          new File(repo, "core/version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val project                                     = nestedProject(repo, "core")
+        // Formatter that drops the version argument — simulates a misconfigured
+        // releaseIOMonorepoVcsTagName whose output cannot be used as a `git tag` glob.
+        val brokenFormatter: (String, String) => String =
+          (name, _) => s"$name-release"
+
+        detectChanged(vcs, Seq(project), env.state, tagNameFn = brokenFormatter).attempt.map {
+          case Left(err: IllegalStateException) =>
+            val msg = err.getMessage
+            assert(
+              msg.contains("releaseIOMonorepoVcsTagName"),
+              s"expected message to mention the setting; got: $msg"
+            )
+            assert(msg.contains("core"), s"expected message to mention project name; got: $msg")
+            assert(
+              msg.contains("core-release"),
+              s"expected message to include the malformed pattern; got: $msg"
+            )
+          case other                            =>
+            fail(s"Expected IllegalStateException; got $other")
+        }
+      }
+    }
+  }
 }

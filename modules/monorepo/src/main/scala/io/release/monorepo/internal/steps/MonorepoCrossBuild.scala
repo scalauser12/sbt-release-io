@@ -127,6 +127,14 @@ private[monorepo] object MonorepoCrossBuild {
     * ref whose `crossScalaVersions` contains it — switching that whole compatible set
     * per iteration is sbt's stock `Cross.switchVersion` behavior so transitive deps stay
     * at a coherent Scala version without us walking the graph by hand.
+    *
+    * Unlike [[runCrossBuildForProjectTracked]] this variant has no failure-path
+    * session restore: `MonorepoContext` is threaded immutably through the fold,
+    * so on a per-iteration failure the in-progress context is simply dropped and
+    * the error propagates. The tracked variant needs an explicit failure restore
+    * because its external `TrackedContextHandle` is mutable and would otherwise
+    * leave the entry session unwound. The success path here still restores the
+    * entry session via `restoreEntryScalaSession`.
     */
   private def runCrossBuildForProject(
       ctx: MonorepoContext,
