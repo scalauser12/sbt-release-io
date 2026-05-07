@@ -45,4 +45,24 @@ private[release] trait ReleaseCtx {
 
   private[release] def useDefaults: Boolean =
     executionFlags.exists(_.useDefaults)
+
+  /** Drop validate-time tentative version seeds before execute starts.
+    *
+    * `validateInquireVersionsWithContext` (core/monorepo) seeds tentative
+    * non-prompting version values into the validated context so that
+    * `precondition` hooks at `afterVersionResolution` and later phases observe
+    * versions during `releaseIO check`. Without this hook, that seed would
+    * flow into the execute phase and either bypass interactive prompts
+    * (monorepo `inquireVersions.execute` short-circuits on
+    * `project.resolvedVersions.isDefined`) or violate the
+    * `beforeVersionResolution` execute-hook contract (those hooks must see
+    * `releaseVersion == None`). [[io.release.runtime.engine.ExecutionEngine]]
+    * calls this at the validate→execute boundary in both orchestration modes.
+    *
+    * Default is a no-op; overrides in [[io.release.ReleaseContext]] and
+    * `MonorepoContext` consult a metadata marker set by the seeders so only
+    * tentatively-seeded values are dropped. Explicit values from CLI overrides
+    * or hooks are preserved.
+    */
+  private[release] def clearTentativeSeeds: Self = this.asInstanceOf[Self]
 }

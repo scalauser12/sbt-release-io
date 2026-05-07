@@ -346,6 +346,76 @@ class VcsStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "tagRelease.execute - propagate the release tag to every aggregated project ref so " +
+      "child artifacts' MANIFEST.MF carries Vcs-Release-Tag"
+  ) {
+    ReleaseTestSupport.gitRepoWithCommitResource(s"$fixturePrefix-aggregate-tag").use {
+      case (repo, vcs) =>
+        IO.blocking(new File(repo, "child").mkdirs()).flatMap { _ =>
+          val childBase    = new File(repo, "child")
+          val state        = TestSupport.loadedState(
+            repo,
+            Seq(
+              sbt
+                .Project("root", repo)
+                .aggregate(sbt.LocalProject("child"))
+                .settings(
+                  releaseIOInternalReleaseHash                                 := None,
+                  releaseIOInternalReleaseTag                                  := None,
+                  io.release.ReleaseSharedKeys.releaseIOPublishAction          := (()),
+                  io.release.ReleasePluginIO.autoImport.releaseIOVcsSign       := false,
+                  io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName    := "v1.0.1",
+                  io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment := "Releasing 1.0.1"
+                ),
+              sbt
+                .Project("child", childBase)
+                .settings(
+                  releaseIOInternalReleaseHash                                 := None,
+                  releaseIOInternalReleaseTag                                  := None,
+                  io.release.ReleaseSharedKeys.releaseIOPublishAction          := (())
+                )
+            ),
+            currentProjectId = Some("root")
+          )
+          val canonicalUri = repo.getCanonicalFile.toURI
+          val rootRef      = sbt.ProjectRef(canonicalUri, "root")
+          val childRef     = sbt.ProjectRef(canonicalUri, "child")
+
+          for {
+            result <- TagSteps.tagRelease.execute(
+                        ReleaseContext(state = state, vcs = Some(vcs), interactive = false)
+                      )
+          } yield {
+            val targets   = io.release.runtime.sbt.AggregatePublishTargets
+              .fromState(result.state, io.release.ReleaseSharedKeys.releaseIOPublishAction)
+            // Sanity check the aggregation expansion in the synthetic state — if this
+            // ever drops the child, the manifest assertions below would silently
+            // become equivalent to the single-project test.
+            assertEquals(
+              targets.toSet,
+              Set(rootRef, childRef),
+              s"AggregatePublishTargets should include both root and child but got: $targets"
+            )
+            val extracted = io.release.runtime.sbt.SbtRuntime.extracted(result.state)
+            val rootTag   = extracted.getOpt(rootRef / releaseIOInternalReleaseTag).flatten
+            val childTag  = extracted.getOpt(childRef / releaseIOInternalReleaseTag).flatten
+            assertEquals(
+              rootTag,
+              Some("v1.0.1"),
+              "root project should see its own release tag"
+            )
+            assertEquals(
+              childTag,
+              Some("v1.0.1"),
+              "aggregated child project should see the same release tag so its " +
+                "MANIFEST.MF carries Vcs-Release-Tag"
+            )
+          }
+        }
+    }
+  }
+
   test("tagRelease.execute - do not create a tag when releaseIOVcsTagName reports FailureCommand") {
     ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
       val marker = new File(repo, "tag-name-task.marker")

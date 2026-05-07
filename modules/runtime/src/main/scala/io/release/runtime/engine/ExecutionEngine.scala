@@ -76,9 +76,15 @@ private[release] object ExecutionEngine {
   ): IO[C] =
     for {
       validatedCtx <- runValidations(logPrefix, steps, startCtx)
+      // Drop validate-time tentative version seeds before any execute step
+      // runs. See `ReleaseCtx.clearTentativeSeeds`. Without this the seeded
+      // ctx flows into execute and either bypasses interactive prompts
+      // (monorepo) or violates the `beforeVersionResolution` execute-hook
+      // contract (both modules).
+      cleanedCtx    = validatedCtx.clearTentativeSeeds
       resultCtx    <-
-        if (validatedCtx.failed) IO.pure(validatedCtx)
-        else runActionPhase(steps)(armOnFailure(validatedCtx))
+        if (cleanedCtx.failed) IO.pure(cleanedCtx)
+        else runActionPhase(steps)(armOnFailure(cleanedCtx))
     } yield resultCtx
 
   def runSequentialValidateThenExecute[C <: ReleaseCtx { type Self = C }](
@@ -91,9 +97,14 @@ private[release] object ExecutionEngine {
         else {
           for {
             validatedCtx <- step.validate(currentCtx)
+            // Symmetric clearance with `runMainSegment` above. No version-
+            // seeding step runs in the sequential path today, but keeping
+            // the contract consistent here means future seeders cannot
+            // accidentally bleed validate-time state into per-step execute.
+            cleanedCtx    = validatedCtx.clearTentativeSeeds
             nextCtx      <-
-              if (validatedCtx.failed) IO.pure(validatedCtx)
-              else runActionPhase(Seq(step))(armOnFailure(validatedCtx))
+              if (cleanedCtx.failed) IO.pure(cleanedCtx)
+              else runActionPhase(Seq(step))(armOnFailure(cleanedCtx))
           } yield nextCtx
         }
       }

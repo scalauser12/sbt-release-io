@@ -241,27 +241,57 @@ private[release] object CorePreflight {
         )
       )
     else
-      VersionSteps.resolveVersions(ctx, allowPrompts = false).map { case (updatedCtx, resolved) =>
-        val summary =
-          if (checkSteps.versionsDependOnPostResolutionRuntimeHookState)
-            Evaluation.NotEvaluated(Messages.VersionsRuntimeHookState)
-          else
-            Evaluation.Resolved(
-              VersionsValue(
-                versionFile = resolved.versionFile,
-                currentVersion = resolved.currentVersion,
-                releaseVersion = resolved.releaseVersion,
-                nextVersion = resolved.nextVersion
+      // Prefer the cached seed installed by `inquire-versions.validate`'s
+      // `validateInquireVersionsWithContext` to avoid a second round of
+      // `releaseIOVersioningReleaseVersion` / `releaseIOVersioningNextVersion`
+      // task evaluation under `releaseIO check`. Custom resolver tasks may
+      // have side effects (logging, remote fetches) that should not run twice
+      // per check. Falls through to the full resolver if the seed is absent
+      // (e.g. seeder swallowed an error or
+      // `versionsDependOnPostResolutionRuntimeHookState` would invalidate
+      // the seed anyway — but we still consult ctx.versions because the
+      // summary is rendered as `NotEvaluated` in that branch and the cached
+      // values are unused).
+      VersionSteps.resolveVersionsFromSeed(ctx).flatMap {
+        case Some((updatedCtx, resolved)) =>
+          IO.pure(buildSnapshot(checkSteps, updatedCtx, resolved))
+        case None                         =>
+          VersionSteps
+            .resolveVersions(ctx, allowPrompts = false)
+            .map { case (updatedCtx, resolved) =>
+              buildSnapshot(
+                checkSteps,
+                updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion),
+                resolved
               )
-            )
-
-        VersionSnapshot(
-          context = updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion),
-          summary = summary,
-          versionsResolved = true,
-          blockedByRuntimeHookState = false
-        )
+            }
       }
+
+  private def buildSnapshot(
+      checkSteps: CheckSteps,
+      ctx: ReleaseContext,
+      resolved: VersionSteps.ResolvedVersions
+  ): VersionSnapshot = {
+    val summary =
+      if (checkSteps.versionsDependOnPostResolutionRuntimeHookState)
+        Evaluation.NotEvaluated(Messages.VersionsRuntimeHookState)
+      else
+        Evaluation.Resolved(
+          VersionsValue(
+            versionFile = resolved.versionFile,
+            currentVersion = resolved.currentVersion,
+            releaseVersion = resolved.releaseVersion,
+            nextVersion = resolved.nextVersion
+          )
+        )
+
+    VersionSnapshot(
+      context = ctx,
+      summary = summary,
+      versionsResolved = true,
+      blockedByRuntimeHookState = false
+    )
+  }
 
   private def resolveTagSummary(
       snapshot: VersionSnapshot,

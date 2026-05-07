@@ -1,0 +1,37 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Run with `with-defaults` and NO per-project release-version/next-version on the CLI.
+# Project versions come from the default version-task computation (strip -SNAPSHOT,
+# bump to next snapshot). The validate-time tentative seed populates project.versions
+# but must be cleared at the boundary so:
+#   1. inquireVersions.execute re-resolves and updates per-project versions normally.
+#   2. beforeVersionResolution execute hooks observe `None`.
+> releaseIOMonorepo core api with-defaults
+
+# Verify both projects bumped to the default next snapshot (built-in bump produces
+# `0.1.0 -> 0.1.1-SNAPSHOT` from `0.1.0-SNAPSHOT`).
+$ exec grep -q "0.1.1-SNAPSHOT" core/version.sbt
+$ exec grep -q "0.1.1-SNAPSHOT" api/version.sbt
+
+# Verify both project tags exist (per-project tagging happens after inquireVersions
+# successfully resolved; if the tentative seed had bled through, the tags would
+# still land but the prompts/late hooks would have been bypassed).
+$ exec git rev-parse core/v0.1.0
+$ exec git rev-parse api/v0.1.0
+
+# beforeVersionResolution.execute observed `None` for both projects:
+$ exec grep -qF release=None target/before-version-resolution-execute-core.txt
+$ exec grep -qF next=None target/before-version-resolution-execute-core.txt
+$ exec grep -qF release=None target/before-version-resolution-execute-api.txt
+$ exec grep -qF next=None target/before-version-resolution-execute-api.txt
+
+# afterVersionResolution.execute observed the freshly resolved versions:
+$ exec grep -qF release=Some(0.1.0) target/after-version-resolution-execute-core.txt
+$ exec grep -qF next=Some(0.1.1-SNAPSHOT) target/after-version-resolution-execute-core.txt
+$ exec grep -qF release=Some(0.1.0) target/after-version-resolution-execute-api.txt
+$ exec grep -qF next=Some(0.1.1-SNAPSHOT) target/after-version-resolution-execute-api.txt

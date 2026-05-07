@@ -48,6 +48,125 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
       }
   }
 
+  test(
+    "clearTentativeSeeds - drop per-project versions that were tentatively seeded by " +
+      "validateInquireVersionsWithContext"
+  ) {
+    fixtureResource.use { fixture =>
+      val ctx     = fixture.context(Seq("core"))
+      val project = fixture.projectInfo("core")
+
+      MonorepoVersionSteps.inquireVersions.validate(ctx, project).map { seeded =>
+        val seededProject = MonorepoSpecSupport.projectNamed(seeded.projects, "core")
+        assertEquals(
+          seededProject.resolvedVersions,
+          Some(("0.1.0", "0.2.0-SNAPSHOT")),
+          "validateInquireVersionsWithContext seeds tentative non-prompting versions"
+        )
+        assert(
+          seeded
+            .metadata(MonorepoContext.tentativelySeededProjectsKey)
+            .exists(_.contains(project.ref)),
+          "the seeder must record the project ref so the boundary clearance knows what to drop"
+        )
+
+        val cleared        = seeded.clearTentativeSeeds
+        val clearedProject = MonorepoSpecSupport.projectNamed(cleared.projects, "core")
+        assertEquals(
+          clearedProject.versions,
+          None,
+          "clearTentativeSeeds drops project.versions for refs that were tentatively seeded — " +
+            "without this, inquireVersions.execute would short-circuit on resolvedVersions and " +
+            "bypass interactive prompts"
+        )
+        assertEquals(
+          cleared.metadata(MonorepoContext.tentativelySeededProjectsKey),
+          None,
+          "the marker must be removed so the clearance is idempotent"
+        )
+      }
+    }
+  }
+
+  test(
+    "clearTentativeSeeds - restore the partial CLI override that the seeder overwrote " +
+      "with a full tentative pair"
+  ) {
+    fixtureResource.use { fixture =>
+      // Mimic `release-version core=5.0.0` (no next-version) — partial pair with the
+      // next side empty. resolvedVersions is None (both must be non-empty), so the
+      // seeder runs, overwrites project.versions with the full tentative pair, and
+      // marks. The boundary clear must put the partial pair back so execute treats it
+      // as the input override and only resolves the missing side.
+      val ctx     = fixture.context(
+        Seq("core"),
+        versionsById = Map("core" -> ("5.0.0", ""))
+      )
+      val project = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      MonorepoVersionSteps.inquireVersions.validate(ctx, project).map { seeded =>
+        val seededProject = MonorepoSpecSupport.projectNamed(seeded.projects, "core")
+        // Tentative full pair installed by the seeder.
+        assert(
+          seededProject.resolvedVersions.isDefined,
+          "seeder should fill the missing side from the partial override"
+        )
+        assert(
+          seeded
+            .metadata(MonorepoContext.tentativelySeededProjectsKey)
+            .exists(_.contains(project.ref)),
+          "partial overrides go through the seed path and must be marked"
+        )
+
+        val cleared        = seeded.clearTentativeSeeds
+        val clearedProject = MonorepoSpecSupport.projectNamed(cleared.projects, "core")
+        assertEquals(
+          clearedProject.versions,
+          Some(("5.0.0", "")),
+          "clearTentativeSeeds must restore the original partial override so execute " +
+            "honors the user-supplied side and computes the missing one"
+        )
+      }
+    }
+  }
+
+  test(
+    "clearTentativeSeeds - preserve project.versions installed by CLI override " +
+      "(no marker means no clear)"
+  ) {
+    fixtureResource.use { fixture =>
+      // Pre-populated explicit versions for `core` (mimics `release-version core=9.9.9
+      // next-version core=10.0.0-SNAPSHOT` on the CLI).
+      val ctx     = fixture.context(
+        Seq("core"),
+        versionsById = Map("core" -> ("9.9.9", "10.0.0-SNAPSHOT"))
+      )
+      val project = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      MonorepoVersionSteps.inquireVersions.validate(ctx, project).map { seeded =>
+        val seededProject = MonorepoSpecSupport.projectNamed(seeded.projects, "core")
+        assertEquals(
+          seededProject.versions,
+          Some(("9.9.9", "10.0.0-SNAPSHOT")),
+          "explicit pre-population is preserved by the seeder's short-circuit branch"
+        )
+        assertEquals(
+          seeded.metadata(MonorepoContext.tentativelySeededProjectsKey),
+          None,
+          "explicit pre-population must leave the tentative-seed marker absent"
+        )
+
+        val cleared        = seeded.clearTentativeSeeds
+        val clearedProject = MonorepoSpecSupport.projectNamed(cleared.projects, "core")
+        assertEquals(
+          clearedProject.versions,
+          Some(("9.9.9", "10.0.0-SNAPSHOT")),
+          "clearTentativeSeeds must NOT touch projects whose versions were not tentatively seeded"
+        )
+      }
+    }
+  }
+
   test("inquireVersions.execute - resolve per-project release and next versions") {
     fixtureResource.use { fixture =>
       val ctx     = MonorepoSpecSupport.withPlan(

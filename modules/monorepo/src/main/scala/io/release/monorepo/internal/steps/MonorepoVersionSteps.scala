@@ -18,6 +18,7 @@ private[monorepo] object MonorepoVersionSteps {
     ProcessStep.PerItem(
       name = "inquire-versions",
       validate = MonorepoVersionWorkflow.validateInquireVersions,
+      validateWithContext = Some(MonorepoVersionWorkflow.validateInquireVersionsWithContext),
       roles = Set(BuiltInStepRole.ResolveVersions),
       execute = MonorepoVersionWorkflow.inquireVersions
     )

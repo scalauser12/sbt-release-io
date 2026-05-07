@@ -334,6 +334,415 @@ class VersionStepsSpec extends CatsEffectSuite {
       }
   }
 
+  test(
+    "inquireVersions.validate - seed ctx.releaseVersion / nextVersion via tentative " +
+      "non-prompting resolution"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-tentative-seed",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        val versionFile = new File(repo, "version.sbt")
+        val state       = TestSupport.loadedState(
+          repo,
+          Seq(
+            Project("root", repo).settings(
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps
+                .defaultWriteVersion(useGlobalVersion = true),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+              releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+            )
+          )
+        )
+        val ctx         = promptingContext(state)
+
+        VersionSteps.inquireVersions.validate(ctx).map { seeded =>
+          assertEquals(seeded.releaseVersion, Some("0.1.0"))
+          assertEquals(seeded.nextVersion, Some("0.2.0-SNAPSHOT"))
+        }
+      }
+  }
+
+  test(
+    "inquireVersions.validate - skip tentative resolution when ctx.releaseVersion is already set"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-tentative-skip",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        val versionFile         = new File(repo, "version.sbt")
+        val resolverInvocations = new AtomicInteger(0)
+        val state               = TestSupport.loadedState(
+          repo,
+          Seq(
+            Project("root", repo).settings(
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps
+                .defaultWriteVersion(useGlobalVersion = true),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := { ver =>
+                resolverInvocations.incrementAndGet()
+                ver.stripSuffix("-SNAPSHOT")
+              },
+              releaseIOVersioningNextVersion    := { _ =>
+                resolverInvocations.incrementAndGet()
+                "0.2.0-SNAPSHOT"
+              }
+            )
+          )
+        )
+        val ctx                 = promptingContext(state).withVersions("9.9.9", "10.0.0-SNAPSHOT")
+
+        VersionSteps.inquireVersions.validate(ctx).map { seeded =>
+          assertEquals(seeded.releaseVersion, Some("9.9.9"))
+          assertEquals(seeded.nextVersion, Some("10.0.0-SNAPSHOT"))
+          assertEquals(
+            resolverInvocations.get(),
+            0,
+            "release/next version tasks must not run when versions are already pre-populated"
+          )
+        }
+      }
+  }
+
+  test(
+    "resolveVersionsFromSeed - reuse ctx.versions without re-evaluating the resolver tasks"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-from-seed",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        val versionFile         = new File(repo, "version.sbt")
+        val resolverInvocations = new AtomicInteger(0)
+        val state               = TestSupport.loadedState(
+          repo,
+          Seq(
+            Project("root", repo).settings(
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps
+                .defaultWriteVersion(useGlobalVersion = true),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := { ver =>
+                resolverInvocations.incrementAndGet()
+                ver.stripSuffix("-SNAPSHOT")
+              },
+              releaseIOVersioningNextVersion    := { _ =>
+                resolverInvocations.incrementAndGet()
+                "0.2.0-SNAPSHOT"
+              }
+            )
+          )
+        )
+        val ctx                 = promptingContext(state).withVersions("9.9.9", "10.0.0-SNAPSHOT")
+
+        VersionSteps.resolveVersionsFromSeed(ctx).map { result =>
+          assert(result.isDefined, "expected a Some when ctx.versions is set")
+          val (returnedCtx, resolved) = result.get
+          assertEquals(resolved.releaseVersion, "9.9.9")
+          assertEquals(resolved.nextVersion, "10.0.0-SNAPSHOT")
+          assertEquals(resolved.versionFile, versionFile)
+          assertEquals(resolved.currentVersion, "0.1.0-SNAPSHOT")
+          assertEquals(returnedCtx.versions, ctx.versions)
+          assertEquals(
+            resolverInvocations.get(),
+            0,
+            "resolveVersionsFromSeed must NOT call the release/next version sbt tasks; " +
+              "the whole point of the helper is to short-circuit the second resolver " +
+              "evaluation under `releaseIO check`"
+          )
+        }
+      }
+  }
+
+  test("resolveVersionsFromSeed - return None when ctx.versions is empty") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val state = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+              )
+            )
+          )
+          val ctx   = promptingContext(state)
+
+          VersionSteps.resolveVersionsFromSeed(ctx).map { result =>
+            assertEquals(
+              result,
+              None,
+              "resolveVersionsFromSeed returns None when ctx.versions is empty so the " +
+                "caller falls through to the full resolver"
+            )
+          }
+      }
+    }
+  }
+
+  test(
+    "inquireVersions.validate - warn (not debug) when tentative resolution fails so the " +
+      "operator can attribute downstream `precondition` failures"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-tentative-warn",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        val unparseable = new File(repo, "broken-version.sbt")
+        IO.blocking {
+          sbt.IO.write(unparseable, """lazy val root = project""" + "\n")
+          unparseable
+        }.flatMap { versionFile =>
+          val buffered = TestSupport.bufferedState(repo)
+          val state    = sbt.TestBuildState(
+            baseState = buffered.state,
+            baseDir = repo,
+            projects = Seq(
+              Project("root", repo).settings(
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+              )
+            ),
+            currentProjectId = Some("root")
+          )
+          val ctx      = promptingContext(state)
+
+          for {
+            seeded <- VersionSteps.inquireVersions.validate(ctx)
+            log    <- IO.blocking(buffered.consoleBuffer.toString("UTF-8"))
+          } yield {
+            assertEquals(seeded.releaseVersion, None)
+            assertEquals(seeded.nextVersion, None)
+            // The warn message must land in the buffered log (default sbt
+            // threshold is INFO, so debug would be invisible to operators).
+            assert(
+              log.contains("Tentative version seed skipped"),
+              s"expected warn line in buffered log; got:\n$log"
+            )
+            assert(
+              log.contains("Could not parse version") ||
+                log.contains("broken-version.sbt"),
+              s"expected the underlying error message in the warn line; got:\n$log"
+            )
+          }
+        }
+      }
+  }
+
+  test(
+    "inquireVersions.validate - degrade to original ctx when tentative resolution fails"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-tentative-failure",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        // Point at a version file that does not parse so resolveVersions raises.
+        val unparseable = new File(repo, "broken-version.sbt")
+        IO.blocking {
+          sbt.IO.write(unparseable, """lazy val root = project""" + "\n")
+          unparseable
+        }.flatMap { versionFile =>
+          val state = TestSupport.loadedState(
+            repo,
+            Seq(
+              Project("root", repo).settings(
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps
+                  .defaultWriteVersion(useGlobalVersion = true),
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+                releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+              )
+            )
+          )
+          val ctx   = promptingContext(state)
+
+          VersionSteps.inquireVersions.validate(ctx).map { seeded =>
+            assertEquals(seeded.releaseVersion, None)
+            assertEquals(seeded.nextVersion, None)
+          }
+        }
+      }
+  }
+
+  test(
+    "clearTentativeSeeds - drop seeded ctx.versions, the State mirror, and the marker"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-tentative-clear",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        val versionFile = new File(repo, "version.sbt")
+        val state       = TestSupport.loadedState(
+          repo,
+          Seq(
+            Project("root", repo).settings(
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps
+                .defaultWriteVersion(useGlobalVersion = true),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+              releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+            )
+          )
+        )
+        val ctx         = promptingContext(state)
+
+        VersionSteps.inquireVersions.validate(ctx).map { seeded =>
+          assertEquals(seeded.releaseVersion, Some("0.1.0"))
+          assertEquals(seeded.nextVersion, Some("0.2.0-SNAPSHOT"))
+          assertEquals(
+            seeded.state.get(io.release.ReleaseKeys.versions),
+            Some(("0.1.0", "0.2.0-SNAPSHOT")),
+            "withVersions writes a State mirror that execute-time tasks can read"
+          )
+          assert(
+            seeded.metadata(ReleaseContext.tentativelySeededVersionsKey).isDefined,
+            "the seeder must mark the seed so the boundary clearance knows what to drop"
+          )
+
+          val cleared = seeded.clearTentativeSeeds
+          assertEquals(cleared.versions, None)
+          assertEquals(
+            cleared.state.get(io.release.ReleaseKeys.versions),
+            None,
+            "clearTentativeSeeds must also drop the State mirror so execute-time tasks " +
+              "do not read the stale tentative pair"
+          )
+          assertEquals(
+            cleared.metadata(ReleaseContext.tentativelySeededVersionsKey),
+            None,
+            "the marker must be removed so the clearance is idempotent"
+          )
+        }
+      }
+  }
+
+  test(
+    "clearTentativeSeeds - preserve explicit ctx.versions installed by CLI override or hook " +
+      "(no marker means no clear)"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-tentative-explicit",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n"
+            )
+          }
+      )
+      .use { case (repo, _) =>
+        val versionFile = new File(repo, "version.sbt")
+        val state       = TestSupport.loadedState(
+          repo,
+          Seq(
+            Project("root", repo).settings(
+              releaseIOVersioningFile           := versionFile,
+              releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents   := VersionSteps
+                .defaultWriteVersion(useGlobalVersion = true),
+              releaseIOVersioningUseGlobal      := true,
+              releaseIOVersioningReleaseVersion := (_.stripSuffix("-SNAPSHOT")),
+              releaseIOVersioningNextVersion    := (_ => "0.2.0-SNAPSHOT")
+            )
+          )
+        )
+        // Pre-populated explicit versions (e.g. CLI override or pre-resolution hook).
+        val ctx         = promptingContext(state).withVersions("9.9.9", "10.0.0-SNAPSHOT")
+
+        VersionSteps.inquireVersions.validate(ctx).map { seeded =>
+          // Seeder short-circuits on existing versions and does NOT mark.
+          assertEquals(seeded.releaseVersion, Some("9.9.9"))
+          assertEquals(seeded.nextVersion, Some("10.0.0-SNAPSHOT"))
+          assertEquals(
+            seeded.metadata(ReleaseContext.tentativelySeededVersionsKey),
+            None,
+            "explicit pre-population must leave the tentative-seed marker absent"
+          )
+
+          val cleared = seeded.clearTentativeSeeds
+          assertEquals(
+            cleared.versions,
+            Some(("9.9.9", "10.0.0-SNAPSHOT")),
+            "clearTentativeSeeds must NOT touch versions that were not tentatively seeded"
+          )
+          assertEquals(
+            cleared.state.get(io.release.ReleaseKeys.versions),
+            Some(("9.9.9", "10.0.0-SNAPSHOT")),
+            "the explicit State mirror is preserved alongside the explicit versions"
+          )
+        }
+      }
+  }
+
   test("resolveVersions - fail when version file cannot be parsed") {
     TestSupport.tempDirResource(fixturePrefix).use { dir =>
       writeVersionFile(
@@ -786,6 +1195,81 @@ class VersionStepsSpec extends CatsEffectSuite {
         } yield {
           assert(
             TestSupport.manifestAttributes(result.state).contains("Vcs-Release-Hash" -> headHash)
+          )
+        }
+      }
+  }
+
+  test(
+    "commitReleaseVersion - propagate the release hash to every aggregated project ref " +
+      "so child artifacts' MANIFEST.MF carries Vcs-Release-Hash"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        s"$fixturePrefix-aggregate-hash",
+        prepareRepo = repo =>
+          IO.blocking {
+            sbt.IO.write(
+              new File(repo, "version.sbt"),
+              """ThisBuild / version := "1.0.0-SNAPSHOT"""" + "\n"
+            )
+            new File(repo, "child").mkdirs()
+          }
+      )
+      .use { case (repo, vcs) =>
+        val versionFile  = new File(repo, "version.sbt")
+        val childBase    = new File(repo, "child")
+        val state        = TestSupport.loadedState(
+          repo,
+          Seq(
+            Project("root", repo)
+              .aggregate(sbt.LocalProject("child"))
+              .settings(
+                releaseIOInternalReleaseHash                        := None,
+                releaseIOInternalReleaseTag                         := None,
+                io.release.ReleaseSharedKeys.releaseIOPublishAction := (()),
+                releaseIOVersioningFile                             := versionFile,
+                releaseIOVersioningReadVersion                      := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents                     := VersionSteps.defaultWriteVersion(
+                  useGlobalVersion = true
+                ),
+                releaseIOVersioningUseGlobal                        := true,
+                releaseIOVcsReleaseCommitMessage                    := "Setting version to 1.0.0",
+                releaseIOVcsSign                                    := false,
+                releaseIOVcsSignOff                                 := false
+              ),
+            Project("child", childBase).settings(
+              releaseIOInternalReleaseHash                          := None,
+              releaseIOInternalReleaseTag                           := None,
+              io.release.ReleaseSharedKeys.releaseIOPublishAction   := (())
+            )
+          ),
+          currentProjectId = Some("root")
+        )
+        val ctx          = ReleaseContext(state = state, vcs = Some(vcs))
+          .withVersions("1.0.0", "1.0.1-SNAPSHOT")
+        val canonicalUri = repo.getCanonicalFile.toURI
+        val rootRef      = sbt.ProjectRef(canonicalUri, "root")
+        val childRef     = sbt.ProjectRef(canonicalUri, "child")
+
+        for {
+          written  <- VersionSteps.setReleaseVersion.execute(ctx)
+          result   <- VersionSteps.commitReleaseVersion.execute(written)
+          headHash <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD")).map(_.trim)
+        } yield {
+          val extracted = SbtRuntime.extracted(result.state)
+          val rootHash  = extracted.getOpt(rootRef / releaseIOInternalReleaseHash).flatten
+          val childHash = extracted.getOpt(childRef / releaseIOInternalReleaseHash).flatten
+          assertEquals(
+            rootHash,
+            Some(headHash),
+            "root project should see its own release hash"
+          )
+          assertEquals(
+            childHash,
+            Some(headHash),
+            "aggregated child project should see the same release hash so its " +
+              "MANIFEST.MF carries Vcs-Release-Hash"
           )
         }
       }

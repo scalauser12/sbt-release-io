@@ -56,13 +56,13 @@ modules/
 │   ├── src/main/scala/io/release/            # Public API: ReleasePluginIO, ReleaseContext, ReleaseHookIO, ReleaseResourceHookIO, ReleaseComposer, VcsOps
 │   ├── src/main/scala/io/release/core/internal/  # CoreLifecycle, CoreCommandExecution, CoreDefaultSettings, steps/
 │   ├── src/test/scala/                       # Unit tests (MUnit)
-│   ├── src/sbt-test/sbt-release-io/          # 40+ scripted integration tests
+│   ├── src/sbt-test/sbt-release-io/          # 70+ scripted integration tests
 │   └── examples/                             # Example code
 ├── monorepo/                                 # io.release.monorepo, io.release.monorepo.internal
 │   ├── src/main/scala/io/release/monorepo/   # Public API: MonorepoReleasePlugin, MonorepoContext, MonorepoHookIO, MonorepoResourceHookIO
 │   ├── src/main/scala/io/release/monorepo/internal/  # MonorepoComposer, ChangeDetection, MonorepoProjectResolver, MonorepoSelectionResolver, DependencyGraph, MonorepoLifecycle, MonorepoCommandExecution
 │   ├── src/test/scala/                       # Unit tests
-│   ├── src/sbt-test/sbt-release-io-monorepo/ # 60+ scripted tests
+│   ├── src/sbt-test/sbt-release-io-monorepo/ # 90+ scripted tests
 │   └── examples/                             # Example code
 ├── runtime/                                  # io.release, io.release.runtime, io.release.vcs, io.release.version
 │   └── src/main/scala/                       # Engine, shared key ownership, VCS adapter, version model
@@ -88,7 +88,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `core/ReleaseComposer.scala` | Composes policies + hooks into the core release sequence |
 | `core/internal/CoreLifecycle.scala` | Wires core policy/hook settings to the shared lifecycle compiler |
 | `core/internal/CoreCommandExecution.scala` | Core command preparation, planning, and release/check orchestration |
-| `core/internal/steps/ReleaseSteps.scala` | 14 default steps (initialize-vcs → check-clean → inquire-versions → tag-preflight → set-release-version → tag-release → publish-artifacts → push-changes); `private[release]` |
+| `core/internal/steps/ReleaseSteps.scala` | Facade re-exporting the 14 built-in step values; the implementations live in sibling files: `VcsSteps.scala` (initialize-vcs, check-clean, push-changes), `TagSteps.scala` (tag-preflight, tag-release), `VersionSteps.scala` / `ReleaseVersionWorkflow.scala` (inquire/set/commit version), `PublishSteps.scala` (check-snapshot-deps, publish-artifacts, run-tests, run-clean). All `private[release]`. |
 
 ### Monorepo Module
 
@@ -100,6 +100,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `monorepo/MonorepoResourceHookIO.scala` | Global resource hook type for acquire/release around the run |
 | `monorepo/internal/MonorepoComposer.scala` | Composes global and per-project steps into release sequence |
 | `monorepo/internal/MonorepoCommandExecution.scala` | Monorepo command preparation, planning, and release/check orchestration |
+| `monorepo/internal/MonorepoLifecycle.scala` | Wires monorepo policy/global-hook/per-project-hook settings to the shared lifecycle compiler |
 | `monorepo/internal/ChangeDetection.scala` | Git diff-based change detection with shared-paths support |
 | `monorepo/internal/MonorepoProjectResolver.scala` | Dependency graph resolution and topological sorting |
 | `monorepo/internal/MonorepoSelectionResolver.scala` | Project selection (by name or change detection) |
@@ -119,6 +120,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `ReleaseSharedKeys.scala` | Runtime-owned shared sbt setting/task keys reused by `core` and `monorepo` without duplicating key identity |
 | `ReleaseSharedDefaultSettingsSupport.scala` | Runtime-owned shared default-setting logic reused by internal workflows and plugin setup |
 | `runtime/workflow/VersionWorkflow.scala` | Default version-file IO and publish validation helpers |
+| `runtime/sbt/AggregatePublishTargets.scala` | Resolves the project refs that `runAggregated` will fan out to for a given task key (mirrors sbt's aggregation expansion); reused by core publish/commit/tag and shareable with monorepo |
 | `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
 | `version/Version.scala` | Version model |
 
@@ -135,7 +137,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 - Scala 2.12 (sbt 1) and Scala 3 (sbt 2) cross-build
 - Max line length: **100 columns** (enforced by scalafmt 3.10.7)
 - Tests use **MUnit** with **munit-cats-effect** for IO assertions
-- Scripted tests live under `src/sbt-test/` in each module
+- Scripted tests live under `src/sbt-test/` in each module. When adding a new fixture, also list it under the relevant bullet in the matching `src/sbt-test/README.md` ([core](modules/core/src/sbt-test/README.md), [monorepo](modules/monorepo/src/sbt-test/README.md)) — the README is the only index of what scripted scenarios exist
 - All blocking operations wrapped in `IO.blocking`
 - Immutable context threading — steps return updated context, no mutable state
 - Hook-based customization is the supported build-facing model

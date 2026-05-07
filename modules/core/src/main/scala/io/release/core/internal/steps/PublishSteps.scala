@@ -11,6 +11,7 @@ import io.release.core.internal.CoreStepAliases.Step
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
+import io.release.runtime.sbt.AggregatePublishTargets
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.sbt.SnapshotDependencyTasks
 import io.release.runtime.workflow.DecisionResolver
@@ -282,47 +283,8 @@ private[release] object PublishSteps {
       }
     }
 
-  /** Resolve the projects that `runAggregated` will actually execute for the publish task.
-    * Checks `aggregationEnabled` at each level so the expansion matches sbt's
-    * `runAggregated` behavior when an intermediate project sets `aggregate := false`.
-    */
-  private def effectiveAggregates[A](
-      extracted: Extracted,
-      taskKey: TaskKey[A]
-  ): Seq[ProjectRef] = {
-    val data    = extracted.structure.data
-    val rootKey = (extracted.currentRef / taskKey).scopedKey
-    val enabled = sbt.internal.Aggregation.aggregationEnabled(rootKey, data)
-    if (!enabled) Seq(extracted.currentRef)
-    else {
-      val units                                           = extracted.structure.units
-      def resolve(ref: ProjectRef): Seq[ProjectRef]       = {
-        val project = units.get(ref.build).flatMap(_.defined.get(ref.project))
-        project.map(_.aggregate).getOrElse(Seq.empty)
-      }
-      def aggregationEnabledFor(ref: ProjectRef): Boolean =
-        sbt.internal.Aggregation.aggregationEnabled((ref / taskKey).scopedKey, data)
-      def loop(
-          refs: Seq[ProjectRef],
-          visited: Set[ProjectRef]
-      ): (Seq[ProjectRef], Set[ProjectRef])               =
-        refs.foldLeft((Seq.empty[ProjectRef], visited)) { case ((acc, vis), ref) =>
-          if (vis.contains(ref)) (acc, vis)
-          else if (!aggregationEnabledFor(ref)) (acc :+ ref, vis + ref)
-          else {
-            val (childAcc, childVis) = loop(resolve(ref), vis + ref)
-            (acc ++ (ref +: childAcc), childVis)
-          }
-        }
-      extracted.currentRef +: loop(resolve(extracted.currentRef), Set(extracted.currentRef))._1
-    }
-  }
-
   private def publishTargetRefs(state: State): IO[Seq[ProjectRef]] =
-    IO.blocking {
-      val extracted = SbtRuntime.extracted(state)
-      effectiveAggregates(extracted, releaseIOPublishAction)
-    }
+    IO.blocking(AggregatePublishTargets.fromState(state, releaseIOPublishAction))
 
   private def checkPublishSkip(
       ref: ProjectRef,

@@ -2,12 +2,13 @@ package io.release.core.internal.steps
 
 import cats.effect.IO
 import io.release.ReleaseContext
-import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
+import io.release.ReleaseManifestMetadata
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagComment
 import io.release.ReleasePluginIO.autoImport.releaseIOVcsTagName
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningFileContents
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningReadVersion
 import io.release.ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal
+import io.release.ReleaseSharedKeys.releaseIOPublishAction
 import io.release.ReleaseSharedKeys.releaseIOVcsSign
 import io.release.ReleaseSharedKeys.releaseIOVersioningFile
 import io.release.VcsOps
@@ -19,6 +20,7 @@ import io.release.core.internal.VersionPlan
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
+import io.release.runtime.sbt.AggregatePublishTargets
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
 import io.release.runtime.workflow.VersionWorkflow
@@ -335,16 +337,25 @@ private[release] object TagSteps {
       ctx: ReleaseContext,
       params: TagPlan,
       tagName: String
-  ): ReleaseContext =
+  ): ReleaseContext = {
+    // Scope the manifest tag to every project that `runAggregated` will publish.
+    // Same rationale as `commit-release-version` for the release hash: an unscoped
+    // setting only applies to the root currentRef, leaving aggregated child
+    // artifacts with `releaseIOInternalReleaseTag = None` and no `Vcs-Release-Tag`
+    // entry in their MANIFEST.MF.
+    val tagSettings = AggregatePublishTargets
+      .fromState(ctx.state, releaseIOPublishAction)
+      .flatMap(ref => ReleaseManifestMetadata.releaseManifestTagSettings(ref, tagName))
+
     ctx
       .withMetadata(CoreReleaseTag.key, tagName)
       .withState(
         SbtRuntime.appendSessionSettings(
           ctx.state,
-          params.versionSessionSettings ++
-            Seq(releaseIOInternalReleaseTag := Some(tagName))
+          params.versionSessionSettings ++ tagSettings
         )
       )
+  }
 
   private def resolveTag(
       vcs: Vcs,

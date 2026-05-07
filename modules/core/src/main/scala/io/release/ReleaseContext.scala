@@ -138,6 +138,29 @@ case class ReleaseContext(
   private[release] def markPushExecuted: ReleaseContext =
     withMetadata(ReleaseContext.pushExecutedKey, true)
 
+  /** Mark `versions` as a tentative seed installed by
+    * `validateInquireVersionsWithContext`. The marker is consumed by
+    * [[clearTentativeSeeds]] at the validate→execute boundary; explicit
+    * values (CLI overrides, hook-installed) leave the marker absent and
+    * survive the boundary cleanup.
+    */
+  private[release] def markVersionsTentativelySeeded: ReleaseContext =
+    withMetadata(ReleaseContext.tentativelySeededVersionsKey, ())
+
+  /** Drop the tentative version seed installed at validate time so that
+    * execute-phase hooks see the contract-mandated `None` and
+    * `inquireVersions.execute` re-resolves cleanly. Also strips the State
+    * mirror at `ReleaseKeys.versions` (set by [[withVersions]]) so sbt task
+    * evaluations in execute-time hooks do not read the stale tentative pair.
+    */
+  private[release] override def clearTentativeSeeds: ReleaseContext =
+    if (metadata(ReleaseContext.tentativelySeededVersionsKey).isEmpty) this
+    else
+      copy(
+        versions = None,
+        state = state.remove(ReleaseKeys.versions)
+      ).withoutMetadata(ReleaseContext.tentativelySeededVersionsKey)
+
   override def fail: ReleaseContext                       = copy(failed = true)
   override def failWith(cause: Throwable): ReleaseContext =
     copy(failed = true, failureCause = Some(cause))
@@ -157,4 +180,7 @@ object ReleaseContext {
 
   private val pushExecutedKey: AttributeKey[Boolean] =
     AttributeKey[Boolean]("releaseIOInternalCorePushExecuted")
+
+  private[release] val tentativelySeededVersionsKey: AttributeKey[Unit] =
+    AttributeKey[Unit]("releaseIOInternalCoreTentativelySeededVersions")
 }

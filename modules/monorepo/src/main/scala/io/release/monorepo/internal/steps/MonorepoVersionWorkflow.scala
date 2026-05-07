@@ -17,6 +17,8 @@ import io.release.runtime.workflow.VersionWorkflow
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
+import scala.util.control.NonFatal
+
 /** Shared internal workflow for monorepo version-resolution and version-file writes.
   *
   * [[MonorepoVersionSteps]] keeps the public step definitions and names; this helper owns the
@@ -61,6 +63,55 @@ private[monorepo] object MonorepoVersionWorkflow {
           }
         }
     }
+
+  /** Tentative non-prompting per-project version resolution wired into
+    * `inquireVersions.validate` via `ProcessStep.PerItem.validateWithContext`. Seeds
+    * `project.versions` so `validate` predicates registered at `afterVersionResolution`
+    * and later phases can rely on the per-project versions being present during the
+    * upfront validation pass — including under `releaseIOMonorepo check`.
+    *
+    * Mirrors [[ReleaseVersionWorkflow.validateInquireVersionsWithContext]]: respects
+    * pre-populated `project.resolvedVersions`, delegates CLI-override precedence to
+    * `project.releaseVersion` / `project.nextVersion` inside `resolveProjectVersions`,
+    * and silently swallows resolution errors (debug log) so the real failure surfaces
+    * from `inquireVersions.execute` instead.
+    */
+  def validateInquireVersionsWithContext(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[MonorepoContext] =
+    if (project.resolvedVersions.isDefined) IO.pure(ctx)
+    else
+      resolveProjectVersions(ctx, project, allowPrompts = false)
+        .map { case (updatedCtx, resolved) =>
+          // Capture the ORIGINAL project.versions (which may be `None` or a
+          // partial CLI override like `Some(("5.0.0", ""))`) before
+          // overwriting with the tentatively-resolved full pair. The boundary
+          // clearance restores this captured value so partial overrides are
+          // not lost — without that, execute would re-resolve as if the user
+          // had supplied no overrides at all, defeating the partial CLI flow.
+          withResolvedVersions(updatedCtx, project.ref, resolved)
+            .recordTentativelySeeded(project.ref, project.versions)
+        }
+        .handleErrorWith {
+          // Log the swallowed error at WARN so an operator can see why a
+          // post-resolution `precondition` hook then fails on
+          // `release=None`. Default sbt log threshold is INFO; debug would
+          // hide the cause. Filter NonFatal so fiber-cancellation, OOMs,
+          // and other VirtualMachineErrors are not silently absorbed —
+          // mirrors `ExecutionEngine.recoverWithContext`.
+          case NonFatal(err) =>
+            IO.blocking {
+              ctx.state.log.warn(
+                s"${ReleaseLogPrefixes.Monorepo} Tentative version seed skipped " +
+                  s"for ${project.name}: ${StepHelpers.errorMessage(err)}. " +
+                  "Post-resolution `precondition` hooks will observe `None` for " +
+                  "this project until inquireVersions.execute resolves; the " +
+                  "underlying error will surface there if it persists."
+              )
+            }.as(ctx)
+          case fatal         => IO.raiseError(fatal)
+        }
 
   def inquireVersions(
       ctx: MonorepoContext,

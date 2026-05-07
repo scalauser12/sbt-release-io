@@ -139,6 +139,34 @@ object MonorepoGlobalHookIO {
     * slot whose inputs should be validated; the predicate runs during
     * validation/check rather than during release execution.
     *
+    * == Versions visible at validate / execute time ==
+    *
+    * Hooks at `afterVersionResolution` and any later phase observe per-project
+    * versions through `ctx.currentProjects` (and `project.releaseVersion` /
+    * `project.nextVersion`) during the validate pass '''when the non-prompting
+    * tentative resolution succeeds for that project''' — `inquire-versions.validate`
+    * runs the per-project version tasks with `allowPrompts = false`. If
+    * resolution raises for a project (e.g. the version-task body throws, the
+    * version file fails to parse, a custom resolver task is missing), the
+    * seeder logs a `warn` line and post-resolution `validate` hooks see
+    * `None` for that project; the actual failure surfaces from
+    * `inquireVersions.execute` later. Hooks at `beforeVersionResolution` and
+    * earlier slots see the per-project versions as `None`.
+    *
+    * Validate-time tentative seeds are dropped at the validate→execute
+    * boundary: `beforeVersionResolution` execute hooks observe `None` again
+    * (matching their validate-time view), and `inquireVersions.execute`
+    * re-resolves cleanly — interactive prompts and any session-setting
+    * changes installed by `beforeVersionResolution` execute hooks are
+    * honored. Projects with explicit CLI overrides (`release-version
+    * <project>=<value>`) are pre-populated upfront and their values survive
+    * the validate→execute boundary unchanged. '''Validate-view and
+    * execute-view of `afterVersionResolution` (and later) hooks can disagree
+    * for a project when the operator answers an interactive prompt with a
+    * value other than the non-prompting default''' — predicates that compare
+    * against a literal version should consider this when designing their
+    * assertion.
+    *
     * {{{
     * MonorepoGlobalHookIO.precondition("require-readme") { ctx =>
     *   val base = Project.extract(ctx.state).get(baseDirectory)
@@ -309,6 +337,31 @@ object MonorepoProjectHookIO {
     * The user-facing argument order mirrors the intent-named factories
     * (`(project, ctx)`) even though the underlying case-class validate is
     * `(ctx, project)`.
+    *
+    * == Versions visible at validate / execute time ==
+    *
+    * Hooks at `afterVersionResolution` and any later phase observe
+    * `project.releaseVersion` and `project.nextVersion` as `Some(...)`
+    * during the validate pass '''when the non-prompting tentative
+    * resolution succeeds for that project''' — `inquire-versions.validate`
+    * runs the per-project version tasks with `allowPrompts = false`. If
+    * resolution raises for a project, the seeder logs a `warn` line and
+    * post-resolution `validate` hooks see `None` for that project; the
+    * actual failure surfaces from `inquireVersions.execute` later. Hooks
+    * at `beforeVersionResolution` and earlier slots see them as `None`.
+    *
+    * Validate-time tentative seeds are dropped at the validate→execute
+    * boundary: `beforeVersionResolution` execute hooks observe `None` again
+    * (matching their validate-time view), and `inquireVersions.execute`
+    * re-resolves cleanly per project — interactive prompts and any session-
+    * setting changes installed by `beforeVersionResolution` execute hooks
+    * are honored. Projects with explicit CLI overrides (`release-version
+    * <project>=<value>`) are pre-populated upfront and their values survive
+    * the validate→execute boundary unchanged. '''Validate-view and execute-
+    * view of post-resolution per-project hooks can disagree when the
+    * operator answers an interactive prompt with a value other than the
+    * non-prompting default''' — predicates that compare against a literal
+    * version should consider this when designing their assertion.
     *
     * {{{
     * MonorepoProjectHookIO.precondition("require-project-readme") { (project, ctx) =>

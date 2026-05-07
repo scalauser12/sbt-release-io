@@ -3,19 +3,23 @@ package io.release.core.internal.steps
 import cats.effect.IO
 import cats.syntax.all.*
 import io.release.ReleaseContext
-import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
+import io.release.ReleaseManifestMetadata
 import io.release.ReleasePluginIO.autoImport.*
+import io.release.ReleaseSharedKeys.releaseIOPublishAction
 import io.release.VcsOps
 import io.release.core.internal.VersionPlan
 import io.release.vcs.Vcs
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.ExecutionEngine
+import io.release.runtime.sbt.AggregatePublishTargets
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
 import io.release.runtime.workflow.VersionCommitSupport
 import io.release.runtime.workflow.VersionWorkflow
 import sbt.Keys.*
 import sbt.{internal as _, *}
+
+import scala.util.control.NonFatal
 
 /** Shared internal workflow for version resolution, version-file writes, and commit state
   * updates.
@@ -90,6 +94,53 @@ private[release] object ReleaseVersionWorkflow {
           }
         }
     }
+
+  /** Tentative non-prompting version resolution wired into
+    * `inquireVersions.validate` via `ProcessStep.Single.validateWithContext`. Seeds
+    * `ctx.releaseVersion` / `ctx.nextVersion` so `validate` predicates registered at
+    * `afterVersionResolution` and later phases can rely on the versions being present
+    * during the upfront validation pass — including under `releaseIO check`.
+    *
+    * Mirrors the lenient resolution shape already used by
+    * [[withReleaseVersionOverlay]]: respects `ctx.releaseVersion` if already set,
+    * delegates CLI-override precedence to `resolveVersionPlan`, and silently swallows
+    * resolution errors (debug log) so the real failure surfaces from
+    * `inquireVersions.execute` instead of from `releaseIO check`.
+    */
+  def validateInquireVersionsWithContext(ctx: ReleaseContext): IO[ReleaseContext] =
+    if (ctx.releaseVersion.isDefined) IO.pure(ctx)
+    else
+      resolveVersions(ctx, allowPrompts = false)
+        .map { case (updatedCtx, resolved) =>
+          // Mark as tentative so ReleaseContext.clearTentativeSeeds drops the
+          // pair (and the State mirror) at the validate→execute boundary.
+          // beforeVersionResolution execute hooks must observe `None`, and
+          // execute-phase resolution must run cleanly without consuming the
+          // validate-time guess.
+          updatedCtx
+            .withVersions(resolved.releaseVersion, resolved.nextVersion)
+            .markVersionsTentativelySeeded
+        }
+        .handleErrorWith {
+          // Log the swallowed error at WARN so an operator can see why a
+          // post-resolution `precondition` hook then fails on `release=None`.
+          // Without this, the seeder failure is silent (default sbt log
+          // threshold is INFO) and the downstream "expected Some(release)" is
+          // unattributable. Filter NonFatal so fiber-cancellation, OOMs, and
+          // other VirtualMachineErrors are not silently absorbed — the
+          // module convention (see ExecutionEngine.recoverWithContext) is to
+          // re-raise fatal throwables.
+          case NonFatal(err) =>
+            IO.blocking {
+              ctx.state.log.warn(
+                s"${ReleaseLogPrefixes.Core} Tentative version seed skipped: " +
+                  s"${errorMessage(err)}. Post-resolution `precondition` hooks " +
+                  "will observe `None` until inquire-versions.execute resolves; " +
+                  "the underlying error will surface there if it persists."
+              )
+            }.as(ctx)
+          case fatal         => IO.raiseError(fatal)
+        }
 
   def inquireVersions(ctx: ReleaseContext): IO[ReleaseContext] =
     resolveVersions(ctx, allowPrompts = true).flatMap { case (updatedCtx, resolved) =>
@@ -194,7 +245,18 @@ private[release] object ReleaseVersionWorkflow {
         actionName = "commit-release-version",
         msgKey = releaseIOVcsReleaseCommitMessage,
         version = releaseVersion,
-        extraSettings = currentHash => Seq(releaseIOInternalReleaseHash := Some(currentHash))
+        // Scope the manifest hash to every project that `runAggregated` will publish.
+        // An unscoped `releaseIOInternalReleaseHash := Some(...)` would resolve only
+        // against the root project's currentRef (transformSettings rewrites `This` to
+        // `extracted.currentRef`), and aggregated child projects with their own
+        // `:= None` defaults from `pluginDefaultSettings` would emit empty manifest
+        // attributes. Scoping per-ref via `releaseManifestHashSettings` mirrors what
+        // the monorepo path already does.
+        extraSettings = (currentHash, state) =>
+          ReleaseManifestMetadata.releaseManifestHashSettings(
+            AggregatePublishTargets.fromState(state, releaseIOPublishAction),
+            currentHash
+          )
       )
     }
 
@@ -205,7 +267,7 @@ private[release] object ReleaseVersionWorkflow {
         actionName = "commit-next-version",
         msgKey = releaseIOVcsNextCommitMessage,
         version = nextVersion,
-        extraSettings = _ => Seq.empty
+        extraSettings = (_, _) => Seq.empty
       )
     }
 
@@ -214,7 +276,7 @@ private[release] object ReleaseVersionWorkflow {
       actionName: String,
       msgKey: TaskKey[String],
       version: String,
-      extraSettings: String => Seq[Setting[?]]
+      extraSettings: (String, State) => Seq[Setting[?]]
   ): IO[ReleaseContext] =
     for {
       versionPlan             <- IO.blocking(resolveVersionPlan(ctx))
@@ -226,13 +288,45 @@ private[release] object ReleaseVersionWorkflow {
             val newState = SbtRuntime.appendSessionSettings(
               resultCtx.state,
               sessionSettings(versionPlan) ++
-                extraSettings(currentHash) ++
+                extraSettings(currentHash, resultCtx.state) ++
                 versionValueSettings(versionPlan, version)
             )
             resultCtx.withState(newState)
           }
         )
     } yield finalCtx
+
+  /** Reuse already-seeded `ctx.versions` to assemble a `ResolvedVersions`
+    * without re-evaluating the `releaseIOVersioningReleaseVersion` /
+    * `releaseIOVersioningNextVersion` sbt tasks. Used by `releaseIO check`
+    * preflight to render the version summary without paying for a second
+    * round of resolver-task evaluation after `validateInquireVersionsWithContext`
+    * has already populated `ctx.versions`. The `versionFile` and
+    * `currentVersion` fields are still read from disk (no task evaluation,
+    * just I/O) because callers need them in the summary.
+    */
+  private[release] def resolveVersionsFromSeed(
+      ctx: ReleaseContext
+  ): IO[Option[(ReleaseContext, ResolvedVersions)]] =
+    ctx.versions match {
+      case Some((release, next)) =>
+        for {
+          versionPlan <- IO.blocking(resolveVersionPlan(ctx))
+          _           <- ensureVersionFileExists(versionPlan.versionFile)
+          currentVer  <- versionPlan.readVersion(versionPlan.versionFile)
+        } yield Some(
+          (
+            ctx,
+            ResolvedVersions(
+              versionFile = versionPlan.versionFile,
+              currentVersion = currentVer,
+              releaseVersion = release,
+              nextVersion = next
+            )
+          )
+        )
+      case None                  => IO.pure(None)
+    }
 
   private[release] def resolveVersions(
       ctx: ReleaseContext,

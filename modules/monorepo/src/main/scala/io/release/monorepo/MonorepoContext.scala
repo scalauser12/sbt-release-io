@@ -220,6 +220,42 @@ case class MonorepoContext(
   private[monorepo] def withPushConfigured(value: Boolean): MonorepoContext =
     withMetadata(MonorepoContext.pushConfiguredKey, value)
 
+  /** Mark `project.versions` as a tentative seed installed by
+    * `validateInquireVersionsWithContext` for the given project ref, capturing
+    * the ORIGINAL `project.versions` value (which may be `None` for a fresh
+    * project, or `Some((release, ""))` / `Some(("", next))` for a partial CLI
+    * override). [[clearTentativeSeeds]] restores this captured value at the
+    * validate→execute boundary so partial overrides survive the cleanup;
+    * fully pre-populated projects leave the marker absent (the seeder's
+    * short-circuit) and are untouched.
+    */
+  private[monorepo] def recordTentativelySeeded(
+      ref: ProjectRef,
+      originalVersions: Option[(String, String)]
+  ): MonorepoContext =
+    withMetadata(
+      MonorepoContext.tentativelySeededProjectsKey,
+      metadata(MonorepoContext.tentativelySeededProjectsKey)
+        .getOrElse(Map.empty[ProjectRef, Option[(String, String)]]) + (ref -> originalVersions)
+    )
+
+  /** Restore the per-project `project.versions` to whatever the validate-time
+    * seeder originally observed, so that `inquireVersions.execute` re-resolves
+    * cleanly (interactive prompts are not bypassed, and partial CLI overrides
+    * are honored as the seed input the second time around) and
+    * `beforeVersionResolution` execute hooks observe the contract-mandated
+    * pre-resolution view. Fully CLI-pre-populated projects are left untouched
+    * because the seeder skipped marking them.
+    */
+  private[release] override def clearTentativeSeeds: MonorepoContext =
+    metadata(MonorepoContext.tentativelySeededProjectsKey).fold(this) { entries =>
+      entries
+        .foldLeft(this) { case (c, (ref, original)) =>
+          c.updateProject(ref)(_.copy(versions = original))
+        }
+        .withoutMetadata(MonorepoContext.tentativelySeededProjectsKey)
+    }
+
   override def fail: MonorepoContext                       = copy(failed = true)
   override def failWith(cause: Throwable): MonorepoContext =
     copy(failed = true, failureCause = Some(cause))
@@ -247,4 +283,10 @@ object MonorepoContext {
 
   private val pushConfiguredKey: AttributeKey[Boolean] =
     AttributeKey[Boolean]("releaseIOInternalMonorepoPushConfigured")
+
+  private[monorepo] val tentativelySeededProjectsKey
+      : AttributeKey[Map[ProjectRef, Option[(String, String)]]] =
+    AttributeKey[Map[ProjectRef, Option[(String, String)]]](
+      "releaseIOInternalMonorepoTentativelySeededProjects"
+    )
 }

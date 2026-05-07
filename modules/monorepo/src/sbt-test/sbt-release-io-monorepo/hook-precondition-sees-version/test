@@ -1,0 +1,26 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+# Validation-only must succeed: post-version-resolution per-project preconditions see tentative versions.
+> releaseIOMonorepo check core api with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Real release also exercises the same validate prefix and must succeed.
+> releaseIOMonorepo core api with-defaults release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT release-version api=0.1.0 next-version api=0.2.0-SNAPSHOT
+
+# Verify both projects bumped
+$ exec grep -q "0.2.0-SNAPSHOT" core/version.sbt
+$ exec grep -q "0.2.0-SNAPSHOT" api/version.sbt
+
+# This test pre-populates project.versions via CLI overrides
+# (`release-version core=0.1.0 ...`). The seeder's short-circuit branch leaves the
+# tentative-seed marker absent for those projects, so clearTentativeSeeds at the
+# validate→execute boundary must NOT clear them. Both projects' beforeVersionResolution
+# execute hooks should observe `release=Some(0.1.0)` / `next=Some(0.2.0-SNAPSHOT)`.
+$ exec grep -qF release=Some(0.1.0) target/before-version-resolution-execute-core.txt
+$ exec grep -qF next=Some(0.2.0-SNAPSHOT) target/before-version-resolution-execute-core.txt
+$ exec grep -qF release=Some(0.1.0) target/before-version-resolution-execute-api.txt
+$ exec grep -qF next=Some(0.2.0-SNAPSHOT) target/before-version-resolution-execute-api.txt

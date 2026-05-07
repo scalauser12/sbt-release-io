@@ -32,6 +32,7 @@ private[release] object VersionSteps {
   val inquireVersions: Step = ProcessStep.Single(
     name = "inquire-versions",
     validate = ReleaseVersionWorkflow.validateInquireVersions,
+    validateWithContext = Some(ReleaseVersionWorkflow.validateInquireVersionsWithContext),
     roles = Set(BuiltInStepRole.ResolveVersions),
     execute = ReleaseVersionWorkflow.inquireVersions
   )
@@ -59,6 +60,11 @@ private[release] object VersionSteps {
       allowPrompts: Boolean
   ): IO[(ReleaseContext, ResolvedVersions)] =
     ReleaseVersionWorkflow.resolveVersions(ctx, allowPrompts)
+
+  private[release] def resolveVersionsFromSeed(
+      ctx: ReleaseContext
+  ): IO[Option[(ReleaseContext, ResolvedVersions)]] =
+    ReleaseVersionWorkflow.resolveVersionsFromSeed(ctx)
 
   private[release] def resolveVersionPlan(
       ctx: ReleaseContext,

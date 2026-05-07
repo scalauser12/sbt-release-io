@@ -154,6 +154,44 @@ object ReleaseHookIO {
     * validated; the predicate runs during validation/check rather than during
     * release execution.
     *
+    * == Versions visible at validate time ==
+    *
+    * Hooks registered at `afterVersionResolution` and any later phase
+    * (`beforeReleaseVersionWrite`, `beforeReleaseCommit`, `beforeTag`,
+    * `beforePublish`, etc.) observe `ctx.releaseVersion` / `ctx.nextVersion`
+    * as `Some(...)` during the validate pass '''when the non-prompting
+    * tentative resolution succeeds''' — `inquire-versions.validate` runs
+    * `releaseIOVersioningReleaseVersion` / `releaseIOVersioningNextVersion`
+    * with `allowPrompts = false` and any CLI override. If that resolution
+    * raises (e.g. the version-task body throws, the version file fails to
+    * parse, a custom resolver task is missing), the seeder logs a `warn`
+    * line and post-resolution `validate` hooks see `None`; the actual
+    * failure surfaces from `inquire-versions.execute` later.
+    *
+    * Hooks registered at `beforeVersionResolution` (and earlier slots like
+    * `afterCleanCheck`) see `ctx.releaseVersion == None` — their inputs
+    * predate version resolution and do not depend on it.
+    *
+    * == Versions visible at execute time ==
+    *
+    * Validate-time tentative seeds are dropped at the validate→execute
+    * boundary: `beforeVersionResolution` execute hooks observe
+    * `ctx.releaseVersion == None` (matching their validate-time view), and
+    * `inquireVersions.execute` re-resolves cleanly — interactive prompts and
+    * any session-setting changes installed by `beforeVersionResolution`
+    * execute hooks are honored. Hooks at `afterVersionResolution` and later
+    * phases observe the resolved `Some(...)` at execute time.
+    *
+    * '''Validate ≠ execute when prompts diverge from the non-prompting
+    * default.''' The validate-view comes from a non-prompting resolution; the
+    * execute-view comes from `inquireVersions.execute` which prompts the
+    * operator (unless `with-defaults` / `useDefaults := true`). If the
+    * operator answers the prompt with a value other than the default,
+    * post-resolution hook predicates see one value at validate (the default)
+    * and a different value at execute (the typed input). Predicates that
+    * compare against a literal version should consider this when designing
+    * their assertion.
+    *
     * {{{
     * ReleaseHookIO.precondition("validate-main-branch") { ctx =>
     *   ctx.vcs match {
