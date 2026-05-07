@@ -1,0 +1,30 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+
+# Partial CLI override: release-version only, no next-version. The default
+# next-version task (Bugfix bump from the resolved release version) supplies
+# the missing side: 1.2.3 -> 1.2.4-SNAPSHOT.
+> releaseIO with-defaults release-version 1.2.3
+
+# Verify the version bump landed.
+$ exec grep -q "1.2.4-SNAPSHOT" version.sbt
+
+# Verify the release tag exists at the CLI-overridden release version.
+$ exec git rev-parse v1.2.3
+
+# beforeVersionResolution.execute observed `None` for both versions — proves
+# the validate-time tentative seed (which populated `Some(1.2.3) / Some(1.2.4-SNAPSHOT)`)
+# was cleared at the validate→execute boundary.
+$ exec grep -qF release=None target/before-version-resolution-execute.txt
+$ exec grep -qF next=None target/before-version-resolution-execute.txt
+
+# afterVersionResolution.execute observed the freshly resolved versions —
+# proves the CLI override flowed through `executionState.plan.releaseVersionOverride`
+# into the second (execute-time) resolution pass and the next-version was
+# computed by the default Bugfix bump.
+$ exec grep -qF release=Some(1.2.3) target/after-version-resolution-execute.txt
+$ exec grep -qF next=Some(1.2.4-SNAPSHOT) target/after-version-resolution-execute.txt

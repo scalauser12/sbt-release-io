@@ -229,7 +229,10 @@ case class MonorepoContext(
     * fully pre-populated projects leave the marker absent (the seeder's
     * short-circuit) and are untouched.
     */
-  private[monorepo] def recordTentativelySeeded(
+  // `private[release]` to match `ReleaseContext.markVersionsTentativelySeeded` —
+  // both helpers are part of the same validate-time-seed contract consumed by
+  // the runtime engine boundary.
+  private[release] def recordTentativelySeeded(
       ref: ProjectRef,
       originalVersions: Option[(String, String)]
   ): MonorepoContext =
@@ -284,7 +287,11 @@ object MonorepoContext {
   private val pushConfiguredKey: AttributeKey[Boolean] =
     AttributeKey[Boolean]("releaseIOInternalMonorepoPushConfigured")
 
-  private[monorepo] val tentativelySeededProjectsKey
+  // Symmetric with `ReleaseContext.tentativelySeededVersionsKey` — both keys back
+  // a `clearTentativeSeeds` override that the runtime `ExecutionEngine` invokes
+  // at the validate→execute boundary, so they share the same `private[release]`
+  // visibility.
+  private[release] val tentativelySeededProjectsKey
       : AttributeKey[Map[ProjectRef, Option[(String, String)]]] =
     AttributeKey[Map[ProjectRef, Option[(String, String)]]](
       "releaseIOInternalMonorepoTentativelySeededProjects"

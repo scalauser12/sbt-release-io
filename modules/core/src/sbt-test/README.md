@@ -23,7 +23,7 @@ Legacy step-list editing fixtures were retired. New scripted tests should use li
 
 - Core flow and CLI: `simple`, `help`, `check`, `with-defaults`, `interactive-with-defaults`, `command-line-version-numbers`
 - Grouped-key surface and plugin coexistence: `grouped-keys`, `coexisting-plugins-shared-keys`
-- Hook lifecycle and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`, `hook-precondition-sees-version`
+- Hook lifecycle and policy customization: `hook-lifecycle`, `hook-disabled-phases`, `hook-late-bound-settings`, `custom-plugin-resource-hooks`, `hook-precondition-sees-version`, `hook-precondition-partial-cli-override`
 - Hook gating and narrow predicates: `after-publish-gate-streams`, `before-push-hook-gated`, `after-push-hook-gated`, `after-push-hook-runs-on-push`, `hook-installed-publish-action`, `hook-installed-publish-skip`
 - ThisBuild scopes and decision defaults: `this-build-overrides`, `thisbuild-decision-default-honored`
 - Versioning and tags: `custom-tag`, `custom-version-format`, `global-version-false`, `invalid-version-input`, `version-bump`, `tag-default`, `version-task-sees-snapshot`

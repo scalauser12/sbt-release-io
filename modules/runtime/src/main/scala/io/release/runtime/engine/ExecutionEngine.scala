@@ -80,8 +80,11 @@ private[release] object ExecutionEngine {
       // runs. See `ReleaseCtx.clearTentativeSeeds`. Without this the seeded
       // ctx flows into execute and either bypasses interactive prompts
       // (monorepo) or violates the `beforeVersionResolution` execute-hook
-      // contract (both modules).
-      cleanedCtx    = validatedCtx.clearTentativeSeeds
+      // contract (both modules). Skipped when validation already failed —
+      // execute will not run anyway, and preserving the seeded snapshot
+      // keeps any future failure-context summary (per-project tentative
+      // resolution result) intact instead of restoring it to `None`.
+      cleanedCtx    = if (validatedCtx.failed) validatedCtx else validatedCtx.clearTentativeSeeds
       resultCtx    <-
         if (cleanedCtx.failed) IO.pure(cleanedCtx)
         else runActionPhase(steps)(armOnFailure(cleanedCtx))
@@ -101,7 +104,9 @@ private[release] object ExecutionEngine {
             // seeding step runs in the sequential path today, but keeping
             // the contract consistent here means future seeders cannot
             // accidentally bleed validate-time state into per-step execute.
-            cleanedCtx    = validatedCtx.clearTentativeSeeds
+            // Same skip-on-failed-validation rationale applies.
+            cleanedCtx    =
+              if (validatedCtx.failed) validatedCtx else validatedCtx.clearTentativeSeeds
             nextCtx      <-
               if (cleanedCtx.failed) IO.pure(cleanedCtx)
               else runActionPhase(Seq(step))(armOnFailure(cleanedCtx))

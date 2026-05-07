@@ -337,12 +337,17 @@ private[release] object TagSteps {
       ctx: ReleaseContext,
       params: TagPlan,
       tagName: String
-  ): ReleaseContext = {
+  ): IO[ReleaseContext] = IO.blocking {
     // Scope the manifest tag to every project that `runAggregated` will publish.
     // Same rationale as `commit-release-version` for the release hash: an unscoped
     // setting only applies to the root currentRef, leaving aggregated child
     // artifacts with `releaseIOInternalReleaseTag = None` and no `Vcs-Release-Tag`
-    // entry in their MANIFEST.MF.
+    // entry in their MANIFEST.MF. Wrapped in `IO.blocking` because both
+    // `AggregatePublishTargets.fromState` (calls `Project.extract` and walks
+    // the aggregate tree) and `SbtRuntime.appendSessionSettings` (rebuilds
+    // the structure via `Load.reapply`) are heavy synchronous sbt work —
+    // mirrors `ReleaseVersionWorkflow.commitVersion`'s blocking wrap of the
+    // symmetric hash-settings install.
     val tagSettings = AggregatePublishTargets
       .fromState(ctx.state, releaseIOPublishAction)
       .flatMap(ref => ReleaseManifestMetadata.releaseManifestTagSettings(ref, tagName))
@@ -387,7 +392,7 @@ private[release] object TagSteps {
               remoteTagPreflightForCreate(ctx.withState(params.state), vcs, finalTagName)
           )
         )
-        .map { case (updatedCtx, result) =>
+        .flatMap { case (updatedCtx, result) =>
           applyTagToState(updatedCtx, params, result.tagName)
         }
     }

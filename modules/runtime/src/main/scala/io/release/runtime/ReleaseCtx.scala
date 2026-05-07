@@ -57,12 +57,14 @@ private[release] trait ReleaseCtx {
     * `project.resolvedVersions.isDefined`) or violate the
     * `beforeVersionResolution` execute-hook contract (those hooks must see
     * `releaseVersion == None`). [[io.release.runtime.engine.ExecutionEngine]]
-    * calls this at the validate→execute boundary in both orchestration modes.
+    * calls this at the validate→execute boundary in both orchestration modes
+    * (skipped when validation already failed).
     *
-    * Default is a no-op; overrides in [[io.release.ReleaseContext]] and
-    * `MonorepoContext` consult a metadata marker set by the seeders so only
-    * tentatively-seeded values are dropped. Explicit values from CLI overrides
-    * or hooks are preserved.
+    * Abstract on purpose — every concrete `ReleaseCtx` must decide what
+    * "tentative seed" means for its shape. The two production subtypes
+    * ([[io.release.ReleaseContext]] and `MonorepoContext`) consult a metadata
+    * marker set by their respective seeders so only tentatively-seeded values
+    * are dropped; explicit values from CLI overrides or hooks survive.
     */
-  private[release] def clearTentativeSeeds: Self = this.asInstanceOf[Self]
+  private[release] def clearTentativeSeeds: Self
 }
