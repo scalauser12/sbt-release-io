@@ -4,6 +4,62 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.2
+
+Published: 2026-05-11
+GitHub release:
+[v0.13.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.2)
+
+`v0.13.2` is a patch release for both plugins that makes version-aware release
+hooks more useful during `check`, tightens monorepo tag formatter validation,
+and fixes release manifest metadata for aggregated core publishes.
+
+### Compatibility notes
+
+- No public API removals are included in this release.
+- Hooks registered at `afterVersionResolution` and later phases now see
+  tentative release/next versions during validation when non-prompting
+  resolution succeeds. Those tentative values are cleared before execute, so
+  interactive prompts and `beforeVersionResolution` execute hooks keep their
+  previous behavior.
+
+### Fixes
+
+- Seed tentative release/next versions during core and monorepo validation so
+  post-resolution `precondition` hooks can validate version-dependent inputs
+  during `releaseIO check` / `releaseIOMonorepo check`.
+- Clear tentative validation seeds at the validate-to-execute boundary and
+  preserve monorepo partial CLI overrides when execute resolves versions again.
+- Scope core release manifest hash settings to every aggregated publish target
+  so multi-project publishes emit the release hash consistently.
+- Reject monorepo change-detection tag formatters that drop the version
+  wildcard, and warn during tag preflight when such a formatter is detected.
+
+### Improvements
+
+- Reuse seeded versions for check-mode summaries to avoid redundant resolver
+  task evaluation.
+- Move tag target lookup through the IO path and expand aggregate publish target
+  test coverage.
+
+### Documentation
+
+- Document validate-time version seeding, execute-time cleanup, and the
+  hook-visible version contract for core and monorepo hooks.
+- Refresh the scripted-test fixture indexes and contributor/agent notes for the
+  newer release-flow coverage.
+- Refresh the root README, module READMEs, and published walkthrough/getting-started docs to
+  reference `0.13.2`.
+
+### Verification
+
+- `git diff --check`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0-RC9: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.13.1
 
 Published: 2026-05-06

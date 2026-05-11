@@ -17,7 +17,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.1")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.2")
 ```
 
 The project needs a `version.sbt` file:
