@@ -623,18 +623,6 @@ class StepHelpersSpec extends CatsEffectSuite {
     }
   }
 
-  test("StepHelpers.readRequiredLine - fail fast when interactionService reaches EOF") {
-    ReleaseTestSupport.dummyContextResource(fixturePrefix).use { ctx =>
-      val ui   = StubInteractionService(readAnswers = List(None))
-      val pCtx = ctx.withState(SbtRuntime.withInteractionService(ctx.state, ui))
-
-      assertIllegalStateMessage(
-        PromptAdapter.readRequiredLine(pCtx, "Release version"),
-        "Standard input closed while waiting for Release version."
-      )
-    }
-  }
-
   test(
     "StepHelpers.readLine - loaded builds prefer the interactionService task over state fallback"
   ) {

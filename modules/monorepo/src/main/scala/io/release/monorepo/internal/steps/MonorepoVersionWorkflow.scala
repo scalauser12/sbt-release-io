@@ -400,14 +400,14 @@ private[monorepo] object MonorepoVersionWorkflow {
       project: ProjectReleaseInfo,
       versionValue: String,
       versionInputs: MonorepoVersionFiles.VersionInputs
-  ): IO[MonorepoContext] =
+  ): IO[MonorepoContext] = {
+    val versionFile = versionInputs.versionFile
     for {
-      versionFile <- IO.pure(versionInputs.versionFile)
-      _           <- VersionWorkflow.writeVersionFile(
-                       versionInputs.versionFile,
-                       versionValue,
-                       versionInputs.versionFileContents
-                     )
+      _        <- VersionWorkflow.writeVersionFile(
+                    versionInputs.versionFile,
+                    versionValue,
+                    versionInputs.versionFileContents
+                  )
       // For next-version writes, `versionValue` is the next snapshot. Because
       // the release-version write for the same project added an earlier
       // `project.ref / version := releaseVer`, and the next-version write
@@ -424,17 +424,17 @@ private[monorepo] object MonorepoVersionWorkflow {
       // resolver and writing to the wrong file. Hooks that already use
       // `ReleaseSessionOps.appendSessionSettings` see the lift as a no-op
       // (the same value re-installed in `rawAppend` resolves identically).
-      newState    <- IO.blocking {
-                       val lifted = MonorepoVersionFiles.liftLateBoundVersioningSettings(ctx.state)
-                       SbtRuntime.appendSessionSettings(
-                         lifted,
-                         Seq(project.ref / version := versionValue)
-                       )
-                     }
-      updated      = ctx
-                       .withState(newState)
-                       .updateProject(project.ref)(_.copy(versionFile = versionFile))
-      result      <-
+      newState <- IO.blocking {
+                    val lifted = MonorepoVersionFiles.liftLateBoundVersioningSettings(ctx.state)
+                    SbtRuntime.appendSessionSettings(
+                      lifted,
+                      Seq(project.ref / version := versionValue)
+                    )
+                  }
+      updated   = ctx
+                    .withState(newState)
+                    .updateProject(project.ref)(_.copy(versionFile = versionFile))
+      result   <-
         ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, updated)(
           logInfo(
             updated,
@@ -442,6 +442,7 @@ private[monorepo] object MonorepoVersionWorkflow {
           ).as(updated)
         )
     } yield result
+  }
 
   private def missingVersionFileMessage(
       project: ProjectReleaseInfo,

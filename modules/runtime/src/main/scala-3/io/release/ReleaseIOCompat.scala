@@ -11,8 +11,6 @@ import sbt.{internal as _, *}
 object ReleaseIOCompat:
   def testKey: TaskKey[sbt.protocol.testing.TestResult] = sbt.Keys.testFull
 
-  def uncached[A](body: => A): A = Def.uncached(body)
-
   def snapshotDependenciesFromManagedClasspath(
       classpath: Seq[Attributed[?]]
   ): Seq[ModuleID] =

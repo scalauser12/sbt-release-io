@@ -9,8 +9,6 @@ import sbt.{internal as _, *}
 object ReleaseIOCompat {
   def testKey: TaskKey[Unit] = sbt.Keys.test
 
-  def uncached[A](body: => A): A = body
-
   def snapshotDependenciesFromManagedClasspath(
       classpath: Seq[Attributed[_]]
   ): Seq[ModuleID] =

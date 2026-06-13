@@ -144,9 +144,6 @@ private[monorepo] object MonorepoCrossBuild {
     CrossBuildSupport
       .loadProjectSetup(ctx.state, project.ref, project.name, LogPrefix)
       .flatMap { setup =>
-        def refreshedProject(currentCtx: MonorepoContext): ProjectReleaseInfo =
-          latestProject(currentCtx, project)
-
         setup.crossVersions
           .foldLeft(IO.pure(ctx)) { (ioCtx, version) =>
             ioCtx.flatMap { currentCtx =>
@@ -166,10 +163,10 @@ private[monorepo] object MonorepoCrossBuild {
                                   LogPrefix
                                 )
                                 .map(currentCtx.withState)
-                  result   <- action(switched, refreshedProject(switched)).flatMap(nextCtx =>
+                  result   <- action(switched, latestProject(switched, project)).flatMap(nextCtx =>
                                 MonorepoStepHelpers.detectProjectFailureCommand(
                                   nextCtx,
-                                  refreshedProject(nextCtx)
+                                  latestProject(nextCtx, project)
                                 )
                               )
                 } yield result
@@ -199,9 +196,6 @@ private[monorepo] object MonorepoCrossBuild {
         CrossBuildSupport.loadProjectSetup(ctx.state, project.ref, project.name, LogPrefix)
       )
       .flatMap { setup =>
-        def refreshedProject(currentCtx: MonorepoContext): ProjectReleaseInfo =
-          latestProject(currentCtx, project)
-
         def restoreEntry(currentCtx: MonorepoContext): IO[MonorepoContext] =
           CrossBuildSupport
             .restoreEntryScalaSession(setup.entryState, currentCtx.state)
@@ -221,7 +215,7 @@ private[monorepo] object MonorepoCrossBuild {
           .foldLeft(IO.unit) { (ioUnit, version) =>
             ioUnit.flatMap { _ =>
               handle.get.flatMap { currentCtx =>
-                if (shouldSkipProject(currentCtx, refreshedProject(currentCtx))) IO.unit
+                if (shouldSkipProject(currentCtx, latestProject(currentCtx, project))) IO.unit
                 else
                   for {
                     _        <- IO.blocking(
@@ -238,12 +232,12 @@ private[monorepo] object MonorepoCrossBuild {
                       )
                     _        <- handle.set(currentCtx.withState(switched))
                     latest   <- handle.get
-                    _        <- action(handle, refreshedProject(latest))
+                    _        <- action(handle, latestProject(latest, project))
                     _        <- handle
                                   .update(ctx =>
                                     MonorepoStepHelpers.detectProjectFailureCommand(
                                       ctx,
-                                      refreshedProject(ctx)
+                                      latestProject(ctx, project)
                                     )
                                   )
                                   .void

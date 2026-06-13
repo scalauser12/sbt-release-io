@@ -23,15 +23,6 @@ private[release] object Evaluation {
       case None         => resolve
     }
 
-  /** Synchronous variant: resolve is a pure expression. */
-  def guardedSync[A](
-      guards: (Boolean, String)*
-  )(resolve: => A): Evaluation[A] =
-    firstReason(guards) match {
-      case Some(reason) => NotEvaluated(reason)
-      case None         => Resolved(resolve)
-    }
-
   /** Chain on an upstream evaluation. Propagate `NotEvaluated` (optionally rewriting the
     * reason) and only call `next` when the upstream is `Resolved`.
     */

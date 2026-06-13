@@ -59,7 +59,5 @@ private[release] object VersionCommitSupport {
     * verify that nothing rode along on the version commit unintentionally.
     */
   def remainingDirtyFiles(vcs: Vcs): IO[Seq[String]] =
-    (vcs.modifiedFiles, vcs.stagedFiles).tupled.map { case (modified, staged) =>
-      (modified ++ staged).distinct
-    }
+    unrelatedDirtyFiles(Set.empty, vcs)
 }

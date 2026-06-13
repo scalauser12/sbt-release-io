@@ -417,9 +417,7 @@ private[monorepo] object ChangeDetection {
       case Right(changedFiles) =>
         val significantFiles = changedFiles
           .filterNot(isExcludedPath(_, excludePaths))
-          .filterNot(f =>
-            childDirPrefixes.exists(prefix => f.startsWith(prefix + "/") || f == prefix)
-          )
+          .filterNot(isExcludedPath(_, childDirPrefixes))
         val excludedCount    = changedFiles.length - significantFiles.length
         if (significantFiles.nonEmpty) {
           val note =

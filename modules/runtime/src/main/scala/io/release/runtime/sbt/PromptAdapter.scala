@@ -39,21 +39,6 @@ private[release] object PromptAdapter {
   def readLine[C <: ReleaseCtx { type Self = C }](ctx: C): IO[(C, Option[String])] =
     readLineWithPrompt(ctx, "")
 
-  /** Reads a line with no visible prompt and raises `IllegalStateException` on EOF,
-    * embedding `context` in the error message.
-    */
-  def readRequiredLine[C <: ReleaseCtx { type Self = C }](
-      ctx: C,
-      context: String
-  ): IO[(C, String)] =
-    readLine(ctx).flatMap {
-      case (_, None)              =>
-        IO.raiseError(
-          new IllegalStateException(s"Standard input closed while waiting for $context.")
-        )
-      case (nextCtx, Some(input)) => IO.pure((nextCtx, input))
-    }
-
   /** Displays the given prompt and reads a line. Returns `None` on EOF. */
   def promptLine[C <: ReleaseCtx { type Self = C }](
       ctx: C,

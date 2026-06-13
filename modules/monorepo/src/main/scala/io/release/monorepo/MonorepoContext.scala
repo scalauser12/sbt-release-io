@@ -39,11 +39,10 @@ case class ProjectReleaseInfo(
   def nextVersion: Option[String]    = versions.map(_._2).filter(_.nonEmpty)
 
   def resolvedVersions: Option[(String, String)] =
-    versions.flatMap {
-      case (releaseVersion, nextVersion) if releaseVersion.nonEmpty && nextVersion.nonEmpty =>
-        Some((releaseVersion, nextVersion))
-      case _                                                                                => None
-    }
+    for {
+      r <- releaseVersion
+      n <- nextVersion
+    } yield (r, n)
 }
 
 /** Immutable context threaded through each monorepo release step during both phases.

@@ -73,9 +73,6 @@ private[monorepo] object MonorepoPublishSteps {
       ctx.withState(newState)
     }
 
-  private def isFailureCommandTaskError(cause: Throwable): Boolean =
-    StepHelpers.isFailureCommandTaskError(cause)
-
   /** Match core's publish-probe recovery: `FailureCommand` still aborts, while
     * ordinary evaluation errors mean "not skipped" so publish/publishTo checks
     * continue and the actual publish path can surface the build's configured failure.
@@ -110,9 +107,9 @@ private[monorepo] object MonorepoPublishSteps {
   ): IO[(State, A)] =
     runTaskChecked(state, key, PublishArtifactsActionName)
       .recoverWith {
-        case NonFatal(cause) if isFailureCommandTaskError(cause) =>
+        case NonFatal(cause) if StepHelpers.isFailureCommandTaskError(cause) =>
           IO.raiseError(cause)
-        case NonFatal(cause)                                     =>
+        case NonFatal(cause)                                                 =>
           IO.raiseError(new IllegalStateException(failureMessage, cause))
       }
 

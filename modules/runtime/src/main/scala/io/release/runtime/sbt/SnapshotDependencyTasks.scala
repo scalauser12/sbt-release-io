@@ -35,11 +35,9 @@ private[release] object SnapshotDependencyTasks {
       taskKey: TaskKey[Seq[ModuleID]]
   ): IO[Either[String, Seq[ModuleID]]] =
     IO.blocking {
-      val extracted           = SbtRuntime.extracted(state)
-      val thisRef             = extracted.get(thisProjectRef)
-      val (nextState, result) =
-        SbtCompat.runTaskAggregated(thisRef / taskKey, state)
-      (nextState, result)
+      val extracted = SbtRuntime.extracted(state)
+      val thisRef   = extracted.get(thisProjectRef)
+      SbtCompat.runTaskAggregated(thisRef / taskKey, state)
     }.map { case (nextState, result) =>
       stripFailureCommandOrContinue(nextState, taskKey).flatMap { _ =>
         StepHelpers.aggregatedTaskValues(result) match {
