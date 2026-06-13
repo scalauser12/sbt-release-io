@@ -46,20 +46,6 @@ private[release] object PublishSteps {
     enableCrossBuild = true
   )
 
-  /** Effective publish-skip decision combining the validate-time frozen value
-    * (when set to `true`) with the live `skipPublish` field. The frozen entry
-    * locks down the validate-time `true` decision so a hook flipping
-    * `skipPublish` to `false` at execute time cannot bypass the publishTo /
-    * `publish / skip` checks already skipped at validate; the reverse
-    * direction (validate-time `false` → execute-time `true`) stays observed so
-    * hooks can legitimately suppress publish via that path
-    * (see `ReleaseHookIO.transform` docstring example). When validate has not
-    * run (unit-test paths), the frozen entry is absent and we fall back to the
-    * live `skipPublish` value.
-    */
-  private def effectiveSkip(ctx: ReleaseContext): Boolean =
-    ctx.publishSkipFrozen.contains(true) || ctx.skipPublish
-
   /** Per-iteration cache key for publish-related decisions. Cross-build core releases
     * iterate by `scalaVersion`, and each iteration must be tracked independently so
     * `after-publish` can observe whether `publish-artifacts` actually ran for *this*

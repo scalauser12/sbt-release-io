@@ -21,7 +21,7 @@ import io.release.runtime.sbt.SnapshotDependencyTasks
 import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.PublishValidation
 import io.release.runtime.workflow.StepHelpers
-import io.release.runtime.workflow.StepHelpers.{errorMessage, runTaskChecked}
+import io.release.runtime.workflow.StepHelpers.{effectiveSkip, errorMessage, runTaskChecked}
 import sbt.Keys.*
 import sbt.{internal as _, *}
 
@@ -348,19 +348,6 @@ private[monorepo] object MonorepoPublishSteps {
         case true  => validatePublishTargetForProject(frozenCtx, project).as(frozenCtx)
       }
   }
-
-  /** Effective publish-skip decision combining the validate-time frozen
-    * value (when set to `true`) with the live `skipPublish` field. The frozen
-    * entry locks down the validate-time `true` decision so a hook flipping
-    * `skipPublish` to `false` at execute time cannot bypass the publishTo /
-    * `publish / skip` checks already skipped at validate; the reverse
-    * direction (validate-time `false` → execute-time `true`) stays observed
-    * so hooks can legitimately suppress publish at execute. When validate
-    * has not run (unit-test paths), the frozen entry is absent and we fall
-    * back to the live `skipPublish` value.
-    */
-  private def effectiveSkip(ctx: MonorepoContext): Boolean =
-    ctx.publishSkipFrozen.contains(true) || ctx.skipPublish
 
   /** Resolve and run the publish task for a single project. Falls back to
     * `publish` with a warning when `releaseIOPublishAction` is not registered

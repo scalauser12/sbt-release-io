@@ -18,9 +18,18 @@ import io.release.vcs.Vcs
 private[release] trait ReleaseCtx {
   type Self <: ReleaseCtx
 
+  /** `this`, typed as the concrete `Self`. Each subtype implements it as `this`. Lets the
+    * idempotency branches in the metadata helpers below return `self` (typed `Self`) rather
+    * than `this` (typed as the supertype `ReleaseCtx`, which would not match the `Self`
+    * return type). A `self: Self =>` self-type cannot express the path-dependent `this.Self`,
+    * so this abstract accessor is used instead.
+    */
+  protected def self: Self
+
   def state: State
   def vcs: Option[Vcs]
   def interactive: Boolean
+  def skipPublish: Boolean
   def failed: Boolean
   def failureCause: Option[Throwable]
 
@@ -46,6 +55,49 @@ private[release] trait ReleaseCtx {
   private[release] def useDefaults: Boolean =
     executionFlags.exists(_.useDefaults)
 
+  // ── Publish / push execution tracking ────────────────────────────────
+  // Shared by core and monorepo: both record which publish iterations actually ran, freeze
+  // the validate-time publish-skip decision, and flag whether push happened. A single backing
+  // key per accessor is safe because a context instance is only ever one concrete type.
+
+  /** Per-iteration keys for which `publish-artifacts` actually executed the publish task.
+    * `None` means the publish step has not run yet; an empty `Some` means it ran but every
+    * iteration skipped. Used to gate `after-publish` hooks on the real publish outcome.
+    */
+  private[release] def publishExecutedKeys: Option[Set[String]] =
+    metadata(ReleaseCtx.publishExecutedKeysKey)
+
+  private[release] def recordPublishExecuted(key: String): Self =
+    withMetadata(
+      ReleaseCtx.publishExecutedKeysKey,
+      publishExecutedKeys.getOrElse(Set.empty) + key
+    )
+
+  private[release] def markPublishExecutionStarted: Self =
+    if (publishExecutedKeys.isDefined) self
+    else withMetadata(ReleaseCtx.publishExecutedKeysKey, Set.empty[String])
+
+  /** Frozen validate-time decision for `publish-artifacts`, so a hook running after validation
+    * but before publish cannot flip `skipPublish` from `true` to `false` and bypass the
+    * publishTo / `publish / skip` checks validation skipped. `None` means validation has not
+    * run yet; execute then falls back to the live `skipPublish` value.
+    */
+  private[release] def publishSkipFrozen: Option[Boolean] =
+    metadata(ReleaseCtx.publishSkipFrozenKey)
+
+  private[release] def freezePublishSkip(skip: Boolean): Self =
+    if (publishSkipFrozen.isDefined) self
+    else withMetadata(ReleaseCtx.publishSkipFrozenKey, skip)
+
+  /** True iff `push-changes` actually pushed to the remote during this release. False when the
+    * operator declined the push. Used to gate `after-push` hooks on the real push outcome.
+    */
+  private[release] def pushExecuted: Boolean =
+    metadata(ReleaseCtx.pushExecutedKey).getOrElse(false)
+
+  private[release] def markPushExecuted: Self =
+    withMetadata(ReleaseCtx.pushExecutedKey, true)
+
   /** Drop validate-time tentative version seeds before execute starts.
     *
     * `validateInquireVersionsWithContext` (core/monorepo) seeds tentative
@@ -67,4 +119,19 @@ private[release] trait ReleaseCtx {
     * are dropped; explicit values from CLI overrides or hooks survive.
     */
   private[release] def clearTentativeSeeds: Self
+}
+
+private[release] object ReleaseCtx {
+
+  // Backing keys for the shared publish/push execution-tracking accessors. Declared once here
+  // rather than per-context: any instance is exactly one concrete type, so a single key cannot
+  // collide between core and monorepo.
+  private[release] val publishExecutedKeysKey: AttributeKey[Set[String]] =
+    AttributeKey[Set[String]]("releaseIOInternalPublishExecutedKeys")
+
+  private[release] val publishSkipFrozenKey: AttributeKey[Boolean] =
+    AttributeKey[Boolean]("releaseIOInternalPublishSkipFrozen")
+
+  private[release] val pushExecutedKey: AttributeKey[Boolean] =
+    AttributeKey[Boolean]("releaseIOInternalPushExecuted")
 }

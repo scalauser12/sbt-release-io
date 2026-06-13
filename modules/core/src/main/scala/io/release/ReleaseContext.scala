@@ -41,6 +41,8 @@ case class ReleaseContext(
 ) extends ReleaseCtx {
   type Self = ReleaseContext
 
+  override protected def self: ReleaseContext = this
+
   override def withState(s: State): ReleaseContext = copy(state = s)
 
   /** Set the release and next version pair, updating both the context field
@@ -93,51 +95,6 @@ case class ReleaseContext(
   private[release] def pushConfigured: Boolean =
     executionState.fold(true)(_.pushConfigured)
 
-  /** Per-iteration keys (matching `CoreLifecycle.scalaVersionKey`) for which
-    * `publish-artifacts` actually executed the publish task. `None` means the publish
-    * step has not yet run; an empty `Some` means it ran but every iteration skipped.
-    * Used to gate `after-publish` hooks against the actual publish outcome rather than a
-    * pre-publish skip evaluation that a `before-publish` hook may have rendered stale.
-    */
-  private[release] def publishExecutedKeys: Option[Set[String]] =
-    metadata(ReleaseContext.publishExecutedKeysKey)
-
-  private[release] def recordPublishExecuted(key: String): ReleaseContext =
-    withMetadata(
-      ReleaseContext.publishExecutedKeysKey,
-      publishExecutedKeys.getOrElse(Set.empty) + key
-    )
-
-  private[release] def markPublishExecutionStarted: ReleaseContext =
-    if (publishExecutedKeys.isDefined) this
-    else withMetadata(ReleaseContext.publishExecutedKeysKey, Set.empty[String])
-
-  /** Frozen validate-time decision for `publish-artifacts`. Captured by the publish
-    * step's validation so that a hook running after validation but before publish
-    * cannot flip `skipPublish` from `true` to `false` and bypass the publishTo /
-    * `publish / skip` checks the validation skipped under the original decision.
-    * `None` means validation has not run yet (e.g. unit-test paths that invoke
-    * execute directly); execute then falls back to the live `skipPublish` value.
-    */
-  private[release] def publishSkipFrozen: Option[Boolean] =
-    metadata(ReleaseContext.publishSkipFrozenKey)
-
-  private[release] def freezePublishSkip(skip: Boolean): ReleaseContext =
-    if (publishSkipFrozen.isDefined) this
-    else withMetadata(ReleaseContext.publishSkipFrozenKey, skip)
-
-  /** True iff `push-changes` actually pushed to the remote during this release.
-    * False when the operator declined the push (CLI `default-push-answer n`,
-    * `releaseIODefaultsPushAnswer := Some(false)`, non-interactive no-default,
-    * interactive decline, EOF). Used to gate `after-push` hooks on the real
-    * push outcome rather than a pre-push policy upper bound.
-    */
-  private[release] def pushExecuted: Boolean =
-    metadata(ReleaseContext.pushExecutedKey).getOrElse(false)
-
-  private[release] def markPushExecuted: ReleaseContext =
-    withMetadata(ReleaseContext.pushExecutedKey, true)
-
   /** Mark `versions` as a tentative seed installed by
     * `validateInquireVersionsWithContext`. The marker is consumed by
     * [[clearTentativeSeeds]] at the validate→execute boundary; explicit
@@ -168,19 +125,9 @@ case class ReleaseContext(
 
 object ReleaseContext {
 
-  // Internal metadata key for the publish-execution snapshot consumed by
-  // `CoreLifecycle.afterPublishNarrow`. Hidden from external consumers; the
-  // companion itself stays public so the case class's synthesized `apply` /
-  // `unapply` remain accessible to hook and custom-plugin code.
-  private val publishExecutedKeysKey: AttributeKey[Set[String]] =
-    AttributeKey[Set[String]]("releaseIOInternalCorePublishExecutedKeys")
-
-  private val publishSkipFrozenKey: AttributeKey[Boolean] =
-    AttributeKey[Boolean]("releaseIOInternalCorePublishSkipFrozen")
-
-  private val pushExecutedKey: AttributeKey[Boolean] =
-    AttributeKey[Boolean]("releaseIOInternalCorePushExecuted")
-
+  // The publish/push execution-tracking keys now live on the shared `ReleaseCtx` companion.
+  // The companion itself stays public so the case class's synthesized `apply` / `unapply`
+  // remain accessible to hook and custom-plugin code.
   private[release] val tentativelySeededVersionsKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalCoreTentativelySeededVersions")
 }

@@ -100,6 +100,8 @@ case class MonorepoContext(
 ) extends ReleaseCtx {
   type Self = MonorepoContext
 
+  override protected def self: MonorepoContext = this
+
   def currentProjects: Seq[ProjectReleaseInfo] =
     projects.filterNot(_.failed)
 
@@ -151,52 +153,6 @@ case class MonorepoContext(
 
   private[monorepo] def markNextVersionFilesPrevalidated: MonorepoContext =
     withMetadata(MonorepoContext.nextVersionFilesPrevalidatedKey, ())
-
-  /** Per-project keys (matching `MonorepoLifecycle.publishGateKey`) for which
-    * `publish-artifacts` actually executed the publish task. `None` means the
-    * publish step has not yet run; an empty `Some` means it ran but every
-    * iteration skipped. Used to gate `after-publish` hooks against the actual
-    * publish outcome rather than a pre-publish skip evaluation.
-    */
-  private[monorepo] def publishExecutedKeys: Option[Set[String]] =
-    metadata(MonorepoContext.publishExecutedKeysKey)
-
-  private[monorepo] def recordPublishExecuted(key: String): MonorepoContext =
-    withMetadata(
-      MonorepoContext.publishExecutedKeysKey,
-      publishExecutedKeys.getOrElse(Set.empty) + key
-    )
-
-  private[monorepo] def markPublishExecutionStarted: MonorepoContext =
-    if (publishExecutedKeys.isDefined) this
-    else withMetadata(MonorepoContext.publishExecutedKeysKey, Set.empty[String])
-
-  /** Frozen validate-time decision for `publish-artifacts`. Captured by the
-    * publish step's validation so that a hook running after validation but
-    * before publish cannot flip `skipPublish` from `true` to `false` and
-    * bypass the publishTo / `publish / skip` checks that validation skipped
-    * under the original decision. `None` means validation has not run yet
-    * (e.g. unit-test paths that invoke execute directly); execute then falls
-    * back to the live `skipPublish` value.
-    */
-  private[monorepo] def publishSkipFrozen: Option[Boolean] =
-    metadata(MonorepoContext.publishSkipFrozenKey)
-
-  private[monorepo] def freezePublishSkip(skip: Boolean): MonorepoContext =
-    if (publishSkipFrozen.isDefined) this
-    else withMetadata(MonorepoContext.publishSkipFrozenKey, skip)
-
-  /** True iff the monorepo `push-changes` step actually pushed to the remote.
-    * False when the operator declined (`default-push-answer n`,
-    * `releaseIOMonorepoDefaultsPushAnswer := Some(false)`, non-interactive
-    * no-default, interactive decline, EOF). Used to gate `after-push` global
-    * hooks on the real push outcome.
-    */
-  private[monorepo] def pushExecuted: Boolean =
-    metadata(MonorepoContext.pushExecutedKey).getOrElse(false)
-
-  private[monorepo] def markPushExecuted: MonorepoContext =
-    withMetadata(MonorepoContext.pushExecutedKey, true)
 
   /** Seed internal execution state during initialization.
     * Replaces any prior execution-state payload.
@@ -278,14 +234,7 @@ object MonorepoContext {
   private val nextVersionFilesPrevalidatedKey: AttributeKey[Unit] =
     AttributeKey[Unit]("releaseIOInternalMonorepoNextVersionFilesPrevalidated")
 
-  private val publishExecutedKeysKey: AttributeKey[Set[String]] =
-    AttributeKey[Set[String]]("releaseIOInternalMonorepoPublishExecutedKeys")
-
-  private val publishSkipFrozenKey: AttributeKey[Boolean] =
-    AttributeKey[Boolean]("releaseIOInternalMonorepoPublishSkipFrozen")
-
-  private val pushExecutedKey: AttributeKey[Boolean] =
-    AttributeKey[Boolean]("releaseIOInternalMonorepoPushExecuted")
+  // The publish/push execution-tracking keys now live on the shared `ReleaseCtx` companion.
 
   private val pushConfiguredKey: AttributeKey[Boolean] =
     AttributeKey[Boolean]("releaseIOInternalMonorepoPushConfigured")

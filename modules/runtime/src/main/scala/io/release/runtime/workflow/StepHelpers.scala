@@ -7,6 +7,7 @@ import _root_.sbt.State
 import _root_.sbt.TaskKey
 import _root_.sbt.internal.Aggregation.KeyValue
 import cats.effect.IO
+import io.release.runtime.ReleaseCtx
 import io.release.runtime.sbt.SbtRuntime
 import io.release.version.Version
 
@@ -14,6 +15,12 @@ import scala.util.control.NonFatal
 
 /** Shared helpers used across release step objects. */
 private[release] object StepHelpers {
+
+  /** Effective publish-skip decision shared by core and monorepo publish steps: a frozen
+    * validate-time `true` is authoritative; otherwise fall back to the live `skipPublish`.
+    */
+  private[release] def effectiveSkip(ctx: ReleaseCtx): Boolean =
+    ctx.publishSkipFrozen.contains(true) || ctx.skipPublish
 
   /** Substring present in any `IllegalStateException` emitted by [[runTaskChecked]] after
     * an sbt task armed sbt's `FailureCommand` sentinel. Detection paths match on this; if
