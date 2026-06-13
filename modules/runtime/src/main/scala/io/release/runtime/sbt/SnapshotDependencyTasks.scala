@@ -1,7 +1,7 @@
 package io.release.runtime.sbt
 
 import cats.effect.IO
-import io.release.LoadCompat
+import io.release.ScopedKeyLookup
 import io.release.ReleaseIOCompat
 import io.release.runtime.workflow.StepHelpers
 import _root_.sbt.Keys.*
@@ -82,7 +82,7 @@ private[release] object SnapshotDependencyTasks {
     IO.blocking {
       if (SbtRuntime.hasFailureCommand(state))
         Left(new IllegalStateException(failureCommandError(Keys.managedClasspath)))
-      else if (!LoadCompat.containsScopedKey(state, ref / Test / Keys.managedClasspath))
+      else if (!ScopedKeyLookup.containsScopedKey(state, ref / Test / Keys.managedClasspath))
         Right(None)
       else
         Right(Some(Project.extract(state).runTask(ref / Test / Keys.managedClasspath, state)))

@@ -156,13 +156,7 @@ private[release] object ReleaseComposer {
       }
     }
 
-  private final case class CrossSetup(
-      crossVersions: Seq[String],
-      entryState: State,
-      affectedFor: String => Seq[ProjectRef]
-  )
-
-  private def loadCrossSetup(entryState: State): IO[CrossSetup] =
+  private def loadCrossSetup(entryState: State): IO[CrossBuildSupport.ProjectCrossBuildSetup] =
     IO.blocking {
       val extracted     = SbtRuntime.extracted(entryState)
       val crossVersions = extracted.get(crossScalaVersions).distinct
@@ -172,7 +166,7 @@ private[release] object ReleaseComposer {
       // aggregator root; for builds with multiple projects it aligns
       // inter-project deps automatically.
       val affectedFor   = CrossBuildSupport.affectedRefsByVersion(entryState)
-      CrossSetup(crossVersions, entryState, affectedFor)
+      CrossBuildSupport.ProjectCrossBuildSetup(crossVersions, entryState, affectedFor)
     }
 
   private def assertNonEmptyCrossVersions(crossVersions: Seq[String]): IO[Unit] =
@@ -220,14 +214,7 @@ private[release] object ReleaseComposer {
       stepName: String,
       ctx: ReleaseContext
   ): IO[ReleaseContext] =
-    IO {
-      if (SbtRuntime.hasFailureCommand(ctx.state)) {
-        val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
-        ctx
-          .withState(cleaned)
-          .failWith(
-            new IllegalStateException(s"$stepName: sbt task reported failure via FailureCommand")
-          )
-      } else ctx
-    }
+    // "task" verb and the no-re-arm (identity) else-branch are load-bearing: the cross-build
+    // loop must not re-arm onFailure between iterations, and the message is asserted verbatim.
+    ExecutionEngine.detectFailureCommand(stepName, ctx, "task", identity[ReleaseContext])
 }

@@ -58,18 +58,10 @@ private[monorepo] object ChangeDetection {
       args: Seq[String]
   )(context: => String): IO[Seq[String]] =
     GitProcessSupport.runCommandResult(vcs.baseDir, args).flatMap { result =>
-      if (result.exitCode != 0) IO.raiseError(gitFailure(context, result))
+      if (result.exitCode != 0)
+        IO.raiseError(GitProcessSupport.unexpectedExitError(context, result))
       else IO.pure(result.stdout)
     }
-
-  private def gitFailure(
-      context: => String,
-      result: GitProcessSupport.GitCommandResult
-  ): IllegalStateException =
-    new IllegalStateException(
-      s"$context failed with exit code ${result.exitCode}" +
-        (if (result.stderr.nonEmpty) s": ${result.stderr}" else "")
-    )
 
   /** Look up the last tag matching a pattern via `git describe` / `git tag`. */
   private def lookupLastTag(vcs: Vcs, tagPattern: String): IO[TagLookupResult] = {

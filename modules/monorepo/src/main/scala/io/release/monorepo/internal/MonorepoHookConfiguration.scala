@@ -2,6 +2,7 @@ package io.release.monorepo.internal
 
 import io.release.monorepo.*
 import io.release.runtime.HookPhases
+import io.release.runtime.PolicyFlags
 import io.release.runtime.sbt.SbtRuntime
 import sbt.*
 
@@ -38,6 +39,17 @@ private[monorepo] final case class MonorepoHookConfiguration(
       other: MonorepoHookConfiguration
   ): MonorepoHookConfiguration =
     MonorepoHookConfiguration.merge(this, other)
+
+  /** The six policy flags as the shared carrier, for conjunction merging. */
+  private[internal] def policyFlags: PolicyFlags =
+    PolicyFlags(
+      enableSnapshotDependenciesCheck,
+      enableRunClean,
+      enableRunTests,
+      enableTagging,
+      enablePublish,
+      enablePush
+    )
 }
 
 private[monorepo] object MonorepoHookConfiguration {
@@ -199,18 +211,32 @@ private[monorepo] object MonorepoHookConfiguration {
     ThisBuild / entry.settingKey := Seq.empty[MonorepoProjectHookIO]
   )
 
+  /** Copy the six flat policy fields from a shared [[PolicyFlags]] carrier (arity unchanged). */
+  private def withPolicyFlags(
+      cfg: MonorepoHookConfiguration,
+      flags: PolicyFlags
+  ): MonorepoHookConfiguration =
+    cfg.copy(
+      enableSnapshotDependenciesCheck = flags.enableSnapshotDependenciesCheck,
+      enableRunClean = flags.enableRunClean,
+      enableRunTests = flags.enableRunTests,
+      enableTagging = flags.enableTagging,
+      enablePublish = flags.enablePublish,
+      enablePush = flags.enablePush
+    )
+
   def resolve(state: State): MonorepoHookConfiguration = {
     val e           = SbtRuntime.extracted(state)
-    val base        = MonorepoHookConfiguration(
-      enableSnapshotDependenciesCheck = e.get(
-        ai.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck
-      ),
+    val flags       = PolicyFlags(
+      enableSnapshotDependenciesCheck =
+        e.get(ai.releaseIOMonorepoPolicyEnableSnapshotDependenciesCheck),
       enableRunClean = e.get(ai.releaseIOMonorepoPolicyEnableRunClean),
       enableRunTests = e.get(ai.releaseIOMonorepoPolicyEnableRunTests),
       enableTagging = e.get(ai.releaseIOMonorepoPolicyEnableTagging),
       enablePublish = e.get(ai.releaseIOMonorepoPolicyEnablePublish),
       enablePush = e.get(ai.releaseIOMonorepoPolicyEnablePush)
     )
+    val base        = withPolicyFlags(MonorepoHookConfiguration(), flags)
     val withGlobal  =
       globalRegistry.foldLeft(base)((cfg, entry) => entry.set(cfg, e.get(entry.settingKey)))
     val withProject =
@@ -222,15 +248,8 @@ private[monorepo] object MonorepoHookConfiguration {
       left: MonorepoHookConfiguration,
       right: MonorepoHookConfiguration
   ): MonorepoHookConfiguration = {
-    val merged      = MonorepoHookConfiguration(
-      enableSnapshotDependenciesCheck = left.enableSnapshotDependenciesCheck &&
-        right.enableSnapshotDependenciesCheck,
-      enableRunClean = left.enableRunClean && right.enableRunClean,
-      enableRunTests = left.enableRunTests && right.enableRunTests,
-      enableTagging = left.enableTagging && right.enableTagging,
-      enablePublish = left.enablePublish && right.enablePublish,
-      enablePush = left.enablePush && right.enablePush
-    )
+    val merged      =
+      withPolicyFlags(MonorepoHookConfiguration(), left.policyFlags.mergeWith(right.policyFlags))
     val withGlobal  = globalRegistry.foldLeft(merged)((cfg, entry) =>
       entry.set(cfg, entry.get(left) ++ entry.get(right))
     )

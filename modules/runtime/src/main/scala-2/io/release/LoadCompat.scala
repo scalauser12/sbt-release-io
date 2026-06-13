@@ -42,23 +42,6 @@ private[release] object LoadCompat {
     )
   }
 
-  def containsScopedKey(
-      state: State,
-      scopedKey: ScopedKey[?]
-  ): Boolean =
-    containsScopedKey(Project.extract(state).structure, scopedKey)
-
-  def containsScopedKey(
-      structure: BuildStructure,
-      scopedKey: ScopedKey[?]
-  ): Boolean = {
-    val definedKeys     = structure.settings.iterator.map(_.key).toSet
-    val candidateScopes =
-      Iterator.single(scopedKey.scope) ++ structure.delegates(scopedKey.scope).iterator
-
-    candidateScopes.exists(scope => definedKeys.contains(ScopedKey(scope, scopedKey.key)))
-  }
-
   // Inlined from sbt-release's LoadCompat / _root_.sbt.internal.Load.
   // Maps dependencies on the special tasks:
   // 1. the scope of 'streams' is the same as the defining key and has the task axis set to the

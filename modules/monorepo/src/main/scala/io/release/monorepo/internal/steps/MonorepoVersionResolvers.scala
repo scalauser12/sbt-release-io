@@ -1,8 +1,8 @@
 package io.release.monorepo.internal.steps
 
 import cats.effect.IO
-import io.release.LoadCompat
 import io.release.ReleaseSharedKeys.releaseIOVersioningBump
+import io.release.ScopedKeyLookup
 import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.MonorepoReleasePlugin
@@ -26,10 +26,7 @@ private[steps] object MonorepoVersionResolvers {
     s"${projectRef.project}: ${taskKey.key.label} is undefined; falling back to $fallback"
 
   def resolveCurrentVcs(ctx: MonorepoContext): IO[Vcs] =
-    ctx.vcs match {
-      case Some(vcs) => IO.pure(vcs)
-      case None      => VcsOps.detectVcs(ctx.state)
-    }
+    VcsOps.resolveVcs(ctx)
 
   def resolveVersionFunction(
       ctx: MonorepoContext,
@@ -38,7 +35,7 @@ private[steps] object MonorepoVersionResolvers {
       defaultForBump: Version.Bump => (String => String),
       actionName: String
   ): IO[(MonorepoContext, String => String)] =
-    if (LoadCompat.containsScopedKey(ctx.state, projectRef / taskKey))
+    if (ScopedKeyLookup.containsScopedKey(ctx.state, projectRef / taskKey))
       StepHelpers
         .runTaskChecked(ctx.state, projectRef / taskKey, actionName)
         .map { case (nextState, fn) =>
@@ -62,7 +59,7 @@ private[steps] object MonorepoVersionResolvers {
       projectRef: ProjectRef,
       actionName: String
   ): IO[(MonorepoContext, Version.Bump)] =
-    if (LoadCompat.containsScopedKey(ctx.state, projectRef / releaseIOVersioningBump))
+    if (ScopedKeyLookup.containsScopedKey(ctx.state, projectRef / releaseIOVersioningBump))
       StepHelpers
         .runTaskChecked(ctx.state, projectRef / releaseIOVersioningBump, actionName)
         .map { case (nextState, bump) =>

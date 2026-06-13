@@ -43,11 +43,7 @@ class Git(val baseDir: File) extends Vcs {
       result.exitCode match {
         case 0 => IO.pure(true)
         case 1 => IO.pure(false)
-        case n =>
-          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
-          IO.raiseError(
-            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
-          )
+        case _ => IO.raiseError(GitProcessSupport.unexpectedExitError(context, result))
       }
     }
 
@@ -79,11 +75,8 @@ class Git(val baseDir: File) extends Vcs {
           }
         case 1 =>
           IO.raiseError(new IllegalStateException(DetachedHeadMessage))
-        case n =>
-          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
-          IO.raiseError(
-            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
-          )
+        case _ =>
+          IO.raiseError(GitProcessSupport.unexpectedExitError(context, result))
       }
     }
   }

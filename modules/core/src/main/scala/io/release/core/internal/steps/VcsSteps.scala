@@ -86,9 +86,8 @@ private[release] object VcsSteps {
     validateWithContext = Some(ctx =>
       if (DecisionResolver.effectivelyDeclinedPush(ctx)) IO.pure(ctx)
       else
-        required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") {
-          vcs =>
-            VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Core)
+        requireVcs(ctx) { vcs =>
+          VcsOps.validatePushReadiness(ctx, vcs, ReleaseLogPrefixes.Core)
         }
     ),
     execute = ctx =>

@@ -148,9 +148,7 @@ private[release] object TagSteps {
     // and `commit-release-version` had already mutated the repo.
     if (!willCreateTag) IO.unit
     else
-      ctx.vcs
-        .fold(VcsOps.detectVcs(ctx.state))(IO.pure)
-        .flatMap(vcs => remoteTagPreflightForCreate(ctx, vcs, tagName))
+      VcsOps.resolveVcs(ctx).flatMap(vcs => remoteTagPreflightForCreate(ctx, vcs, tagName))
 
   /** Late-path probe invoked from inside [[TagConflictResolver.resolveConflict]]
     * via the `beforeCreateTag` callback. Unlike [[remoteTagPreflight]] this
@@ -222,8 +220,8 @@ private[release] object TagSteps {
   private def currentHashTarget(
       ctx: ReleaseContext
   ): IO[TagConflictResolver.PreflightCommitTarget] = {
-    val detectedVcs = ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure)
-    detectedVcs
+    VcsOps
+      .resolveVcs(ctx)
       .flatMap(_.currentHash)
       .map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
   }
@@ -307,10 +305,11 @@ private[release] object TagSteps {
   ): IO[PreflightTagOutcome] =
     preparePreflightContext(ctx).flatMap { preflightCtx =>
       resolveTagPlan(preflightCtx).flatMap { params =>
-        val detectedVcs = preflightCtx.vcs.fold(VcsOps.detectVcs(preflightCtx.state))(IO.pure)
-        detectedVcs.flatMap(vcs =>
-          resolveTagPreflight(vcs, params, preflightCtx, interactive, preflightTagTarget)
-        )
+        VcsOps
+          .resolveVcs(preflightCtx)
+          .flatMap(vcs =>
+            resolveTagPreflight(vcs, params, preflightCtx, interactive, preflightTagTarget)
+          )
       }
     }
 

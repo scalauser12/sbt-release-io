@@ -71,6 +71,7 @@ class ArchitectureBoundarySpec extends CatsEffectSuite {
     "ReleaseCommandRunner",
     "ReleaseCommandCli",
     "LoadCompat",
+    "ScopedKeyLookup",
     "SbtRuntime",
     "PromptAdapter",
     "SnapshotDependencyTasks",

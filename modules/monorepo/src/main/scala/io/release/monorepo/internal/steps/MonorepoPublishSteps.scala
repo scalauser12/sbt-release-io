@@ -2,12 +2,12 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import io.release.CleanCompat
-import io.release.LoadCompat
 import io.release.ReleaseIOCompat
 import io.release.ReleaseManifestMetadata
 import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
 import io.release.ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
 import io.release.ReleaseSharedKeys.releaseIOPublishAction
+import io.release.ScopedKeyLookup
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks
 import io.release.monorepo.ProjectReleaseInfo
@@ -241,7 +241,7 @@ private[monorepo] object MonorepoPublishSteps {
         for {
           externalSnapshots <-
             if (
-              LoadCompat.containsScopedKey(
+              ScopedKeyLookup.containsScopedKey(
                 ctx.state,
                 project.ref / releaseIODiagnosticsSnapshotDependencies
               )
@@ -371,7 +371,7 @@ private[monorepo] object MonorepoPublishSteps {
       project: ProjectReleaseInfo
   ): IO[MonorepoContext] = {
     val publishStep =
-      if (LoadCompat.containsScopedKey(ctx.state, project.ref / releaseIOPublishAction))
+      if (ScopedKeyLookup.containsScopedKey(ctx.state, project.ref / releaseIOPublishAction))
         runProjectTask(ctx, project.ref / releaseIOPublishAction)
       else
         logWarn(ctx, fallbackToPublishWarning(project)) *>

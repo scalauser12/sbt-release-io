@@ -3,6 +3,7 @@ package io.release.core.internal
 import io.release.ReleaseHookIO
 import io.release.ReleasePluginIO
 import io.release.runtime.HookPhases
+import io.release.runtime.PolicyFlags
 import io.release.runtime.sbt.SbtRuntime
 import sbt.*
 
@@ -35,6 +36,17 @@ private[release] final case class CoreHookConfiguration(
 
   def mergeWith(other: CoreHookConfiguration): CoreHookConfiguration =
     CoreHookConfiguration.merge(this, other)
+
+  /** The six policy flags as the shared carrier, for conjunction merging. */
+  private[internal] def policyFlags: PolicyFlags =
+    PolicyFlags(
+      enableSnapshotDependenciesCheck,
+      enableRunClean,
+      enableRunTests,
+      enableTagging,
+      enablePublish,
+      enablePush
+    )
 }
 
 private[release] object CoreHookConfiguration {
@@ -172,9 +184,23 @@ private[release] object CoreHookConfiguration {
     ThisBuild / ai.releaseIOPolicyEnablePush                      := true
   ) ++ phaseRegistry.map(entry => ThisBuild / entry.settingKey := Seq.empty[ReleaseHookIO])
 
+  /** Copy the six flat policy fields from a shared [[PolicyFlags]] carrier (arity unchanged). */
+  private def withPolicyFlags(
+      cfg: CoreHookConfiguration,
+      flags: PolicyFlags
+  ): CoreHookConfiguration =
+    cfg.copy(
+      enableSnapshotDependenciesCheck = flags.enableSnapshotDependenciesCheck,
+      enableRunClean = flags.enableRunClean,
+      enableRunTests = flags.enableRunTests,
+      enableTagging = flags.enableTagging,
+      enablePublish = flags.enablePublish,
+      enablePush = flags.enablePush
+    )
+
   def resolve(state: State): CoreHookConfiguration = {
-    val e    = SbtRuntime.extracted(state)
-    val base = CoreHookConfiguration(
+    val e     = SbtRuntime.extracted(state)
+    val flags = PolicyFlags(
       enableSnapshotDependenciesCheck = e.get(ai.releaseIOPolicyEnableSnapshotDependenciesCheck),
       enableRunClean = e.get(ai.releaseIOPolicyEnableRunClean),
       enableRunTests = e.get(ai.releaseIOPolicyEnableRunTests),
@@ -182,6 +208,7 @@ private[release] object CoreHookConfiguration {
       enablePublish = e.get(ai.releaseIOPolicyEnablePublish),
       enablePush = e.get(ai.releaseIOPolicyEnablePush)
     )
+    val base  = withPolicyFlags(CoreHookConfiguration(), flags)
     phaseRegistry.foldLeft(base)((cfg, entry) => entry.set(cfg, e.get(entry.settingKey)))
   }
 
@@ -189,15 +216,8 @@ private[release] object CoreHookConfiguration {
       left: CoreHookConfiguration,
       right: CoreHookConfiguration
   ): CoreHookConfiguration = {
-    val merged = CoreHookConfiguration(
-      enableSnapshotDependenciesCheck =
-        left.enableSnapshotDependenciesCheck && right.enableSnapshotDependenciesCheck,
-      enableRunClean = left.enableRunClean && right.enableRunClean,
-      enableRunTests = left.enableRunTests && right.enableRunTests,
-      enableTagging = left.enableTagging && right.enableTagging,
-      enablePublish = left.enablePublish && right.enablePublish,
-      enablePush = left.enablePush && right.enablePush
-    )
+    val merged =
+      withPolicyFlags(CoreHookConfiguration(), left.policyFlags.mergeWith(right.policyFlags))
     phaseRegistry.foldLeft(merged)((cfg, entry) =>
       entry.set(cfg, entry.get(left) ++ entry.get(right))
     )

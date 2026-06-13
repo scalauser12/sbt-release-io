@@ -138,16 +138,31 @@ private[release] object ExecutionEngine {
       .withMetadata(armedOnFailureKey, ())
   }
 
-  def detectSbtFailure[C <: ReleaseCtx { type Self = C }](stepName: String, ctx: C): IO[C] = IO {
+  /** Detect a sbt `FailureCommand` left on the state after running a step. When present, strip
+    * it and fail the context with a message naming the unit of work (`verb`, e.g. "action" or
+    * "task"); otherwise hand the clean context to `onClean`. The `verb` and `onClean` seam lets
+    * the main action phase (`detectSbtFailure`: "action", re-arm via `armOnFailure`) and the
+    * cross-build iteration loop (`ReleaseComposer.detectIterationFailure`: "task", no re-arm)
+    * share this core while preserving their distinct, test-asserted messages and else-branches.
+    */
+  def detectFailureCommand[C <: ReleaseCtx { type Self = C }](
+      stepName: String,
+      ctx: C,
+      verb: String,
+      onClean: C => C
+  ): IO[C] = IO {
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val cleaned = SbtRuntime.stripLeadingFailureCommand(ctx.state)
       ctx
         .withState(cleaned)
         .failWith(
-          new IllegalStateException(s"$stepName: sbt action reported failure via FailureCommand")
+          new IllegalStateException(s"$stepName: sbt $verb reported failure via FailureCommand")
         )
-    } else armOnFailure(ctx)
+    } else onClean(ctx)
   }
+
+  def detectSbtFailure[C <: ReleaseCtx { type Self = C }](stepName: String, ctx: C): IO[C] =
+    detectFailureCommand(stepName, ctx, "action", armOnFailure[C])
 
   def stripFailureCommand[C <: ReleaseCtx { type Self = C }](ctx: C): IO[C] = IO {
     val cleaned           = SbtRuntime.stripLeadingFailureCommand(ctx.state)

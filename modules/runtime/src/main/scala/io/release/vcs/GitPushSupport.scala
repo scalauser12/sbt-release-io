@@ -82,11 +82,7 @@ private[release] object GitPushSupport {
       result.exitCode match {
         case 0 => IO.pure(result.stdout.headOption.fold("")(_.trim))
         case 1 => IO.raiseError(new InvalidUpstreamConfigException(missingMessage))
-        case n =>
-          val stderrSuffix = if (result.stderr.nonEmpty) s": ${result.stderr}" else ""
-          IO.raiseError(
-            new IllegalStateException(s"$context failed with exit code $n$stderrSuffix")
-          )
+        case _ => IO.raiseError(GitProcessSupport.unexpectedExitError(context, result))
       }
     }
   }

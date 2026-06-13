@@ -3,10 +3,8 @@ package io.release.vcs
 import scala.concurrent.duration.FiniteDuration
 
 import cats.effect.IO
-import io.release.ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout
 import io.release.VcsOps
 import io.release.runtime.ReleaseCtx
-import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.DecisionResolver
 import _root_.sbt.State
 
@@ -47,12 +45,7 @@ private[release] object RemoteTagProbe {
     * shared default when unset.
     */
   def loadTimeout(state: State): IO[FiniteDuration] =
-    IO.blocking(
-      SbtRuntime
-        .extracted(state)
-        .getOpt(releaseIOVcsRemoteCheckTimeout)
-        .getOrElse(VcsOps.DefaultRemoteCheckTimeout)
-    )
+    VcsOps.loadRemoteCheckTimeout(state)
 
   /** Run the full probe pipeline gated on [[shouldSkip]]: hasUpstream check,
     * fetch trackingRemote, query the remote with timeout, and either abort on

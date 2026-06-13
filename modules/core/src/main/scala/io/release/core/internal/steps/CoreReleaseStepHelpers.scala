@@ -12,6 +12,9 @@ import sbt.{internal as _, *}
   */
 private[release] object CoreReleaseStepHelpers {
 
+  private[steps] val MissingVcsMessage =
+    "VCS not initialized. Ensure initializeVcs runs before this step."
+
   def failOnSbtTaskFailure(
       ctx: ReleaseContext,
       newState: State,
@@ -23,7 +26,7 @@ private[release] object CoreReleaseStepHelpers {
     } else ctx.withState(newState)
 
   def requireVcs(ctx: ReleaseContext)(f: Vcs => IO[ReleaseContext]): IO[ReleaseContext] =
-    required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.")(f)
+    required(ctx.vcs, MissingVcsMessage)(f)
 
   def requireVersions(
       ctx: ReleaseContext

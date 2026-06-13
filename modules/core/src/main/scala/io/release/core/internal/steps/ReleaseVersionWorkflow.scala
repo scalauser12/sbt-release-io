@@ -84,7 +84,7 @@ private[release] object ReleaseVersionWorkflow {
       // version file at validate time, before `set-release-version` rewrites it
       // on disk and leaves a corrupted (yet git-invisible) state behind.
       ensureVersionFileExists(versionFile) *>
-        ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
+        VcsOps.resolveVcs(ctx).flatMap { vcs =>
           VcsOps.relativizeToBase(vcs, versionFile).flatMap { relativePath =>
             VersionWorkflow.assertVersionFileNotIgnored(
               "inquire-versions",
@@ -404,7 +404,7 @@ private[release] object ReleaseVersionWorkflow {
       commitMessageKey: TaskKey[String],
       versionFile: File
   ): IO[(ReleaseContext, String)] =
-    required(ctx.vcs, "VCS not initialized. Ensure initializeVcs runs before this step.") { vcs =>
+    required(ctx.vcs, CoreReleaseStepHelpers.MissingVcsMessage) { vcs =>
       for {
         signFlags       <- loadSignFlags(ctx.state)
         relativePath    <- VcsOps.relativizeToBase(vcs, versionFile)
@@ -529,7 +529,7 @@ private[release] object ReleaseVersionWorkflow {
       // ran, so the validate-time checks at [[validateInquireVersions]] cannot see the
       // final value. Running the checks here means a misconfigured or gitignored file
       // is rejected before the on-disk write rather than after.
-      _           <- ctx.vcs.fold(VcsOps.detectVcs(ctx.state))(IO.pure).flatMap { vcs =>
+      _           <- VcsOps.resolveVcs(ctx).flatMap { vcs =>
                        VcsOps.relativizeToBase(vcs, versionPlan.versionFile).flatMap { rel =>
                          VersionWorkflow.assertVersionFileNotIgnored(actionName, rel, vcs)
                        }

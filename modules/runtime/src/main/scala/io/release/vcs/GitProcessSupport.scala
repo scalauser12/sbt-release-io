@@ -91,6 +91,21 @@ private[release] object GitProcessSupport {
       ManagedProcessRunner.captureCommandResult
     )
 
+  /** Build the standard "non-zero git exit" error: `<context> failed with exit code <n>`
+    * with `: <stderr>` appended when stderr is non-empty. Shared by every call site that
+    * raises on an unexpected git exit code so the message stays uniform.
+    *
+    * @param context by-name label inserted into the error message on failure.
+    */
+  private[release] def unexpectedExitError(
+      context: => String,
+      result: GitCommandResult
+  ): IllegalStateException =
+    new IllegalStateException(
+      s"$context failed with exit code ${result.exitCode}" +
+        (if (result.stderr.nonEmpty) s": ${result.stderr}" else "")
+    )
+
   /** Run git capturing stdout; raise on non-zero exit with stderr appended to the message.
     * Empty stdout lines are filtered out.
     *
@@ -99,13 +114,7 @@ private[release] object GitProcessSupport {
   def runLines(baseDir: File, args: Seq[String])(context: => String): IO[Seq[String]] =
     ManagedProcessRunner.run(GitCommands.captured(baseDir, args*), closeStdin = true) { managed =>
       ManagedProcessRunner.captureCommandResult(managed).flatMap { result =>
-        if (result.exitCode != 0)
-          IO.raiseError(
-            new IllegalStateException(
-              s"$context failed with exit code ${result.exitCode}" +
-                (if (result.stderr.nonEmpty) s": ${result.stderr}" else "")
-            )
-          )
+        if (result.exitCode != 0) IO.raiseError(unexpectedExitError(context, result))
         else IO.pure(result.stdout)
       }
     }

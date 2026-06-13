@@ -24,6 +24,15 @@ private[release] object VcsOps {
 
   private[release] val DefaultRemoteCheckTimeout: FiniteDuration = 60.seconds
 
+  /** Read the remote-check timeout from the state, falling back to the shared default. */
+  private[release] def loadRemoteCheckTimeout(state: State): IO[FiniteDuration] =
+    IO.blocking(
+      Project
+        .extract(state)
+        .getOpt(ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout)
+        .getOrElse(DefaultRemoteCheckTimeout)
+    )
+
   private val confirmedUpstreamTipKey: AttributeKey[String] =
     AttributeKey[String]("releaseIOInternalConfirmedUpstreamTip")
 
@@ -46,6 +55,10 @@ private[release] object VcsOps {
   /** Detect VCS at the project base directory. Does not modify sbt state. */
   def detectVcs(state: State): IO[Vcs] =
     IO.blocking(Project.extract(state).get(thisProject).base).flatMap(detectVcsFromBase)
+
+  /** Reuse the context's cached VCS adapter, detecting one from state when absent. */
+  private[release] def resolveVcs[C <: ReleaseCtx { type Self = C }](ctx: C): IO[Vcs] =
+    ctx.vcs.fold(detectVcs(ctx.state))(IO.pure)
 
   /** Result of a clean-working-directory check. */
   case class CleanCheckResult(vcs: Vcs, currentHash: String)
@@ -146,13 +159,7 @@ private[release] object VcsOps {
     for {
       remote      <- vcs.trackingRemote
       _           <- log.fold(IO.unit)(f => IO.blocking(f(remote)))
-      timeout     <- IO
-                       .blocking(
-                         Project
-                           .extract(ctx.state)
-                           .getOpt(ReleaseSharedKeys.releaseIOVcsRemoteCheckTimeout)
-                       )
-                       .map(_.getOrElse(DefaultRemoteCheckTimeout))
+      timeout     <- loadRemoteCheckTimeout(ctx.state)
       remoteCheck <- vcs.checkRemoteWithTimeout(remote, timeout)
       resultCtx   <- remoteCheck match {
                        case Some(0) => IO.pure(RemoteCheckResult(ctx, refreshed = true))
