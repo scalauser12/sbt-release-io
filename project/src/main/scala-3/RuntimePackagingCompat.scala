@@ -2,72 +2,33 @@ import sbt.*
 import sbt.Keys.*
 import xsbti.HashedVirtualFileRef
 
+/** sbt 2 packaging mappings: convert the shared `File`-keyed mappings to `HashedVirtualFileRef`.
+  * The conversion re-enters task context with its own `Def.task` because `fileConverter.value`
+  * is only available inside a task macro.
+  */
 object RuntimePackagingCompat:
 
-  private def currentPaths(docDir: File): Set[String] =
-    Path
-      .allSubpaths(docDir)
-      .toSeq
-      .collect {
-        case (file, path) if file.isFile => path
+  private def toVirtual(
+      raw: Def.Initialize[Task[Seq[(File, String)]]]
+  ): Def.Initialize[Task[Seq[(HashedVirtualFileRef, String)]]] =
+    Def.task {
+      val converter = fileConverter.value
+      raw.value.map { case (file, path) =>
+        (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
       }
-      .toSet
-
-  private def shouldIncludeDoc(path: String, existingPaths: Set[String]): Boolean =
-    path.endsWith(".html") &&
-      (path.startsWith("io/release/") || path.startsWith("sbt/")) &&
-      !existingPaths.contains(path)
+    }
 
   def classMappings(
       project: ProjectReference
   ): Def.Initialize[Task[Seq[(HashedVirtualFileRef, String)]]] =
-    Def.task {
-      val converter = fileConverter.value
-
-      (project / Compile / products).value.flatMap { product =>
-        if product.isDirectory then
-          Path.allSubpaths(product).toSeq.collect {
-            case (file, path) if file.isFile =>
-              (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
-          }
-        else Nil
-      }
-    }
+    toVirtual(RuntimePackaging.classMappingsRaw(project))
 
   def sourceMappings(
       project: ProjectReference
   ): Def.Initialize[Task[Seq[(HashedVirtualFileRef, String)]]] =
-    Def.task {
-      val converter  = fileConverter.value
-      val sourceDirs = (project / Compile / sourceDirectories).value
-      val baseDir    = (project / baseDirectory).value
-      val excluded   = sourceDirs.toSet + baseDir
-      val relative   = (file: File) =>
-        Path
-          .relativeTo(sourceDirs)(file)
-          .orElse(Path.relativeTo(baseDir)(file))
-          .orElse(Path.flat(file))
-
-      (project / Compile / sources).value.flatMap {
-        case file if !excluded(file) =>
-          relative(file).map(path =>
-            (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
-          )
-        case _                       => None
-      }
-    }
+    toVirtual(RuntimePackaging.sourceMappingsRaw(project))
 
   def docMappings(
       project: ProjectReference
   ): Def.Initialize[Task[Seq[(HashedVirtualFileRef, String)]]] =
-    Def.task {
-      val converter     = fileConverter.value
-      val currentDocDir = (Compile / doc).value
-      val projectDocDir = (project / Compile / doc).value
-      val existingPaths = currentPaths(currentDocDir)
-
-      Path.allSubpaths(projectDocDir).toSeq.collect {
-        case (file, path) if file.isFile && shouldIncludeDoc(path, existingPaths) =>
-          (converter.toVirtualFile(file.toPath): HashedVirtualFileRef) -> path
-      }
-    }
+    toVirtual(RuntimePackaging.docMappingsRaw(project))
