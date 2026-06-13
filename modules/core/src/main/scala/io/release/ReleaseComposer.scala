@@ -34,8 +34,7 @@ private[release] object ReleaseComposer {
     ExecutionEngine.runMainSegment(
       logPrefix = LogPrefix,
       steps = preparedSteps(steps, crossBuild),
-      startCtx = initialCtx,
-      armOnFailure = ExecutionEngine.armOnFailure[ReleaseContext]
+      startCtx = initialCtx
     )
 
   /** Run only the validation phase for the given steps.

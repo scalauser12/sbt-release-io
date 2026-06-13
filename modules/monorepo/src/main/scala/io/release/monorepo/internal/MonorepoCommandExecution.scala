@@ -82,8 +82,7 @@ private[monorepo] object MonorepoCommandExecution {
       state,
       args,
       runtime,
-      interactiveEnabled = true,
-      warnOnDuplicates = true
+      interactiveEnabled = true
     ) { (command, session) =>
       runPlannedRelease(command, session, runtime)
     }
@@ -97,8 +96,7 @@ private[monorepo] object MonorepoCommandExecution {
       state,
       args,
       runtime,
-      interactiveEnabled = false,
-      warnOnDuplicates = true
+      interactiveEnabled = false
     ) { (command, session) =>
       runPlannedCheck(command, session, runtime)
     }
@@ -183,8 +181,7 @@ private[monorepo] object MonorepoCommandExecution {
       cleanState: State,
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T],
-      interactiveEnabled: Boolean,
-      warnOnDuplicates: Boolean
+      interactiveEnabled: Boolean
   ): IO[Either[State, PlannedCommand]] =
     for {
       flags    <- IO.blocking(resolveFlags(cleanState, args, runtime, interactiveEnabled))
@@ -194,7 +191,7 @@ private[monorepo] object MonorepoCommandExecution {
                       ReleaseLogPrefixes.Monorepo,
                       args,
                       cliExtractors,
-                      warnOnDuplicates
+                      warnOnDuplicates = true
                     )
                   )
       planned  <- MonorepoReleasePlan.build(
@@ -207,8 +204,7 @@ private[monorepo] object MonorepoCommandExecution {
       state: State,
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T],
-      interactiveEnabled: Boolean,
-      warnOnDuplicates: Boolean
+      interactiveEnabled: Boolean
   )(run: (PlannedCommand, MonorepoPreparedSession) => IO[State]): State = {
     val cleanStateFn: State => State =
       state => ReleaseCommandRunner.cleanReleaseState(state)
@@ -223,8 +219,7 @@ private[monorepo] object MonorepoCommandExecution {
           cleanState,
           args,
           runtime,
-          interactiveEnabled,
-          warnOnDuplicates
+          interactiveEnabled
         ),
       (command: PlannedCommand) =>
         IO.blocking(runtime.resolveInteractiveEnabled(command.cleanState)).flatMap {
@@ -261,7 +256,6 @@ private[monorepo] object MonorepoCommandExecution {
                   }
       result   <- ReleaseCommandRunner.finalizeWithCleanState(
                     finalCtx,
-                    cleanState = state => ReleaseCommandRunner.cleanReleaseState(state),
                     prefix = ReleaseLogPrefixes.Monorepo
                   )
     } yield result

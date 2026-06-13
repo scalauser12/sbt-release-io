@@ -3,8 +3,6 @@ package io.release.monorepo.internal
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
-import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
-import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.HookPhases
@@ -23,17 +21,12 @@ private[release] object MonorepoLifecycle {
       ProjectReleaseInfo
     ]
 
-  private def singleBuiltIn(
-      step: GlobalStep,
-      enabled: MonorepoHookConfiguration => Boolean = _ => true
-  ): Phase =
-    LifecycleCompiler.builtIn(
-      step = step,
-      enabled = enabled
-    )
-
-  private def perItemBuiltIn(
-      step: ProjectStep,
+  // Both GlobalStep (ProcessStep.Single[MonorepoContext], i.e. ProcessStep[_, Nothing]) and
+  // ProjectStep (ProcessStep.PerItem[MonorepoContext, ProjectReleaseInfo]) are subtypes of
+  // AnyStep = ProcessStep[MonorepoContext, ProjectReleaseInfo] (ProcessStep is covariant in I),
+  // so a single builtIn wrapper covers both kinds of built-in step.
+  private def builtIn(
+      step: AnyStep,
       enabled: MonorepoHookConfiguration => Boolean = _ => true
   ): Phase =
     LifecycleCompiler.builtIn(
@@ -167,14 +160,14 @@ private[release] object MonorepoLifecycle {
     ctx => IO.pure(ctx.pushExecuted)
 
   private[release] lazy val phases: Seq[Phase] = Seq(
-    singleBuiltIn(MonorepoReleaseSteps.initializeVcs),
-    singleBuiltIn(MonorepoReleaseSteps.checkCleanWorkingDir),
+    builtIn(MonorepoReleaseSteps.initializeVcs),
+    builtIn(MonorepoReleaseSteps.checkCleanWorkingDir),
     globalHookPhase(HookPhases.AfterCleanCheck, _.afterCleanCheckHooks),
-    singleBuiltIn(MonorepoReleaseSteps.resolveReleaseOrder),
+    builtIn(MonorepoReleaseSteps.resolveReleaseOrder),
     globalHookPhase(HookPhases.BeforeSelection, _.beforeSelectionHooks),
-    singleBuiltIn(MonorepoReleaseSteps.detectOrSelectProjects),
+    builtIn(MonorepoReleaseSteps.detectOrSelectProjects),
     globalHookPhase(HookPhases.AfterSelection, _.afterSelectionHooks),
-    perItemBuiltIn(
+    builtIn(
       MonorepoReleaseSteps.checkSnapshotDependencies,
       _.enableSnapshotDependenciesCheck
     ),
@@ -183,31 +176,31 @@ private[release] object MonorepoLifecycle {
       _.beforeVersionResolutionHooks,
       crossBuild = MonorepoReleaseSteps.inquireVersions.enableCrossBuild
     ),
-    perItemBuiltIn(MonorepoReleaseSteps.inquireVersions),
+    builtIn(MonorepoReleaseSteps.inquireVersions),
     projectHookPhase(
       HookPhases.AfterVersionResolution,
       _.afterVersionResolutionHooks,
       crossBuild = MonorepoReleaseSteps.inquireVersions.enableCrossBuild
     ),
-    perItemBuiltIn(MonorepoReleaseSteps.tagPreflight, tagPreflightEnabled),
-    perItemBuiltIn(MonorepoReleaseSteps.runClean, _.enableRunClean),
-    perItemBuiltIn(MonorepoReleaseSteps.runTests, _.enableRunTests),
+    builtIn(MonorepoReleaseSteps.tagPreflight, tagPreflightEnabled),
+    builtIn(MonorepoReleaseSteps.runClean, _.enableRunClean),
+    builtIn(MonorepoReleaseSteps.runTests, _.enableRunTests),
     projectHookPhase(
       HookPhases.BeforeReleaseVersionWrite,
       _.beforeReleaseVersionWriteHooks,
       crossBuild = MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
     ),
-    perItemBuiltIn(MonorepoReleaseSteps.setReleaseVersions),
+    builtIn(MonorepoReleaseSteps.setReleaseVersions),
     projectHookPhase(
       HookPhases.AfterReleaseVersionWrite,
       _.afterReleaseVersionWriteHooks,
       crossBuild = MonorepoReleaseSteps.setReleaseVersions.enableCrossBuild
     ),
     globalHookPhase(HookPhases.BeforeReleaseCommit, _.beforeReleaseCommitHooks),
-    singleBuiltIn(MonorepoReleaseSteps.commitReleaseVersions),
+    builtIn(MonorepoReleaseSteps.commitReleaseVersions),
     globalHookPhase(HookPhases.AfterReleaseCommit, _.afterReleaseCommitHooks),
     projectHookPhase(HookPhases.BeforeTag, _.beforeTagHooks, enabled = _.enableTagging),
-    perItemBuiltIn(MonorepoReleaseSteps.tagReleasesPerProject, _.enableTagging),
+    builtIn(MonorepoReleaseSteps.tagReleasesPerProject, _.enableTagging),
     projectHookPhase(HookPhases.AfterTag, _.afterTagHooks, enabled = _.enableTagging),
     projectHookPhase(
       HookPhases.BeforePublish,
@@ -218,7 +211,7 @@ private[release] object MonorepoLifecycle {
       enabled = _.enablePublish,
       narrowExecute = Some(beforePublishNarrow)
     ),
-    perItemBuiltIn(MonorepoReleaseSteps.publishArtifacts, _.enablePublish),
+    builtIn(MonorepoReleaseSteps.publishArtifacts, _.enablePublish),
     projectHookPhase(
       HookPhases.AfterPublish,
       _.afterPublishHooks,
@@ -233,14 +226,14 @@ private[release] object MonorepoLifecycle {
       _.beforeNextVersionWriteHooks,
       crossBuild = MonorepoReleaseSteps.setNextVersions.enableCrossBuild
     ),
-    perItemBuiltIn(MonorepoReleaseSteps.setNextVersions),
+    builtIn(MonorepoReleaseSteps.setNextVersions),
     projectHookPhase(
       HookPhases.AfterNextVersionWrite,
       _.afterNextVersionWriteHooks,
       crossBuild = MonorepoReleaseSteps.setNextVersions.enableCrossBuild
     ),
     globalHookPhase(HookPhases.BeforeNextCommit, _.beforeNextCommitHooks),
-    singleBuiltIn(MonorepoReleaseSteps.commitNextVersions),
+    builtIn(MonorepoReleaseSteps.commitNextVersions),
     globalHookPhase(HookPhases.AfterNextCommit, _.afterNextCommitHooks),
     globalHookPhase(
       HookPhases.BeforePush,
@@ -248,7 +241,7 @@ private[release] object MonorepoLifecycle {
       enabled = _.enablePush,
       narrowExecute = Some(beforePushNarrow)
     ),
-    singleBuiltIn(MonorepoReleaseSteps.pushChanges, _.enablePush),
+    builtIn(MonorepoReleaseSteps.pushChanges, _.enablePush),
     globalHookPhase(
       HookPhases.AfterPush,
       _.afterPushHooks,

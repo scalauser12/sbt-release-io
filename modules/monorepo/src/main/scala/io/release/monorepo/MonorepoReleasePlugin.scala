@@ -359,39 +359,31 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild` setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    PluginEntrypoint.settingValue(
-      state,
-      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild
-    )
+    Project.extract(state).get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorCrossBuild)
 
   /** Whether tests should be skipped (before command-line args are applied).
     * Defaults to reading from the
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests` setting.
     */
   protected def skipTestsEnabled(state: State): Boolean =
-    PluginEntrypoint.settingValue(
-      state,
-      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests
-    )
+    Project.extract(state).get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipTests)
 
   /** Whether to skip publish. Defaults to reading from the
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish` setting.
     */
   protected def skipPublishEnabled(state: State): Boolean =
-    PluginEntrypoint.settingValue(
-      state,
-      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish
-    )
+    Project
+      .extract(state)
+      .get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorSkipPublish)
 
   /** Whether interactive prompts are enabled.
     * Defaults to reading from the
     * `MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive` setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    PluginEntrypoint.settingValue(
-      state,
-      MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive
-    )
+    Project
+      .extract(state)
+      .get(MonorepoReleasePlugin.autoImport.releaseIOMonorepoBehaviorInteractive)
 
   /** The name of the monorepo release command. Override to use a different name
     * when coexisting with [[MonorepoReleasePlugin]].

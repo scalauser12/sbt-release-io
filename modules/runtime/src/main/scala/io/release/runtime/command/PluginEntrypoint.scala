@@ -7,13 +7,10 @@ import _root_.sbt.complete.Parser
 /** Shared plugin-entrypoint helpers for the public release plugins.
   *
   * Core and monorepo keep their own parser grammars, token decoding, and command dispatch, but
-  * they share the small amount of sbt boilerplate needed to read settings from state, register a
-  * command next to default settings, and aggregate those settings into one plugin surface.
+  * they share the small amount of sbt boilerplate needed to register a command next to default
+  * settings and aggregate those settings into one plugin surface.
   */
 private[release] object PluginEntrypoint {
-
-  def settingValue[A](state: State, key: SettingKey[A]): A =
-    Project.extract(state).get(key)
 
   def commandSetting(
       commandName: String

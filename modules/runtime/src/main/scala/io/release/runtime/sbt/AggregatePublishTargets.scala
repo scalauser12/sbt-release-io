@@ -15,10 +15,11 @@ import _root_.sbt.{internal as _, *}
   */
 private[release] object AggregatePublishTargets {
 
-  def of[A](extracted: Extracted, taskKey: TaskKey[A]): Seq[ProjectRef] = {
-    val data    = extracted.structure.data
-    val rootKey = (extracted.currentRef / taskKey).scopedKey
-    val enabled = sbt.internal.Aggregation.aggregationEnabled(rootKey, data)
+  def fromState[A](state: State, taskKey: TaskKey[A]): Seq[ProjectRef] = {
+    val extracted = SbtRuntime.extracted(state)
+    val data      = extracted.structure.data
+    val rootKey   = (extracted.currentRef / taskKey).scopedKey
+    val enabled   = sbt.internal.Aggregation.aggregationEnabled(rootKey, data)
     if (!enabled) Seq(extracted.currentRef)
     else {
       val units                                           = extracted.structure.units
@@ -43,7 +44,4 @@ private[release] object AggregatePublishTargets {
       extracted.currentRef +: loop(resolve(extracted.currentRef), Set(extracted.currentRef))._1
     }
   }
-
-  def fromState[A](state: State, taskKey: TaskKey[A]): Seq[ProjectRef] =
-    of(SbtRuntime.extracted(state), taskKey)
 }

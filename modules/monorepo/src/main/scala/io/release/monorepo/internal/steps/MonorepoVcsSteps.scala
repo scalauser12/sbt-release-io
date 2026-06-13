@@ -115,19 +115,16 @@ private[monorepo] object MonorepoVcsSteps {
       vcs: Vcs,
       tagName: String,
       label: String
-  ): IO[Unit] = {
-    val commandName =
-      ctx.releasePlan.map(_.commandName).getOrElse(MonorepoReleasePlan.DefaultCommandName)
+  ): IO[Unit] =
     RemoteTagProbe.probeForCreate(
       ctx,
       vcs,
       tagName,
-      commandName,
+      ctx.commandName,
       ReleaseLogPrefixes.Monorepo,
       label = if (label.isEmpty) None else Some(label),
       pushConfigured = ctx.pushConfigured
     )
-  }
 
   private def preflightCreateTag(
       ctx: MonorepoContext,
@@ -136,10 +133,7 @@ private[monorepo] object MonorepoVcsSteps {
       target: TagConflictResolver.PreflightCommitTarget,
       projectName: String,
       interactive: Boolean
-  ): IO[PreflightTagOutcome] = {
-    val commandName =
-      ctx.releasePlan.map(_.commandName).getOrElse(MonorepoReleasePlan.DefaultCommandName)
-
+  ): IO[PreflightTagOutcome] =
     TagConflictResolver
       .preflightConflict(
         vcs,
@@ -149,12 +143,11 @@ private[monorepo] object MonorepoVcsSteps {
           interactive = interactive,
           useDefaults = ctx.useDefaults,
           defaultAnswer = ctx.decisionDefaults.tagExistsAnswer,
-          commandName = commandName,
+          commandName = ctx.commandName,
           label = projectName
         )
       )
       .map(o => PreflightTagOutcome(projectName, o.tagName, o.status, o.willCreateTag))
-  }
 
   /** Preflight tag categorization.
     *

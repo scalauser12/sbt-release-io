@@ -274,7 +274,7 @@ private[monorepo] object MonorepoPublishSteps {
     name = "run-clean",
     execute = (ctx, project) =>
       IO.blocking {
-        val newState = CleanCompat.runProject(ctx.state, project.ref)
+        val newState = CleanCompat.runBuild(ctx.state, project.ref)
         ctx.withState(newState)
       }
   )

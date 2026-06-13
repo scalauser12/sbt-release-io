@@ -34,8 +34,7 @@ class ExecutionEngineSpec extends CatsEffectSuite {
           .runMainSegment[ReleaseContext](
             ReleaseLogPrefixes.Core,
             Seq(step),
-            ctx,
-            armOnFailure = ExecutionEngine.armOnFailure[ReleaseContext]
+            ctx
           )
           .flatMap { result =>
             observed.get.map { seenInExecute =>
@@ -78,8 +77,7 @@ class ExecutionEngineSpec extends CatsEffectSuite {
           .runMainSegment[ReleaseContext](
             ReleaseLogPrefixes.Core,
             Seq(step),
-            ctx,
-            armOnFailure = ExecutionEngine.armOnFailure[ReleaseContext]
+            ctx
           )
           .flatMap { result =>
             observed.get.map { seenInExecute =>
@@ -114,8 +112,7 @@ class ExecutionEngineSpec extends CatsEffectSuite {
           .runMainSegment[ReleaseContext](
             ReleaseLogPrefixes.Core,
             Seq(step),
-            ctx,
-            armOnFailure = ExecutionEngine.armOnFailure[ReleaseContext]
+            ctx
           )
           .flatMap { result =>
             observed.get.map { seenInExecute =>

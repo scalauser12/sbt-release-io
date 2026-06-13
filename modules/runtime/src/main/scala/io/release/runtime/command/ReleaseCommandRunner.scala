@@ -83,12 +83,11 @@ private[release] object ReleaseCommandRunner {
       IO.blocking(ctx.state.log.info(s"$prefix Release completed successfully!")).as(ctx.state)
     }
 
-  /** Apply `cleanState` to the wrapped sbt `State`, then [[handleReleaseResult]]. */
+  /** Drop release metadata from the wrapped sbt `State`, then [[handleReleaseResult]]. */
   def finalizeWithCleanState[C <: ReleaseCtx { type Self = C }](
       ctx: C,
-      cleanState: State => State,
       prefix: String
   ): IO[State] =
-    IO.blocking(ctx.withState(cleanState(ctx.state)))
+    IO.blocking(ctx.withState(cleanReleaseState(ctx.state)))
       .flatMap(cleanedCtx => handleReleaseResult(cleanedCtx, prefix))
 }

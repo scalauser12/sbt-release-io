@@ -110,8 +110,7 @@ private[monorepo] object MonorepoComposer {
     ExecutionEngine.runMainSegment(
       logPrefix = LogPrefix,
       steps = preparedSteps(steps, crossBuild),
-      startCtx = startCtx,
-      armOnFailure = ExecutionEngine.armOnFailure[MonorepoContext]
+      startCtx = startCtx
     )
 
   private def runSequentialValidateThenExecute(
@@ -147,18 +146,17 @@ private[monorepo] object MonorepoComposer {
           )
         ),
       typed => {
+        def logLine(ctx: MonorepoContext, project: ProjectReleaseInfo): IO[Unit] =
+          IO.blocking(ctx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]"))
+
         val logged: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
           (currentCtx, project) =>
-            IO.blocking(currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")) *>
-              typed.execute(currentCtx, project)
+            logLine(currentCtx, project) *> typed.execute(currentCtx, project)
 
         val loggedTracked: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit] =
           (handle, project) =>
             handle.get.flatMap(currentCtx =>
-              IO.blocking(
-                currentCtx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]")
-              ) *>
-                typed.executeTracked(handle, project)
+              logLine(currentCtx, project) *> typed.executeTracked(handle, project)
             )
 
         ExecutionEngine.PreparedStep(

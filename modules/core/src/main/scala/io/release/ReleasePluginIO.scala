@@ -357,29 +357,20 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     * setting.
     */
   protected def crossBuildEnabled(state: State): Boolean =
-    PluginEntrypoint.settingValue(
-      state,
-      ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild
-    )
+    Project.extract(state).get(ReleasePluginIO.autoImport.releaseIOBehaviorCrossBuild)
 
   /** Whether to skip publish. Defaults to reading from the
     * `ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish` setting.
     */
   protected def skipPublishEnabled(state: State): Boolean =
-    PluginEntrypoint.settingValue(
-      state,
-      ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish
-    )
+    Project.extract(state).get(ReleasePluginIO.autoImport.releaseIOBehaviorSkipPublish)
 
   /** Whether interactive prompts are enabled.
     * Defaults to reading from the `ReleasePluginIO.autoImport.releaseIOBehaviorInteractive`
     * setting.
     */
   protected def interactiveEnabled(state: State): Boolean =
-    PluginEntrypoint.settingValue(
-      state,
-      ReleasePluginIO.autoImport.releaseIOBehaviorInteractive
-    )
+    Project.extract(state).get(ReleasePluginIO.autoImport.releaseIOBehaviorInteractive)
 
   /** Base settings that include the shared/core default values plus command registration.
     * Custom plugins that override `projectSettings` should start from `baseReleaseSettings` so

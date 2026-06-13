@@ -68,25 +68,27 @@ private[release] object ExecutionEngine {
 
   // ── Orchestration ───────────────────────────────────────────────────
 
+  /** Drop validate-time tentative version seeds before any execute step runs.
+    * See `ReleaseCtx.clearTentativeSeeds`. Without this the seeded ctx flows
+    * into execute and either bypasses interactive prompts (monorepo) or
+    * violates the `beforeVersionResolution` execute-hook contract (both
+    * modules). Skipped when validation already failed — execute will not run
+    * anyway, and the seeded snapshot is left intact for any future
+    * failure-context summary to inspect (today the core path only logs
+    * `failureCause.message`; this leaves room for a per-project
+    * tentative-resolution summary without reshaping the engine boundary).
+    */
+  private def clearSeedsUnlessFailed[C <: ReleaseCtx { type Self = C }](ctx: C): C =
+    if (ctx.failed) ctx else ctx.clearTentativeSeeds
+
   def runMainSegment[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,
       steps: Seq[PreparedStep[C]],
-      startCtx: C,
-      armOnFailure: C => C
+      startCtx: C
   ): IO[C] =
     for {
       validatedCtx <- runValidations(logPrefix, steps, startCtx)
-      // Drop validate-time tentative version seeds before any execute step
-      // runs. See `ReleaseCtx.clearTentativeSeeds`. Without this the seeded
-      // ctx flows into execute and either bypasses interactive prompts
-      // (monorepo) or violates the `beforeVersionResolution` execute-hook
-      // contract (both modules). Skipped when validation already failed —
-      // execute will not run anyway, and the seeded snapshot is left intact
-      // for any future failure-context summary to inspect (today the core
-      // path only logs `failureCause.message`; this leaves room for a
-      // per-project tentative-resolution summary without reshaping the
-      // engine boundary).
-      cleanedCtx    = if (validatedCtx.failed) validatedCtx else validatedCtx.clearTentativeSeeds
+      cleanedCtx    = clearSeedsUnlessFailed(validatedCtx)
       resultCtx    <-
         if (cleanedCtx.failed) IO.pure(cleanedCtx)
         else runActionPhase(steps)(armOnFailure(cleanedCtx))
@@ -102,13 +104,8 @@ private[release] object ExecutionEngine {
         else {
           for {
             validatedCtx <- step.validate(currentCtx)
-            // Symmetric clearance with `runMainSegment` above. No version-
-            // seeding step runs in the sequential path today, but keeping
-            // the contract consistent here means future seeders cannot
-            // accidentally bleed validate-time state into per-step execute.
-            // Same skip-on-failed-validation rationale applies.
-            cleanedCtx    =
-              if (validatedCtx.failed) validatedCtx else validatedCtx.clearTentativeSeeds
+            // Symmetric clearance with `runMainSegment`; see clearSeedsUnlessFailed.
+            cleanedCtx    = clearSeedsUnlessFailed(validatedCtx)
             nextCtx      <-
               if (cleanedCtx.failed) IO.pure(cleanedCtx)
               else runActionPhase(Seq(step))(armOnFailure(cleanedCtx))

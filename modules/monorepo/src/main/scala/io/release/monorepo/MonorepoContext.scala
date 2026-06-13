@@ -136,6 +136,10 @@ case class MonorepoContext(
   private[monorepo] def releasePlan: Option[MonorepoReleasePlan] =
     metadata(MonorepoReleasePlan.metadataKey)
 
+  /** Command name from the release plan, falling back to the default when no plan is recorded. */
+  private[monorepo] def commandName: String =
+    releasePlan.map(_.commandName).getOrElse(MonorepoReleasePlan.DefaultCommandName)
+
   private[monorepo] def hasReleaseVersionFilesPrevalidated: Boolean =
     metadata(MonorepoContext.releaseVersionFilesPrevalidatedKey).nonEmpty
 

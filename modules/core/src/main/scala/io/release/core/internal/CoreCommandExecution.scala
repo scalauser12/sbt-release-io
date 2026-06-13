@@ -77,7 +77,6 @@ private[release] object CoreCommandExecution {
       state,
       args,
       runtime,
-      warnOnDuplicates = true,
       resolveInteractive = runtime.resolveInteractiveEnabled,
       run = runPlannedRelease(_, runtime)
     )
@@ -91,7 +90,6 @@ private[release] object CoreCommandExecution {
       state,
       args,
       runtime,
-      warnOnDuplicates = true,
       resolveInteractive = _ => false,
       run = runPlannedCheck(_, runtime)
     )
@@ -100,7 +98,6 @@ private[release] object CoreCommandExecution {
       state: State,
       args: Seq[ReleaseCli.Arg],
       runtime: CommandRuntime[T],
-      warnOnDuplicates: Boolean,
       resolveInteractive: State => Boolean,
       run: CoreCommandInputs => IO[State]
   ): State =
@@ -115,7 +112,6 @@ private[release] object CoreCommandExecution {
             buildCommandInputs(
               cleanState,
               args,
-              warnOnDuplicates = warnOnDuplicates,
               interactiveEnabled = resolveInteractive(cleanState),
               runtime
             )
@@ -156,7 +152,6 @@ private[release] object CoreCommandExecution {
   private def buildCommandInputs[T](
       cleanState: State,
       args: Seq[ReleaseCli.Arg],
-      warnOnDuplicates: Boolean,
       interactiveEnabled: Boolean,
       runtime: CommandRuntime[T]
   ): CoreCommandInputs = {
@@ -177,7 +172,7 @@ private[release] object CoreCommandExecution {
       "release-version",
       allArgs { case ReleaseVersion(value) => value },
       (value: String) => value,
-      warnOnDuplicates
+      warnOnDuplicates = true
     )
     val nextVersionArg    = DecisionDefaultsSupport.resolveLast(
       cleanState,
@@ -185,7 +180,7 @@ private[release] object CoreCommandExecution {
       "next-version",
       allArgs { case NextVersion(value) => value },
       (value: String) => value,
-      warnOnDuplicates
+      warnOnDuplicates = true
     )
 
     CoreCommandInputs(
@@ -208,7 +203,7 @@ private[release] object CoreCommandExecution {
           ReleaseLogPrefixes.Core,
           args,
           cliExtractors,
-          warnOnDuplicates
+          warnOnDuplicates = true
         ),
         commandName = runtime.commandName
       )
@@ -266,7 +261,6 @@ private[release] object CoreCommandExecution {
                   }
       result   <- ReleaseCommandRunner.finalizeWithCleanState(
                     finalCtx,
-                    cleanState = state => ReleaseCommandRunner.cleanReleaseState(state),
                     prefix = ReleaseLogPrefixes.Core
                   )
     } yield result

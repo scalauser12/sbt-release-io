@@ -21,7 +21,7 @@ class AggregatePublishTargetsSpec extends CatsEffectSuite {
   private val fixturePrefix = "aggregate-publish-targets-spec"
 
   test(
-    "of - includes the root and every aggregated child when no aggregation is disabled"
+    "fromState - includes the root and every aggregated child when no aggregation is disabled"
   ) {
     twoProjectFixture(s"$fixturePrefix-happy", rootSettings = Seq.empty).map { state =>
       val targets = AggregatePublishTargets.fromState(state, releaseIOPublishAction)
@@ -30,7 +30,7 @@ class AggregatePublishTargetsSpec extends CatsEffectSuite {
   }
 
   test(
-    "of - prunes children when the root sets `releaseIOPublishAction / aggregate := false`"
+    "fromState - prunes children when the root sets `releaseIOPublishAction / aggregate := false`"
   ) {
     twoProjectFixture(
       s"$fixturePrefix-root-prune",
@@ -46,7 +46,7 @@ class AggregatePublishTargetsSpec extends CatsEffectSuite {
   }
 
   test(
-    "of - includes a non-aggregating intermediate project but skips its descendants"
+    "fromState - includes a non-aggregating intermediate project but skips its descendants"
   ) {
     threeProjectFixture(
       s"$fixturePrefix-mid-prune",
