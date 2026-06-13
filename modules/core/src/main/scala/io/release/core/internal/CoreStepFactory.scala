@@ -3,90 +3,15 @@ package io.release.core.internal
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.core.internal.steps.CoreReleaseStepHelpers.failOnSbtTaskFailure
 import io.release.runtime.engine.ProcessStep
-import io.release.runtime.sbt.SbtRuntime
-import sbt.{internal as _, *}
 
-/** Core-only helpers for building steps backed by sbt tasks or commands. */
+/** Core-only helper for building an `IO`-backed step. The sbt-task/command-backed factories
+  * live in the test sources (`CoreStepFactoryTestSteps`) — production builds only use `io`.
+  */
 private[release] object CoreStepFactory {
 
   def io(name: String)(
       f: ReleaseContext => IO[ReleaseContext]
   ): Step =
     ProcessStep.Single(name, f)
-
-  def fromTask[T](
-      key: TaskKey[T],
-      enableCrossBuild: Boolean = false
-  ): Step =
-    ProcessStep.Single(
-      name = key.key.label,
-      execute = ctx =>
-        IO.blocking {
-          val (newState, _) = SbtRuntime.runTask(ctx.state, key)
-          failOnSbtTaskFailure(
-            ctx,
-            newState,
-            s"sbt task '${key.key.label}' reported failure via FailureCommand"
-          )
-        },
-      enableCrossBuild = enableCrossBuild
-    )
-
-  def fromInputTask[T](
-      key: InputKey[T],
-      args: String = "",
-      enableCrossBuild: Boolean = false
-  ): Step =
-    ProcessStep.Single(
-      name = key.key.label,
-      execute = ctx =>
-        IO.blocking {
-          val (newState, _) = SbtRuntime.runInputTask(ctx.state, key, args)
-          failOnSbtTaskFailure(
-            ctx,
-            newState,
-            s"sbt input task '${key.key.label}' reported failure via FailureCommand"
-          )
-        },
-      enableCrossBuild = enableCrossBuild
-    )
-
-  def fromTaskAggregated[T](
-      key: TaskKey[T],
-      enableCrossBuild: Boolean = false
-  ): Step =
-    ProcessStep.Single(
-      name = s"${key.key.label} (aggregated)",
-      execute = ctx =>
-        IO.blocking {
-          val extracted = SbtRuntime.extracted(ctx.state)
-          val newState  = extracted.runAggregated(extracted.currentRef / key, ctx.state)
-          failOnSbtTaskFailure(
-            ctx,
-            newState,
-            s"aggregated sbt task '${key.key.label}' reported failure via FailureCommand"
-          )
-        },
-      enableCrossBuild = enableCrossBuild
-    )
-
-  def fromCommand(command: String): Step =
-    ProcessStep.Single(
-      name = s"command: $command",
-      execute = ctx =>
-        IO.blocking {
-          ctx.withState(SbtRuntime.processCommand(ctx.state, command))
-        }
-    )
-
-  def fromCommandAndRemaining(command: String): Step =
-    ProcessStep.Single(
-      name = s"command+remaining: $command",
-      execute = ctx =>
-        IO.blocking {
-          ctx.withState(SbtRuntime.runCommandAndRemaining(ctx.state, command))
-        }
-    )
 }

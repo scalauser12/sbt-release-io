@@ -48,9 +48,6 @@ private[release] object SbtRuntime {
   def withInteractionService(state: State, service: InteractionService): State =
     state.put(InteractionServiceStateKey, service)
 
-  def runInputTask[A](state: State, key: InputKey[A], args: String): (State, A) =
-    extracted(state).runInputTask(key, args, state)
-
   def appendWithSession(state: State, settings: Seq[Setting[?]]): State =
     extracted(state).appendWithSession(settings, state)
 
@@ -119,38 +116,4 @@ private[release] object SbtRuntime {
       logPrefix: String
   ): IO[State] =
     CrossBuildSupport.switchScalaVersion(state, version, affectedRefs, logPrefix)
-
-  /** Processes an sbt command synchronously. Performs blocking I/O;
-    * callers must wrap in `IO.blocking`.
-    */
-  def processCommand(state: State, command: String): State =
-    Command.process(
-      command,
-      state,
-      (msg: String) => throw new IllegalStateException(s"Failed to parse command '$command': $msg")
-    )
-
-  /** Run a command and drain any follow-up commands it enqueues, preserving the
-    * caller's original remaining command queue.
-    */
-  def runCommandAndRemaining(state: State, command: String): State = {
-    val savedRemaining = state.remainingCommands
-
-    @scala.annotation.tailrec
-    def drainCommands(current: State, pending: List[Exec]): State =
-      pending match {
-        case Nil                                 =>
-          current.copy(remainingCommands = savedRemaining)
-        case head :: _ if head == FailureCommand =>
-          current.copy(remainingCommands = head +: savedRemaining)
-        case head :: rest                        =>
-          val cleanState = current.copy(remainingCommands = Nil)
-          val newState   = processCommand(cleanState, head.commandLine)
-          drainCommands(newState, newState.remainingCommands.toList ++ rest)
-      }
-
-    val cleanInit  = state.copy(remainingCommands = Nil)
-    val afterFirst = processCommand(cleanInit, command)
-    drainCommands(afterFirst, afterFirst.remainingCommands.toList)
-  }
 }

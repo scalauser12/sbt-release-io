@@ -6,7 +6,6 @@ import io.release.runtime.sbt.SbtRuntime
 import sbt.Keys
 import sbt.Project
 import sbt.State
-import sbt.inputKey
 import sbt.taskKey
 
 import java.io.File
@@ -44,6 +43,5 @@ trait ReleaseStepIOSpecSupport {
   protected def readFile(file: File): IO[String] =
     IO.blocking(sbt.IO.read(file, StandardCharsets.UTF_8))
 
-  protected val stateUpdateTask      = taskKey[String]("stateUpdateTask")
-  protected val stateUpdateInputTask = inputKey[String]("stateUpdateInputTask")
+  protected val stateUpdateTask = taskKey[String]("stateUpdateTask")
 }

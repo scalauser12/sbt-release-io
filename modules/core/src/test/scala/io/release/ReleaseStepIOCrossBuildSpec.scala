@@ -419,7 +419,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
           )
         )
     ).use { ctx =>
-      val step = CoreStepFactory.fromTask(failureCommandTask, enableCrossBuild = true)
+      val step = CoreStepFactoryTestSteps.fromTask(failureCommandTask, enableCrossBuild = true)
 
       ReleaseComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         val marker =
