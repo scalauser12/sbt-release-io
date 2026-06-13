@@ -1,6 +1,5 @@
 package io.release.core.internal.steps
 
-import _root_.io.release.ReleaseManifestMetadata
 import _root_.io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
 import _root_.io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
 import cats.effect.IO
@@ -18,14 +17,13 @@ import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.vcs.TagConflictResolver
 import munit.CatsEffectSuite
-import sbt.Keys.packageOptions
 import sbt.Project
 
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 
-class VcsStepsSpec extends CatsEffectSuite {
+class VcsStepsSpec extends CatsEffectSuite with ReleaseManifestTestSettings {
   private val fixturePrefix = "vcs-steps-spec"
 
   test("initializeVcs - detect Git from the loaded project base") {
@@ -1182,20 +1180,6 @@ class VcsStepsSpec extends CatsEffectSuite {
       } yield ()
     }
   }
-
-  private def releaseManifestSettings(
-      basePackageOptions: Seq[sbt.PackageOption] = Seq.empty
-  ): Seq[sbt.Setting[?]] =
-    Seq(
-      packageOptions               := basePackageOptions,
-      releaseIOInternalReleaseHash := None,
-      releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseManifestMetadata
-        .releaseManifestPackageOptions(
-          releaseIOInternalReleaseHash.value,
-          releaseIOInternalReleaseTag.value
-        )
-    )
 
   private def bufferedGitRootState(
       repo: File,

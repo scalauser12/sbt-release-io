@@ -1,6 +1,5 @@
 package io.release.core.internal.steps
 
-import _root_.io.release.ReleaseManifestMetadata
 import _root_.io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
 import _root_.io.release.ReleaseManifestMetadata.releaseIOInternalReleaseTag
 import cats.effect.Deferred
@@ -19,13 +18,12 @@ import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.sbt.SbtRuntime
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
-import sbt.Keys.packageOptions
 import sbt.Project
 
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
-class VersionStepsSpec extends CatsEffectSuite {
+class VersionStepsSpec extends CatsEffectSuite with ReleaseManifestTestSettings {
   private val fixturePrefix = "version-steps-spec"
 
   private val startupFlags = ExecutionFlags(
@@ -1426,20 +1424,6 @@ class VersionStepsSpec extends CatsEffectSuite {
     writeVersionFile(dir, content).flatMap { file =>
       VersionSteps.defaultReadVersion(file).map(result => assertEquals(result, expected))
     }
-
-  private def releaseManifestSettings(
-      basePackageOptions: Seq[sbt.PackageOption] = Seq.empty
-  ): Seq[sbt.Setting[?]] =
-    Seq(
-      packageOptions               := basePackageOptions,
-      releaseIOInternalReleaseHash := None,
-      releaseIOInternalReleaseTag  := None,
-      packageOptions ++= ReleaseManifestMetadata
-        .releaseManifestPackageOptions(
-          releaseIOInternalReleaseHash.value,
-          releaseIOInternalReleaseTag.value
-        )
-    )
 
   private def withStartupPlan(
       ctx: ReleaseContext,
