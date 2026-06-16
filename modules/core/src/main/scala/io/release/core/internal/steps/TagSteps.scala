@@ -82,7 +82,6 @@ private[release] object TagSteps {
     */
   val tagPreflight: Step = ProcessStep.Single(
     name = "tag-preflight",
-    roles = Set(BuiltInStepRole.TagPreflight),
     execute = ctx => runTagPreflight(ctx).as(ctx)
   )
 

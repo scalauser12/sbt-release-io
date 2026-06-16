@@ -138,9 +138,6 @@ private[monorepo] object MonorepoComposer {
         ExecutionEngine.PreparedStep(
           name = single.name,
           validate = single.validate,
-          execute = ExecutionEngine.withErrorRecovery(LogPrefix)(
-            ExecutionEngine.withLogged(LogPrefix, single.name)(single.execute)
-          ),
           executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(
             ExecutionEngine.withLoggedTracked(LogPrefix, single.name)(single.executeTracked)
           )
@@ -148,10 +145,6 @@ private[monorepo] object MonorepoComposer {
       typed => {
         def logLine(ctx: MonorepoContext, project: ProjectReleaseInfo): IO[Unit] =
           IO.blocking(ctx.state.log.info(s"$LogPrefix ${typed.name} [${project.name}]"))
-
-        val logged: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext] =
-          (currentCtx, project) =>
-            logLine(currentCtx, project) *> typed.execute(currentCtx, project)
 
         val loggedTracked: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit] =
           (handle, project) =>
@@ -168,14 +161,6 @@ private[monorepo] object MonorepoComposer {
               crossBuild,
               typed.enableCrossBuild
             ),
-          execute = ExecutionEngine.withErrorRecovery(LogPrefix)(ctx =>
-            MonorepoCrossBuild.runPerProjectWithCrossBuild(
-              ctx,
-              logged,
-              crossBuild,
-              typed.enableCrossBuild
-            )
-          ),
           executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(handle =>
             MonorepoCrossBuild.runPerProjectWithCrossBuildTracked(
               handle,

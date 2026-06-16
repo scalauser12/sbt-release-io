@@ -3,6 +3,7 @@ package io.release.monorepo
 import cats.effect.IO
 import cats.effect.Ref
 import io.release.monorepo.internal.*
+import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 import sbt.Setting
@@ -113,11 +114,10 @@ class MonorepoReleasePluginProcessModeSpec
 
         assertEquals(
           flags,
-          MonorepoCommandExecution.ReleaseFlags(
+          ExecutionFlags(
             useDefaults = false,
             skipTests = true,
             crossBuild = true,
-            allChanged = false,
             skipPublish = true,
             interactive = true
           )
@@ -143,11 +143,10 @@ class MonorepoReleasePluginProcessModeSpec
 
         assertEquals(
           flags,
-          MonorepoCommandExecution.ReleaseFlags(
+          ExecutionFlags(
             useDefaults = false,
             skipTests = true,
             crossBuild = true,
-            allChanged = false,
             skipPublish = true,
             interactive = true
           )

@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 /** Publish, test, clean, and dependency-check monorepo release steps.
   *
   * Returned-state FailureCommand detection is handled centrally by
-  * [[MonorepoStepHelpers.runPerProject]]. Task-valued publish checks route through
+  * [[MonorepoStepHelpers.runPerProjectTracked]]. Task-valued publish checks route through
   * [[io.release.runtime.workflow.StepHelpers.runTaskChecked]] because they need the updated
   * `State` and task result immediately.
   */

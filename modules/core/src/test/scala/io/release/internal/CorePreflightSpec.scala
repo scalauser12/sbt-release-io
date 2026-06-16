@@ -10,7 +10,7 @@ import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.core.internal.steps.ReleaseSteps
+import io.release.core.internal.steps.PublishSteps
 import io.release.core.internal.steps.TagSteps
 import io.release.core.internal.steps.VcsSteps
 import io.release.core.internal.steps.VersionSteps
@@ -220,7 +220,7 @@ class CorePreflightSpec extends CatsEffectSuite {
           initialCtx,
           Seq(
             skipPublishInValidationStep,
-            ReleaseSteps.publishArtifacts
+            PublishSteps.publishArtifacts
           ),
           crossBuild = false
         )

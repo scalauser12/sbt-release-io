@@ -63,11 +63,6 @@ private[release] object ReleaseComposer {
     ExecutionEngine.PreparedStep(
       name = step.name,
       validate = wrapWithCrossBuild(step, crossBuild)(step.validate),
-      execute = ExecutionEngine.withErrorRecovery(LogPrefix)(
-        wrapWithCrossBuild(step, crossBuild)(
-          ExecutionEngine.withLogged(LogPrefix, logMessage)(step.execute)
-        )
-      ),
       executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(
         wrapWithCrossBuildTracked(step, crossBuild)(
           ExecutionEngine.withLoggedTracked(LogPrefix, logMessage)(step.executeTracked)

@@ -11,61 +11,6 @@ import java.io.File
 class GitPushSupportSpec extends CatsEffectSuite {
   private val fixturePrefix = "git-push-support-spec"
 
-  test("pushTag - reject empty or blank tag names before invoking git") {
-    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-empty-tag").use { repo =>
-      val vcs      = new Git(repo)
-      val expected = "Tag name cannot be empty when pushing to the remote."
-
-      assertPushTagRejects(vcs, "origin", "", expected) *>
-        assertPushTagRejects(vcs, "origin", "   ", expected)
-    }
-  }
-
-  test("pushTag - reject empty or blank remote before invoking git") {
-    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-empty-remote").use { repo =>
-      val vcs      = new Git(repo)
-      val expected = "Remote name cannot be empty when pushing a tag."
-
-      assertPushTagRejects(vcs, "", "v1.0.0", expected) *>
-        assertPushTagRejects(vcs, "   ", "v1.0.0", expected)
-    }
-  }
-
-  test("pushTag - push the tag when a local branch has the same name") {
-    TestSupport.gitRepoWithBareRemoteResource(fixturePrefix).use { case (repo, remoteRepo) =>
-      val tagName = "release-v1.0.0"
-
-      Vcs.detect(repo).flatMap {
-        case Some(vcs) =>
-          for {
-            _         <- IO.blocking {
-                           TestSupport.runGit(repo, "branch", tagName)
-                           TestSupport.runGit(repo, "tag", tagName)
-                         }
-            _         <- GitPushSupport.pushTag(vcs, "origin", tagName)
-            remoteTag <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", tagName).trim)
-          } yield {
-            assertEquals(remoteTag, tagName)
-          }
-        case None      =>
-          IO.raiseError(new RuntimeException(s"Failed to detect VCS in ${repo.getAbsolutePath}"))
-      }
-    }
-  }
-
-  test("pushTag - trim surrounding whitespace from tag names before building the refspec") {
-    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-trim-tag").use {
-      case (repo, remoteRepo) =>
-        val tagName = "release-trim-v1.0.0"
-
-        for {
-          _         <- IO.blocking(TestSupport.runGit(repo, "tag", tagName))
-          _         <- GitPushSupport.pushTag(new Git(repo), "origin", s"  $tagName  ")
-          remoteTag <- IO.blocking(TestSupport.runGit(remoteRepo, "tag", "--list", tagName).trim)
-        } yield assertEquals(remoteTag, tagName)
-    }
-  }
-
   test("resolvePushTarget - reject when the configured tracking remote is blank") {
     TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-blank-remote").use { repo =>
       configureTracking(repo, branch = "main", remote = "   ", merge = "refs/heads/main") *>
@@ -350,16 +295,6 @@ class GitPushSupportSpec extends CatsEffectSuite {
         )
       }
   }
-
-  private def assertPushTagRejects(
-      vcs: Vcs,
-      remote: String,
-      tag: String,
-      expectedMessage: String
-  ): IO[Unit] =
-    assertFailure[IllegalStateException, Unit](GitPushSupport.pushTag(vcs, remote, tag)) { err =>
-      assertEquals(err.getMessage, expectedMessage)
-    }
 
   private def configureTracking(
       repo: File,

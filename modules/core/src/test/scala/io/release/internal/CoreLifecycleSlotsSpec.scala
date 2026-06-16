@@ -2,7 +2,6 @@ package io.release.core.internal
 
 import io.release.ReleasePluginIO
 import io.release.ReleaseContext
-import io.release.core.internal.steps.ReleaseSteps
 import io.release.runtime.engine.LifecycleCompiler
 import munit.FunSuite
 import sbt.SettingKey
@@ -16,7 +15,7 @@ class CoreLifecycleSlotsSpec extends FunSuite {
     )
     assertEquals(
       builtInStepNames(CoreLifecycle.phases),
-      ReleaseSteps.defaults.map(_.name)
+      CoreLifecycle.defaults.map(_.name)
     )
   }
 

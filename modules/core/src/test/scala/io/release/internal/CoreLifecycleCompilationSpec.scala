@@ -8,7 +8,6 @@ import io.release.ReleasePluginIO
 import io.release.TestSupport
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.steps.PublishSteps
-import io.release.core.internal.steps.ReleaseSteps
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
@@ -24,7 +23,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
   ) {
     hookStateResource("release-hook-compiler-defaults").use { state =>
       compileLifecycle(state).map { steps =>
-        assertEquals(steps, ReleaseSteps.defaults)
+        assertEquals(steps, CoreLifecycle.defaults)
       }
     }
   }
@@ -39,7 +38,7 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
             )
           )
         ).map { commandExecution =>
-          assertEquals(steps.map(_.name), ReleaseSteps.defaults.map(_.name))
+          assertEquals(steps.map(_.name), CoreLifecycle.defaults.map(_.name))
           assert(
             !Files.exists(
               repoPath("modules/core/src/main/scala/io/release/internal/ReleaseHookCompiler.scala")

@@ -23,16 +23,15 @@ private[release] object Evaluation {
       case None         => resolve
     }
 
-  /** Chain on an upstream evaluation. Propagate `NotEvaluated` (optionally rewriting the
-    * reason) and only call `next` when the upstream is `Resolved`.
+  /** Chain on an upstream evaluation. Propagate `NotEvaluated` and only call `next`
+    * when the upstream is `Resolved`.
     */
   def flatMap[A, B](
-      upstream: Evaluation[A],
-      propagate: String => String = identity
+      upstream: Evaluation[A]
   )(next: A => IO[Evaluation[B]]): IO[Evaluation[B]] =
     upstream match {
       case Resolved(value)        => next(value)
-      case NotEvaluated(original) => IO.pure(NotEvaluated(propagate(original)))
+      case NotEvaluated(original) => IO.pure(NotEvaluated(original))
     }
 
   private def firstReason(guards: Seq[(Boolean, String)]): Option[String] =

@@ -6,6 +6,7 @@ import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.internal.steps.*
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.TrackedContextHandle
 import munit.CatsEffectSuite
 import sbt.Keys.*
 import sbt.LocalProject
@@ -45,16 +46,19 @@ class MonorepoCrossBuildSpec extends CatsEffectSuite {
           (ctx, buffered.consoleBuffer)
         }.flatMap { case (ctx, consoleBuffer) =>
           val action =
-            (currentCtx: MonorepoContext, _: io.release.monorepo.ProjectReleaseInfo) =>
-              IO.pure(currentCtx)
+            (_: TrackedContextHandle[MonorepoContext], _: io.release.monorepo.ProjectReleaseInfo) =>
+              IO.unit
 
-          MonorepoCrossBuild
-            .runPerProjectWithCrossBuild(
-              ctx,
-              action,
-              crossBuild = true,
-              enableCrossBuild = true
-            )
+          TrackedContextHandle
+            .create(ctx)
+            .flatMap { handle =>
+              MonorepoCrossBuild.runPerProjectWithCrossBuildTracked(
+                handle,
+                action,
+                crossBuild = true,
+                enableCrossBuild = true
+              )
+            }
             .flatMap { _ =>
               IO.blocking {
                 val log = consoleBuffer.toString("UTF-8")
