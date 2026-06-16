@@ -15,6 +15,6 @@ sbt scalafmtCheckAll       # check formatting
 ### Cross-build (sbt 2)
 
 ```bash
-sbt -Dsbt.version=2.0.0-RC9 compile
-sbt -Dsbt.version=2.0.0-RC9 test
+sbt -Dsbt.version=2.0.0 compile
+sbt -Dsbt.version=2.0.0 test
 ```
