@@ -22,12 +22,12 @@ sbt monorepo/scripted      # monorepo scripted tests only
 ```bash
 ./bin/sbt2-clean compile
 ./bin/sbt2-clean test
-sbt -Dsbt.version=2.0.0-RC9 test
+sbt -Dsbt.version=2.0.0 test
 ```
 
 **Note:** Prefer `./bin/sbt2-clean ...` for local sbt 2 work. It runs from a clean tracked
 snapshot, which avoids interference from IDE-generated files such as `project/metals.sbt`
-or `.bloop/`. Use plain `sbt -Dsbt.version=2.0.0-RC9 ...` only when you explicitly need
+or `.bloop/`. Use plain `sbt -Dsbt.version=2.0.0 ...` only when you explicitly need
 the direct lane or you are working from a known-clean checkout/CI environment.
 
 ### Verification Expectations

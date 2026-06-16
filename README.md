@@ -118,8 +118,8 @@ sbt monorepo/test        # monorepo unit tests only
 sbt scripted             # run all scripted integration tests
 
 # sbt 2 / Scala 3 (version pinned in project/sbt2.version)
-sbt -Dsbt.version=2.0.0-RC9 compile  # compile on sbt 2
-sbt -Dsbt.version=2.0.0-RC9 test     # run unit tests on sbt 2
+sbt -Dsbt.version=2.0.0 compile  # compile on sbt 2
+sbt -Dsbt.version=2.0.0 test     # run unit tests on sbt 2
 ./bin/sbt2-clean test                # same sbt 2 test lane from a clean checkout of tracked files
 ./bin/sbt2-clean core/scripted       # core scripted tests on sbt 2
 ./bin/sbt2-clean monorepo/scripted   # monorepo scripted tests on sbt 2
@@ -133,11 +133,11 @@ sbt scalafmtSbtCheck     # verify sbt/build file formatting
 
 Use `./bin/sbt2-clean ...` for local sbt 2 verification when your checkout has generated IDE
 files such as `project/metals.sbt` or `.bloop/` — those can interfere with sbt 2 compilation.
-CI runs on a clean checkout and uses plain `sbt -Dsbt.version=2.0.0-RC9 ...`.
+CI runs on a clean checkout and uses plain `sbt -Dsbt.version=2.0.0 ...`.
 
 ## Compatibility
 
-- **sbt**: 1.12.3 and 2.0.0-RC9
+- **sbt**: 1.12.3 and 2.0.0
 - **Scala**: 2.12 (sbt 1) / Scala 3 (sbt 2) — plugin compile targets, not constraints on your project's Scala version
 - **cats-effect**: 3.7.0
 - **VCS**: Git only

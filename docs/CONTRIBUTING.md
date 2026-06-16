@@ -33,7 +33,7 @@ Prefer the helper script for local checkouts so generated IDE files
 ./bin/sbt2-clean monorepo/scripted
 ```
 
-Plain `sbt -Dsbt.version=2.0.0-RC9 ...` works from a clean checkout / CI.
+Plain `sbt -Dsbt.version=2.0.0 ...` works from a clean checkout / CI.
 
 ## Formatting
 
