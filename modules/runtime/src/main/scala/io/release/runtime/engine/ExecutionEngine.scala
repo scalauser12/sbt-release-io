@@ -48,12 +48,16 @@ private[release] object ExecutionEngine {
   final case class PreparedStep[C](
       name: String,
       validate: C => IO[C],
-      execute: C => IO[C],
       executeTracked: TrackedContextHandle[C] => IO[Unit]
   )
 
   object PreparedStep {
-    def apply[C](
+
+    /** Build a step from an untracked `execute`, deriving the tracked runner via
+      * [[TrackedContextHandle.lift]]. Named to avoid an erasure clash with the
+      * case class's synthesized `apply`.
+      */
+    def fromUntracked[C](
         name: String,
         validate: C => IO[C],
         execute: C => IO[C]
@@ -61,7 +65,6 @@ private[release] object ExecutionEngine {
       new PreparedStep(
         name = name,
         validate = validate,
-        execute = execute,
         executeTracked = TrackedContextHandle.lift(execute)
       )
   }
@@ -213,27 +216,16 @@ private[release] object ExecutionEngine {
       case fatal       => IO.raiseError(fatal)
     }
 
-  def withErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(
-      f: C => IO[C]
-  ): C => IO[C] =
-    (ctx: C) => recoverWithContext(logPrefix, ctx)(f(ctx))
-
   def withTrackedErrorRecovery[C <: ReleaseCtx { type Self = C }](logPrefix: String)(
       f: TrackedContextHandle[C] => IO[Unit]
   ): TrackedContextHandle[C] => IO[Unit] =
     (handle: TrackedContextHandle[C]) => recoverWithContext(logPrefix, handle)(f(handle))
 
-  /** Prepend a single info-log line to an action. The log fires once per call,
-    * so when the wrapped action is itself wrapped in an iterating combinator
-    * (e.g. cross-build switching), the log fires once per iteration.
-    */
-  def withLogged[C <: ReleaseCtx { type Self = C }](logPrefix: String, message: String)(
-      action: C => IO[C]
-  ): C => IO[C] =
-    (ctx: C) => IO.blocking(ctx.state.log.info(s"$logPrefix $message")) *> action(ctx)
-
-  /** Tracked variant of [[withLogged]]: fetches the current context from the
-    * handle to write the log line, then invokes the action against the handle.
+  /** Prepend a single info-log line to a tracked action: fetches the current
+    * context from the handle to write the log line, then invokes the action
+    * against the handle. The log fires once per call, so when the wrapped action
+    * is itself wrapped in an iterating combinator (e.g. cross-build switching),
+    * the log fires once per iteration.
     */
   def withLoggedTracked[C <: ReleaseCtx { type Self = C }](
       logPrefix: String,

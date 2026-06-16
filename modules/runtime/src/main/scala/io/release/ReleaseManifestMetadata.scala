@@ -60,26 +60,6 @@ private[release] object ReleaseManifestMetadata {
   ): Seq[Setting[?]] =
     releaseManifestMetadataSettings(projectRef, releaseHash = None, releaseTag = Some(releaseTag))
 
-  /** Re-emits stored per-project hash/tag settings from the current session so they
-    * survive a session refresh.
-    */
-  def existingReleaseManifestSettings(
-      state: State,
-      projectRefs: Seq[ProjectRef]
-  ): Seq[Setting[?]] = {
-    val extracted = SbtRuntime.extracted(state)
-
-    projectRefs.distinct.flatMap { ref =>
-      releaseManifestMetadataSettings(
-        ref,
-        // getOpt returns Option[Option[String]] because the setting type is Option[String];
-        // flatten unwraps to Option[String].
-        releaseHash = extracted.getOpt(ref / releaseIOInternalReleaseHash).flatten,
-        releaseTag = extracted.getOpt(ref / releaseIOInternalReleaseTag).flatten
-      )
-    }
-  }
-
   /** Strip every prior `releaseIOInternalReleaseHash` / `releaseIOInternalReleaseTag`
     * setting out of `session.rawAppend`. After this, the structure resolves
     * the keys via the build/original layer (which carries the `:= None`

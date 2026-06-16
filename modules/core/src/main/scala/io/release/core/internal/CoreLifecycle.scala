@@ -4,7 +4,9 @@ import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.ReleaseHookIO
 import io.release.core.internal.steps.PublishSteps
-import io.release.core.internal.steps.ReleaseSteps
+import io.release.core.internal.steps.TagSteps
+import io.release.core.internal.steps.VcsSteps
+import io.release.core.internal.steps.VersionSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
 import io.release.runtime.engine.ProcessStep
@@ -144,49 +146,49 @@ private[release] object CoreLifecycle {
     ctx => IO.pure(ctx.pushExecuted)
 
   private[release] lazy val phases: Seq[Phase] = Seq(
-    builtIn(ReleaseSteps.initializeVcs),
-    builtIn(ReleaseSteps.checkCleanWorkingDir),
+    builtIn(VcsSteps.initializeVcs),
+    builtIn(VcsSteps.checkCleanWorkingDir),
     hookPhase(HookPhases.AfterCleanCheck, _.afterCleanCheckHooks),
-    builtIn(ReleaseSteps.checkSnapshotDependencies, _.enableSnapshotDependenciesCheck),
+    builtIn(PublishSteps.checkSnapshotDependencies, _.enableSnapshotDependenciesCheck),
     hookPhase(HookPhases.BeforeVersionResolution, _.beforeVersionResolutionHooks),
-    builtIn(ReleaseSteps.inquireVersions),
+    builtIn(VersionSteps.inquireVersions),
     hookPhase(HookPhases.AfterVersionResolution, _.afterVersionResolutionHooks),
-    builtIn(ReleaseSteps.tagPreflight, tagPreflightEnabled),
-    builtIn(ReleaseSteps.runClean, _.enableRunClean),
-    builtIn(ReleaseSteps.runTests, _.enableRunTests),
+    builtIn(TagSteps.tagPreflight, tagPreflightEnabled),
+    builtIn(PublishSteps.runClean, _.enableRunClean),
+    builtIn(PublishSteps.runTests, _.enableRunTests),
     hookPhase(HookPhases.BeforeReleaseVersionWrite, _.beforeReleaseVersionWriteHooks),
-    builtIn(ReleaseSteps.setReleaseVersion),
+    builtIn(VersionSteps.setReleaseVersion),
     hookPhase(HookPhases.AfterReleaseVersionWrite, _.afterReleaseVersionWriteHooks),
     hookPhase(HookPhases.BeforeReleaseCommit, _.beforeReleaseCommitHooks),
-    builtIn(ReleaseSteps.commitReleaseVersion),
+    builtIn(VersionSteps.commitReleaseVersion),
     hookPhase(HookPhases.AfterReleaseCommit, _.afterReleaseCommitHooks),
     hookPhase(HookPhases.BeforeTag, _.beforeTagHooks, enabled = _.enableTagging),
-    builtIn(ReleaseSteps.tagRelease, _.enableTagging),
+    builtIn(TagSteps.tagRelease, _.enableTagging),
     hookPhase(HookPhases.AfterTag, _.afterTagHooks, enabled = _.enableTagging),
     hookPhase(
       HookPhases.BeforePublish,
       _.beforePublishHooks,
       gate = publishGate,
-      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      crossBuild = PublishSteps.publishArtifacts.enableCrossBuild,
       freezeGateKey = Some(scalaVersionKey),
       enabled = _.enablePublish,
       narrowExecute = Some(beforePublishNarrow)
     ),
-    builtIn(ReleaseSteps.publishArtifacts, _.enablePublish),
+    builtIn(PublishSteps.publishArtifacts, _.enablePublish),
     hookPhase(
       HookPhases.AfterPublish,
       _.afterPublishHooks,
       gate = publishGate,
-      crossBuild = ReleaseSteps.publishArtifacts.enableCrossBuild,
+      crossBuild = PublishSteps.publishArtifacts.enableCrossBuild,
       freezeGateKey = Some(scalaVersionKey),
       enabled = _.enablePublish,
       narrowExecute = Some(afterPublishNarrow)
     ),
     hookPhase(HookPhases.BeforeNextVersionWrite, _.beforeNextVersionWriteHooks),
-    builtIn(ReleaseSteps.setNextVersion),
+    builtIn(VersionSteps.setNextVersion),
     hookPhase(HookPhases.AfterNextVersionWrite, _.afterNextVersionWriteHooks),
     hookPhase(HookPhases.BeforeNextCommit, _.beforeNextCommitHooks),
-    builtIn(ReleaseSteps.commitNextVersion),
+    builtIn(VersionSteps.commitNextVersion),
     hookPhase(HookPhases.AfterNextCommit, _.afterNextCommitHooks),
     hookPhase(
       HookPhases.BeforePush,
@@ -194,7 +196,7 @@ private[release] object CoreLifecycle {
       enabled = _.enablePush,
       narrowExecute = Some(beforePushNarrow)
     ),
-    builtIn(ReleaseSteps.pushChanges, _.enablePush),
+    builtIn(VcsSteps.pushChanges, _.enablePush),
     hookPhase(
       HookPhases.AfterPush,
       _.afterPushHooks,

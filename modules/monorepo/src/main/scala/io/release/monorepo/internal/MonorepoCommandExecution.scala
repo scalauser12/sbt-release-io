@@ -43,18 +43,9 @@ private[monorepo] object MonorepoCommandExecution {
       resolveInteractiveEnabled: State => Boolean
   )
 
-  final case class ReleaseFlags(
-      useDefaults: Boolean,
-      skipTests: Boolean,
-      crossBuild: Boolean,
-      allChanged: Boolean,
-      skipPublish: Boolean,
-      interactive: Boolean
-  )
-
   final case class PlannedCommand(
       cleanState: State,
-      flags: ReleaseFlags,
+      flags: ExecutionFlags,
       plan: MonorepoReleasePlan
   )
 
@@ -135,36 +126,29 @@ private[monorepo] object MonorepoCommandExecution {
       args: Seq[MonorepoCli.Arg],
       runtime: CommandRuntime[T],
       interactiveEnabled: Boolean
-  ): ReleaseFlags = {
+  ): ExecutionFlags = {
     import MonorepoCli.Arg.*
 
-    ReleaseFlags(
+    ExecutionFlags(
       useDefaults = args.contains(WithDefaults),
       skipTests = args.contains(SkipTests) || runtime.resolveSkipTestsEnabled(cleanState),
-      crossBuild = args.contains(CrossBuild) || runtime.resolveCrossBuildEnabled(cleanState),
-      allChanged = args.contains(AllChanged),
       skipPublish = runtime.resolveSkipPublishEnabled(cleanState),
-      interactive = interactiveEnabled && runtime.resolveInteractiveEnabled(cleanState)
+      interactive = interactiveEnabled && runtime.resolveInteractiveEnabled(cleanState),
+      crossBuild = args.contains(CrossBuild) || runtime.resolveCrossBuildEnabled(cleanState)
     )
   }
 
   private def plannerInputs(
       args: Seq[MonorepoCli.Arg],
-      flags: ReleaseFlags,
+      flags: ExecutionFlags,
       defaults: ReleaseDecisionDefaults,
       commandName: String
   ): MonorepoReleasePlan.Inputs = {
     import MonorepoCli.Arg.*
 
     MonorepoReleasePlan.Inputs(
-      flags = ExecutionFlags(
-        useDefaults = flags.useDefaults,
-        skipTests = flags.skipTests,
-        skipPublish = flags.skipPublish,
-        interactive = flags.interactive,
-        crossBuild = flags.crossBuild
-      ),
-      allChanged = flags.allChanged,
+      flags = flags,
+      allChanged = args.contains(AllChanged),
       selectedNames = args.collect { case SelectProject(name) => name },
       releaseVersionPairs = args.collect { case ReleaseVersion(project, version) =>
         project -> version
@@ -286,7 +270,7 @@ private[monorepo] object MonorepoCommandExecution {
   private[monorepo] def releaseStartLines(
       stepCount: Int,
       projectCount: Int,
-      flags: ReleaseFlags
+      flags: ExecutionFlags
   ): List[String] = {
     val prefix = ReleaseLogPrefixes.Monorepo
 
@@ -303,7 +287,7 @@ private[monorepo] object MonorepoCommandExecution {
       state: State,
       stepCount: Int,
       projectCount: Int,
-      flags: ReleaseFlags
+      flags: ExecutionFlags
   ): Unit =
     releaseStartLines(stepCount, projectCount, flags).foreach(line => state.log.info(line))
 }

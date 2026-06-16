@@ -198,7 +198,6 @@ class ReleaseIOGroupedKeysSpec extends CatsEffectSuite with ReleasePluginIOSpecS
     "releaseManifestPackageOptions",
     "releaseManifestHashSettings",
     "releaseManifestTagSettings",
-    "existingReleaseManifestSettings",
     "clearReleaseManifestMetadata"
   )
 

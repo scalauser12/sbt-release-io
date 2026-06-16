@@ -4,7 +4,6 @@ import cats.effect.IO
 import io.release.ReleaseComposer
 import io.release.ReleaseContext
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.core.internal.steps.ReleaseSteps
 import io.release.core.internal.steps.TagSteps
 import io.release.core.internal.steps.VersionSteps
 import io.release.runtime.HookPhases
@@ -31,8 +30,8 @@ private[release] object CorePreflight {
       s"$stepName not in check process"
   }
 
-  private val InquireVersionsStep             = ReleaseSteps.inquireVersions.name
-  private val TagReleaseStep                  = ReleaseSteps.tagRelease.name
+  private val InquireVersionsStep             = VersionSteps.inquireVersions.name
+  private val TagReleaseStep                  = TagSteps.tagRelease.name
   private val VersionResolutionBlockingPhases = Set(
     HookPhases.AfterCleanCheck,
     HookPhases.BeforeVersionResolution
@@ -117,7 +116,7 @@ private[release] object CorePreflight {
   )
 
   def helpLines(commandName: String): List[String] = {
-    val defaultFlow = ReleaseSteps.defaults.map(_.name).mkString(" -> ")
+    val defaultFlow = CoreLifecycle.defaults.map(_.name).mkString(" -> ")
 
     List(
       s"""Usage: sbt "$commandName [flags]"""",

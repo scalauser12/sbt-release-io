@@ -38,55 +38,15 @@ private[monorepo] object MonorepoStepHelpers {
   // ── Per-project execution ─────────────────────────────────────────────
 
   /** Run a per-project action across all non-failed projects, with error isolation
-    * and automatic failure propagation.
+    * and automatic failure propagation. Checkpoints the latest context in-place via
+    * the tracked handle.
     */
-  def runPerProject(
-      ctx: MonorepoContext,
-      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  ): IO[MonorepoContext] =
-    runPerProjectInternal(ctx, action).map(propagateFailures)
-
-  /** Tracked variant of [[runPerProject]] that checkpoints the latest context in-place. */
   def runPerProjectTracked(
       handle: TrackedContextHandle[MonorepoContext],
       action: (TrackedContextHandle[MonorepoContext], ProjectReleaseInfo) => IO[Unit]
   ): IO[Unit] =
     runPerProjectTrackedInternal(handle, action) *>
       handle.update(ctx => IO.pure(propagateFailures(ctx))).void
-
-  /** Internal per-project fold without propagation — used by cross-build iteration
-    * which needs to run multiple version iterations before propagating.
-    */
-  private def runPerProjectInternal(
-      ctx: MonorepoContext,
-      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
-  ): IO[MonorepoContext] =
-    ctx.currentProjects
-      .foldLeft(IO.pure(ctx)) { (ioCtx, proj) =>
-        ioCtx.flatMap { currentCtx =>
-          currentCtx.projects.find(_.ref == proj.ref) match {
-            case None             => IO.pure(currentCtx)
-            case Some(latestProj) =>
-              if (currentCtx.failed || latestProj.failed) IO.pure(currentCtx)
-              else
-                action(currentCtx, latestProj)
-                  .flatMap(detectProjectFailureCommand(_, latestProj))
-                  .handleErrorWith {
-                    case NonFatal(err) =>
-                      IO.blocking(
-                        currentCtx.state.log.error(
-                          s"${ReleaseLogPrefixes.Monorepo} ${latestProj.name}: ${errorMessage(err)}"
-                        )
-                      ) *> IO.pure(
-                        currentCtx.updateProject(latestProj.ref)(
-                          _.copy(failed = true, failureCause = Some(err))
-                        )
-                      )
-                    case fatal         => IO.raiseError(fatal)
-                  }
-          }
-        }
-      }
 
   private def runPerProjectTrackedInternal(
       handle: TrackedContextHandle[MonorepoContext],

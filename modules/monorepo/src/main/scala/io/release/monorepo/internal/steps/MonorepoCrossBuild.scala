@@ -63,18 +63,6 @@ private[monorepo] object MonorepoCrossBuild {
       )
     }
 
-  /** Run a per-project action with optional cross-build iteration. */
-  def runPerProjectWithCrossBuild(
-      ctx: MonorepoContext,
-      action: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext],
-      crossBuild: Boolean,
-      enableCrossBuild: Boolean
-  ): IO[MonorepoContext] =
-    if (crossBuild && enableCrossBuild)
-      MonorepoStepHelpers.runPerProject(ctx, (c, p) => runCrossBuildForProject(c, p, action))
-    else
-      MonorepoStepHelpers.runPerProject(ctx, action)
-
   /** Tracked per-project action with optional cross-build iteration. */
   def runPerProjectWithCrossBuildTracked(
       handle: TrackedContextHandle[MonorepoContext],

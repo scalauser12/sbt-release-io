@@ -144,26 +144,4 @@ private[release] object GitPushSupport {
                 )(label)
     } yield ()
   }
-
-  /** Push a single tag to the given remote.
-    *
-    * @param tag the tag name (without `refs/tags/` — the ref is built internally).
-    */
-  def pushTag(vcs: Vcs, remote: String, tag: String): IO[Unit] = {
-    val trimmedRemote = remote.trim
-    val trimmedTag    = tag.trim
-    for {
-      _     <- IO.raiseWhen(trimmedRemote.isEmpty)(
-                 new IllegalStateException("Remote name cannot be empty when pushing a tag.")
-               )
-      _     <- IO.raiseWhen(trimmedTag.isEmpty)(
-                 new IllegalStateException("Tag name cannot be empty when pushing to the remote.")
-               )
-      tagRef = s"refs/tags/$trimmedTag"
-      _     <- GitProcessSupport.runCmd(
-                 vcs.baseDir,
-                 Seq("push", trimmedRemote, s"$tagRef:$tagRef")
-               )(s"git push tag '$trimmedTag'")
-    } yield ()
-  }
 }

@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.Resource
 import io.release.ReleaseKeys
 import io.release.monorepo.internal.*
+import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseLogPrefixes
 import munit.CatsEffectSuite
 
@@ -44,11 +45,10 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
 
         assertEquals(
           flags,
-          MonorepoCommandExecution.ReleaseFlags(
+          ExecutionFlags(
             useDefaults = true,
             skipTests = true,
             crossBuild = true,
-            allChanged = true,
             skipPublish = true,
             interactive = true
           )
@@ -71,11 +71,10 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
 
         assertEquals(
           flags,
-          MonorepoCommandExecution.ReleaseFlags(
+          ExecutionFlags(
             useDefaults = false,
             skipTests = true,
             crossBuild = true,
-            allChanged = false,
             skipPublish = false,
             interactive = false
           )
@@ -196,11 +195,10 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
     val lines = MonorepoCommandExecution.releaseStartLines(
       stepCount = 12,
       projectCount = 3,
-      flags = MonorepoCommandExecution.ReleaseFlags(
+      flags = ExecutionFlags(
         useDefaults = false,
         skipTests = true,
         crossBuild = true,
-        allChanged = false,
         skipPublish = true,
         interactive = true
       )
@@ -222,11 +220,10 @@ class MonorepoCommandExecutionSpec extends CatsEffectSuite with MonorepoReleaseP
     val lines = MonorepoCommandExecution.releaseStartLines(
       stepCount = 4,
       projectCount = 1,
-      flags = MonorepoCommandExecution.ReleaseFlags(
+      flags = ExecutionFlags(
         useDefaults = false,
         skipTests = false,
         crossBuild = false,
-        allChanged = false,
         skipPublish = false,
         interactive = false
       )

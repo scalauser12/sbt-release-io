@@ -228,7 +228,7 @@ private[monorepo] object MonorepoVcsSteps {
     * Per-item with isolation: each project is preflighted independently so all
     * errors are reported at once and a single failing project does not mask the
     * remaining projects' diagnostics. Per-project failures still propagate to
-    * the global context (via `runPerProject`), so once any preflight fails the
+    * the global context (via `runPerProjectTracked`), so once any preflight fails the
     * release skips every later step (`set-release-versions`,
     * `commit-release-versions`, `tag-releases`, `publish-artifacts`,
     * `push-changes`) — the clean-abort outcome the reviewer asked for.
@@ -244,7 +244,6 @@ private[monorepo] object MonorepoVcsSteps {
     */
   private[monorepo] val tagPreflight: ProjectStep = ProcessStep.PerItem(
     name = "tag-preflight",
-    roles = Set(BuiltInStepRole.TagPreflight),
     execute = (ctx, project) => runProjectTagPreflight(ctx, project).as(ctx)
   )
 
