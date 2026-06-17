@@ -253,10 +253,12 @@ private[release] object PublishSteps {
     * **drop transient settings** that an earlier execute hook installed via the public
     * `Project.extract(state).appendWithSession(...)` API (the documented pattern, see
     * the `hook-installed-publish-skip` scripted test). Used by `before-publish` so its
-    * narrow stays consistent with `publish-artifacts.execute`'s own decision.
+    * narrow stays consistent with `publish-artifacts.execute`'s own decision (also folds
+    * in [[effectiveSkip]] so a frozen validate-time skip — or `ctx.skipPublish` flipped at
+    * execute time — suppresses the hook symmetrically with `afterPublishNarrow`).
     */
   private[release] def shouldRunPublishHooksAtExecute(ctx: ReleaseContext): IO[Boolean] =
-    if (ctx.skipPublish) IO.pure(false)
+    if (effectiveSkip(ctx)) IO.pure(false)
     else anyTargetWillPublish(ctx.state)
 
   private def anyTargetWillPublish(state: State): IO[Boolean] =

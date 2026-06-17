@@ -106,6 +106,33 @@ class PublishStepsSpec extends CatsEffectSuite {
   }
 
   test(
+    "shouldRunPublishHooksAtExecute: a frozen validate-time skip suppresses the before-publish " +
+      "gate even when a hook flipped ctx.skipPublish back to false (symmetric with execute)"
+  ) {
+    // publishTo is configured and publish/skip is false, so anyTargetWillPublish
+    // would return true; the gate must still return false because the publish
+    // step itself will skip on the frozen decision. Before the effectiveSkip fix
+    // this returned true, firing before-publish for a non-publishing iteration.
+    loadedContextResource(s"$fixturePrefix-before-publish-gate-frozen") { dir =>
+      () -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publishTo                                         := Some(
+          Resolver.file("local", new File(dir, "repo"))
+        )
+      )
+    }.use { case (ctx, _) =>
+      val skippedAtValidate = ctx.copy(skipPublish = true)
+      for {
+        validated  <- PublishSteps.publishArtifacts.validate(skippedAtValidate)
+        _           = assertEquals(validated.publishSkipFrozen, Some(true))
+        hookFlipped = validated.copy(skipPublish = false)
+        shouldRun  <- PublishSteps.shouldRunPublishHooksAtExecute(hookFlipped)
+        _           = assertEquals(shouldRun, false)
+      } yield ()
+    }
+  }
+
+  test(
     "publishArtifacts.execute - propagate FailureCommand from a task-valued publish/skip " +
       "that returns true"
   ) {

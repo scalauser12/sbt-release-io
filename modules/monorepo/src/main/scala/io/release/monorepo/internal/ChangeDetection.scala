@@ -242,21 +242,34 @@ private[monorepo] object ChangeDetection {
   private def projectTagLookup(
       inputs: DetectionInputs,
       project: ProjectReleaseInfo
-  ): IO[ProjectTagLookup] = {
+  ): IO[ProjectTagLookup] =
     // "*" is used as a glob wildcard for git tag lookup — tag formatters must preserve it literally.
-    val pattern = inputs.tagNameFn(project.name, "*")
-    if (!pattern.contains("*"))
-      IO.raiseError(
-        new IllegalStateException(
-          s"releaseIOMonorepoVcsTagName for project '${project.name}' produced " +
-            s"'$pattern' from the wildcard probe — formatters must preserve the " +
-            "version argument literally so change detection can build a `git tag` " +
-            "glob. Ensure the formatter interpolates both arguments."
+    // Guard the probe itself: formatters that parse/normalize real semvers can throw on "*" (the
+    // preflight warning tolerates this and defers the hard contract to here), so surface a thrown
+    // formatter as the same friendly, setting-named error rather than a raw NumberFormatException.
+    scala.util.Try(inputs.tagNameFn(project.name, "*")) match {
+      case scala.util.Failure(err)                               =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"releaseIOMonorepoVcsTagName for project '${project.name}' threw when probed with " +
+              s"the wildcard '*': ${err.getMessage} — formatters must accept the version " +
+              "argument literally so change detection can build a `git tag` glob. Ensure the " +
+              "formatter interpolates both arguments without parsing the version.",
+            err
+          )
         )
-      )
-    else
-      lookupLastTag(inputs.vcs, pattern).map(result => ProjectTagLookup(pattern, result))
-  }
+      case scala.util.Success(pattern) if !pattern.contains("*") =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"releaseIOMonorepoVcsTagName for project '${project.name}' produced " +
+              s"'$pattern' from the wildcard probe — formatters must preserve the " +
+              "version argument literally so change detection can build a `git tag` " +
+              "glob. Ensure the formatter interpolates both arguments."
+          )
+        )
+      case scala.util.Success(pattern)                           =>
+        lookupLastTag(inputs.vcs, pattern).map(result => ProjectTagLookup(pattern, result))
+    }
 
   private def sharedPathsChanged(
       inputs: DetectionInputs,

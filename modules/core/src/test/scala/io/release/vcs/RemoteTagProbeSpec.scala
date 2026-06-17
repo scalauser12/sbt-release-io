@@ -150,6 +150,52 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
             s"missing fetch instruction: ${err.getMessage}"
           )
           assert(
+            !err.getMessage.contains("--force"),
+            s"remote-only message should not advise a force-push: ${err.getMessage}"
+          )
+          assert(
+            err.getMessage.contains(s"$CommandName help"),
+            s"missing help reference: ${err.getMessage}"
+          )
+        case other                            =>
+          fail(s"expected IllegalStateException, got: $other")
+      }
+    }
+  }
+
+  test(
+    "probeForCreate - on the overwrite path (tag also exists locally) advises a force-push, " +
+      "not git fetch"
+  ) {
+    runProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        remoteTagExistsValue = Some(Some(true)),
+        existsTagValue = true
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true)
+    ) { (result, _) =>
+      result match {
+        case Left(err: IllegalStateException) =>
+          assert(
+            err.getMessage.contains("already exists on remote"),
+            s"unexpected message: ${err.getMessage}"
+          )
+          assert(
+            err.getMessage.contains("[v0.1.0]"),
+            s"missing tag name in message: ${err.getMessage}"
+          )
+          assert(
+            err.getMessage.contains("git push origin --force refs/tags/v0.1.0"),
+            s"missing force-push instruction: ${err.getMessage}"
+          )
+          assert(
+            !err.getMessage.contains("git fetch"),
+            s"overwrite message should not advise git fetch: ${err.getMessage}"
+          )
+          assert(
             err.getMessage.contains(s"$CommandName help"),
             s"missing help reference: ${err.getMessage}"
           )
@@ -267,7 +313,8 @@ private final class StubVcs(
     callsRef: Ref[IO, List[String]],
     hasUpstreamValue: Boolean,
     trackingRemoteValue: String,
-    remoteTagExistsValue: Option[Option[Boolean]]
+    remoteTagExistsValue: Option[Option[Boolean]],
+    existsTagValue: Boolean
 ) extends Vcs {
   override val baseDir: File       = new File(".")
   override val commandName: String = "git"
@@ -303,7 +350,7 @@ private final class StubVcs(
   override def isBehindRemote: IO[Boolean]                                                 =
     IO.raiseError(new AssertionError("isBehindRemote should not be reached"))
   override def existsTag(name: String): IO[Boolean]                                        =
-    IO.raiseError(new AssertionError("existsTag should not be reached"))
+    record(s"existsTag($name)") *> IO.pure(existsTagValue)
   override def modifiedFiles: IO[Seq[String]]                                              =
     IO.raiseError(new AssertionError("modifiedFiles should not be reached"))
   override def stagedFiles: IO[Seq[String]]                                                =
@@ -334,15 +381,23 @@ private object StubVcs {
       callsRef: Ref[IO, List[String]],
       hasUpstreamValue: Boolean = true,
       trackingRemoteValue: String = "origin",
-      remoteTagExistsValue: Option[Option[Boolean]] = None
+      remoteTagExistsValue: Option[Option[Boolean]] = None,
+      existsTagValue: Boolean = false
   ): StubVcs =
-    new StubVcs(callsRef, hasUpstreamValue, trackingRemoteValue, remoteTagExistsValue)
+    new StubVcs(
+      callsRef,
+      hasUpstreamValue,
+      trackingRemoteValue,
+      remoteTagExistsValue,
+      existsTagValue
+    )
 
   def recording(callsRef: Ref[IO, List[String]]): StubVcs =
     recording(
       callsRef = callsRef,
       hasUpstreamValue = true,
       trackingRemoteValue = "origin",
-      remoteTagExistsValue = None
+      remoteTagExistsValue = None,
+      existsTagValue = false
     )
 }

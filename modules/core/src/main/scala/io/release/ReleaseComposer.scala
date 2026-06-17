@@ -146,7 +146,11 @@ private[release] object ReleaseComposer {
                 }
               }
             }
-            .handleErrorWith(actionErr => restoreTracked *> IO.raiseError(actionErr))
+            // Best-effort restore: `restoreLatest` re-raises (after logging via
+            // `onRestoreError`) if the restore itself fails. Without `.attempt`, that
+            // secondary failure would short-circuit `*>` and mask `actionErr` — the
+            // real cause of the release failing. Keep the action error authoritative.
+            .handleErrorWith(actionErr => restoreTracked.attempt *> IO.raiseError(actionErr))
             .flatMap(_ => restoreTracked)
       }
     }

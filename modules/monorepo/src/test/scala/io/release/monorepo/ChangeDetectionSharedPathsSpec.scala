@@ -468,4 +468,51 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
       }
     }
   }
+
+  test("detectChangedProjects - fail with a friendly error when tagNameFn throws on the wildcard") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core"))
+        sbt.IO.write(
+          new File(repo, "core/version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val project                                       = nestedProject(repo, "core")
+        // Formatter that strict-parses the version segment — succeeds on real
+        // semvers, throws on the wildcard "*" probe. A common build-side pattern.
+        val throwingFormatter: (String, String) => String =
+          (name, ver) =>
+            io.release.version
+              .Version(ver)
+              .map(v => s"$name-v${v.render}")
+              .getOrElse(throw new IllegalArgumentException(s"not a semver: $ver"))
+
+        detectChanged(vcs, Seq(project), env.state, tagNameFn = throwingFormatter).attempt.map {
+          case Left(err: IllegalStateException) =>
+            val msg = err.getMessage
+            assert(
+              msg.contains("releaseIOMonorepoVcsTagName"),
+              s"expected message to mention the setting; got: $msg"
+            )
+            assert(msg.contains("core"), s"expected message to mention project name; got: $msg")
+            assert(
+              msg.contains("threw"),
+              s"expected message to note the formatter threw; got: $msg"
+            )
+          case other                            =>
+            fail(s"Expected IllegalStateException; got $other")
+        }
+      }
+    }
+  }
 }

@@ -197,7 +197,11 @@ private[monorepo] object MonorepoCrossBuild {
           )
 
         def restoreAfterFailure(actionErr: Throwable): IO[Unit] =
-          restoreTrackedContext *> IO.raiseError(actionErr)
+          // Best-effort restore: `restoreLatest` re-raises (after logging via
+          // `onRestoreError`) if the restore itself fails. Without `.attempt`, that
+          // secondary failure would short-circuit `*>` and mask `actionErr` — the
+          // real per-project cause. Keep the action error authoritative.
+          restoreTrackedContext.attempt *> IO.raiseError(actionErr)
 
         setup.crossVersions
           .foldLeft(IO.unit) { (ioUnit, version) =>

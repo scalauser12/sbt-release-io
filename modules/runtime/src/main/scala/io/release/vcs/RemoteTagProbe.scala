@@ -81,12 +81,13 @@ private[release] object RemoteTagProbe {
           remote  <- vcs.trackingRemote
           timeout <- loadTimeout(ctx.state)
           result  <- vcs.remoteTagExistsWithTimeout(remote, tagName, timeout)
-          _       <- handleResult(ctx, tagName, remote, commandName, logPrefix, label, result)
+          _       <- handleResult(ctx, vcs, tagName, remote, commandName, logPrefix, label, result)
         } yield ()
     }
 
   private def handleResult[C <: ReleaseCtx { type Self = C }](
       ctx: C,
+      vcs: Vcs,
       tagName: String,
       remote: String,
       commandName: String,
@@ -96,9 +97,16 @@ private[release] object RemoteTagProbe {
   ): IO[Unit] =
     result match {
       case Some(true)  =>
-        IO.raiseError(
-          new IllegalStateException(conflictMessage(tagName, remote, commandName, label))
-        )
+        // The probe also runs on the overwrite path, where the tag exists locally
+        // too. There `git fetch --tags` cannot resolve the conflict — the remedy is
+        // a force-push or a new tag. Tailor the message to whether the tag is local.
+        vcs.existsTag(tagName).flatMap { localExists =>
+          IO.raiseError(
+            new IllegalStateException(
+              conflictMessage(tagName, remote, commandName, label, localExists)
+            )
+          )
+        }
       case Some(false) => IO.unit
       case None        =>
         IO.blocking(
@@ -113,12 +121,23 @@ private[release] object RemoteTagProbe {
       tagName: String,
       remote: String,
       commandName: String,
-      label: Option[String]
+      label: Option[String],
+      localExists: Boolean
   ): String =
-    s"Tag [$tagName]${formatLabel(label)} already exists on remote [$remote] but is not " +
-      s"present locally. Run `git fetch $remote --tags` to bring the tag into your local " +
-      s"repository, then re-run the release to resolve the conflict (overwrite, keep, or " +
-      s"pick a new tag). Use `$commandName help` for tag conflict options."
+    if (localExists)
+      // Overwrite path: the tag exists locally and on the remote. A non-force push
+      // of an existing remote tag is rejected when the commits differ, so fetching
+      // does not help — force-push or pick a new tag.
+      s"Tag [$tagName]${formatLabel(label)} already exists on remote [$remote] and locally. " +
+        s"The release would push it with a non-force update, which the remote rejects when " +
+        s"the tags point at different commits. Force-push the tag " +
+        s"(`git push $remote --force refs/tags/$tagName`) or pick a new tag, then re-run the " +
+        s"release. Use `$commandName help` for tag conflict options."
+    else
+      s"Tag [$tagName]${formatLabel(label)} already exists on remote [$remote] but is not " +
+        s"present locally. Run `git fetch $remote --tags` to bring the tag into your local " +
+        s"repository, then re-run the release to resolve the conflict (overwrite, keep, or " +
+        s"pick a new tag). Use `$commandName help` for tag conflict options."
 
   private def formatLabel(label: Option[String]): String =
     label.fold("")(value => if (value.isEmpty) "" else s" for $value")
