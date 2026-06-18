@@ -390,8 +390,8 @@ private[release] object TagSteps {
               remoteTagPreflightForCreate(ctx.withState(params.state), vcs, finalTagName)
           )
         )
-        .flatMap { case (updatedCtx, result) =>
-          applyTagToState(updatedCtx, params, result.tagName)
+        .flatMap { case (updatedCtx, tagName) =>
+          applyTagToState(updatedCtx, params, tagName)
         }
     }
 

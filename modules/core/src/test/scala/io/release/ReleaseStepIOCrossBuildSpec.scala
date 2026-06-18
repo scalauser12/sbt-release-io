@@ -2,7 +2,6 @@ package io.release
 
 import cats.effect.IO
 import cats.effect.Ref
-import io.release.core.internal.CoreStepFactory
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
@@ -120,7 +119,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
           enableCrossBuild = true
         )
-        val plainStep = CoreStepFactory.io("plain-step") { c =>
+        val plainStep = CoreStepFactoryTestSteps.io("plain-step") { c =>
           scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"plain:$v").as(c))
         }
 
@@ -170,7 +169,7 @@ class ReleaseStepIOCrossBuildSpec extends CatsEffectSuite with ReleaseStepIOSpec
             c => scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"validate:$v")),
           enableCrossBuild = true
         )
-        val plainStep = CoreStepFactory.io("plain-step") { c =>
+        val plainStep = CoreStepFactoryTestSteps.io("plain-step") { c =>
           scalaVersionOf(c.state).flatMap(v => observed.update(_ :+ s"plain:$v").as(c))
         }
 

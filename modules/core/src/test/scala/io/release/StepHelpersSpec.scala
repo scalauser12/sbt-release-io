@@ -632,7 +632,7 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport
       .loadedStateResource(
         s"$fixturePrefix-loaded-interaction",
-        buildSettings = Seq(StepHelpersTestCompat.interactionServiceSetting(taskUi)),
+        buildSettings = Seq(TestInteractionServiceCompat.interactionServiceSetting(taskUi)),
         currentProjectId = Some("root")
       )(dir => Seq(Project("root", dir)))
       .use { state =>
@@ -659,7 +659,7 @@ class StepHelpersSpec extends CatsEffectSuite {
     TestSupport
       .loadedStateResource(
         s"$fixturePrefix-loaded-default-no",
-        buildSettings = Seq(StepHelpersTestCompat.interactionServiceSetting(taskUi)),
+        buildSettings = Seq(TestInteractionServiceCompat.interactionServiceSetting(taskUi)),
         currentProjectId = Some("root")
       )(dir => Seq(Project("root", dir)))
       .use { state =>
@@ -692,7 +692,7 @@ class StepHelpersSpec extends CatsEffectSuite {
       .loadedStateResource(
         s"$fixturePrefix-loaded-interaction-failure",
         buildSettings = Seq(
-          StepHelpersTestCompat.interactionServiceSetting {
+          TestInteractionServiceCompat.interactionServiceSetting {
             throw new IllegalStateException("boom")
           }
         ),

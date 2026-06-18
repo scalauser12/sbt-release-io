@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.effect.Ref
 import io.release.core.internal.CoreExecutionState
 import io.release.core.internal.CoreReleasePlan
-import io.release.core.internal.CoreStepFactory
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
@@ -126,10 +125,10 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - mark the release as failed when an execute throws") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val failing = CoreStepFactory.io("failing") { _ =>
+        val failing = CoreStepFactoryTestSteps.io("failing") { _ =>
           observed.update(_ :+ "execute1") *> IO.raiseError(new RuntimeException("boom"))
         }
-        val skipped = CoreStepFactory.io("skipped") { c =>
+        val skipped = CoreStepFactoryTestSteps.io("skipped") { c =>
           observed.update(_ :+ "execute2").as(c)
         }
 
@@ -147,7 +146,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - clear onFailure after successful compose") {
     contextResource.use { ctx =>
       ReleaseComposer
-        .compose(Seq(CoreStepFactory.io("noop")(IO.pure)), crossBuild = false)(ctx)
+        .compose(Seq(CoreStepFactoryTestSteps.io("noop")(IO.pure)), crossBuild = false)(ctx)
         .map { result =>
           assertEquals(result.state.onFailure, None)
         }
@@ -159,7 +158,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
       val originalOnFailure = Exec("custom-on-failure", None, None)
 
       ReleaseComposer
-        .compose(Seq(CoreStepFactory.io("noop")(IO.pure)), crossBuild = false)(
+        .compose(Seq(CoreStepFactoryTestSteps.io("noop")(IO.pure)), crossBuild = false)(
           ctx.withState(ctx.state.copy(onFailure = Some(originalOnFailure)))
         )
         .map { result =>
@@ -358,12 +357,12 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - detect FailureCommand sentinel and skip subsequent executes") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val injectFailure = CoreStepFactory.io("inject-failure-command") { c =>
+        val injectFailure = CoreStepFactoryTestSteps.io("inject-failure-command") { c =>
           observed
             .update(_ :+ "execute1")
             .as(c.copy(state = c.state.copy(remainingCommands = SbtCompat.FailureCommand :: Nil)))
         }
-        val skipped       = CoreStepFactory.io("skipped") { c =>
+        val skipped       = CoreStepFactoryTestSteps.io("skipped") { c =>
           observed.update(_ :+ "execute2").as(c)
         }
 
@@ -385,7 +384,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
     contextResource.use { ctx =>
       val rootCause = new RuntimeException("root cause")
 
-      val alreadyFailed = CoreStepFactory.io("already-failed") { currentCtx =>
+      val alreadyFailed = CoreStepFactoryTestSteps.io("already-failed") { currentCtx =>
         val failedCtx = currentCtx.failWith(rootCause)
 
         IO.pure(
@@ -394,7 +393,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
           )
         )
       }
-      val skipped       = CoreStepFactory.io("skipped")(IO.pure)
+      val skipped       = CoreStepFactoryTestSteps.io("skipped")(IO.pure)
 
       ReleaseComposer.compose(Seq(alreadyFailed, skipped), crossBuild = false)(ctx).map { result =>
         assert(result.failed)
@@ -406,7 +405,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
   test("compose - attribute FailureCommand when a step returns ctx.fail without a cause") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { observed =>
-        val markFailed = CoreStepFactory.io("mark-failed-with-sentinel") { currentCtx =>
+        val markFailed = CoreStepFactoryTestSteps.io("mark-failed-with-sentinel") { currentCtx =>
           observed.update(_ :+ "execute1").as {
             val failedCtx = currentCtx.fail
 
@@ -415,7 +414,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
             )
           }
         }
-        val skipped    = CoreStepFactory.io("skipped") { currentCtx =>
+        val skipped    = CoreStepFactoryTestSteps.io("skipped") { currentCtx =>
           observed.update(_ :+ "execute2").as(currentCtx)
         }
         val expected   =
@@ -460,7 +459,7 @@ class ReleaseStepIOComposeSpec extends CatsEffectSuite with ReleaseStepIOSpecSup
                 )
               }
         )
-        val skipped     = CoreStepFactory.io("skipped") { currentCtx =>
+        val skipped     = CoreStepFactoryTestSteps.io("skipped") { currentCtx =>
           observed.update(_ :+ "execute2").as(currentCtx)
         }
 

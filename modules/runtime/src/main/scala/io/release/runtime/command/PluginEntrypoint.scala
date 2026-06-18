@@ -4,11 +4,10 @@ import _root_.sbt.*
 import _root_.sbt.Keys.*
 import _root_.sbt.complete.Parser
 
-/** Shared plugin-entrypoint helpers for the public release plugins.
+/** Shared plugin-entrypoint helper for the public release plugins.
   *
   * Core and monorepo keep their own parser grammars, token decoding, and command dispatch, but
-  * they share the small amount of sbt boilerplate needed to register a command next to default
-  * settings and aggregate those settings into one plugin surface.
+  * they share the small amount of sbt boilerplate needed to register the release command.
   */
 private[release] object PluginEntrypoint {
 
@@ -19,10 +18,4 @@ private[release] object PluginEntrypoint {
       handle: (State, Seq[String]) => State
   ): Setting[?] =
     commands += Command(commandName)(parser)(handle)
-
-  def pluginSettings(
-      defaultSettings: Seq[Setting[?]],
-      commandSetting: Setting[?]
-  ): Seq[Setting[?]] =
-    defaultSettings ++ Seq(commandSetting)
 }

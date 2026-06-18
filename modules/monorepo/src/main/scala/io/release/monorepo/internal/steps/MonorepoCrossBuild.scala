@@ -7,7 +7,6 @@ import io.release.monorepo.ProjectReleaseInfo
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.ExecutionEngine
-import io.release.runtime.sbt.SbtRuntime
 import sbt.{internal as _, *}
 
 /** Cross-build executor for monorepo per-project steps.
@@ -143,7 +142,7 @@ private[monorepo] object MonorepoCrossBuild {
                                   s"$LogPrefix Cross-building ${project.name} with Scala $version"
                                 )
                               )
-                  switched <- SbtRuntime
+                  switched <- CrossBuildSupport
                                 .switchScalaVersion(
                                   currentCtx.state,
                                   version,
@@ -216,7 +215,7 @@ private[monorepo] object MonorepoCrossBuild {
                                   )
                                 )
                     switched <-
-                      SbtRuntime.switchScalaVersion(
+                      CrossBuildSupport.switchScalaVersion(
                         currentCtx.state,
                         version,
                         setup.affectedFor(version),

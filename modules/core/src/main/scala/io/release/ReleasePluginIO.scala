@@ -377,10 +377,8 @@ trait ReleasePluginIOLike[T] extends AutoPlugin {
     * the release command and required keys stay defined.
     */
   protected def baseReleaseSettings: Seq[Setting[?]] =
-    PluginEntrypoint.pluginSettings(
-      ReleaseSharedDefaultSettingsSupport.pluginDefaultSettings ++ defaultSettingsValues,
+    (ReleaseSharedDefaultSettingsSupport.pluginDefaultSettings ++ defaultSettingsValues) :+
       releaseIOCommand
-    )
 
   /** Base build-level defaults for shared `releaseIO*` settings.
     * Custom plugins that override `buildSettings` should start from `baseBuildSettings`.

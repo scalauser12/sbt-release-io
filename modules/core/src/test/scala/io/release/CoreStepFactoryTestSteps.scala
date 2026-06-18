@@ -7,11 +7,16 @@ import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import sbt.{internal as _, *}
 
-/** Test-only step constructors backed by sbt tasks. Production code only uses
-  * `CoreStepFactory.io`; these factories exist solely to exercise FailureCommand detection and
+/** Test-only step constructors. `io` builds a plain `IO`-backed step; `fromTask` /
+  * `fromTaskAggregated` are backed by sbt tasks to exercise FailureCommand detection and
   * `runTask` / `runAggregated` state threading from unit tests, so they live in the test sources.
   */
 private[release] object CoreStepFactoryTestSteps {
+
+  def io(name: String)(
+      f: ReleaseContext => IO[ReleaseContext]
+  ): Step =
+    ProcessStep.Single(name, f)
 
   def fromTask[T](
       key: TaskKey[T],

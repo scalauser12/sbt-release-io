@@ -53,7 +53,7 @@ private[monorepo] object MonorepoVersionWorkflow {
         // `releaseIOVcsIgnoreUntrackedFiles := true` an ignored per-project version file
         // slips past the initial clean check, then `set-release-version` rewrites it and
         // the later `git add` declines, leaving a mutated, git-invisible file behind.
-        resolveCurrentVcs(ctx).flatMap { vcs =>
+        VcsOps.resolveVcs(ctx).flatMap { vcs =>
           VcsOps.relativizeToBase(vcs, versionInputs.versionFile).flatMap { relativePath =>
             VersionWorkflow.assertVersionFileNotIgnored(
               s"inquire-versions (${project.name})",
@@ -278,7 +278,7 @@ private[monorepo] object MonorepoVersionWorkflow {
         runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
         _            <- validateDistinctVersionFiles(runtime)
         versionInputs = MonorepoVersionFiles.resolveInputs(runtime, project.ref)
-        vcs          <- resolveCurrentVcs(ctx)
+        vcs          <- VcsOps.resolveVcs(ctx)
         _            <- validateSelectedVersionFileUnderVcsRoot(
                           vcs,
                           project,

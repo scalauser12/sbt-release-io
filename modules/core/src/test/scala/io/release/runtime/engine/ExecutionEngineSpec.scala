@@ -5,6 +5,7 @@ import cats.effect.Ref
 import io.release.ReleaseContext
 import io.release.ReleaseTestSupport
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.TrackedContextHandle
 import munit.CatsEffectSuite
 
 /** Coverage for the validate→execute clearance boundary in
@@ -20,10 +21,17 @@ import munit.CatsEffectSuite
   */
 class ExecutionEngineSpec extends CatsEffectSuite {
 
+  private def stepFromUntracked[C](
+      name: String,
+      validate: C => IO[C],
+      execute: C => IO[C]
+  ): ExecutionEngine.PreparedStep[C] =
+    ExecutionEngine.PreparedStep(name, validate, TrackedContextHandle.lift(execute))
+
   test("runMainSegment - clear tentative seeds at the validate→execute boundary") {
     ReleaseTestSupport.dummyContextResource("execution-engine-spec-clear").use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { observed =>
-        val step = ExecutionEngine.PreparedStep.fromUntracked[ReleaseContext](
+        val step = stepFromUntracked[ReleaseContext](
           name = "fake-seeder",
           validate = (c: ReleaseContext) =>
             IO.pure(c.withVersions("1.0.0", "1.1.0-SNAPSHOT").markVersionsTentativelySeeded),
@@ -65,7 +73,7 @@ class ExecutionEngineSpec extends CatsEffectSuite {
   ) {
     ReleaseTestSupport.dummyContextResource("execution-engine-spec-explicit").use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { observed =>
-        val step = ExecutionEngine.PreparedStep.fromUntracked[ReleaseContext](
+        val step = stepFromUntracked[ReleaseContext](
           name = "fake-explicit-seeder",
           // No `markVersionsTentativelySeeded` — simulates a CLI override or
           // hook that installed the version pair explicitly.
@@ -97,7 +105,7 @@ class ExecutionEngineSpec extends CatsEffectSuite {
   test("runMainSegment - skip clearance when validation fails") {
     ReleaseTestSupport.dummyContextResource("execution-engine-spec-fail").use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { observed =>
-        val step = ExecutionEngine.PreparedStep.fromUntracked[ReleaseContext](
+        val step = stepFromUntracked[ReleaseContext](
           name = "fake-failing-seeder",
           validate = (c: ReleaseContext) =>
             IO.pure(
@@ -143,7 +151,7 @@ class ExecutionEngineSpec extends CatsEffectSuite {
   ) {
     ReleaseTestSupport.dummyContextResource("execution-engine-spec-sequential").use { ctx =>
       Ref.of[IO, Option[String]](None).flatMap { observed =>
-        val step = ExecutionEngine.PreparedStep.fromUntracked[ReleaseContext](
+        val step = stepFromUntracked[ReleaseContext](
           name = "fake-seeder-sequential",
           validate = (c: ReleaseContext) =>
             IO.pure(c.withVersions("1.0.0", "1.1.0-SNAPSHOT").markVersionsTentativelySeeded),
