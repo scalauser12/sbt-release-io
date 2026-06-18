@@ -90,29 +90,6 @@ private[monorepo] object MonorepoPublishSteps {
       fallback = fallback
     )(cause)
 
-  /** Evaluate `key` against the given `state` and return both the next state
-    * and the result. The next state preserves any session mutations the task
-    * produced (e.g., resolver setup) so subsequent evaluations in the chain
-    * see them.
-    *
-    * Used from validators that compute against a transient overlay state via
-    * [[MonorepoVersionWorkflow.withReleaseVersionOverlay]] — currently only
-    * `publishTo` evaluation. The overlay state plus any task-induced mutations
-    * stay local to the body and are discarded once the body returns.
-    */
-  private def evaluateTaskAtState[A](
-      state: State,
-      key: TaskKey[A],
-      failureMessage: String
-  ): IO[(State, A)] =
-    runTaskChecked(state, key, PublishArtifactsActionName)
-      .recoverWith {
-        case NonFatal(cause) if StepHelpers.isFailureCommandTaskError(cause) =>
-          IO.raiseError(cause)
-        case NonFatal(cause)                                                 =>
-          IO.raiseError(new IllegalStateException(failureMessage, cause))
-      }
-
   private def evaluatePublishSkipAt(
       state: State,
       project: ProjectReleaseInfo
@@ -125,15 +102,30 @@ private[monorepo] object MonorepoPublishSteps {
       recoverPublishSkipProbeError(state, project, fallback = (state, false))
     )
 
+  /** Evaluate `publishTo` for `project` against the given `state` and return both the
+    * next state and the resolver. The next state preserves any session mutations the
+    * task produced (e.g. resolver setup) so subsequent evaluations in the chain see them.
+    *
+    * Called from validators that compute against a transient overlay state via
+    * [[MonorepoVersionWorkflow.withReleaseVersionOverlay]]; the overlay state plus any
+    * task-induced mutations stay local to the body and are discarded once it returns.
+    */
   private def evaluatePublishTargetAt(
       state: State,
       project: ProjectReleaseInfo
   ): IO[(State, Option[Resolver])] =
-    evaluateTaskAtState(
-      state,
-      project.ref / publishTo,
-      s"Failed to evaluate publishTo for ${project.name}"
-    )
+    runTaskChecked(state, project.ref / publishTo, PublishArtifactsActionName)
+      .recoverWith {
+        case NonFatal(cause) if StepHelpers.isFailureCommandTaskError(cause) =>
+          IO.raiseError(cause)
+        case NonFatal(cause)                                                 =>
+          IO.raiseError(
+            new IllegalStateException(
+              s"Failed to evaluate publishTo for ${project.name}",
+              cause
+            )
+          )
+      }
 
   private[monorepo] def shouldRunPublishHooks(
       ctx: MonorepoContext,

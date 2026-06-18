@@ -51,24 +51,6 @@ private[release] object ExecutionEngine {
       executeTracked: TrackedContextHandle[C] => IO[Unit]
   )
 
-  object PreparedStep {
-
-    /** Build a step from an untracked `execute`, deriving the tracked runner via
-      * [[TrackedContextHandle.lift]]. Named to avoid an erasure clash with the
-      * case class's synthesized `apply`.
-      */
-    def fromUntracked[C](
-        name: String,
-        validate: C => IO[C],
-        execute: C => IO[C]
-    ): PreparedStep[C] =
-      new PreparedStep(
-        name = name,
-        validate = validate,
-        executeTracked = TrackedContextHandle.lift(execute)
-      )
-  }
-
   // ── Orchestration ───────────────────────────────────────────────────
 
   /** Drop validate-time tentative version seeds before any execute step runs.

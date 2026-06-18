@@ -5,7 +5,6 @@ import io.release.ReleaseContext
 import io.release.VcsOps
 import io.release.core.internal.CoreReleaseTag
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.core.internal.CoreStepFactory
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
@@ -22,9 +21,10 @@ private[release] object VcsSteps {
 
   import CoreReleaseStepHelpers.requireVcs
 
-  val initializeVcs: Step = CoreStepFactory.io("initialize-vcs") { ctx =>
-    VcsOps.detectAndInit(ctx)
-  }
+  val initializeVcs: Step = ProcessStep.Single(
+    name = "initialize-vcs",
+    execute = ctx => VcsOps.detectAndInit(ctx)
+  )
 
   val checkCleanWorkingDir: Step = ProcessStep.Single(
     name = "check-clean-working-dir",

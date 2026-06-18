@@ -53,21 +53,6 @@ private[release] object ReleaseVersionWorkflow {
       useGlobalVersion = SbtRuntime.getSetting(state, releaseIOVersioningUseGlobal)
     )
 
-  private[steps] def sessionSettings(state: State): Seq[Setting[?]] = {
-    val settings = resolveCurrentSettings(state)
-
-    sessionSettings(
-      VersionPlan(
-        versionFile = settings.versionFile,
-        readVersion = settings.readVersion,
-        versionFileContents = settings.versionFileContents,
-        releaseVersionOverride = None,
-        nextVersionOverride = None,
-        useGlobalVersion = settings.useGlobalVersion
-      )
-    )
-  }
-
   private[steps] def sessionSettings(versionPlan: VersionPlan): Seq[Setting[?]] =
     Seq(
       releaseIOVersioningFile         := versionPlan.versionFile,

@@ -394,13 +394,11 @@ trait MonorepoReleasePluginLike[T] extends AutoPlugin {
     * Custom plugins that override `projectSettings` should start from `baseReleaseSettings`.
     */
   protected def baseReleaseSettings: Seq[Setting[?]] =
-    PluginEntrypoint.pluginSettings(
-      MonorepoDefaultSettings.pluginDefaultSettings,
+    MonorepoDefaultSettings.pluginDefaultSettings :+
       PluginEntrypoint.commandSetting(commandName)(
         monorepoParser,
         (state, tokens) => handleMonorepoCommandTokens(state, tokens)
       )
-    )
 
   /** Base build-level defaults for monorepo plugin settings.
     * Custom plugins that override `buildSettings` should start from `baseBuildSettings`.

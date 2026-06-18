@@ -3,7 +3,6 @@ package io.release.core.internal.steps
 import cats.effect.IO
 import io.release.ReleaseContext
 import io.release.core.internal.CoreStepAliases.Step
-import io.release.core.internal.CoreStepFactory
 import io.release.core.internal.VersionPlan
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
@@ -37,11 +36,15 @@ private[release] object VersionSteps {
     execute = ReleaseVersionWorkflow.inquireVersions
   )
 
-  val setReleaseVersion: Step =
-    CoreStepFactory.io("set-release-version")(ReleaseVersionWorkflow.writeReleaseVersion)
+  val setReleaseVersion: Step = ProcessStep.Single(
+    name = "set-release-version",
+    execute = ReleaseVersionWorkflow.writeReleaseVersion
+  )
 
-  val setNextVersion: Step =
-    CoreStepFactory.io("set-next-version")(ReleaseVersionWorkflow.writeNextVersion)
+  val setNextVersion: Step = ProcessStep.Single(
+    name = "set-next-version",
+    execute = ReleaseVersionWorkflow.writeNextVersion
+  )
 
   val commitReleaseVersion: Step = ProcessStep.Single(
     name = "commit-release-version",

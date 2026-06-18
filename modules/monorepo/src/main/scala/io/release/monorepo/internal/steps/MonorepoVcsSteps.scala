@@ -89,8 +89,8 @@ private[monorepo] object MonorepoVcsSteps {
             finalTagName => remoteTagPreflightForCreate(ctx, vcs, finalTagName, label)
         )
       )
-      .map { case (updatedCtx, result) =>
-        (updatedCtx, result.tagName)
+      .map { case (updatedCtx, tagName) =>
+        (updatedCtx, tagName)
       }
 
   /** Detect a remote-only per-project tag conflict before any tag side

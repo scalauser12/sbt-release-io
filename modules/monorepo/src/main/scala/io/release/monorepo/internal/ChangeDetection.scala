@@ -20,18 +20,11 @@ private[monorepo] object ChangeDetection {
   }
 
   private final case class ProjectTagLookup(pattern: String, result: TagLookupResult)
-  private final case class ResolvedProjectScope(name: String, path: String)
-  private final case class UnresolvedProjectScope(name: String, details: String)
-  private final case class ProjectScopeInputs(
-      resolved: Seq[ResolvedProjectScope],
-      unresolved: Seq[UnresolvedProjectScope]
-  )
 
   private final case class DetectionInputs(
       vcs: Vcs,
       state: State,
       globalExcludes: Set[String],
-      projectScopes: Seq[ResolvedProjectScope],
       diffScopeByProject: Map[String, Either[String, String]],
       sharedPaths: Seq[String],
       tagNameFn: (String, String) => String
@@ -122,64 +115,63 @@ private[monorepo] object ChangeDetection {
       sharedPaths: Seq[String] = Seq.empty
   ): IO[Seq[ProjectReleaseInfo]] =
     for {
-      projectScopes     <- IO.blocking(resolveProjectScopes(vcs, projects))
-      _                 <- IO.blocking(logUnresolvedProjectScopes(state, projectScopes.unresolved))
-      globalExcludes    <- IO.blocking(resolveGlobalExcludes(vcs, state, additionalExcludeFiles))
-      diffScopeByProject =
-        projectScopes.resolved.map(r => r.name -> Right(r.path)).toMap ++
-          projectScopes.unresolved.map(u => u.name -> Left(u.details)).toMap
-      inputs             = DetectionInputs(
-                             vcs = vcs,
-                             state = state,
-                             globalExcludes = globalExcludes,
-                             projectScopes = projectScopes.resolved,
-                             diffScopeByProject = diffScopeByProject,
-                             sharedPaths = sharedPaths,
-                             tagNameFn = tagNameFn
-                           )
-      accumulated       <- projects.toList.foldLeftM(
-                             (
-                               Map.empty[SharedPathCacheKey, Boolean],
-                               Vector.empty[ProjectReleaseInfo]
-                             )
-                           ) { case ((cache, acc), project) =>
-                             processProject(inputs, project, cache).map { case (updatedCache, changed) =>
-                               updatedCache -> (if (changed) acc :+ project else acc)
-                             }
-                           }
+      diffScopeByProject <- IO.blocking(resolveDiffScopes(vcs, projects))
+      _                  <- IO.blocking(logUnresolvedProjectScopes(state, projects, diffScopeByProject))
+      globalExcludes     <- IO.blocking(resolveGlobalExcludes(vcs, state, additionalExcludeFiles))
+      inputs              = DetectionInputs(
+                              vcs = vcs,
+                              state = state,
+                              globalExcludes = globalExcludes,
+                              diffScopeByProject = diffScopeByProject,
+                              sharedPaths = sharedPaths,
+                              tagNameFn = tagNameFn
+                            )
+      accumulated        <- projects.toList.foldLeftM(
+                              (
+                                Map.empty[SharedPathCacheKey, Boolean],
+                                Vector.empty[ProjectReleaseInfo]
+                              )
+                            ) { case ((cache, acc), project) =>
+                              processProject(inputs, project, cache).map { case (updatedCache, changed) =>
+                                updatedCache -> (if (changed) acc :+ project else acc)
+                              }
+                            }
     } yield accumulated._2
 
-  private def resolveProjectScopes(
+  /** Resolve each project's diff scope — `Right(relativePath)` or `Left(errorDetail)` — keyed by
+    * project name. Single source of truth for resolved-vs-unresolved project scope.
+    */
+  private def resolveDiffScopes(
       vcs: Vcs,
       projects: Seq[ProjectReleaseInfo]
-  ): ProjectScopeInputs =
-    projects.foldLeft(
-      ProjectScopeInputs(Vector.empty[ResolvedProjectScope], Vector.empty[UnresolvedProjectScope])
-    ) { case (acc, project) =>
-      resolveDiffScope(vcs, project) match {
-        case Right(path)   =>
-          acc.copy(resolved = acc.resolved :+ ResolvedProjectScope(project.name, path))
-        case Left(details) =>
-          acc.copy(unresolved = acc.unresolved :+ UnresolvedProjectScope(project.name, details))
-      }
-    }
+  ): Map[String, Either[String, String]] =
+    projects.map(project => project.name -> resolveDiffScope(vcs, project)).toMap
 
+  /** Warn about projects whose diff scope could not be resolved. Iterates `projects` so the
+    * warning lists names/details in deterministic project order, not `Map` iteration order.
+    */
   private def logUnresolvedProjectScopes(
       state: State,
-      unresolvedProjectScopes: Seq[UnresolvedProjectScope]
-  ): Unit =
-    if (unresolvedProjectScopes.nonEmpty) {
-      val affectedProjects = unresolvedProjectScopes.map(_.name).mkString(", ")
+      projects: Seq[ProjectReleaseInfo],
+      diffScopeByProject: Map[String, Either[String, String]]
+  ): Unit = {
+    val unresolved =
+      projects.flatMap(project =>
+        diffScopeByProject.get(project.name).collect { case Left(details) =>
+          project.name -> details
+        }
+      )
+    if (unresolved.nonEmpty) {
+      val affectedProjects = unresolved.map(_._1).mkString(", ")
       val details          =
-        unresolvedProjectScopes
-          .map(scope => s"${scope.name}: ${scope.details}")
-          .mkString("; ")
+        unresolved.map { case (name, detail) => s"$name: $detail" }.mkString("; ")
       state.log.warn(
         s"${ReleaseLogPrefixes.Monorepo} Cannot resolve child diff scope for " +
           s"project(s): $affectedProjects. Child-directory exclusion will be " +
           s"incomplete for these project(s). Details: $details"
       )
     }
+  }
 
   private def resolveGlobalExcludes(
       vcs: Vcs,
@@ -301,8 +293,8 @@ private[monorepo] object ChangeDetection {
   ): Set[String] =
     diffScope match {
       case Right(scope) =>
-        inputs.projectScopes.collect {
-          case ResolvedProjectScope(name, path)
+        inputs.diffScopeByProject.iterator.collect {
+          case (name, Right(path))
               if name != project.name && path != "." && path.nonEmpty &&
                 (scope == "." || path.startsWith(scope + "/")) =>
             path

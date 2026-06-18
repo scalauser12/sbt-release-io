@@ -1,7 +1,5 @@
 package io.release.runtime.sbt
 
-import cats.effect.IO
-import io.release.CrossBuildSupport
 import _root_.sbt.Keys.{interactionService => interactionServiceKey}
 import _root_.sbt.{internal as _, *}
 
@@ -108,12 +106,4 @@ private[release] object SbtRuntime {
         state.copy(remainingCommands = tail)
       case _                                      => state
     }
-
-  def switchScalaVersion(
-      state: State,
-      version: String,
-      affectedRefs: Seq[ProjectRef],
-      logPrefix: String
-  ): IO[State] =
-    CrossBuildSupport.switchScalaVersion(state, version, affectedRefs, logPrefix)
 }

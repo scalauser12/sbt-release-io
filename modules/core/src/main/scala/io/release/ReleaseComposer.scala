@@ -187,7 +187,7 @@ private[release] object ReleaseComposer {
                     ctx.state.log.info(s"$LogPrefix Cross-building with Scala $version")
                   )
       switched <-
-        SbtRuntime.switchScalaVersion(ctx.state, version, affectedFor(version), LogPrefix)
+        CrossBuildSupport.switchScalaVersion(ctx.state, version, affectedFor(version), LogPrefix)
     } yield ctx.withState(switched)
 
   private def restoreEntryFromCross(

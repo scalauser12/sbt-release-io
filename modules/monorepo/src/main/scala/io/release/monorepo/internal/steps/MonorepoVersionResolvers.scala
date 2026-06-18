@@ -25,9 +25,6 @@ private[steps] object MonorepoVersionResolvers {
   ): String =
     s"${projectRef.project}: ${taskKey.key.label} is undefined; falling back to $fallback"
 
-  def resolveCurrentVcs(ctx: MonorepoContext): IO[Vcs] =
-    VcsOps.resolveVcs(ctx)
-
   def resolveVersionFunction(
       ctx: MonorepoContext,
       projectRef: ProjectRef,
@@ -83,7 +80,7 @@ private[steps] object MonorepoVersionResolvers {
     for {
       runtime <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
       _       <- validateDistinctVersionFiles(runtime)
-      vcs     <- resolveCurrentVcs(ctx)
+      vcs     <- VcsOps.resolveVcs(ctx)
       _       <- validateSelectedVersionFilesUnderVcsRoot(
                    runtime,
                    vcs,

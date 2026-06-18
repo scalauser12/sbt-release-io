@@ -12,9 +12,6 @@ import io.release.runtime.workflow.DecisionResolver
   */
 private[release] object TagConflictResolver {
 
-  /** Result of a tag-conflict resolution. */
-  final case class TagResult(tagName: String, overwritten: Boolean)
-
   /** Outcome of a preflight tag check.
     *
     * @param tagName        the tag name that would be used at execute time (may differ from the
@@ -86,7 +83,7 @@ private[release] object TagConflictResolver {
   /** Resolve a tag conflict at execution time. Creates the tag if absent, or handles
     * the conflict through the o/k/a/new-tag state machine.
     *
-    * Returns the final tag name and whether an overwrite occurred.
+    * Returns the final tag name.
     *
     * The configured `defaultAnswer` applies only to the first prompt; retries (triggered
     * when the answer is a replacement tag name) always fall back to interactive resolution.
@@ -95,12 +92,12 @@ private[release] object TagConflictResolver {
       ctx: C,
       vcs: Vcs,
       params: TagParams
-  ): IO[(C, TagResult)] = {
+  ): IO[(C, String)] = {
     def loop(
         currentCtx: C,
         tagName: String,
         defaultAnswer: Option[String]
-    ): IO[(C, TagResult)] =
+    ): IO[(C, String)] =
       // Validate at the top of every iteration so the *initial* tag name (resolved
       // from `releaseIOVcsTagName`) raises here instead of letting `vcs.tag` fail
       // mid-flight after `commit-release-version` has already mutated the repo.
@@ -117,7 +114,7 @@ private[release] object TagConflictResolver {
           params.beforeCreateTag(tagName) *>
             vcs
               .tag(tagName, params.tagComment, params.sign)
-              .as(currentCtx -> TagResult(tagName, overwritten = false))
+              .as(currentCtx -> tagName)
         case true  =>
           existingTagMatch(vcs, tagName, params.expectedCommitHash).flatMap {
             case MatchStatus(matchesExpectedCommit, actualCommitHash) =>
@@ -140,7 +137,7 @@ private[release] object TagConflictResolver {
                     nextCtx.state.log.warn(
                       s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
                     )
-                  ).as(nextCtx -> TagResult(tagName, overwritten = false))
+                  ).as(nextCtx -> tagName)
                 case (_, ParsedAnswer.Keep)                                =>
                   IO.raiseError(
                     new IllegalStateException(
@@ -165,7 +162,7 @@ private[release] object TagConflictResolver {
                     params.beforeCreateTag(tagName) *>
                     vcs
                       .tag(tagName, params.tagComment, params.sign, force = true)
-                      .as(nextCtx -> TagResult(tagName, overwritten = true))
+                      .as(nextCtx -> tagName)
                 case (nextCtx, ParsedAnswer.Retry(newTag))                 =>
                   // Validate the retry name *before* recursing so an invalid
                   // prompt response is caught here. On invalid retry input we

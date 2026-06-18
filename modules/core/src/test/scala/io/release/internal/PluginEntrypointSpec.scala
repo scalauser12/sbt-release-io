@@ -3,36 +3,8 @@ package io.release.runtime.command
 import cats.effect.IO
 import io.release.TestRepoFiles
 import munit.CatsEffectSuite
-import sbt.*
-import sbt.complete.DefaultParsers.success
 
 class PluginEntrypointSpec extends CatsEffectSuite {
-
-  test("pluginSettings appends command registration after defaults") {
-    IO {
-      val settings = PluginEntrypoint.pluginSettings(
-        defaultSettings = Seq(
-          PluginEntrypointSpec.DefaultAKey := "default-a",
-          PluginEntrypointSpec.DefaultBKey := "default-b"
-        ),
-        commandSetting = PluginEntrypoint.commandSetting("releaseIO")(
-          _ => success(Seq.empty[String]),
-          (state, _) => state
-        )
-      )
-      val labels   = settings.map(_.key.key.label)
-
-      assertEquals(
-        labels,
-        Seq(
-          PluginEntrypointSpec.DefaultAKey.key.label,
-          PluginEntrypointSpec.DefaultBKey.key.label,
-          "commands"
-        )
-      )
-      assertEquals(labels.count(_ == "commands"), 1)
-    }
-  }
 
   test("source cleanup - shared plugin shell only keeps setting helpers") {
     IO {
@@ -62,19 +34,4 @@ class PluginEntrypointSpec extends CatsEffectSuite {
       assert(monorepoCliSource.contains("ReleaseCommandCli.CommandMode"))
     }
   }
-}
-
-object PluginEntrypointSpec {
-
-  val DefaultAKey: SettingKey[String] =
-    SettingKey[String](
-      "pluginEntrypointSpecDefaultA",
-      "Plugin entrypoint spec default A"
-    )
-
-  val DefaultBKey: SettingKey[String] =
-    SettingKey[String](
-      "pluginEntrypointSpecDefaultB",
-      "Plugin entrypoint spec default B"
-    )
 }
