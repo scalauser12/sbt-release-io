@@ -21,7 +21,7 @@ my-monorepo/
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.4")
 ```
 
 `project/build.properties`:

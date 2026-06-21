@@ -4,6 +4,55 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.4
+
+Published: 2026-06-21
+GitHub release:
+[v0.13.4](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.4)
+
+`v0.13.4` is a patch release for both plugins that tightens tag-conflict
+preflight around kept tags, improves release-flow diagnostics, and keeps the
+public release contract unchanged while simplifying shared internals.
+
+### Compatibility notes
+
+- No public API removals or source incompatibilities are intended in this
+  release.
+- Releases remain published only from pushed `v*` tags through GitHub Actions.
+
+### Fixes
+
+- Abort before publish when a release keeps an existing local tag but the remote
+  already has the same tag at a different commit.
+- Resolve remote annotated tags to their peeled commit before comparing kept tag
+  hashes, so same-commit remote tags remain a harmless no-op.
+- Strip repeated trailing `-SNAPSHOT` markers when deriving the default release
+  version, and fail loudly if a stable version cannot be derived.
+- Surface clearer release, cross-build, publish-skip, and monorepo
+  change-detection errors.
+
+### Improvements
+
+- Simplify core, monorepo, and shared runtime internals by removing dead code,
+  redundant pass-throughs, and never-varied modeling.
+- Keep tag and remote preflight behavior aligned across the core and monorepo
+  release flows.
+
+### Documentation
+
+- Refresh the root README, module READMEs, and published
+  walkthrough/getting-started docs to reference `0.13.4`.
+
+### Verification
+
+- `git diff --check`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: targeted unit tests for version parsing, git/tag probing, publish
+  steps, monorepo change detection, and monorepo VCS steps
+- sbt 2.0.0: the same targeted unit tests through `./bin/sbt2-clean`
+- sbt 1.12.3: targeted keep-tag remote-divergence scripted tests
+- sbt 2.0.0: the same targeted scripted tests through `./bin/sbt2-clean`
+
 ## v0.13.3
 
 Published: 2026-06-16

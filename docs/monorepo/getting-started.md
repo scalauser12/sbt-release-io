@@ -17,7 +17,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.3")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.4")
 ```
 
 This installs the monorepo plugin plus the transitive core settings surface, so
