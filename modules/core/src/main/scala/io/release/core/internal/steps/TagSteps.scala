@@ -38,7 +38,8 @@ private[release] object TagSteps {
   private[release] final case class PreflightTagOutcome(
       tagName: String,
       status: String,
-      willCreateTag: Boolean
+      willCreateTag: Boolean,
+      keepRemoteCommitProbe: Option[String] = None
   )
 
   /** Preflight tag conflicts before `setReleaseVersion`/`commitReleaseVersion` mutate the
@@ -87,9 +88,10 @@ private[release] object TagSteps {
 
   private def runTagPreflight(ctx: ReleaseContext): IO[PreflightTagOutcome] =
     tagPreflightTarget(ctx).flatMap { target =>
-      preflightTag(ctx, ctx.interactive, _ => IO.pure(target)).flatTap(localOutcome =>
-        remoteTagPreflight(ctx, localOutcome.tagName, localOutcome.willCreateTag)
-      )
+      preflightTag(ctx, ctx.interactive, _ => IO.pure(target)).flatTap { localOutcome =>
+        remoteTagPreflight(ctx, localOutcome.tagName, localOutcome.willCreateTag) *>
+          remoteTagKeepPreflight(ctx, localOutcome.tagName, localOutcome.keepRemoteCommitProbe)
+      }
     }
 
   /** Detect a remote-only tag conflict before any release side effects.
@@ -167,6 +169,47 @@ private[release] object TagSteps {
       ctx,
       vcs,
       tagName,
+      commandName,
+      ReleaseLogPrefixes.Core,
+      label = None,
+      pushConfigured = ctx.pushConfigured
+    )
+  }
+
+  /** Keep-path counterpart of [[remoteTagPreflight]]: when the resolver's
+    * deterministic verdict is to KEEP an existing local tag, the kept tag still
+    * rides the final atomic push with a non-force update. Probe the remote with a
+    * hash-aware check (a same-commit remote tag is a harmless no-op and must not
+    * abort) so a divergent remote tag aborts before any side effect lands.
+    */
+  private[release] def remoteTagKeepPreflight(
+      ctx: ReleaseContext,
+      tagName: String,
+      keepRemoteCommitProbe: Option[String]
+  ): IO[Unit] =
+    keepRemoteCommitProbe match {
+      case None               => IO.unit
+      case Some(expectedHash) =>
+        VcsOps.resolveVcs(ctx).flatMap(vcs => remoteTagKeepProbe(ctx, vcs, tagName, expectedHash))
+    }
+
+  /** Late-path keep probe invoked from inside [[TagConflictResolver.resolveConflict]]
+    * via the `beforeKeepTag` callback, so it observes the FINAL kept tag name and
+    * the commit `git tag` would keep right now.
+    */
+  private def remoteTagKeepProbe(
+      ctx: ReleaseContext,
+      vcs: Vcs,
+      tagName: String,
+      expectedCommitHash: String
+  ): IO[Unit] = {
+    val commandName =
+      ctx.executionState.map(_.plan.commandName).getOrElse(CoreReleasePlan.DefaultCommandName)
+    RemoteTagProbe.probeForKeep(
+      ctx,
+      vcs,
+      tagName,
+      expectedCommitHash,
       commandName,
       ReleaseLogPrefixes.Core,
       label = None,
@@ -387,7 +430,11 @@ private[release] object TagSteps {
             // Inside the conflict resolver this fires for both fresh-create and
             // overwrite paths; outside it, we cannot observe a redirected name.
             beforeCreateTag = finalTagName =>
-              remoteTagPreflightForCreate(ctx.withState(params.state), vcs, finalTagName)
+              remoteTagPreflightForCreate(ctx.withState(params.state), vcs, finalTagName),
+            // Keep path: catch a divergent remote tag (interactive `k`, or a
+            // deterministic keep when `tag-preflight` is hook-disabled) before publish.
+            beforeKeepTag = (finalTagName, expectedHash) =>
+              remoteTagKeepProbe(ctx.withState(params.state), vcs, finalTagName, expectedHash)
           )
         )
         .flatMap { case (updatedCtx, tagName) =>
@@ -419,6 +466,8 @@ private[release] object TagSteps {
             label = ""
           )
         )
-        .map(o => PreflightTagOutcome(o.tagName, o.status, o.willCreateTag))
+        .map(o =>
+          PreflightTagOutcome(o.tagName, o.status, o.willCreateTag, o.keepRemoteCommitProbe)
+        )
     }
 }

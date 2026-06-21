@@ -155,6 +155,22 @@ private[release] object GitProcessSupport {
   ): IO[Option[Int]] =
     ManagedProcessRunner.runWithTimeout(processBuilder, timeout, destroyGracePeriod)
 
+  /** Run git capturing stdout/stderr, bounded by `timeout`. Returns `Some(result)`
+    * when the command completes before the deadline, or `None` when the deadline
+    * elapses (the process tree is terminated by the surrounding Resource scope on
+    * cancellation). Does not raise on non-zero exit — callers branch on the result.
+    *
+    * Use when the caller needs both the exit code AND stdout under a deadline (e.g.
+    * `ls-remote` hash lookups). For exit-code-only timed checks use
+    * [[runCommandWithTimeout]].
+    */
+  private[release] def runCapturedWithTimeout(
+      baseDir: File,
+      args: Seq[String],
+      timeout: FiniteDuration
+  ): IO[Option[GitCommandResult]] =
+    runCommandResult(baseDir, args).map(Option(_)).timeoutTo(timeout, IO.pure(None))
+
   private[release] def captureLines(
       stream: InputStream,
       charset: Charset

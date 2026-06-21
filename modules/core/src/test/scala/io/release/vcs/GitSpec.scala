@@ -517,6 +517,56 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test("remoteTagCommitWithTimeout - peel an annotated remote tag to its commit hash") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-commit-annotated").use {
+      case (repo, _) =>
+        for {
+          head   <- IO.blocking {
+                      // Annotated tag (`-a`/`-m`): `ls-remote` advertises both the tag
+                      // OBJECT id and the peeled `^{}` commit; the probe must return the
+                      // commit, not the tag object, so a same-commit keep does not abort.
+                      TestSupport.runGit(repo, "tag", "-a", "-m", "release", "v1.0.0")
+                      TestSupport.runGit(repo, "push", "origin", "v1.0.0")
+                      TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                    }
+          result <- new Git(repo).remoteTagCommitWithTimeout("origin", "v1.0.0", 30.seconds)
+        } yield assertEquals(result, RemoteTagCommit.At(head))
+    }
+  }
+
+  test("remoteTagCommitWithTimeout - resolve a lightweight remote tag to its commit hash") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-commit-lightweight").use {
+      case (repo, _) =>
+        for {
+          head   <- IO.blocking {
+                      TestSupport.runGit(repo, "tag", "v1.0.0")
+                      TestSupport.runGit(repo, "push", "origin", "v1.0.0")
+                      TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                    }
+          result <- new Git(repo).remoteTagCommitWithTimeout("origin", "v1.0.0", 30.seconds)
+        } yield assertEquals(result, RemoteTagCommit.At(head))
+    }
+  }
+
+  test("remoteTagCommitWithTimeout - return Absent when the remote has no such tag") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-commit-absent").use {
+      case (repo, _) =>
+        new Git(repo)
+          .remoteTagCommitWithTimeout("origin", "v9.9.9", 30.seconds)
+          .map(result => assertEquals(result, RemoteTagCommit.Absent))
+    }
+  }
+
+  test("remoteTagCommitWithTimeout - return Unavailable when the remote URL is unreachable") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-remote-tag-commit-unreachable").use {
+      repo =>
+        val unreachable = new File(repo, "nonexistent-bare.git").getAbsolutePath
+        new Git(repo)
+          .remoteTagCommitWithTimeout(unreachable, "v1.0.0", 10.seconds)
+          .map(result => assertEquals(result, RemoteTagCommit.Unavailable))
+    }
+  }
+
   test("add - stage a leading-dash pathspec without parsing it as a CLI option") {
     // Without the `--` separator, `git add -version.sbt` would treat the path as
     // an option flag and fail. This test pins the defence-in-depth fix so a

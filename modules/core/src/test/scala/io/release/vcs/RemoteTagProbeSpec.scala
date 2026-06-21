@@ -239,6 +239,144 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
     }
   }
 
+  // ── probeForKeep ───────────────────────────────────────────────────
+
+  private val KeptCommit  = "1111111111111111111111111111111111111111"
+  private val OtherCommit = "2222222222222222222222222222222222222222"
+
+  test("probeForKeep - skips when pushConfigured = false; no Vcs calls") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording,
+      pushConfigured = false
+    ) { (result, calls) =>
+      assert(result.isRight, s"expected success, got: $result")
+      assertEquals(calls, Nil)
+    }
+  }
+
+  test("probeForKeep - exits cleanly when the branch has no upstream; no remote query") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(_, hasUpstreamValue = false),
+      pushConfigured = true,
+      pushAnswer = Some(true)
+    ) { (result, calls) =>
+      assert(result.isRight, s"expected success, got: $result")
+      assertEquals(calls, List("hasUpstream"))
+    }
+  }
+
+  test("probeForKeep - returns unit when the remote does not have the tag (Absent)") {
+    runKeepProbe(
+      buildVcs = StubVcs
+        .recording(_, hasUpstreamValue = true, remoteTagCommitValue = Some(RemoteTagCommit.Absent)),
+      pushConfigured = true,
+      pushAnswer = Some(true)
+    ) { (result, calls) =>
+      assert(result.isRight, s"expected success, got: $result")
+      assertEquals(
+        calls,
+        List("hasUpstream", "trackingRemote", "remoteTagCommitWithTimeout(origin,v0.1.0)")
+      )
+    }
+  }
+
+  test("probeForKeep - returns unit when the remote tag is at the same commit (no-op push)") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        remoteTagCommitValue = Some(RemoteTagCommit.At(KeptCommit))
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true),
+      expectedCommitHash = KeptCommit
+    ) { (result, calls) =>
+      assert(result.isRight, s"expected success, got: $result")
+      assertEquals(
+        calls,
+        List("hasUpstream", "trackingRemote", "remoteTagCommitWithTimeout(origin,v0.1.0)")
+      )
+    }
+  }
+
+  test("probeForKeep - raises IllegalStateException when the remote tag is at a different commit") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        remoteTagCommitValue = Some(RemoteTagCommit.At(OtherCommit))
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true),
+      expectedCommitHash = KeptCommit
+    ) { (result, _) =>
+      result match {
+        case Left(err: IllegalStateException) =>
+          assert(
+            err.getMessage.contains("different commit"),
+            s"unexpected message: ${err.getMessage}"
+          )
+          assert(
+            err.getMessage.contains("[v0.1.0]"),
+            s"missing tag name in message: ${err.getMessage}"
+          )
+          assert(
+            err.getMessage.contains(KeptCommit) && err.getMessage.contains(OtherCommit),
+            s"missing commit hashes in message: ${err.getMessage}"
+          )
+          assert(
+            err.getMessage.contains("git push origin --force refs/tags/v0.1.0"),
+            s"missing force-push instruction: ${err.getMessage}"
+          )
+          assert(
+            err.getMessage.contains(s"$CommandName help"),
+            s"missing help reference: ${err.getMessage}"
+          )
+        case other                            =>
+          fail(s"expected IllegalStateException, got: $other")
+      }
+    }
+  }
+
+  test("probeForKeep - degrades to no-error when the remote query is Unavailable") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        remoteTagCommitValue = Some(RemoteTagCommit.Unavailable)
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true)
+    ) { (result, calls) =>
+      assert(result.isRight, s"expected success on unavailable remote, got: $result")
+      assertEquals(
+        calls,
+        List("hasUpstream", "trackingRemote", "remoteTagCommitWithTimeout(origin,v0.1.0)")
+      )
+    }
+  }
+
+  test("probeForKeep - includes the per-project label suffix in the conflict error message") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        remoteTagCommitValue = Some(RemoteTagCommit.At(OtherCommit))
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true),
+      expectedCommitHash = KeptCommit,
+      label = Some("api")
+    ) { (result, _) =>
+      result match {
+        case Left(err: IllegalStateException) =>
+          assert(err.getMessage.contains("for api"), s"missing label suffix: ${err.getMessage}")
+        case other                            =>
+          fail(s"expected IllegalStateException, got: $other")
+      }
+    }
+  }
+
   // ── helpers ────────────────────────────────────────────────────────
 
   /** Loaded sbt context — needed by `loadTimeout` and the deeper `probeForCreate`
@@ -302,6 +440,34 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
           }
       }
     }
+
+  private def runKeepProbe(
+      buildVcs: Ref[IO, List[String]] => StubVcs,
+      pushConfigured: Boolean,
+      pushAnswer: Option[Boolean] = None,
+      label: Option[String] = None,
+      expectedCommitHash: String = KeptCommit
+  )(verify: (Either[Throwable, Unit], List[String]) => Unit): IO[Unit] =
+    contextWithPushAnswer(pushAnswer).use { ctx =>
+      Ref.of[IO, List[String]](Nil).flatMap { calls =>
+        val vcs = buildVcs(calls)
+        RemoteTagProbe
+          .probeForKeep(
+            ctx,
+            vcs,
+            TagName,
+            expectedCommitHash,
+            CommandName,
+            LogPrefix,
+            label,
+            pushConfigured
+          )
+          .attempt
+          .flatMap { result =>
+            calls.get.map(recorded => verify(result, recorded.reverse))
+          }
+      }
+    }
 }
 
 /** Minimal stub `Vcs` for [[RemoteTagProbeSpec]]. Records each invoked method
@@ -314,7 +480,8 @@ private final class StubVcs(
     hasUpstreamValue: Boolean,
     trackingRemoteValue: String,
     remoteTagExistsValue: Option[Option[Boolean]],
-    existsTagValue: Boolean
+    existsTagValue: Boolean,
+    remoteTagCommitValue: Option[RemoteTagCommit] = None
 ) extends Vcs {
   override val baseDir: File       = new File(".")
   override val commandName: String = "git"
@@ -337,6 +504,18 @@ private final class StubVcs(
       remoteTagExistsValue.fold(
         IO.raiseError[Option[Boolean]](
           new AssertionError("remoteTagExistsWithTimeout should not be reached")
+        )
+      )(IO.pure)
+
+  override def remoteTagCommitWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[RemoteTagCommit] =
+    record(s"remoteTagCommitWithTimeout($remote,$tagName)") *>
+      remoteTagCommitValue.fold(
+        IO.raiseError[RemoteTagCommit](
+          new AssertionError("remoteTagCommitWithTimeout should not be reached")
         )
       )(IO.pure)
 
@@ -382,14 +561,16 @@ private object StubVcs {
       hasUpstreamValue: Boolean = true,
       trackingRemoteValue: String = "origin",
       remoteTagExistsValue: Option[Option[Boolean]] = None,
-      existsTagValue: Boolean = false
+      existsTagValue: Boolean = false,
+      remoteTagCommitValue: Option[RemoteTagCommit] = None
   ): StubVcs =
     new StubVcs(
       callsRef,
       hasUpstreamValue,
       trackingRemoteValue,
       remoteTagExistsValue,
-      existsTagValue
+      existsTagValue,
+      remoteTagCommitValue
     )
 
   def recording(callsRef: Ref[IO, List[String]]): StubVcs =

@@ -29,8 +29,21 @@ private[release] object TagConflictResolver {
     *                       conflict (or a remote tag at a different commit) would otherwise
     *                       only surface at the final push, after release-version writes and
     *                       the release commit have already landed.
+    * @param keepRemoteCommitProbe
+    *                       `Some(expectedCommitHash)` when the deterministic verdict is to KEEP
+    *                       an existing local tag at that commit. No new local ref lands
+    *                       (`willCreateTag = false`), but the kept tag is still pushed with a
+    *                       non-force update, so callers must run the hash-aware keep probe
+    *                       (`RemoteTagProbe.probeForKeep`) to abort before publish when the
+    *                       remote holds the tag at a different commit. `None` for every other
+    *                       verdict (create/overwrite/abort/interactive).
     */
-  final case class PreflightOutcome(tagName: String, status: String, willCreateTag: Boolean)
+  final case class PreflightOutcome(
+      tagName: String,
+      status: String,
+      willCreateTag: Boolean,
+      keepRemoteCommitProbe: Option[String] = None
+  )
 
   /** Describes what the tag is expected to point at when the release executes. */
   sealed trait PreflightCommitTarget
@@ -55,6 +68,13 @@ private[release] object TagConflictResolver {
     * invoked) cannot observe the redirected name and would miss the
     * remote-only conflict on the replacement tag. Default is a no-op so
     * adapters that do not need a probe (monorepo, tests) keep working.
+    *
+    * `beforeKeepTag` is the keep-path analogue: invoked with `(tagName,
+    * expectedCommitHash)` immediately before the resolver settles on KEEPING an
+    * existing local tag. No new ref is created locally, but the kept tag is still
+    * pushed with a non-force update, so callers run the hash-aware remote keep
+    * probe here to abort before `publish-artifacts` when the remote holds the tag
+    * at a different commit. Default is a no-op.
     */
   final case class TagParams(
       tagName: String,
@@ -66,7 +86,8 @@ private[release] object TagConflictResolver {
       defaultAnswer: Option[String],
       logPrefix: String,
       label: String,
-      beforeCreateTag: String => IO[Unit] = _ => IO.unit
+      beforeCreateTag: String => IO[Unit] = _ => IO.unit,
+      beforeKeepTag: (String, String) => IO[Unit] = (_, _) => IO.unit
   )
 
   /** Parameters for preflight tag checks. */
@@ -133,11 +154,17 @@ private[release] object TagConflictResolver {
                     )
                   )
                 case (nextCtx, ParsedAnswer.Keep) if matchesExpectedCommit =>
-                  IO.blocking(
-                    nextCtx.state.log.warn(
-                      s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
-                    )
-                  ).as(nextCtx -> tagName)
+                  // The kept tag lands in the final atomic push with a non-force
+                  // `refs/tags/X:refs/tags/X` update, which the remote rejects if it
+                  // holds the tag at a different commit. Probe the remote here so the
+                  // release aborts before `publish-artifacts` rather than failing at
+                  // the push with artifacts already published.
+                  params.beforeKeepTag(tagName, params.expectedCommitHash) *>
+                    IO.blocking(
+                      nextCtx.state.log.warn(
+                        s"${params.logPrefix} Tag [$tagName] already exists. Keeping existing tag."
+                      )
+                    ).as(nextCtx -> tagName)
                 case (_, ParsedAnswer.Keep)                                =>
                   IO.raiseError(
                     new IllegalStateException(
@@ -231,15 +258,18 @@ private[release] object TagConflictResolver {
                     onKeep =
                       if (matchesExpectedCommit)
                         IO.pure(
-                          // Keep: no new ref will land. Push will see the tag
-                          // ref unchanged and either no-op (matching commit on
-                          // remote) or fail at push (different commit on
-                          // remote). The remote probe stays out of the way
-                          // because the user explicitly opted to keep.
+                          // Keep: no new local ref will land, but the kept tag is
+                          // still pushed with a non-force `refs/tags/X:refs/tags/X`
+                          // update, which the remote rejects if it holds the tag at
+                          // a different commit. Signal the keep so the caller runs
+                          // the hash-aware remote probe and aborts before publish
+                          // (instead of the existence-only probe, which would
+                          // over-abort on a harmless same-commit remote tag).
                           PreflightOutcome(
                             tagName,
                             "exists; release will keep the existing tag",
-                            willCreateTag = false
+                            willCreateTag = false,
+                            keepRemoteCommitProbe = Some(expectedCommitHash)
                           )
                         )
                       else

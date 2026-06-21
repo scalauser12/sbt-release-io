@@ -79,8 +79,17 @@ private[release] object ReleaseSharedDefaultSettingsSupport {
         .map { v =>
           bump match {
             case Version.Bump.Next =>
-              if (v.isSnapshot) v.withoutSnapshot.render
-              else
+              if (v.isSnapshot) {
+                val released = v.withoutSnapshot
+                // Guard against a derived release version that is still a snapshot (e.g.
+                // a malformed `1.0.0-SNAPSHOT-SNAPSHOT` input): fail loudly rather than
+                // tagging/publishing a snapshot release.
+                if (released.isSnapshot)
+                  throw new IllegalArgumentException(
+                    s"Could not derive a stable release version from: $ver"
+                  )
+                released.render
+              } else
                 throw new IllegalArgumentException(
                   s"Expected snapshot version, got: $ver"
                 )

@@ -85,6 +85,108 @@ private[release] object RemoteTagProbe {
         } yield ()
     }
 
+  /** Keep-path probe: the release will KEEP an existing local tag (no new ref
+    * created locally), but the final atomic push still advertises it with a
+    * non-force `refs/tags/X:refs/tags/X` update. That update is rejected only
+    * when the remote already holds the tag at a DIFFERENT commit, so — unlike
+    * [[probeForCreate]] — a mere existence check is not enough: a same-commit
+    * remote tag is a harmless no-op push and must not abort the keep.
+    *
+    * Aborts (before `publish-artifacts`) only when the remote tag exists at a
+    * commit other than `expectedCommitHash`. Absent / same-commit proceed
+    * silently; an unavailable remote degrades to a warning.
+    */
+  def probeForKeep[C <: ReleaseCtx { type Self = C }](
+      ctx: C,
+      vcs: Vcs,
+      tagName: String,
+      expectedCommitHash: String,
+      commandName: String,
+      logPrefix: String,
+      label: Option[String],
+      pushConfigured: Boolean
+  ): IO[Unit] =
+    if (shouldSkip(ctx, pushConfigured)) IO.unit
+    else runKeepProbe(ctx, vcs, tagName, expectedCommitHash, commandName, logPrefix, label)
+
+  private def runKeepProbe[C <: ReleaseCtx { type Self = C }](
+      ctx: C,
+      vcs: Vcs,
+      tagName: String,
+      expectedCommitHash: String,
+      commandName: String,
+      logPrefix: String,
+      label: Option[String]
+  ): IO[Unit] =
+    vcs.hasUpstream.flatMap {
+      case false => IO.unit
+      case true  =>
+        for {
+          remote  <- vcs.trackingRemote
+          timeout <- loadTimeout(ctx.state)
+          result  <- vcs.remoteTagCommitWithTimeout(remote, tagName, timeout)
+          _       <- handleKeepResult(
+                       ctx,
+                       tagName,
+                       expectedCommitHash,
+                       remote,
+                       commandName,
+                       logPrefix,
+                       label,
+                       result
+                     )
+        } yield ()
+    }
+
+  private def handleKeepResult[C <: ReleaseCtx { type Self = C }](
+      ctx: C,
+      tagName: String,
+      expectedCommitHash: String,
+      remote: String,
+      commandName: String,
+      logPrefix: String,
+      label: Option[String],
+      result: RemoteTagCommit
+  ): IO[Unit] =
+    result match {
+      case RemoteTagCommit.At(remoteHash) if remoteHash != expectedCommitHash =>
+        IO.raiseError(
+          new IllegalStateException(
+            keepConflictMessage(
+              tagName,
+              remote,
+              commandName,
+              label,
+              expectedCommitHash,
+              remoteHash
+            )
+          )
+        )
+      // Same commit → the non-force push is a no-op. Absent → the push creates it.
+      case RemoteTagCommit.At(_) | RemoteTagCommit.Absent                     => IO.unit
+      case RemoteTagCommit.Unavailable                                        =>
+        IO.blocking(
+          ctx.state.log.warn(
+            s"$logPrefix Could not query remote [$remote] for kept " +
+              s"tag [$tagName]${formatLabel(label)}; the atomic push will surface any conflict."
+          )
+        )
+    }
+
+  private def keepConflictMessage(
+      tagName: String,
+      remote: String,
+      commandName: String,
+      label: Option[String],
+      expectedCommitHash: String,
+      remoteHash: String
+  ): String =
+    s"Tag [$tagName]${formatLabel(label)} would be kept at commit [$expectedCommitHash], but " +
+      s"remote [$remote] already has it at a different commit [$remoteHash]. The release would " +
+      s"push it with a non-force update, which the remote rejects — so publish would run and the " +
+      s"push would then fail. Force-push the tag (`git push $remote --force refs/tags/$tagName`) " +
+      s"or pick a new tag, then re-run the release. Use `$commandName help` for tag conflict options."
+
   private def handleResult[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       vcs: Vcs,

@@ -205,4 +205,17 @@ class VersionSpec extends FunSuite {
       "1.0.0-RC1"
     )
   }
+
+  test("withoutSnapshot - strip all trailing -SNAPSHOT markers, not just the first") {
+    val stripped = version("1.0.0-SNAPSHOT-SNAPSHOT").withoutSnapshot
+    assertEquals(stripped.render, "1.0.0")
+    assertEquals(stripped.isSnapshot, false)
+  }
+
+  test("withoutSnapshot - leave a non-trailing -SNAPSHOT marker untouched") {
+    assertEquals(
+      version("1.0.0-SNAPSHOT-RC1").withoutSnapshot.render,
+      "1.0.0-SNAPSHOT-RC1"
+    )
+  }
 }

@@ -12,6 +12,22 @@ import scala.concurrent.duration.FiniteDuration
   */
 final class InvalidTagNameException(message: String) extends IllegalStateException(message)
 
+/** Outcome of resolving a tag's commit on a remote, used by the keep-path remote
+  * probe to decide whether a kept tag would survive the final atomic push.
+  */
+sealed trait RemoteTagCommit
+object RemoteTagCommit {
+
+  /** The remote does not advertise the tag (the push would create it freshly). */
+  case object Absent extends RemoteTagCommit
+
+  /** The remote tag resolves to this commit (annotated tags are peeled). */
+  final case class At(commitHash: String) extends RemoteTagCommit
+
+  /** The remote could not be queried (timeout, network error, unreachable). */
+  case object Unavailable extends RemoteTagCommit
+}
+
 /** IO-native VCS adapter. All operations that perform I/O return `IO`;
   * `commandName` and `baseDir` are synchronous accessors for fixed properties.
   */
@@ -155,6 +171,42 @@ trait Vcs {
   ): IO[Option[Boolean]] = {
     val _ = (remote, tagName, timeout)
     IO.pure(None)
+  }
+
+  /** Resolve the commit a tag points to on `remote`, bounded by `timeout`,
+    * peeling annotated tags to their underlying commit.
+    *
+    * Used by the keep-path tag preflight. When the release will KEEP an existing
+    * local tag (no new ref created), the final atomic push still advertises that
+    * tag with a non-force `refs/tags/X:refs/tags/X` update, which the remote
+    * rejects if it already holds the tag at a different commit. Comparing the
+    * remote tag's commit against the kept tag's commit lets the release abort
+    * before `publish-artifacts` runs, instead of failing at the final push with
+    * artifacts already published.
+    *
+    * Distinct from [[remoteTagExistsWithTimeout]] (existence only): a same-commit
+    * remote tag is a harmless no-op push and must NOT abort a keep, so the keep
+    * path needs the hash, not just presence.
+    *
+    * Returns:
+    *   - [[RemoteTagCommit.Absent]] — the remote does not advertise the tag.
+    *   - [[RemoteTagCommit.At]] — the remote tag resolves to this commit.
+    *   - [[RemoteTagCommit.Unavailable]] — the probe could not be completed
+    *     (timeout, network error, unreachable remote). Callers should degrade
+    *     gracefully rather than aborting the release.
+    *
+    * The default returns [[RemoteTagCommit.Unavailable]] so test stubs and
+    * non-strict adapters keep working without surfacing spurious aborts;
+    * production adapters with a real remote query (e.g. Git's `ls-remote`)
+    * override this method.
+    */
+  def remoteTagCommitWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[RemoteTagCommit] = {
+    val _ = (remote, tagName, timeout)
+    IO.pure(RemoteTagCommit.Unavailable)
   }
 
   // ── Actions (raise on non-zero exit) ─────────────────────────────────

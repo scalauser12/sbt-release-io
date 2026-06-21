@@ -33,7 +33,8 @@ private[monorepo] object MonorepoVcsSteps {
       projectName: String,
       rendered: String,
       status: String,
-      willCreateTag: Boolean
+      willCreateTag: Boolean,
+      keepRemoteCommitProbe: Option[String] = None
   )
 
   val initializeVcs: GlobalStep = ProcessStep.Single(
@@ -86,7 +87,12 @@ private[monorepo] object MonorepoVcsSteps {
           // end would fail — leaving partially-published artifacts without the
           // matching pushed release tags.
           beforeCreateTag =
-            finalTagName => remoteTagPreflightForCreate(ctx, vcs, finalTagName, label)
+            finalTagName => remoteTagPreflightForCreate(ctx, vcs, finalTagName, label),
+          // Keep path: a kept per-project tag still rides the final atomic push;
+          // catch a divergent remote tag before publish (hash-aware, so a
+          // same-commit remote tag does not over-abort).
+          beforeKeepTag = (finalTagName, expectedHash) =>
+            remoteTagKeepProbe(ctx, vcs, finalTagName, expectedHash, label)
         )
       )
       .map { case (updatedCtx, tagName) =>
@@ -126,6 +132,44 @@ private[monorepo] object MonorepoVcsSteps {
       pushConfigured = ctx.pushConfigured
     )
 
+  /** Keep-path counterpart of [[remoteTagPreflightForPreflightStep]]: when the
+    * resolver's deterministic verdict is to KEEP an existing per-project tag, the
+    * kept tag still rides the global atomic push. Probe the remote with a
+    * hash-aware check so a divergent remote tag aborts before publish.
+    */
+  private def remoteTagKeepPreflightStep(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      tagName: String,
+      label: String,
+      keepRemoteCommitProbe: Option[String]
+  ): IO[Unit] =
+    keepRemoteCommitProbe match {
+      case None               => IO.unit
+      case Some(expectedHash) => remoteTagKeepProbe(ctx, vcs, tagName, expectedHash, label)
+    }
+
+  /** Late-path keep probe invoked from inside [[TagConflictResolver.resolveConflict]]
+    * via the `beforeKeepTag` callback, observing the FINAL kept tag name.
+    */
+  private def remoteTagKeepProbe(
+      ctx: MonorepoContext,
+      vcs: Vcs,
+      tagName: String,
+      expectedCommitHash: String,
+      label: String
+  ): IO[Unit] =
+    RemoteTagProbe.probeForKeep(
+      ctx,
+      vcs,
+      tagName,
+      expectedCommitHash,
+      ctx.commandName,
+      ReleaseLogPrefixes.Monorepo,
+      label = if (label.isEmpty) None else Some(label),
+      pushConfigured = ctx.pushConfigured
+    )
+
   private def preflightCreateTag(
       ctx: MonorepoContext,
       vcs: Vcs,
@@ -147,7 +191,15 @@ private[monorepo] object MonorepoVcsSteps {
           label = projectName
         )
       )
-      .map(o => PreflightTagOutcome(projectName, o.tagName, o.status, o.willCreateTag))
+      .map(o =>
+        PreflightTagOutcome(
+          projectName,
+          o.tagName,
+          o.status,
+          o.willCreateTag,
+          o.keepRemoteCommitProbe
+        )
+      )
 
   /** Preflight tag categorization.
     *
@@ -289,7 +341,14 @@ private[monorepo] object MonorepoVcsSteps {
                     outcome.rendered,
                     project.name,
                     outcome.willCreateTag
-                  )
+                  ) *>
+                    remoteTagKeepPreflightStep(
+                      ctx,
+                      vcs,
+                      outcome.rendered,
+                      project.name,
+                      outcome.keepRemoteCommitProbe
+                    )
                 )
               }
           }

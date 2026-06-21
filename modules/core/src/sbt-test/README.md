@@ -27,7 +27,7 @@ Legacy step-list editing fixtures were retired. New scripted tests should use li
 - Hook gating and narrow predicates: `after-publish-gate-streams`, `before-push-hook-gated`, `after-push-hook-gated`, `after-push-hook-runs-on-push`, `hook-installed-publish-action`, `hook-installed-publish-skip`
 - ThisBuild scopes and decision defaults: `this-build-overrides`, `thisbuild-decision-default-honored`
 - Versioning and tags: `custom-tag`, `custom-version-format`, `global-version-false`, `invalid-version-input`, `version-bump`, `tag-default`, `version-task-sees-snapshot`
-- Tag preflight and remote tag probe: `invalid-tag-name-fails-preflight`, `tag-preflight-skipped-with-hook`, `hook-disabled-tag-preflight-still-probes`, `hook-disabled-retry-tag-probes-remote`, `retry-tag-name-probes-remote`, `remote-only-tag-aborts-preflight`
+- Tag preflight and remote tag probe: `invalid-tag-name-fails-preflight`, `tag-preflight-skipped-with-hook`, `hook-disabled-tag-preflight-still-probes`, `hook-disabled-retry-tag-probes-remote`, `retry-tag-name-probes-remote`, `remote-only-tag-aborts-preflight`, `keep-tag-remote-divergence-aborts`, `keep-tag-remote-match-proceeds`
 - Cross-build behavior: `cross`, `cross-build-setting`
 - Test and clean phases: `run-clean`, `fail-test`, `run-tests-aggregate-fail`, `skip-tests`
 - Publish and push flow: `publish-to-check`, `publish-skip`, `publish-skip-root`, `publish-skip-isSnapshot`, `publish-skip-isSnapshot-default-flow`, `publish-runs-after-tag`, `skip-publish-setting`, `publish-multi-project`, `publish-multi-project-manifest`, `publish-nested-aggregate`, `push-changes`, `push-explicit-tag`, `push-first-tracked-branch`, `push-behind-remote`, `push-race-before-push`, `custom-publish-action`

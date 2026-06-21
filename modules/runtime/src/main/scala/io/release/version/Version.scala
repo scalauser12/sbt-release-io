@@ -114,7 +114,12 @@ case class Version(major: Int, subversions: Seq[Int], qualifier: Option[String])
   def isSnapshot: Boolean = qualifier.exists(_.matches("""(^.*)-SNAPSHOT$"""))
 
   def withoutSnapshot: Version = copy(qualifier = qualifier.flatMap { q =>
-    val stripped = """-SNAPSHOT""".r.replaceFirstIn(q, "")
+    // Strip the trailing `-SNAPSHOT` marker(s) that `isSnapshot` matches on. Using an
+    // anchored, repeated strip (rather than `replaceFirstIn`, which removes the first
+    // occurrence anywhere) keeps this in lockstep with `isSnapshot`'s `-SNAPSHOT$` anchor:
+    // `1.0.0-SNAPSHOT-SNAPSHOT` -> `1.0.0` instead of the still-snapshot `1.0.0-SNAPSHOT`,
+    // and a mid-qualifier marker like `-SNAPSHOT-RC1` is left intact.
+    val stripped = q.replaceAll("(?:-SNAPSHOT)+$", "")
     if (stripped == q) Some(q)
     else Option(stripped).filter(_.nonEmpty)
   })

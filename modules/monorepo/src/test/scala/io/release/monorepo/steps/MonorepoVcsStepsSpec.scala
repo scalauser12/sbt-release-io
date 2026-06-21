@@ -378,6 +378,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                                sbt.IO.write(new File(repo, "file.txt"), "updated-after-hook")
                                TestSupport.commitAll(repo, "Post-commit hook commit")
                              }
+        // The tag is created on the CURRENT HEAD (post-hook commit), not the stale
+        // persisted release hash; the keep decision — and the hash-aware keep probe
+        // signal — must follow this commit.
+        currentHeadHash   <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
         _                 <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
         seededState        =
           TestSupport.appendSessionSettings(
@@ -401,7 +405,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
               "core",
               "core-v1.0.0",
               "exists; release will keep the existing tag",
-              willCreateTag = false
+              willCreateTag = false,
+              keepRemoteCommitProbe = Some(currentHeadHash)
             )
           )
         )

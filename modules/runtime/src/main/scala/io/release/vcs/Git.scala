@@ -12,10 +12,22 @@ class Git(val baseDir: File) extends Vcs {
   private val DetachedHeadMessage =
     "HEAD is detached. release-io branch-based VCS operations require a checked-out branch."
 
-  // NOTE: This helper currently swallows any NonFatal as `None`. Git uses exit 128 for
+  // NOTE: This helper deliberately swallows any NonFatal as `None`. Git uses exit 128 for
   // "not a valid ref" AND for other error conditions (corrupt repo, permission denied,
-  // ambiguous arg). A stricter implementation would inspect exit code + stderr — deferred
-  // pending a concrete bug report.
+  // ambiguous arg), so a corrupt/permission failure is reported as "ref missing" here. This
+  // is an accepted trade-off, not an oversight:
+  //   - It is diagnostic-only, never a correctness hazard. The genuinely dangerous existence
+  //     check, `existsTag`, uses the strict `runBooleanProbe`, which RAISES on exit 128 — so a
+  //     real, existing tag is never silently treated as absent. The only consumers of this
+  //     recovery are the resolution lookups `tagCommitHash` and `upstreamTrackingHash`, and
+  //     both degrade conservatively (a `None` tightens the tag-keep decision to a mismatch/abort
+  //     and re-prompts on the upstream path rather than proceeding unsafely).
+  //   - The upstream path is additionally swallowed one layer up in `VcsOps.currentUpstreamTip`,
+  //     so narrowing here would not surface those errors anyway.
+  //   - Narrowing to "not a valid ref" cannot be done by exit code alone (a corrupt object also
+  //     exits 128); it would require stderr-substring matching, which is locale-fragile because
+  //     `GitProcessSupport` does not pin `LC_ALL=C`. Not worth that fragility for a cosmetic gain.
+  // Revisit only with a concrete bug report that depends on the lost diagnostic.
   private def recoverMissingRef(io: IO[String]): IO[Option[String]] =
     io.map(Some(_)).handleErrorWith {
       case e: InvalidUpstreamConfigException => IO.raiseError(e)
@@ -267,6 +279,47 @@ class Git(val baseDir: File) extends Vcs {
         case Some(2) => Some(false)
         case _       => None
       }
+
+  override def remoteTagCommitWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[RemoteTagCommit] =
+    // `ls-remote` (without `--exit-code`) exits 0 even when nothing matches, with
+    // empty stdout. Each matched line is `<sha>\t<ref>`. For an ANNOTATED tag we
+    // need the peeled `refs/tags/<name>^{}` (the commit), not `refs/tags/<name>`
+    // (the tag object), so the hash is comparable to a local commit hash. Git only
+    // emits the `^{}` line when it is requested explicitly — a single `refs/tags/X`
+    // pattern suppresses it — so we pass BOTH patterns and prefer the peeled line;
+    // a lightweight tag has no peel and falls back to the plain ref (whose sha IS
+    // the commit). Exit != 0 or a timeout degrade to `Unavailable` so transient
+    // failures fall back to a warning, not an abort.
+    GitProcessSupport
+      .runCapturedWithTimeout(
+        baseDir,
+        Seq("ls-remote", "--tags", "--", remote, s"refs/tags/$tagName", s"refs/tags/$tagName^{}"),
+        timeout
+      )
+      .map {
+        case Some(result) if result.exitCode == 0 =>
+          parseRemoteTagCommit(tagName, result.stdout)
+        case _                                    => RemoteTagCommit.Unavailable
+      }
+
+  private def parseRemoteTagCommit(
+      tagName: String,
+      lines: Vector[String]
+  ): RemoteTagCommit = {
+    def shaFor(ref: String): Option[String] =
+      lines.iterator
+        .map(_.split('\t'))
+        .collectFirst { case Array(sha, r) if r == ref => sha }
+    // Prefer the peeled commit of an annotated tag; fall back to the plain ref
+    // (lightweight tag, whose advertised sha is already the commit).
+    shaFor(s"refs/tags/$tagName^{}")
+      .orElse(shaFor(s"refs/tags/$tagName"))
+      .fold[RemoteTagCommit](RemoteTagCommit.Absent)(RemoteTagCommit.At(_))
+  }
 
   // ── Actions ──────────────────────────────────────────────────────────
 
