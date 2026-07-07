@@ -132,19 +132,26 @@ private[release] object VcsOps {
       currentHash <- vcs.currentHash
     } yield CleanCheckResult(vcs, currentHash)
 
-  /** Resolve file path relative to VCS base directory. */
+  /** Resolve file path relative to VCS base directory, normalized to forward slashes on
+    * Windows to match git path output. On POSIX the path is left untouched — a backslash
+    * there is a legal filename character, not a separator (mirrors
+    * ChangeDetection.gitRelativize).
+    */
   def relativizeToBase(vcs: Vcs, file: File): IO[String] =
     IO.blocking {
       val base      = vcs.baseDir.getCanonicalFile
       val canonical = file.getCanonicalFile
       (base, canonical)
     }.flatMap { case (base, canonical) =>
-      IO.fromOption(sbt.IO.relativize(base, canonical))(
+      IO.fromOption(sbt.IO.relativize(base, canonical).map(normalizeSeparators))(
         new IllegalStateException(
           s"Version file [$canonical] is outside of VCS root [$base]"
         )
       )
     }
+
+  private def normalizeSeparators(path: String): String =
+    if (java.io.File.separatorChar == '\\') path.replace('\\', '/') else path
 
   /** Status of tracked files only (excludes untracked `?` lines). */
   def trackedStatus(vcs: Vcs): IO[String] =

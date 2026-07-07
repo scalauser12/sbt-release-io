@@ -167,6 +167,28 @@ class VcsOpsSpec extends CatsEffectSuite {
     }
   }
 
+  test("relativizeToBase - preserve literal backslashes in POSIX filenames") {
+    // A backslash on POSIX is a filename character, not a separator; normalizing it would
+    // corrupt the path and break comparison against git's `-z` (literal) output. Windows
+    // forbids backslashes in filenames, so the separator normalization only runs there.
+    assume(
+      !sys.props.getOrElse("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("windows"),
+      "requires POSIX filenames"
+    )
+
+    ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (repo, vcs) =>
+      IO.blocking {
+        val weird = new File(repo, "we\\name.sbt")
+        sbt.IO.write(weird, """version := "0.1.0-SNAPSHOT"""")
+        weird
+      }.flatMap { file =>
+        VcsOps.relativizeToBase(vcs, file).map { relativePath =>
+          assertEquals(relativePath, "we\\name.sbt")
+        }
+      }
+    }
+  }
+
   test("relativizeToBase - raise when the file is outside the VCS root") {
     TestSupport.tempDirResource(fixturePrefix).use { outside =>
       ReleaseTestSupport.gitRepoWithCommitResource(fixturePrefix).use { case (_, vcs) =>

@@ -25,8 +25,9 @@ class Git(val baseDir: File) extends Vcs {
   //   - The upstream path is additionally swallowed one layer up in `VcsOps.currentUpstreamTip`,
   //     so narrowing here would not surface those errors anyway.
   //   - Narrowing to "not a valid ref" cannot be done by exit code alone (a corrupt object also
-  //     exits 128); it would require stderr-substring matching, which is locale-fragile because
-  //     `GitProcessSupport` does not pin `LC_ALL=C`. Not worth that fragility for a cosmetic gain.
+  //     exits 128); it would require stderr-substring matching. `GitProcessSupport` now pins
+  //     `LC_ALL=C` for captured commands, so the wording is locale-stable, but it still varies
+  //     across git versions. Not worth that fragility for a cosmetic gain.
   // Revisit only with a concrete bug report that depends on the lost diagnostic.
   private def recoverMissingRef(io: IO[String]): IO[Option[String]] =
     io.map(Some(_)).handleErrorWith {
@@ -42,6 +43,9 @@ class Git(val baseDir: File) extends Vcs {
 
   private def runLines(args: String*)(context: => String): IO[Seq[String]] =
     GitProcessSupport.runLines(baseDir, args)(context)
+
+  private def runNulRecords(args: String*)(context: => String): IO[Seq[String]] =
+    GitProcessSupport.runNulRecords(baseDir, args)(context)
 
   private def runSingleLine(args: String*)(context: => String): IO[String] =
     GitProcessSupport.runSingleLine(baseDir, args)(context)
@@ -212,14 +216,16 @@ class Git(val baseDir: File) extends Vcs {
       )
     )
 
+  // `-z` disables C-quoting so paths with non-ASCII or special characters compare equal
+  // to the literal relative paths produced by VcsOps.relativizeToBase.
   def modifiedFiles: IO[Seq[String]] =
-    runLines("ls-files", "--modified", "--exclude-standard")("git ls-files --modified")
+    runNulRecords("ls-files", "-z", "--modified", "--exclude-standard")("git ls-files --modified")
 
   def stagedFiles: IO[Seq[String]] =
-    runLines("diff", "--cached", "--name-only")("git diff --cached --name-only")
+    runNulRecords("diff", "--cached", "--name-only", "-z")("git diff --cached --name-only")
 
   def untrackedFiles: IO[Seq[String]] =
-    runLines("ls-files", "--other", "--exclude-standard")("git ls-files --other")
+    runNulRecords("ls-files", "-z", "--other", "--exclude-standard")("git ls-files --other")
 
   override def isIgnored(path: String): IO[Boolean] =
     // git check-ignore exit codes:

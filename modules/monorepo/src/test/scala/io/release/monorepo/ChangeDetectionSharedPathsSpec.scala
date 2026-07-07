@@ -253,6 +253,245 @@ class ChangeDetectionSharedPathsSpec extends CatsEffectSuite with ChangeDetectio
     }
   }
 
+  test("detectChangedProjects - match shared-path excludes for non-ASCII paths") {
+    // Pins the `-z` diff fix: with line-oriented output git C-quotes non-ASCII paths, so
+    // the excluded CHANGELOG under café-common survived the exclusion filter and a false
+    // shared-path change marked every project as changed. core.quotePath is forced to true
+    // so the pre-fix failure reproduces regardless of the developer's global git config.
+    repoResource.use { repo =>
+      for {
+        changelog <- IO.blocking {
+                       val sharedDir = new File(repo, "café-common")
+                       val file      = new File(sharedDir, "CHANGELOG.md")
+
+                       sbt.IO.createDirectory(new File(repo, "core"))
+                       sbt.IO.createDirectory(sharedDir)
+                       sbt.IO.write(
+                         new File(repo, "core/version.sbt"),
+                         """version := "0.1.0-SNAPSHOT"""" + "\n"
+                       )
+                       sbt.IO.write(file, "# Changelog\n")
+
+                       TestSupport.initGitRepo(repo)
+                       TestSupport.runGit(repo, "config", "core.quotePath", "true")
+                       TestSupport.runGit(repo, "add", ".")
+                       TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+                       TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+                       sbt.IO.write(file, "# Changelog\n\n- entry\n")
+                       TestSupport.runGit(repo, "add", ".")
+                       TestSupport.runGit(repo, "commit", "-m", "Update changelog")
+                       file
+                     }
+        vcs       <- detectVcs(repo)
+        env        = testEnv(repo)
+        project    = nestedProject(repo, "core")
+        changed   <- detectChanged(
+                       vcs,
+                       Seq(project),
+                       env.state,
+                       sharedPaths = Seq("café-common"),
+                       additionalExcludeFiles = Seq(changelog)
+                     )
+        logs      <- readLogs(env, required = Seq("core unchanged since core-v0.1.0"))
+      } yield {
+        assert(changed.isEmpty)
+        assert(!logs.contains("Shared path change(s) detected"))
+      }
+    }
+  }
+
+  test("detectChangedProjects - match trailing-slash shared paths against nested files") {
+    // Pins the trailing-slash normalization in the in-Scala shared-path matcher: the
+    // exclude-style matcher would append another "/" to "project/" and never match.
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core"))
+        sbt.IO.createDirectory(new File(repo, "project"))
+        sbt.IO.write(
+          new File(repo, "core/version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+        sbt.IO.write(new File(repo, "project/plugins.sbt"), "// plugins\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        sbt.IO.write(new File(repo, "project/plugins.sbt"), "// plugins updated\n")
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update build plugins")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val project = nestedProject(repo, "core")
+
+        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("project/")).flatMap {
+          changed =>
+            readLogs(
+              env,
+              required = Seq("Shared path change(s) detected since core-v0.1.0")
+            ).map { logs =>
+              assertEquals(changed.map(_.name), Seq("core"))
+              assert(logs.contains("project/plugins.sbt"))
+            }
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - match shared path entries as exact files, not name prefixes") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core"))
+        sbt.IO.write(
+          new File(repo, "core/version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+        sbt.IO.write(new File(repo, "build.sbt"), "name := \"root\"\n")
+        sbt.IO.write(new File(repo, "build.sbt.bak"), "name := \"root-old\"\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        sbt.IO.write(new File(repo, "build.sbt.bak"), "name := \"root-older\"\n")
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update backup file only")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val project = nestedProject(repo, "core")
+
+        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
+          changed =>
+            readLogs(env, required = Seq("core unchanged since core-v0.1.0")).map { logs =>
+              assert(changed.isEmpty)
+              assert(!logs.contains("Shared path change(s) detected"))
+            }
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - log the shared-path change once across differing exclude sets") {
+    // Two projects share one tag but have different effective excludes (their own version
+    // files), so the shared-path cache misses twice — the single cached tag diff must still
+    // produce exactly one detection log line (core's evaluation excludes the changed file).
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core"))
+        sbt.IO.createDirectory(new File(repo, "api"))
+        sbt.IO.createDirectory(new File(repo, "versions"))
+        sbt.IO.write(
+          new File(repo, "versions/core.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+        sbt.IO.write(
+          new File(repo, "versions/api.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "shared-v0.1.0")
+
+        sbt.IO.write(
+          new File(repo, "versions/core.sbt"),
+          """version := "0.2.0-SNAPSHOT"""" + "\n"
+        )
+        TestSupport.runGit(repo, "add", "versions/core.sbt")
+        TestSupport.runGit(repo, "commit", "-m", "Update core version file")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val core = projectInfo(
+          repo,
+          name = "core",
+          baseDir = new File(repo, "core"),
+          versionFile = new File(repo, "versions/core.sbt")
+        )
+        val api  = projectInfo(
+          repo,
+          name = "api",
+          baseDir = new File(repo, "api"),
+          versionFile = new File(repo, "versions/api.sbt")
+        )
+
+        detectChanged(
+          vcs,
+          Seq(core, api),
+          env.state,
+          sharedPaths = Seq("versions/"),
+          tagNameFn = (_, version) => s"shared-v$version"
+        ).flatMap { changed =>
+          readLogs(env, required = Seq("Shared path change(s) detected")).map { logs =>
+            assertEquals(changed.map(_.name), Seq("api"))
+            assertEquals(
+              logs.linesIterator.count(_.contains("Shared path change(s) detected")),
+              1
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - conservatively mark changed when the shared-path diff fails") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.createDirectory(new File(repo, "core"))
+        sbt.IO.write(
+          new File(repo, "core/version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "core-v0.1.0")
+
+        sbt.IO.write(
+          new File(repo, "core/version.sbt"),
+          """version := "0.2.0-SNAPSHOT"""" + "\n"
+        )
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Bump version")
+
+        // Delete the tag commit's root tree object so `git describe` succeeds but the
+        // full-repo `git diff <tag>..HEAD` fails (see the project-diff spec counterpart).
+        val treeHash   = TestSupport.runGit(repo, "rev-parse", "core-v0.1.0^{tree}").trim
+        val objectFile =
+          new File(repo, s".git/objects/${treeHash.take(2)}/${treeHash.drop(2)}")
+        objectFile.setWritable(true)
+        assert(objectFile.delete(), s"failed to delete loose object $objectFile")
+
+        repo
+      }.flatMap { _ =>
+        detectVcs(repo).map(vcs => (vcs, testEnv(repo)))
+      }.flatMap { case (vcs, env) =>
+        val project = nestedProject(repo, "core")
+
+        detectChanged(vcs, Seq(project), env.state, sharedPaths = Seq("build.sbt")).flatMap {
+          changed =>
+            readLogs(
+              env,
+              required = Seq("Failed to check shared paths", "Conservatively treating as changed")
+            ).map(_ => assertEquals(changed.map(_.name), Seq("core")))
+        }
+      }
+    }
+  }
+
   test("detectChangedProjects - detect shared path changes per-project with diverged tags") {
     repoResource.use { repo =>
       IO.blocking {

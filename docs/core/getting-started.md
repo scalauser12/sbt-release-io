@@ -28,6 +28,11 @@ ThisBuild / version := "0.1.0-SNAPSHOT"
 
 The plugin reads and writes this file during the release. The file path and format can be customized — see [Custom version formats](configuration.md#custom-version-formats).
 
+> **Note:** On Linux, run sbt under a UTF-8 locale (e.g. `LANG=C.UTF-8`). With a non-UTF-8
+> locale the JVM cannot pass non-ASCII strings to git intact, so the plugin fails fast when
+> a tag name or commit message cannot cross the process boundary, rather than silently
+> corrupting it.
+
 ## Usage
 
 Start by inspecting the built-in command help:

@@ -97,13 +97,18 @@ trait Vcs {
     */
   def tagCommitHash(name: String): IO[Option[String]] = IO.pure(None)
 
-  /** Tracked files with unstaged local modifications. */
+  /** Tracked files with unstaged local modifications.
+    *
+    * Paths must be repository-relative, `/`-separated, and unquoted (never C-quoted)
+    * regardless of `core.quotePath` — callers compare them against literal relative
+    * paths (e.g. from [[io.release.VcsOps.relativizeToBase]]).
+    */
   def modifiedFiles: IO[Seq[String]]
 
-  /** Files with staged changes not yet committed. */
+  /** Files with staged changes not yet committed. Same path contract as [[modifiedFiles]]. */
   def stagedFiles: IO[Seq[String]]
 
-  /** Files that are neither tracked nor ignored. */
+  /** Files that are neither tracked nor ignored. Same path contract as [[modifiedFiles]]. */
   def untrackedFiles: IO[Seq[String]]
 
   /** Returns `true` when `path` matches a `.gitignore` (or equivalent) rule.

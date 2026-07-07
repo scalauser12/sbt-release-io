@@ -31,61 +31,108 @@ private[monorepo] object ChangeDetection {
   )
   private final case class SharedPathCacheKey(tag: String, excludes: Vector[String])
 
-  /** Normalize path separators to forward slashes to match git output on all platforms.
+  /** Per-run caches threaded through the project fold: `tagDiffs` holds one full-repo diff
+    * result per distinct tag (`Left` = error detail; failures are cached so a failed diff is
+    * not retried per project); `sharedChanged` preserves the log-once shared-path decision
+    * per (tag, effective excludes).
+    */
+  private final case class DiffCaches(
+      tagDiffs: Map[String, Either[String, Seq[String]]],
+      sharedChanged: Map[SharedPathCacheKey, Boolean]
+  )
+  private object DiffCaches {
+    val empty: DiffCaches = DiffCaches(Map.empty, Map.empty)
+  }
+
+  /** Normalize Windows path separators to forward slashes to match git output; on POSIX the
+    * path is untouched (a backslash there is a legal filename character, not a separator).
     * Uses canonical paths to handle symlinks (e.g. macOS /var → /private/var).
     */
   private def gitRelativize(base: File, file: File): Option[String] =
-    sbt.IO.relativize(base.getCanonicalFile, file.getCanonicalFile).map(_.replace('\\', '/'))
+    sbt.IO.relativize(base.getCanonicalFile, file.getCanonicalFile).map { path =>
+      if (java.io.File.separatorChar == '\\') path.replace('\\', '/') else path
+    }
 
-  private def matchesExcludedPath(path: String, excluded: String): Boolean =
-    path == excluded || path.startsWith(excluded + "/")
+  /** Literal root-relative prefix match with trailing-slash normalization: "project/" (or
+    * "project") matches "project" itself and anything under "project/"; "build.sbt" matches
+    * only exactly. No globs — entries are literal paths.
+    */
+  private def matchesPathPrefix(path: String, entry: String): Boolean = {
+    val normalized = entry.stripSuffix("/")
+    path == normalized || path.startsWith(normalized + "/")
+  }
 
   private def isExcludedPath(path: String, excludes: Set[String]): Boolean =
-    excludes.exists(matchesExcludedPath(path, _))
+    excludes.exists(matchesPathPrefix(path, _))
 
-  /** Runs a git subprocess and returns stdout lines, raising [[IllegalStateException]] on a
-    * non-zero exit.
+  private def inScope(path: String, baseRelative: String): Boolean =
+    baseRelative == "." || baseRelative.isEmpty || matchesPathPrefix(path, baseRelative)
+
+  /** Full-repo `git diff --name-only <tag>..HEAD` — deliberately pathspec-free: pathspecs
+    * cross the argv boundary and are silently mangled on non-UTF-8 JVMs (an unmatched
+    * pathspec exits 0 empty), so all path scoping happens in Scala instead. `--no-renames`
+    * keeps both sides of a rename in the output so cross-directory moves attribute to both
+    * scopes. Package-visible so specs can exercise the failure branch directly.
     */
-  private def successfulGitLines(
+  private[monorepo] def diffFilesSinceTag(
       vcs: Vcs,
-      args: Seq[String]
-  )(context: => String): IO[Seq[String]] =
-    GitProcessSupport.runCommandResult(vcs.baseDir, args).flatMap { result =>
-      if (result.exitCode != 0)
-        IO.raiseError(GitProcessSupport.unexpectedExitError(context, result))
-      else IO.pure(result.stdout)
+      tag: String
+  ): IO[Either[String, Seq[String]]] =
+    GitProcessSupport
+      .runNulRecords(
+        vcs.baseDir,
+        Seq("diff", "--name-only", "--no-renames", "-z", s"$tag..HEAD")
+      )("git diff")
+      .attempt
+      .map(_.leftMap(errorMessage))
+
+  private def cachedDiffSinceTag(
+      vcs: Vcs,
+      tag: String,
+      cache: Map[String, Either[String, Seq[String]]]
+  ): IO[(Map[String, Either[String, Seq[String]]], Either[String, Seq[String]])] =
+    cache.get(tag) match {
+      case Some(result) => IO.pure(cache -> result)
+      case None         =>
+        diffFilesSinceTag(vcs, tag).map(result => cache.updated(tag, result) -> result)
     }
 
   /** Look up the last tag matching a pattern via `git describe` / `git tag`. */
   private def lookupLastTag(vcs: Vcs, tagPattern: String): IO[TagLookupResult] = {
     import TagLookupResult.*
 
-    successfulGitLines(
-      vcs,
-      Seq("describe", "--tags", "--match", tagPattern, "--abbrev=0")
-    )("git describe").attempt.flatMap {
-      case Right(lines)      =>
-        val tag = lines.mkString("\n").trim
-        IO.pure(if (tag.nonEmpty) TagFound(tag) else NoMatchingTag)
-      case Left(describeErr) =>
-        successfulGitLines(
-          vcs,
-          Seq("tag", "--list", tagPattern, "--merged", "HEAD")
-        )("git tag --list --merged HEAD").attempt.map {
-          case Right(Nil)          =>
-            NoMatchingTag
-          case Right(existingTags) =>
-            LookupFailed(
-              s"`git describe` failed (${errorMessage(describeErr)}) " +
-                s"even though matching tag(s) exist (${existingTags.mkString(", ")})"
-            )
-          case Left(fallbackErr)   =>
-            LookupFailed(
-              s"`git describe` failed (${errorMessage(describeErr)}), and fallback " +
-                s"`git tag --list --merged HEAD` failed (${errorMessage(fallbackErr)})"
-            )
-        }
-    }
+    GitProcessSupport
+      .runLines(
+        vcs.baseDir,
+        Seq("describe", "--tags", "--match", tagPattern, "--abbrev=0")
+      )("git describe")
+      .attempt
+      .flatMap {
+        case Right(lines)      =>
+          val tag = lines.mkString("\n").trim
+          IO.pure(if (tag.nonEmpty) TagFound(tag) else NoMatchingTag)
+        case Left(describeErr) =>
+          GitProcessSupport
+            .runLines(
+              vcs.baseDir,
+              Seq("tag", "--list", tagPattern, "--merged", "HEAD")
+            )("git tag --list --merged HEAD")
+            .attempt
+            .map {
+              case Right(Nil)          =>
+                NoMatchingTag
+              case Right(existingTags) =>
+                LookupFailed(
+                  s"`git describe` failed (${errorMessage(describeErr)}) " +
+                    s"even though matching tag(s) exist (${existingTags.mkString(", ")})"
+                )
+              case Left(fallbackErr)   =>
+                LookupFailed(
+                  s"`git describe` failed (${errorMessage(describeErr)}), and fallback " +
+                    s"`git tag --list --merged HEAD` failed (${errorMessage(fallbackErr)})"
+                )
+            }
+      }
   }
 
   /** Right(relativePath) or Left(errorDetail). */
@@ -100,7 +147,8 @@ private[monorepo] object ChangeDetection {
     }
 
   /** Detect which projects have changed since their last release tag.
-    * Uses file-level `git diff` between the last matching tag and HEAD.
+    * Runs one file-level `git diff` per distinct last-matching tag against HEAD and scopes
+    * the result per project in Scala (see [[diffFilesSinceTag]] for why no pathspec is used).
     *
     * Each project's version file is automatically excluded from diff results,
     * since version bumps from the previous release are not meaningful changes.
@@ -127,13 +175,11 @@ private[monorepo] object ChangeDetection {
                               tagNameFn = tagNameFn
                             )
       accumulated        <- projects.toList.foldLeftM(
-                              (
-                                Map.empty[SharedPathCacheKey, Boolean],
-                                Vector.empty[ProjectReleaseInfo]
-                              )
-                            ) { case ((cache, acc), project) =>
-                              processProject(inputs, project, cache).map { case (updatedCache, changed) =>
-                                updatedCache -> (if (changed) acc :+ project else acc)
+                              (DiffCaches.empty, Vector.empty[ProjectReleaseInfo])
+                            ) { case ((caches, acc), project) =>
+                              processProject(inputs, project, caches).map {
+                                case (updatedCaches, changed) =>
+                                  updatedCaches -> (if (changed) acc :+ project else acc)
                               }
                             }
     } yield accumulated._2
@@ -197,36 +243,35 @@ private[monorepo] object ChangeDetection {
     resolved.toSet
   }
 
-  /** Evaluate a single project: look up its tag, check shared paths, diff project files.
-    * Returns the updated shared-path cache and whether the project has changed.
+  /** Evaluate a single project: look up its tag, check shared paths, scope the tag diff.
+    * Returns the updated caches and whether the project has changed.
     */
   private def processProject(
       inputs: DetectionInputs,
       project: ProjectReleaseInfo,
-      sharedPathCache: Map[SharedPathCacheKey, Boolean]
-  ): IO[(Map[SharedPathCacheKey, Boolean], Boolean)] =
+      caches: DiffCaches
+  ): IO[(DiffCaches, Boolean)] =
     projectTagLookup(inputs, project).flatMap { case ProjectTagLookup(tagPattern, tagLookup) =>
       IO.blocking(
         inputs.globalExcludes ++ gitRelativize(inputs.vcs.baseDir, project.versionFile).toSet
       ).flatMap { excludes =>
-        sharedPathsChanged(inputs, sharedPathCache, tagLookup, excludes).flatMap {
-          case (updatedCache, sharedChanged) =>
+        sharedPathsChanged(inputs, caches, tagLookup, excludes).flatMap {
+          case (cachesAfterShared, sharedChanged) =>
             val diffScope         = inputs.diffScopeByProject(project.name)
             val excludedChildDirs = childDirPrefixes(inputs, project, diffScope)
-            val downstream        =
-              if (sharedChanged) IO.pure(true)
-              else
-                hasChangedSinceLastTag(
-                  inputs.vcs,
-                  project,
-                  tagPattern,
-                  tagLookup,
-                  inputs.state,
-                  excludes,
-                  diffScope,
-                  excludedChildDirs
-                )
-            downstream.map(updatedCache -> _)
+            if (sharedChanged) IO.pure(cachesAfterShared -> true)
+            else
+              hasChangedSinceLastTag(
+                inputs.vcs,
+                project,
+                tagPattern,
+                tagLookup,
+                inputs.state,
+                excludes,
+                diffScope,
+                excludedChildDirs,
+                cachesAfterShared
+              )
         }
       }
     }
@@ -265,25 +310,28 @@ private[monorepo] object ChangeDetection {
 
   private def sharedPathsChanged(
       inputs: DetectionInputs,
-      cache: Map[SharedPathCacheKey, Boolean],
+      caches: DiffCaches,
       tagLookup: TagLookupResult,
       excludes: Set[String]
-  ): IO[(Map[SharedPathCacheKey, Boolean], Boolean)] =
+  ): IO[(DiffCaches, Boolean)] =
     tagLookup match {
       case TagLookupResult.TagFound(tag) if inputs.sharedPaths.nonEmpty =>
         val cacheKey = SharedPathCacheKey(tag, excludes.toVector.sorted)
-        cache.get(cacheKey) match {
-          case Some(changed) => IO.pure(cache -> changed)
+        caches.sharedChanged.get(cacheKey) match {
+          case Some(changed) => IO.pure(caches -> changed)
           case None          =>
-            checkSharedPaths(
-              inputs.vcs,
-              tag,
-              inputs.state,
-              inputs.sharedPaths,
-              excludes
-            ).map(changed => cache.updated(cacheKey, changed) -> changed)
+            cachedDiffSinceTag(inputs.vcs, tag, caches.tagDiffs).flatMap {
+              case (tagDiffs, diffResult) =>
+                checkSharedPaths(inputs.state, tag, inputs.sharedPaths, excludes, diffResult)
+                  .map { changed =>
+                    DiffCaches(
+                      tagDiffs,
+                      caches.sharedChanged.updated(cacheKey, changed)
+                    ) -> changed
+                  }
+            }
         }
-      case _                                                            => IO.pure(cache -> false)
+      case _                                                            => IO.pure(caches -> false)
     }
 
   private def childDirPrefixes(
@@ -302,22 +350,22 @@ private[monorepo] object ChangeDetection {
       case _            => Set.empty[String]
     }
 
-  /** Check whether any shared (root-level) paths have changed since the given tag.
-    * Results are cached per tag + effective excludes by the caller to avoid redundant git calls.
+  /** Check whether any shared (root-level) paths have changed since the given tag, using the
+    * cached full-repo diff. Results are cached per tag + effective excludes by the caller so
+    * the info line logs once.
     */
   private def checkSharedPaths(
-      vcs: Vcs,
-      tag: String,
       state: State,
+      tag: String,
       sharedPaths: Seq[String],
-      excludes: Set[String]
+      excludes: Set[String],
+      diffResult: Either[String, Seq[String]]
   ): IO[Boolean] =
-    successfulGitLines(
-      vcs,
-      Seq("diff", "--name-only", s"$tag..HEAD", "--") ++ sharedPaths
-    )("git diff").attempt.flatMap {
+    diffResult match {
       case Right(rawFiles) =>
-        val files = rawFiles.filterNot(isExcludedPath(_, excludes))
+        val files = rawFiles
+          .filter(path => sharedPaths.exists(matchesPathPrefix(path, _)))
+          .filterNot(isExcludedPath(_, excludes))
         if (files.nonEmpty)
           IO.blocking {
             state.log.info(
@@ -326,10 +374,10 @@ private[monorepo] object ChangeDetection {
             )
           }.as(true)
         else IO.pure(false)
-      case Left(err)       =>
+      case Left(detail)    =>
         IO.blocking {
           state.log.warn(
-            s"${ReleaseLogPrefixes.Monorepo} Failed to check shared paths: ${errorMessage(err)}. " +
+            s"${ReleaseLogPrefixes.Monorepo} Failed to check shared paths: $detail. " +
               "Conservatively treating as changed"
           )
         }.as(true)
@@ -344,8 +392,9 @@ private[monorepo] object ChangeDetection {
       state: State,
       excludePaths: Set[String],
       diffScope: Either[String, String],
-      childDirPrefixes: Set[String]
-  ): IO[Boolean] = {
+      childDirPrefixes: Set[String],
+      caches: DiffCaches
+  ): IO[(DiffCaches, Boolean)] = {
     import TagLookupResult.*
 
     tagLookup match {
@@ -355,7 +404,7 @@ private[monorepo] object ChangeDetection {
             s"${ReleaseLogPrefixes.Monorepo} No previous tag matching '$tagPattern' " +
               s"for ${project.name}, marking as changed"
           )
-        }.as(true)
+        }.as(caches -> true)
 
       case LookupFailed(details) =>
         IO.blocking {
@@ -363,7 +412,7 @@ private[monorepo] object ChangeDetection {
             s"${ReleaseLogPrefixes.Monorepo} git describe failed for ${project.name} " +
               s"(pattern '$tagPattern'): $details. Conservatively treating as changed"
           )
-        }.as(true)
+        }.as(caches -> true)
 
       case TagFound(tag) =>
         diffScope match {
@@ -373,45 +422,45 @@ private[monorepo] object ChangeDetection {
                 s"${ReleaseLogPrefixes.Monorepo} Cannot diff ${project.name}: $details. " +
                   "Conservatively treating as changed"
               )
-            }.as(true)
+            }.as(caches -> true)
           case Right(baseRelative) =>
-            diffProjectSinceTag(
-              vcs,
-              project,
-              tag,
-              baseRelative,
-              state,
-              excludePaths,
-              childDirPrefixes
-            )
+            cachedDiffSinceTag(vcs, tag, caches.tagDiffs).flatMap { case (tagDiffs, diffResult) =>
+              diffProjectSinceTag(
+                project,
+                tag,
+                baseRelative,
+                state,
+                excludePaths,
+                childDirPrefixes,
+                diffResult
+              ).map(changed => caches.copy(tagDiffs = tagDiffs) -> changed)
+            }
         }
     }
   }
 
-  /** Run `git diff` for a project against a known tag and determine whether
-    * there are significant (non-excluded) file changes.
+  /** Determine from the cached full-repo diff whether a project has significant
+    * (in-scope, non-excluded) file changes since its tag.
     */
   private def diffProjectSinceTag(
-      vcs: Vcs,
       project: ProjectReleaseInfo,
       tag: String,
       baseRelative: String,
       state: State,
       excludePaths: Set[String],
-      childDirPrefixes: Set[String]
+      childDirPrefixes: Set[String],
+      diffResult: Either[String, Seq[String]]
   ): IO[Boolean] =
-    successfulGitLines(
-      vcs,
-      Seq("diff", "--name-only", s"$tag..HEAD", "--", baseRelative)
-    )("git diff").attempt.flatMap {
-      case Left(err)           =>
+    diffResult match {
+      case Left(detail)    =>
         IO.blocking {
           state.log.warn(
             s"${ReleaseLogPrefixes.Monorepo} git diff failed for ${project.name}: " +
-              s"${errorMessage(err)}. Conservatively treating as changed"
+              s"$detail. Conservatively treating as changed"
           )
         }.as(true)
-      case Right(changedFiles) =>
+      case Right(allFiles) =>
+        val changedFiles     = allFiles.filter(inScope(_, baseRelative))
         val significantFiles = changedFiles
           .filterNot(isExcludedPath(_, excludePaths))
           .filterNot(isExcludedPath(_, childDirPrefixes))

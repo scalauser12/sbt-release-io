@@ -32,6 +32,43 @@ class GitSpec extends CatsEffectSuite {
     IO(assertEquals(GitProcessSupport.executableNameFor("Linux"), "git"))
   }
 
+  test("findLossyArg - detect an argument that does not round-trip the argv charset") {
+    IO(
+      assertEquals(
+        GitProcessSupport.findLossyArg(Seq("diff", "café"), StandardCharsets.US_ASCII),
+        Some("café")
+      )
+    )
+  }
+
+  test("findLossyArg - pass pure-ASCII arguments under a non-UTF-8 charset") {
+    IO(
+      assertEquals(
+        GitProcessSupport.findLossyArg(Seq("diff", "--name-only"), StandardCharsets.US_ASCII),
+        None
+      )
+    )
+  }
+
+  test("findLossyArg - short-circuit on UTF-8 without round-tripping") {
+    // A lone surrogate does not survive a UTF-8 round-trip, so None proves the UTF-8
+    // short-circuit path is taken instead of the scan.
+    IO(
+      assertEquals(GitProcessSupport.findLossyArg(Seq("\ud800"), StandardCharsets.UTF_8), None)
+    )
+  }
+
+  test("lossyArgvError - name the argument, the charset, and the UTF-8 locale remedy") {
+    IO {
+      val message =
+        GitProcessSupport.lossyArgvError("café", StandardCharsets.US_ASCII).getMessage
+      assert(message.contains("café"))
+      assert(message.contains("US-ASCII"))
+      assert(message.contains("sun.jnu.encoding"))
+      assert(message.contains("LANG=C.UTF-8"))
+    }
+  }
+
   test("runLines - preserve stderr on git failure in a non-repository directory") {
     TestSupport.tempDirResource(s"$fixturePrefix-stderr").use { dir =>
       for {
@@ -77,6 +114,15 @@ class GitSpec extends CatsEffectSuite {
     GitProcessSupport
       .captureLines(new ByteArrayInputStream(bytes), StandardCharsets.ISO_8859_1)
       .map(lines => assertEquals(lines, Vector(expected)))
+  }
+
+  test("captureNulRecords - split NUL-delimited output with non-ASCII paths and trailing NUL") {
+    val bytes =
+      "caf\u00e9/version.sbt\u0000we\"ird\\name.txt\u0000".getBytes(StandardCharsets.UTF_8)
+
+    GitProcessSupport
+      .captureNulRecords(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)
+      .map(records => assertEquals(records, Vector("caf\u00e9/version.sbt", "we\"ird\\name.txt")))
   }
 
   test("cleanupManagedProcess - destroy descendants when the root process already exited") {
@@ -583,6 +629,100 @@ class GitSpec extends CatsEffectSuite {
         staged.contains("-version.sbt"),
         s"Expected `-version.sbt` to be staged, got: ${staged.mkString(", ")}"
       )
+    }
+  }
+
+  // The non-ASCII and special-character path tests pin the `-z` fix: with line-oriented
+  // output git C-quotes such paths ("caf\303\251/..."), which can never equal the literal
+  // relative paths the release guards compare against. Each test forces core.quotePath=true
+  // so the pre-fix failure reproduces regardless of the developer's global git config.
+  test("modifiedFiles - return literal non-ASCII paths unquoted") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-nonascii-modified").use { repo =>
+      val versionFile = new File(repo, "café/version.sbt")
+      for {
+        _        <- IO.blocking {
+                      TestSupport.runGit(repo, "config", "core.quotePath", "true")
+                      sbt.IO.write(versionFile, "version := \"0.1.0\"\n")
+                      TestSupport.runGit(repo, "add", ".")
+                      TestSupport.runGit(repo, "commit", "-m", "Add version file")
+                      sbt.IO.write(versionFile, "version := \"0.2.0\"\n")
+                    }
+        modified <- new Git(repo).modifiedFiles
+      } yield assertEquals(modified, Seq("café/version.sbt"))
+    }
+  }
+
+  test("stagedFiles - return literal non-ASCII paths unquoted") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-nonascii-staged").use { repo =>
+      val versionFile = new File(repo, "café/version.sbt")
+      for {
+        _      <- IO.blocking {
+                    TestSupport.runGit(repo, "config", "core.quotePath", "true")
+                    sbt.IO.write(versionFile, "version := \"0.1.0\"\n")
+                    TestSupport.runGit(repo, "add", ".")
+                  }
+        staged <- new Git(repo).stagedFiles
+      } yield assertEquals(staged, Seq("café/version.sbt"))
+    }
+  }
+
+  test("untrackedFiles - return literal non-ASCII paths unquoted") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-nonascii-untracked").use { repo =>
+      for {
+        _         <- IO.blocking {
+                       TestSupport.runGit(repo, "config", "core.quotePath", "true")
+                       sbt.IO.write(new File(repo, "café/new.sbt"), "version := \"0.1.0\"\n")
+                     }
+        untracked <- new Git(repo).untrackedFiles
+      } yield assert(
+        untracked.contains("café/new.sbt"),
+        s"Expected literal café/new.sbt, got: ${untracked.mkString(", ")}"
+      )
+    }
+  }
+
+  test("stagedFiles and untrackedFiles - return paths with quotes and backslashes literally") {
+    // Git always C-quotes `"` and `\` in line-oriented output regardless of core.quotePath;
+    // only `-z` emits them raw. Windows forbids these characters in filenames.
+    assume(
+      !sys.props.getOrElse("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("windows"),
+      "requires POSIX filenames"
+    )
+
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-specialchar-paths").use { repo =>
+      val weird = "we\"ird\\name.txt"
+      for {
+        _         <- IO.blocking {
+                       TestSupport.runGit(repo, "config", "core.quotePath", "true")
+                       sbt.IO.write(new File(repo, weird), "content\n")
+                     }
+        untracked <- new Git(repo).untrackedFiles
+        _         <- new Git(repo).add(weird)
+        staged    <- new Git(repo).stagedFiles
+      } yield {
+        assert(
+          untracked.contains(weird),
+          s"Expected literal $weird in untracked, got: ${untracked.mkString(", ")}"
+        )
+        assert(
+          staged.contains(weird),
+          s"Expected literal $weird in staged, got: ${staged.mkString(", ")}"
+        )
+      }
+    }
+  }
+
+  test("captured - pin LC_ALL=C for captured git invocations") {
+    // Captured stderr/stdout must keep git's untranslated wording ("fatal:", "bad ...")
+    // regardless of the developer's locale; attached and discarding builders deliberately
+    // keep the user locale.
+    assume(new File("/bin/sh").exists(), "requires /bin/sh")
+
+    TestSupport.gitRepoResource(s"$fixturePrefix-lc-all-pin").use { repo =>
+      for {
+        _     <- configureAlias(repo, "codexlcall", """echo "$LC_ALL"""")
+        lines <- GitProcessSupport.runLines(repo, Seq("codexlcall"))("git codexlcall")
+      } yield assertEquals(lines, Seq("C"))
     }
   }
 

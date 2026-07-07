@@ -11,7 +11,10 @@ The plugin detects which projects have changed since their last release tag usin
    `git tag -l`-compatible glob when called with `"*"` as the version — most simple
    `s"…/v$ver"` shapes work as-is.
 2. If no tag exists, the project is treated as changed (first release).
-3. Run `git diff --name-only <tag>..HEAD -- <projectDir>`.
+3. Run one full-repo `git diff --name-only -z <tag>..HEAD` per distinct tag (NUL-delimited
+   output, so paths arrive unquoted regardless of `core.quotePath`; no path arguments cross
+   the process boundary), then filter the result down to files under each project's
+   directory in Scala.
 4. Filter out each project's own version file and any files or directories in
    `releaseIOMonorepoDetectionExcludes` (see [Excluding files or directories from
    detection](#excluding-files-or-directories-from-detection)).
@@ -63,12 +66,25 @@ releaseIOMonorepoDetectionSharedPaths := Seq("build.sbt")
 releaseIOMonorepoDetectionSharedPaths := Seq.empty
 ```
 
-Shared paths are checked per tag, so projects that all point at the same last-tag commit
-share a single git diff lookup. Shared-path detection only runs for projects that have a
-prior tag — first-release projects are already marked as changed.
+Entries are literal root-relative paths matched by prefix: `build.sbt` matches exactly that
+file; `project/` — with or without the trailing slash — matches everything under
+`project/`. Glob patterns are not supported.
+
+Shared paths are checked per tag: projects that all point at the same last-tag commit share
+a single git diff lookup, which also feeds each project's own directory scoping. Shared-path
+detection only runs for projects that have a prior tag — first-release projects are already
+marked as changed.
 
 Shared paths only apply to the built-in detector and are ignored when
 `releaseIOMonorepoDetectionChangeDetector` is set.
+
+## Locale requirements
+
+On Linux, run sbt under a UTF-8 locale (e.g. `LANG=C.UTF-8`). With a non-UTF-8 locale the
+JVM cannot pass non-ASCII strings to git intact, so the plugin fails fast — with a message
+naming the offending value — when a tag name or commit message cannot cross the process
+boundary, rather than silently corrupting it. Non-ASCII project paths on macOS rely on
+git's automatic `core.precomposeunicode=true` (the default written at `init`/`clone`).
 
 ## Version overrides force-include projects
 

@@ -27,7 +27,9 @@ private[release] object GitProcessSupport {
   /** Result of a captured git invocation.
     *
     * @param exitCode the process exit code.
-    * @param stdout   UTF-8 decoded stdout lines, empty lines filtered out.
+    * @param stdout   UTF-8 decoded stdout records — newline-delimited for [[runLines]] /
+    *                 [[runCommandResult]], NUL-delimited for [[runNulRecords]] — with empty
+    *                 records filtered out.
     * @param stderr   UTF-8 decoded stderr joined with `\n` and trimmed.
     */
   private[release] final case class GitCommandResult(
@@ -46,6 +48,22 @@ private[release] object GitProcessSupport {
   /** Returns `"git.exe"` on Windows-like OS names, `"git"` otherwise. */
   private[release] def executableNameFor(osName: String): String =
     GitCommands.executableNameFor(osName)
+
+  /** First argument that does not survive an encode/decode round-trip through `cs`.
+    * `ProcessBuilder` encodes argv with `sun.jnu.encoding` on POSIX, so a lossy encode
+    * silently corrupts pathspecs and commit messages (e.g. 'café' → 'caf?') before git
+    * ever sees them. UTF-8 short-circuits: every valid Unicode string round-trips it.
+    */
+  private[vcs] def findLossyArg(args: Seq[String], cs: Charset): Option[String] =
+    if (cs == StandardCharsets.UTF_8) None
+    else args.find(arg => new String(arg.getBytes(cs), cs) != arg)
+
+  private[vcs] def lossyArgvError(arg: String, cs: Charset): IllegalStateException =
+    new IllegalStateException(
+      s"Cannot pass argument '$arg' to git: the JVM argv charset '${cs.name}' " +
+        "(sun.jnu.encoding) cannot represent it and would silently corrupt it. " +
+        "Run sbt with a UTF-8 locale, e.g. LANG=C.UTF-8 or LC_ALL=C.UTF-8."
+    )
 
   /** Build a git `ProcessBuilder` that discards both stdout and stderr.
     * Use when only the exit code matters.
@@ -119,6 +137,24 @@ private[release] object GitProcessSupport {
       }
     }
 
+  /** Run git capturing stdout as NUL-delimited records; raise on non-zero exit with stderr
+    * appended to the message. Empty records are filtered out (git's trailing NUL terminator
+    * yields an empty final record).
+    *
+    * Use for path-emitting commands invoked with `-z`, which makes git print paths as raw
+    * bytes instead of C-quoting non-ASCII and special characters, so results compare equal
+    * to literal repository-relative paths.
+    *
+    * @param context by-name label inserted into the error message on failure.
+    */
+  def runNulRecords(baseDir: File, args: Seq[String])(context: => String): IO[Seq[String]] =
+    ManagedProcessRunner.run(GitCommands.captured(baseDir, args*), closeStdin = true) { managed =>
+      ManagedProcessRunner.captureNulRecordResult(managed).flatMap { result =>
+        if (result.exitCode != 0) IO.raiseError(unexpectedExitError(context, result))
+        else IO.pure(result.stdout)
+      }
+    }
+
   /** Run git capturing stdout and return the single line of output.
     * Raises if the command succeeds with zero or more than one line, or fails per [[runLines]].
     */
@@ -177,12 +213,35 @@ private[release] object GitProcessSupport {
   ): IO[Vector[String]] =
     ProcessStreams.captureLines(stream, charset)
 
+  private[release] def captureNulRecords(
+      stream: InputStream,
+      charset: Charset
+  ): IO[Vector[String]] =
+    ProcessStreams.captureNulRecords(stream, charset)
+
   private object GitCommands {
     private lazy val exec: String =
       executableNameFor(sys.props.getOrElse("os.name", ""))
 
     def executableNameFor(osName: String): String =
       if (osName.toLowerCase(Locale.ROOT).contains("windows")) "git.exe" else "git"
+
+    private def isWindows(osName: String): Boolean =
+      osName.toLowerCase(Locale.ROOT).contains("windows")
+
+    // The argv charset the fail-fast guard checks against. None means "no guard needed":
+    // the property is missing, the charset is unknown to this JVM, it is UTF-8 (lossless),
+    // or the OS is Windows — there sun.jnu.encoding is the ANSI code page but ProcessBuilder
+    // passes argv as UTF-16 to CreateProcessW, so arguments survive intact.
+    private lazy val nonUtf8ArgvCharset: Option[Charset] =
+      if (isWindows(sys.props.getOrElse("os.name", ""))) None
+      else
+        sys.props.get("sun.jnu.encoding").flatMap { name =>
+          scala.util
+            .Try(Charset.forName(name))
+            .toOption
+            .filterNot(_ == StandardCharsets.UTF_8)
+        }
 
     def discarding(baseDir: File, args: String*): ProcessBuilder =
       base(baseDir, args*)
@@ -195,11 +254,22 @@ private[release] object GitProcessSupport {
         .redirectOutput(Redirect.INHERIT)
         .redirectError(Redirect.INHERIT)
 
-    def captured(baseDir: File, args: String*): ProcessBuilder =
-      base(baseDir, args*)
+    def captured(baseDir: File, args: String*): ProcessBuilder = {
+      val builder = base(baseDir, args*)
+      // Pin the C locale so captured stderr/stdout keeps git's untranslated wording
+      // ("fatal:", "bad ...") regardless of the user's locale. Attached commands
+      // (commit/tag/push) keep the user locale for user-visible output and hooks;
+      // discarding output is never read.
+      builder.environment().put("LC_ALL", "C")
+      builder
+    }
 
-    private def base(baseDir: File, args: String*): ProcessBuilder =
+    private def base(baseDir: File, args: String*): ProcessBuilder = {
+      nonUtf8ArgvCharset.foreach { cs =>
+        findLossyArg(args, cs).foreach(arg => throw lossyArgvError(arg, cs))
+      }
       new ProcessBuilder((exec +: args)*).directory(baseDir)
+    }
   }
 
   private object ProcessStreams {
@@ -208,6 +278,33 @@ private[release] object GitProcessSupport {
         charset: Charset
     ): IO[Vector[String]] =
       IO.blocking(readLinesSync(stream, charset))
+
+    def captureNulRecords(
+        stream: InputStream,
+        charset: Charset
+    ): IO[Vector[String]] =
+      IO.blocking(readNulRecordsSync(stream, charset))
+
+    // `-z` output is a small path list, so read fully then split rather than stream-scanning.
+    // Filename bytes that are not valid UTF-8 decode to U+FFFD (String(byte[], Charset)
+    // always replaces, never throws). Decision comparisons stay correct: setting-derived
+    // comparands are valid Unicode, so a replaced path can only fail to match, never
+    // falsely match — the replaced form is display-only exposure.
+    private def readNulRecordsSync(stream: InputStream, charset: Charset): Vector[String] = {
+      var primary: Throwable = null
+      try new String(stream.readAllBytes(), charset).split('\u0000').toVector
+      catch {
+        case t: Throwable =>
+          primary = t
+          throw t
+      } finally
+        try stream.close()
+        catch {
+          case NonFatal(closeErr) =>
+            if (primary != null) primary.addSuppressed(closeErr)
+            else throw closeErr
+        }
+    }
 
     private def readLinesSync(stream: InputStream, charset: Charset): Vector[String] = {
       val reader             = new BufferedReader(new InputStreamReader(stream, charset))
@@ -283,19 +380,27 @@ private[release] object GitProcessSupport {
           }
       }
 
+    def captureCommandResult(managed: ManagedProcess): IO[GitCommandResult] =
+      captureResultWith(managed, ProcessStreams.captureLines(_, StandardCharsets.UTF_8))
+
+    def captureNulRecordResult(managed: ManagedProcess): IO[GitCommandResult] =
+      captureResultWith(managed, ProcessStreams.captureNulRecords(_, StandardCharsets.UTF_8))
+
     // Assumes the spawned command (and any descendants) does not inherit stdout/stderr after exit.
     // If a descendant outlives the root and holds these FDs, the pipe never EOFs, the read fibers
-    // stay blocked on `BufferedReader.readLine`, and `joinWithNever` hangs indefinitely
+    // stay blocked on the synchronous stdout/stderr reads, and `joinWithNever` hangs indefinitely
     // (cancellation of the surrounding Resource scope cannot unblock the synchronous read). The
     // git commands routed through this path (rev-parse, ls-files, status, diff, describe,
     // tag --list) are all read-only inspections that do not spawn output-inheriting children.
-    def captureCommandResult(managed: ManagedProcess): IO[GitCommandResult] = {
+    private def captureResultWith(
+        managed: ManagedProcess,
+        readStdout: InputStream => IO[Vector[String]]
+    ): IO[GitCommandResult] = {
       val stdoutIn  = managed.process.getInputStream
       val stderrIn  = managed.process.getErrorStream
       val stdoutRes =
-        Resource.make(ProcessStreams.captureLines(stdoutIn, StandardCharsets.UTF_8).start) {
-          fiber =>
-            IO.blocking(ProcessStreams.closeQuietly(stdoutIn)) *> fiber.cancel
+        Resource.make(readStdout(stdoutIn).start) { fiber =>
+          IO.blocking(ProcessStreams.closeQuietly(stdoutIn)) *> fiber.cancel
         }
       val stderrRes =
         Resource.make(ProcessStreams.captureLines(stderrIn, StandardCharsets.UTF_8).start) {
