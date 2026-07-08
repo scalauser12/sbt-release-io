@@ -21,7 +21,7 @@ The example uses three projects:
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.4")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.5")
 ```
 
 `project/build.properties`:

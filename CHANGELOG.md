@@ -4,6 +4,59 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.5
+
+Published: 2026-07-08
+GitHub release:
+[v0.13.5](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.5)
+
+`v0.13.5` is a patch release for both plugins that fixes git path handling for
+non-ASCII paths and makes monorepo change detection avoid pathspec-dependent
+diffs.
+
+### Compatibility notes
+
+- No public API removals or source incompatibilities are intended in this
+  release.
+- Releases remain published only from pushed `v*` tags through GitHub Actions.
+
+### Fixes
+
+- Parse path-emitting git output with NUL delimiters so git `core.quotePath`
+  escaping does not break commit guards, version commits, or literal path
+  comparisons.
+- Avoid passing derived project paths as git diff pathspecs during monorepo
+  change detection, preventing missed releases on non-UTF-8 JVM process
+  boundaries.
+- Normalize Windows separators while relativizing paths against the VCS base.
+- Fail fast when git command arguments cannot round-trip through the platform
+  process encoding.
+
+### Improvements
+
+- Run one full-repository `--no-renames` diff per distinct monorepo tag and
+  scope changed paths in Scala.
+- Treat shared path settings as documented root-relative prefixes, with
+  tolerated trailing slashes.
+- Keep captured git command output locale-stable and consolidate line parsing
+  through the shared git process support.
+
+### Documentation
+
+- Document non-ASCII path handling for core version files and monorepo change
+  detection.
+- Refresh the root README, module READMEs, and published
+  walkthrough/getting-started docs to reference `0.13.5`.
+
+### Verification
+
+- `git diff --check`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 scalafmtCheckAll scalafmtSbtCheck`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 test`
+- sbt 2.0.0: `./bin/sbt2-clean test`
+- sbt 1.12.3: `sbt -Dsbt.version=1.12.3 'core/publishLocal' 'monorepo/publishLocal'`
+- sbt 2.0.0: `./bin/sbt2-clean 'core/publishLocal' 'monorepo/publishLocal'`
+
 ## v0.13.4
 
 Published: 2026-06-21
